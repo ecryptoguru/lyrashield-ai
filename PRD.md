@@ -1,4 +1,4 @@
-> ⚠️ **2026-07 UPDATE:** This PRD has an authoritative engineering addendum — see **“PART B — 2026-07 Research & Code-Grounded Engineering Update”** at the end of this file. **Current build status: Sprints 0–2 complete** (see PART B §B0 for the code-grounded reality and revised roadmap). Where PART B conflicts with the original spec below, PART B is authoritative.
+> ⚠️ **2026-07 UPDATE:** This PRD has an authoritative engineering addendum — see **“PART B — 2026-07 Research & Code-Grounded Engineering Update”** at the end of this file. **Current build status: Sprints 0–2 complete** (see PART B §B0 for the code-grounded reality and §B0.1 for the delivery status / open items). Where PART B conflicts with the original spec below, PART B is authoritative.
 
 ---
 
@@ -4609,6 +4609,24 @@ Reference: [Update.md](./Update.md) contains the full Agent-Native integration a
 - **Engine:** forked from `usestrix/strix` and rebranded (2 commits), telemetry disabled; **not yet upgraded** (structured output, exit codes, dedupe, CVSS, patch output all pending).
 - **Doc drift to fix:** `codebase.md` numbers Sprint 3 = "Scan Queue" / Sprint 4 = "Engine"; this PRD numbers Sprint 3 = GitHub App / 4 = Orchestrator / 5 = Engine MVP. **Reconcile to one canonical sprint map.**
 
+## B0.1 Delivery status (2026-07-02) — what is DONE vs STILL OPEN
+
+This addendum is **not** an all-done checklist. Current state:
+
+**DONE — merged to `main`:**
+- §B1.1 SSRF hardening (shared `checkScanUrlSafe` helper) — PR #2.
+- §B1.2 RBAC enforcement on mutating routes + §B1.3 ADMIN `audit`/`policy` permissions + type-safe `Permission` — PR #4.
+
+**IN REVIEW — open PR, not merged:**
+- CI green-up (typecheck/build fix for the merges above) — PR #5. Actually **running vitest in CI** is still pending a GitHub `workflows` permission grant + a `pnpm-lock.yaml` refresh (see PR #5).
+
+**STILL OPEN — NOT STARTED (nothing below has been implemented):**
+- **§B1.4 Auth hardening** — **email verification** (currently disabled in `auth.ts`), **env/secret startup validation**, and **rate limiting** (auth + scan-creation endpoints).
+- **§B4 Schema retrofits (all of them)** — **Postgres RLS + Prisma query extension**; **`targetId` in the `Finding` dedupe key**; **`ApiKey`/`ServiceToken` model**; **`Evidence.encryptionKeyRef` + serve-redacted-only**; **`AuditLog` hash-chain**; **soft-delete standardization**; **duplicate-target constraints**; **`Report.shareToken` hashing + revocation**; **`UsageRecord.idempotencyKey`**; **`Retest` model**; **composite indexes**; **pgcrypto/pgvector + `directUrl`**; **GDPR delete/anonymize for loose user FKs**. These are cheapest to do now, while there is no scan/finding data.
+- **Greenfield — design-in when the feature is built (not applicable yet):** §B2 sandbox isolation + egress proxy + prompt-injection defense; §B5 verification layer + deterministic fingerprint; §B6 MCP OAuth 2.1; §B7 SARIF/CVSS/OWASP-2025/EPSS-KEV; §B8 SCA/secrets/IaC coverage; §B10 LLM cost controls.
+
+---
+
 ## B1. Confirmed issues in shipped code (fix now — cheapest while there is no scan/finding data)
 
 **B1.1 SSRF blocklist is bypassable `[P0 · security]`.** `apps/web/src/app/api/targets/route.ts → isSsrfSafe()` string-prefix-matches `URL.hostname` only and never resolves DNS. Confirmed bypasses:
@@ -4623,7 +4641,7 @@ Reference: [Update.md](./Update.md) contains the full Agent-Native integration a
 
 **B1.3 RBAC hierarchy vs. capability mismatch `[P1]`.** In `permissions.ts`, `ADMIN` (rank 80) lacks `audit:view`/`audit:export`/`policy:*` while lower-ranked `SECURITY_ADMIN` (75) has them → an org ADMIN can't view audit logs (likely unintended). Decide whether sets nest by hierarchy; at minimum grant ADMIN `audit:view`. Also derive a union `Permission` type from `PERMISSIONS` (currently `string`, so a typo silently denies). **Status: FIXED in PR #3 — ADMIN granted `audit:view`/`audit:export` + `policy:*`; `Permission` is now a derived union type.**
 
-**B1.4 Auth hardening `[P1]`.** `auth.ts` sets `requireEmailVerification: false` — **enable before scans/billing** (abuse vector, compounds free-tier LLM cost). No env/secret startup validation (PRD §14.1 required `BETTER_AUTH_SECRET`/`DATABASE_URL`) — add a Zod env schema in `packages/config` that fails fast on boot. No rate limiting anywhere (no `middleware.ts`); sign-in/sign-up are live now — **add auth-endpoint rate limiting immediately**, extend to scan creation at Sprint 3.
+**B1.4 Auth hardening `[P1]`. — STATUS: NOT STARTED (2026-07-02).** `auth.ts` sets `requireEmailVerification: false` — **enable before scans/billing** (abuse vector, compounds free-tier LLM cost). No env/secret startup validation (PRD §14.1 required `BETTER_AUTH_SECRET`/`DATABASE_URL`) — add a Zod env schema in `packages/config` that fails fast on boot. No rate limiting anywhere (no `middleware.ts`); sign-in/sign-up are live now — **add auth-endpoint rate limiting immediately**, extend to scan creation at Sprint 3.
 
 ## B2. Security hardening (design-in for unbuilt features)
 
@@ -4640,6 +4658,8 @@ Reference: [Update.md](./Update.md) contains the full Agent-Native integration a
 Add: (9) **engine supply-chain** (heavy Kali/LiteLLM/Caido dep tree — pin, SBOM, scan the fork); (10) **indirect prompt injection → agent hijack** (B2.3); (11) **root-capable sandbox escape** (B2.1); (12) **MCP confused-deputy / token passthrough** (B6); (13) **tenant-isolation failure** via a missing `where workspaceId` (B4.1 RLS); (14) **report share-link leakage** (tokens in DB — B4); (15) **malicious AI fix-PR** (B2.4).
 
 ## B4. Data-model change log (apply while schema is data-free — validated against the real 669-line schema)
+
+**STATUS: NOT STARTED (2026-07-02) — none of the retrofits below have been implemented yet.**
 
 1. **`[P0]` Postgres RLS + a Prisma Client Extension** that injects `workspaceId` scope and `deletedAt IS NULL` on every workspace-scoped query. Today isolation depends on remembering `where workspaceId`, and B1.2 shows enforcement is already inconsistent — this is the top schema fix. RLS keyed on a session GUC (`app.current_workspace_id`) as defense-in-depth.
 2. **`[P0]` Re-scope `Finding` dedupe:** change `@@unique([workspaceId, dedupeKey])` → include `targetId` (`@@unique([targetId, dedupeKey])`), and generate `dedupeKey` as a **deterministic fingerprint** = hash of `(vuln_class, normalized route/location, root cause)`, wording-independent, excluding CWE (see B5.2).
