@@ -66,30 +66,34 @@ export function canonicalizeIpv4(host: string): string | null {
     if (v === null) return null
     values.push(v)
   }
+  const v0 = values[0] ?? 0
+  const v1 = values[1] ?? 0
+  const v2 = values[2] ?? 0
+  const v3 = values[3] ?? 0
   let ipNum: number
   switch (values.length) {
     case 1:
-      if (values[0] > 0xffffffff) return null
-      ipNum = values[0]
+      if (v0 > 0xffffffff) return null
+      ipNum = v0
       break
     case 2:
-      if (values[0] > 0xff || values[1] > 0xffffff) return null
-      ipNum = (values[0] << 24) | values[1]
+      if (v0 > 0xff || v1 > 0xffffff) return null
+      ipNum = (v0 << 24) | v1
       break
     case 3:
-      if (values[0] > 0xff || values[1] > 0xff || values[2] > 0xffff) return null
-      ipNum = (values[0] << 24) | (values[1] << 16) | values[2]
+      if (v0 > 0xff || v1 > 0xff || v2 > 0xffff) return null
+      ipNum = (v0 << 24) | (v1 << 16) | v2
       break
     default:
-      if (values.some((v) => v > 0xff)) return null
-      ipNum = (values[0] << 24) | (values[1] << 16) | (values[2] << 8) | values[3]
+      if (v0 > 0xff || v1 > 0xff || v2 > 0xff || v3 > 0xff) return null
+      ipNum = (v0 << 24) | (v1 << 16) | (v2 << 8) | v3
   }
   ipNum >>>= 0
   return [(ipNum >>> 24) & 0xff, (ipNum >>> 16) & 0xff, (ipNum >>> 8) & 0xff, ipNum & 0xff].join(".")
 }
 
 function ipv4ToInt(ip: string): number {
-  return ip.split(".").reduce((acc, o) => ((acc << 8) | Number(o)) >>> 0, 0) >>> 0
+  return ip.split(".").reduce((acc, octet) => ((acc << 8) | (Number(octet) & 0xff)) >>> 0, 0) >>> 0
 }
 
 function inCidrV4(ip: string, base: string, bits: number): boolean {
@@ -129,18 +133,25 @@ export function expandIpv6(input: string): number[] | null {
   // Convert a trailing embedded IPv4 (e.g. ::ffff:1.2.3.4) into two hex groups.
   const embedded = ip.match(/^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/)
   if (embedded) {
-    const v4 = canonicalizeIpv4(embedded[2])
+    const prefix = embedded[1] ?? ""
+    const v4 = canonicalizeIpv4(embedded[2] ?? "")
     if (!v4) return null
-    const b = v4.split(".").map(Number)
-    const g1 = ((b[0] << 8) | b[1]).toString(16)
-    const g2 = ((b[2] << 8) | b[3]).toString(16)
-    ip = `${embedded[1]}${g1}:${g2}`
+    const octets = v4.split(".").map(Number)
+    const o0 = octets[0] ?? 0
+    const o1 = octets[1] ?? 0
+    const o2 = octets[2] ?? 0
+    const o3 = octets[3] ?? 0
+    const g1 = (((o0 << 8) | o1) >>> 0).toString(16)
+    const g2 = (((o2 << 8) | o3) >>> 0).toString(16)
+    ip = `${prefix}${g1}:${g2}`
   }
 
   const halves = ip.split("::")
   if (halves.length > 2) return null
-  const head = halves[0] ? halves[0].split(":") : []
-  const tail = halves.length === 2 ? (halves[1] ? halves[1].split(":") : []) : null
+  const h0 = halves[0] ?? ""
+  const h1 = halves.length === 2 ? (halves[1] ?? "") : null
+  const head = h0 ? h0.split(":") : []
+  const tail = h1 === null ? null : h1 ? h1.split(":") : []
 
   let groups: string[]
   if (tail === null) {
@@ -148,7 +159,7 @@ export function expandIpv6(input: string): number[] | null {
   } else {
     const missing = 8 - head.length - tail.length
     if (missing < 0) return null
-    groups = [...head, ...Array(missing).fill("0"), ...tail]
+    groups = [...head, ...Array.from({ length: missing }, () => "0"), ...tail]
   }
   if (groups.length !== 8) return null
 
@@ -162,25 +173,26 @@ export function expandIpv6(input: string): number[] | null {
 }
 
 function isBlockedIpv6(bytes: number[]): boolean {
-  const zero = (from: number, to: number) => bytes.slice(from, to).every((b) => b === 0)
+  const at = (i: number): number => bytes[i] ?? 0
+  const zero = (from: number, to: number): boolean => bytes.slice(from, to).every((x) => x === 0)
 
   if (zero(0, 16)) return true // :: unspecified
-  if (zero(0, 15) && bytes[15] === 1) return true // ::1 loopback
+  if (zero(0, 15) && at(15) === 1) return true // ::1 loopback
 
   // IPv4-mapped ::ffff:0:0/96 and IPv4-compatible ::/96 → validate embedded IPv4
-  if (zero(0, 10) && bytes[10] === 0xff && bytes[11] === 0xff) {
+  if (zero(0, 10) && at(10) === 0xff && at(11) === 0xff) {
     return isBlockedIpv4(bytes.slice(12, 16).join("."))
   }
   if (zero(0, 12)) return isBlockedIpv4(bytes.slice(12, 16).join("."))
 
   // NAT64 well-known prefix 64:ff9b::/96 → validate embedded IPv4
-  if (bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b && zero(4, 12)) {
+  if (at(0) === 0x00 && at(1) === 0x64 && at(2) === 0xff && at(3) === 0x9b && zero(4, 12)) {
     return isBlockedIpv4(bytes.slice(12, 16).join("."))
   }
 
-  if ((bytes[0] & 0xfe) === 0xfc) return true // fc00::/7 unique-local
-  if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80) return true // fe80::/10 link-local
-  if (bytes[0] === 0xff) return true // ff00::/8 multicast
+  if ((at(0) & 0xfe) === 0xfc) return true // fc00::/7 unique-local
+  if (at(0) === 0xfe && (at(1) & 0xc0) === 0x80) return true // fe80::/10 link-local
+  if (at(0) === 0xff) return true // ff00::/8 multicast
   return false
 }
 
