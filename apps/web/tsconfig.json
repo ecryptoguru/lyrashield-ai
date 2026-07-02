@@ -1,0 +1,22 @@
+{
+  "extends": "../../packages/config/tsconfig/nextjs.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@lyrashield/db": ["../../packages/db/src/index.ts"],
+      "@lyrashield/db/*": ["../../packages/db/src/*"],
+      "@lyrashield/auth": ["../../packages/auth/src/index.ts"],
+      "@lyrashield/auth/*": ["../../packages/auth/src/*"],
+      "@lyrashield/ui": ["../../packages/ui/src/index.ts"],
+      "@lyrashield/ui/*": ["../../packages/ui/src/*"],
+      "@lyrashield/types": ["../../packages/types/src/index.ts"],
+      "@lyrashield/types/*": ["../../packages/types/src/*"],
+      "@lyrashield/integrations": ["../../packages/integrations/src/index.ts"],
+      "@lyrashield/integrations/*": ["../../packages/integrations/src/*"],
+      "@lyrashield/logger": ["../../packages/logger/src/index.ts"],
+      "@lyrashield/logger/*": ["../../packages/logger/src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", "dist", ".next", ".turbo"]
+}

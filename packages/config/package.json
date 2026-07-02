@@ -1,0 +1,10 @@
+{
+  "name": "@lyrashield/config",
+  "version": "0.0.0",
+  "private": true,
+  "files": ["tsconfig/**"],
+  "devDependencies": {
+    "typescript": "^6.0.0",
+    "@types/node": "^22.0.0"
+  }
+}

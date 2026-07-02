@@ -1,0 +1,668 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Better Auth Base Tables ────────────────────────────────────────────────
+// These are managed by Better Auth. Do not manually modify.
+// Reference user.id from application models.
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions      Session[]
+  accounts      Account[]
+  verifications Verification[]
+
+  @@map("users")
+}
+
+model Session {
+  id           String   @id
+  expiresAt    DateTime
+  token        String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  ipAddress    String?
+  userAgent    String?
+  userId       String
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                String    @id
+  accountId         String
+  providerId        String
+  userId            String
+  accessToken       String?
+  refreshToken      String?
+  idToken           String?
+  accessTokenExpiresAt DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope             String?
+  password          String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+// ─── Application Models ─────────────────────────────────────────────────────
+// These are owned by the application. Reference Better Auth user.id.
+
+enum WorkspaceMode {
+  VIBE
+  TEAM
+  ENTERPRISE
+}
+
+enum WorkspacePlan {
+  FREE
+  PRO
+  TEAM
+  AGENCY
+  BUSINESS
+  ENTERPRISE
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+  SECURITY_ADMIN
+  APPSEC_MANAGER
+  DEVELOPER
+  AUDITOR
+  BILLING_ADMIN
+  EXTERNAL_PENTESTER
+}
+
+enum TargetType {
+  REPO
+  WEB_APP
+  API
+  CLOUD_ACCOUNT
+  CONTAINER
+  IAC
+}
+
+enum TargetEnvironment {
+  LOCAL
+  PREVIEW
+  STAGING
+  PRODUCTION
+}
+
+enum ScanGoal {
+  CHECK_PR
+  TEST_APP
+  LAUNCH_REVIEW
+  WEEKLY_MONITOR
+  FULL_PENTEST
+  COMPLIANCE_REVIEW
+}
+
+enum ScanMode {
+  SAFE
+  QUICK
+  STANDARD
+  DEEP
+  CUSTOM
+}
+
+enum ScanStatus {
+  QUEUED
+  PREFLIGHT
+  RUNNING
+  VERIFYING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REQUIRES_APPROVAL
+  STOPPED_BUDGET
+  TIMED_OUT
+}
+
+enum FindingSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FindingStatus {
+  OPEN
+  FIX_READY
+  PR_OPENED
+  TICKET_CREATED
+  FIXED_PENDING_RETEST
+  FIXED
+  ACCEPTED_RISK
+  FALSE_POSITIVE
+  DUPLICATE
+}
+
+enum IntegrationType {
+  GITHUB
+  GITLAB
+  AZURE_DEVOPS
+  SLACK
+  DISCORD
+  JIRA
+  LINEAR
+  TEAMS
+  SERVICENOW
+  SPLUNK
+  DATADOG
+  SENTINEL
+  VANTA
+  DRATA
+}
+
+model Workspace {
+  id                String        @id @default(cuid())
+  name              String
+  slug              String        @unique
+  mode              WorkspaceMode @default(VIBE)
+  plan              WorkspacePlan @default(FREE)
+  billingStatus     String?
+  deploymentType    String        @default("saas")
+  retentionDays     Int           @default(30)
+  telemetryEnabled  Boolean       @default(true)
+  deletedAt         DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  members           WorkspaceMember[]
+  projects          Project[]
+  targets           Target[]
+  scans             Scan[]
+  findings          Finding[]
+  policies          Policy[]
+  integrations      Integration[]
+  auditLogs         AuditLog[]
+  usageRecords      UsageRecord[]
+  reports           Report[]
+  notifications     Notification[]
+  schedules         Schedule[]
+  billingAccount    BillingAccount?
+  invitations       Invitation[]
+  webhookEvents     WebhookEvent[]
+
+  @@index([slug])
+}
+
+model WorkspaceMember {
+  id            String     @id @default(cuid())
+  workspaceId   String
+  userId        String
+  role          MemberRole @default(MEMBER)
+  status        String     @default("active")
+  invitedEmail  String?
+  invitedById   String?
+  idpSubject    String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([invitedEmail])
+}
+
+model Project {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  name          String
+  description   String?
+  ownerUserId   String?
+  ownerTeam     String?
+  riskScore     Int       @default(100)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  targets       Target[]
+  scans         Scan[]
+  findings      Finding[]
+
+  @@index([workspaceId])
+}
+
+model Target {
+  id              String            @id @default(cuid())
+  workspaceId     String
+  projectId       String?
+  type            TargetType
+  name            String
+  url             String?
+  repoProvider    String?
+  repoOwner       String?
+  repoName        String?
+  repoFullName    String?
+  branch          String?
+  environment     TargetEnvironment @default(STAGING)
+  status          String            @default("active")
+  lastScanAt      DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project         Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  scans           Scan[]
+  findings        Finding[]
+  credentials     CredentialSet[]
+
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+model CredentialSet {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  targetId      String?
+  kind          String
+  name          String
+  vaultRef      String
+  scope         Json?
+  expiresAt     DateTime?
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  target        Target?  @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([targetId])
+}
+
+model Policy {
+  id                       String    @id @default(cuid())
+  workspaceId              String
+  name                     String
+  description              String?
+  scanWindow               Json?
+  blockedPaths             String[]
+  allowedDomains           String[]
+  rateLimit                Json?
+  networkEgressPolicy      String    @default("target_only")
+  destructiveTestsAllowed  Boolean   @default(false)
+  approvalRequired         Boolean   @default(false)
+  maxBudgetUsd             Decimal?  @db.Decimal(10, 2)
+  maxDurationMinutes       Int       @default(60)
+  piiRedactionEnabled      Boolean   @default(true)
+  evidenceRetentionDays    Int       @default(30)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scans                    Scan[]
+
+  @@index([workspaceId])
+}
+
+model Scan {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  projectId       String?
+  targetId        String?
+  policyId        String?
+  goal            ScanGoal
+  mode            ScanMode    @default(SAFE)
+  status          ScanStatus  @default(QUEUED)
+  triggerType     String      @default("manual")
+  startedAt       DateTime?
+  endedAt         DateTime?
+  summary         String?
+  errorCategory   String?
+  errorMessage    String?
+  riskScoreBefore Int?
+  riskScoreAfter  Int?
+  createdById     String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project         Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  target          Target?     @relation(fields: [targetId], references: [id], onDelete: SetNull)
+  policy          Policy?     @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  events          ScanEvent[]
+  findings        Finding[]
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([targetId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ScanEvent {
+  id          String   @id @default(cuid())
+  scanId      String
+  stage       String
+  level       String   @default("info")
+  message     String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  scan        Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([stage])
+}
+
+model Finding {
+  id                  String           @id @default(cuid())
+  workspaceId         String
+  projectId           String?
+  targetId            String?
+  scanId              String
+  title               String
+  summary             String
+  category            String?
+  cwe                 String?
+  owaspCategory       String?
+  severity            FindingSeverity
+  confidence          String           @default("medium")
+  verified            Boolean          @default(false)
+  exploitability      String?
+  businessImpact      String?
+  technicalDetail     String?
+  recommendedFix      String?
+  status              FindingStatus   @default(OPEN)
+  dedupeKey           String
+  ownerUserId         String?
+  ownerTeam           String?
+  slaDueAt            DateTime?
+  firstSeenAt         DateTime         @default(now())
+  lastSeenAt          DateTime         @default(now())
+  fixedAt             DateTime?
+  deletedAt           DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project             Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  target              Target?          @relation(fields: [targetId], references: [id], onDelete: SetNull)
+  scan                Scan             @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  evidence            Evidence[]
+  fixProposals        FixProposal[]
+  tickets             Ticket[]
+
+  @@index([workspaceId])
+  @@index([scanId])
+  @@index([status])
+  @@index([severity])
+  @@index([lastSeenAt])
+  @@index([slaDueAt])
+  @@unique([workspaceId, dedupeKey])
+}
+
+model Evidence {
+  id                 String   @id @default(cuid())
+  findingId          String
+  type               String
+  storageUri         String?
+  redactedStorageUri String?
+  checksum           String?
+  redactionStatus    String   @default("pending")
+  createdAt          DateTime @default(now())
+
+  finding            Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+}
+
+model FixProposal {
+  id                String   @id @default(cuid())
+  findingId         String
+  kind              String   @default("patch")
+  summary           String
+  diffRef           String?
+  status            String   @default("draft")
+  safetyScore       Int?
+  generatedByModel  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  finding           Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  pullRequests      PullRequest[]
+
+  @@index([findingId])
+}
+
+model PullRequest {
+  id              String   @id @default(cuid())
+  fixProposalId   String
+  provider        String
+  repoOwner       String
+  repoName        String
+  branchName      String
+  prNumber        Int?
+  prUrl           String?
+  status          String   @default("open")
+  createdAt       DateTime @default(now())
+  mergedAt        DateTime?
+  closedAt        DateTime?
+
+  fixProposal     FixProposal @relation(fields: [fixProposalId], references: [id], onDelete: Cascade)
+
+  @@index([fixProposalId])
+}
+
+model Ticket {
+  id            String   @id @default(cuid())
+  findingId     String
+  provider      String
+  externalId    String?
+  status        String   @default("open")
+  url           String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  finding       Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+}
+
+model Integration {
+  id            String          @id @default(cuid())
+  workspaceId   String
+  type          IntegrationType
+  name          String
+  configRef     String?
+  status        String          @default("active")
+  capabilities  Json?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([type])
+}
+
+model UsageRecord {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  kind          String
+  quantity      Int
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([kind])
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  actorUserId   String?
+  action        String
+  resourceType  String
+  resourceId    String?
+  ipAddress     String?
+  userAgent     String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([actorUserId])
+  @@index([action])
+}
+
+model Report {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  scanId         String?
+  type           String   @default("developer")
+  title          String
+  status         String   @default("generated")
+  format         String   @default("html")
+  storageUri     String?
+  shareToken     String?  @unique
+  shareExpiresAt DateTime?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([scanId])
+}
+
+model Notification {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  userId        String?
+  channel       String   @default("email")
+  type          String
+  title         String
+  body          String
+  status        String   @default("pending")
+  sentAt        DateTime?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([status])
+}
+
+model Schedule {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  targetId      String
+  cron          String
+  goal          ScanGoal
+  mode          ScanMode @default(SAFE)
+  enabled       Boolean  @default(true)
+  lastRunAt     DateTime?
+  nextRunAt     DateTime?
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([targetId])
+  @@index([enabled])
+}
+
+model BillingAccount {
+  id              String   @id @default(cuid())
+  workspaceId     String   @unique
+  provider        String   @default("polar")
+  externalId      String?
+  status          String   @default("free")
+  currentPlan     WorkspacePlan @default(FREE)
+  trialEndsAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([externalId])
+}
+
+model Invitation {
+  id            String     @id @default(cuid())
+  workspaceId   String
+  email         String
+  role          MemberRole @default(MEMBER)
+  token         String   @unique
+  status        String   @default("pending")
+  invitedById   String
+  expiresAt     DateTime
+  acceptedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([status])
+}
+
+model WebhookEvent {
+  id            String   @id @default(cuid())
+  workspaceId   String?
+  provider      String
+  eventType     String
+  externalId    String
+  payload       Json
+  processed     Boolean  @default(false)
+  processedAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+  @@index([workspaceId])
+  @@index([processed])
+}

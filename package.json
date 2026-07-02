@@ -1,0 +1,30 @@
+{
+  "name": "lyrashield",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json,yml,yaml}\"",
+    "db:generate": "pnpm --filter @lyrashield/db generate",
+    "db:migrate": "pnpm --filter @lyrashield/db migrate",
+    "db:push": "pnpm --filter @lyrashield/db push",
+    "db:seed": "pnpm --filter @lyrashield/db seed",
+    "db:studio": "pnpm --filter @lyrashield/db studio"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.0",
+    "prettier-plugin-tailwindcss": "^0.6.0",
+    "turbo": "^2.10.0"
+  },
+  "packageManager": "pnpm@11.6.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@prisma/client-runtime-utils": "7.8.0"
+  }
+}
