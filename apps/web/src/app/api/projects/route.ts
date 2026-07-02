@@ -1,51 +1,34 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
-import { getSession } from "@lyrashield/auth/server"
+import { getSession, requirePermission } from "@lyrashield/auth/server"
+import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateProjectSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
+import { authErrorResponse } from "../../../lib/api-auth"
 
 export async function POST(request: Request) {
+  let body: unknown
   try {
-    const session = await getSession()
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
-        { status: 401 }
-      )
-    }
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
+      { status: 400 }
+    )
+  }
 
-    let body: unknown
-    try {
-      body = await request.json()
-    } catch {
-      return NextResponse.json(
-        { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
-        { status: 400 }
-      )
-    }
+  const parsed = CreateProjectSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
+      { status: 400 }
+    )
+  }
 
-    const parsed = CreateProjectSchema.safeParse(body)
-    if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
-        { status: 400 }
-      )
-    }
+  const { workspaceId, name, description } = parsed.data
 
-    const { workspaceId, name, description } = parsed.data
-
-    const membership = await prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: { workspaceId, userId: session.userId },
-      },
-    })
-
-    if (!membership || membership.status !== "active") {
-      return NextResponse.json(
-        { success: false, error: { code: "FORBIDDEN", message: "You do not have access to this workspace" } },
-        { status: 403 }
-      )
-    }
+  try {
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.project.create)
 
     const project = await prisma.project.create({
       data: {
@@ -78,6 +61,8 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
+    const authErr = authErrorResponse(error)
+    if (authErr) return authErr
     logger.error("Failed to create project", { error: String(error) })
     return NextResponse.json(
       { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to create project" } },

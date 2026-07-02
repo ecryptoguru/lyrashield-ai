@@ -71,10 +71,16 @@ export const PERMISSIONS = {
   },
 } as const
 
-export type Permission = string
+// Derive a type-safe union of every permission string from PERMISSIONS.
+// (Replaces the previous `type Permission = string`, which let typo'd permission
+// strings silently fail closed.)
+type PermissionGroups = typeof PERMISSIONS
+export type Permission = {
+  [G in keyof PermissionGroups]: PermissionGroups[G][keyof PermissionGroups[G]]
+}[keyof PermissionGroups]
 
 const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
-  OWNER: Object.values(PERMISSIONS).flatMap((group) => Object.values(group)),
+  OWNER: Object.values(PERMISSIONS).flatMap((group) => Object.values(group)) as Permission[],
   ADMIN: [
     PERMISSIONS.workspace.update,
     PERMISSIONS.member.invite,
@@ -98,6 +104,14 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.fix.createPr,
     PERMISSIONS.report.create,
     PERMISSIONS.report.download,
+    // Governance permissions — an org ADMIN must be able to view/export audit logs
+    // and manage scan policies. Previously these were held only by SECURITY_ADMIN
+    // (a lower hierarchy rank), so an ADMIN could not view audit logs.
+    PERMISSIONS.policy.create,
+    PERMISSIONS.policy.update,
+    PERMISSIONS.policy.delete,
+    PERMISSIONS.audit.view,
+    PERMISSIONS.audit.export,
     PERMISSIONS.integration.manage,
   ],
   SECURITY_ADMIN: [
@@ -172,10 +186,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.report.create,
     PERMISSIONS.report.download,
   ],
-  VIEWER: [
-    PERMISSIONS.finding.view,
-    PERMISSIONS.report.download,
-  ],
+  VIEWER: [PERMISSIONS.finding.view, PERMISSIONS.report.download],
 }
 
 export function hasPermission(role: MemberRole, permission: Permission): boolean {
