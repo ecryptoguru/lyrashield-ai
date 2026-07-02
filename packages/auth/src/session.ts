@@ -2,7 +2,7 @@ import { headers } from "next/headers"
 import { auth } from "./auth"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole, WorkspaceMember } from "@lyrashield/db"
-import { hasPermission, hasMinimumRole } from "./permissions"
+import { hasPermission, hasMinimumRole, type Permission } from "./permissions"
 
 export interface AuthSession {
   userId: string
@@ -79,7 +79,7 @@ export async function requireWorkspaceAccess(
 
 export async function requirePermission(
   workspaceId: string,
-  permission: string
+  permission: Permission
 ): Promise<{ session: AuthSession; workspace: WorkspaceContext }> {
   const { session, workspace } = await requireWorkspaceAccess(workspaceId)
 
