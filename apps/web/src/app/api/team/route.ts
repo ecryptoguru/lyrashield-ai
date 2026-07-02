@@ -1,64 +1,43 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
-import { getSession } from "@lyrashield/auth/server"
+import { getSession, requirePermission } from "@lyrashield/auth/server"
+import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
+import { authErrorResponse } from "../../../lib/api-auth"
 
 const InviteMemberSchema = z.object({
   workspaceId: z.string().min(1),
   email: z.email(),
-  role: z.enum(["ADMIN", "MEMBER", "VIEWER", "SECURITY_ADMIN", "APPSEC_MANAGER", "DEVELOPER", "AUDITOR", "BILLING_ADMIN", "EXTERNAL_PENTESTER"]).default("MEMBER"),
+  role: z
+    .enum(["ADMIN", "MEMBER", "VIEWER", "SECURITY_ADMIN", "APPSEC_MANAGER", "DEVELOPER", "AUDITOR", "BILLING_ADMIN", "EXTERNAL_PENTESTER"])
+    .default("MEMBER"),
 })
 
 export async function POST(request: Request) {
+  let body: unknown
   try {
-    const session = await getSession()
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
-        { status: 401 }
-      )
-    }
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
+      { status: 400 }
+    )
+  }
 
-    let body: unknown
-    try {
-      body = await request.json()
-    } catch {
-      return NextResponse.json(
-        { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
-        { status: 400 }
-      )
-    }
+  const parsed = InviteMemberSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
+      { status: 400 }
+    )
+  }
 
-    const parsed = InviteMemberSchema.safeParse(body)
-    if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
-        { status: 400 }
-      )
-    }
+  const { workspaceId, email, role } = parsed.data
 
-    const { workspaceId, email, role } = parsed.data
-
-    const membership = await prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: { workspaceId, userId: session.userId },
-      },
-    })
-
-    if (!membership || membership.status !== "active") {
-      return NextResponse.json(
-        { success: false, error: { code: "FORBIDDEN", message: "You do not have access to this workspace" } },
-        { status: 403 }
-      )
-    }
-
-    if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
-      return NextResponse.json(
-        { success: false, error: { code: "FORBIDDEN", message: "Only owners and admins can invite members" } },
-        { status: 403 }
-      )
-    }
+  try {
+    // Enforces membership + the `member:invite` permission (OWNER and ADMIN only).
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.member.invite)
 
     const [existingMember, existingInvitation] = await Promise.all([
       prisma.workspaceMember.findFirst({
@@ -113,6 +92,8 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
+    const authErr = authErrorResponse(error)
+    if (authErr) return authErr
     logger.error("Failed to invite member", { error: String(error) })
     return NextResponse.json(
       { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to invite member" } },

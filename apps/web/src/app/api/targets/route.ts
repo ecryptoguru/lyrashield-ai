@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
-import { getSession } from "@lyrashield/auth/server"
+import { getSession, requirePermission } from "@lyrashield/auth/server"
+import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateRepoTargetSchema, CreateUrlTargetSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
+import { authErrorResponse } from "../../../lib/api-auth"
 
+// NOTE: SSRF validation here is the existing (weak) inline blocklist. It is replaced
+// by the shared `checkScanUrlSafe` helper in the companion PR `fix/ssrf-hardening`.
+// Both PRs touch this file in different regions; merge the SSRF PR first, then rebase.
 const SSRF_BLOCKED_PATTERNS = [
   "127.",
   "0.0.0.0",
@@ -51,50 +56,31 @@ function isSsrfSafe(url: string): boolean {
 }
 
 export async function POST(request: Request) {
+  let body: unknown
   try {
-    const session = await getSession()
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
-        { status: 401 }
-      )
-    }
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
+      { status: 400 }
+    )
+  }
 
-    let body: unknown
-    try {
-      body = await request.json()
-    } catch {
-      return NextResponse.json(
-        { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
-        { status: 400 }
-      )
-    }
+  const isRepo = typeof body === "object" && body !== null && (body as Record<string, unknown>).type === "REPO"
+  const parsed = isRepo ? CreateRepoTargetSchema.safeParse(body) : CreateUrlTargetSchema.safeParse(body)
 
-    const isRepo = typeof body === "object" && body !== null && (body as Record<string, unknown>).type === "REPO"
-    const parsed = isRepo ? CreateRepoTargetSchema.safeParse(body) : CreateUrlTargetSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
+      { status: 400 }
+    )
+  }
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
-        { status: 400 }
-      )
-    }
+  const data = parsed.data
+  const workspaceId = data.workspaceId
 
-    const data = parsed.data
-    const workspaceId = data.workspaceId
-
-    const membership = await prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: { workspaceId, userId: session.userId },
-      },
-    })
-
-    if (!membership || membership.status !== "active") {
-      return NextResponse.json(
-        { success: false, error: { code: "FORBIDDEN", message: "You do not have access to this workspace" } },
-        { status: 403 }
-      )
-    }
+  try {
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.target.create)
 
     if (data.type !== "REPO") {
       if (!isSsrfSafe(data.url)) {
@@ -164,6 +150,8 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
+    const authErr = authErrorResponse(error)
+    if (authErr) return authErr
     logger.error("Failed to create target", { error: String(error) })
     return NextResponse.json(
       { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to create target" } },
