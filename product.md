@@ -1,3 +1,106 @@
+# LyraShield — Product, Positioning & GTM (2026-07 Update)
+
+> **Status:** Authoritative positioning update, 2026-07. Produced from a deep research pass (engineering) + a full marketing/GTM lens + a code-grounded review of the repo at Sprint-2 state. **This section supersedes the earlier Positioning, USPs, Competitive Differentiation, Messaging, and Pricing sections of this document** (retained below for reference). Items marked *(pending founder confirmation)* are proposals, not decisions. **Pre-launch: no customers yet — nothing here is approved public copy.**
+
+## 0. What changed and why
+
+Three findings reshaped the positioning:
+
+1. **The category already exists and is well-funded.** "Securing AI-built / vibe-coded software" is a funded 2025–2026 category: XBOW (~$272M raised; topped a HackerOne US leaderboard), Snyk (~$278M ARR, now shipping agentic pentest), Aikido ($84.6M, explicitly courting vibe coders), Endor Labs ($188M), Legit Security ($73.5M), plus Backslash, Socket, Semgrep, Arnica, and BugBase. **Every individual LyraShield differentiator is already shipped by a serious competitor.**
+2. **Therefore the moat is the combination, not any single feature.** Verified findings, auto-fix PRs, and MCP/IDE integration are each matched elsewhere. What the field does *poorly* — and LyraShield is architected for — is **one product with two depths** (solo vibe coder → enterprise CISO on the same loop), **agent-native everywhere** (one action definition → UI, chat, MCP, CLI, HTTP), and a **complete review package** (fix PR + retest + visual recap + reviewer checklist) as a single artifact.
+3. **The engine honesty constraint is real.** The scan engine (a fork of the Strix OSS AI-pentest CLI) is alpha and its "verification" is not yet dependable. Marketing must treat "verified findings" as a *hygiene promise*, never as a benchmark/accuracy headline. Proof comes from design-partner conversion, not vendor benchmarks.
+
+## 1. Positioning statement (internal)
+
+> **For** developers and small teams building with AI coding tools (Cursor, Bolt, Lovable, v0, Windsurf, Claude Code) — and the AppSec teams and CISOs who will eventually govern that software — **LyraShield is the agent-native application security platform** that turns "secure this" into a verified finding, a fix, a retest, and a shareable report — across UI, chat sidebar, MCP server, CLI, and HTTP. **Unlike** point tools that each do one thing, LyraShield is **one product with two depths**: the same loop serves a solo builder shipping a weekend app *and* an enterprise team gating production merges.
+
+**Category:** agent-native AppSec. **Core loop (unchanged):** Target → Scan → Verified Finding → Fix → Retest → Report.
+
+## 2. Positioning guardrails (non-negotiable)
+
+1. **Never claim "only we verify."** False (XBOW, Terra, RunSybil, Horizon3, BugBase verify). Say "every finding is exploit-validated before it reaches you" — hygiene, not headline.
+2. **Never claim "only we auto-fix" or "only we do MCP."** Snyk, Semgrep, Aikido, Endor do subsets. These are features *of the combination*.
+3. **Lead with the combination + the loop + the review package.** The only story that survives a side-by-side with XBOW and Snyk open in other tabs.
+4. **No benchmark/accuracy claims** (e.g. XBEN numbers) — the engine is alpha; benchmarks are vendor-self-run and will be demolished in a technical eval.
+5. **No "trusted by X" social proof** until we have customers.
+
+## 3. The differentiator: "one loop, two depths" (use this matrix on comparison pages)
+
+| | Point tools (XBOW, Semgrep, Snyk, Socket, Endor) | Vibe-coder wrappers (Aikido, Arnica, Backslash) | **LyraShield** |
+|---|---|---|---|
+| Span of user | One role (sec OR dev) | One role (dev, no enterprise depth) | **Solo builder → CISO, one product** |
+| Verified findings | Some | Rarely | **Yes (+ own verification layer)** |
+| Auto-fix PR | Some | Sometimes | **Yes** |
+| MCP / IDE / CLI / HTTP | Partial | Usually IDE-only | **All five, one action definition** |
+| Retest after fix | Rarely | Rarely | **Yes — closes the loop** |
+| Shareable report + visual recap | Rarely | Sometimes | **Yes, one artifact** |
+| Reviewer checklist | Almost never | Never | **Yes** |
+| CI / SARIF / PR gate | Some | Rarely | **Yes (planned P0)** |
+
+**Rule:** never say "only we do X" for any single cell — say "we're the only row where every column is checked."
+
+### Honest per-competitor framing (summary)
+- **vs Snyk:** they bolted agentic pentest onto a SCA/SAST empire; we started as the loop and added scanners. Don't claim SCA-depth parity.
+- **vs Semgrep:** best deterministic CI scanner, deliberately not an autonomous pentester; we run both a rule engine *and* an exploit engine. (We also run Semgrep as an unmodified dependency — see PRD.)
+- **vs Aikido:** closest vibe-coder competitor; hold the line on agent-native surfaces + review package, don't fight on SAST/SCA breadth.
+- **vs GitHub Advanced Security:** their autofix patches a pattern; ours is the back half of an exploit-verified loop with retest + report.
+- **vs XBOW / AI-native pentest:** *complement, not compete* on pure offense — "if you have an AppSec team and want the best pure offense, buy XBOW; if you have builders in Cursor and no AppSec team, that's us." **Never claim we out-perform XBOW on exploitation.**
+- **vs Socket/Endor (supply chain):** different problem; we ingest supply-chain signal as one input and turn it into an action (fix PR + retest + report).
+
+**Two claims we will NOT make:** "the only AI security tool that verifies findings" and "first/only to combine scan + fix + MCP."
+
+## 4. Messaging by audience (draft — internal only)
+
+- **Vibe coder (Phase 1 primary):** "You shipped it in an hour. Is it secure?" → paste a URL / connect a repo → scanned like an attacker → plain-English "founder mode" + one-click fix PR + MCP inside Cursor. Don't mention XBOW/Snyk to this audience.
+- **Indie hacker / small SaaS:** "The security review your launch customer is about to ask for." → the shareable report is the wedge (a sales-enablement artifact for "are you secure/pen-tested?").
+- **Agency / dev shop:** "Ship every client project with a security report in the handoff." → per-target protection, branded per-client recaps; a margin feature, not a cost center. (PLG wedge *and* channel.)
+- **Enterprise AppSec (Phase 2):** "One loop, from the vibe coder in your repo to the gate on your main branch." → security-engineer mode + SARIF + RBAC + audit trail + PR gate.
+- **CISO / regulated SaaS (Phase 2):** "AI is writing your code. You're still accountable for it." → a verifiable chain (finding → fix → retest → attested report) + govern the new MCP/agent surface + one vendor, one audit trail.
+
+## 5. Naming & taglines *(pending founder confirmation)*
+
+- **Trademark clearance required** on "LyraShield" (US/EU/India, Class 9 & 42) before public use.
+- **"Lyra-" prefix decision:** LyraShield shares a prefix with Lyrafin AI (a *different*, unrelated product — market intelligence). A shared prefix may confuse search/SEO/investor narrative. **Founder-level decision:** keep a "Lyra-" family or rename. Blocks brand work + domain purchase.
+- **Public domain: TBD** (repo is `ecryptoguru/lyrashieldai`); confirm `lyrashield.ai` / `.com` / `.io` availability.
+- **Taglines:** primary (site/institutional) **"Secure AI-built apps before they ship."**; dev-facing **"One loop. From vibe-coded to verified."**
+- **Product personas:** do **not** reuse Lyra/Myra (those are Lyrafin's). If personas are wanted: copilot = "Shield"/"Aegis"; onboarding = "Guide" or unnamed.
+
+## 6. Pricing & packaging *(proposal — pending founder confirmation)*
+
+Built around the intended usage metric **"protected targets + agent minutes"** (maps cleanly to Polar metered billing + Razorpay UPI-Autopay in India), because per-scan LLM cost is superlinear in target size ($38–104 for a full-repo audit; ~$0.02–0.07 for a diff-only PR scan). **Diff-only is the margin-friendly default; deep scans are a metered upgrade.**
+
+| Tier | USD/mo | India (₹/mo) | Targets | Agent min/mo | Highlights |
+|---|---|---|---|---|---|
+| Free | $0 | ₹0 | 1 | ~30 (2–3 diff scans) | Diff-only, founder-mode, fix-PR suggestion, basic report. **No deep scans.** |
+| Pro | $29 | ₹1,800 | 3 | ~300 | Deep scans (budget-gated), all 5 modes, retest, shareable report, MCP |
+| Team | $99 | ₹4,500 | 10 | ~1,500 | GitHub Action + diff-aware PR gate, SARIF, 5 seats, scheduled scans |
+| Agency | $299 | ₹12,000 | 50 | ~8,000 | Per-client workspaces, branded reports, 15 seats, priority queue |
+| Business | $599 | ₹24,000 | 100 | ~20,000 | SSO (SAML), RBAC, tamper-evident audit export, 25 seats, SLA |
+| Enterprise | Custom | Custom | Custom | Custom | SCIM, private/on-prem, DPA, custom retention |
+
+**Free-tier abuse defense (mandatory before paid tiers launch):** email verification ON, 1 target, hard agent-minute cap, **no deep scans on Free**, per-account abuse signals + the in-loop budget guard live first. (Email verification is currently disabled in code — must be turned on.)
+
+**PLG motion:** Free→Pro (2nd target / hit agent-minute cap / tried deep scan); Pro→Team (want it in CI / invited a teammate — the PR gate is the stickiest lever); Team→Agency (protecting client apps). **Never gate the fix PR itself** — gate automation (auto-merge, retest-on-fix) and scale (targets, deep scans, CI).
+
+## 7. Pre-launch GTM (summary)
+
+Pre-PMF, **developer-led + design-partner-first** motion:
+- **ICP wedge:** technical solo founders / 2–10-person teams building customer-facing apps with AI coding tools, about to face a security question from a buyer/auditor, with no security person.
+- **Growth engine:** the shareable report (viral artifact), the fix PR (in-repo demo), the MCP server (distribution where builders already are).
+- **Design partners:** 3–5 hand-picked (prioritize agencies), 3–9 months, structured weekly feedback, hard conversion to paid (30–60% benchmark). This validates positioning + pricing before a public launch.
+- **Launch (only when the loop is production-grade + partners converted):** Product Hunt + a genuinely honest "Show HN" (founder-authored) + X thread + value-add Reddit. **No** benchmark claims, "first/only" claims, or fake social proof.
+- **Category content spine (out-write, don't out-spend):** "the point-tool trap," "a security product's own security," "verified findings, honestly," "the review package is the product," "agent-native security: one action, five surfaces."
+
+**SEO clusters:** Phase 1 (secure AI-generated code, vibe coding security, "scan my app for vulnerabilities", fix-specific vuln pages, SaaS-launch/SOC2 intent); Phase 2 (agent-native AppSec, MCP/agent security, SARIF/PR-gate, competitor-alternative pages). Programmatic opportunity: one page per vuln-class × stack (dev-built, not marketing-built).
+
+## 8. Founder decisions that block downstream work (from research §18)
+
+Brand: (1) public domain, (2) "Lyra-" prefix keep-or-rename, (3) trademark clearance, (4) product personas. Pricing: (5) tier structure/prices, (6) "agent minutes" metric + per-tier allowances, (7) free-tier policy sign-off, (8) India pricing. GTM: (9) design-partner go/no-go, (10) build-in-public founder vs product voice, (11) launch timing, (12) HN/PH founder-authored. Product: (13) confirm "two depths, one loop" as the headline, (14) confirm the 5 explanation modes, (15) **v1 coverage — strong recommendation: ship SCA + secrets scanning with v1** (deterministic, high-confidence, what buyers check first), (16) confirm no public benchmark numbers.
+
+---
+
+> _Below is the original product.md (pre-2026-07), retained for reference. Where it conflicts with the 2026-07 update above (USP framing, competitive tables, pricing), the update above is authoritative._
+
 # LyraShield — Product Features & USPs
 
 > **For marketing, sales, and positioning use.** This document maps every feature to a buyer benefit and competitive differentiator.
