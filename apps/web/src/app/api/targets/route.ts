@@ -3,52 +3,7 @@ import { prisma } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
 import { CreateRepoTargetSchema, CreateUrlTargetSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
-
-const SSRF_BLOCKED_PATTERNS = [
-  "127.",
-  "0.0.0.0",
-  "10.",
-  "192.168.",
-  "169.254.",
-  "172.16.",
-  "172.17.",
-  "172.18.",
-  "172.19.",
-  "172.20.",
-  "172.21.",
-  "172.22.",
-  "172.23.",
-  "172.24.",
-  "172.25.",
-  "172.26.",
-  "172.27.",
-  "172.28.",
-  "172.29.",
-  "172.30.",
-  "172.31.",
-  "::1",
-  "::ffff:",
-  "fc00:",
-  "fe80:",
-  "fd00:",
-  "localhost",
-  "metadata.google.internal",
-]
-
-function isSsrfSafe(url: string): boolean {
-  try {
-    const parsed = new URL(url)
-    const hostname = parsed.hostname.toLowerCase()
-
-    if (hostname.endsWith(".")) {
-      return false
-    }
-
-    return !SSRF_BLOCKED_PATTERNS.some((p) => hostname === p || hostname.startsWith(p))
-  } catch {
-    return false
-  }
-}
+import { checkScanUrlSafe } from "../../../lib/ssrf"
 
 export async function POST(request: Request) {
   try {
@@ -97,9 +52,16 @@ export async function POST(request: Request) {
     }
 
     if (data.type !== "REPO") {
-      if (!isSsrfSafe(data.url)) {
+      const ssrf = await checkScanUrlSafe(data.url)
+      if (!ssrf.safe) {
         return NextResponse.json(
-          { success: false, error: { code: "SSRF_BLOCKED", message: "URL targets internal/private ranges are not allowed" } },
+          {
+            success: false,
+            error: {
+              code: "SSRF_BLOCKED",
+              message: "This URL is not allowed as a scan target (it targets an internal, private, or unresolvable address).",
+            },
+          },
           { status: 400 }
         )
       }
