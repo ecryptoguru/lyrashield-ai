@@ -10,6 +10,19 @@ const GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET
 const GOOGLE_CLIENT_ID = env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = env.GOOGLE_CLIENT_SECRET
 
+// Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; additional
+// origins (staging, apex+www, preview deploys) come from a comma-separated
+// ADDITIONAL_TRUSTED_ORIGINS env var so multi-origin deployments don't have
+// their sign-in/OAuth requests rejected.
+const trustedOrigins = [
+  env.BETTER_AUTH_URL,
+  ...(env.ADDITIONAL_TRUSTED_ORIGINS
+    ? env.ADDITIONAL_TRUSTED_ORIGINS.split(",")
+        .map((o) => o.trim())
+        .filter(Boolean)
+    : []),
+]
+
 async function sendVerificationEmail({
   user,
   url,
@@ -52,7 +65,7 @@ export const auth = betterAuth({
   }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
-  trustedOrigins: [env.BETTER_AUTH_URL],
+  trustedOrigins,
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
