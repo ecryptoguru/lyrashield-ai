@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
-import { getSession } from "@lyrashield/auth/server"
+import { getSession, getWorkspaceMembership } from "@lyrashield/auth/server"
 import { UpdateOnboardingSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
 
@@ -71,6 +71,39 @@ export async function PATCH(request: Request) {
         { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
         { status: 400 }
       )
+    }
+
+    // Ownership checks: workspaceId / targetId are attacker-controlled foreign
+    // keys. Without verification a user could point their onboarding state at
+    // any workspace or target in the system (IDOR). Verify the caller is an
+    // active member of the workspace, and that the target belongs to a
+    // workspace the caller is a member of, before persisting either value.
+    if (parsed.data.workspaceId !== undefined && parsed.data.workspaceId !== null) {
+      const membership = await getWorkspaceMembership(parsed.data.workspaceId, session.userId)
+      if (!membership) {
+        return NextResponse.json(
+          { success: false, error: { code: "FORBIDDEN", message: "You do not have access to this workspace" } },
+          { status: 403 }
+        )
+      }
+    }
+
+    if (parsed.data.targetId !== undefined && parsed.data.targetId !== null) {
+      // A targetId is only meaningful alongside a workspace the user belongs to.
+      // Resolve the target and confirm the caller is an active member of its workspace.
+      const target = await prisma.target.findUnique({
+        where: { id: parsed.data.targetId },
+        select: { workspaceId: true },
+      })
+      const targetMembership = target
+        ? await getWorkspaceMembership(target.workspaceId, session.userId)
+        : null
+      if (!target || !targetMembership) {
+        return NextResponse.json(
+          { success: false, error: { code: "FORBIDDEN", message: "You do not have access to this target" } },
+          { status: 403 }
+        )
+      }
     }
 
     const updateData: Record<string, unknown> = {}
