@@ -9,7 +9,7 @@
 
 - **Repo renamed** → `github.com/ecryptoguru/lyrasec-ai` (was `lyrashieldai`). In-code `@lyrashield/*` scopes + `LYRASHIELD_*` env vars intentionally NOT renamed yet (trademark clearance open). *Decision #2 (keep "Lyra-" prefix): trending KEEP — new name retains it; formal trademark clearance (#3) still pending.*
 - **Decision #15 (v1 coverage) — RESOLVED:** v1 = agentic pentest **+ SCA + secrets** + GitHub Action/reusable workflow (diff-aware gate) + SARIF. (See PRD §B13.4 / §B8 / §18.)
-- **Deep audit completed** (repo @ `396ca63`) → prioritized report in the "LyraSec — Deep Audit" doc. **Batch 1 (P0/P1 security/correctness) shipped as PRs #7–#11** (branches; not merged):
+- **Deep audit completed** (repo @ `396ca63`) → full prioritized backlog embedded in **PRD PART B §B13** (PRD is the single source of truth). **Batch 1 (P0/P1 security/correctness) shipped as PRs #7–#11** (branches; not merged):
   - A0 tenant-isolation: AsyncLocalStorage rewrite + corrected model sets (found a latent crash: soft-delete set wrongly included 4 columnless models → `getWorkspaceMembership` would throw on a real DB) + auth-guard auto-activation + tests. RLS = follow-up (needs DB validation).
   - A1 Redis/Upstash rate-limit (prod limiting was silently no-op); A2/A4 webhook idempotency + exact repo match; A3 onboarding IDOR; A5 GitHub install-URL slug.
   - A7 CI-runs-tests: **blocked** on granting the GitHub App `Workflows: write`.

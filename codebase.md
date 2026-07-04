@@ -763,4 +763,4 @@ A code-grounded deep audit produced these fixes. Each is a branch + PR on `ecryp
 - **GitHub install URL (`packages/integrations/src/github.ts`)** — built from `GITHUB_APP_SLUG` (was the numeric app id, which 404s).
 - **CI (`.github/workflows/ci.yml`)** — adds a `pnpm test` step, reads pnpm from `packageManager`, adds `NEXT_PUBLIC_APP_URL`. **Blocked** on granting the GitHub App `Workflows: write`.
 
-Remaining audit backlog (Batches 2–4: pagination, frontend/UX + a11y + mobile, audit-log hash-chain, shared component library, data-fetch/memoization, cost/determinism + SARIF/CVSS contracts, dogfood CI, and the differentiated feature set) lives in the "LyraSec — Deep Audit" doc.
+Remaining audit backlog (Batches 2–4: pagination, frontend/UX + a11y + mobile, audit-log hash-chain, shared component library, data-fetch/memoization, cost/determinism + SARIF/CVSS contracts, dogfood CI, and the differentiated feature set) is in **PRD PART B §B13.5 / §B13.6** — the PRD is the single source of truth.
