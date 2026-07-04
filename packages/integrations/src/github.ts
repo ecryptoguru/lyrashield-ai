@@ -1,8 +1,13 @@
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
-import { createHmac, createSign } from "crypto"
+import { createHmac, createSign, timingSafeEqual as cryptoTimingSafeEqual } from "crypto"
 
 const GITHUB_API_BASE = "https://api.github.com"
+
+const GITHUB_HEADERS = {
+  Accept: "application/vnd.github+json",
+  "X-GitHub-Api-Version": "2022-11-28",
+} as const
 
 function getAppCredentials() {
   const appId = env.GITHUB_APP_ID
@@ -38,16 +43,54 @@ export function createAppJWT(): string {
   return `${data}.${signature}`
 }
 
+/**
+ * fetch() wrapper that retries transient GitHub failures: 5xx, 429, and 403s
+ * that carry a Retry-After (secondary rate limit). A 403 WITHOUT Retry-After is
+ * an auth/permission error and is NOT retried. Honors Retry-After, else backs
+ * off exponentially (capped).
+ */
+async function githubFetch(url: string, init: RequestInit, retries = 3): Promise<Response> {
+  let attempt = 0
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const res = await fetch(url, init)
+    if (res.ok || attempt >= retries) return res
+
+    const retryAfter = res.headers.get("retry-after")
+    const isSecondaryRateLimit = res.status === 403 && retryAfter !== null
+    const retryable = res.status >= 500 || res.status === 429 || isSecondaryRateLimit
+    if (!retryable) return res
+
+    const delayMs = retryAfter
+      ? Number(retryAfter) * 1000
+      : Math.min(1000 * 2 ** attempt, 8000)
+    await new Promise((r) => setTimeout(r, delayMs))
+    attempt++
+  }
+}
+
+// ── Installation-token cache ──────────────────────────────────────────────────
+// GitHub installation tokens are valid ~1h. Re-minting on every call (JWT sign
+// + network round-trip) burns the tight installation-token rate limit once the
+// worker/webhooks fetch per-event. Cache per installationId and re-mint only
+// within TOKEN_SKEW_MS of expiry.
+// NOTE: this is a per-process Map (single-instance). For multi-instance
+// deployments, move this cache to Redis keyed by installationId.
+type CachedToken = { token: string; expiresAt: number }
+const tokenCache = new Map<number, CachedToken>()
+const TOKEN_SKEW_MS = 5 * 60 * 1000
+
 export async function getInstallationToken(installationId: number): Promise<string> {
+  const cached = tokenCache.get(installationId)
+  if (cached && cached.expiresAt - Date.now() > TOKEN_SKEW_MS) {
+    return cached.token
+  }
+
   const jwt = createAppJWT()
 
-  const res = await fetch(`${GITHUB_API_BASE}/app/installations/${installationId}/access_tokens`, {
+  const res = await githubFetch(`${GITHUB_API_BASE}/app/installations/${installationId}/access_tokens`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
+    headers: { Authorization: `Bearer ${jwt}`, ...GITHUB_HEADERS },
   })
 
   if (!res.ok) {
@@ -56,7 +99,9 @@ export async function getInstallationToken(installationId: number): Promise<stri
     throw new Error(`Failed to get installation token: ${res.status}`)
   }
 
-  const data = (await res.json()) as { token: string }
+  const data = (await res.json()) as { token: string; expires_at?: string }
+  const expiresAt = data.expires_at ? Date.parse(data.expires_at) : Date.now() + 55 * 60 * 1000
+  tokenCache.set(installationId, { token: data.token, expiresAt })
   return data.token
 }
 
@@ -77,13 +122,10 @@ export async function listInstallationRepos(installationId: number): Promise<Git
   let hasMore = true
 
   while (hasMore) {
-    const res = await fetch(`${GITHUB_API_BASE}/installation/repositories?per_page=100&page=${page}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-    })
+    const res = await githubFetch(
+      `${GITHUB_API_BASE}/installation/repositories?per_page=100&page=${page}`,
+      { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS } }
+    )
 
     if (!res.ok) {
       logger.error("Failed to list installation repos", { installationId, status: res.status })
@@ -110,20 +152,26 @@ export interface InstallationInfo {
 
 export async function getAppInstallations(): Promise<InstallationInfo[]> {
   const jwt = createAppJWT()
+  const installations: InstallationInfo[] = []
+  let page = 1
+  let hasMore = true
 
-  const res = await fetch(`${GITHUB_API_BASE}/app/installations`, {
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  })
+  while (hasMore) {
+    const res = await githubFetch(`${GITHUB_API_BASE}/app/installations?per_page=100&page=${page}`, {
+      headers: { Authorization: `Bearer ${jwt}`, ...GITHUB_HEADERS },
+    })
 
-  if (!res.ok) {
-    throw new Error(`Failed to list installations: ${res.status}`)
+    if (!res.ok) {
+      throw new Error(`Failed to list installations: ${res.status}`)
+    }
+
+    const data = (await res.json()) as InstallationInfo[]
+    installations.push(...data)
+    hasMore = data.length === 100
+    page++
   }
 
-  return (await res.json()) as InstallationInfo[]
+  return installations
 }
 
 export function verifyWebhookSignature(payload: string, signature: string | null): boolean {
@@ -140,20 +188,12 @@ export function verifyWebhookSignature(payload: string, signature: string | null
   const expected = createHmac("sha256", secret).update(payload).digest("hex")
   const provided = signature.slice(7)
 
+  // crypto.timingSafeEqual throws on unequal-length buffers, so length-check first.
   if (expected.length !== provided.length) {
     return false
   }
 
-  return timingSafeEqual(expected, provided)
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let result = 0
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  }
-  return result === 0
+  return cryptoTimingSafeEqual(Buffer.from(expected), Buffer.from(provided))
 }
 
 export function getInstallAppUrl(): string {
