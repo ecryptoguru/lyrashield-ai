@@ -5,6 +5,7 @@ import { createHmac } from "crypto"
 vi.mock("@lyrashield/config", () => ({
   env: {
     GITHUB_APP_ID: "test-app-id",
+    GITHUB_APP_SLUG: "test-app",
     GITHUB_APP_PRIVATE_KEY: "test-private-key",
     GITHUB_WEBHOOK_SECRET: "test-webhook-secret",
     NEXT_PUBLIC_APP_URL: "https://test.example.com",
@@ -81,16 +82,13 @@ describe("verifyWebhookSignature", () => {
 })
 
 describe("getInstallAppUrl", () => {
-  it("returns a URL containing the app ID", () => {
+  it("returns a URL containing the app slug", () => {
     const url = getInstallAppUrl()
-    expect(url).toContain("test-app-id")
-    expect(url).toContain("github.com/apps/")
-    expect(url).toContain("installations/new")
+    expect(url).toBe("https://github.com/apps/test-app/installations/new")
   })
 
-  it("includes callback URL in state parameter", () => {
+  it("does not include caller state", () => {
     const url = getInstallAppUrl()
-    expect(url).toContain("state=")
-    expect(url).toContain(encodeURIComponent("https://test.example.com"))
+    expect(url).not.toContain("state=")
   })
 })
