@@ -1,6 +1,8 @@
 # LyraShield — Codebase Guide for AI Agents
 
-> **Purpose**: This document gives AI agents (Claude, GPT, Copilot, etc.) a complete mental model of the LyraShield codebase so they can navigate, modify, and extend it effectively.
+> **Purpose**: This document gives AI agents (Claude, GPT, Copilot, etc.) a complete mental model of the codebase so they can navigate, modify, and extend it effectively.
+>
+> **⚠️ 2026-07-04:** The GitHub repo is now **`ecryptoguru/lyrasec-ai`** (renamed from `lyrashieldai`). The product name is migrating LyraShield → **LyraSec AI**, but the in-code package scopes (`@lyrashield/*`) and engine env vars (`LYRASHIELD_*`) are intentionally **not** renamed yet (trademark clearance open) — keep using them in code. See **§17 (2026-07-04 Audit — Batch 1 changes)** at the end for the latest merged/in-flight changes; where it conflicts with older sections below, §17 wins.
 
 ---
 
@@ -266,19 +268,15 @@ return NextResponse.json({ success: false, error: { code: "INTERNAL_ERROR", ... 
 
 ### 4.7 SSRF Protection
 
-`apps/web/src/app/api/targets/route.ts` contains an SSRF blocklist that validates URL target hostnames:
+The SSRF logic lives in a shared helper **`apps/web/src/lib/ssrf.ts`** (`checkScanUrlSafe`), wired into the URL-target path of `apps/web/src/app/api/targets/route.ts`. It does **DNS-resolution-aware** validation, not string-prefix matching:
 
-**Blocked ranges**:
-- `127.` prefix (full 127.0.0.0/8 loopback)
-- `0.0.0.0` (reserved)
-- `10.` prefix (private)
-- `192.168.` prefix (private)
-- `169.254.` prefix (link-local / cloud metadata)
-- `172.16.` through `172.31.` prefixes (private)
-- `::1`, `::ffff:`, `fc00:`, `fe80:`, `fd00:` (IPv6)
-- `localhost`, `metadata.google.internal`
+- Only `http(s)` schemes; rejects empty host and trailing-dot hostnames; blocks `localhost`/`*.localhost`/metadata hostnames.
+- **Resolves the hostname and validates every resolved A/AAAA address** against the blocklist (so a public domain that resolves to an internal IP is rejected).
+- Full IPv4 CIDR coverage: `0.0.0.0/8`, `10/8`, `100.64/10` (CGNAT), `127/8`, `169.254/16` (link-local + cloud metadata), `172.16/12`, `192.0.0/24`, `192.168/16`, `198.18/15`, multicast, reserved. Canonicalizes decimal/octal/hex IPv4.
+- IPv6: strips brackets + zone id; handles IPv4-mapped (`::ffff:`), IPv4-compat, NAT64 (`64:ff9b::/96`), ULA (`fc00::/7`), link-local (`fe80::/10`), multicast; fail-closed on unparseable v6.
+- Injectable resolver for tests (`ssrf.test.ts`).
 
-**Additional checks**: Rejects hostnames with trailing dot (bypass prevention). Only `http://` and `https://` schemes allowed (enforced by `z.url()` in Zod schema).
+**Remaining (deferred to the worker, unbuilt):** this is *create-time* validation. The durable defense against DNS rebinding is *fetch-time* enforcement — resolve→pin IP→connect→re-validate each redirect hop, via an allow-listed egress proxy (PRD PART B §B2.2). Move the helper to `packages/security` when that package lands.
 
 ---
 
@@ -323,8 +321,13 @@ Required for local development (see `.env.example`):
 # Database
 DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
 
-# Redis
+# Redis (redis:// — reserved for the BullMQ job queue, Sprint 4+)
 REDIS_URL="redis://localhost:6379"
+
+# Upstash Redis REST — distributed rate limiting in production (HTTP endpoint +
+# token; NOT the redis:// URL above). If the URL is set, the token is required.
+UPSTASH_REDIS_REST_URL=""
+UPSTASH_REDIS_REST_TOKEN=""
 
 # Better Auth
 BETTER_AUTH_SECRET="replace-with-a-strong-secret-key-min-32-chars"
@@ -336,6 +339,7 @@ GITHUB_CLIENT_SECRET=""
 
 # GitHub App (integration — Sprint 3)
 GITHUB_APP_ID=""
+GITHUB_APP_SLUG=""          # slug from github.com/apps/<slug> — used to build the install URL (NOT the numeric id)
 GITHUB_APP_PRIVATE_KEY=""
 GITHUB_WEBHOOK_SECRET=""
 
@@ -744,3 +748,19 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 | `product.md` | GTM/marketing layer |
 | `engine-CHANGES.md` | Apache-2.0 §4b modification log |
 | `engine-NOTICE.md` | Apache-2.0 NOTICE file |
+| `packages/db/src/scoping.ts` | **(new, 2026-07-04)** pure workspace-scoping/soft-delete policy: model sets, `applyQueryGuards`, AsyncLocalStorage request context. No Prisma import (unit-testable). |
+
+---
+
+## 17. 2026-07-04 Audit — Batch 1 changes (branches/PRs, not yet merged to `main`)
+
+A code-grounded deep audit produced these fixes. Each is a branch + PR on `ecryptoguru/lyrasec-ai`. Where this conflicts with older sections, this section wins.
+
+- **Tenant isolation (`packages/db`)** — the workspace-scoping context was rewritten from an unsafe module-level global to **AsyncLocalStorage** in the new `packages/db/src/scoping.ts`; `extension.ts` is now a thin wrapper. **Both model sets were corrected to match real schema columns:** soft-delete = the **19** models that actually have `deletedAt` (removed `WorkspaceMember`, `CredentialSet`, `AuditLog`, `Retest`); workspace-scoped = the **17** auto-scopable models with `workspaceId` (removed `ScanEvent`, `Evidence`, `FixProposal`, `PullRequest`, `Ticket`; excluded cross-workspace `WorkspaceMember` and per-user `OnboardingState`). Auto-activation is wired into `requireWorkspaceAccess` (`packages/auth/src/session.ts`) via `setWorkspaceContext`. **Postgres RLS is a deliberate follow-up** (needs DB-validated per-request GUC). Regression + concurrency tests in `extension.test.ts` (now imports the real policy from `scoping.ts`).
+- **Rate limiting (`apps/web/src/lib/rate-limit.ts`)** — now uses `UPSTASH_REDIS_REST_URL`/`_TOKEN` (the previous code passed an empty token + the `redis://` URL, silently degrading prod to per-instance in-memory). Fail-loud on init error; in-memory map is bounded by an expiry sweep.
+- **GitHub webhook (`api/webhooks/github`)** — idempotent on `X-GitHub-Delivery` (pre-check + P2002 race guard); `installation.deleted` now matches targets by `startsWith("{owner}/")` instead of `contains`.
+- **Onboarding (`api/onboarding`)** — PATCH verifies workspace membership + target ownership before persisting (IDOR fix).
+- **GitHub install URL (`packages/integrations/src/github.ts`)** — built from `GITHUB_APP_SLUG` (was the numeric app id, which 404s).
+- **CI (`.github/workflows/ci.yml`)** — adds a `pnpm test` step, reads pnpm from `packageManager`, adds `NEXT_PUBLIC_APP_URL`. **Blocked** on granting the GitHub App `Workflows: write`.
+
+Remaining audit backlog (Batches 2–4: pagination, frontend/UX + a11y + mobile, audit-log hash-chain, shared component library, data-fetch/memoization, cost/determinism + SARIF/CVSS contracts, dogfood CI, and the differentiated feature set) lives in the "LyraSec — Deep Audit" doc.
