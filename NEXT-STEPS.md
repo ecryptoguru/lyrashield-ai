@@ -13,7 +13,7 @@
   - A0 tenant-isolation: AsyncLocalStorage rewrite + corrected model sets (found a latent crash: soft-delete set wrongly included 4 columnless models → `getWorkspaceMembership` would throw on a real DB) + auth-guard auto-activation + tests. RLS = follow-up (needs DB validation).
   - A1 Redis/Upstash rate-limit (prod limiting was silently no-op); A2/A4 webhook idempotency + exact repo match; A3 onboarding IDOR; A5 GitHub install-URL slug.
   - A7 CI-runs-tests: **blocked** on granting the GitHub App `Workflows: write`.
-- **Still open:** domain (#1); Batches 2–4 of the audit (pagination, frontend/UX+a11y+mobile, audit-log hash-chain, component library, data-fetch/memoization, cost/determinism + SARIF/CVSS contracts, dogfood CI, differentiated features — several need the unbuilt worker/engine).
+- **Still open:** domain (#1); Batches 2–4 of the audit. **Done:** Batch 2 (server-fetched initialData + React cache() (B1/B2) ✅, pagination (A6) ✅, API/fetch helpers (B4) ✅, nav-404 stubs (A8 remainder) ✅, shared component library (B3) ✅, frontend a11y + mobile sidebar + dark mode fixes (A8 partial) ✅, premium UI upgrade across all pages ✅). **Batch 3 done (except Postgres RLS):** audit-log hash-chain (A9) ✅, Evidence encryption enforcement ✅, cost/determinism + SARIF 2.1.0 + dual CVSS fields (B5/B6) ✅. **Remaining:** Postgres RLS + validate on CI Postgres; Batch 4: differentiated features (several need the unbuilt worker/engine).
 
 ### Round-2 audit + hardening (2026-07-04, MERGED to main)
 
@@ -145,7 +145,7 @@ These block downstream work. Status as of 2026-07-02 — all PENDING.
 - Sprint 2.5: Onboarding flow (7-step wizard, OnboardingState model, GET/PATCH API)
 - Sprint 3: GitHub App integration (JWT, installation tokens, repo listing, webhook signature verification, integrations UI)
 - Rate limiting middleware (auth 5/min, API 30/min)
-- Tests: 115 passing (env, onboarding schemas, GitHub webhook signature, install URL)
+- Tests: 176 passing (env, onboarding schemas, GitHub webhook signature, install URL, Prisma extension, SSRF, rate-limit, types, API client helpers, audit hash-chain, RLS helpers, UI components). 10 test files.
 
 ### Not started (PRD PART B §B0.1)
 

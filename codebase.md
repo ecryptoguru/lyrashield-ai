@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the next tasks, and the landmines — then use this file as the deep code map and `PRD.md` PART B §B13 as the backlog source of truth.
 >
-> **⚠️ 2026-07-04:** The GitHub repo is now **`ecryptoguru/lyrasec-ai`** (renamed from `lyrashieldai`). The product name is migrating LyraShield → **LyraSec AI**, but the in-code package scopes (`@lyrashield/*`) and engine env vars (`LYRASHIELD_*`) are intentionally **not** renamed yet (trademark clearance open) — keep using them in code. See **§17 (2026-07-04 Audit — Batch 1 changes)** at the end for the latest merged/in-flight changes; where it conflicts with older sections below, §17 wins.
+> **⚠️ 2026-07-05:** The GitHub repo is now **`ecryptoguru/lyrasec-ai`** (renamed from `lyrashieldai`). The product name is migrating LyraShield → **LyraSec AI**, but the in-code package scopes (`@lyrashield/*`) and engine env vars (`LYRASHIELD_*`) are intentionally **not** renamed yet (trademark clearance open) — keep using them in code. See **§17 (2026-07-04 Audit — Batch 1)**, **§18 (2026-07-05 UI/UX Premium Upgrade + Deep Code Review)**, and **§19 (2026-07-05 Batch 2 Remainder + Batch 3 Design Contracts + RLS + Deep Code Review)** at the end for the latest merged changes; where they conflict with older sections below, §17/§18/§19 win.
 
 ---
 
@@ -73,9 +73,10 @@ The engine repo has been forked from [usestrix/strix](https://github.com/usestri
 | Auth | Better Auth | 1.6.x |
 | Validation | Zod | 4.x |
 | Styling | TailwindCSS (CSS-first config) | 4.3.x |
+| Component variants | class-variance-authority (cva) | 0.7.x |
 | Icons | lucide-react | 1.23.x |
 | Monorepo | Turborepo + pnpm workspaces | 2.10.x / 11.6.x |
-| Testing | Vitest | 4.1.x |
+| Testing | Vitest | 4.1.x (176 tests, 10 files) |
 | Worker | tsx watch (stub mode) | — |
 | Job queue | BullMQ (planned Sprint 4) | 5.78.x |
 
@@ -83,9 +84,11 @@ The engine repo has been forked from [usestrix/strix](https://github.com/usestri
 - TypeScript 6: `types: ["node"]` required in tsconfig, `baseUrl` is deprecated
 - Prisma 7: uses `prisma.config.ts` with dotenv, requires `PrismaPg` driver adapter in client constructor (no datasource URL in schema)
 - Zod 4: use `z.url()` instead of `z.string().url()`, `z.email()` instead of `z.string().email()`
-- TailwindCSS 4: CSS-first config via `@theme` in `globals.css`, no `tailwind.config.js`
+- TailwindCSS 4: CSS-first config via `@theme` in `globals.css`, no `tailwind.config.js`. Premium design tokens: OKLCH color space, custom shadows (`--shadow-xs` through `--shadow-lg`, `--shadow-primary`), enlarged radii (`--radius-sm` 0.375rem through `--radius-2xl` 1.25rem), glassmorphism (`.glass`), gradient utilities (`.gradient-primary`, `.gradient-hero`, `.text-gradient`), shadow utilities (`.shadow-premium`, `.shadow-card-hover`, `.shadow-primary-glow`). All utilities have dark mode variants.
+- class-variance-authority (cva): Used in `Button` and `Badge` components for variant management. Variants: Button (default/secondary/ghost/destructive/outline × sm/md/lg/icon), Badge (default/success/danger/warning/info/muted).
 - lucide-react v1.x: Brand icons (e.g. `Github`) removed — use `GithubIcon` from `@lyrashield/ui` instead
 - Vitest 4: Test files (`*.test.ts`) are excluded from `tsc --noEmit` typecheck via tsconfig excludes
+- Next.js `output: "standalone"`: Enabled in `next.config.ts` for optimized Docker builds — produces a minimal standalone server in `.next/standalone/` that runs via `node server.js` without needing `pnpm start`
 
 ---
 
@@ -101,45 +104,60 @@ lyrashield/
 │   │   │   │   │   ├── dashboard/
 │   │   │   │   │   │   ├── page.tsx              # Main dashboard with stats
 │   │   │   │   │   │   ├── projects/             # Project list + create
-│   │   │   │   │   │   │   ├── page.tsx          # Server component
-│   │   │   │   │   │   │   └── projects-client.tsx
+│   │   │   │   │   │   │   ├── page.tsx          # Server component (cursor pagination, initialData)
+│   │   │   │   │   │   │   └── projects-client.tsx  # Client (LoadMore, apiGetPaginated)
 │   │   │   │   │   │   ├── targets/              # Target list + create + detail
-│   │   │   │   │   │   │   ├── page.tsx          # Server component
-│   │   │   │   │   │   │   ├── targets-client.tsx
+│   │   │   │   │   │   │   ├── page.tsx          # Server component (cursor pagination, initialData)
+│   │   │   │   │   │   │   ├── targets-client.tsx  # Client (LoadMore, apiGetPaginated)
 │   │   │   │   │   │   │   └── [id]/page.tsx     # Target detail page
 │   │   │   │   │   │   ├── integrations/         # Integrations page (GitHub App)
 │   │   │   │   │   │   │   ├── page.tsx          # Server component
-│   │   │   │   │   │   │   └── github-integration.tsx  # Client: connect + repo picker
+│   │   │   │   │   │   │   └── github-integration.tsx  # Client: connect + repo picker (apiGet/apiPost)
+│   │   │   │   │   │   ├── findings/             # Stub page (not yet built)
+│   │   │   │   │   │   ├── fixes/                # Stub page (not yet built)
+│   │   │   │   │   │   ├── scans/                # Stub page (not yet built)
+│   │   │   │   │   │   ├── reports/              # Stub page (not yet built)
+│   │   │   │   │   │   ├── settings/             # Stub page (not yet built)
 │   │   │   │   │   │   └── team/                 # Team members + invites
 │   │   │   │   │   │       ├── page.tsx          # Server component
 │   │   │   │   │   │       └── team-client.tsx
 │   │   │   │   │   ├── layout.tsx                # Dashboard layout (auth guard + onboarding redirect + sidebar)
 │   │   │   │   │   └── loading.tsx
-│   │   │   │   ├── onboarding/                   # Onboarding wizard (Sprint 2.5)
-│   │   │   │   │   ├── page.tsx                  # Server component (auth guard)
-│   │   │   │   │   └── onboarding-wizard.tsx     # 7-step client component
+│   │   │   │   ├── onboarding/                   # Onboarding wizard (Sprint 2.5, premium UI)
+│   │   │   │   │   ├── page.tsx                  # Server component (auth guard, gradient hero bg, logo badge)
+│   │   │   │   │   └── onboarding-wizard.tsx     # 7-step client component (apiPost/apiPatch, premium buttons)
 │   │   │   │   ├── api/                          # REST API routes
 │   │   │   │   │   ├── auth/[...all]/route.ts    # Better Auth handler
 │   │   │   │   │   ├── onboarding/route.ts       # GET + PATCH onboarding state
-│   │   │   │   │   ├── projects/route.ts         # POST + GET projects
-│   │   │   │   │   ├── targets/route.ts          # POST + GET targets (with SSRF)
+│   │   │   │   │   ├── projects/route.ts         # POST + GET projects (cursor pagination)
+│   │   │   │   │   ├── targets/route.ts          # POST + GET targets (cursor pagination, SSRF)
 │   │   │   │   │   ├── team/route.ts             # POST invite + GET members
 │   │   │   │   │   ├── workspaces/route.ts       # POST create + GET list workspaces
 │   │   │   │   │   ├── integrations/github/      # GitHub App integration routes
 │   │   │   │   │   │   ├── install/route.ts      # GET callback + POST install URL
 │   │   │   │   │   │   └── repos/route.ts        # GET list installation repos
 │   │   │   │   │   └── webhooks/github/route.ts  # POST GitHub webhook handler
-│   │   │   │   ├── sign-in/page.tsx              # Sign-in page (email + GitHub OAuth)
-│   │   │   │   ├── sign-up/page.tsx              # Sign-up page (redirects to /onboarding)
-│   │   │   │   ├── page.tsx                      # Marketing landing page
+│   │   │   │   ├── sign-in/page.tsx              # Sign-in page (email + GitHub OAuth, gradient bg, premium card)
+│   │   │   │   ├── sign-up/page.tsx              # Sign-up page (redirects to /onboarding, gradient bg, premium card)
+│   │   │   │   ├── page.tsx                      # Marketing landing page (gradient hero, glassmorphic nav, feature cards)
 │   │   │   │   ├── layout.tsx                    # Root layout (Inter font)
-│   │   │   │   ├── globals.css                   # Tailwind theme + global styles
+│   │   │   │   ├── globals.css                   # Tailwind theme + premium design tokens (OKLCH, shadows, gradients, glass)
 │   │   │   │   ├── not-found.tsx
 │   │   │   │   └── icon.svg
 │   │   │   └── components/
-│   │   │       ├── sidebar.tsx                   # Dashboard sidebar nav (with Integrations)
-│   │   │       └── workspace-switcher.tsx        # Workspace dropdown switcher
-│   │   ├── next.config.ts                        # transpilePackages + serverExternalPackages
+│   │   │       ├── sidebar.tsx                   # Dashboard sidebar nav (gradient logo, mobile drawer, active state)
+│   │   │       └── workspace-switcher.tsx        # Workspace dropdown switcher (rounded-lg, aria attrs)
+│   │   ├── src/lib/                                  # Shared utilities
+│   │   │   ├── api-client.ts          # Typed API fetch helpers (apiGet/apiPost/apiPatch/apiDelete/apiGetPaginated + ApiError)
+│   │   │   ├── api-client.test.ts     # Tests for API helpers (13 tests: success, error, network, parse, pagination)
+│   │   │   ├── api-response.ts        # Server-side API helpers (apiSuccess/apiError/apiPaginated/parsePaginationParams)
+│   │   │   ├── api-auth.ts            # Auth error response mapper
+│   │   │   ├── cache.ts               # React cache() wrappers (getCachedSession/getCachedWorkspaceId/getCachedWorkspaces/getCachedProjects/getCachedDashboardStats/getCachedOnboardingState)
+│   │   │   ├── ssrf.ts                # SSRF protection (DNS-resolution-aware URL validation)
+│   │   │   ├── ssrf.test.ts           # SSRF tests (35 tests)
+│   │   │   ├── rate-limit.ts          # Rate limiting middleware (Upstash Redis)
+│   │   │   └── rate-limit.test.ts     # Rate limit tests (8 tests)
+│   │   ├── next.config.ts                        # output: standalone + transpilePackages + serverExternalPackages
 │   │   └── package.json
 │   └── worker/                                   # Worker service (stub for Sprint 4)
 │       └── src/index.ts
@@ -160,15 +178,31 @@ lyrashield/
 │   │   ├── prisma.config.ts      # Prisma 7 config (dotenv + datasource URL)
 │   │   └── src/
 │   │       ├── client.ts         # PrismaClient with PrismaPg adapter
-│   │       ├── index.ts          # Re-exports models + prisma client
+│   │       ├── scoping.ts        # Workspace scoping + soft-delete model sets (AsyncLocalStorage)
+│   │       ├── extension.ts      # Prisma client extension (thin wrapper over scoping.ts)
+│   │       ├── extension.test.ts # Scoping + soft-delete regression tests (24 tests)
+│   │       ├── audit-hash.ts     # AuditLog hash-chain (computeAuditHash + verifyAuditChain, SHA-256)
+│   │       ├── audit-hash.test.ts # Hash-chain tests (21 tests: determinism, chaining, tamper, evidence encryption)
+│   │       ├── evidence.ts       # Evidence encryption enforcement (assertEvidenceEncrypted, isValidKeyRefFormat)
+│   │       ├── rls.ts            # Postgres RLS helper (withWorkspaceRLS, withoutWorkspaceRLS — SET LOCAL in transaction)
+│   │       ├── rls.test.ts       # RLS helper tests (9 tests: context, error propagation, table coverage)
+│   │       ├── index.ts          # Re-exports models + prisma client + audit-hash + evidence + RLS utils
 │   │       └── generated/prisma/ # Prisma generated client (gitignored)
 │   ├── types/                                    # Shared Zod schemas + TS types
 │   │   └── src/index.ts          # All schema definitions + ApiResponse types
-│   ├── ui/                                       # Shared UI components (shadcn/ui base)
+│   ├── ui/                                       # Shared UI component library (premium design system)
 │   │   └── src/
-│   │       ├── github-icon.tsx   # GitHub SVG icon (lucide v1 removed brand icons)
-│   │       ├── utils.ts          # cn() class merge utility
-│   │       └── index.ts          # Re-exports
+│   │       ├── button.tsx       # Button with cva variants (default/secondary/ghost/destructive/outline × sm/md/lg/icon, transition-[background,box-shadow,transform])
+│   │       ├── components.test.ts # Unit tests for buttonVariants, badgeVariants, cn (20 tests)
+│   │       ├── card.tsx         # Card, CardHeader, CardTitle, CardContent, CardFooter (rounded-xl, shadow-sm)
+│   │       ├── badge.tsx        # Badge with cva variants (default/success/danger/warning/info/muted)
+│   │       ├── form-field.tsx   # Input, Textarea, Select, FormField wrapper (rounded-lg, focus ring, transition-[border-color,box-shadow])
+│   │       ├── empty-state.tsx  # EmptyState with icon, title, description, action
+│   │       ├── spinner.tsx      # Spinner (Loader2 with animate-spin)
+│   │       ├── load-more.tsx    # LoadMore pagination button (error handling, aria-busy)
+│   │       ├── github-icon.tsx  # GitHub SVG icon (lucide v1 removed brand icons)
+│   │       ├── utils.ts         # cn() class merge utility
+│   │       └── index.ts         # Re-exports all components
 │   ├── config/                                   # Shared tsconfig presets + env validation
 │   ├── logger/                                   # Structured JSON logger
 │   │   └── src/index.ts
@@ -177,7 +211,9 @@ lyrashield/
 │           ├── github.ts          # JWT, installation tokens, repo listing, webhook verification
 │           ├── github.test.ts     # Tests for webhook signature + install URL
 │           └── index.ts           # Re-exports
-├── docker-compose.yml                            # PostgreSQL 16 + Redis 7
+├── docker-compose.yml                            # PostgreSQL 16 + Redis 7 (env-interpolated secrets, Redis password)
+├── Dockerfile                                   # Multi-stage build (standalone output, slim runner, ARG-based build secrets)
+├── .dockerignore                                # Excludes node_modules, .next, .git, secrets, IDE dirs, docs
 ├── turbo.json                                    # Turborepo task config
 ├── pnpm-workspace.yaml                           # Workspace + build allowlist
 ├── tsconfig.json                                 # Root tsconfig (composite, ES2022)
@@ -257,9 +293,10 @@ return NextResponse.json({ success: false, error: { code: "INTERNAL_ERROR", ... 
 
 ### 4.5 Server/Client Component Split
 
-- **Server components** (`page.tsx`): Fetch session, workspace membership, and data via Prisma. Pass data as props to client components.
-- **Client components** (`*-client.tsx`): Handle form state, fetch calls to API routes, interactive UI. Use `useState` + `useEffect` for data fetching.
-- **Dashboard layout** (`(dashboard)/layout.tsx`): Auth guard — redirects to `/sign-in` if no session. Fetches all workspace memberships for sidebar.
+- **Server components** (`page.tsx`): Fetch session via `getCachedSession()` (React `cache()`), workspace membership via `getCachedWorkspaceId()`, and data via Prisma with cursor-based pagination (`take: limit + 1` pattern). Pass `initialData` + `initialNextCursor` as props to client components for hydration.
+- **Client components** (`*-client.tsx`): Handle form state, use typed API helpers (`apiGet`, `apiPost`, `apiPatch`, `apiGetPaginated` from `@/lib/api-client`) for API calls. Use `LoadMore` component from `@lyrashield/ui` for pagination. Use `useState` + `useEffect` for client-side data fetching when no `initialData`.
+- **Dashboard layout** (`(dashboard)/layout.tsx`): Auth guard — redirects to `/sign-in` if no session. Fetches session, onboarding state, and workspace memberships via React `cache()` wrappers from `@/lib/cache`.
+- **React `cache()` wrappers** (`@/lib/cache.ts`): `getCachedSession`, `getCachedWorkspaceId`, `getCachedWorkspaces`, `getCachedProjects`, `getCachedDashboardStats` (accepts comma-joined string key for memoization), `getCachedOnboardingState`. These deduplicate Prisma queries within the same request.
 
 ### 4.6 Prisma 7 Configuration
 
@@ -485,10 +522,68 @@ docker compose down       # Stop services
 - **Integrations UI**: `/dashboard/integrations` page with GitHub connect button, repo picker, and target creation from selected repo
 - **Sidebar**: Added Integrations nav item with Plug icon
 - **Security**: GitHub secrets stored only as installation metadata (configRef pattern), no raw tokens in DB; webhook signature verification required
-- **Tests**: `packages/integrations/src/github.test.ts` (9 tests: webhook signature valid/invalid/null/empty/wrong-secret/tampered/wrong-length, install URL format), `packages/types/src/index.test.ts` (21 tests: OnboardingStepSchema + UpdateOnboardingSchema validation). Total: 115 tests passing.
+- **Tests**: `packages/integrations/src/github.test.ts` (9 tests: webhook signature valid/invalid/null/empty/wrong-secret/tampered/wrong-length, install URL format), `packages/types/src/index.test.ts` (21 tests: OnboardingStepSchema + UpdateOnboardingSchema validation). Total: 133 tests passing (113 original + 20 UI component tests added in Batch 2).
 
 ### Sprint 4: Scan Orchestrator and Queue — Not Started
 ### Sprint 5: LyraShield Scan Engine MVP — Not Started
+
+### UI/UX Premium Upgrade (2026-07-05) — ✅ Complete
+
+A full visual audit and upgrade of the entire app UI for a modern, premium look with richer colors, shadows, gradients, glassmorphism, and larger radii. All pages are fully responsive and mobile-optimized.
+
+**Design system (`globals.css`)**:
+- OKLCH color space for all tokens (light + dark mode)
+- Custom shadow scale: `--shadow-xs` through `--shadow-lg`, `--shadow-primary`
+- Enlarged radii: `--radius-sm` (0.375rem) through `--radius-2xl` (1.25rem)
+- Premium utility classes: `.glass` (glassmorphism), `.gradient-primary`, `.gradient-hero`, `.text-gradient`, `.shadow-premium`, `.shadow-card-hover`, `.shadow-primary-glow` — all with dark mode variants
+- Antialiased font rendering (`-webkit-font-smoothing: antialiased`)
+
+**Shared UI components (`packages/ui`)**:
+- `Button`: cva-based variants (default with `gradient-primary` + `shadow-sm` + `hover:shadow-primary-glow`, secondary, ghost, destructive, outline) × sizes (sm, md, lg, icon). `active:scale-[0.98]` press feedback.
+- `Card`: `rounded-xl`, `shadow-sm`, `transition-shadow` on hover
+- `Badge`: cva variants — default, success (emerald), danger (destructive), warning (amber), info (sky), muted
+- `Input`/`Textarea`/`Select`: `rounded-lg`, `shadow-xs`, `focus:ring-2 focus:ring-ring focus:border-primary/50`, `transition-all`
+- `EmptyState`: `rounded-xl border-dashed`, primary-tinted icon background (`bg-primary/5`), `aria-hidden` on icon
+- `Spinner`: `Loader2` with `animate-spin`, `aria-hidden`
+
+**Landing page**: Gradient hero background, glassmorphic floating navbar (`.glass` + `backdrop-blur`), gradient CTA buttons, feature cards with hover-lift (`hover:-translate-y-1 hover:shadow-lg`), `aria-label` on nav
+
+**Auth pages (sign-in/sign-up)**: Gradient background (`.gradient-hero`), premium card with `shadow-primary-glow` logo badge, gradient CTA buttons, `setLoading(false)` in `finally` block for GitHub OAuth error handling
+
+**Sidebar**: Gradient logo badge (`.gradient-primary`), mobile drawer with overlay backdrop, active route with `bg-primary/8 text-primary`, user avatar with initial, `aria-label` on close button, open-menu button hidden when sidebar is open
+
+**Dashboard**: Gradient stat cards with icon backgrounds (`bg-primary/5 group-hover:bg-primary/10`), hover shadow, premium workspace cards with role badges, `title` attribute on New Scan button
+
+**Targets page**: Mobile-responsive table (`hidden sm:table-cell` on non-essential columns), `overflow-x-auto`, clickable rows with `role="link"` + `aria-label`, premium form card with `rounded-xl shadow-sm`
+
+**Projects page**: Responsive header (`flex-col sm:flex-row`), hover-lift project cards (`hover:-translate-y-0.5 hover:shadow-md`), risk badges
+
+**Team page**: Responsive table with hidden columns on mobile, OWNER badge distinguished from ADMIN (default vs info variant), premium invite form card
+
+**Target detail**: Responsive header with `flex-wrap`, hover-lift stat cards, premium table with hidden date column on mobile, card sections with `shadow-sm`
+
+**Integrations page**: Card with `shadow-sm`, responsive flex layout (`flex-col sm:flex-row`), repo list buttons with `rounded-lg`
+
+**Onboarding wizard**: Gradient step indicators (completed = `.gradient-primary`, current = `border-primary shadow-primary-glow`), step labels hidden on mobile (`hidden sm:block`), all action buttons use `gradient-primary rounded-lg`, `PreflightItem` with `rounded-lg` + gradient checkmark + `Clock` icon for pending items, `grid-cols-2` for mode selector buttons
+
+**Onboarding page**: Gradient hero background, gradient logo badge with `shadow-primary-glow`, `aria-hidden` on icon
+
+**Workspace switcher**: `rounded-lg` items, `transition-colors` on hover
+
+**Deep code review fixes (2026-07-05)**:
+- Dark mode variants added for `.gradient-primary`, `.text-gradient`, `.shadow-card-hover` (were invisible/too dark in dark mode)
+- Dead `--shadow-card-hover` CSS vars removed from theme blocks; moved to proper utility class
+- Sidebar: open-menu button hidden when sidebar is open (was both visible simultaneously)
+- Auth pages: `setLoading(false)` moved to `finally` block (button stayed disabled on OAuth redirect failure)
+- Onboarding wizard: mode selector changed from `flex` to `grid-cols-2` (overflow on narrow screens), all buttons upgraded to `gradient-primary rounded-lg`, `PreflightItem` icon changed from `Plus` to `Clock` (was confusing)
+- Team page: OWNER badge distinguished from ADMIN (`default` vs `info` variant)
+- Targets table: `role="link"` + `aria-label` added to clickable rows for screen readers
+- Dashboard: `title` attribute on New Scan button (links to placeholder page)
+- GitHub integration: repo buttons upgraded from `rounded-md` to `rounded-lg`
+- Landing page: `aria-label="Main navigation"` on nav, `container` replaced with `max-w-5xl mx-auto` in footer
+- Onboarding page: `aria-hidden="true"` on ShieldCheck icon
+
+**Verification**: lint ✅ (0 errors), typecheck ✅, tests ✅ (113/113), build ✅
 
 ### Engine Repo (lyrashield-engine) — Forked & Rebranded
 
@@ -572,31 +667,72 @@ The engine repo has been forked from usestrix/strix, fully rebranded to LyraShie
 
 ## 10. UI Components
 
+### Shared Component Library (`packages/ui`)
+
+All components use `forwardRef` and `cn()` (clsx + tailwind-merge) for class merging. Variants are managed via `class-variance-authority` (cva).
+
+**Button** (`button.tsx`):
+- Variants: `default` (gradient-primary + shadow + hover glow), `secondary` (border + bg-card), `ghost`, `destructive`, `outline`
+- Sizes: `sm` (h-8), `md` (h-10), `lg` (h-11), `icon` (h-10 w-10)
+- Press feedback: `active:scale-[0.98]`
+- Transition: `transition-[background,box-shadow,transform]` (specific properties, not `transition-all`)
+- Focus: `focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`
+- Exported: `Button`, `buttonVariants`, `ButtonProps`
+
+**Card** (`card.tsx`): `Card` (rounded-xl, shadow-sm, transition-shadow), `CardHeader`, `CardTitle`, `CardContent`, `CardFooter`
+
+**Badge** (`badge.tsx`):
+- Variants: `default` (bg-secondary), `success` (emerald), `danger` (destructive), `warning` (amber), `info` (sky), `muted`
+- Rounded-full, gap-1 for icon + text
+- Exported: `Badge`, `badgeVariants`, `BadgeProps`
+
+**Input/Textarea/Select** (`form-field.tsx`): `rounded-lg`, `shadow-xs`, `focus:ring-2 focus:ring-ring focus:border-primary/50`, `transition-[border-color,box-shadow]`, `placeholder:text-muted-foreground/60`
+
+**FormField** (`form-field.tsx`): Wrapper with `<label htmlFor>` + children. Props: `label`, `htmlFor`, `children`, `className`
+
+**EmptyState** (`empty-state.tsx`): `rounded-xl border-dashed bg-card/50`, icon in `rounded-xl bg-primary/5`, title, description, action slot. Props: `icon`, `title`, `description`, `action`, `className`
+
+**Spinner** (`spinner.tsx`): `Loader2` with `animate-spin`, `aria-hidden="true"`. Props: `className`
+
+**GithubIcon** (`github-icon.tsx`): Custom GitHub SVG icon (lucide v1 removed brand icons). Accepts `className` prop.
+
 ### Sidebar (`apps/web/src/components/sidebar.tsx`)
 - Navigation with icons: Dashboard, Projects, Targets, Scans (Radar icon), Findings, Fixes, Reports, Team, Integrations (Plug icon), Settings
+- Gradient logo badge (`.gradient-primary`) at top
 - Workspace switcher embedded at top
-- User info + sign-out button at bottom
-- Active route highlighting via `usePathname`
+- Active route highlighting via `usePathname` with `bg-primary/8 text-primary font-semibold`
+- User avatar with initial in `rounded-full bg-primary/10` + name/email
 - Sign-out calls `signOut()` from `@lyrashield/auth`
+- Mobile: fixed drawer (`w-64`) with overlay backdrop, `translate-x` transition, open button hidden when sidebar is open
+- `aria-label` on open/close buttons, `aria-current="page"` on active nav item, `aria-hidden` on all icons
 
 ### Onboarding Wizard (`apps/web/src/app/onboarding/onboarding-wizard.tsx`)
 - 7-step guided flow: Workspace → Target → Goal → Preflight → Scan → Results → Fix
-- Progress indicator with checkmarks for completed steps
+- Gradient step indicators (completed = `.gradient-primary`, current = `border-primary shadow-primary-glow`)
+- Current step label always visible on mobile (`block`); non-current steps hidden on mobile (`hidden sm:block`)
+- All action buttons use shared `Button` component from `@lyrashield/ui` (default variant for primary actions, ghost variant for Back/Skip)
+- All inputs use shared `Input` component from `@lyrashield/ui`
+- Loading states use shared `Spinner` component (replaces inline `Loader2 animate-spin`)
+- `PreflightItem` with `rounded-lg` + gradient checkmark + `Clock` icon for pending items, `aria-hidden` on icons
+- Mode selector uses `grid-cols-2` for equal-width buttons, `transition-[border-color,box-shadow]`
+- Error banner uses `role="alert"` for accessibility
 - Skip option at every step (sets `skipped: true`, redirects to `/dashboard`)
 - Fetches and updates state via `GET/PATCH /api/onboarding`
-- Steps 4-6 (Scan/Results/Fix) show placeholder UI (engine integration in Sprint 5)
+- Steps 4-6 (Scan/Results/Fix) show placeholder UI with `rounded-xl border-dashed bg-card/50` (engine integration in Sprint 5)
 - Completion sets `completed: true` and redirects to `/dashboard`
 
 ### GitHub Integration (`apps/web/src/app/(dashboard)/dashboard/integrations/github-integration.tsx`)
 - Connect button: calls `POST /api/integrations/github/install` → redirects to GitHub App install page
-- Repo picker: calls `GET /api/integrations/github/repos` → displays selectable list with private badges
+- Repo picker: calls `GET /api/integrations/github/repos` → displays selectable list with private badges, `rounded-lg` buttons
 - Target creation: calls `POST /api/targets` with selected repo data (type: REPO, provider: github)
 - Connected state: shows account login badge with checkmark
 - Error handling: inline error banners for all operations
+- Uses `Spinner` from `@lyrashield/ui` for loading states
 
 ### Workspace Switcher (`apps/web/src/components/workspace-switcher.tsx`)
 - Dropdown with click-outside and Escape key to close
-- ARIA attributes: `aria-expanded`, `aria-haspopup`, `role="listbox"`
+- ARIA attributes: `aria-expanded`, `aria-haspopup`, `role="listbox"`, `role="option"`, `aria-selected`
+- `rounded-lg` items with `transition-colors` on hover
 - Calls `onSelect(workspaceId)` — parent handles workspace switching
 
 ### Client Components Pattern
@@ -666,7 +802,10 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 - **Error handling**: API routes return `{ success: false, error: { code, message } }` with appropriate HTTP status
 - **Database queries**: Always scope by `workspaceId` to prevent cross-tenant data access
 - **Soft deletes**: Targets use `deletedAt` field (filter with `deletedAt: null`)
-- **Icons**: Use `lucide-react` icons. Each nav item should have a unique icon. Brand icons (e.g. GitHub) are not in lucide v1 — use `GithubIcon` from `@lyrashield/ui`
+- **Icons**: Use `lucide-react` icons. Each nav item should have a unique icon. Brand icons (e.g. GitHub) are not in lucide v1 — use `GithubIcon` from `@lyrashield/ui`. All decorative icons must have `aria-hidden="true"`
+- **UI components**: Use shared components from `@lyrashield/ui` (Button, Card, Badge, Input, Textarea, Select, FormField, EmptyState, Spinner, GithubIcon). Use `buttonVariants`/`badgeVariants` for consistent variant styling. All components use `forwardRef` and `cn()` for class merging
+- **Premium design tokens**: Use OKLCH colors, custom shadows, and utility classes from `globals.css` (`.glass`, `.gradient-primary`, `.gradient-hero`, `.text-gradient`, `.shadow-premium`, `.shadow-card-hover`, `.shadow-primary-glow`). All have dark mode variants. Use `rounded-lg` or `rounded-xl` for cards/buttons, not `rounded-md`
+- **Responsive**: Mobile-first. Use `flex-col sm:flex-row` for headers, `hidden sm:table-cell` for non-essential table columns, `overflow-x-auto` for tables, `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` for card grids
 - **Forms**: Labels must have `htmlFor`/`id` associations. First field should have `autoFocus`. Cancel button should clear errors
 - **Error states**: Client components should show error message + retry button on fetch failure
 - **Accessibility**: Add `aria-*` attributes to interactive elements (dropdowns, buttons with icons)
@@ -733,18 +872,30 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 | `packages/integrations/src/index.ts` | Integrations package re-exports |
 | `packages/types/src/index.ts` | All Zod schemas + TS types |
 | `packages/types/src/index.test.ts` | Tests for OnboardingStep + UpdateOnboarding schemas |
+| `packages/ui/src/button.tsx` | Button component with cva variants (default/secondary/ghost/destructive/outline × sm/md/lg/icon) |
+| `packages/ui/src/card.tsx` | Card, CardHeader, CardTitle, CardContent, CardFooter components |
+| `packages/ui/src/badge.tsx` | Badge component with cva variants (default/success/danger/warning/info/muted) |
+| `packages/ui/src/form-field.tsx` | Input, Textarea, Select, FormField wrapper components |
+| `packages/ui/src/empty-state.tsx` | EmptyState component (icon, title, description, action) |
+| `packages/ui/src/spinner.tsx` | Spinner component (Loader2 with animate-spin) |
 | `packages/ui/src/github-icon.tsx` | GitHub SVG icon (lucide v1 removed brand icons) |
-| `packages/ui/src/index.ts` | UI package exports (cn, GithubIcon) |
+| `packages/ui/src/utils.ts` | cn() class merge utility (clsx + tailwind-merge) |
+| `packages/ui/src/index.ts` | UI package exports (cn, GithubIcon, Button, Card, Badge, EmptyState, Spinner, FormField, Input, Select, Textarea) |
 | `packages/config/src/env.ts` | Zod env validation schema (fails fast on boot) |
 | `packages/config/src/env.test.ts` | Tests for env validation |
 | `packages/config/src/index.ts` | Config package exports |
 | `packages/db/src/extension.ts` | Prisma client extension (soft-delete, workspace scoping) |
 | `packages/db/src/extension.test.ts` | Tests for Prisma extension |
+| `packages/db/src/rls.ts` | Postgres RLS helper (`withWorkspaceRLS`, `withoutWorkspaceRLS`) |
+| `packages/db/src/rls.test.ts` | RLS helper tests (9 tests) |
 | `apps/web/src/lib/rate-limit.ts` | Rate limiting logic (Upstash Redis + in-memory fallback) |
 | `apps/web/src/lib/rate-limit.test.ts` | Tests for rate limiting |
 | `packages/logger/src/index.ts` | Structured JSON logger |
-| `apps/web/next.config.ts` | Next.js config (transpile + external packages) |
-| `docker-compose.yml` | Postgres 16 + Redis 7 |
+| `apps/web/next.config.ts` | Next.js config (output: standalone, transpile + external packages) |
+| `docker-compose.yml` | Postgres 16 + Redis 7 (env-interpolated secrets, Redis password) |
+| `Dockerfile` | Multi-stage Docker build (standalone output, slim runner, ARG-based build secrets) |
+| `.dockerignore` | Docker build exclusions (node_modules, .next, .git, secrets, IDE dirs, docs) |
+| `packages/ui/src/components.test.ts` | Unit tests for buttonVariants, badgeVariants, cn (20 tests) |
 | `turbo.json` | Turborepo task definitions |
 | `pnpm-workspace.yaml` | Workspace + build allowlist |
 | `.env.example` | All environment variables |

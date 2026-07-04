@@ -18,6 +18,8 @@ import {
   Users,
   Radar,
   Plug,
+  Menu,
+  X,
 } from "lucide-react"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 
@@ -57,6 +59,7 @@ export function Sidebar({
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
     workspaces[0]?.id ?? null
   )
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
     const stored = localStorage.getItem("activeWorkspaceId")
@@ -77,11 +80,13 @@ export function Sidebar({
     router.refresh()
   }
 
-  return (
-    <aside className="flex w-64 flex-col border-r bg-sidebar">
-      <div className="flex h-16 items-center gap-2 border-b px-4">
-        <ShieldCheck className="h-6 w-6 text-primary" />
-        <span className="text-lg font-bold">LyraShield</span>
+  const sidebarContent = (
+    <>
+      <div className="flex h-16 items-center gap-2.5 border-b px-5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
+          <ShieldCheck className="h-5 w-5 text-primary-foreground" aria-hidden="true" />
+        </div>
+        <span className="text-lg font-bold tracking-tight">LyraShield</span>
       </div>
 
       {workspaces.length > 0 && (
@@ -94,20 +99,22 @@ export function Sidebar({
         </div>
       )}
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Main navigation">
         {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              aria-current={isActive ? "page" : undefined}
+              onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                 isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                  ? "bg-primary/8 text-primary font-semibold"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               }`}
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} aria-hidden="true" />
               {item.label}
             </Link>
           )
@@ -115,19 +122,61 @@ export function Sidebar({
       </nav>
 
       <div className="border-t p-3">
-        <div className="mb-2 px-3">
-          <p className="text-sm font-medium">{userName}</p>
-          <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
+        <div className="mb-2 flex items-center gap-3 rounded-lg px-3 py-2">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+            {userName.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{userName}</p>
+            <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
+          </div>
         </div>
         <button
           onClick={handleSignOut}
           aria-label="Sign out"
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent/50"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
         >
-          <LogOut className="h-4 w-4" />
+          <LogOut className="h-4 w-4" aria-hidden="true" />
           Sign out
         </button>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {!mobileOpen && (
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          className="fixed left-4 top-4 z-30 rounded-lg border bg-card p-2 shadow-md md:hidden"
+        >
+          <Menu className="h-5 w-5" aria-hidden="true" />
+        </button>
+      )}
+
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-sidebar transition-transform duration-300 md:relative md:translate-x-0 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <button
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close menu"
+          className="absolute right-3 top-5 rounded-lg p-1 hover:bg-sidebar-accent md:hidden"
+        >
+          <X className="h-5 w-5" aria-hidden="true" />
+        </button>
+        {sidebarContent}
+      </aside>
+    </>
   )
 }

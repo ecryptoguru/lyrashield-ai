@@ -4,7 +4,6 @@ import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import {
   ShieldCheck,
-  Loader2,
   Check,
   ChevronRight,
   ChevronLeft,
@@ -15,9 +14,10 @@ import {
   Rocket,
   Bug,
   GitBranch,
-  Plus,
+  Clock,
 } from "lucide-react"
-import { GithubIcon } from "@lyrashield/ui"
+import { Button, Input, Spinner, GithubIcon } from "@lyrashield/ui"
+import { apiPost, apiPatch } from "@/lib/api-client"
 
 const STEPS = [
   { label: "Workspace", icon: ShieldCheck },
@@ -67,25 +67,14 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
   const [selectedGoal, setSelectedGoal] = useState<string | null>(initialState.selectedGoal)
 
   const updateState = useCallback(async (updates: Partial<OnboardingData>) => {
-    setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/onboarding", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      })
-      const json = await res.json()
-      if (!json.success) {
-        throw new Error(json.error?.message ?? "Failed to update")
-      }
-      setData(json.data)
-      return json.data
+      const updated = await apiPatch<OnboardingData>("/api/onboarding", updates)
+      setData(updated)
+      return updated
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong")
       return null
-    } finally {
-      setLoading(false)
     }
   }, [])
 
@@ -97,14 +86,8 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/workspaces", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: wsName, mode: wsMode }),
-      })
-      const json = await res.json()
-      if (!json.success) throw new Error(json.error?.message ?? "Failed to create workspace")
-      await updateState({ workspaceId: json.data.id, currentStep: 1 })
+      const ws = await apiPost<{ id: string }>('/api/workspaces', { name: wsName, mode: wsMode })
+      await updateState({ workspaceId: ws.id, currentStep: 1 })
       setStep(1)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create workspace")
@@ -134,14 +117,8 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
           ? { type: "REPO", name: targetName, workspaceId: data.workspaceId, repoProvider: "github", repoOwner, repoName, environment: "STAGING" }
           : { type: "WEB_APP", name: targetName, workspaceId: data.workspaceId, url: targetUrl, environment: "STAGING" }
 
-      const res = await fetch("/api/targets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
-      const json = await res.json()
-      if (!json.success) throw new Error(json.error?.message ?? "Failed to create target")
-      await updateState({ targetId: json.data.id, currentStep: 2 })
+      const target = await apiPost<{ id: string }>("/api/targets", body)
+      await updateState({ targetId: target.id, currentStep: 2 })
       setStep(2)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create target")
@@ -152,30 +129,40 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
 
   async function handleSelectGoal(goal: string) {
     setSelectedGoal(goal)
+    setLoading(true)
     const updated = await updateState({ selectedGoal: goal, currentStep: 3 })
+    setLoading(false)
     if (updated) setStep(3)
   }
 
   async function handleNext() {
     const nextStep = step + 1
+    setLoading(true)
     const updated = await updateState({ currentStep: nextStep })
+    setLoading(false)
     if (updated) setStep(nextStep)
   }
 
   async function handleBack() {
     const prevStep = Math.max(0, step - 1)
+    setLoading(true)
     const updated = await updateState({ currentStep: prevStep })
+    setLoading(false)
     if (updated) setStep(prevStep)
   }
 
   async function handleSkip() {
+    setLoading(true)
     await updateState({ skipped: true, completed: true })
+    setLoading(false)
     router.push("/dashboard")
     router.refresh()
   }
 
   async function handleComplete() {
+    setLoading(true)
     await updateState({ completed: true })
+    setLoading(false)
     router.push("/dashboard")
     router.refresh()
   }
@@ -189,30 +176,30 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
             <div key={s.label} className="flex flex-1 flex-col items-center">
               <div className="flex w-full items-center">
                 {i > 0 && (
-                  <div className={`h-0.5 flex-1 ${i <= step ? "bg-primary" : "bg-border"}`} />
+                  <div className={`h-0.5 flex-1 transition-colors duration-300 ${i <= step ? "bg-primary" : "bg-border"}`} />
                 )}
                 <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-[border-color,box-shadow] duration-300 ${
                     i < step
-                      ? "border-primary bg-primary text-primary-foreground"
+                      ? "gradient-primary border-transparent text-primary-foreground shadow-sm"
                       : i === step
-                      ? "border-primary text-primary"
+                      ? "border-primary text-primary shadow-primary-glow"
                       : "border-border text-muted-foreground"
                   }`}
                 >
                   {i < step ? (
-                    <Check className="h-4 w-4" />
+                    <Check className="h-4 w-4" aria-hidden="true" />
                   ) : (
-                    <s.icon className="h-4 w-4" />
+                    <s.icon className="h-4 w-4" aria-hidden="true" />
                   )}
                 </div>
                 {i < STEPS.length - 1 && (
-                  <div className={`h-0.5 flex-1 ${i < step ? "bg-primary" : "bg-border"}`} />
+                  <div className={`h-0.5 flex-1 transition-colors duration-300 ${i < step ? "bg-primary" : "bg-border"}`} />
                 )}
               </div>
               <span
                 className={`mt-2 text-xs font-medium ${
-                  i === step ? "text-foreground" : "text-muted-foreground"
+                  i === step ? "block text-foreground" : "hidden sm:block text-muted-foreground"
                 }`}
               >
                 {s.label}
@@ -224,25 +211,26 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
 
       {/* Skip Button */}
       <div className="mb-4 flex justify-end">
-        <button
+        <Button
           onClick={handleSkip}
           disabled={loading}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          variant="ghost"
+          size="sm"
         >
-          <SkipForward className="h-4 w-4" />
+          <SkipForward className="h-4 w-4" aria-hidden="true" />
           Skip onboarding
-        </button>
+        </Button>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
           {error}
         </div>
       )}
 
       {/* Step Content */}
-      <div className="rounded-lg border bg-card p-6">
+      <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
         {/* Step 0: Workspace */}
         {step === 0 && (
           <div className="space-y-4">
@@ -253,31 +241,30 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               </p>
             </div>
             {data.workspaceId && (
-              <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-                <Check className="h-4 w-4 text-primary" />
+              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+                <Check className="h-4 w-4 text-primary" aria-hidden="true" />
                 Workspace already created. Click Next to continue.
               </div>
             )}
             <div>
-              <label className="mb-1 block text-sm font-medium" htmlFor="ws-name">
+              <label className="mb-1.5 block text-sm font-medium" htmlFor="ws-name">
                 Workspace name
               </label>
-              <input
+              <Input
                 id="ws-name"
                 type="text"
                 value={wsName}
                 onChange={(e) => setWsName(e.target.value)}
                 placeholder="My Security Team"
-                className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">Mode</label>
-              <div className="flex gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setWsMode("VIBE")}
-                  className={`flex-1 rounded-md border p-3 text-left text-sm transition-colors ${
-                    wsMode === "VIBE" ? "border-primary bg-primary/5" : "hover:bg-accent"
+                  className={`flex-1 rounded-lg border p-3 text-left text-sm transition-[border-color,box-shadow] ${
+                    wsMode === "VIBE" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
                   }`}
                 >
                   <div className="font-medium">Vibe</div>
@@ -285,8 +272,8 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 </button>
                 <button
                   onClick={() => setWsMode("TEAM")}
-                  className={`flex-1 rounded-md border p-3 text-left text-sm transition-colors ${
-                    wsMode === "TEAM" ? "border-primary bg-primary/5" : "hover:bg-accent"
+                  className={`flex-1 rounded-lg border p-3 text-left text-sm transition-[border-color,box-shadow] ${
+                    wsMode === "TEAM" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
                   }`}
                 >
                   <div className="font-medium">Team</div>
@@ -295,15 +282,14 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               </div>
             </div>
             <div className="flex justify-end">
-              <button
+              <Button
                 onClick={data.workspaceId ? () => { setStep(1) } : handleCreateWorkspace}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {loading && <Spinner className="mr-1" />}
                 {data.workspaceId ? "Next" : "Create workspace"}
-                <ChevronRight className="h-4 w-4" />
-              </button>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
             </div>
           </div>
         )}
@@ -318,19 +304,19 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               </p>
             </div>
             {data.targetId && (
-              <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-                <Check className="h-4 w-4 text-primary" />
+              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+                <Check className="h-4 w-4 text-primary" aria-hidden="true" />
                 Target already set. Click Next to continue.
               </div>
             )}
-            <div className="flex gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 onClick={() => setTargetType("REPO")}
-                className={`flex flex-1 items-center gap-3 rounded-md border p-4 text-left transition-colors ${
-                  targetType === "REPO" ? "border-primary bg-primary/5" : "hover:bg-accent"
+                className={`flex flex-1 items-center gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] ${
+                  targetType === "REPO" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
                 }`}
               >
-                <GithubIcon className="h-5 w-5" />
+                <GithubIcon className="h-5 w-5" aria-hidden="true" />
                 <div>
                   <div className="font-medium">GitHub Repo</div>
                   <div className="text-sm text-muted-foreground">Scan a repository</div>
@@ -338,11 +324,11 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               </button>
               <button
                 onClick={() => setTargetType("URL")}
-                className={`flex flex-1 items-center gap-3 rounded-md border p-4 text-left transition-colors ${
-                  targetType === "URL" ? "border-primary bg-primary/5" : "hover:bg-accent"
+                className={`flex flex-1 items-center gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] ${
+                  targetType === "URL" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
                 }`}
               >
-                <Globe className="h-5 w-5" />
+                <Globe className="h-5 w-5" aria-hidden="true" />
                 <div>
                   <div className="font-medium">App URL</div>
                   <div className="text-sm text-muted-foreground">Scan a running app</div>
@@ -350,80 +336,76 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               </button>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium" htmlFor="target-name">
+              <label className="mb-1.5 block text-sm font-medium" htmlFor="target-name">
                 Target name
               </label>
-              <input
+              <Input
                 id="target-name"
                 type="text"
                 value={targetName}
                 onChange={(e) => setTargetName(e.target.value)}
                 placeholder="My Web App"
-                className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             {targetType === "REPO" ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium" htmlFor="repo-owner">
+                  <label className="mb-1.5 block text-sm font-medium" htmlFor="repo-owner">
                     Repo owner
                   </label>
-                  <input
+                  <Input
                     id="repo-owner"
                     type="text"
                     value={repoOwner}
                     onChange={(e) => setRepoOwner(e.target.value)}
                     placeholder="octocat"
-                    className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium" htmlFor="repo-name">
+                  <label className="mb-1.5 block text-sm font-medium" htmlFor="repo-name">
                     Repo name
                   </label>
-                  <input
+                  <Input
                     id="repo-name"
                     type="text"
                     value={repoName}
                     onChange={(e) => setRepoName(e.target.value)}
                     placeholder="Hello-World"
-                    className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
               </div>
             ) : (
               <div>
-                <label className="mb-1 block text-sm font-medium" htmlFor="target-url">
+                <label className="mb-1.5 block text-sm font-medium" htmlFor="target-url">
                   App URL
                 </label>
-                <input
+                <Input
                   id="target-url"
                   type="url"
                   value={targetUrl}
                   onChange={(e) => setTargetUrl(e.target.value)}
                   placeholder="https://myapp.example.com"
-                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
             )}
             <div className="flex justify-between">
-              <button
+              <Button
                 onClick={handleBack}
                 disabled={loading}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                variant="ghost"
+                size="sm"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 Back
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={data.targetId ? () => { setStep(2) } : handleCreateTarget}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {loading && <Spinner className="mr-1" />}
                 {data.targetId ? "Next" : "Add target"}
-                <ChevronRight className="h-4 w-4" />
-              </button>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
             </div>
           </div>
         )}
@@ -443,13 +425,13 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                   key={goal.value}
                   onClick={() => handleSelectGoal(goal.value)}
                   disabled={loading}
-                  className={`flex items-start gap-3 rounded-md border p-4 text-left transition-colors ${
+                  className={`flex items-start gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] ${
                     selectedGoal === goal.value
-                      ? "border-primary bg-primary/5"
+                      ? "border-primary bg-primary/5 shadow-sm"
                       : "hover:bg-accent"
                   }`}
                 >
-                  <goal.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                  <goal.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
                   <div>
                     <div className="font-medium">{goal.label}</div>
                     <div className="text-sm text-muted-foreground">{goal.description}</div>
@@ -458,14 +440,15 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               ))}
             </div>
             <div className="flex justify-between">
-              <button
+              <Button
                 onClick={handleBack}
                 disabled={loading}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                variant="ghost"
+                size="sm"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 Back
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -486,23 +469,23 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               <PreflightItem label="Scan policy ready" passed={!!data.workspaceId} />
             </div>
             <div className="flex justify-between">
-              <button
+              <Button
                 onClick={handleBack}
                 disabled={loading}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                variant="ghost"
+                size="sm"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 Back
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleNext}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {loading && <Spinner className="mr-1" />}
                 Continue
-                <ChevronRight className="h-4 w-4" />
-              </button>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
             </div>
           </div>
         )}
@@ -516,30 +499,30 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 The scan engine integration is coming in Sprint 5.
               </p>
             </div>
-            <div className="rounded-md border border-dashed p-8 text-center">
-              <Rocket className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+            <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center">
+              <Rocket className="mx-auto mb-3 h-10 w-10 text-muted-foreground" aria-hidden="true" />
               <p className="text-sm text-muted-foreground">
                 The LyraShield scan engine is being integrated. Once ready, you&apos;ll be able to
                 start a scan directly from this wizard.
               </p>
             </div>
             <div className="flex justify-between">
-              <button
+              <Button
                 onClick={handleBack}
                 disabled={loading}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                variant="ghost"
+                size="sm"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 Back
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleNext}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 Continue
-                <ChevronRight className="h-4 w-4" />
-              </button>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
             </div>
           </div>
         )}
@@ -553,29 +536,29 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 Scan results will appear here once the engine is integrated.
               </p>
             </div>
-            <div className="rounded-md border border-dashed p-8 text-center">
-              <Bug className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+            <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center">
+              <Bug className="mx-auto mb-3 h-10 w-10 text-muted-foreground" aria-hidden="true" />
               <p className="text-sm text-muted-foreground">
                 Findings, severity ratings, and evidence will be displayed here after your first scan.
               </p>
             </div>
             <div className="flex justify-between">
-              <button
+              <Button
                 onClick={handleBack}
                 disabled={loading}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                variant="ghost"
+                size="sm"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 Back
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleNext}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 Continue
-                <ChevronRight className="h-4 w-4" />
-              </button>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
             </div>
           </div>
         )}
@@ -589,31 +572,31 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 Fix proposals and PR creation will be available after scan engine integration.
               </p>
             </div>
-            <div className="rounded-md border border-dashed p-8 text-center">
-              <GitBranch className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+            <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center">
+              <GitBranch className="mx-auto mb-3 h-10 w-10 text-muted-foreground" aria-hidden="true" />
               <p className="text-sm text-muted-foreground">
                 Once scans produce findings, you&apos;ll be able to generate fix proposals and create
                 pull requests directly from LyraShield.
               </p>
             </div>
             <div className="flex justify-between">
-              <button
+              <Button
                 onClick={handleBack}
                 disabled={loading}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                variant="ghost"
+                size="sm"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 Back
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleComplete}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                <Check className="h-4 w-4" />
+                {loading && <Spinner className="mr-1" />}
+                <Check className="h-4 w-4" aria-hidden="true" />
                 Finish onboarding
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -624,13 +607,13 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
 
 function PreflightItem({ label, passed }: { label: string; passed: boolean }) {
   return (
-    <div className="flex items-center gap-3 rounded-md border p-3">
+    <div className="flex items-center gap-3 rounded-lg border p-3">
       <div
         className={`flex h-6 w-6 items-center justify-center rounded-full ${
-          passed ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+          passed ? "gradient-primary text-primary-foreground" : "bg-muted text-muted-foreground"
         }`}
       >
-        {passed ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+        {passed ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Clock className="h-3.5 w-3.5" aria-hidden="true" />}
       </div>
       <span className={`text-sm ${passed ? "text-foreground" : "text-muted-foreground"}`}>
         {label}

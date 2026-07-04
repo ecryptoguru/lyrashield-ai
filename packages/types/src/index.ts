@@ -135,9 +135,8 @@ export interface ApiResponse<T = unknown> {
 
 export interface PaginatedResponse<T = unknown> {
   items: T[]
-  total: number
-  page: number
-  pageSize: number
+  nextCursor: string | null
+  total?: number
 }
 
 export const OnboardingStepSchema = z.enum([
@@ -161,3 +160,73 @@ export const UpdateOnboardingSchema = z.object({
 
 export type OnboardingStep = z.infer<typeof OnboardingStepSchema>
 export type UpdateOnboardingInput = z.infer<typeof UpdateOnboardingSchema>
+
+// ── SARIF 2.1.0 types ──────────────────────────────────────────────
+
+export interface SarifReport {
+  version: "2.1.0"
+  $schema: "https://json.schemastore.org/sarif-2.1.0.json"
+  runs: SarifRun[]
+}
+
+export interface SarifRun {
+  tool: {
+    driver: {
+      name: string
+      version?: string
+      informationUri?: string
+      rules?: SarifRule[]
+    }
+  }
+  results: SarifResult[]
+}
+
+export interface SarifRule {
+  id: string
+  name?: string
+  shortDescription?: { text: string }
+  fullDescription?: { text: string }
+  helpUri?: string
+  defaultConfiguration?: { level: "error" | "warning" | "note" | "none" }
+  properties?: Record<string, unknown>
+}
+
+export interface SarifResult {
+  ruleId: string
+  level: "error" | "warning" | "note" | "none"
+  message: { text: string }
+  locations?: SarifLocation[]
+  partialFingerprints?: Record<string, string>
+  properties?: Record<string, unknown>
+}
+
+export interface SarifLocation {
+  physicalLocation: {
+    artifactLocation: { uri: string }
+    region?: { startLine: number; startColumn?: number; endLine?: number; endColumn?: number }
+  }
+}
+
+// ── CVSS types ─────────────────────────────────────────────────────
+
+export interface CvssScore {
+  /** CVSS v2 base score (0-10) */
+  cvssScore?: number
+  /** CVSS v2 vector string */
+  cvssVector?: string
+  /** CVSS v3.x base score (0-10) */
+  cvss3Score?: number
+  /** CVSS v3.x vector string */
+  cvss3Vector?: string
+}
+
+// ── Scan cost & determinism ────────────────────────────────────────
+
+export type DeterminismMode = "default" | "strict" | "best-effort"
+
+export interface ScanCostControls {
+  estimatedCostCents?: number
+  actualCostCents?: number
+  determinismMode?: DeterminismMode
+  sarifUri?: string
+}

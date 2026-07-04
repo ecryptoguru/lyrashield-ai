@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { UserPlus, Mail, Clock, Users } from "lucide-react"
+import { Button, Badge, FormField, Input, Select } from "@lyrashield/ui"
+import { apiGet, apiPost } from "@/lib/api-client"
 
 interface Member {
   id: string
@@ -23,10 +25,16 @@ interface Invitation {
   createdAt: string
 }
 
-export function TeamClient({ workspaceId }: { workspaceId: string }) {
-  const [members, setMembers] = useState<Member[]>([])
-  const [invitations, setInvitations] = useState<Invitation[]>([])
-  const [loading, setLoading] = useState(true)
+export function TeamClient({
+  workspaceId,
+  initialData,
+}: {
+  workspaceId: string
+  initialData?: { members: Member[]; invitations: Invitation[] }
+}) {
+  const [members, setMembers] = useState<Member[]>(initialData?.members ?? [])
+  const [invitations, setInvitations] = useState<Invitation[]>(initialData?.invitations ?? [])
+  const [loading, setLoading] = useState(!initialData)
   const [showInvite, setShowInvite] = useState(false)
   const [email, setEmail] = useState("")
   const [role, setRole] = useState("MEMBER")
@@ -37,49 +45,36 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
   const fetchMembers = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/team?workspaceId=${workspaceId}`)
-      const data = await res.json()
-      if (data.success) {
-        setMembers(data.data.members)
-        setInvitations(data.data.invitations)
-        setFetchError(null)
-      } else {
-        setFetchError(data.error?.message ?? "Failed to load team members")
-      }
-    } catch {
-      setFetchError("Failed to load team members")
+      const data = await apiGet<{ members: Member[]; invitations: Invitation[] }>(`/api/team?workspaceId=${workspaceId}`)
+      setMembers(data.members)
+      setInvitations(data.invitations)
+      setFetchError(null)
+    } catch (e) {
+      setFetchError(e instanceof Error ? e.message : "Failed to load team members")
     } finally {
       setLoading(false)
     }
   }, [workspaceId])
 
   useEffect(() => {
+    if (initialData) return
     queueMicrotask(() => {
       void fetchMembers()
     })
-  }, [fetchMembers])
+  }, [fetchMembers, initialData])
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault()
     setInviting(true)
     setError(null)
     try {
-      const res = await fetch("/api/team", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, email, role }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setEmail("")
-        setRole("MEMBER")
-        setShowInvite(false)
-        await fetchMembers()
-      } else {
-        setError(data.error?.message ?? "Failed to invite member")
-      }
-    } catch {
-      setError("Failed to invite member")
+      await apiPost("/api/team", { workspaceId, email, role })
+      setEmail("")
+      setRole("MEMBER")
+      setShowInvite(false)
+      await fetchMembers()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to invite member")
     } finally {
       setInviting(false)
     }
@@ -87,7 +82,7 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12">
+      <div className="flex items-center justify-center p-12" aria-busy="true">
         <p className="text-sm text-muted-foreground">Loading team...</p>
       </div>
     )
@@ -96,62 +91,52 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
   if (fetchError) {
     return (
       <div className="flex flex-col items-center justify-center p-12">
-        <p className="mb-4 text-sm text-destructive">{fetchError}</p>
-        <button
-          onClick={() => fetchMembers()}
-          className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
-        >
+        <p className="mb-4 text-sm text-destructive" role="alert">{fetchError}</p>
+        <Button variant="secondary" onClick={() => fetchMembers()}>
           Retry
-        </button>
+        </Button>
       </div>
     )
   }
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Team Members</h1>
-          <p className="text-sm text-muted-foreground">Manage who has access to this workspace</p>
+          <h1 className="text-2xl font-bold tracking-tight">Team Members</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Manage who has access to this workspace</p>
         </div>
-        <button
-          onClick={() => setShowInvite(!showInvite)}
-          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <UserPlus className="h-4 w-4" />
+        <Button onClick={() => setShowInvite(!showInvite)} className="shrink-0">
+          <UserPlus className="h-4 w-4" aria-hidden="true" />
           Invite Member
-        </button>
+        </Button>
       </div>
 
       {showInvite && (
-        <form onSubmit={handleInvite} className="mb-6 rounded-lg border p-6">
+        <form onSubmit={handleInvite} className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
           <h2 className="mb-4 text-lg font-semibold">Invite Team Member</h2>
           {error && (
-            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
               {error}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="invite-email" className="mb-1 block text-sm font-medium">Email</label>
-              <input
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Email" htmlFor="invite-email">
+              <Input
                 id="invite-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoFocus
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                 placeholder="teammate@example.com"
               />
-            </div>
-            <div>
-              <label htmlFor="invite-role" className="mb-1 block text-sm font-medium">Role</label>
-              <select
+            </FormField>
+            <FormField label="Role" htmlFor="invite-role">
+              <Select
                 id="invite-role"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
               >
                 <option value="MEMBER">Member</option>
                 <option value="ADMIN">Admin</option>
@@ -162,62 +147,54 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
                 <option value="AUDITOR">Auditor</option>
                 <option value="BILLING_ADMIN">Billing Admin</option>
                 <option value="EXTERNAL_PENTESTER">External Pentester</option>
-              </select>
-            </div>
+              </Select>
+            </FormField>
           </div>
           <div className="mt-4 flex gap-2">
-            <button
-              type="submit"
-              disabled={inviting}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
+            <Button type="submit" disabled={inviting}>
               {inviting ? "Inviting..." : "Send Invite"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowInvite(false)
-                setError(null)
-              }}
-              className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
-            >
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => {
+              setShowInvite(false)
+              setError(null)
+            }}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       )}
 
-      <div className="mb-6 rounded-lg border">
+      <div className="mb-6 overflow-x-auto rounded-xl border shadow-sm">
         <div className="border-b p-4">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <Users className="h-5 w-5" />
+            <Users className="h-5 w-5 text-primary" aria-hidden="true" />
             Members ({members.length})
           </h2>
         </div>
         <table className="w-full text-sm">
-          <thead className="border-b bg-muted/50">
+          <thead className="border-b bg-muted/30">
             <tr>
-              <th className="px-4 py-3 text-left font-medium">Name</th>
-              <th className="px-4 py-3 text-left font-medium">Email</th>
-              <th className="px-4 py-3 text-left font-medium">Role</th>
-              <th className="px-4 py-3 text-left font-medium">Joined</th>
+              <th className="px-4 py-3 text-left font-semibold">Name</th>
+              <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Email</th>
+              <th className="px-4 py-3 text-left font-semibold">Role</th>
+              <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Joined</th>
             </tr>
           </thead>
           <tbody>
             {members.map((m) => (
               <tr key={m.id} className="border-b last:border-0">
                 <td className="px-4 py-3 font-medium">{m.name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{m.email}</td>
+                <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">{m.email}</td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                    m.role === "OWNER" ? "bg-purple-100 text-purple-700" :
-                    m.role === "ADMIN" ? "bg-blue-100 text-blue-700" :
-                    "bg-muted text-muted-foreground"
-                  }`}>
+                  <Badge variant={
+                    m.role === "OWNER" ? "default" :
+                    m.role === "ADMIN" ? "info" :
+                    "muted"
+                  }>
                     {m.role}
-                  </span>
+                  </Badge>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">
+                <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
                   {new Date(m.createdAt).toLocaleDateString()}
                 </td>
               </tr>
@@ -227,19 +204,19 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
       </div>
 
       {invitations.length > 0 && (
-        <div className="rounded-lg border">
+        <div className="overflow-x-auto rounded-xl border shadow-sm">
           <div className="border-b p-4">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <Mail className="h-5 w-5" />
+              <Mail className="h-5 w-5 text-primary" aria-hidden="true" />
               Pending Invitations ({invitations.length})
             </h2>
           </div>
           <table className="w-full text-sm">
-            <thead className="border-b bg-muted/50">
+            <thead className="border-b bg-muted/30">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Email</th>
-                <th className="px-4 py-3 text-left font-medium">Role</th>
-                <th className="px-4 py-3 text-left font-medium">Expires</th>
+                <th className="px-4 py-3 text-left font-semibold">Email</th>
+                <th className="px-4 py-3 text-left font-semibold">Role</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Expires</th>
               </tr>
             </thead>
             <tbody>
@@ -247,13 +224,11 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
                 <tr key={inv.id} className="border-b last:border-0">
                   <td className="px-4 py-3 font-medium">{inv.email}</td>
                   <td className="px-4 py-3">
-                    <span className="inline-flex rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                      {inv.role}
-                    </span>
+                    <Badge variant="muted">{inv.role}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
+                  <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
                     <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
+                      <Clock className="h-3 w-3" aria-hidden="true" />
                       {new Date(inv.expiresAt).toLocaleDateString()}
                     </span>
                   </td>

@@ -21,15 +21,55 @@ services:
     image: redis:7-alpine
     container_name: lyrashield-redis
     restart: unless-stopped
+    command: redis-server --requirepass "${REDIS_PASSWORD:-lyrashield-dev-redis}"
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-lyrashield-dev-redis}", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lyrashield-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-lyrashield}:${POSTGRES_PASSWORD:-lyrashield}@postgres:5432/${POSTGRES_DB:-lyrashield}?schema=public"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required — set it in .env or your environment}"
+      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3000}"
+      NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
+    command: ["pnpm", "--filter", "@lyrashield/db", "migrate:deploy"]
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lyrashield-web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-lyrashield}:${POSTGRES_PASSWORD:-lyrashield}@postgres:5432/${POSTGRES_DB:-lyrashield}?schema=public"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required — set it in .env or your environment}"
+      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3000}"
+      NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-lyrashield-dev-redis}@redis:6379"
+      NODE_ENV: "production"
+    ports:
+      - "3000:3000"
 
 volumes:
   postgres_data:
