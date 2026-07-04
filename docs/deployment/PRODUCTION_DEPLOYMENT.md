@@ -81,7 +81,7 @@ x86 AMD EPYC means the existing Kali sandbox image works as-is — no ARM rebuil
 npm i -g vercel
 
 # From the monorepo root
-cd ~/Desktop/lyrashieldai
+cd ~/Desktop/lyrasec-ai
 
 # Link to Vercel project
 vercel link
@@ -150,8 +150,8 @@ npm install -g pnpm
 
 # 6. Install git and clone the repo
 apt install -y git
-git clone https://github.com/lyrashield/lyrashield.git
-cd lyrashield
+git clone https://github.com/ecryptoguru/lyrasec-ai.git
+cd lyrasec-ai
 
 # 7. Install dependencies and build worker
 pnpm install --frozen-lockfile
@@ -178,8 +178,8 @@ Requires=docker.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/lyrashield/apps/worker
-EnvironmentFile=/root/lyrashield/.env
+WorkingDirectory=/root/lyrasec-ai/apps/worker
+EnvironmentFile=/root/lyrasec-ai/.env
 ExecStart=/usr/bin/node dist/index.js
 Restart=always
 RestartSec=10
@@ -221,7 +221,7 @@ Supabase gives you 500MB Postgres + 50K auth users for free.
 # Format: postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres
 
 # Run migrations against Supabase
-cd ~/Desktop/lyrashieldai
+cd ~/Desktop/lyrasec-ai
 DATABASE_URL="postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres" pnpm db:migrate
 DATABASE_URL="postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres" pnpm db:generate
 
@@ -403,7 +403,7 @@ jobs:
           username: root
           key: ${{ secrets.WORKER_VPS_SSH_KEY }}
           script: |
-            cd /root/lyrashield
+            cd /root/lyrasec-ai
             git pull origin main
             pnpm install --frozen-lockfile
             pnpm build --filter @lyrashield/worker

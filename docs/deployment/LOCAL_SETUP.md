@@ -48,8 +48,8 @@ uv (Python package manager — only for engine development)
 
 ```bash
 # Platform (TypeScript monorepo)
-git clone <your-github>/lyrashield.git ~/Desktop/lyrashieldai
-cd ~/Desktop/lyrashieldai
+git clone https://github.com/ecryptoguru/lyrasec-ai.git ~/Desktop/lyrasec-ai
+cd ~/Desktop/lyrasec-ai
 
 # Engine (Python fork)
 git clone <your-github>/lyrashield-engine.git ~/Desktop/lyrashield-engine
@@ -58,7 +58,7 @@ git clone <your-github>/lyrashield-engine.git ~/Desktop/lyrashield-engine
 ### 2. Start Infrastructure (Docker Compose)
 
 ```bash
-cd ~/Desktop/lyrashieldai
+cd ~/Desktop/lyrasec-ai
 
 # Start Postgres + Redis (+ MinIO for evidence storage)
 docker compose up -d
@@ -71,7 +71,7 @@ docker ps
 ### 3. Configure Environment
 
 ```bash
-cd ~/Desktop/lyrashieldai
+cd ~/Desktop/lyrasec-ai
 cp .env.example .env
 
 # Edit .env — minimum required values:
@@ -100,7 +100,7 @@ cp .env.example .env
 ### 4. Install Dependencies & Run Migrations
 
 ```bash
-cd ~/Desktop/lyrashieldai
+cd ~/Desktop/lyrasec-ai
 
 # Install all workspace dependencies
 pnpm install
@@ -118,7 +118,7 @@ pnpm db:seed
 ### 5. Start the Platform
 
 ```bash
-cd ~/Desktop/lyrashieldai
+cd ~/Desktop/lyrasec-ai
 
 # Starts both web (:3000) and worker (stub mode)
 pnpm dev
