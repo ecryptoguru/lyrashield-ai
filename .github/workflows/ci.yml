@@ -63,7 +63,7 @@ jobs:
         run: pnpm db:generate
 
       - name: Run database migrations
-        run: pnpm db:migrate
+        run: pnpm --filter @lyrashield/db migrate:deploy
 
       - name: Lint
         run: pnpm lint
