@@ -5,6 +5,18 @@
 
 ---
 
+## 🔄 2026-07-04 Update
+
+- **Repo renamed** → `github.com/ecryptoguru/lyrasec-ai` (was `lyrashieldai`). In-code `@lyrashield/*` scopes + `LYRASHIELD_*` env vars intentionally NOT renamed yet (trademark clearance open). *Decision #2 (keep "Lyra-" prefix): trending KEEP — new name retains it; formal trademark clearance (#3) still pending.*
+- **Decision #15 (v1 coverage) — RESOLVED:** v1 = agentic pentest **+ SCA + secrets** + GitHub Action/reusable workflow (diff-aware gate) + SARIF. (See PRD §B13.4 / §B8 / §18.)
+- **Deep audit completed** (repo @ `396ca63`) → full prioritized backlog embedded in **PRD PART B §B13** (PRD is the single source of truth). **Batch 1 (P0/P1 security/correctness) shipped as PRs #7–#11** (branches; not merged):
+  - A0 tenant-isolation: AsyncLocalStorage rewrite + corrected model sets (found a latent crash: soft-delete set wrongly included 4 columnless models → `getWorkspaceMembership` would throw on a real DB) + auth-guard auto-activation + tests. RLS = follow-up (needs DB validation).
+  - A1 Redis/Upstash rate-limit (prod limiting was silently no-op); A2/A4 webhook idempotency + exact repo match; A3 onboarding IDOR; A5 GitHub install-URL slug.
+  - A7 CI-runs-tests: **blocked** on granting the GitHub App `Workflows: write`.
+- **Still open:** domain (#1); Batches 2–4 of the audit (pagination, frontend/UX+a11y+mobile, audit-log hash-chain, component library, data-fetch/memoization, cost/determinism + SARIF/CVSS contracts, dogfood CI, differentiated features — several need the unbuilt worker/engine).
+
+---
+
 ## 1. Notion Workspace Summary
 
 8 pages found in the LyraSec Notion workspace:
@@ -96,7 +108,7 @@ These block downstream work. Status as of 2026-07-02 — all PENDING.
 |---|----------|--------|--------|
 | 13 | **"Two depths, one loop" as headline moat** — confirm or different angle? | All messaging, landing page, comparisons | PENDING |
 | 14 | **5 explanation modes** — confirm set? Is "auditor" a mode or a report export? | Messaging by audience, product copy | PENDING |
-| 15 | **v1 coverage scope** — agentic-only or SCA + secrets alongside? (Recommendation: ship SCA + secrets with v1) | v1 landing page feature list, demo | PENDING |
+| 15 | **v1 coverage scope** — agentic-only or SCA + secrets alongside? | v1 landing page feature list, demo | ✅ RESOLVED 2026-07-04 — SCA + secrets ship in v1 (+ GitHub Action/SARIF) |
 | 16 | **No public benchmarks** — confirm we will NOT publish XBEN/accuracy numbers | Comparison pages, launch claims | PENDING |
 
 ### Engineering-Marketing Dependencies

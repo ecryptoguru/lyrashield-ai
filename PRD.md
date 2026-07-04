@@ -1,4 +1,6 @@
-> ⚠️ **2026-07 UPDATE:** This PRD has an authoritative engineering addendum — see **“PART B — 2026-07 Research & Code-Grounded Engineering Update”** at the end of this file. **Current build status: Sprints 0–2 complete** (see PART B §B0 for the code-grounded reality and §B0.1 for the delivery status / open items). Where PART B conflicts with the original spec below, PART B is authoritative.
+> ⚠️ **2026-07 UPDATE:** This PRD has an authoritative engineering addendum — see **“PART B — 2026-07 Research & Code-Grounded Engineering Update”** at the end of this file. **Current build status: Sprints 0–3 + 2.5 complete** (see PART B §B0 for the code-grounded reality and §B0.1 for the delivery status / open items). Where PART B conflicts with the original spec below, PART B is authoritative.
+>
+> ⚠️ **2026-07-04 UPDATE (authoritative over older status lists):** (1) **Repo renamed** to `github.com/ecryptoguru/lyrasec-ai` — in-code `@lyrashield/*` package scopes and `LYRASHIELD_*` env vars are intentionally NOT renamed yet (trademark clearance still open; revert risk). (2) **v1 coverage FINAL:** agentic pentest **+ SCA + secrets** + a first-class GitHub Action / reusable workflow with a diff-aware gate + SARIF output (resolves founder decision #15). IaC/container + reachability remain Phase 2. (3) A code-grounded deep audit was completed; its P0/P1 fixes shipped as PRs — see the new **§B13 — 2026-07-04 Deep-Audit Findings & Batch 1** at the end of PART B, which supersedes the older §B0.1 status list.
 
 ---
 
@@ -4445,6 +4447,10 @@ GitHub App
 URL scan
 scan queue
 LyraShield scan engine
+SCA / dependency scan          # v1-confirmed (decision #15, 2026-07-04)
+secrets scan                   # v1-confirmed (decision #15, 2026-07-04)
+GitHub Action + reusable workflow (diff-aware gate)   # v1-confirmed
+SARIF output                   # v1-confirmed
 live scan events
 findings
 finding detail
@@ -4899,6 +4905,8 @@ From "AI AppSec scanner" to **"Agent-native security for AI-built apps."**
 
 ## B0.1 Delivery status (2026-07-02) — what is DONE vs STILL OPEN
 
+> **⚠️ SUPERSEDED (2026-07-04):** The snapshot below is from 2026-07-02 and is now stale — several items it lists as "STILL OPEN / NOT STARTED" (email verification, env validation, rate limiting, and the entire §B4 schema retrofit set) were in fact shipped by the time of the 2026-07-04 audit. See **§B13** for the accurate, code-grounded status. The list below is retained for history only.
+
 This addendum is **not** an all-done checklist. Current state:
 
 **DONE — merged to `main`:**
@@ -4984,8 +4992,8 @@ Add: (9) **engine supply-chain** (heavy Kali/LiteLLM/Caido dep tree — pin, SBO
 
 ## B8. Detection-coverage expansion (table stakes)
 
-- **`[P0/P1]` SCA / dependency + malicious-package detection** (OSV/GHSA + Socket-style signals) — deterministic, high-confidence, often the *first* thing buyers check; unlocks EPSS/KEV. **Strong recommendation: ship SCA + secrets with v1** rather than agentic-pentest-only.
-- **`[P1]` Secrets scanning** (gitleaks/trufflehog-style, incl. git history).
+- **`[v1 — CONFIRMED]` SCA / dependency + malicious-package detection** (OSV/GHSA + Socket-style signals) — deterministic, high-confidence, often the *first* thing buyers check; unlocks EPSS/KEV. **Founder-confirmed 2026-07-04: ships in v1** (decision #15), not agentic-pentest-only.
+- **`[v1 — CONFIRMED]` Secrets scanning** (gitleaks/trufflehog-style, incl. git history). **Ships in v1.**
 - **`[P2]` IaC + container-image scanning** (backs the "code + cloud + infra" positioning).
 - **`[P2]` Reachability analysis** (noise reduction + prioritization).
 - Pair the DAST-strong forked engine with **unmodified** Semgrep (SAST), Nuclei/ZAP (infra), OSV/Trivy (deps) as independent dependencies — do not extend the fork's prompt system to cover these (see B9).
@@ -5018,3 +5026,77 @@ Superlinear token growth with target size is the top margin threat ($38–104 fu
 ## B12. Kept as-is (strong already)
 
 Better-Auth-owns-identity / Prisma-owns-app boundary; webhook idempotency model (`@@unique([provider, externalId])`); secrets-as-vault-refs; human-approval-gate model; definition-of-done incl. a11y/empty/error states; the "one product, two depths" principle. The SSRF *intent* is good — the *implementation* needs B1.1.
+
+---
+
+## B13. 2026-07-04 Deep-Audit Findings & Batch 1 (authoritative status)
+
+> A code-grounded deep audit of the repo at `396ca63` (now `ecryptoguru/lyrasec-ai`). This section is the **current source of truth for build status**, superseding §B0 / §B0.1 where they disagree.
+
+### B13.1 Corrected status — what is actually DONE
+
+- **Sprints 0, 1, 2, 2.5, 3 complete.** Auth (email/password + GitHub/Google OAuth), full Prisma schema, 10-role RBAC **enforced** on mutating routes, dashboard/projects/targets/team CRUD, onboarding wizard, GitHub App integration (JWT, installation tokens, repo listing, webhook signature verification), integrations UI.
+- **Auth hardening DONE** (§B1.4 was stale): `requireEmailVerification: true` + Brevo + `sendOnSignUp`; Zod env validation in `@lyrashield/config`; rate-limiting middleware (auth 5/min, API 30/min).
+- **Schema retrofits DONE** (§B4 was stale): `Finding @@unique([targetId, dedupeKey])`, `ApiKey`, `Retest`, `UsageRecord.idempotencyKey`, `Report.shareTokenHash + revokedAt`, duplicate-target constraints, composite `Finding(workspaceId,status,severity)` + `AuditLog(workspaceId,createdAt)`, soft-delete columns.
+- **SSRF DONE and strong** (§B1.1 resolved): `apps/web/src/lib/ssrf.ts` resolves DNS and validates every resolved IP; full CIDR coverage (0.0.0.0/8, 10/8, CGNAT 100.64/10, 127/8, 169.254/16 metadata, 172.16/12, 192.0.0/24, 192.168/16, 198.18/15, multicast, reserved); IPv6 incl. bracket/zone-id strip, IPv4-mapped, NAT64, ULA, link-local; fail-closed. Only the **fetch-time** rebinding defense (worker IP-pinning + egress proxy, §B2.2) remains — deferred to the worker (unbuilt).
+
+### B13.2 New issues found in the audit and FIXED (Batch 1, PRs on branches, not yet merged)
+
+- **[P0] Tenant-isolation extension was a latent breach + latent crash** (`packages/db`). The workspace-scoping context was a **module-level mutable global** (`setWorkspaceContext` never called) → cross-request tenant leak if ever activated. **Additionally, both model sets were wrong vs. the schema:** `SOFT_DELETE_MODELS` included `WorkspaceMember`, `CredentialSet`, `AuditLog`, `Retest` (no `deletedAt` column) — so the extension would inject `deletedAt: null` into `getWorkspaceMembership()`'s `findUnique` and **throw on every authenticated request against a real DB**; `WORKSPACE_SCOPED_MODELS` included `ScanEvent`, `Evidence`, `FixProposal`, `PullRequest`, `Ticket` (no `workspaceId` column). **Fixed:** rewrote scoping around `AsyncLocalStorage` (request-safe) in a new `packages/db/src/scoping.ts`; corrected both sets to match real columns (19 soft-delete / 17 workspace-scoped, excluding cross-workspace `WorkspaceMember` + per-user `OnboardingState`); wired auto-activation into the auth guard; added unit + concurrency tests. **Postgres RLS remains the deliberate follow-up** (needs DB validation of the per-request GUC under Prisma pooling — transaction-scoped `SET LOCAL`).
+- **[P0] Production rate limiting silently no-oped.** The Upstash client used a hardcoded empty token and the `redis://` `REDIS_URL` (wrong endpoint for the HTTP REST client) → prod fell back to per-instance in-memory limiting. **Fixed:** added `UPSTASH_REDIS_REST_URL`/`_TOKEN`, gated the distributed limiter on them, fail-loud on init error, bounded the in-memory map, env refine requires the token when the URL is set. (`REDIS_URL` reserved for the BullMQ queue.)
+- **[P0] GitHub webhook had no idempotency guard.** Retried deliveries hit the `@@unique([provider, externalId])` constraint → 500-loop. **Fixed:** dedupe on `X-GitHub-Delivery` (pre-check + P2002 race guard).
+- **[P1] Onboarding PATCH IDOR.** Accepted attacker-controlled `workspaceId`/`targetId` with no ownership check. **Fixed:** verify membership/ownership before persisting.
+- **[P1] `installation.deleted` over-broad target disable.** `repoFullName: { contains: login }` matched unrelated repos. **Fixed:** owner-prefix `startsWith`. (Follow-up: store numeric `installationId` on `Target` for exact match.)
+- **[P1] GitHub install URL used the numeric app id** (404s). **Fixed:** build from `GITHUB_APP_SLUG`.
+- **[P1] CI never ran the test suite.** **Fix prepared** (`ci.yml` adds a `pnpm test` step, aligns pnpm to `packageManager`, adds `NEXT_PUBLIC_APP_URL`) — **blocked** on granting the GitHub App the `Workflows: write` permission.
+
+### B13.3 Verification note
+The Next 16 / Prisma 7 / Postgres suite is not runnable in the authoring environment; Batch 1 ships with unit tests in the existing Vitest style and relies on CI as the gate — which is why the CI-runs-tests fix (B13.2, blocked) matters. **The full post-Batch-1 backlog (Batches 2–4) is embedded below in §B13.5, with the sprint mapping in §B13.6 — this PRD is the single source of truth.**
+
+### B13.4 v1 coverage — FINAL
+Founder-confirmed 2026-07-04: **v1 = agentic pentest + SCA + secrets + GitHub Action/reusable workflow (diff-aware gate) + SARIF.** Pair the DAST-strong forked engine with **unmodified** independent tools for the deterministic layers (Semgrep-style SAST, OSV/Trivy-style deps, gitleaks/trufflehog-style secrets) rather than extending the fork's prompt system. This resolves decision #15 and pulls §B8's SCA/secrets recommendation into v1 scope (see §B8, and MVP Cutline §18).
+
+## B13.5 Post-Batch-1 backlog (full detail — PRD is the single source of truth)
+
+The complete prioritized backlog from the 2026-07-04 deep audit. Severity **P0/P1/P2**; effort **S** ≤half-day / **M** ~1–2 days / **L** ~3+ days. Honest-positioning guardrails apply (no "only we" claims, no benchmark/accuracy numbers, no public pricing, no naming the forked engine publicly).
+
+### Part A — remaining correctness/security fixes
+
+- **A6 · P1 · No pagination on any list endpoint** (`targets`/`projects`/`team` GET). Unbounded `findMany`; a `PaginatedResponse<T>` type exists but is unused. **Fix (M):** cursor / `take`+`skip` pagination + composite indexes `Target(workspaceId, createdAt)`, `Project(workspaceId, createdAt)`.
+- **A7 · P1 · CI never runs the tests** (PREPARED, blocked on GitHub App `Workflows: write`). Adds `pnpm test`, aligns pnpm to `packageManager`, adds `NEXT_PUBLIC_APP_URL`, concurrency-cancel.
+- **A8 · P0-UX/P1 · Frontend correctness & a11y** (`apps/web`): keyboard-inaccessible clickable `<div>`/`<tr>` cards → use `<Link>` (WCAG 2.1.1); **no responsive sidebar** (fixed `w-64`, no drawer) → dashboard unusable on mobile; sidebar links + "New Scan" point to routes that **404** (`/dashboard/scans|findings|fixes|reports|settings`) → coming-soon stubs / disabled nav; onboarding edits after revisiting steps 0/1 silently dropped, no skip-confirm, no re-entry after skip, steps 4–6 inert placeholders with no upfront signal; error/success banners lack `role="alert"`/`aria-live`, decorative icons lack `aria-hidden`, status badges use raw Tailwind colors that bypass `@theme` tokens and break in dark mode; `repoProvider` free-text → `z.enum(["github"])`; install POST skips Zod on `workspaceId`.
+- **A9 · P2 · Audit-log richness & hygiene**: `ipAddress`/`userAgent`/`prevHash` columns never populated → add `buildAuditContext(request)`; implement the `prevHash` hash-chain (tamper-evident compliance export) or mark reserved; log `error.stack` not `String(error)` and scrub secrets; fix the install-POST catch block that leaks the raw error message and never logs.
+
+### Part B — optimizations (perf, cost, architecture, DX)
+
+- **B1 · P1 · Kill the Server→Client data waterfall.** Dashboard sub-pages (Server Components) hand off to `*-client.tsx` that re-fetch the same data over `/api/*`, and every mutation fires both a client refetch and `router.refresh()`. Pass `initialData`; drop the redundant `router.refresh()`.
+- **B2 · P0-perf · Request-level memoization.** Every sub-page re-runs `getSession()` + a membership query already resolved in the layout → wrap in React `cache()`.
+- **B3 · P1 · Extract a real component library.** `packages/ui` exports only `cn()` + `GithubIcon`; buttons/empty-states/badges are copy-pasted across 9+ files; auth pages inline a second GitHub SVG. Extract `Button`, `Card`, `Badge` (variants → theme tokens incl. dark mode), `EmptyState`, `FormField`, `Spinner`. Also makes the LyraShield→LyraSec visual rename cheap.
+- **B4 · P2 · API-response & fetch helpers.** Factor repeated `{success:false,error:{code,message}}` blocks (mirror `authErrorResponse`); add a `useApiResource<T>` hook with `AbortController` (fixes unmount/rapid-filter races).
+- **B5 · P1 (design-only) · Cost & determinism controls.** In-loop budget guard (`STOPPED_BUDGET` enum exists), **diff-only scan default**, model cascade + provider prompt caching, deterministic **fingerprint** dedupe (hash of vuln-class + normalized location + root cause), independent verification layer (verify file/line existence before surfacing a finding).
+- **B6 · P1 (design-only) · Fork strategy & standards.** Thin-wrapper engine (consume unmodified upstream output, brand in the TS worker); CVE-triggered fast-path merge; Apache-2.0 §4b file-marking + NOTICE; commit to **SARIF 2.1.0** output + **dual CVSS v3.1 + v4.0** fields on `Finding` before findings data exists.
+- **B7 · P2 · Dogfood in CI.** Run the eventual LyraSec Action against this monorepo — real dogfooding alongside the internal Lyrafin-codebase POC.
+
+### Part C — feature additions (differentiated for the ICP)
+
+Every competitor matches *some* individual feature; the moat is the **combination for an audience nobody built the information-architecture for**. Documented breaches (Lovable CVE-2025-48757, Base44 auth-bypass, RedAccess's 380K exposed assets) cluster at the **deployed-app + backend-config** layer (missing Supabase RLS, exposed `anon_key`, IDOR/broken-auth), not classic SQLi/XSS.
+
+- **Bet 1 — "Can I launch?" as the primary experience:** **C1 · Launch-readiness gate (P1, M)** — one yes/no verdict + 1–3 things to fix, deploy-check style, honest copy. **C2 · Plain-language findings as a hard constraint (P1, M)** — actionable by a non-engineer without googling a term; 5 explanation modes, "founder mode" default, CWE/CVSS behind a disclosure.
+- **Bet 2 — Scan the layer competitors ignore (live app + backend config):** **C3 · AI-builder-aware URL scan (P0 for differentiation, L — needs worker)** — tune detectors for Lovable/Bolt/v0/Replit/Base44 defaults (Supabase/Firebase RLS gaps, exposed public keys in client bundles, IDOR, missing webhook verification, apps defaulting public). **C4 · SCA + secrets (P0, v1 — CONFIRMED)** — unmodified Semgrep/OSV/gitleaks as independent deps.
+- **Bet 3 — Close the full agent-native loop:** **C5 · MCP server (P1, L)** — detect → exploit-validate → fix-PR → retest across Cursor/Claude Code/Windsurf/Codex/OpenCode; OAuth 2.1 (PKCE, RFC 8707/8693), `needsApproval` on mutating tools re-validated at execution; never "only we have MCP." **C6 · Prompt-injection defense (P0 before agent GA, M)** — treat target-controlled content as delimited untrusted data, least-privilege tools, scan the AI fix patch before opening a PR.
+- **Bet 4 — Make the output a shareable trust artifact:** **C7 · Shareable report/badge (P1, M)** — public, revocable mini-SOC2 using `Report.shareTokenHash`+`revokedAt`+`shareExpiresAt` (schema present) + rate-limited token access; PLG viral loop. **C8 · Compliance-lite evidence pack (P2, M)** — auto-generated SOC2/GDPR-flavored evidence; honest claims (evidence, not certification).
+- **Table-stakes:** PR comments; Slack/Discord alerts; one-click fix PRs; real free tier; GitHub Action + `workflow_call` reusable workflow with a diff-aware gate + Checks API annotations (this *is* the pre-merge product — pull forward); AI autotriage/noise-reduction as a headline metric (quantify only once measured + founder-approved).
+
+## B13.6 Backlog → sprint mapping (extends §B11 overlay)
+
+**Batch 2 — DX & UX foundation (interleave with Sprint 3.5/4; mostly pre-worker):**
+- **Sprint 2.6 — Shared component library** (B3).
+- **Sprint 2.7 — Frontend correctness & a11y** (A8).
+- **Sprint 2.8 — Data-fetch + perf** (B1/B2/A6/B4).
+
+**Batch 3 — Design-in contracts before the worker (schema/interfaces, cheap now):**
+- **Sprint 4.1 — Tenant-isolation hardening**: Postgres RLS + auto-activation validated on CI Postgres (follow-up to PR #11); `Evidence.encryptionKeyRef` enforcement; `AuditLog` `prevHash` hash-chain (A9).
+- **Sprint 4.2 — Cost/determinism + standards contracts** (B5/B6): budget guard, diff-only default, cascade + caching, fingerprint dedupe, verification layer; SARIF 2.1.0 + dual CVSS fields; thin-wrapper fork + CVE fast-path + §4b/NOTICE.
+
+**Batch 4 — Differentiated build (needs worker/engine; sequence within Sprints 4–9 + the §22 agent sprints):**
+- **SCA + secrets** (C4, v1) → **AI-builder-aware URL scan** (C3) → **launch-readiness gate + plain-language findings** (C1/C2) → **shareable report/badge** (C7) + **compliance-lite evidence** (C8) → **MCP server** (C5) + **prompt-injection defense** (C6) → **GitHub Action + reusable workflow diff-gate** (pull forward). Dogfood the Action on this repo (B7).
