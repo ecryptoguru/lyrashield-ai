@@ -47,4 +47,8 @@ export type {
 export { Prisma } from "./generated/prisma"
 
 export { prisma } from "./client"
-export { setWorkspaceContext, getWorkspaceContext } from "./extension"
+export {
+  setWorkspaceContext,
+  getWorkspaceContext,
+  runWithWorkspaceContext,
+} from "./extension"
