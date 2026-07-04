@@ -334,6 +334,9 @@ UPSTASH_REDIS_REST_TOKEN=""
 # Better Auth
 BETTER_AUTH_SECRET="replace-with-a-strong-secret-key-min-32-chars"
 BETTER_AUTH_URL="http://localhost:3000"
+# Comma-separated extra origins trusted for auth/CSRF (staging, apex+www, preview).
+# BETTER_AUTH_URL is always trusted; these are appended.
+ADDITIONAL_TRUSTED_ORIGINS=""
 
 # GitHub OAuth (sign-in)
 GITHUB_CLIENT_ID=""
@@ -754,15 +757,24 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 
 ---
 
-## 17. 2026-07-04 Audit — Batch 1 changes (branches/PRs, not yet merged to `main`)
+## 17. 2026-07-04 Audit — Batch 1 + Round-2 changes (MERGED to `main`)
 
-A code-grounded deep audit produced these fixes. Each is a branch + PR on `ecryptoguru/lyrasec-ai`. Where this conflicts with older sections, this section wins.
+A code-grounded deep audit produced these fixes, all now merged to `main`. Where this conflicts with older sections, this section wins.
 
 - **Tenant isolation (`packages/db`)** — the workspace-scoping context was rewritten from an unsafe module-level global to **AsyncLocalStorage** in the new `packages/db/src/scoping.ts`; `extension.ts` is now a thin wrapper. **Both model sets were corrected to match real schema columns:** soft-delete = the **19** models that actually have `deletedAt` (removed `WorkspaceMember`, `CredentialSet`, `AuditLog`, `Retest`); workspace-scoped = the **17** auto-scopable models with `workspaceId` (removed `ScanEvent`, `Evidence`, `FixProposal`, `PullRequest`, `Ticket`; excluded cross-workspace `WorkspaceMember` and per-user `OnboardingState`). Auto-activation is wired into `requireWorkspaceAccess` (`packages/auth/src/session.ts`) via `setWorkspaceContext`. **Postgres RLS is a deliberate follow-up** (needs DB-validated per-request GUC). Regression + concurrency tests in `extension.test.ts` (now imports the real policy from `scoping.ts`).
 - **Rate limiting (`apps/web/src/lib/rate-limit.ts`)** — now uses `UPSTASH_REDIS_REST_URL`/`_TOKEN` (the previous code passed an empty token + the `redis://` URL, silently degrading prod to per-instance in-memory). Fail-loud on init error; in-memory map is bounded by an expiry sweep.
 - **GitHub webhook (`api/webhooks/github`)** — idempotent on `X-GitHub-Delivery` (pre-check + P2002 race guard); `installation.deleted` now matches targets by `startsWith("{owner}/")` instead of `contains`.
 - **Onboarding (`api/onboarding`)** — PATCH verifies workspace membership + target ownership before persisting (IDOR fix).
 - **GitHub install URL (`packages/integrations/src/github.ts`)** — built from `GITHUB_APP_SLUG` (was the numeric app id, which 404s).
-- **CI (`.github/workflows/ci.yml`)** — adds a `pnpm test` step, reads pnpm from `packageManager`, adds `NEXT_PUBLIC_APP_URL`. **Blocked** on granting the GitHub App `Workflows: write`.
+- **CI (`.github/workflows/ci.yml`)** — adds a `pnpm test` step, reads pnpm from `packageManager`, adds `NEXT_PUBLIC_APP_URL` (landed via Codex, PR #14).
 
-Remaining audit backlog (Batches 2–4: pagination, frontend/UX + a11y + mobile, audit-log hash-chain, shared component library, data-fetch/memoization, cost/determinism + SARIF/CVSS contracts, dogfood CI, and the differentiated feature set) is in **PRD PART B §B13.5 / §B13.6** — the PRD is the single source of truth.
+**Round-2 hardening (merged; findings in PRD §B13.7):**
+- **Web security headers (`apps/web/next.config.ts`)** — `headers()` adds HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy; `poweredByHeader:false`, `reactStrictMode:true`, `images.remotePatterns` (GitHub/Google avatars). (Full nonce-based **CSP** still deferred.)
+- **Logger (`packages/logger`)** — now **redacts** sensitive keys (password/secret/token/authorization/apikey/privatekey/cookie/credential/vaultref/verificationurl/otp), captures `Error`, breaks circular refs, truncates oversized output. Use it freely; still never log raw secrets deliberately.
+- **GitHub integration (`packages/integrations/src/github.ts`)** — installation-token **caching** (per `installationId`, using `expires_at`), retry/backoff (`githubFetch`, honors `Retry-After`), paginated `getAppInstallations`, `crypto.timingSafeEqual`.
+- **Auth (`packages/auth/src/auth.ts`)** — `trustedOrigins` = `BETTER_AUTH_URL` + `ADDITIONAL_TRUSTED_ORIGINS` (comma-separated).
+- **Dependabot** (`.github/dependabot.yml`) — weekly npm + github-actions; majors excluded from auto-PRs.
+
+**🔴 KNOWN ISSUE — Prisma migration drift (latent P0 on deploy):** only 2 migrations exist and `schema.prisma` is far ahead (tables `ApiKey`/`OnboardingState`/`Retest` + many columns/indexes/constraints were applied via `db push`, never migrated). `prisma migrate deploy` on a **fresh** DB (CI/prod) yields a DB that mismatches the generated client. **Use `prisma db push` for local dev until a reconciling migration is generated** (`prisma migrate dev`) and a CI drift-check is added. See PRD §B13.7 R-C/R-F.
+
+Remaining audit backlog (Batches 2–4, plus the round-2 Codex items: migration-drift reconciliation, CI hardening, supply-chain pinning + `eslint-plugin-security`, CSP) is in **PRD PART B §B13.5 / §B13.6 / §B13.7** — the PRD is the single source of truth.
