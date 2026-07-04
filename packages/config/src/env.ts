@@ -9,12 +9,21 @@ const envSchema = z.object({
     .optional()
     .or(z.literal("")),
 
-  // Redis
+  // Redis (redis:// URL — reserved for the BullMQ job queue, Sprint 4+)
   REDIS_URL: z
     .string()
     .url()
     .optional()
     .or(z.literal("")),
+
+  // Upstash Redis REST (HTTP) — distributed rate limiting in production.
+  // These are the HTTPS REST endpoint + token, NOT the redis:// REDIS_URL above.
+  UPSTASH_REDIS_REST_URL: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal("")),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional().or(z.literal("")),
 
   // Better Auth
   BETTER_AUTH_SECRET: z
@@ -72,7 +81,15 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),
-})
+}).refine(
+  // If an Upstash REST URL is configured, a token must accompany it — a URL
+  // without a token silently falls back to per-instance in-memory limiting.
+  (val) => !(val.UPSTASH_REDIS_REST_URL && !val.UPSTASH_REDIS_REST_TOKEN),
+  {
+    path: ["UPSTASH_REDIS_REST_TOKEN"],
+    message: "UPSTASH_REDIS_REST_TOKEN is required when UPSTASH_REDIS_REST_URL is set",
+  }
+)
 
 export type Env = z.infer<typeof envSchema>
 
