@@ -35,6 +35,19 @@ export async function POST(request: NextRequest) {
 
   const event = body as Record<string, unknown>
 
+  // Idempotency: GitHub retries any delivery that doesn't return 2xx (and can
+  // redeliver on its own). The X-GitHub-Delivery id is unique per delivery, and
+  // WebhookEvent has @@unique([provider, externalId]) built for exactly this.
+  // If we've already recorded this delivery, treat it as a processed no-op so
+  // retries don't 500-loop or duplicate side effects.
+  const alreadyProcessed = await prisma.webhookEvent.findUnique({
+    where: { provider_externalId: { provider: "github", externalId: String(deliveryId) } },
+  })
+  if (alreadyProcessed) {
+    logger.info("Duplicate GitHub webhook delivery ignored", { deliveryId, eventType })
+    return NextResponse.json({ success: true, data: { processed: true, duplicate: true } })
+  }
+
   try {
     if (eventType === "installation") {
       const action = event.action as string
@@ -51,11 +64,16 @@ export async function POST(request: NextRequest) {
             data: { status: "disconnected", deletedAt: new Date() },
           })
 
+          // Match repos owned by this account exactly, by "owner/" prefix.
+          // A `contains` substring match previously disabled unrelated targets
+          // (login "acme" also matched "not-acme/repo" or "acme-corp/other").
+          // NOTE follow-up: once Target stores the numeric installationId, match
+          // on that instead of the login prefix for full precision.
           await prisma.target.updateMany({
             where: {
               workspaceId: integration.workspaceId,
               repoProvider: "github",
-              repoFullName: { contains: installation.account.login },
+              repoFullName: { startsWith: `${installation.account.login}/` },
             },
             data: { deletedAt: new Date() },
           })
@@ -84,30 +102,41 @@ export async function POST(request: NextRequest) {
       })
 
       if (integration) {
-        await prisma.webhookEvent.create({
-          data: {
-            workspaceId: integration.workspaceId,
-            provider: "github",
-            eventType: `pull_request.${action}`,
-            externalId: `${deliveryId}`,
-            payload: {
-              action,
-              repoFullName: repository.full_name,
-              repoId: repository.id,
-              prNumber: pullRequest.number,
-              headRef: pullRequest.head.ref,
-              baseRef: pullRequest.base.ref,
-              installationId: installation.id,
+        try {
+          await prisma.webhookEvent.create({
+            data: {
+              workspaceId: integration.workspaceId,
+              provider: "github",
+              eventType: `pull_request.${action}`,
+              externalId: `${deliveryId}`,
+              payload: {
+                action,
+                repoFullName: repository.full_name,
+                repoId: repository.id,
+                prNumber: pullRequest.number,
+                headRef: pullRequest.head.ref,
+                baseRef: pullRequest.base.ref,
+                installationId: installation.id,
+              },
             },
-          },
-        })
+          })
 
-        logger.info("Pull request webhook stored", {
-          deliveryId,
-          repo: repository.full_name,
-          prNumber: pullRequest.number,
-          action,
-        })
+          logger.info("Pull request webhook stored", {
+            deliveryId,
+            repo: repository.full_name,
+            prNumber: pullRequest.number,
+            action,
+          })
+        } catch (err) {
+          // Handle the race where two concurrent redeliveries both pass the
+          // pre-check above: the unique (provider, externalId) constraint
+          // rejects the second insert (P2002). Treat as an idempotent no-op.
+          if (err && typeof err === "object" && (err as { code?: string }).code === "P2002") {
+            logger.info("Concurrent duplicate GitHub delivery ignored", { deliveryId })
+          } else {
+            throw err
+          }
+        }
       }
     } else {
       logger.debug("Unhandled GitHub webhook event type", { eventType, deliveryId })
