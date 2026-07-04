@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { UserPlus, Mail, Clock, Users } from "lucide-react"
+import { Button, Badge, FormField, Input, Select } from "@lyrashield/ui"
 
 interface Member {
   id: string
@@ -87,7 +88,7 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12">
+      <div className="flex items-center justify-center p-12" aria-busy="true">
         <p className="text-sm text-muted-foreground">Loading team...</p>
       </div>
     )
@@ -96,13 +97,10 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
   if (fetchError) {
     return (
       <div className="flex flex-col items-center justify-center p-12">
-        <p className="mb-4 text-sm text-destructive">{fetchError}</p>
-        <button
-          onClick={() => fetchMembers()}
-          className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
-        >
+        <p className="mb-4 text-sm text-destructive" role="alert">{fetchError}</p>
+        <Button variant="secondary" onClick={() => fetchMembers()}>
           Retry
-        </button>
+        </Button>
       </div>
     )
   }
@@ -114,44 +112,37 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
           <h1 className="text-2xl font-bold">Team Members</h1>
           <p className="text-sm text-muted-foreground">Manage who has access to this workspace</p>
         </div>
-        <button
-          onClick={() => setShowInvite(!showInvite)}
-          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
+        <Button onClick={() => setShowInvite(!showInvite)}>
           <UserPlus className="h-4 w-4" />
           Invite Member
-        </button>
+        </Button>
       </div>
 
       {showInvite && (
         <form onSubmit={handleInvite} className="mb-6 rounded-lg border p-6">
           <h2 className="mb-4 text-lg font-semibold">Invite Team Member</h2>
           {error && (
-            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
               {error}
             </div>
           )}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="invite-email" className="mb-1 block text-sm font-medium">Email</label>
-              <input
+            <FormField label="Email" htmlFor="invite-email">
+              <Input
                 id="invite-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoFocus
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                 placeholder="teammate@example.com"
               />
-            </div>
-            <div>
-              <label htmlFor="invite-role" className="mb-1 block text-sm font-medium">Role</label>
-              <select
+            </FormField>
+            <FormField label="Role" htmlFor="invite-role">
+              <Select
                 id="invite-role"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
               >
                 <option value="MEMBER">Member</option>
                 <option value="ADMIN">Admin</option>
@@ -162,27 +153,19 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
                 <option value="AUDITOR">Auditor</option>
                 <option value="BILLING_ADMIN">Billing Admin</option>
                 <option value="EXTERNAL_PENTESTER">External Pentester</option>
-              </select>
-            </div>
+              </Select>
+            </FormField>
           </div>
           <div className="mt-4 flex gap-2">
-            <button
-              type="submit"
-              disabled={inviting}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
+            <Button type="submit" disabled={inviting}>
               {inviting ? "Inviting..." : "Send Invite"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowInvite(false)
-                setError(null)
-              }}
-              className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
-            >
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => {
+              setShowInvite(false)
+              setError(null)
+            }}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -209,13 +192,13 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
                 <td className="px-4 py-3 font-medium">{m.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{m.email}</td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                    m.role === "OWNER" ? "bg-purple-100 text-purple-700" :
-                    m.role === "ADMIN" ? "bg-blue-100 text-blue-700" :
-                    "bg-muted text-muted-foreground"
-                  }`}>
+                  <Badge variant={
+                    m.role === "OWNER" ? "info" :
+                    m.role === "ADMIN" ? "info" :
+                    "muted"
+                  }>
                     {m.role}
-                  </span>
+                  </Badge>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {new Date(m.createdAt).toLocaleDateString()}
@@ -247,9 +230,7 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
                 <tr key={inv.id} className="border-b last:border-0">
                   <td className="px-4 py-3 font-medium">{inv.email}</td>
                   <td className="px-4 py-3">
-                    <span className="inline-flex rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                      {inv.role}
-                    </span>
+                    <Badge variant="muted">{inv.role}</Badge>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     <span className="flex items-center gap-1">

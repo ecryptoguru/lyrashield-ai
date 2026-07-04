@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Plus, FolderKanban, Bug, Crosshair, Radar } from "lucide-react"
+import { Button, Badge, EmptyState, FormField, Input, Textarea } from "@lyrashield/ui"
 
 interface Project {
   id: string
@@ -81,7 +83,7 @@ export function ProjectsClient({ workspaceId }: { workspaceId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12">
+      <div className="flex items-center justify-center p-12" aria-busy="true">
         <p className="text-sm text-muted-foreground">Loading projects...</p>
       </div>
     )
@@ -90,13 +92,10 @@ export function ProjectsClient({ workspaceId }: { workspaceId: string }) {
   if (fetchError) {
     return (
       <div className="flex flex-col items-center justify-center p-12">
-        <p className="mb-4 text-sm text-destructive">{fetchError}</p>
-        <button
-          onClick={() => fetchProjects()}
-          className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
-        >
+        <p className="mb-4 text-sm text-destructive" role="alert">{fetchError}</p>
+        <Button variant="secondary" onClick={() => fetchProjects()}>
           Retry
-        </button>
+        </Button>
       </div>
     )
   }
@@ -108,118 +107,102 @@ export function ProjectsClient({ workspaceId }: { workspaceId: string }) {
           <h1 className="text-2xl font-bold">Projects</h1>
           <p className="text-sm text-muted-foreground">Organize your scan targets and findings</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
+        <Button onClick={() => setShowForm(!showForm)}>
           <Plus className="h-4 w-4" />
           New Project
-        </button>
+        </Button>
       </div>
 
       {showForm && (
         <form onSubmit={handleCreate} className="mb-6 rounded-lg border p-6">
           <h2 className="mb-4 text-lg font-semibold">Create Project</h2>
           {error && (
-            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
               {error}
             </div>
           )}
           <div className="mb-4">
-            <label htmlFor="project-name" className="mb-1 block text-sm font-medium">Name</label>
-            <input
-              id="project-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              maxLength={100}
-              autoFocus
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              placeholder="My App"
-            />
+            <FormField label="Name" htmlFor="project-name">
+              <Input
+                id="project-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={100}
+                autoFocus
+                placeholder="My App"
+              />
+            </FormField>
           </div>
           <div className="mb-4">
-            <label htmlFor="project-description" className="mb-1 block text-sm font-medium">Description (optional)</label>
-            <textarea
-              id="project-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={500}
-              rows={3}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              placeholder="Brief description of this project"
-            />
+            <FormField label="Description (optional)" htmlFor="project-description">
+              <Textarea
+                id="project-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="Brief description of this project"
+              />
+            </FormField>
           </div>
           <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={creating}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
+            <Button type="submit" disabled={creating}>
               {creating ? "Creating..." : "Create"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(false)
-                setError(null)
-              }}
-              className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
-            >
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => {
+              setShowForm(false)
+              setError(null)
+            }}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       )}
 
       {projects.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-12 text-center">
-          <FolderKanban className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-          <h2 className="mb-2 text-lg font-semibold">No projects yet</h2>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Create your first project to organize targets and scans.
-          </p>
-          <button
-            onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            Create project
-          </button>
-        </div>
+        <EmptyState
+          icon={FolderKanban}
+          title="No projects yet"
+          description="Create your first project to organize targets and scans."
+          action={
+            <Button onClick={() => setShowForm(true)}>
+              <Plus className="h-4 w-4" />
+              Create project
+            </Button>
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
-            <div
+            <Link
               key={project.id}
-              className="cursor-pointer rounded-lg border p-6 transition-colors hover:border-primary/50"
-              onClick={() => router.push(`/dashboard/targets?projectId=${project.id}`)}
+              href={`/dashboard/targets?projectId=${project.id}`}
+              className="block rounded-lg border p-6 transition-colors hover:border-primary/50"
             >
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="font-semibold">{project.name}</h3>
-                <span className="rounded-full bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground">
-                  Risk: {project.riskScore}
-                </span>
+                <Badge>Risk: {project.riskScore}</Badge>
               </div>
               {project.description && (
                 <p className="mb-4 text-sm text-muted-foreground">{project.description}</p>
               )}
               <div className="flex gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <Crosshair className="h-3 w-3" />
+                  <Crosshair className="h-3 w-3" aria-hidden="true" />
                   {project.targetCount} targets
                 </span>
                 <span className="flex items-center gap-1">
-                  <Radar className="h-3 w-3" />
+                  <Radar className="h-3 w-3" aria-hidden="true" />
                   {project.scanCount} scans
                 </span>
                 <span className="flex items-center gap-1">
-                  <Bug className="h-3 w-3" />
+                  <Bug className="h-3 w-3" aria-hidden="true" />
                   {project.findingCount} findings
                 </span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

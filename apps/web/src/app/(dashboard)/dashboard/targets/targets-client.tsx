@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft } from "lucide-react"
+import { Button, Badge, EmptyState, FormField, Input, Select } from "@lyrashield/ui"
 
 interface Target {
   id: string
@@ -156,7 +157,7 @@ export function TargetsClient({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12">
+      <div className="flex items-center justify-center p-12" aria-busy="true">
         <p className="text-sm text-muted-foreground">Loading targets...</p>
       </div>
     )
@@ -165,13 +166,10 @@ export function TargetsClient({
   if (fetchError) {
     return (
       <div className="flex flex-col items-center justify-center p-12">
-        <p className="mb-4 text-sm text-destructive">{fetchError}</p>
-        <button
-          onClick={() => fetchTargets()}
-          className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
-        >
+        <p className="mb-4 text-sm text-destructive" role="alert">{fetchError}</p>
+        <Button variant="secondary" onClick={() => fetchTargets()}>
           Retry
-        </button>
+        </Button>
       </div>
     )
   }
@@ -195,40 +193,33 @@ export function TargetsClient({
           <h1 className="text-2xl font-bold">Targets</h1>
           <p className="text-sm text-muted-foreground">Repositories and URLs to scan</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
+        <Button onClick={() => setShowForm(!showForm)}>
           <Plus className="h-4 w-4" />
           New Target
-        </button>
+        </Button>
       </div>
 
       {showForm && (
         <div className="mb-6 rounded-lg border p-6">
           <div className="mb-4 flex gap-2">
-            <button
+            <Button
+              variant={formType === "REPO" ? "default" : "secondary"}
               onClick={() => setFormType("REPO")}
-              className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium ${
-                formType === "REPO" ? "bg-primary text-primary-foreground" : "border hover:bg-accent"
-              }`}
             >
               <GitBranch className="h-4 w-4" />
               Repository
-            </button>
-            <button
+            </Button>
+            <Button
+              variant={formType === "URL" ? "default" : "secondary"}
               onClick={() => setFormType("URL")}
-              className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium ${
-                formType === "URL" ? "bg-primary text-primary-foreground" : "border hover:bg-accent"
-              }`}
             >
               <Globe className="h-4 w-4" />
               URL / API
-            </button>
+            </Button>
           </div>
 
           {error && (
-            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
               {error}
             </div>
           )}
@@ -236,9 +227,8 @@ export function TargetsClient({
           {formType === "REPO" ? (
             <form onSubmit={handleCreateRepo} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="repo-name-input" className="mb-1 block text-sm font-medium">Target Name</label>
-                  <input
+                <FormField label="Target Name" htmlFor="repo-name-input">
+                  <Input
                     id="repo-name-input"
                     type="text"
                     value={repoForm.name}
@@ -246,93 +236,81 @@ export function TargetsClient({
                     required
                     maxLength={100}
                     autoFocus
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                     placeholder="My App Backend"
                   />
-                </div>
-                <div>
-                  <label htmlFor="repo-project" className="mb-1 block text-sm font-medium">Project (optional)</label>
-                  <select
+                </FormField>
+                <FormField label="Project (optional)" htmlFor="repo-project">
+                  <Select
                     id="repo-project"
                     value={repoForm.projectId}
                     onChange={(e) => setRepoForm({ ...repoForm, projectId: e.target.value })}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   >
                     <option value="">No project</option>
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
-                  </select>
-                </div>
+                  </Select>
+                </FormField>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="repo-owner" className="mb-1 block text-sm font-medium">Repo Owner</label>
-                  <input
+                <FormField label="Repo Owner" htmlFor="repo-owner">
+                  <Input
                     id="repo-owner"
                     type="text"
                     value={repoForm.repoOwner}
                     onChange={(e) => setRepoForm({ ...repoForm, repoOwner: e.target.value })}
                     required
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                     placeholder="lyrashield"
                   />
-                </div>
-                <div>
-                  <label htmlFor="repo-name-field" className="mb-1 block text-sm font-medium">Repo Name</label>
-                  <input
+                </FormField>
+                <FormField label="Repo Name" htmlFor="repo-name-field">
+                  <Input
                     id="repo-name-field"
                     type="text"
                     value={repoForm.repoName}
                     onChange={(e) => setRepoForm({ ...repoForm, repoName: e.target.value })}
                     required
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                     placeholder="lyrashield"
                   />
-                </div>
+                </FormField>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="repo-branch" className="mb-1 block text-sm font-medium">Branch</label>
-                  <input
+                <FormField label="Branch" htmlFor="repo-branch">
+                  <Input
                     id="repo-branch"
                     type="text"
                     value={repoForm.branch}
                     onChange={(e) => setRepoForm({ ...repoForm, branch: e.target.value })}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                     placeholder="main"
                   />
-                </div>
-                <div>
-                  <label htmlFor="repo-env" className="mb-1 block text-sm font-medium">Environment</label>
-                  <select
+                </FormField>
+                <FormField label="Environment" htmlFor="repo-env">
+                  <Select
                     id="repo-env"
                     value={repoForm.environment}
                     onChange={(e) => setRepoForm({ ...repoForm, environment: e.target.value })}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   >
                     <option value="LOCAL">Local</option>
                     <option value="PREVIEW">Preview</option>
                     <option value="STAGING">Staging</option>
                     <option value="PRODUCTION">Production</option>
-                  </select>
-                </div>
+                  </Select>
+                </FormField>
               </div>
               <div className="flex gap-2">
-                <button type="submit" disabled={creating} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                <Button type="submit" disabled={creating}>
                   {creating ? "Creating..." : "Create Target"}
-                </button>
-                <button type="button" onClick={() => { setShowForm(false); setError(null) }} className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent">
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => { setShowForm(false); setError(null) }}>
                   Cancel
-                </button>
+                </Button>
               </div>
             </form>
           ) : (
             <form onSubmit={handleCreateUrl} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="url-name" className="mb-1 block text-sm font-medium">Target Name</label>
-                  <input
+                <FormField label="Target Name" htmlFor="url-name">
+                  <Input
                     id="url-name"
                     type="text"
                     value={urlForm.name}
@@ -340,72 +318,63 @@ export function TargetsClient({
                     required
                     maxLength={100}
                     autoFocus
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                     placeholder="Staging API"
                   />
-                </div>
-                <div>
-                  <label htmlFor="url-type" className="mb-1 block text-sm font-medium">Type</label>
-                  <select
+                </FormField>
+                <FormField label="Type" htmlFor="url-type">
+                  <Select
                     id="url-type"
                     value={urlForm.type}
                     onChange={(e) => setUrlForm({ ...urlForm, type: e.target.value as "WEB_APP" | "API" })}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   >
                     <option value="WEB_APP">Web App</option>
                     <option value="API">API</option>
-                  </select>
-                </div>
+                  </Select>
+                </FormField>
               </div>
-              <div>
-                <label htmlFor="url-input" className="mb-1 block text-sm font-medium">URL</label>
-                <input
+              <FormField label="URL" htmlFor="url-input">
+                <Input
                   id="url-input"
                   type="url"
                   value={urlForm.url}
                   onChange={(e) => setUrlForm({ ...urlForm, url: e.target.value })}
                   required
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   placeholder="https://staging.example.com"
                 />
-              </div>
+              </FormField>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="url-project" className="mb-1 block text-sm font-medium">Project (optional)</label>
-                  <select
+                <FormField label="Project (optional)" htmlFor="url-project">
+                  <Select
                     id="url-project"
                     value={urlForm.projectId}
                     onChange={(e) => setUrlForm({ ...urlForm, projectId: e.target.value })}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   >
                     <option value="">No project</option>
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="url-env" className="mb-1 block text-sm font-medium">Environment</label>
-                  <select
+                  </Select>
+                </FormField>
+                <FormField label="Environment" htmlFor="url-env">
+                  <Select
                     id="url-env"
                     value={urlForm.environment}
                     onChange={(e) => setUrlForm({ ...urlForm, environment: e.target.value })}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   >
                     <option value="LOCAL">Local</option>
                     <option value="PREVIEW">Preview</option>
                     <option value="STAGING">Staging</option>
                     <option value="PRODUCTION">Production</option>
-                  </select>
-                </div>
+                  </Select>
+                </FormField>
               </div>
               <div className="flex gap-2">
-                <button type="submit" disabled={creating} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                <Button type="submit" disabled={creating}>
                   {creating ? "Creating..." : "Create Target"}
-                </button>
-                <button type="button" onClick={() => { setShowForm(false); setError(null) }} className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent">
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => { setShowForm(false); setError(null) }}>
                   Cancel
-                </button>
+                </Button>
               </div>
             </form>
           )}
@@ -413,20 +382,17 @@ export function TargetsClient({
       )}
 
       {targets.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-12 text-center">
-          <Crosshair className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-          <h2 className="mb-2 text-lg font-semibold">No targets yet</h2>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Add a repository or URL target to start scanning.
-          </p>
-          <button
-            onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            Add target
-          </button>
-        </div>
+        <EmptyState
+          icon={Crosshair}
+          title="No targets yet"
+          description="Add a repository or URL target to start scanning."
+          action={
+            <Button onClick={() => setShowForm(true)}>
+              <Plus className="h-4 w-4" />
+              Add target
+            </Button>
+          }
+        />
       ) : (
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
@@ -447,6 +413,13 @@ export function TargetsClient({
                   key={t.id}
                   className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
                   onClick={() => router.push(`/dashboard/targets/${t.id}`)}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      router.push(`/dashboard/targets/${t.id}`)
+                    }
+                  }}
                 >
                   <td className="px-4 py-3">
                     <div className="font-medium">{t.name}</div>
@@ -458,10 +431,10 @@ export function TargetsClient({
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground">
-                      {t.type === "REPO" ? <GitBranch className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
+                    <Badge>
+                      {t.type === "REPO" ? <GitBranch className="h-3 w-3" aria-hidden="true" /> : <Globe className="h-3 w-3" aria-hidden="true" />}
                       {t.type}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {t.project?.name ?? "—"}
@@ -481,11 +454,9 @@ export function TargetsClient({
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                      t.status === "active" ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"
-                    }`}>
+                    <Badge variant={t.status === "active" ? "success" : "muted"}>
                       {t.status}
-                    </span>
+                    </Badge>
                   </td>
                 </tr>
               ))}

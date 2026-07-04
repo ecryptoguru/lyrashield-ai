@@ -2,8 +2,8 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Loader2, Check, RefreshCw, Plus, ChevronRight } from "lucide-react"
-import { GithubIcon } from "@lyrashield/ui"
+import { Check, RefreshCw, Plus, ChevronRight } from "lucide-react"
+import { Button, Badge, Spinner, GithubIcon } from "@lyrashield/ui"
 
 interface Repo {
   id: number
@@ -109,38 +109,30 @@ export function GithubIntegration({
           </div>
         </div>
         {connected ? (
-          <span className="flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            <Check className="h-3 w-3" />
+          <Badge variant="success">
+            <Check className="h-3 w-3" aria-hidden="true" />
             Connected{accountLogin?.accountLogin ? ` as ${accountLogin.accountLogin}` : ""}
-          </span>
+          </Badge>
         ) : (
-          <button
-            onClick={handleConnect}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GithubIcon className="h-4 w-4" />}
+          <Button onClick={handleConnect} disabled={loading}>
+            {loading ? <Spinner /> : <GithubIcon className="h-4 w-4" />}
             Connect GitHub
-          </button>
+          </Button>
         )}
       </div>
 
       {error && (
-        <div className="mt-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="mt-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
           {error}
         </div>
       )}
 
       {connected && !reposLoaded && (
         <div className="mt-4">
-          <button
-            onClick={loadRepos}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          <Button onClick={loadRepos} disabled={loading} variant="secondary">
+            {loading ? <Spinner /> : <RefreshCw className="h-4 w-4" />}
             Load repositories
-          </button>
+          </Button>
         </div>
       )}
 
@@ -172,14 +164,10 @@ export function GithubIntegration({
             )}
           </div>
           {selectedRepo && !targetCreated && (
-            <button
-              onClick={handleCreateTarget}
-              disabled={loading}
-              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            <Button onClick={handleCreateTarget} disabled={loading}>
+              {loading ? <Spinner /> : <Plus className="h-4 w-4" />}
               Add &ldquo;{selectedRepo.fullName}&rdquo; as target
-            </button>
+            </Button>
           )}
           {targetCreated && (
             <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">

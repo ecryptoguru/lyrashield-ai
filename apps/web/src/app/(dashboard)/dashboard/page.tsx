@@ -2,6 +2,7 @@ import { prisma } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
 import Link from "next/link"
 import { Crosshair, Bug, ShieldCheck, Plus } from "lucide-react"
+import { Card, Badge, EmptyState, Button } from "@lyrashield/ui"
 
 export default async function DashboardPage() {
   const session = await getSession()
@@ -37,41 +38,39 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Welcome back, {session.userName}</p>
         </div>
-        <Link
-          href="/dashboard/scans"
-          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          New Scan
+        <Link href="/dashboard/scans">
+          <Button>
+            <Plus className="h-4 w-4" />
+            New Scan
+          </Button>
         </Link>
       </div>
 
       {workspaces.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-12 text-center">
-          <ShieldCheck className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-          <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Create your first workspace to start scanning your apps.
-          </p>
-          <Link
-            href="/onboarding"
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            Create workspace
-          </Link>
-        </div>
+        <EmptyState
+          icon={ShieldCheck}
+          title="No workspace yet"
+          description="Create your first workspace to start scanning your apps."
+          action={
+            <Link href="/onboarding">
+              <Button>
+                <Plus className="h-4 w-4" />
+                Create workspace
+              </Button>
+            </Link>
+          }
+        />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {stats.map((stat) => (
-              <div key={stat.label} className="rounded-lg border p-6">
+              <Card key={stat.label} className="p-6">
                 <div className="mb-2 flex items-center justify-between">
-                  <stat.icon className="h-5 w-5 text-muted-foreground" />
+                  <stat.icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                   <span className="text-2xl font-bold">{stat.value}</span>
                 </div>
                 <p className="text-sm text-muted-foreground">{stat.label}</p>
-              </div>
+              </Card>
             ))}
           </div>
 
@@ -79,17 +78,15 @@ export default async function DashboardPage() {
             <h2 className="mb-4 text-lg font-semibold">Your Workspaces</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {workspaces.map(({ workspace, role }) => (
-                <div key={workspace.id} className="rounded-lg border p-6">
+                <Card key={workspace.id} className="p-6">
                   <div className="mb-2 flex items-center justify-between">
                     <h3 className="font-semibold">{workspace.name}</h3>
-                    <span className="rounded-full bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground">
-                      {role}
-                    </span>
+                    <Badge>{role}</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Plan: {workspace.plan} · Mode: {workspace.mode}
                   </p>
-                </div>
+                </Card>
               ))}
             </div>
           </div>
