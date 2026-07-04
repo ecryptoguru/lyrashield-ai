@@ -21,3 +21,35 @@ export const getCachedProjects = cache(async (workspaceId: string) => {
     orderBy: { name: "asc" },
   })
 })
+
+export const getCachedWorkspaces = cache(async (userId: string) => {
+  const memberships = await prisma.workspaceMember.findMany({
+    where: { userId, status: "active" },
+    include: { workspace: true },
+  })
+  return memberships.map((m) => ({
+    id: m.workspace.id,
+    name: m.workspace.name,
+    slug: m.workspace.slug,
+    mode: m.workspace.mode,
+    plan: m.workspace.plan,
+    role: m.role,
+  }))
+})
+
+export const getCachedDashboardStats = cache(async (workspaceIdsKey: string) => {
+  const workspaceIds = workspaceIdsKey.split(",").filter(Boolean)
+  if (workspaceIds.length === 0) return { scanCount: 0, findingCount: 0, projectCount: 0 }
+  const [scanCount, findingCount, projectCount] = await Promise.all([
+    prisma.scan.count({ where: { workspaceId: { in: workspaceIds } } }),
+    prisma.finding.count({ where: { workspaceId: { in: workspaceIds } } }),
+    prisma.project.count({ where: { workspaceId: { in: workspaceIds } } }),
+  ])
+  return { scanCount, findingCount, projectCount }
+})
+
+export const getCachedOnboardingState = cache(async (userId: string) => {
+  return prisma.onboardingState.findUnique({
+    where: { userId },
+  })
+})

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { UserPlus, Mail, Clock, Users } from "lucide-react"
 import { Button, Badge, FormField, Input, Select } from "@lyrashield/ui"
+import { apiGet, apiPost } from "@/lib/api-client"
 
 interface Member {
   id: string
@@ -44,17 +45,12 @@ export function TeamClient({
   const fetchMembers = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/team?workspaceId=${workspaceId}`)
-      const data = await res.json()
-      if (data.success) {
-        setMembers(data.data.members)
-        setInvitations(data.data.invitations)
-        setFetchError(null)
-      } else {
-        setFetchError(data.error?.message ?? "Failed to load team members")
-      }
-    } catch {
-      setFetchError("Failed to load team members")
+      const data = await apiGet<{ members: Member[]; invitations: Invitation[] }>(`/api/team?workspaceId=${workspaceId}`)
+      setMembers(data.members)
+      setInvitations(data.invitations)
+      setFetchError(null)
+    } catch (e) {
+      setFetchError(e instanceof Error ? e.message : "Failed to load team members")
     } finally {
       setLoading(false)
     }
@@ -72,22 +68,13 @@ export function TeamClient({
     setInviting(true)
     setError(null)
     try {
-      const res = await fetch("/api/team", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, email, role }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setEmail("")
-        setRole("MEMBER")
-        setShowInvite(false)
-        await fetchMembers()
-      } else {
-        setError(data.error?.message ?? "Failed to invite member")
-      }
-    } catch {
-      setError("Failed to invite member")
+      await apiPost("/api/team", { workspaceId, email, role })
+      setEmail("")
+      setRole("MEMBER")
+      setShowInvite(false)
+      await fetchMembers()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to invite member")
     } finally {
       setInviting(false)
     }
@@ -114,26 +101,26 @@ export function TeamClient({
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Team Members</h1>
-          <p className="text-sm text-muted-foreground">Manage who has access to this workspace</p>
+          <h1 className="text-2xl font-bold tracking-tight">Team Members</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Manage who has access to this workspace</p>
         </div>
-        <Button onClick={() => setShowInvite(!showInvite)}>
+        <Button onClick={() => setShowInvite(!showInvite)} className="shrink-0">
           <UserPlus className="h-4 w-4" aria-hidden="true" />
           Invite Member
         </Button>
       </div>
 
       {showInvite && (
-        <form onSubmit={handleInvite} className="mb-6 rounded-lg border p-6">
+        <form onSubmit={handleInvite} className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
           <h2 className="mb-4 text-lg font-semibold">Invite Team Member</h2>
           {error && (
             <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
               {error}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField label="Email" htmlFor="invite-email">
               <Input
                 id="invite-email"
@@ -177,37 +164,37 @@ export function TeamClient({
         </form>
       )}
 
-      <div className="mb-6 rounded-lg border">
+      <div className="mb-6 overflow-x-auto rounded-xl border shadow-sm">
         <div className="border-b p-4">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <Users className="h-5 w-5" aria-hidden="true" />
+            <Users className="h-5 w-5 text-primary" aria-hidden="true" />
             Members ({members.length})
           </h2>
         </div>
         <table className="w-full text-sm">
-          <thead className="border-b bg-muted/50">
+          <thead className="border-b bg-muted/30">
             <tr>
-              <th className="px-4 py-3 text-left font-medium">Name</th>
-              <th className="px-4 py-3 text-left font-medium">Email</th>
-              <th className="px-4 py-3 text-left font-medium">Role</th>
-              <th className="px-4 py-3 text-left font-medium">Joined</th>
+              <th className="px-4 py-3 text-left font-semibold">Name</th>
+              <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Email</th>
+              <th className="px-4 py-3 text-left font-semibold">Role</th>
+              <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Joined</th>
             </tr>
           </thead>
           <tbody>
             {members.map((m) => (
               <tr key={m.id} className="border-b last:border-0">
                 <td className="px-4 py-3 font-medium">{m.name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{m.email}</td>
+                <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">{m.email}</td>
                 <td className="px-4 py-3">
                   <Badge variant={
-                    m.role === "OWNER" ? "info" :
+                    m.role === "OWNER" ? "default" :
                     m.role === "ADMIN" ? "info" :
                     "muted"
                   }>
                     {m.role}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">
+                <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
                   {new Date(m.createdAt).toLocaleDateString()}
                 </td>
               </tr>
@@ -217,19 +204,19 @@ export function TeamClient({
       </div>
 
       {invitations.length > 0 && (
-        <div className="rounded-lg border">
+        <div className="overflow-x-auto rounded-xl border shadow-sm">
           <div className="border-b p-4">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <Mail className="h-5 w-5" aria-hidden="true" />
+              <Mail className="h-5 w-5 text-primary" aria-hidden="true" />
               Pending Invitations ({invitations.length})
             </h2>
           </div>
           <table className="w-full text-sm">
-            <thead className="border-b bg-muted/50">
+            <thead className="border-b bg-muted/30">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Email</th>
-                <th className="px-4 py-3 text-left font-medium">Role</th>
-                <th className="px-4 py-3 text-left font-medium">Expires</th>
+                <th className="px-4 py-3 text-left font-semibold">Email</th>
+                <th className="px-4 py-3 text-left font-semibold">Role</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Expires</th>
               </tr>
             </thead>
             <tbody>
@@ -239,7 +226,7 @@ export function TeamClient({
                   <td className="px-4 py-3">
                     <Badge variant="muted">{inv.role}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
+                  <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" aria-hidden="true" />
                       {new Date(inv.expiresAt).toLocaleDateString()}

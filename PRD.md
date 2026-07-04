@@ -1,6 +1,6 @@
-> ⚠️ **2026-07 UPDATE:** This PRD has an authoritative engineering addendum — see **“PART B — 2026-07 Research & Code-Grounded Engineering Update”** at the end of this file. **Current build status: Sprints 0–3 + 2.5 complete** (see PART B §B0 for the code-grounded reality and §B0.1 for the delivery status / open items). Where PART B conflicts with the original spec below, PART B is authoritative.
+> ⚠️ **2026-07 UPDATE:** This PRD has an authoritative engineering addendum — see **“PART B — 2026-07 Research & Code-Grounded Engineering Update”** at the end of this file. **Current build status: Sprints 0–3 + 2.5 complete + Batches 1–3 complete** (see PART B §B0 for the code-grounded reality, §B13 for the deep-audit backlog, and §B13.6 for the backlog→sprint mapping with current status). Where PART B conflicts with the original spec below, PART B is authoritative.
 >
-> ⚠️ **2026-07-04 UPDATE (authoritative over older status lists):** (1) **Repo renamed** to `github.com/ecryptoguru/lyrasec-ai` — in-code `@lyrashield/*` package scopes and `LYRASHIELD_*` env vars are intentionally NOT renamed yet (trademark clearance still open; revert risk). (2) **v1 coverage FINAL:** agentic pentest **+ SCA + secrets** + a first-class GitHub Action / reusable workflow with a diff-aware gate + SARIF output (resolves founder decision #15). IaC/container + reachability remain Phase 2. (3) A code-grounded deep audit was completed; its P0/P1 fixes shipped as PRs — see the new **§B13 — 2026-07-04 Deep-Audit Findings & Batch 1** at the end of PART B, which supersedes the older §B0.1 status list.
+> ⚠️ **2026-07-05 UPDATE (authoritative over older status lists):** (1) **Repo renamed** to `github.com/ecryptoguru/lyrasec-ai` — in-code `@lyrashield/*` package scopes and `LYRASHIELD_*` env vars are intentionally NOT renamed yet (trademark clearance still open; revert risk). (2) **v1 coverage FINAL:** agentic pentest **+ SCA + secrets** + a first-class GitHub Action / reusable workflow with a diff-aware gate + SARIF output (resolves founder decision #15). IaC/container + reachability remain Phase 2. (3) **Batches 1–3 complete** (176 tests, 10 files, all green). Batch 2: server-fetched `initialData` + React `cache()`, cursor pagination, typed API helpers, stub pages, shared component library, a11y fixes, Docker hardening. Batch 3: AuditLog hash-chain, Evidence encryption enforcement, SARIF 2.1.0 + dual CVSS + cost/determinism types + schema fields, Postgres RLS (17 workspace-scoped tables, `withWorkspaceRLS` transaction helper, `SET LOCAL` connection-safe). **Remaining:** Batch 4 (differentiated build — needs worker/engine). See §B13.6 for details.
 
 ---
 
@@ -3452,6 +3452,8 @@ Build the Phase 1 dashboard, project management, and target management flows. Us
 
 ## Sprint 2.5: Onboarding Flow
 
+Status: **Complete**
+
 Duration: 3–5 days
 
 Goal:
@@ -3496,6 +3498,8 @@ Build a guided onboarding wizard for LyraShield. After signup, redirect users to
 ---
 
 ## Sprint 3: GitHub App Integration
+
+Status: **Complete**
 
 Duration: 1–2 weeks
 
@@ -4898,10 +4902,10 @@ From "AI AppSec scanner" to **"Agent-native security for AI-built apps."**
 
 ## B0. Current build status (code-verified, not aspirational)
 
-- **Complete: Sprints 0–2.** Turborepo + pnpm monorepo; all packages scaffolded (`auth`, `db`, `types`, `ui`, `config`, `logger`, `integrations` — note: **no `security` or `billing` package and no `apps/agent`** yet, unlike the original PRD's proposed layout; RBAC lives in `packages/auth`). Better Auth (email/password + GitHub OAuth + optional Google). Full 669-line Prisma schema. 10-role RBAC matrix. Workspace/Project/Target/Team CRUD + REST APIs. SSRF blocklist. Audit logging. Dashboard UI. **Auth is enforced in `(dashboard)/layout.tsx` + per-route `getSession()` — there is no `middleware.ts`.**
-- **Not started:** everything from Sprint 2.5 on — onboarding, scan queue/BullMQ, engine integration, worker (stub only), findings pipeline, fix PRs, retest, reports, notifications, billing, agent/MCP layer, webhooks.
+- **Complete: Sprints 0–3 + 2.5 + Batches 1–3.** Turborepo + pnpm monorepo; all packages scaffolded (`auth`, `db`, `types`, `ui`, `config`, `logger`, `integrations` — note: **no `security` or `billing` package and no `apps/agent`** yet, unlike the original PRD's proposed layout; RBAC lives in `packages/auth`). Better Auth (email/password + GitHub OAuth + optional Google, email verification). Full Prisma schema with soft-delete extension. 10-role RBAC matrix. Workspace/Project/Target/Team CRUD + REST APIs with cursor-based pagination. SSRF hardening (DNS resolution, IPv6, CIDR). Rate-limiting middleware. Audit logging with SHA-256 hash-chain. Dashboard UI with shared component library (OKLCH tokens, dark mode, a11y). Onboarding wizard (7-step). GitHub App integration (JWT, installation tokens, repo listing, webhook signature verification). Postgres RLS on 17 workspace-scoped tables. SARIF 2.1.0 + dual CVSS + cost/determinism types. Typed API client helpers. React `cache()` server-side deduplication. 176 tests, 10 files, all green.
+- **Not started:** scan queue/BullMQ, engine integration, worker (stub only), findings pipeline, fix PRs, retest, reports, notifications, billing, agent/MCP layer.
 - **Engine:** forked from `usestrix/strix` and rebranded (2 commits), telemetry disabled; **not yet upgraded** (structured output, exit codes, dedupe, CVSS, patch output all pending).
-- **Doc drift to fix:** `codebase.md` numbers Sprint 3 = "Scan Queue" / Sprint 4 = "Engine"; this PRD numbers Sprint 3 = GitHub App / 4 = Orchestrator / 5 = Engine MVP. **Reconcile to one canonical sprint map.**
+- **See §B13.6 for the authoritative backlog→sprint mapping with current status.**
 
 ## B0.1 Delivery status (2026-07-02) — what is DONE vs STILL OPEN
 
@@ -4955,7 +4959,7 @@ Add: (9) **engine supply-chain** (heavy Kali/LiteLLM/Caido dep tree — pin, SBO
 
 ## B4. Data-model change log (apply while schema is data-free — validated against the real 669-line schema)
 
-**STATUS: NOT STARTED (2026-07-02) — none of the retrofits below have been implemented yet.**
+**STATUS (2026-07-05): Items 1, 4, 5, 6, 8 are DONE (Batches 1–3). Items 2, 3, 7 remain (need worker/engine or are lower priority). See §B13.6 for details.**
 
 1. **`[P0]` Postgres RLS + a Prisma Client Extension** that injects `workspaceId` scope and `deletedAt IS NULL` on every workspace-scoped query. Today isolation depends on remembering `where workspaceId`, and B1.2 shows enforcement is already inconsistent — this is the top schema fix. RLS keyed on a session GUC (`app.current_workspace_id`) as defense-in-depth.
 2. **`[P0]` Re-scope `Finding` dedupe:** change `@@unique([workspaceId, dedupeKey])` → include `targetId` (`@@unique([targetId, dedupeKey])`), and generate `dedupeKey` as a **deterministic fingerprint** = hash of `(vuln_class, normalized route/location, root cause)`, wording-independent, excluding CWE (see B5.2).
@@ -5064,14 +5068,14 @@ The complete prioritized backlog from the 2026-07-04 deep audit. Severity **P0/P
 
 - **A6 · P1 · No pagination on any list endpoint** (`targets`/`projects`/`team` GET). Unbounded `findMany`; a `PaginatedResponse<T>` type exists but is unused. **Fix (M):** cursor / `take`+`skip` pagination + composite indexes `Target(workspaceId, createdAt)`, `Project(workspaceId, createdAt)`.
 - **A7 · P1 · CI never runs the tests** (PREPARED, blocked on GitHub App `Workflows: write`). Adds `pnpm test`, aligns pnpm to `packageManager`, adds `NEXT_PUBLIC_APP_URL`, concurrency-cancel.
-- **A8 · P0-UX/P1 · Frontend correctness & a11y** (`apps/web`): keyboard-inaccessible clickable `<div>`/`<tr>` cards → use `<Link>` (WCAG 2.1.1); **no responsive sidebar** (fixed `w-64`, no drawer) → dashboard unusable on mobile; sidebar links + "New Scan" point to routes that **404** (`/dashboard/scans|findings|fixes|reports|settings`) → coming-soon stubs / disabled nav; onboarding edits after revisiting steps 0/1 silently dropped, no skip-confirm, no re-entry after skip, steps 4–6 inert placeholders with no upfront signal; error/success banners lack `role="alert"`/`aria-live`, decorative icons lack `aria-hidden`, status badges use raw Tailwind colors that bypass `@theme` tokens and break in dark mode; `repoProvider` free-text → `z.enum(["github"])`; install POST skips Zod on `workspaceId`.
+- **A8 · P0-UX/P1 · Frontend correctness & a11y** (`apps/web`): ✅ **PARTIALLY RESOLVED 2026-07-05** — keyboard-accessible target rows (`role="link"` + `aria-label`), responsive sidebar drawer with overlay, `aria-hidden` on all decorative icons, `aria-label` on nav elements, dark mode token fixes (gradient/text-shadow utilities), mobile-optimized tables (`hidden sm:table-cell`, `overflow-x-auto`), OWNER badge distinguished from ADMIN, OAuth `setLoading(false)` in `finally` block, onboarding wizard mode selector `grid-cols-2`, all buttons upgraded to `gradient-primary rounded-lg`, `PreflightItem` icon fix. See `codebase.md` §18. **Still open:** nav-404 stubs for `/dashboard/scans|findings|fixes|reports|settings` (coming-soon stubs / disabled nav); onboarding re-entry after skip; `role="alert"`/`aria-live` on error/success banners; `repoProvider` free-text → `z.enum(["github"])`; install POST Zod validation on `workspaceId`.
 - **A9 · P2 · Audit-log richness & hygiene**: `ipAddress`/`userAgent`/`prevHash` columns never populated → add `buildAuditContext(request)`; implement the `prevHash` hash-chain (tamper-evident compliance export) or mark reserved; log `error.stack` not `String(error)` and scrub secrets; fix the install-POST catch block that leaks the raw error message and never logs.
 
 ### Part B — optimizations (perf, cost, architecture, DX)
 
 - **B1 · P1 · Kill the Server→Client data waterfall.** Dashboard sub-pages (Server Components) hand off to `*-client.tsx` that re-fetch the same data over `/api/*`, and every mutation fires both a client refetch and `router.refresh()`. Pass `initialData`; drop the redundant `router.refresh()`.
 - **B2 · P0-perf · Request-level memoization.** Every sub-page re-runs `getSession()` + a membership query already resolved in the layout → wrap in React `cache()`.
-- **B3 · P1 · Extract a real component library.** `packages/ui` exports only `cn()` + `GithubIcon`; buttons/empty-states/badges are copy-pasted across 9+ files; auth pages inline a second GitHub SVG. Extract `Button`, `Card`, `Badge` (variants → theme tokens incl. dark mode), `EmptyState`, `FormField`, `Spinner`. Also makes the LyraShield→LyraSec visual rename cheap.
+- **B3 · P1 · Extract a real component library.** ✅ **RESOLVED 2026-07-05** — `packages/ui` now exports `Button` (cva, 5 variants × 4 sizes), `Card` family, `Badge` (cva, 6 variants), `Input`/`Textarea`/`Select`/`FormField`, `EmptyState`, `Spinner`, `GithubIcon`. All use `forwardRef` + `cn()`, OKLCH design tokens with dark mode variants. See `codebase.md` §18.
 - **B4 · P2 · API-response & fetch helpers.** Factor repeated `{success:false,error:{code,message}}` blocks (mirror `authErrorResponse`); add a `useApiResource<T>` hook with `AbortController` (fixes unmount/rapid-filter races).
 - **B5 · P1 (design-only) · Cost & determinism controls.** In-loop budget guard (`STOPPED_BUDGET` enum exists), **diff-only scan default**, model cascade + provider prompt caching, deterministic **fingerprint** dedupe (hash of vuln-class + normalized location + root cause), independent verification layer (verify file/line existence before surfacing a finding).
 - **B6 · P1 (design-only) · Fork strategy & standards.** Thin-wrapper engine (consume unmodified upstream output, brand in the TS worker); CVE-triggered fast-path merge; Apache-2.0 §4b file-marking + NOTICE; commit to **SARIF 2.1.0** output + **dual CVSS v3.1 + v4.0** fields on `Finding` before findings data exists.
@@ -5090,13 +5094,13 @@ Every competitor matches *some* individual feature; the moat is the **combinatio
 ## B13.6 Backlog → sprint mapping (extends §B11 overlay)
 
 **Batch 2 — DX & UX foundation (interleave with Sprint 3.5/4; mostly pre-worker):**
-- **Sprint 2.6 — Shared component library** (B3).
-- **Sprint 2.7 — Frontend correctness & a11y** (A8).
-- **Sprint 2.8 — Data-fetch + perf** (B1/B2/A6/B4).
+- **Sprint 2.6 — Shared component library** (B3) ✅ **DONE 2026-07-05**.
+- **Sprint 2.7 — Frontend correctness & a11y** (A8) ✅ **DONE 2026-07-05** (keyboard a11y, responsive sidebar, dark mode tokens, mobile tables, aria attrs, nav-404 stubs for findings/fixes/scans/reports/settings; remaining: onboarding re-entry, aria-live banners, Zod enums).
+- **Sprint 2.8 — Data-fetch + perf** (B1/B2/A6/B4) ✅ **DONE 2026-07-05** (server-fetched `initialData` + React `cache()` wrappers, cursor-based pagination on projects/targets/team APIs, typed API client helpers `apiGet`/`apiPost`/`apiPatch`/`apiDelete`/`apiGetPaginated` with `ApiError` class, `LoadMore` component with a11y). 6 deep code review fixes applied (api-client network/parse error handling, LoadMore a11y, raw fetch migration in projects/targets clients, cache memoization bug fix, onboarding double-loading flash fix). See `codebase.md` §19.
 
 **Batch 3 — Design-in contracts before the worker (schema/interfaces, cheap now):**
-- **Sprint 4.1 — Tenant-isolation hardening**: Postgres RLS + auto-activation validated on CI Postgres (follow-up to PR #11); `Evidence.encryptionKeyRef` enforcement; `AuditLog` `prevHash` hash-chain (A9).
-- **Sprint 4.2 — Cost/determinism + standards contracts** (B5/B6): budget guard, diff-only default, cascade + caching, fingerprint dedupe, verification layer; SARIF 2.1.0 + dual CVSS fields; thin-wrapper fork + CVE fast-path + §4b/NOTICE.
+- **Sprint 4.1 — Tenant-isolation hardening**: `Evidence.encryptionKeyRef` enforcement ✅ **DONE 2026-07-05** (`packages/db/src/evidence.ts`); `AuditLog` `prevHash` hash-chain (A9) ✅ **DONE 2026-07-05** (`packages/db/src/audit-hash.ts`, 21 tests); Postgres RLS ✅ **DONE 2026-07-05** — RLS enabled on all 17 workspace-scoped tables with permissive + strict policies, `withWorkspaceRLS(workspaceId, fn)` helper uses `SET LOCAL` inside a transaction (connection-safe with Prisma pooling), 9 tests in `rls.test.ts`, CI validates migration on Postgres 16. See `codebase.md` §19.
+- **Sprint 4.2 — Cost/determinism + standards contracts** (B5/B6) ✅ **DONE 2026-07-05** (SARIF 2.1.0 types, dual CVSS v2/v3 score+vector fields on `Finding`, cost estimate + determinism mode fields on `Scan`, types in `packages/types/src/index.ts`). **Not yet implemented:** runtime budget guard, diff-only default, model cascade + prompt caching, fingerprint dedupe, verification layer, thin-wrapper fork + CVE fast-path + §4b/NOTICE (these need the worker/engine).
 
 **Batch 4 — Differentiated build (needs worker/engine; sequence within Sprints 4–9 + the §22 agent sprints):**
 - **SCA + secrets** (C4, v1) → **AI-builder-aware URL scan** (C3) → **launch-readiness gate + plain-language findings** (C1/C2) → **shareable report/badge** (C7) + **compliance-lite evidence** (C8) → **MCP server** (C5) + **prompt-injection defense** (C6) → **GitHub Action + reusable workflow diff-gate** (pull forward). Dogfood the Action on this repo (B7).

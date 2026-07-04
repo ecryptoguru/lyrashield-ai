@@ -1,11 +1,10 @@
-import { getSession } from "@lyrashield/auth/server"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { TeamClient } from "./team-client"
-import { getCachedWorkspaceId } from "@/lib/cache"
+import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 
 export default async function TeamPage() {
-  const session = await getSession()
+  const session = await getCachedSession()
   if (!session) redirect("/sign-in")
 
   const workspaceId = await getCachedWorkspaceId(session.userId)

@@ -1,26 +1,23 @@
 import { prisma } from "@lyrashield/db"
-import { getSession } from "@lyrashield/auth/server"
 import { notFound } from "next/navigation"
 import { GithubIntegration } from "./github-integration"
+import { getCachedSession, getCachedWorkspaces } from "@/lib/cache"
 
 export default async function IntegrationsPage() {
-  const session = await getSession()
+  const session = await getCachedSession()
   if (!session) return null
 
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId: session.userId, status: "active" },
-    include: { workspace: true },
-  })
+  const workspaces = await getCachedWorkspaces(session.userId)
 
-  if (memberships.length === 0) {
+  if (workspaces.length === 0) {
     notFound()
   }
 
-  const firstMembership = memberships[0]
-  if (!firstMembership) return null
+  const firstWorkspace = workspaces[0]
+  if (!firstWorkspace) return null
 
-  const workspaceId = firstMembership.workspaceId
-  const workspaceName = firstMembership.workspace.name
+  const workspaceId = firstWorkspace.id
+  const workspaceName = firstWorkspace.name
 
   const integrations = await prisma.integration.findMany({
     where: { workspaceId, deletedAt: null },

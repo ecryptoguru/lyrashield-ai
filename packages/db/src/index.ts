@@ -52,3 +52,18 @@ export {
   getWorkspaceContext,
   runWithWorkspaceContext,
 } from "./extension"
+export {
+  computeAuditHash,
+  verifyAuditChain,
+  type AuditLogChainFields,
+} from "./audit-hash"
+export {
+  assertEvidenceEncrypted,
+  isEvidenceEncrypted,
+  isValidKeyRefFormat,
+  EvidenceEncryptionError,
+} from "./evidence"
+export {
+  withWorkspaceRLS,
+  withoutWorkspaceRLS,
+} from "./rls"

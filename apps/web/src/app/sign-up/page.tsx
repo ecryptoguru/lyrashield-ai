@@ -46,89 +46,96 @@ export default function SignUpPage() {
       })
     } catch {
       setError("GitHub sign up failed. Please try again.")
+    } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="relative flex min-h-screen items-center justify-center px-4">
+      <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
+      <div className="relative w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
-          <ShieldCheck className="mb-2 h-10 w-10 text-primary" aria-hidden="true" />
+          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl gradient-primary shadow-primary-glow">
+            <ShieldCheck className="h-7 w-7 text-primary-foreground" aria-hidden="true" />
+          </div>
           <h1 className="text-2xl font-bold">Create your account</h1>
           <p className="text-sm text-muted-foreground">Start securing your apps with LyraShield</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="name">
-              Name
-            </label>
-            <Input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              autoComplete="name"
-              placeholder="Jane Doe"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="email">
-              Email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              placeholder="you@example.com"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="password">
-              Password
-            </label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              autoComplete="new-password"
-              placeholder="At least 8 characters"
-            />
+        <div className="rounded-xl border bg-card p-6 shadow-lg sm:p-8">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium" htmlFor="name">
+                Name
+              </label>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoComplete="name"
+                placeholder="Jane Doe"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium" htmlFor="email">
+                Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium" htmlFor="password">
+                Password
+              </label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                autoComplete="new-password"
+                placeholder="At least 8 characters"
+              />
+            </div>
+
+            {error && (
+              <p className="text-sm text-destructive" role="alert">{error}</p>
+            )}
+
+            <Button type="submit" disabled={loading} className="w-full" size="lg">
+              {loading && <Spinner className="mr-2" />}
+              Create account
+            </Button>
+          </form>
+
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs font-medium text-muted-foreground">OR</span>
+            <div className="h-px flex-1 bg-border" />
           </div>
 
-          {error && (
-            <p className="text-sm text-destructive" role="alert">{error}</p>
-          )}
-
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading && <Spinner className="mr-2" />}
-            Create account
+          <Button
+            onClick={handleGitHub}
+            disabled={loading}
+            variant="secondary"
+            className="w-full"
+            size="lg"
+          >
+            <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+            Sign up with GitHub
           </Button>
-        </form>
-
-        <div className="my-4 flex items-center gap-2">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-xs text-muted-foreground">OR</span>
-          <div className="h-px flex-1 bg-border" />
         </div>
-
-        <Button
-          onClick={handleGitHub}
-          disabled={loading}
-          variant="secondary"
-          className="w-full"
-        >
-          <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-          Sign up with GitHub
-        </Button>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Already have an account?{" "}

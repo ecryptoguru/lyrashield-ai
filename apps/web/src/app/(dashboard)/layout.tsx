@@ -1,40 +1,25 @@
 import { redirect } from "next/navigation"
-import { getSession } from "@lyrashield/auth/server"
-import { prisma } from "@lyrashield/db"
 import { Sidebar } from "@/components/sidebar"
+import { getCachedSession, getCachedWorkspaces, getCachedOnboardingState } from "@/lib/cache"
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const session = await getSession()
+  const session = await getCachedSession()
 
   if (!session) {
     redirect("/sign-in")
   }
 
-  const onboardingState = await prisma.onboardingState.findUnique({
-    where: { userId: session.userId },
-  })
+  const onboardingState = await getCachedOnboardingState(session.userId)
 
   if (onboardingState && !onboardingState.completed && !onboardingState.skipped) {
     redirect("/onboarding")
   }
 
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId: session.userId, status: "active" },
-    include: { workspace: true },
-  })
-
-  const workspaces = memberships.map((m) => ({
-    id: m.workspace.id,
-    name: m.workspace.name,
-    slug: m.workspace.slug,
-    mode: m.workspace.mode,
-    plan: m.workspace.plan,
-    role: m.role,
-  }))
+  const workspaces = await getCachedWorkspaces(session.userId)
 
   return (
     <div className="flex min-h-screen">
@@ -44,7 +29,7 @@ export default async function DashboardLayout({
         workspaces={workspaces}
       />
       <main className="flex-1 overflow-auto pt-16 md:pt-0">
-        <div className="container mx-auto p-6">{children}</div>
+        <div className="container mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</div>
       </main>
     </div>
   )

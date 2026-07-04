@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Plus, FolderKanban, Bug, Crosshair, Radar } from "lucide-react"
-import { Button, Badge, EmptyState, FormField, Input, Textarea } from "@lyrashield/ui"
+import { Button, Badge, EmptyState, FormField, Input, Textarea, LoadMore } from "@lyrashield/ui"
+import { apiGetPaginated, apiPost } from "@/lib/api-client"
 
 interface Project {
   id: string
@@ -17,9 +18,10 @@ interface Project {
   findingCount: number
 }
 
-export function ProjectsClient({ workspaceId, initialData }: { workspaceId: string; initialData?: Project[] }) {
+export function ProjectsClient({ workspaceId, initialData, initialNextCursor }: { workspaceId: string; initialData?: Project[]; initialNextCursor?: string | null }) {
   const router = useRouter()
   const [projects, setProjects] = useState<Project[]>(initialData ?? [])
+  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor ?? null)
   const [loading, setLoading] = useState(!initialData)
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState("")
@@ -31,16 +33,12 @@ export function ProjectsClient({ workspaceId, initialData }: { workspaceId: stri
   const fetchProjects = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/projects?workspaceId=${workspaceId}`)
-      const data = await res.json()
-      if (data.success) {
-        setProjects(data.data)
-        setFetchError(null)
-      } else {
-        setFetchError(data.error?.message ?? "Failed to load projects")
-      }
-    } catch {
-      setFetchError("Failed to load projects")
+      const result = await apiGetPaginated<Project>(`/api/projects`, { workspaceId })
+      setProjects(result.items)
+      setNextCursor(result.nextCursor)
+      setFetchError(null)
+    } catch (e) {
+      setFetchError(e instanceof Error ? e.message : "Failed to load projects")
     } finally {
       setLoading(false)
     }
@@ -60,27 +58,22 @@ export function ProjectsClient({ workspaceId, initialData }: { workspaceId: stri
     setCreating(true)
     setError(null)
     try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, name, description: description || undefined }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setName("")
-        setDescription("")
-        setShowForm(false)
-        await fetchProjects()
-        router.refresh()
-      } else {
-        setError(data.error?.message ?? "Failed to create project")
-      }
-    } catch {
-      setError("Failed to create project")
+      await apiPost("/api/projects", { workspaceId, name, description: description || undefined })
+      setName("")
+      setDescription("")
+      setShowForm(false)
+      await fetchProjects()
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create project")
     } finally {
       setCreating(false)
     }
   }
+
+  const loadMore = useCallback(async (cursor: string) => {
+    return apiGetPaginated<Project>(`/api/projects`, { workspaceId, cursor })
+  }, [workspaceId])
 
   if (loading) {
     return (
@@ -103,19 +96,19 @@ export function ProjectsClient({ workspaceId, initialData }: { workspaceId: stri
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Projects</h1>
-          <p className="text-sm text-muted-foreground">Organize your scan targets and findings</p>
+          <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Organize your scan targets and findings</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
+        <Button onClick={() => setShowForm(!showForm)} className="shrink-0">
           <Plus className="h-4 w-4" aria-hidden="true" />
           New Project
         </Button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreate} className="mb-6 rounded-lg border p-6">
+        <form onSubmit={handleCreate} className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
           <h2 className="mb-4 text-lg font-semibold">Create Project</h2>
           {error && (
             <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
@@ -175,21 +168,21 @@ export function ProjectsClient({ workspaceId, initialData }: { workspaceId: stri
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
             <Link
               key={project.id}
               href={`/dashboard/targets?projectId=${project.id}`}
-              className="block rounded-lg border p-6 transition-colors hover:border-primary/50"
+              className="group block rounded-xl border bg-card p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
             >
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="font-semibold">{project.name}</h3>
-                <Badge>Risk: {project.riskScore}</Badge>
+                <Badge variant={project.riskScore > 0 ? "warning" : "muted"}>Risk: {project.riskScore}</Badge>
               </div>
               {project.description && (
                 <p className="mb-4 text-sm text-muted-foreground">{project.description}</p>
               )}
-              <div className="flex gap-4 text-sm text-muted-foreground">
+              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Crosshair className="h-3 w-3" aria-hidden="true" />
                   {project.targetCount} targets
@@ -207,6 +200,13 @@ export function ProjectsClient({ workspaceId, initialData }: { workspaceId: stri
           ))}
         </div>
       )}
+
+      <LoadMore
+        cursor={nextCursor}
+        onLoadMore={loadMore}
+        onItems={(items) => setProjects((prev) => [...prev, ...items as Project[]])}
+        onNextCursor={setNextCursor}
+      />
     </div>
   )
 }

@@ -1,11 +1,10 @@
-import { getSession } from "@lyrashield/auth/server"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { ProjectsClient } from "./projects-client"
-import { getCachedWorkspaceId } from "@/lib/cache"
+import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 
 export default async function ProjectsPage() {
-  const session = await getSession()
+  const session = await getCachedSession()
   if (!session) redirect("/sign-in")
 
   const workspaceId = await getCachedWorkspaceId(session.userId)
@@ -21,16 +20,21 @@ export default async function ProjectsPage() {
     )
   }
 
+  const limit = 50
   const projects = await prisma.project.findMany({
     where: { workspaceId },
     include: {
       _count: { select: { targets: true, scans: true, findings: true } },
     },
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: limit + 1,
   })
 
-  const initialData = projects.map((p) => ({
+  const hasMore = projects.length > limit
+  const items = hasMore ? projects.slice(0, limit) : projects
+  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
+
+  const initialData = items.map((p) => ({
     id: p.id,
     name: p.name,
     description: p.description,
@@ -41,5 +45,5 @@ export default async function ProjectsPage() {
     findingCount: p._count.findings,
   }))
 
-  return <ProjectsClient workspaceId={workspaceId} initialData={initialData} />
+  return <ProjectsClient workspaceId={workspaceId} initialData={initialData} initialNextCursor={nextCursor} />
 }

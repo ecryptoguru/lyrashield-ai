@@ -1,15 +1,14 @@
-import { getSession } from "@lyrashield/auth/server"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { TargetsClient } from "./targets-client"
-import { getCachedWorkspaceId, getCachedProjects } from "@/lib/cache"
+import { getCachedSession, getCachedWorkspaceId, getCachedProjects } from "@/lib/cache"
 
 export default async function TargetsPage({
   searchParams,
 }: {
   searchParams: Promise<{ projectId?: string }>
 }) {
-  const session = await getSession()
+  const session = await getCachedSession()
   if (!session) redirect("/sign-in")
 
   const params = await searchParams
@@ -27,6 +26,7 @@ export default async function TargetsPage({
     )
   }
 
+  const limit = 50
   const [projects, initialTargets] = await Promise.all([
     getCachedProjects(workspaceId),
     prisma.target.findMany({
@@ -40,11 +40,15 @@ export default async function TargetsPage({
         _count: { select: { scans: true, findings: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: limit + 1,
     }),
   ])
 
-  const initialData = initialTargets.map((t) => ({
+  const hasMore = initialTargets.length > limit
+  const items = hasMore ? initialTargets.slice(0, limit) : initialTargets
+  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
+
+  const initialData = items.map((t) => ({
     id: t.id,
     name: t.name,
     type: t.type,
@@ -66,6 +70,7 @@ export default async function TargetsPage({
       projects={projects}
       initialProjectId={params.projectId}
       initialData={initialData}
+      initialNextCursor={nextCursor}
     />
   )
 }

@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { Check, RefreshCw, Plus, ChevronRight } from "lucide-react"
 import { Button, Badge, Spinner, GithubIcon } from "@lyrashield/ui"
+import { apiGet, apiPost } from "@/lib/api-client"
 
 interface Repo {
   id: number
@@ -35,14 +36,8 @@ export function GithubIntegration({
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/integrations/github/install", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId }),
-      })
-      const json = await res.json()
-      if (!json.success) throw new Error(json.error?.message ?? "Failed to get install URL")
-      window.location.href = json.data.installUrl
+      const data = await apiPost<{ installUrl: string }>("/api/integrations/github/install", { workspaceId })
+      window.location.href = data.installUrl
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to connect")
       setLoading(false)
@@ -53,10 +48,8 @@ export function GithubIntegration({
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/integrations/github/repos?workspaceId=${workspaceId}`)
-      const json = await res.json()
-      if (!json.success) throw new Error(json.error?.message ?? "Failed to load repos")
-      setRepos(json.data)
+      const data = await apiGet<Repo[]>(`/api/integrations/github/repos?workspaceId=${workspaceId}`)
+      setRepos(data)
       setReposLoaded(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load repos")
@@ -70,22 +63,16 @@ export function GithubIntegration({
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/targets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId,
-          type: "REPO",
-          name: selectedRepo.fullName,
-          repoProvider: "github",
-          repoOwner: selectedRepo.owner,
-          repoName: selectedRepo.name,
-          branch: selectedRepo.defaultBranch,
-          environment: "STAGING",
-        }),
+      await apiPost("/api/targets", {
+        workspaceId,
+        type: "REPO",
+        name: selectedRepo.fullName,
+        repoProvider: "github",
+        repoOwner: selectedRepo.owner,
+        repoName: selectedRepo.name,
+        branch: selectedRepo.defaultBranch,
+        environment: "STAGING",
       })
-      const json = await res.json()
-      if (!json.success) throw new Error(json.error?.message ?? "Failed to create target")
       setTargetCreated(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create target")
@@ -95,10 +82,10 @@ export function GithubIntegration({
   }
 
   return (
-    <div className="rounded-lg border bg-card p-6">
-      <div className="flex items-start justify-between">
+    <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-foreground text-background">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
             <GithubIcon className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
@@ -147,7 +134,7 @@ export function GithubIntegration({
                 <button
                   key={repo.id}
                   onClick={() => setSelectedRepo(repo)}
-                  className={`flex w-full items-center justify-between rounded-md border p-3 text-left text-sm transition-colors ${
+                  className={`flex w-full items-center justify-between rounded-lg border p-3 text-left text-sm transition-colors ${
                     selectedRepo?.id === repo.id ? "border-primary bg-primary/5" : "hover:bg-accent"
                   }`}
                 >

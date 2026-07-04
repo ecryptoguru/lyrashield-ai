@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft } from "lucide-react"
-import { Button, Badge, EmptyState, FormField, Input, Select } from "@lyrashield/ui"
+import { Button, Badge, EmptyState, FormField, Input, Select, LoadMore } from "@lyrashield/ui"
+import { apiGetPaginated, apiPost } from "@/lib/api-client"
 
 interface Target {
   id: string
@@ -31,14 +32,17 @@ export function TargetsClient({
   projects,
   initialProjectId,
   initialData,
+  initialNextCursor,
 }: {
   workspaceId: string
   projects: Project[]
   initialProjectId?: string
   initialData?: Target[]
+  initialNextCursor?: string | null
 }) {
   const router = useRouter()
   const [targets, setTargets] = useState<Target[]>(initialData ?? [])
+  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor ?? null)
   const [loading, setLoading] = useState(!initialData)
   const [showForm, setShowForm] = useState(false)
   const [formType, setFormType] = useState<"REPO" | "URL">("REPO")
@@ -66,18 +70,14 @@ export function TargetsClient({
   const fetchTargets = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ workspaceId })
-      if (filterProjectId) params.set("projectId", filterProjectId)
-      const res = await fetch(`/api/targets?${params}`)
-      const data = await res.json()
-      if (data.success) {
-        setTargets(data.data)
-        setFetchError(null)
-      } else {
-        setFetchError(data.error?.message ?? "Failed to load targets")
-      }
-    } catch {
-      setFetchError("Failed to load targets")
+      const params: Record<string, string | undefined> = { workspaceId }
+      if (filterProjectId) params.projectId = filterProjectId
+      const result = await apiGetPaginated<Target>(`/api/targets`, params)
+      setTargets(result.items)
+      setNextCursor(result.nextCursor)
+      setFetchError(null)
+    } catch (e) {
+      setFetchError(e instanceof Error ? e.message : "Failed to load targets")
     } finally {
       setLoading(false)
     }
@@ -95,31 +95,22 @@ export function TargetsClient({
     setCreating(true)
     setError(null)
     try {
-      const res = await fetch("/api/targets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId,
-          type: "REPO",
-          name: repoForm.name,
-          repoOwner: repoForm.repoOwner,
-          repoName: repoForm.repoName,
-          branch: repoForm.branch,
-          projectId: repoForm.projectId || undefined,
-          environment: repoForm.environment,
-        }),
+      await apiPost("/api/targets", {
+        workspaceId,
+        type: "REPO",
+        name: repoForm.name,
+        repoOwner: repoForm.repoOwner,
+        repoName: repoForm.repoName,
+        branch: repoForm.branch,
+        projectId: repoForm.projectId || undefined,
+        environment: repoForm.environment,
       })
-      const data = await res.json()
-      if (data.success) {
-        setShowForm(false)
-        setRepoForm({ name: "", repoOwner: "", repoName: "", branch: "main", projectId: "", environment: "STAGING" })
-        await fetchTargets()
-        router.refresh()
-      } else {
-        setError(data.error?.message ?? "Failed to create target")
-      }
-    } catch {
-      setError("Failed to create target")
+      setShowForm(false)
+      setRepoForm({ name: "", repoOwner: "", repoName: "", branch: "main", projectId: "", environment: "STAGING" })
+      await fetchTargets()
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create target")
     } finally {
       setCreating(false)
     }
@@ -130,33 +121,30 @@ export function TargetsClient({
     setCreating(true)
     setError(null)
     try {
-      const res = await fetch("/api/targets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId,
-          type: urlForm.type,
-          name: urlForm.name,
-          url: urlForm.url,
-          projectId: urlForm.projectId || undefined,
-          environment: urlForm.environment,
-        }),
+      await apiPost("/api/targets", {
+        workspaceId,
+        type: urlForm.type,
+        name: urlForm.name,
+        url: urlForm.url,
+        projectId: urlForm.projectId || undefined,
+        environment: urlForm.environment,
       })
-      const data = await res.json()
-      if (data.success) {
-        setShowForm(false)
-        setUrlForm({ name: "", url: "", type: "WEB_APP", projectId: "", environment: "STAGING" })
-        await fetchTargets()
-        router.refresh()
-      } else {
-        setError(data.error?.message ?? "Failed to create target")
-      }
-    } catch {
-      setError("Failed to create target")
+      setShowForm(false)
+      setUrlForm({ name: "", url: "", type: "WEB_APP", projectId: "", environment: "STAGING" })
+      await fetchTargets()
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create target")
     } finally {
       setCreating(false)
     }
   }
+
+  const loadMore = useCallback(async (cursor: string) => {
+    const params: Record<string, string | undefined> = { workspaceId, cursor }
+    if (filterProjectId) params.projectId = filterProjectId
+    return apiGetPaginated<Target>(`/api/targets`, params)
+  }, [workspaceId, filterProjectId])
 
   if (loading) {
     return (
@@ -179,7 +167,7 @@ export function TargetsClient({
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           {filterProjectId && (
             <button
@@ -193,21 +181,22 @@ export function TargetsClient({
               All targets
             </button>
           )}
-          <h1 className="text-2xl font-bold">Targets</h1>
-          <p className="text-sm text-muted-foreground">Repositories and URLs to scan</p>
+          <h1 className="text-2xl font-bold tracking-tight">Targets</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Repositories and URLs to scan</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
+        <Button onClick={() => setShowForm(!showForm)} className="shrink-0">
           <Plus className="h-4 w-4" aria-hidden="true" />
           New Target
         </Button>
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-lg border p-6">
-          <div className="mb-4 flex gap-2">
+        <div className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+          <div className="mb-4 flex flex-wrap gap-2">
             <Button
               variant={formType === "REPO" ? "default" : "secondary"}
               onClick={() => setFormType("REPO")}
+              size="sm"
             >
               <GitBranch className="h-4 w-4" aria-hidden="true" />
               Repository
@@ -215,6 +204,7 @@ export function TargetsClient({
             <Button
               variant={formType === "URL" ? "default" : "secondary"}
               onClick={() => setFormType("URL")}
+              size="sm"
             >
               <Globe className="h-4 w-4" aria-hidden="true" />
               URL / API
@@ -229,7 +219,7 @@ export function TargetsClient({
 
           {formType === "REPO" ? (
             <form onSubmit={handleCreateRepo} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField label="Target Name" htmlFor="repo-name-input">
                   <Input
                     id="repo-name-input"
@@ -255,7 +245,7 @@ export function TargetsClient({
                   </Select>
                 </FormField>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField label="Repo Owner" htmlFor="repo-owner">
                   <Input
                     id="repo-owner"
@@ -277,7 +267,7 @@ export function TargetsClient({
                   />
                 </FormField>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField label="Branch" htmlFor="repo-branch">
                   <Input
                     id="repo-branch"
@@ -311,7 +301,7 @@ export function TargetsClient({
             </form>
           ) : (
             <form onSubmit={handleCreateUrl} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField label="Target Name" htmlFor="url-name">
                   <Input
                     id="url-name"
@@ -345,7 +335,7 @@ export function TargetsClient({
                   placeholder="https://staging.example.com"
                 />
               </FormField>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField label="Project (optional)" htmlFor="url-project">
                   <Select
                     id="url-project"
@@ -397,17 +387,17 @@ export function TargetsClient({
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="overflow-x-auto rounded-xl border shadow-sm">
           <table className="w-full text-sm">
-            <thead className="border-b bg-muted/50">
+            <thead className="border-b bg-muted/30">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Name</th>
-                <th className="px-4 py-3 text-left font-medium">Type</th>
-                <th className="px-4 py-3 text-left font-medium">Project</th>
-                <th className="px-4 py-3 text-left font-medium">Environment</th>
-                <th className="px-4 py-3 text-left font-medium">Scans</th>
-                <th className="px-4 py-3 text-left font-medium">Findings</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
+                <th className="px-4 py-3 text-left font-semibold">Name</th>
+                <th className="px-4 py-3 text-left font-semibold">Type</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Project</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Environment</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Scans</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Findings</th>
+                <th className="px-4 py-3 text-left font-semibold">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -417,6 +407,8 @@ export function TargetsClient({
                   className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
                   onClick={() => router.push(`/dashboard/targets/${t.id}`)}
                   tabIndex={0}
+                  role="link"
+                  aria-label={`View target ${t.name}`}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault()
@@ -439,14 +431,14 @@ export function TargetsClient({
                       {t.type}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
+                  <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
                     {t.project?.name ?? "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-4 py-3 sm:table-cell">
                     <span className="text-xs">{t.environment}</span>
                   </td>
-                  <td className="px-4 py-3">{t.scanCount}</td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-4 py-3 sm:table-cell">{t.scanCount}</td>
+                  <td className="hidden px-4 py-3 sm:table-cell">
                     {t.findingCount > 0 ? (
                       <span className="flex items-center gap-1 text-destructive">
                         <Bug className="h-3 w-3" aria-hidden="true" />
@@ -467,6 +459,13 @@ export function TargetsClient({
           </table>
         </div>
       )}
+
+      <LoadMore
+        cursor={nextCursor}
+        onLoadMore={loadMore}
+        onItems={(items) => setTargets((prev) => [...prev, ...items as Target[]])}
+        onNextCursor={setNextCursor}
+      />
     </div>
   )
 }

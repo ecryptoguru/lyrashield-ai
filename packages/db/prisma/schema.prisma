@@ -359,6 +359,10 @@ model Scan {
   errorMessage    String?
   riskScoreBefore Int?
   riskScoreAfter  Int?
+  estimatedCostCents Int?
+  actualCostCents     Int?
+  determinismMode     String?  @default("default")
+  sarifUri            String?
   createdById     String
   deletedAt       DateTime?
   createdAt       DateTime    @default(now())
@@ -429,6 +433,11 @@ model Finding {
   owaspCategory       String?
   severity            FindingSeverity
   confidence          String           @default("medium")
+  cvssScore           Float?
+  cvssVector          String?
+  cvss3Score          Float?
+  cvss3Vector         String?
+  sarifRuleId         String?
   verified            Boolean          @default(false)
   exploitability      String?
   businessImpact      String?
@@ -584,6 +593,7 @@ model AuditLog {
   userAgent     String?
   metadata      Json?
   prevHash      String?
+  hash          String?
   createdAt     DateTime @default(now())
 
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

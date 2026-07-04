@@ -61,8 +61,8 @@ export default async function TargetDetailPage({
       </Link>
 
       <div className="mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{target.name}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">{target.name}</h1>
           <Badge>
             {target.type === "REPO" ? <GitBranch className="h-3 w-3" aria-hidden="true" /> : <Globe className="h-3 w-3" aria-hidden="true" />}
             {target.type}
@@ -77,33 +77,33 @@ export default async function TargetDetailPage({
         </p>
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card className="p-6">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card className="group p-5 transition-all duration-200 hover:shadow-md">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Crosshair className="h-4 w-4" aria-hidden="true" />
+            <Crosshair className="h-4 w-4 text-primary" aria-hidden="true" />
             Total Scans
           </div>
-          <p className="mt-2 text-2xl font-bold">{target._count.scans}</p>
+          <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.scans}</p>
         </Card>
-        <Card className="p-6">
+        <Card className="group p-5 transition-all duration-200 hover:shadow-md">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Bug className="h-4 w-4" aria-hidden="true" />
+            <Bug className="h-4 w-4 text-primary" aria-hidden="true" />
             Total Findings
           </div>
-          <p className="mt-2 text-2xl font-bold">{target._count.findings}</p>
+          <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.findings}</p>
         </Card>
-        <Card className="p-6">
+        <Card className="group p-5 transition-all duration-200 hover:shadow-md">
           <div className="text-sm text-muted-foreground">Last Scan</div>
-          <p className="mt-2 text-2xl font-bold">
+          <p className="mt-2 text-2xl font-bold tracking-tight">
             {target.lastScanAt ? new Date(target.lastScanAt).toLocaleDateString() : "Never"}
           </p>
         </Card>
       </div>
 
       {target.type === "REPO" && (
-        <div className="mb-6 rounded-lg border p-6">
+        <div className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
           <h2 className="mb-4 text-lg font-semibold">Repository Details</h2>
-          <dl className="grid grid-cols-2 gap-4 text-sm">
+          <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
             <div>
               <dt className="text-muted-foreground">Provider</dt>
               <dd className="font-medium">{target.repoProvider}</dd>
@@ -121,7 +121,7 @@ export default async function TargetDetailPage({
       )}
 
       {target.type !== "REPO" && target.url && (
-        <div className="mb-6 rounded-lg border p-6">
+        <div className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
           <h2 className="mb-4 text-lg font-semibold">URL Details</h2>
           <dl className="grid grid-cols-1 gap-4 text-sm">
             <div>
@@ -136,7 +136,7 @@ export default async function TargetDetailPage({
         </div>
       )}
 
-      <div className="rounded-lg border">
+      <div className="overflow-x-auto rounded-xl border shadow-sm">
         <div className="border-b p-4">
           <h2 className="text-lg font-semibold">Recent Scans</h2>
         </div>
@@ -146,12 +146,12 @@ export default async function TargetDetailPage({
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="border-b bg-muted/50">
+            <thead className="border-b bg-muted/30">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Goal</th>
-                <th className="px-4 py-3 text-left font-medium">Mode</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-left font-medium">Date</th>
+                <th className="px-4 py-3 text-left font-semibold">Goal</th>
+                <th className="px-4 py-3 text-left font-semibold">Mode</th>
+                <th className="px-4 py-3 text-left font-semibold">Status</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Date</th>
               </tr>
             </thead>
             <tbody>
@@ -169,7 +169,7 @@ export default async function TargetDetailPage({
                       {scan.status}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
+                  <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
                     {new Date(scan.createdAt).toLocaleString()}
                   </td>
                 </tr>
