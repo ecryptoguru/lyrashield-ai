@@ -32,6 +32,9 @@ const envSchema = z.object({
 
   // GitHub App (Sprint 3)
   GITHUB_APP_ID: z.string().optional().or(z.literal("")),
+  // App slug (from the GitHub App settings URL) — used to build the public
+  // installation URL `https://github.com/apps/{slug}/installations/new`.
+  GITHUB_APP_SLUG: z.string().optional().or(z.literal("")),
   GITHUB_APP_PRIVATE_KEY: z.string().optional().or(z.literal("")),
   GITHUB_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
 
