@@ -15,6 +15,13 @@
   - A7 CI-runs-tests: **blocked** on granting the GitHub App `Workflows: write`.
 - **Still open:** domain (#1); Batches 2–4 of the audit (pagination, frontend/UX+a11y+mobile, audit-log hash-chain, component library, data-fetch/memoization, cost/determinism + SARIF/CVSS contracts, dogfood CI, differentiated features — several need the unbuilt worker/engine).
 
+### Round-2 audit + hardening (2026-07-04, MERGED to main)
+
+- Batch 1 (PRs #7–#12) and the CI test step (#14) are **merged to main** (not just branches). A second audit pass over current main → findings in **PRD §B13.7**. Merged round-2: web security headers (next.config), logger secret redaction, GitHub token caching/retry/pagination, auth multi-origin `trustedOrigins` (`ADDITIONAL_TRUSTED_ORIGINS`), Dependabot config.
+- 🔴 **Migration drift found (latent P0 on deploy):** only 2 Prisma migrations exist; `schema.prisma` is far ahead (`ApiKey`/`OnboardingState`/`Retest` tables + many columns/indexes never migrated — synced via `db push`). `prisma migrate deploy` on a fresh DB mismatches the client. Use `db push` in dev until reconciled.
+- **Codex handoff (needs live DB / `Workflows` scope / lockfile regen):** (1) migration-drift reconciliation via `prisma migrate dev` + fold in R-C (`Report.scanId` FK, `Finding` `projectId` index); (2) CI hardening (least-priv `permissions`, SCA + secret-scan + SARIF, migration-drift check, build cache); (3) `eslint-plugin-security` + pin `better-auth`/Prisma exact + refresh `pnpm-lock.yaml`; (4) nonce-based CSP.
+- **Note:** §5/§9 below are historical (pre-Batch-1) — PRD §B13 is the authoritative current status.
+
 ---
 
 ## 1. Notion Workspace Summary
