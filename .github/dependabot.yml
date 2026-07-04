@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # JS/TS dependencies (pnpm monorepo — Dependabot reads pnpm-lock.yaml).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Batch low-risk updates into single PRs to reduce review noise.
+      dev-dependencies:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+      production-minor-patch:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+    # Security-sensitive packages: keep major bumps as individual, reviewed PRs.
+    # (better-auth, @prisma/*, pg, bullmq are intentionally NOT grouped so a
+    # major/behavioral change is never buried in a batch.)
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions used in workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
