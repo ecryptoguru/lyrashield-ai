@@ -78,17 +78,15 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),
-}).superRefine((val, ctx) => {
+}).refine(
   // If an Upstash REST URL is configured, a token must accompany it — a URL
   // without a token silently falls back to per-instance in-memory limiting.
-  if (val.UPSTASH_REDIS_REST_URL && !val.UPSTASH_REDIS_REST_TOKEN) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["UPSTASH_REDIS_REST_TOKEN"],
-      message: "UPSTASH_REDIS_REST_TOKEN is required when UPSTASH_REDIS_REST_URL is set",
-    })
+  (val) => !(val.UPSTASH_REDIS_REST_URL && !val.UPSTASH_REDIS_REST_TOKEN),
+  {
+    path: ["UPSTASH_REDIS_REST_TOKEN"],
+    message: "UPSTASH_REDIS_REST_TOKEN is required when UPSTASH_REDIS_REST_URL is set",
   }
-})
+)
 
 export type Env = z.infer<typeof envSchema>
 
