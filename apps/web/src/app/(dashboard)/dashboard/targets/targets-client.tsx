@@ -30,14 +30,16 @@ export function TargetsClient({
   workspaceId,
   projects,
   initialProjectId,
+  initialData,
 }: {
   workspaceId: string
   projects: Project[]
   initialProjectId?: string
+  initialData?: Target[]
 }) {
   const router = useRouter()
-  const [targets, setTargets] = useState<Target[]>([])
-  const [loading, setLoading] = useState(true)
+  const [targets, setTargets] = useState<Target[]>(initialData ?? [])
+  const [loading, setLoading] = useState(!initialData)
   const [showForm, setShowForm] = useState(false)
   const [formType, setFormType] = useState<"REPO" | "URL">("REPO")
   const [creating, setCreating] = useState(false)
@@ -82,10 +84,11 @@ export function TargetsClient({
   }, [filterProjectId, workspaceId])
 
   useEffect(() => {
+    if (initialData) return
     queueMicrotask(() => {
       void fetchTargets()
     })
-  }, [fetchTargets])
+  }, [fetchTargets, initialData])
 
   async function handleCreateRepo(e: React.FormEvent) {
     e.preventDefault()

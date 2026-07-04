@@ -135,9 +135,8 @@ export interface ApiResponse<T = unknown> {
 
 export interface PaginatedResponse<T = unknown> {
   items: T[]
-  total: number
-  page: number
-  pageSize: number
+  nextCursor: string | null
+  total?: number
 }
 
 export const OnboardingStepSchema = z.enum([

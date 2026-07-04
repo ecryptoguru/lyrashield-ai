@@ -2,6 +2,7 @@ import { getSession } from "@lyrashield/auth/server"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { TargetsClient } from "./targets-client"
+import { getCachedWorkspaceId, getCachedProjects } from "@/lib/cache"
 
 export default async function TargetsPage({
   searchParams,
@@ -13,12 +14,7 @@ export default async function TargetsPage({
 
   const params = await searchParams
 
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId: session.userId, status: "active" },
-    select: { workspaceId: true },
-  })
-
-  const workspaceId = memberships[0]?.workspaceId
+  const workspaceId = await getCachedWorkspaceId(session.userId)
 
   if (!workspaceId) {
     return (
@@ -31,17 +27,45 @@ export default async function TargetsPage({
     )
   }
 
-  const projects = await prisma.project.findMany({
-    where: { workspaceId },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  })
+  const [projects, initialTargets] = await Promise.all([
+    getCachedProjects(workspaceId),
+    prisma.target.findMany({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        ...(params.projectId ? { projectId: params.projectId } : {}),
+      },
+      include: {
+        project: { select: { id: true, name: true } },
+        _count: { select: { scans: true, findings: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
+  ])
+
+  const initialData = initialTargets.map((t) => ({
+    id: t.id,
+    name: t.name,
+    type: t.type,
+    url: t.url,
+    repoFullName: t.repoFullName,
+    branch: t.branch,
+    environment: t.environment,
+    status: t.status,
+    lastScanAt: t.lastScanAt ? t.lastScanAt.toISOString() : null,
+    project: t.project,
+    scanCount: t._count.scans,
+    findingCount: t._count.findings,
+    createdAt: t.createdAt.toISOString(),
+  }))
 
   return (
     <TargetsClient
       workspaceId={workspaceId}
       projects={projects}
       initialProjectId={params.projectId}
+      initialData={initialData}
     />
   )
 }

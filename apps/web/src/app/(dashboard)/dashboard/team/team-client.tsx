@@ -24,10 +24,16 @@ interface Invitation {
   createdAt: string
 }
 
-export function TeamClient({ workspaceId }: { workspaceId: string }) {
-  const [members, setMembers] = useState<Member[]>([])
-  const [invitations, setInvitations] = useState<Invitation[]>([])
-  const [loading, setLoading] = useState(true)
+export function TeamClient({
+  workspaceId,
+  initialData,
+}: {
+  workspaceId: string
+  initialData?: { members: Member[]; invitations: Invitation[] }
+}) {
+  const [members, setMembers] = useState<Member[]>(initialData?.members ?? [])
+  const [invitations, setInvitations] = useState<Invitation[]>(initialData?.invitations ?? [])
+  const [loading, setLoading] = useState(!initialData)
   const [showInvite, setShowInvite] = useState(false)
   const [email, setEmail] = useState("")
   const [role, setRole] = useState("MEMBER")
@@ -55,10 +61,11 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
   }, [workspaceId])
 
   useEffect(() => {
+    if (initialData) return
     queueMicrotask(() => {
       void fetchMembers()
     })
-  }, [fetchMembers])
+  }, [fetchMembers, initialData])
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault()

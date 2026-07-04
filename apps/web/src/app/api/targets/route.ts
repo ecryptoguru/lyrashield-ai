@@ -6,6 +6,7 @@ import { CreateRepoTargetSchema, CreateUrlTargetSchema } from "@lyrashield/types
 import { logger } from "@lyrashield/logger"
 import { checkScanUrlSafe } from "../../../lib/ssrf"
 import { authErrorResponse } from "../../../lib/api-auth"
+import { apiError, apiPaginated, parsePaginationParams } from "../../../lib/api-response"
 
 export async function POST(request: Request) {
   let body: unknown
@@ -123,10 +124,7 @@ export async function GET(request: Request) {
   try {
     const session = await getSession()
     if (!session) {
-      return NextResponse.json(
-        { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
-        { status: 401 }
-      )
+      return apiError("UNAUTHORIZED", "Authentication required", 401)
     }
 
     const { searchParams } = new URL(request.url)
@@ -134,10 +132,7 @@ export async function GET(request: Request) {
     const projectId = searchParams.get("projectId")
 
     if (!workspaceId) {
-      return NextResponse.json(
-        { success: false, error: { code: "MISSING_PARAM", message: "workspaceId is required" } },
-        { status: 400 }
-      )
+      return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
     const membership = await prisma.workspaceMember.findUnique({
@@ -147,11 +142,10 @@ export async function GET(request: Request) {
     })
 
     if (!membership || membership.status !== "active") {
-      return NextResponse.json(
-        { success: false, error: { code: "FORBIDDEN", message: "You do not have access to this workspace" } },
-        { status: 403 }
-      )
+      return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
     }
+
+    const { cursor, limit } = parsePaginationParams(searchParams)
 
     const targets = await prisma.target.findMany({
       where: {
@@ -164,11 +158,16 @@ export async function GET(request: Request) {
         _count: { select: { scans: true, findings: true } },
       },
       orderBy: { createdAt: "desc" },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     })
 
-    return NextResponse.json({
-      success: true,
-      data: targets.map((t) => ({
+    const hasMore = targets.length > limit
+    const items = hasMore ? targets.slice(0, limit) : targets
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
+
+    return apiPaginated(
+      items.map((t) => ({
         id: t.id,
         name: t.name,
         type: t.type,
@@ -183,12 +182,10 @@ export async function GET(request: Request) {
         findingCount: t._count.findings,
         createdAt: t.createdAt,
       })),
-    })
+      nextCursor
+    )
   } catch (error) {
     logger.error("Failed to list targets", { error: String(error) })
-    return NextResponse.json(
-      { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to list targets" } },
-      { status: 500 }
-    )
+    return apiError("INTERNAL_ERROR", "Failed to list targets", 500)
   }
 }

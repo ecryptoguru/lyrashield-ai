@@ -5,6 +5,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
 import { authErrorResponse } from "../../../lib/api-auth"
+import { apiError, apiSuccess } from "../../../lib/api-response"
 
 const InviteMemberSchema = z.object({
   workspaceId: z.string().min(1),
@@ -106,20 +107,14 @@ export async function GET(request: Request) {
   try {
     const session = await getSession()
     if (!session) {
-      return NextResponse.json(
-        { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
-        { status: 401 }
-      )
+      return apiError("UNAUTHORIZED", "Authentication required", 401)
     }
 
     const { searchParams } = new URL(request.url)
     const workspaceId = searchParams.get("workspaceId")
 
     if (!workspaceId) {
-      return NextResponse.json(
-        { success: false, error: { code: "MISSING_PARAM", message: "workspaceId is required" } },
-        { status: 400 }
-      )
+      return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
     const membership = await prisma.workspaceMember.findUnique({
@@ -129,10 +124,7 @@ export async function GET(request: Request) {
     })
 
     if (!membership || membership.status !== "active") {
-      return NextResponse.json(
-        { success: false, error: { code: "FORBIDDEN", message: "You do not have access to this workspace" } },
-        { status: 403 }
-      )
+      return apiError("FORBIDDEN", "You do not have access to this workspace", 403)
     }
 
     const [members, invitations] = await Promise.all([
@@ -155,37 +147,31 @@ export async function GET(request: Request) {
       select: { id: true, name: true, email: true, image: true },
     })
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        members: members.map((m) => {
-          const user = users.find((u) => u.id === m.userId)
-          return {
-            id: m.id,
-            userId: m.userId,
-            name: user?.name ?? "Unknown",
-            email: user?.email ?? m.invitedEmail ?? "",
-            image: user?.image,
-            role: m.role,
-            status: m.status,
-            createdAt: m.createdAt,
-          }
-        }),
-        invitations: invitations.map((i) => ({
-          id: i.id,
-          email: i.email,
-          role: i.role,
-          status: i.status,
-          expiresAt: i.expiresAt,
-          createdAt: i.createdAt,
-        })),
-      },
+    return apiSuccess({
+      members: members.map((m) => {
+        const user = users.find((u) => u.id === m.userId)
+        return {
+          id: m.id,
+          userId: m.userId,
+          name: user?.name ?? "Unknown",
+          email: user?.email ?? m.invitedEmail ?? "",
+          image: user?.image,
+          role: m.role,
+          status: m.status,
+          createdAt: m.createdAt,
+        }
+      }),
+      invitations: invitations.map((i) => ({
+        id: i.id,
+        email: i.email,
+        role: i.role,
+        status: i.status,
+        expiresAt: i.expiresAt,
+        createdAt: i.createdAt,
+      })),
     })
   } catch (error) {
     logger.error("Failed to list members", { error: String(error) })
-    return NextResponse.json(
-      { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to list members" } },
-      { status: 500 }
-    )
+    return apiError("INTERNAL_ERROR", "Failed to list members", 500)
   }
 }

@@ -17,10 +17,10 @@ interface Project {
   findingCount: number
 }
 
-export function ProjectsClient({ workspaceId }: { workspaceId: string }) {
+export function ProjectsClient({ workspaceId, initialData }: { workspaceId: string; initialData?: Project[] }) {
   const router = useRouter()
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
+  const [projects, setProjects] = useState<Project[]>(initialData ?? [])
+  const [loading, setLoading] = useState(!initialData)
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -47,12 +47,13 @@ export function ProjectsClient({ workspaceId }: { workspaceId: string }) {
   }, [workspaceId])
 
   useEffect(() => {
+    if (initialData) return
     if (workspaceId) {
       queueMicrotask(() => {
         void fetchProjects()
       })
     }
-  }, [workspaceId, fetchProjects])
+  }, [workspaceId, fetchProjects, initialData])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()

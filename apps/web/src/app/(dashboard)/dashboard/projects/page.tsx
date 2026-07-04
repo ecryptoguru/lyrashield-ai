@@ -2,17 +2,13 @@ import { getSession } from "@lyrashield/auth/server"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { ProjectsClient } from "./projects-client"
+import { getCachedWorkspaceId } from "@/lib/cache"
 
 export default async function ProjectsPage() {
   const session = await getSession()
   if (!session) redirect("/sign-in")
 
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId: session.userId, status: "active" },
-    select: { workspaceId: true },
-  })
-
-  const workspaceId = memberships[0]?.workspaceId
+  const workspaceId = await getCachedWorkspaceId(session.userId)
 
   if (!workspaceId) {
     return (
@@ -25,5 +21,25 @@ export default async function ProjectsPage() {
     )
   }
 
-  return <ProjectsClient workspaceId={workspaceId} />
+  const projects = await prisma.project.findMany({
+    where: { workspaceId },
+    include: {
+      _count: { select: { targets: true, scans: true, findings: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  })
+
+  const initialData = projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    riskScore: p.riskScore,
+    createdAt: p.createdAt.toISOString(),
+    targetCount: p._count.targets,
+    scanCount: p._count.scans,
+    findingCount: p._count.findings,
+  }))
+
+  return <ProjectsClient workspaceId={workspaceId} initialData={initialData} />
 }
