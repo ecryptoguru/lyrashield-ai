@@ -636,9 +636,16 @@ Stack-specific security skill packs that catch common mistakes in popular framew
 - Audit logging for all operations
 - RBAC with 10 roles and permission matrix
 
-### Next up (Sprint 3-5)
+### Completed (Sprint 2.5-3)
 
-- GitHub App integration for PR scanning
+- Onboarding flow (7-step wizard: Workspace → Target → Goal → Preflight → Scan → Results → Fix)
+- GitHub App integration (JWT auth, installation tokens, repo listing, webhook signature verification)
+- Integrations UI page with GitHub connect + repo picker + target creation
+- Rate limiting middleware (auth 5/min, API 30/min)
+- Tests: 115 passing (env, onboarding schemas, GitHub webhook signature, install URL)
+
+### Next up (Sprint 4-5)
+
 - Scan orchestrator with Redis/BullMQ queue
 - LyraShield scan engine MVP (structured JSON findings, exit codes, event streaming)
 

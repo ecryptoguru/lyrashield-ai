@@ -21,6 +21,7 @@ export type {
   Policy,
   Scan,
   ScanEvent,
+  ApiKey,
   Finding,
   Evidence,
   FixProposal,
@@ -29,6 +30,14 @@ export type {
   Integration,
   UsageRecord,
   AuditLog,
+  Report,
+  Notification,
+  Schedule,
+  BillingAccount,
+  Invitation,
+  WebhookEvent,
+  Retest,
+  OnboardingState,
   User,
   Session,
   Account,
@@ -38,3 +47,4 @@ export type {
 export { Prisma } from "./generated/prisma"
 
 export { prisma } from "./client"
+export { setWorkspaceContext, getWorkspaceContext } from "./extension"

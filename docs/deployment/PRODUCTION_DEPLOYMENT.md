@@ -313,7 +313,7 @@ docker push ghcr.io/lyrashield/lyrashield-sandbox:v0.1.0
 # 2. New GitHub App
 #    App name: LyraShield
 #    Homepage URL: https://your-domain.com
-#    Webhook URL: https://your-domain.com/api/integrations/github/webhook
+#    Webhook URL: https://your-domain.com/api/webhooks/github
 #    Webhook secret: <generate strong secret>
 #    Repository permissions:
 #      - Contents: Read-only

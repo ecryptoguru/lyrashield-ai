@@ -13,12 +13,15 @@
     "db:migrate": "pnpm --filter @lyrashield/db migrate",
     "db:push": "pnpm --filter @lyrashield/db push",
     "db:seed": "pnpm --filter @lyrashield/db seed",
-    "db:studio": "pnpm --filter @lyrashield/db studio"
+    "db:studio": "pnpm --filter @lyrashield/db studio",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "prettier": "^3.9.0",
-    "prettier-plugin-tailwindcss": "^0.6.0",
-    "turbo": "^2.10.0"
+    "prettier": "^3.9.4",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "turbo": "^2.10.3",
+    "vitest": "^4.1.9"
   },
   "packageManager": "pnpm@11.6.0",
   "engines": {

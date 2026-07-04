@@ -10,6 +10,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
+    "jsx": "preserve",
     "noEmit": true,
     "incremental": true,
     "composite": true,

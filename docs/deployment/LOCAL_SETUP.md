@@ -89,6 +89,12 @@ cp .env.example .env
 # # GitHub OAuth (create at https://github.com/settings/developers)
 # GITHUB_CLIENT_ID=your-client-id
 # GITHUB_CLIENT_SECRET=your-client-secret
+#
+# # GitHub App (for repo scanning — Sprint 3)
+# # Create at https://github.com/settings/apps
+# GITHUB_APP_ID=your-app-id
+# GITHUB_APP_PRIVATE_KEY=<contents-of-pem-file>
+# GITHUB_WEBHOOK_SECRET=<generate-strong-secret>
 ```
 
 ### 4. Install Dependencies & Run Migrations
@@ -199,7 +205,7 @@ pnpm dev
 # 3. Make changes in apps/web or packages/*
 
 # 4. Run tests
-pnpm test          # unit tests (when added)
+pnpm test          # unit tests (115 passing: env, onboarding, GitHub webhook)
 pnpm typecheck     # TypeScript checks
 pnpm lint          # ESLint
 

@@ -139,3 +139,25 @@ export interface PaginatedResponse<T = unknown> {
   page: number
   pageSize: number
 }
+
+export const OnboardingStepSchema = z.enum([
+  "WORKSPACE",
+  "TARGET",
+  "GOAL",
+  "PREFLIGHT",
+  "SCAN",
+  "RESULTS",
+  "FIX",
+])
+
+export const UpdateOnboardingSchema = z.object({
+  currentStep: z.number().int().min(0).max(6).optional(),
+  completed: z.boolean().optional(),
+  skipped: z.boolean().optional(),
+  workspaceId: z.string().optional().nullable(),
+  targetId: z.string().optional().nullable(),
+  selectedGoal: ScanGoalSchema.optional().nullable(),
+})
+
+export type OnboardingStep = z.infer<typeof OnboardingStepSchema>
+export type UpdateOnboardingInput = z.infer<typeof UpdateOnboardingSchema>

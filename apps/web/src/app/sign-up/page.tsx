@@ -31,7 +31,7 @@ export default function SignUpPage() {
       return
     }
 
-    router.push("/dashboard")
+    router.push("/onboarding")
     router.refresh()
   }
 
@@ -41,7 +41,7 @@ export default function SignUpPage() {
     try {
       await authClient.signIn.social({
         provider: "github",
-        callbackURL: "/dashboard",
+        callbackURL: "/onboarding",
       })
     } catch {
       setError("GitHub sign up failed. Please try again.")

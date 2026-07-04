@@ -2,22 +2,64 @@ import { betterAuth } from "better-auth"
 import { prismaAdapter } from "better-auth/adapters/prisma"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
+import { env, isProd } from "@lyrashield/config"
+import { logger } from "@lyrashield/logger"
 
-const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID
-const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
+const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
+const GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET
+const GOOGLE_CLIENT_ID = env.GOOGLE_CLIENT_ID
+const GOOGLE_CLIENT_SECRET = env.GOOGLE_CLIENT_SECRET
+
+async function sendVerificationEmail({
+  user,
+  url,
+}: {
+  user: { email: string; name: string }
+  url: string
+  token: string
+}) {
+  if (isProd && env.BREVO_API_KEY) {
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": env.BREVO_API_KEY,
+      },
+      body: JSON.stringify({
+        sender: { email: env.EMAIL_FROM || "noreply@lyrashield.ai" },
+        to: [{ email: user.email, name: user.name }],
+        subject: "Verify your email — LyraShield",
+        htmlContent: `<p>Hi ${user.name},</p><p>Click the link below to verify your email address:</p><p><a href="${url}">Verify Email</a></p><p>If you didn't create an account, you can safely ignore this email.</p>`,
+      }),
+    })
+    if (!res.ok) {
+      logger.error("Failed to send verification email via Brevo", {
+        status: res.status,
+        email: user.email,
+      })
+    }
+  } else {
+    logger.info("Email verification (dev mode — no email sent)", {
+      email: user.email,
+      verificationUrl: url,
+    })
+  }
+}
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
-  secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
-  trustedOrigins: [process.env.BETTER_AUTH_URL ?? "http://localhost:3000"],
+  secret: env.BETTER_AUTH_SECRET,
+  baseURL: env.BETTER_AUTH_URL,
+  trustedOrigins: [env.BETTER_AUTH_URL],
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: false,
+    requireEmailVerification: true,
+  },
+  emailVerification: {
+    sendVerificationEmail,
+    sendOnSignUp: true,
   },
   socialProviders: {
     github: {

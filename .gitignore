@@ -38,3 +38,6 @@ packages/db/src/generated/
 
 # Docker
 docker-data/
+
+# TypeScript build info
+*.tsbuildinfo

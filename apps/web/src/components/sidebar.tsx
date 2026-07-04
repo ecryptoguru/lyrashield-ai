@@ -17,6 +17,7 @@ import {
   LogOut,
   Users,
   Radar,
+  Plug,
 } from "lucide-react"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/dashboard/fixes", label: "Fixes", icon: Wrench },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/team", label: "Team", icon: Users },
+  { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ]
 

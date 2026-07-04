@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@lyrashield/types": "workspace:*",
-    "@lyrashield/logger": "workspace:*"
+    "@lyrashield/logger": "workspace:*",
+    "@lyrashield/config": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.0",

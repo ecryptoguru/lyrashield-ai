@@ -14,6 +14,14 @@ export default async function DashboardLayout({
     redirect("/sign-in")
   }
 
+  const onboardingState = await prisma.onboardingState.findUnique({
+    where: { userId: session.userId },
+  })
+
+  if (onboardingState && !onboardingState.completed && !onboardingState.skipped) {
+    redirect("/onboarding")
+  }
+
   const memberships = await prisma.workspaceMember.findMany({
     where: { userId: session.userId, status: "active" },
     include: { workspace: true },

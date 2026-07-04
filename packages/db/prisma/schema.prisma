@@ -222,8 +222,8 @@ model Workspace {
   billingAccount    BillingAccount?
   invitations       Invitation[]
   webhookEvents     WebhookEvent[]
-
-  @@index([slug])
+  apiKeys           ApiKey[]
+  retests           Retest[]
 }
 
 model WorkspaceMember {
@@ -254,6 +254,7 @@ model Project {
   ownerUserId   String?
   ownerTeam     String?
   riskScore     Int       @default(100)
+  deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -290,6 +291,8 @@ model Target {
   findings        Finding[]
   credentials     CredentialSet[]
 
+  @@unique([workspaceId, repoFullName])
+  @@unique([workspaceId, url])
   @@index([workspaceId])
   @@index([projectId])
 }
@@ -329,6 +332,7 @@ model Policy {
   maxDurationMinutes       Int       @default(60)
   piiRedactionEnabled      Boolean   @default(true)
   evidenceRetentionDays    Int       @default(30)
+  deletedAt                DateTime?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
@@ -356,6 +360,7 @@ model Scan {
   riskScoreBefore Int?
   riskScoreAfter  Int?
   createdById     String
+  deletedAt       DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -365,6 +370,7 @@ model Scan {
   policy          Policy?     @relation(fields: [policyId], references: [id], onDelete: SetNull)
   events          ScanEvent[]
   findings        Finding[]
+  retests         Retest[]
 
   @@index([workspaceId])
   @@index([projectId])
@@ -380,12 +386,34 @@ model ScanEvent {
   level       String   @default("info")
   message     String
   metadata    Json?
+  deletedAt   DateTime?
   createdAt   DateTime @default(now())
 
   scan        Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
   @@index([scanId])
   @@index([stage])
+}
+
+model ApiKey {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  name          String
+  hashedKey     String    @unique
+  prefix        String
+  scopes        String[]
+  lastUsedAt    DateTime?
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  createdById   String
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([prefix])
 }
 
 model Finding {
@@ -425,6 +453,7 @@ model Finding {
   evidence            Evidence[]
   fixProposals        FixProposal[]
   tickets             Ticket[]
+  retests             Retest[]
 
   @@index([workspaceId])
   @@index([scanId])
@@ -432,7 +461,8 @@ model Finding {
   @@index([severity])
   @@index([lastSeenAt])
   @@index([slaDueAt])
-  @@unique([workspaceId, dedupeKey])
+  @@index([workspaceId, status, severity])
+  @@unique([targetId, dedupeKey])
 }
 
 model Evidence {
@@ -441,6 +471,7 @@ model Evidence {
   type               String
   storageUri         String?
   redactedStorageUri String?
+  encryptionKeyRef   String?
   checksum           String?
   redactionStatus    String   @default("pending")
   createdAt          DateTime @default(now())
@@ -459,6 +490,7 @@ model FixProposal {
   status            String   @default("draft")
   safetyScore       Int?
   generatedByModel  String?
+  deletedAt         DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -478,6 +510,7 @@ model PullRequest {
   prNumber        Int?
   prUrl           String?
   status          String   @default("open")
+  deletedAt       DateTime?
   createdAt       DateTime @default(now())
   mergedAt        DateTime?
   closedAt        DateTime?
@@ -494,6 +527,7 @@ model Ticket {
   externalId    String?
   status        String   @default("open")
   url           String?
+  deletedAt     DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -510,6 +544,9 @@ model Integration {
   configRef     String?
   status        String          @default("active")
   capabilities  Json?
+  externalId    String?
+  metadata      Json?
+  deletedAt     DateTime?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -517,6 +554,7 @@ model Integration {
 
   @@index([workspaceId])
   @@index([type])
+  @@unique([workspaceId, type, externalId])
 }
 
 model UsageRecord {
@@ -525,6 +563,8 @@ model UsageRecord {
   kind          String
   quantity      Int
   metadata      Json?
+  idempotencyKey String? @unique
+  deletedAt     DateTime?
   createdAt     DateTime @default(now())
 
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -543,6 +583,7 @@ model AuditLog {
   ipAddress     String?
   userAgent     String?
   metadata      Json?
+  prevHash      String?
   createdAt     DateTime @default(now())
 
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -550,6 +591,7 @@ model AuditLog {
   @@index([workspaceId])
   @@index([actorUserId])
   @@index([action])
+  @@index([workspaceId, createdAt])
 }
 
 model Report {
@@ -561,9 +603,11 @@ model Report {
   status         String   @default("generated")
   format         String   @default("html")
   storageUri     String?
-  shareToken     String?  @unique
+  shareTokenHash String?  @unique
   shareExpiresAt DateTime?
+  revokedAt      DateTime?
   createdById    String
+  deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -584,6 +628,7 @@ model Notification {
   status        String   @default("pending")
   sentAt        DateTime?
   metadata      Json?
+  deletedAt     DateTime?
   createdAt     DateTime @default(now())
 
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -604,6 +649,7 @@ model Schedule {
   lastRunAt     DateTime?
   nextRunAt     DateTime?
   createdById   String
+  deletedAt     DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -622,6 +668,7 @@ model BillingAccount {
   status          String   @default("free")
   currentPlan     WorkspacePlan @default(FREE)
   trialEndsAt     DateTime?
+  deletedAt       DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -640,6 +687,7 @@ model Invitation {
   invitedById   String
   expiresAt     DateTime
   acceptedAt    DateTime?
+  deletedAt     DateTime?
   createdAt     DateTime @default(now())
 
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -658,6 +706,7 @@ model WebhookEvent {
   payload       Json
   processed     Boolean  @default(false)
   processedAt   DateTime?
+  deletedAt     DateTime?
   createdAt     DateTime @default(now())
 
   workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -665,4 +714,40 @@ model WebhookEvent {
   @@unique([provider, externalId])
   @@index([workspaceId])
   @@index([processed])
+}
+
+model Retest {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  findingId     String
+  scanId        String
+  status        String   @default("pending")
+  resultBefore  String?
+  resultAfter   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  finding       Finding   @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  scan          Scan      @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([findingId])
+  @@index([scanId])
+}
+
+model OnboardingState {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  currentStep     Int      @default(0)
+  completed       Boolean  @default(false)
+  skipped         Boolean  @default(false)
+  workspaceId     String?
+  targetId        String?
+  selectedGoal    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@map("onboarding_states")
 }

@@ -2,7 +2,12 @@
   "name": "@lyrashield/config",
   "version": "0.0.0",
   "private": true,
-  "files": ["tsconfig/**"],
+  "files": ["tsconfig/**", "src/**", "dist/**"],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
   "devDependencies": {
     "typescript": "^6.0.0",
     "@types/node": "^22.0.0"

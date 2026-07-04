@@ -9,6 +9,7 @@ export const {
   signOut,
   signUp,
   useSession,
+  sendVerificationEmail: clientSendVerificationEmail,
 } = authClient
 
 export const getClientSession = authClient.getSession

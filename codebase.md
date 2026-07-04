@@ -100,26 +100,37 @@ lyrashield/
 │   │   │   │   │   │   │   ├── page.tsx          # Server component
 │   │   │   │   │   │   │   ├── targets-client.tsx
 │   │   │   │   │   │   │   └── [id]/page.tsx     # Target detail page
+│   │   │   │   │   │   ├── integrations/         # Integrations page (GitHub App)
+│   │   │   │   │   │   │   ├── page.tsx          # Server component
+│   │   │   │   │   │   │   └── github-integration.tsx  # Client: connect + repo picker
 │   │   │   │   │   │   └── team/                 # Team members + invites
 │   │   │   │   │   │       ├── page.tsx          # Server component
 │   │   │   │   │   │       └── team-client.tsx
-│   │   │   │   │   ├── layout.tsx                # Dashboard layout (auth guard + sidebar)
+│   │   │   │   │   ├── layout.tsx                # Dashboard layout (auth guard + onboarding redirect + sidebar)
 │   │   │   │   │   └── loading.tsx
+│   │   │   │   ├── onboarding/                   # Onboarding wizard (Sprint 2.5)
+│   │   │   │   │   ├── page.tsx                  # Server component (auth guard)
+│   │   │   │   │   └── onboarding-wizard.tsx     # 7-step client component
 │   │   │   │   ├── api/                          # REST API routes
 │   │   │   │   │   ├── auth/[...all]/route.ts    # Better Auth handler
+│   │   │   │   │   ├── onboarding/route.ts       # GET + PATCH onboarding state
 │   │   │   │   │   ├── projects/route.ts         # POST + GET projects
 │   │   │   │   │   ├── targets/route.ts          # POST + GET targets (with SSRF)
 │   │   │   │   │   ├── team/route.ts             # POST invite + GET members
-│   │   │   │   │   └── workspaces/route.ts       # POST create + GET list workspaces
+│   │   │   │   │   ├── workspaces/route.ts       # POST create + GET list workspaces
+│   │   │   │   │   ├── integrations/github/      # GitHub App integration routes
+│   │   │   │   │   │   ├── install/route.ts      # GET callback + POST install URL
+│   │   │   │   │   │   └── repos/route.ts        # GET list installation repos
+│   │   │   │   │   └── webhooks/github/route.ts  # POST GitHub webhook handler
 │   │   │   │   ├── sign-in/page.tsx              # Sign-in page (email + GitHub OAuth)
-│   │   │   │   ├── sign-up/page.tsx              # Sign-up page
+│   │   │   │   ├── sign-up/page.tsx              # Sign-up page (redirects to /onboarding)
 │   │   │   │   ├── page.tsx                      # Marketing landing page
 │   │   │   │   ├── layout.tsx                    # Root layout (Inter font)
 │   │   │   │   ├── globals.css                   # Tailwind theme + global styles
 │   │   │   │   ├── not-found.tsx
 │   │   │   │   └── icon.svg
 │   │   │   └── components/
-│   │   │       ├── sidebar.tsx                   # Dashboard sidebar nav
+│   │   │       ├── sidebar.tsx                   # Dashboard sidebar nav (with Integrations)
 │   │   │       └── workspace-switcher.tsx        # Workspace dropdown switcher
 │   │   ├── next.config.ts                        # transpilePackages + serverExternalPackages
 │   │   └── package.json
@@ -150,7 +161,11 @@ lyrashield/
 │   ├── config/                                   # Shared tsconfig presets
 │   ├── logger/                                   # Structured JSON logger
 │   │   └── src/index.ts
-│   └── integrations/                             # External integrations (planned)
+│   └── integrations/                             # External integrations (GitHub App)
+│       └── src/
+│           ├── github.ts          # JWT, installation tokens, repo listing, webhook verification
+│           ├── github.test.ts     # Tests for webhook signature + install URL
+│           └── index.ts           # Re-exports
 ├── docker-compose.yml                            # PostgreSQL 16 + Redis 7
 ├── turbo.json                                    # Turborepo task config
 ├── pnpm-workspace.yaml                           # Workspace + build allowlist
@@ -207,11 +222,27 @@ Defined in `packages/auth/src/permissions.ts`:
 All API routes follow this pattern:
 1. Call `getSession()` — return 401 if null
 2. Parse and validate body with Zod schema — return 400 on validation error
-3. Check workspace membership via `prisma.workspaceMember.findUnique()` — return 403 if not active
-4. Check role-specific permissions if needed
+3. Check permissions via `await requirePermission(workspaceId, permission)` — throws `UNAUTHORIZED` or `FORBIDDEN` on failure
+4. Wrap in try/catch — use `authErrorResponse(error)` from `@/lib/api-auth` to map thrown auth errors to 401/403 responses, then fall through to generic 500
 5. Perform the operation
 6. Write audit log via `prisma.auditLog.create()`
 7. Return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`
+
+**`requirePermission(workspaceId, permission)`** (async, throws):
+- Returns `{ session, membership }` on success
+- Throws `Error("UNAUTHORIZED")` if no session
+- Throws `Error("FORBIDDEN")` if not workspace member or lacks permission
+- Callers catch with `authErrorResponse(error)` → returns NextResponse with 401/403
+
+**`authErrorResponse(error)`** (`apps/web/src/lib/api-auth.ts`):
+```typescript
+// In catch block:
+const authErr = authErrorResponse(error)
+if (authErr) return authErr  // 401 or 403
+// Fall through to generic 500
+logger.error("...", { error: String(error) })
+return NextResponse.json({ success: false, error: { code: "INTERNAL_ERROR", ... } }, { status: 500 })
+```
 
 ### 4.5 Server/Client Component Split
 
@@ -268,8 +299,10 @@ The Prisma schema (`packages/db/prisma/schema.prisma`) defines these models:
 - **FixProposal** — findingId, codeDiff, description, status
 - **PullRequest** — fixProposalId, url, status
 - **Ticket** — findingId, url, provider
-- **Integration** — workspaceId, type, config
-- **UsageRecord** — workspaceId, metric, value, period
+- **Integration** — workspaceId, type (GITHUB/SLACK/JIRA/etc), name, configRef, status, capabilities (JSON), externalId (GitHub installation ID), metadata (JSON: accountLogin, accountId, accountType, setupAction), deletedAt. Unique on `[workspaceId, type, externalId]`
+- **WebhookEvent** — workspaceId (nullable), provider, eventType, externalId, payload (JSON), processed, processedAt, error. Unique on `[provider, externalId]`
+- **OnboardingState** — userId (unique), currentStep (0-6), completed, skipped, workspaceId, targetId, selectedGoal, createdAt, updatedAt
+- **UsageRecord** — workspaceId, kind, quantity, idempotencyKey (unique), metadata (JSON), deletedAt
 - **AuditLog** — workspaceId, actorUserId, action, resourceType, resourceId, metadata (JSON)
 - **Invitation** — workspaceId, email, token (unique), role, status (pending/accepted/expired), expiresAt, invitedById
 
@@ -290,9 +323,14 @@ REDIS_URL="redis://localhost:6379"
 BETTER_AUTH_SECRET="replace-with-a-strong-secret-key-min-32-chars"
 BETTER_AUTH_URL="http://localhost:3000"
 
-# GitHub OAuth
+# GitHub OAuth (sign-in)
 GITHUB_CLIENT_ID=""
 GITHUB_CLIENT_SECRET=""
+
+# GitHub App (integration — Sprint 3)
+GITHUB_APP_ID=""
+GITHUB_APP_PRIVATE_KEY=""
+GITHUB_WEBHOOK_SECRET=""
 
 # Google OAuth (optional)
 GOOGLE_CLIENT_ID=""
@@ -302,7 +340,7 @@ GOOGLE_CLIENT_SECRET=""
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 ```
 
-Additional env vars for later sprints: GitHub App, S3/R2 evidence storage, Brevo email, Polar/Razorpay billing, Sentry monitoring, LyraShield engine (`LYRASHIELD_LLM`, `LLM_API_KEY`, `LYRASHIELD_IMAGE`, `LYRASHIELD_ENGINE_PATH`, `LYRASHIELD_TELEMETRY=false`).
+Additional env vars for later sprints: S3/R2 evidence storage, Brevo email, Polar/Razorpay billing, Sentry monitoring, LyraShield engine (`LYRASHIELD_LLM`, `LLM_API_KEY`, `LYRASHIELD_IMAGE`, `LYRASHIELD_ENGINE_PATH`, `LYRASHIELD_TELEMETRY=false`).
 
 ---
 
@@ -387,9 +425,50 @@ docker compose down       # Stop services
 - Radar icon for Scans nav item (was duplicate Crosshair)
 - Empty description sent as undefined instead of empty string
 
-### Sprint 2.5: Onboarding Flow — Not Started
-### Sprint 3: Scan Queue — Not Started
-### Sprint 4: LyraShield Scan Engine — Not Started
+### Sprint 2.5: Onboarding Flow — ✅ Complete
+- **OnboardingState model**: `OnboardingState` in Prisma schema — tracks `currentStep`, `completed`, `skipped`, `workspaceId`, `targetId`, `selectedGoal` per user
+- **Onboarding API**: `GET/PATCH /api/onboarding` — auto-creates state on first GET, upsert on PATCH, Zod-validated via `UpdateOnboardingSchema`
+- **Onboarding wizard**: `/onboarding` page with 7-step guided flow (Workspace → Target → Goal → Preflight → Scan → Results → Fix)
+- **Progress indicator**: Visual step tracker with checkmarks for completed steps
+- **Skip option**: Users can skip onboarding at any step; sets `skipped: true` and redirects to dashboard
+- **Completion tracking**: `completed: true` on finish; dashboard layout redirects incomplete/non-skipped users to `/onboarding`
+- **Sign-up redirect**: Both email and GitHub sign-up now redirect to `/onboarding` instead of `/dashboard`
+- **Steps 4-6 (Scan/Results/Fix)**: Placeholder UI with clear messaging that engine integration comes in Sprint 5
+- **Zod schemas**: `OnboardingStepSchema`, `UpdateOnboardingSchema` added to `@lyrashield/types`
+
+### Pre-Sprint-3 Hardening (PRD §B1.4 + §B4) — ✅ Complete
+- **Env validation**: Zod schema in `@lyrashield/config` — fails fast on missing/invalid `BETTER_AUTH_SECRET`, `DATABASE_URL`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`
+- **Email verification**: `requireEmailVerification: true` in `auth.ts`; Brevo integration for production, console.log in dev; `sendOnSignUp: true`
+- **Rate limiting**: `middleware.ts` — auth endpoints 5/min per IP, general API 30/min per IP; Upstash Redis in prod, in-memory fallback in dev
+- **Schema retrofits (§B4)**:
+  - Finding dedupe key: `@@unique([targetId, dedupeKey])` (was `[workspaceId, dedupeKey]`)
+  - ApiKey model: hashedKey, prefix, scopes, expiresAt, revokedAt, lastUsedAt
+  - Evidence.encryptionKeyRef added
+  - AuditLog.prevHash added (hash-chain ready)
+  - Soft-delete (`deletedAt`) standardized across all models
+  - Duplicate-target guards: `@@unique([workspaceId, repoFullName])` + `@@unique([workspaceId, url])`
+  - Report.shareToken → shareTokenHash (hashed at rest) + revokedAt
+  - UsageRecord.idempotencyKey added
+  - Composite indexes: `Finding(workspaceId, status, severity)`, `AuditLog(workspaceId, createdAt)`
+  - Redundant `@@index([slug])` on Workspace removed (already @unique)
+  - Retest model added (P2)
+- **Prisma Client Extension**: auto-injects `deletedAt: null` on reads, `workspaceId` scoping, redirects `delete` → soft-delete
+- **License hygiene**: `engine-NOTICE.md` and `engine-CHANGES.md` templates created for Apache-2.0 §4b compliance
+
+### Sprint 3: GitHub App Integration — ✅ Complete
+- **Integration module** (`@lyrashield/integrations`): GitHub App JWT minting (RS256), installation token fetching, repo listing, webhook signature verification (HMAC-SHA256 with timing-safe comparison)
+- **Schema updates**: `Integration` model — added `externalId` (installation ID), `metadata` (JSON for account info), `@@unique([workspaceId, type, externalId])`
+- **Installation callback**: `GET /api/integrations/github/install` — receives GitHub OAuth redirect, stores installation metadata, creates audit log
+- **Install URL generation**: `POST /api/integrations/github/install` — returns GitHub App install URL with workspace state
+- **Repo listing**: `GET /api/integrations/github/repos` — lists accessible repos via installation token
+- **Webhook handler**: `POST /api/webhooks/github` — verifies signature, handles `installation.deleted` (disables targets, soft-deletes integration) and `pull_request` events (stores in WebhookEvent)
+- **Integrations UI**: `/dashboard/integrations` page with GitHub connect button, repo picker, and target creation from selected repo
+- **Sidebar**: Added Integrations nav item with Plug icon
+- **Security**: GitHub secrets stored only as installation metadata (configRef pattern), no raw tokens in DB; webhook signature verification required
+- **Tests**: `packages/integrations/src/github.test.ts` (9 tests: webhook signature valid/invalid/null/empty/wrong-secret/tampered/wrong-length, install URL format), `packages/types/src/index.test.ts` (21 tests: OnboardingStepSchema + UpdateOnboardingSchema validation). Total: 115 tests passing.
+
+### Sprint 4: Scan Orchestrator and Queue — Not Started
+### Sprint 5: LyraShield Scan Engine MVP — Not Started
 
 ### Engine Repo (lyrashield-engine) — Forked & Rebranded
 
@@ -416,6 +495,12 @@ The engine repo has been forked from usestrix/strix, fully rebranded to LyraShie
 |--------|------|-------------|
 | POST | `/api/auth/[...all]` | Better Auth handler (sign-in, sign-up, sign-out, OAuth callbacks) |
 
+### Onboarding
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/api/onboarding` | Get current user's onboarding state (auto-creates if missing) | Authenticated |
+| PATCH | `/api/onboarding` | Update onboarding state (step, completed, skipped, workspaceId, targetId, selectedGoal) | Authenticated |
+
 ### Workspaces
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
@@ -440,6 +525,18 @@ The engine repo has been forked from usestrix/strix, fully rebranded to LyraShie
 | POST | `/api/team` | Invite team member (creates Invitation with 7-day expiry) | OWNER or ADMIN |
 | GET | `/api/team?workspaceId=<id>` | List active members + pending invitations | Active workspace member |
 
+### Integrations — GitHub App
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/api/integrations/github/install` | GitHub OAuth callback — stores installation metadata, redirects to dashboard | Authenticated + `integration.manage` |
+| POST | `/api/integrations/github/install` | Returns GitHub App install URL with workspace state | Authenticated + `integration.manage` |
+| GET | `/api/integrations/github/repos?workspaceId=<id>` | List accessible repos via installation token | Authenticated + `integration.manage` |
+
+### Webhooks
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | `/api/webhooks/github` | GitHub webhook handler — verifies HMAC-SHA256 signature, handles `installation.deleted` + `pull_request` | Webhook signature (no session) |
+
 **API response format**:
 ```json
 // Success
@@ -449,18 +546,33 @@ The engine repo has been forked from usestrix/strix, fully rebranded to LyraShie
 { "success": false, "error": { "code": "ERROR_CODE", "message": "Human-readable message" } }
 ```
 
-**Common error codes**: `UNAUTHORIZED` (401), `FORBIDDEN` (403), `VALIDATION_ERROR` (400), `INVALID_JSON` (400), `MISSING_PARAM` (400), `SSRF_BLOCKED` (400), `ALREADY_INVITED` (409), `SLUG_TAKEN` (409), `PROJECT_NOT_FOUND` (404), `INTERNAL_ERROR` (500)
+**Common error codes**: `UNAUTHORIZED` (401), `FORBIDDEN` (403), `VALIDATION_ERROR` (400), `INVALID_JSON` (400), `MISSING_PARAM` (400), `SSRF_BLOCKED` (400), `ALREADY_INVITED` (409), `SLUG_TAKEN` (409), `PROJECT_NOT_FOUND` (404), `NOT_CONNECTED` (404), `NOT_FOUND` (404), `INVALID_SIGNATURE` (401), `MISSING_HEADERS` (400), `CONFIG_ERROR` (500), `INTERNAL_ERROR` (500)
 
 ---
 
 ## 10. UI Components
 
 ### Sidebar (`apps/web/src/components/sidebar.tsx`)
-- Navigation with icons: Dashboard, Projects, Targets, Scans (Radar icon), Findings, Fixes, Reports, Team, Settings
+- Navigation with icons: Dashboard, Projects, Targets, Scans (Radar icon), Findings, Fixes, Reports, Team, Integrations (Plug icon), Settings
 - Workspace switcher embedded at top
 - User info + sign-out button at bottom
 - Active route highlighting via `usePathname`
 - Sign-out calls `signOut()` from `@lyrashield/auth`
+
+### Onboarding Wizard (`apps/web/src/app/onboarding/onboarding-wizard.tsx`)
+- 7-step guided flow: Workspace → Target → Goal → Preflight → Scan → Results → Fix
+- Progress indicator with checkmarks for completed steps
+- Skip option at every step (sets `skipped: true`, redirects to `/dashboard`)
+- Fetches and updates state via `GET/PATCH /api/onboarding`
+- Steps 4-6 (Scan/Results/Fix) show placeholder UI (engine integration in Sprint 5)
+- Completion sets `completed: true` and redirects to `/dashboard`
+
+### GitHub Integration (`apps/web/src/app/(dashboard)/dashboard/integrations/github-integration.tsx`)
+- Connect button: calls `POST /api/integrations/github/install` → redirects to GitHub App install page
+- Repo picker: calls `GET /api/integrations/github/repos` → displays selectable list with private badges
+- Target creation: calls `POST /api/targets` with selected repo data (type: REPO, provider: github)
+- Connected state: shows account login badge with checkmark
+- Error handling: inline error banners for all operations
 
 ### Workspace Switcher (`apps/web/src/components/workspace-switcher.tsx`)
 - Dropdown with click-outside and Escape key to close
@@ -490,6 +602,8 @@ All Zod schemas and TypeScript types are defined here:
 - `CreateRepoTargetSchema` — workspaceId, projectId (optional), type: REPO, name, repoProvider (default github), repoOwner, repoName, branch (optional), environment (default STAGING)
 - `CreateUrlTargetSchema` — workspaceId, projectId (optional), type: WEB_APP|API, name, url (z.url()), environment (default STAGING)
 - `CreateScanSchema` — workspaceId, targetId, goal, mode (default SAFE), policyId (optional)
+- `OnboardingStepSchema` — enum: WORKSPACE, TARGET, GOAL, PREFLIGHT, SCAN, RESULTS, FIX
+- `UpdateOnboardingSchema` — currentStep (0-6, optional), completed (bool, optional), skipped (bool, optional), workspaceId (string|null, optional), targetId (string|null, optional), selectedGoal (ScanGoal|null, optional)
 
 **Response types**: `ApiResponse<T>`, `PaginatedResponse<T>`
 
@@ -515,7 +629,12 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 - `transpilePackages`: All `@lyrashield/*` packages
 - `serverExternalPackages`: `@prisma/client`, `@prisma/adapter-pg`, `@prisma/client-runtime-utils`
 
-**No middleware.ts** — auth protection is handled in the `(dashboard)/layout.tsx` server component via `getSession()` + `redirect()`.
+**Middleware** (`apps/web/src/middleware.ts`) — Rate limiting on API routes:
+- Auth endpoints (`/api/auth/*`): 5 requests/min per IP
+- General API (`/api/*`): 30 requests/min per IP
+- Uses Upstash Redis in production, in-memory Map fallback in dev
+- Auth protection is handled in the `(dashboard)/layout.tsx` server component via `getSession()` + `redirect()`
+- Onboarding redirect: layout checks `OnboardingState` — redirects incomplete/non-skipped users to `/onboarding`
 
 ---
 
@@ -554,20 +673,30 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 
 | File | Purpose |
 |------|---------|
-| `apps/web/src/app/(dashboard)/layout.tsx` | Auth guard + sidebar shell |
+| `apps/web/src/app/(dashboard)/layout.tsx` | Auth guard + onboarding redirect + sidebar shell |
 | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | Main dashboard with aggregate stats |
 | `apps/web/src/app/(dashboard)/dashboard/projects/projects-client.tsx` | Project list + create form |
 | `apps/web/src/app/(dashboard)/dashboard/targets/targets-client.tsx` | Target list + repo/URL create forms |
 | `apps/web/src/app/(dashboard)/dashboard/targets/[id]/page.tsx` | Target detail with scans |
+| `apps/web/src/app/(dashboard)/dashboard/integrations/page.tsx` | Integrations page (server component) |
+| `apps/web/src/app/(dashboard)/dashboard/integrations/github-integration.tsx` | GitHub connect + repo picker + target creation |
 | `apps/web/src/app/(dashboard)/dashboard/team/team-client.tsx` | Team members + invite form |
+| `apps/web/src/app/onboarding/page.tsx` | Onboarding wizard server component (auth guard) |
+| `apps/web/src/app/onboarding/onboarding-wizard.tsx` | 7-step onboarding wizard (client component) |
+| `apps/web/src/app/api/onboarding/route.ts` | GET + PATCH onboarding state API |
 | `apps/web/src/app/api/projects/route.ts` | POST + GET projects API |
 | `apps/web/src/app/api/targets/route.ts` | POST + GET targets API (with SSRF) |
 | `apps/web/src/app/api/team/route.ts` | POST invite + GET members API |
 | `apps/web/src/app/api/workspaces/route.ts` | POST create + GET list workspaces API |
-| `apps/web/src/components/sidebar.tsx` | Dashboard sidebar navigation |
+| `apps/web/src/app/api/integrations/github/install/route.ts` | GET callback + POST install URL for GitHub App |
+| `apps/web/src/app/api/integrations/github/repos/route.ts` | GET list installation repos |
+| `apps/web/src/app/api/webhooks/github/route.ts` | POST GitHub webhook handler (signature verification) |
+| `apps/web/src/lib/api-auth.ts` | authErrorResponse helper for API routes |
+| `apps/web/src/middleware.ts` | Rate limiting middleware (auth 5/min, API 30/min) |
+| `apps/web/src/components/sidebar.tsx` | Dashboard sidebar navigation (with Integrations) |
 | `apps/web/src/components/workspace-switcher.tsx` | Workspace dropdown switcher |
 | `packages/auth/src/auth.ts` | Better Auth config |
-| `packages/auth/src/session.ts` | Session + workspace access helpers |
+| `packages/auth/src/session.ts` | Session + workspace access helpers (requirePermission) |
 | `packages/auth/src/permissions.ts` | RBAC role/permission matrix |
 | `packages/auth/src/client.ts` | Better Auth client (client-safe) |
 | `packages/auth/src/index.ts` | Client-safe exports |
@@ -576,7 +705,11 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 | `packages/db/prisma.config.ts` | Prisma 7 config |
 | `packages/db/src/client.ts` | PrismaClient singleton with PrismaPg |
 | `packages/db/src/index.ts` | DB package exports |
+| `packages/integrations/src/github.ts` | GitHub App: JWT, tokens, repo listing, webhook verification |
+| `packages/integrations/src/github.test.ts` | Tests for webhook signature + install URL |
+| `packages/integrations/src/index.ts` | Integrations package re-exports |
 | `packages/types/src/index.ts` | All Zod schemas + TS types |
+| `packages/types/src/index.test.ts` | Tests for OnboardingStep + UpdateOnboarding schemas |
 | `packages/logger/src/index.ts` | Structured JSON logger |
 | `apps/web/next.config.ts` | Next.js config (transpile + external packages) |
 | `docker-compose.yml` | Postgres 16 + Redis 7 |

@@ -14,9 +14,30 @@
       "@lyrashield/integrations": ["../../packages/integrations/src/index.ts"],
       "@lyrashield/integrations/*": ["../../packages/integrations/src/*"],
       "@lyrashield/logger": ["../../packages/logger/src/index.ts"],
-      "@lyrashield/logger/*": ["../../packages/logger/src/*"]
+      "@lyrashield/logger/*": ["../../packages/logger/src/*"],
+      "@lyrashield/config": ["../../packages/config/src/index.ts"],
+      "@lyrashield/config/*": ["../../packages/config/src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "dist", ".next", ".turbo", "**/*.test.ts", "vitest.config.ts"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "../../packages/auth/src/**/*.ts",
+    "../../packages/auth/src/**/*.tsx",
+    "../../packages/integrations/src/**/*.ts",
+    "../../packages/integrations/src/**/*.tsx",
+    "../../packages/types/src/**/*.ts",
+    "../../packages/types/src/**/*.tsx",
+    "../../packages/db/src/**/*.ts",
+    "../../packages/db/src/**/*.tsx",
+    "../../packages/ui/src/**/*.ts",
+    "../../packages/ui/src/**/*.tsx",
+    "../../packages/logger/src/**/*.ts",
+    "../../packages/logger/src/**/*.tsx",
+    "../../packages/config/src/**/*.ts",
+    "../../packages/config/src/**/*.tsx"
+  ],
+  "exclude": ["node_modules", "dist", ".next", ".turbo", "**/*.test.ts", "**/*.test.tsx", "../../packages/**/*.test.ts", "../../packages/**/*.test.tsx", "vitest.config.ts"]
 }

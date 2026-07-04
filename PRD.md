@@ -4564,28 +4564,309 @@ LyraShield should feel simple enough for a solo founder and controlled enough fo
 
 ---
 
-# 22. Agent-Native Integration Summary
+# 22. Agent-Native Integration Analysis
 
-Reference: [Update.md](./Update.md) contains the full Agent-Native integration analysis.
+> **Note:** This section is the canonical source for the Agent-Native integration analysis. It was originally in a separate `Update.md` file and has been inlined here so `PRD.md` is the single source of truth.
 
-**Architecture**: Agent-Native is a strategic agent layer around LyraShield's core. It does not replace Better Auth, Prisma, or the core API. It wraps them with `defineAction()`, MCP tools, approval gates, and a copilot sidebar.
+## 22.1 What Agent-Native Adds
 
-**Key decisions**:
+Agent-Native is an open-source framework from BuilderIO for building apps where the **agent and UI share the same actions, state, tools, jobs, skills, observability, and UI surfaces**. Its key idea is: define a single action once, then expose it to the UI, agent, HTTP, MCP, A2A, CLI, jobs, and webhooks.
+
+That is extremely relevant for LyraShield because our product loop is already action-driven:
+
+```txt
+Target → Scan → Finding → Fix → Retest → Report
+```
+
+Agent-Native lets us convert each of those operations into agent-callable, UI-callable, externally callable actions.
+
+Example LyraShield actions:
+
+```txt
+create-target
+run-scan
+get-scan-status
+list-findings
+explain-finding
+generate-fix-proposal
+create-fix-pr
+retest-finding
+generate-report
+accept-risk
+create-jira-ticket
+```
+
+Agent-Native also supports human-in-the-loop approvals where consequential actions pause before execution and require explicit approval. That maps perfectly to high-risk LyraShield actions like production scans, creating PRs, accepting risk, exporting reports, or changing enterprise policies.
+
+## 22.2 Integration Decision: Do Not Replace Better Auth + Prisma
+
+Agent-Native's default framework stack uses **Drizzle ORM** and has its own organization/multi-tenancy system. But our LyraShield architecture is already Better Auth + Prisma + PostgreSQL + Redis + BullMQ + LyraShield workers + Next.js dashboard.
+
+The correct design:
+
+```txt
+LyraShield Core = Better Auth + Prisma + LyraShield Engine + Workers
+Agent-Native Layer = actions + copilot UI + MCP/A2A + approvals + skills
+```
+
+Agent-Native should **call LyraShield APIs**, not own the primary product database.
+
+## 22.3 Recommended Architecture
+
+```txt
+Next.js Web App
+  ↓
+Better Auth + Prisma
+  ↓
+LyraShield API
+  ↓
+Agent-Native Action Layer
+  ↓
+MCP / A2A / CLI / Agent Sidebar / Skills
+  ↓
+Scan Orchestrator
+  ↓
+LyraShield Engine Runtime
+```
+
+Monorepo update:
+
+```txt
+lyrashield/
+  apps/
+    web/
+    api/
+    worker/
+    agent/
+      actions/
+      skills/
+      AGENTS.md
+      server/
+      mcp/
+      a2a/
+
+  packages/
+    db/              # Prisma
+    auth/            # Better Auth
+    ui/
+    types/
+    security/
+    integrations/
+    agent-actions/   # shared action schemas
+```
+
+`apps/agent` should be a **headless or lightweight Agent-Native service**. It should not become the main product app.
+
+## 22.4 How Agent-Native Enhances LyraShield
+
+### 22.4.1 One action powers UI, chat, API, MCP, A2A, and CLI
+
+Agent-Native's `defineAction()` exposes a single action across multiple surfaces. For LyraShield, this means every feature becomes human-operable, agent-operable, and automation-operable simultaneously.
+
+### 22.4.2 Security Copilot inside every screen
+
+Add an Agent-Native sidebar to every major page (Dashboard, Project, Target, Scan, Finding, Fix Proposal, Report, Policy, Audit Log). The agent should know the current page context.
+
+Examples:
+- On a finding page: "Explain this like I'm a founder", "Show the exact file I need to fix", "Generate a minimal safe patch"
+- On a scan page: "What is the agent doing now?", "Stop if it touches production data", "Summarize only confirmed risks"
+- On a policy page: "Create a safe production scan policy", "Block deep scans outside business hours"
+
+### 22.4.3 Human approval for high-risk actions
+
+Actions requiring approval:
+
+```txt
+run-production-deep-scan
+create-fix-pr
+send-client-report
+accept-risk
+mark-false-positive
+delete-target
+rotate-secret
+change-policy
+connect-cloud-account
+disable-security-gate
+```
+
+### 22.4.4 MCP tools for Codex, Cursor, Claude Code, Windsurf, OpenCode
+
+Example MCP tools:
+
+```txt
+lyrashield_check_diff
+lyrashield_run_pr_scan
+lyrashield_explain_finding
+lyrashield_generate_fix
+lyrashield_verify_fix
+lyrashield_create_security_plan
+lyrashield_create_launch_report
+```
+
+This lets us position LyraShield as "The security layer for AI coding agents."
+
+### 22.4.5 Visual security plans and PR recaps
+
+Adapt Agent-Native's visual-plan / visual-recap into:
+
+```txt
+/security-plan
+/security-recap
+/security-fix-plan
+/security-launch-plan
+/security-retest-recap
+```
+
+### 22.4.6 Security Action Layer
+
+Initial action list:
+
+```txt
+list-projects
+list-targets
+create-target
+validate-target
+run-scan
+get-scan-status
+list-findings
+get-finding
+explain-finding
+generate-fix-proposal
+create-fix-pr
+retest-finding
+generate-report
+send-report
+accept-risk
+mark-false-positive
+create-ticket
+```
+
+Actions should have: Zod schema, permission check, workspace scoping, audit log, approval rule, output schema, safe error handling.
+
+### 22.4.7 Agent-Native Security Assistant
+
+Modes: Founder, Developer, Security Engineer, Enterprise Admin, Auditor. Same finding, different explanation depth.
+
+### 22.4.8 Additional features
+
+- **Visual Attack Map**: Interactive attack path diagram for every scan
+- **Verified Fix PR + Retest Recap**: Full review package (patch + proof + retest + explanation)
+- **Security Skills Marketplace**: Next.js Security, Supabase RLS, Firebase Rules, Better Auth, Clerk, Stripe/Razorpay, Webhook Security, OpenAI App Security, Prompt Injection, File Upload, Web3 Smart Contract, Multi-Tenant SaaS, Healthcare Compliance, Fintech Compliance
+- **Security Repro Recorder**: Records safe reproduction with HTTP req/res, screenshots, redacted secrets
+- **Agent Audit Trail**: Records who mutated what, when, from which surface (agent/human/system)
+- **Interactive Report Rooms**: Executive summary + findings + evidence + fix status + agent Q&A + downloadable PDF
+
+## 22.5 Database Design
+
+Use same Postgres, separate table namespace:
+
+```txt
+public.users
+public.workspaces
+public.scans
+public.findings
+
+agent_native.agent_threads
+agent_native.agent_runs
+agent_native.agent_action_calls
+agent_native.agent_approvals
+agent_native.agent_audit_events
+```
+
+If Agent-Native does not cleanly support schema separation, use a separate database to avoid Prisma/Drizzle migration conflicts.
+
+## 22.6 Action Design Examples
+
+### run-scan action
+
+```ts
+export default defineAction({
+  description: "Run a safe security scan for a LyraShield target.",
+  schema: z.object({
+    workspaceId: z.string(),
+    targetId: z.string(),
+    goal: z.enum(["CHECK_PR", "TEST_APP", "LAUNCH_REVIEW", "WEEKLY_MONITOR"]),
+    mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).default("SAFE"),
+  }),
+  needsApproval: async (args) => {
+    return args.mode === "DEEP";
+  },
+  run: async (args, ctx) => {
+    return await lyraApi.createScan({
+      ...args,
+      actorUserId: ctx.userId,
+    });
+  },
+});
+```
+
+### create-fix-pr action
+
+```ts
+export default defineAction({
+  description: "Create a GitHub pull request for an approved security fix proposal.",
+  schema: z.object({
+    workspaceId: z.string(),
+    findingId: z.string(),
+    fixProposalId: z.string(),
+  }),
+  needsApproval: true,
+  run: async (args, ctx) => {
+    return await lyraApi.createFixPullRequest({
+      ...args,
+      actorUserId: ctx.userId,
+    });
+  },
+});
+```
+
+### explain-finding action
+
+```ts
+export default defineAction({
+  description: "Explain a verified LyraShield finding for a founder, developer, auditor, or security engineer.",
+  schema: z.object({
+    findingId: z.string(),
+    mode: z.enum(["FOUNDER", "DEVELOPER", "AUDITOR", "SECURITY_ENGINEER"]),
+  }),
+  readOnly: true,
+  run: async ({ findingId, mode }, ctx) => {
+    return await lyraApi.explainFinding({
+      findingId,
+      mode,
+      actorUserId: ctx.userId,
+    });
+  },
+});
+```
+
+## 22.7 New Sprints Added
+
+- **Sprint 3.5: Agent Action Layer MVP** — Expose core operations as typed Agent-Native actions (list-targets, run-scan, get-scan-status, list-findings, explain-finding). Permission bridge from Better Auth, workspace scoping, audit mapping.
+- **Sprint 5.5: Security Copilot Sidebar** — Page-aware agent assistant on dashboard. Suggested prompts per page. Founder/developer/security explanation modes.
+- **Sprint 7.5: Agent Approval Layer** — Human approval for consequential actions (create-fix-pr, production deep scan, accept-risk, send-report, delete-target). Approval UI + audit logs.
+- **Sprint 8.5: Visual Security Plan and Recap** — /security-plan and /security-recap skills. Attack path diagrams, file-level fix maps, reviewer checklists, shareable recap links.
+- **Sprint 9.5: MCP Server for Coding Agents** — Expose selected actions over MCP. OAuth token, setup docs for Cursor/Codex/Claude Code/Windsurf. Tools: check-diff, run-pr-scan, explain-finding, generate-fix-plan, verify-fix.
+
+## 22.8 Key Decisions Summary
+
 - Agent-Native calls LyraShield APIs, not the product database directly
 - Agent-Native stores only agent runtime state (threads, runs, approvals)
 - Database separation: separate schema (`agent_native.*`) or separate database to avoid Prisma/Drizzle conflicts
 - Keep action surface small (10-15 core actions initially)
 - Read actions run freely; mutating actions require permission; high-impact actions require approval
 
-**New sprints added**: 3.5 (Agent Action Layer), 5.5 (Security Copilot), 7.5 (Approval Layer), 8.5 (Visual Plans), 9.5 (MCP Server)
+## 22.9 Market Positioning Shift
 
-**Market positioning shift**: From "AI AppSec scanner" to "Agent-native security for AI-built apps"
+From "AI AppSec scanner" to **"Agent-native security for AI-built apps."**
 
-**Homepage headline**: Secure AI-built apps before they ship.
+- **Homepage headline**: Secure AI-built apps before they ship.
+- **Subheadline**: LyraShield plugs into your repo, app, and coding agent to find verified vulnerabilities, explain them clearly, create fix PRs, and retest automatically.
+- **Developer CTA**: Connect GitHub
+- **Vibe coder CTA**: Check if my app is safe to launch
+- **Enterprise CTA**: Deploy agent-native AppSec across your engineering org
 
-**Subheadline**: LyraShield plugs into your repo, app, and coding agent to find verified vulnerabilities, explain them clearly, create fix PRs, and retest automatically.
-
-**Five killer workflows**:
+## 22.10 Five Killer Workflows
 
 ```txt
 1. Ask: "Is my app safe to launch?"
@@ -4595,12 +4876,19 @@ Reference: [Update.md](./Update.md) contains the full Agent-Native integration a
 5. Retest and generate visual security recap
 ```
 
+## 22.11 Key Risks
+
+1. **Prisma + Agent-Native DB mismatch** — Don't share ORM ownership; LyraShield Prisma DB remains source of truth; Agent-Native stores only agent runtime state.
+2. **Too many agent tools** — Keep only 10-15 core agent tools initially; hide UI-only actions from the model; use broad actions with typed schemas.
+3. **Unsafe agent autonomy** — Read actions run freely; mutating actions require permission; high-impact actions require approval; production/deep scans require approval; PR creation requires approval; risk acceptance requires approval.
+4. **User confusion** — Use plain-language modes; hide advanced AppSec terminology; offer "Can I launch?" as the primary experience.
+
 
 ---
 
 # PART B — 2026-07 Research & Code-Grounded Engineering Update
 
-> **Status:** Authoritative engineering addendum, 2026-07. Produced from (a) a deep external research pass, (b) a **code-grounded review of the repo at `e02853f`** (Sprints 0–2 complete), and (c) reconciliation with `Update.md` (Agent-Native analysis). Where this addendum conflicts with the original PRD above, **this addendum is authoritative** (the running code and current research win over the original spec). Companion: the marketing/GTM layer lives in `product.md`'s 2026-07 update; the full reasoning + sources live in the research doc.
+> **Status:** Authoritative engineering addendum, 2026-07. Produced from (a) a deep external research pass, (b) a **code-grounded review of the repo at `e02853f`** (Sprints 0–2 complete), and (c) reconciliation with the Agent-Native integration analysis (now inlined into §22 above). Where this addendum conflicts with the original PRD above, **this addendum is authoritative** (the running code and current research win over the original spec). Companion: the marketing/GTM layer lives in `product.md`'s 2026-07 update; the full reasoning + sources live in the research doc.
 
 ## B0. Current build status (code-verified, not aspirational)
 
@@ -4680,12 +4968,12 @@ Add: (9) **engine supply-chain** (heavy Kali/LiteLLM/Caido dep tree — pin, SBO
 **B5.1 Independent verification layer `[P0]`.** Do **not** trust the engine's `confidence.py` as ground truth (open upstream bugs: fabricated file paths/line numbers in black-box mode; missed findings). Insert a layer between engine output and `Finding` records: verify path/line existence in the cloned repo before showing code locations; re-map severity via a deterministic rubric; drop findings whose PoC can't be re-derived. Add a **budget-gated exploit replay** for HIGH/CRITICAL against a frozen target snapshot.
 **B5.2 Deterministic fingerprint, not deterministic scanning `[P0]`.** Market/spec the *dedupe key* as deterministic (B4.2), not the agentic scan. Demote the LLM-judge dedupe to a secondary cross-fingerprint merge pass. Use Schema-Aligned Parsing (generate→validate→retry) for tool/finding outputs rather than relying on `temperature=0+seed`; self-consistency voting for narrow "is this exploitable?" classification only.
 
-## B6. Agent layer & MCP (reconciles + extends `Update.md`)
+## B6. Agent layer & MCP (reconciles + extends §22 above)
 
-- **Don't adopt BuilderIO/agent-native as the system of record** — MIT but ~4 months old, pre-1.0, single-vendor, Drizzle-only. **Borrow the `defineAction()` pattern** hand-rolled thin over Prisma services; if used at all, confine it to a genuinely separate database (two ORMs on one DB = connection-pool/tx-isolation hazard; the separate-DB plan in `Update.md` is the correct mitigation).
+- **Don't adopt BuilderIO/agent-native as the system of record** — MIT but ~4 months old, pre-1.0, single-vendor, Drizzle-only. **Borrow the `defineAction()` pattern** hand-rolled thin over Prisma services; if used at all, confine it to a genuinely separate database (two ORMs on one DB = connection-pool/tx-isolation hazard; the separate-DB plan in §22.5 above is the correct mitigation).
 - **MCP server = OAuth 2.1 resource server from day one:** PKCE, RFC 8707 audience binding, RFC 7591 dynamic client registration (Cursor/Claude Code/Windsurf/Codex/OpenCode), **RFC 8693 token exchange for internal calls — never pass the caller's token through** (confused-deputy defense). Evaluate Better Auth's `@better-auth/oauth-provider` (v1.5+) as this server.
 - **`needsApproval` on every mutating/destructive tool** by default; bind approval to the exact input and re-validate at execution (TOCTOU). Per-key least-privilege tool scoping + independent rate limiting.
-- This supersedes/extends `Update.md`'s agent-native analysis with the current MCP security spec.
+- This supersedes/extends the Agent-Native analysis in §22 above with the current MCP security spec.
 
 ## B7. Standards & interchange (new)
 
