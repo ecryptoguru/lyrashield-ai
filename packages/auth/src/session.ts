@@ -1,6 +1,6 @@
 import { headers } from "next/headers"
 import { auth } from "./auth"
-import { prisma } from "@lyrashield/db"
+import { prisma, setWorkspaceContext } from "@lyrashield/db"
 import type { MemberRole, WorkspaceMember } from "@lyrashield/db"
 import { hasPermission, hasMinimumRole, type Permission } from "./permissions"
 
@@ -73,6 +73,15 @@ export async function requireWorkspaceAccess(
   if (minimumRole && !hasMinimumRole(ctx.role, minimumRole)) {
     throw new Error("FORBIDDEN")
   }
+
+  // Activate request-scoped workspace context (AsyncLocalStorage) once access
+  // is confirmed. From here on, workspace-scoped Prisma reads that don't already
+  // carry an explicit `workspaceId` are auto-scoped to this workspace as a
+  // defense-in-depth backstop against a forgotten `where: { workspaceId }`.
+  // Safe for existing routes: they pass workspaceId explicitly, so injection is
+  // a no-op; cross-workspace models (WorkspaceMember, OnboardingState) are
+  // intentionally excluded from the scoped set.
+  setWorkspaceContext(workspaceId)
 
   return { session, workspace: ctx }
 }
