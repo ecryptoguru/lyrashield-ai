@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { UserPlus, Mail, Clock, Users } from "lucide-react"
 
 interface Member {
@@ -34,11 +34,7 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchMembers()
-  }, [workspaceId])
-
-  async function fetchMembers() {
+  const fetchMembers = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch(`/api/team?workspaceId=${workspaceId}`)
@@ -55,7 +51,13 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [workspaceId])
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchMembers()
+    })
+  }, [fetchMembers])
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault()
@@ -72,7 +74,7 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
         setEmail("")
         setRole("MEMBER")
         setShowInvite(false)
-        fetchMembers()
+        await fetchMembers()
       } else {
         setError(data.error?.message ?? "Failed to invite member")
       }

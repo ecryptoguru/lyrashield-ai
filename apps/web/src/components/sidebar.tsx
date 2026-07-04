@@ -61,7 +61,7 @@ export function Sidebar({
   useEffect(() => {
     const stored = localStorage.getItem("activeWorkspaceId")
     if (stored && workspaces.some((w) => w.id === stored)) {
-      setActiveWorkspaceId(stored)
+      queueMicrotask(() => setActiveWorkspaceId(stored))
     }
   }, [workspaces])
 

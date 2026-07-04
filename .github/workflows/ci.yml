@@ -41,6 +41,7 @@ jobs:
       REDIS_URL: "redis://localhost:6379"
       BETTER_AUTH_SECRET: "ci-test-secret-key-at-least-32-characters-long"
       BETTER_AUTH_URL: "http://localhost:3000"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
 
     steps:
       - name: Checkout
@@ -48,8 +49,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

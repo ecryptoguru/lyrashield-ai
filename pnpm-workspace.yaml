@@ -8,12 +8,14 @@ onlyBuiltDependencies:
   - "msgpackr-extract"
   - "prisma"
   - "sharp"
+  - "unrs-resolver"
 allowBuilds:
   '@prisma/engines': true
   esbuild: true
   msgpackr-extract: true
   prisma: true
   sharp: true
+  unrs-resolver: true
 minimumReleaseAgeExclude:
   - '@turbo/darwin-64@2.10.3'
   - '@turbo/darwin-arm64@2.10.3'

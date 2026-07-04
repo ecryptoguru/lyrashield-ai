@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft } from "lucide-react"
 
@@ -60,11 +60,7 @@ export function TargetsClient({
     environment: "STAGING",
   })
 
-  useEffect(() => {
-    fetchTargets()
-  }, [workspaceId, filterProjectId])
-
-  async function fetchTargets() {
+  const fetchTargets = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({ workspaceId })
@@ -82,7 +78,13 @@ export function TargetsClient({
     } finally {
       setLoading(false)
     }
-  }
+  }, [filterProjectId, workspaceId])
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchTargets()
+    })
+  }, [fetchTargets])
 
   async function handleCreateRepo(e: React.FormEvent) {
     e.preventDefault()
@@ -107,7 +109,7 @@ export function TargetsClient({
       if (data.success) {
         setShowForm(false)
         setRepoForm({ name: "", repoOwner: "", repoName: "", branch: "main", projectId: "", environment: "STAGING" })
-        fetchTargets()
+        await fetchTargets()
         router.refresh()
       } else {
         setError(data.error?.message ?? "Failed to create target")
@@ -140,7 +142,7 @@ export function TargetsClient({
       if (data.success) {
         setShowForm(false)
         setUrlForm({ name: "", url: "", type: "WEB_APP", projectId: "", environment: "STAGING" })
-        fetchTargets()
+        await fetchTargets()
         router.refresh()
       } else {
         setError(data.error?.message ?? "Failed to create target")

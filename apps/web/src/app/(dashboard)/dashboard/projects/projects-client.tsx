@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, FolderKanban, Bug, Crosshair, Radar } from "lucide-react"
 
@@ -26,13 +26,7 @@ export function ProjectsClient({ workspaceId }: { workspaceId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (workspaceId) {
-      fetchProjects()
-    }
-  }, [workspaceId])
-
-  async function fetchProjects() {
+  const fetchProjects = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch(`/api/projects?workspaceId=${workspaceId}`)
@@ -48,7 +42,15 @@ export function ProjectsClient({ workspaceId }: { workspaceId: string }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [workspaceId])
+
+  useEffect(() => {
+    if (workspaceId) {
+      queueMicrotask(() => {
+        void fetchProjects()
+      })
+    }
+  }, [workspaceId, fetchProjects])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -65,7 +67,7 @@ export function ProjectsClient({ workspaceId }: { workspaceId: string }) {
         setName("")
         setDescription("")
         setShowForm(false)
-        fetchProjects()
+        await fetchProjects()
         router.refresh()
       } else {
         setError(data.error?.message ?? "Failed to create project")

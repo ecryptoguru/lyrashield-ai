@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Loader2, Check, RefreshCw, Plus, ChevronRight } from "lucide-react"
 import { GithubIcon } from "@lyrashield/ui"
 
@@ -184,9 +185,9 @@ export function GithubIntegration({
             <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
               <Check className="h-4 w-4 text-primary" />
               Target created successfully. You can now scan this repository.
-              <a href="/dashboard/targets" className="ml-auto flex items-center gap-1 text-primary hover:underline">
+              <Link href="/dashboard/targets" className="ml-auto flex items-center gap-1 text-primary hover:underline">
                 View targets <ChevronRight className="h-3 w-3" />
-              </a>
+              </Link>
             </div>
           )}
         </div>
