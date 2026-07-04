@@ -18,6 +18,8 @@ import {
   Users,
   Radar,
   Plug,
+  Menu,
+  X,
 } from "lucide-react"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 
@@ -57,6 +59,7 @@ export function Sidebar({
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
     workspaces[0]?.id ?? null
   )
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
     const stored = localStorage.getItem("activeWorkspaceId")
@@ -77,10 +80,10 @@ export function Sidebar({
     router.refresh()
   }
 
-  return (
-    <aside className="flex w-64 flex-col border-r bg-sidebar">
+  const sidebarContent = (
+    <>
       <div className="flex h-16 items-center gap-2 border-b px-4">
-        <ShieldCheck className="h-6 w-6 text-primary" />
+        <ShieldCheck className="h-6 w-6 text-primary" aria-hidden="true" />
         <span className="text-lg font-bold">LyraShield</span>
       </div>
 
@@ -94,20 +97,22 @@ export function Sidebar({
         </div>
       )}
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Main navigation">
         {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
           return (
             <Link
               key={item.href}
               href={item.href}
+              aria-current={isActive ? "page" : undefined}
+              onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 isActive
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent/50"
               }`}
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon className="h-4 w-4" aria-hidden="true" />
               {item.label}
             </Link>
           )
@@ -124,10 +129,45 @@ export function Sidebar({
           aria-label="Sign out"
           className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent/50"
         >
-          <LogOut className="h-4 w-4" />
+          <LogOut className="h-4 w-4" aria-hidden="true" />
           Sign out
         </button>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      <button
+        onClick={() => setMobileOpen(true)}
+        aria-label="Open menu"
+        className="fixed left-4 top-4 z-30 rounded-md border bg-background p-2 md:hidden"
+      >
+        <Menu className="h-5 w-5" aria-hidden="true" />
+      </button>
+
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-sidebar transition-transform md:relative md:translate-x-0 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <button
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close menu"
+          className="absolute right-2 top-4 rounded-md p-1 hover:bg-sidebar-accent md:hidden"
+        >
+          <X className="h-5 w-5" aria-hidden="true" />
+        </button>
+        {sidebarContent}
+      </aside>
+    </>
   )
 }

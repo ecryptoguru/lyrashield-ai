@@ -54,7 +54,7 @@ export default function SignUpPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
-          <ShieldCheck className="mb-2 h-10 w-10 text-primary" />
+          <ShieldCheck className="mb-2 h-10 w-10 text-primary" aria-hidden="true" />
           <h1 className="text-2xl font-bold">Create your account</h1>
           <p className="text-sm text-muted-foreground">Start securing your apps with LyraShield</p>
         </div>
@@ -126,7 +126,7 @@ export default function SignUpPage() {
           variant="secondary"
           className="w-full"
         >
-          <GithubIcon className="mr-2 h-4 w-4" />
+          <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
           Sign up with GitHub
         </Button>
 

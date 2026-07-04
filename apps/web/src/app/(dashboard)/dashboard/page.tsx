@@ -40,7 +40,7 @@ export default async function DashboardPage() {
         </div>
         <Link href="/dashboard/scans">
           <Button>
-            <Plus className="h-4 w-4" />
+            <Plus className="h-4 w-4" aria-hidden="true" />
             New Scan
           </Button>
         </Link>
@@ -54,7 +54,7 @@ export default async function DashboardPage() {
           action={
             <Link href="/onboarding">
               <Button>
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4" aria-hidden="true" />
                 Create workspace
               </Button>
             </Link>

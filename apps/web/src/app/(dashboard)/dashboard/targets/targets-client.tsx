@@ -186,7 +186,7 @@ export function TargetsClient({
               }}
               className="mb-2 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
             >
-              <ArrowLeft className="h-3 w-3" />
+              <ArrowLeft className="h-3 w-3" aria-hidden="true" />
               All targets
             </button>
           )}
@@ -194,7 +194,7 @@ export function TargetsClient({
           <p className="text-sm text-muted-foreground">Repositories and URLs to scan</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4" aria-hidden="true" />
           New Target
         </Button>
       </div>
@@ -206,14 +206,14 @@ export function TargetsClient({
               variant={formType === "REPO" ? "default" : "secondary"}
               onClick={() => setFormType("REPO")}
             >
-              <GitBranch className="h-4 w-4" />
+              <GitBranch className="h-4 w-4" aria-hidden="true" />
               Repository
             </Button>
             <Button
               variant={formType === "URL" ? "default" : "secondary"}
               onClick={() => setFormType("URL")}
             >
-              <Globe className="h-4 w-4" />
+              <Globe className="h-4 w-4" aria-hidden="true" />
               URL / API
             </Button>
           </div>
@@ -388,7 +388,7 @@ export function TargetsClient({
           description="Add a repository or URL target to start scanning."
           action={
             <Button onClick={() => setShowForm(true)}>
-              <Plus className="h-4 w-4" />
+              <Plus className="h-4 w-4" aria-hidden="true" />
               Add target
             </Button>
           }
@@ -446,7 +446,7 @@ export function TargetsClient({
                   <td className="px-4 py-3">
                     {t.findingCount > 0 ? (
                       <span className="flex items-center gap-1 text-destructive">
-                        <Bug className="h-3 w-3" />
+                        <Bug className="h-3 w-3" aria-hidden="true" />
                         {t.findingCount}
                       </span>
                     ) : (

@@ -43,7 +43,7 @@ export default async function DashboardLayout({
         userEmail={session.userEmail}
         workspaces={workspaces}
       />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto pt-16 md:pt-0">
         <div className="container mx-auto p-6">{children}</div>
       </main>
     </div>

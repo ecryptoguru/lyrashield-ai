@@ -113,7 +113,7 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
           <p className="text-sm text-muted-foreground">Manage who has access to this workspace</p>
         </div>
         <Button onClick={() => setShowInvite(!showInvite)}>
-          <UserPlus className="h-4 w-4" />
+          <UserPlus className="h-4 w-4" aria-hidden="true" />
           Invite Member
         </Button>
       </div>
@@ -173,7 +173,7 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
       <div className="mb-6 rounded-lg border">
         <div className="border-b p-4">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <Users className="h-5 w-5" />
+            <Users className="h-5 w-5" aria-hidden="true" />
             Members ({members.length})
           </h2>
         </div>
@@ -213,7 +213,7 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
         <div className="rounded-lg border">
           <div className="border-b p-4">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <Mail className="h-5 w-5" />
+              <Mail className="h-5 w-5" aria-hidden="true" />
               Pending Invitations ({invitations.length})
             </h2>
           </div>
@@ -234,7 +234,7 @@ export function TeamClient({ workspaceId }: { workspaceId: string }) {
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
+                      <Clock className="h-3 w-3" aria-hidden="true" />
                       {new Date(inv.expiresAt).toLocaleDateString()}
                     </span>
                   </td>

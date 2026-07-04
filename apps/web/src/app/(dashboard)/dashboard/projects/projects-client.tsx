@@ -108,7 +108,7 @@ export function ProjectsClient({ workspaceId }: { workspaceId: string }) {
           <p className="text-sm text-muted-foreground">Organize your scan targets and findings</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4" aria-hidden="true" />
           New Project
         </Button>
       </div>
@@ -168,7 +168,7 @@ export function ProjectsClient({ workspaceId }: { workspaceId: string }) {
           description="Create your first project to organize targets and scans."
           action={
             <Button onClick={() => setShowForm(true)}>
-              <Plus className="h-4 w-4" />
+              <Plus className="h-4 w-4" aria-hidden="true" />
               Create project
             </Button>
           }

@@ -99,7 +99,7 @@ export function GithubIntegration({
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-md bg-foreground text-background">
-            <GithubIcon className="h-5 w-5" />
+            <GithubIcon className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
             <h2 className="text-lg font-semibold">GitHub</h2>
@@ -115,7 +115,7 @@ export function GithubIntegration({
           </Badge>
         ) : (
           <Button onClick={handleConnect} disabled={loading}>
-            {loading ? <Spinner /> : <GithubIcon className="h-4 w-4" />}
+            {loading ? <Spinner /> : <GithubIcon className="h-4 w-4" aria-hidden="true" />}
             Connect GitHub
           </Button>
         )}
@@ -152,7 +152,7 @@ export function GithubIntegration({
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <GithubIcon className="h-4 w-4 text-muted-foreground" />
+                    <GithubIcon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     <span className="font-medium">{repo.fullName}</span>
                     {repo.private && (
                       <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">private</span>
@@ -170,11 +170,11 @@ export function GithubIntegration({
             </Button>
           )}
           {targetCreated && (
-            <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-              <Check className="h-4 w-4 text-primary" />
+            <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm" role="status">
+              <Check className="h-4 w-4 text-primary" aria-hidden="true" />
               Target created successfully. You can now scan this repository.
               <Link href="/dashboard/targets" className="ml-auto flex items-center gap-1 text-primary hover:underline">
-                View targets <ChevronRight className="h-3 w-3" />
+                View targets <ChevronRight className="h-3 w-3" aria-hidden="true" />
               </Link>
             </div>
           )}

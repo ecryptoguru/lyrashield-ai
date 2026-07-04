@@ -56,7 +56,7 @@ export default async function TargetDetailPage({
         href="/dashboard/targets"
         className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-3 w-3" />
+        <ArrowLeft className="h-3 w-3" aria-hidden="true" />
         Back to targets
       </Link>
 

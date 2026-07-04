@@ -52,7 +52,7 @@ export default function SignInPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
-          <ShieldCheck className="mb-2 h-10 w-10 text-primary" />
+          <ShieldCheck className="mb-2 h-10 w-10 text-primary" aria-hidden="true" />
           <h1 className="text-2xl font-bold">Welcome back</h1>
           <p className="text-sm text-muted-foreground">Sign in to your LyraShield account</p>
         </div>
@@ -109,7 +109,7 @@ export default function SignInPage() {
           variant="secondary"
           className="w-full"
         >
-          <GithubIcon className="mr-2 h-4 w-4" />
+          <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
           Continue with GitHub
         </Button>
 
