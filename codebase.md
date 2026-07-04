@@ -2,6 +2,8 @@
 
 > **Purpose**: This document gives AI agents (Claude, GPT, Copilot, etc.) a complete mental model of the codebase so they can navigate, modify, and extend it effectively.
 >
+> **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the next tasks, and the landmines — then use this file as the deep code map and `PRD.md` PART B §B13 as the backlog source of truth.
+>
 > **⚠️ 2026-07-04:** The GitHub repo is now **`ecryptoguru/lyrasec-ai`** (renamed from `lyrashieldai`). The product name is migrating LyraShield → **LyraSec AI**, but the in-code package scopes (`@lyrashield/*`) and engine env vars (`LYRASHIELD_*`) are intentionally **not** renamed yet (trademark clearance open) — keep using them in code. See **§17 (2026-07-04 Audit — Batch 1 changes)** at the end for the latest merged/in-flight changes; where it conflicts with older sections below, §17 wins.
 
 ---
