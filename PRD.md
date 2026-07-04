@@ -5100,3 +5100,56 @@ Every competitor matches *some* individual feature; the moat is the **combinatio
 
 **Batch 4 — Differentiated build (needs worker/engine; sequence within Sprints 4–9 + the §22 agent sprints):**
 - **SCA + secrets** (C4, v1) → **AI-builder-aware URL scan** (C3) → **launch-readiness gate + plain-language findings** (C1/C2) → **shareable report/badge** (C7) + **compliance-lite evidence** (C8) → **MCP server** (C5) + **prompt-injection defense** (C6) → **GitHub Action + reusable workflow diff-gate** (pull forward). Dogfood the Action on this repo (B7).
+
+## B13.7 Round-2 audit (2026-07-04, post-Batch-1) — net-new findings
+
+A second code-grounded pass over current `main` (post-merge), covering the never-audited tooling-commit config + the packages/worker/ops surfaces. All items below are NEW (not the Batch 1 fixes or the §B13.5 backlog). Severity P0/P1/P2; effort S/M/L. Honest-positioning guardrails apply.
+
+### R-A · Web app hardening (`apps/web/next.config.ts`)
+- **`[P0·S]` No HTTP security headers at all.** Add a `headers()` export: CSP, `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`. An AppSec product scoring an F on securityheaders.com is a credibility risk any prospect can check in 5s.
+- **`[P1·S]` `poweredByHeader: false`** (stop leaking `X-Powered-By: Next.js`) and **`reactStrictMode: true`** explicit.
+- **`[P1·S]` `images.remotePatterns`** scoped to `avatars.githubusercontent.com` + `lh3.googleusercontent.com` — imminent once OAuth avatars render.
+- **`[P2·S]` `output: "standalone"`** for the documented self-host/VPC (Phase 2) path.
+
+### R-B · Shared logger has zero secret/PII redaction (`packages/logger`) `[P1·M]`
+`log()` spreads `meta` straight into JSON with no redaction. Real call sites already log sensitive data: `auth.ts` logs the email-verification `url` (contains the token) in dev; `github.ts` logs raw GitHub error bodies. Add a recursive redaction pass masking sensitive key names (`token`, `secret`, `password`, `authorization`, `apiKey`, `accessToken`, `refreshToken`, `url`/`verificationUrl`, `vaultRef`, …) before stringify. Also wrap `JSON.stringify` in try/catch (circular refs) + truncate oversized payloads. High leverage — every package uses this primitive.
+
+### R-C · Schema integrity (`packages/db/prisma/schema.prisma`)
+- **`[P1·S]` `Report.scanId` is a dangling FK** — no `@relation` (every other `scanId` has one). Add `scan Scan? @relation(fields:[scanId], references:[id], onDelete: SetNull)`.
+- **`[P2·S]` `Finding` missing `@@index([projectId])`** — project-detail finding lists fall back to the `workspaceId` index. Add `@@index([projectId])` (or composite `[projectId, status, severity]`).
+- **`[P2·S]` `Policy.maxBudgetUsd`** has no floor — add a `CHECK (>= 0)` migration + a `PolicySchema` bound when policy CRUD lands (protects the budget-guard logic).
+
+### R-D · GitHub integration efficiency (`packages/integrations/src/github.ts`) `[P1·M]`
+- Installation tokens are **re-minted on every call** and the `expires_at` GitHub returns is **discarded** (only `token` is read). Cache per `installationId` (module Map for single-instance, Redis for multi) with TTL just under 1h. Critical before the worker/webhooks call this per-event.
+- `[P2·S]` add retry/backoff honoring `Retry-After` (GitHub 403/429/5xx); paginate `getAppInstallations()` (currently unpaginated → silently drops installations past page 1); swap the hand-rolled constant-time compare for `crypto.timingSafeEqual`.
+
+### R-E · Auth hardening (`packages/auth/src/auth.ts`)
+- **`[P1·S]` `trustedOrigins: [BETTER_AUTH_URL]`** is a single hardcoded origin → breaks staging/apex+www/preview. Support a comma-separated `ADDITIONAL_TRUSTED_ORIGINS`.
+- `[P2·S]` no Better-Auth-level `rateLimit` on sign-in/sign-up/forgot-password (confirm the Upstash layer covers auth routes specifically); rolling session has no **absolute** max lifetime (cap at 30–90d); make cookie `sameSite`/`secure` explicit; no account-deletion (GDPR) flow exists — decide/ticket it.
+
+### R-F · CI/CD hardening (`.github/workflows/ci.yml`)
+- **`[P1·S]` No least-privilege `permissions:` block** → workflow inherits broad default `GITHUB_TOKEN`. Add `permissions: { contents: read }` top-level; elevate per-job only where needed.
+- **`[P1·M]` No SCA / secret-scan on our own repo** (ironic for AppSec). Add a `security` job: `pnpm audit`/OSV-Scanner + gitleaks, SARIF-uploaded to the Security tab. (Overlaps the "dogfood" B7 goal; do this now with off-the-shelf tools, swap in LyraSec later.)
+- `[P1·S]` **No migration-drift check** (`prisma migrate status`/`diff --exit-code`) → schema.prisma edits without a migration pass CI silently. **No Turbo/Next build cache** in CI (add `actions/cache` for `.turbo` + `.next/cache` or Vercel Remote Cache). `[P2]` add `paths-ignore` for docs; consider a Node 20+24 matrix (engines says >=20, CI only runs 24).
+
+### R-G · Deployment-doc security (`docs/deployment/PRODUCTION_DEPLOYMENT.md`)
+- **`[P1]` Worker documented to run as `root`** (systemd `User=root`, root SSH) — huge blast radius for a process that shells out to Docker to run untrusted scan targets. Document a dedicated non-root user (note `docker` group ≈ root; prefer rootless/gVisor/Kata).
+- `[P1]` TLS is only in the checklist, not the copy-paste connection strings — put `?sslmode=require` / `rediss://` directly in the examples. `[P1]` No real backup/restore procedure — especially none for the **R2 evidence bucket** (the actual product data); add RPO/RTO + a tested restore + R2 versioning. `[P2]` SSH hardening (`PasswordAuthentication no`, source-restrict 22), and the doc has you SSH in as root which contradicts its own checklist.
+
+### R-H · Supply chain & lint
+- **`[P1·S]` Caret ranges on security-sensitive deps** (`better-auth`, `@prisma/client`, `pg`, `bullmq`) + no Renovate/Dependabot. Pin `better-auth` and Prisma exactly (as already done for `@prisma/client-runtime-utils`); add Dependabot/Renovate with grouped, reviewed updates.
+- `[P1·S]` **No `eslint-plugin-security`** (or `no-unsanitized`) despite the worker shelling out to Docker/Python — add at least to `apps/worker` + `packages/integrations`. `[P2]` document the pnpm `onlyBuiltDependencies` allowlist review process; confirm `minimumReleaseAge` is actually set (only the Exclude list is present → may be a no-op); sanity-check `lucide-react ^1.23` isn't a typosquat.
+
+### R-I · Config / correctness / a11y (mostly `[P2·S]`)
+- **`turbo.json` `globalEnv` is stale** — missing `NEXT_PUBLIC_APP_URL`, all `GITHUB_APP_*`, `UPSTASH_*`, `BREVO_*`, `S3_*`, `POLAR_*`, `RAZORPAY_*`, `SENTRY_*`, `DATABASE_DIRECT_URL`, `NODE_ENV` → wrong Turbo cache keys + Next "undeclared env" warnings + stale cached builds when env changes.
+- **`docker-compose.yml`**: no resource limits; bind ports to `127.0.0.1`; add a `# DEV ONLY` header + Redis `--requirepass`; pin image digests.
+- **`seed.ts`**: add `if (isProd) throw` guard — it upserts a predictable `demo@lyrashield.ai` **OWNER** account with `emailVerified: true`; must never run against prod.
+- **`packages/types`**: `.trim()` + control-char strip on names; regex/length bounds on `repoOwner`/`repoName` (`^[A-Za-z0-9_.-]+$`) and `.max()` on `branch`; add an enum-parity test (Zod schemas vs Prisma enums) so a migration can't silently desync them; add the missing input schemas (Policy/Finding-status/Integration/Schedule) as those routes land.
+- **`env.ts`**: `.refine()` `GITHUB_APP_PRIVATE_KEY` starts with `-----BEGIN` (catch the `\n`-escaping footgun at boot, not first-use).
+- **`apps/worker`**: use validated `@lyrashield/config` env (not raw `process.env`; add it as a dep); add `SIGTERM`/`SIGINT` graceful shutdown; wrap job DB access in `runWithWorkspaceContext` from day one.
+- **`globals.css`**: add `@media (prefers-reduced-motion: reduce)`; `color-scheme` for native controls; verify `--color-muted-foreground` (oklch 0.5 on 0.99) meets AA (used pervasively). **tsconfig**: consider `verbatimModuleSyntax`; delete the orphaned root `tsconfig.json` or wire it as the real base.
+- **`.gitignore`**: add `*.pem`/`*.key`/`*.crt`/`*.p12` (the deploy doc has you download a GitHub App `.pem`) and `.vercel`.
+- **`scoping.ts`** docstring on `setWorkspaceContext` is stale ("nothing calls this yet") — auto-activation shipped in #11; update it. **`(dashboard)/layout.tsx`**: parallelize the onboarding + membership queries.
+
+### R-J · Sprint mapping for round-2
+Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + Finding index), R-F (CI permissions + drift + cache), R-I quick wins (turbo globalEnv, seed guard, .gitignore, docker-compose, types bounds). Into **Batch 3**: R-D (token cache), R-E (auth hardening), R-H (supply chain + eslint-security), R-G (deploy-doc security). The **P0 security headers (R-A)** and **logger redaction (R-B)** are the two to pull to the very front — both are small, high-credibility, and independent of the unbuilt worker.
