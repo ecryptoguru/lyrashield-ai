@@ -157,10 +157,14 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 export function getInstallAppUrl(): string {
-  const appId = env.GITHUB_APP_ID
-  if (!appId) {
-    throw new Error("GITHUB_APP_ID not configured")
+  const slug = env.GITHUB_APP_SLUG
+  if (!slug) {
+    throw new Error("GITHUB_APP_SLUG not configured")
   }
-  const callbackUrl = `${env.NEXT_PUBLIC_APP_URL}/api/integrations/github/install/callback`
-  return `https://github.com/apps/${appId}/installations/new?state=${encodeURIComponent(callbackUrl)}`
+  // GitHub's public installation URL is keyed by the app SLUG, not the numeric
+  // app id (`https://github.com/apps/{slug}/installations/new`) — using the id
+  // produces a 404. The `state` parameter is set by the caller (POST
+  // /api/integrations/github/install sets it to the workspaceId, which the GET
+  // callback then reads back), so we intentionally do not embed one here.
+  return `https://github.com/apps/${slug}/installations/new`
 }
