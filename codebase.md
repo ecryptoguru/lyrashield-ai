@@ -69,8 +69,9 @@ The engine repo has been forked from [usestrix/strix](https://github.com/usestri
 | Auth | Better Auth | 1.6.x |
 | Validation | Zod | 4.x |
 | Styling | TailwindCSS (CSS-first config) | 4.3.x |
-| Icons | lucide-react | 0.469.x |
+| Icons | lucide-react | 1.23.x |
 | Monorepo | Turborepo + pnpm workspaces | 2.10.x / 11.6.x |
+| Testing | Vitest | 4.1.x |
 | Worker | tsx watch (stub mode) | — |
 | Job queue | BullMQ (planned Sprint 4) | 5.78.x |
 
@@ -79,6 +80,8 @@ The engine repo has been forked from [usestrix/strix](https://github.com/usestri
 - Prisma 7: uses `prisma.config.ts` with dotenv, requires `PrismaPg` driver adapter in client constructor (no datasource URL in schema)
 - Zod 4: use `z.url()` instead of `z.string().url()`, `z.email()` instead of `z.string().email()`
 - TailwindCSS 4: CSS-first config via `@theme` in `globals.css`, no `tailwind.config.js`
+- lucide-react v1.x: Brand icons (e.g. `Github`) removed — use `GithubIcon` from `@lyrashield/ui` instead
+- Vitest 4: Test files (`*.test.ts`) are excluded from `tsc --noEmit` typecheck via tsconfig excludes
 
 ---
 
@@ -158,7 +161,11 @@ lyrashield/
 │   ├── types/                                    # Shared Zod schemas + TS types
 │   │   └── src/index.ts          # All schema definitions + ApiResponse types
 │   ├── ui/                                       # Shared UI components (shadcn/ui base)
-│   ├── config/                                   # Shared tsconfig presets
+│   │   └── src/
+│   │       ├── github-icon.tsx   # GitHub SVG icon (lucide v1 removed brand icons)
+│   │       ├── utils.ts          # cn() class merge utility
+│   │       └── index.ts          # Re-exports
+│   ├── config/                                   # Shared tsconfig presets + env validation
 │   ├── logger/                                   # Structured JSON logger
 │   │   └── src/index.ts
 │   └── integrations/                             # External integrations (GitHub App)
@@ -356,6 +363,10 @@ pnpm build
 # Lint / typecheck
 pnpm lint
 pnpm typecheck
+
+# Test
+pnpm test                # Run all tests (vitest)
+pnpm test:watch          # Watch mode
 
 # Format
 pnpm format
@@ -646,7 +657,7 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 - **Error handling**: API routes return `{ success: false, error: { code, message } }` with appropriate HTTP status
 - **Database queries**: Always scope by `workspaceId` to prevent cross-tenant data access
 - **Soft deletes**: Targets use `deletedAt` field (filter with `deletedAt: null`)
-- **Icons**: Use `lucide-react` icons. Each nav item should have a unique icon
+- **Icons**: Use `lucide-react` icons. Each nav item should have a unique icon. Brand icons (e.g. GitHub) are not in lucide v1 — use `GithubIcon` from `@lyrashield/ui`
 - **Forms**: Labels must have `htmlFor`/`id` associations. First field should have `autoFocus`. Cancel button should clear errors
 - **Error states**: Client components should show error message + retry button on fetch failure
 - **Accessibility**: Add `aria-*` attributes to interactive elements (dropdowns, buttons with icons)
@@ -666,6 +677,9 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 8. **`notFound()` vs `redirect()`** — Use `notFound()` only when the resource truly doesn't exist. Use `redirect("/dashboard")` for authorization failures to prevent info leakage
 9. **Zod 4 breaking changes** — Use `z.url()` and `z.email()` instead of `z.string().url()` and `z.string().email()`
 10. **TypeScript 6** — `types: ["node"]` is required in tsconfig. `baseUrl` is deprecated, use `paths` in each package's tsconfig
+11. **lucide-react v1.x** — Brand icons (`Github`, `Twitter`, etc.) were removed. Use `GithubIcon` from `@lyrashield/ui` for GitHub icon
+12. **Test files excluded from typecheck** — `*.test.ts` files are excluded from `tsc --noEmit` via tsconfig `exclude` patterns. Tests are run separately via `vitest`
+13. **`*.tsbuildinfo` gitignored** — TypeScript incremental build info files are not tracked in git
 
 ---
 
@@ -710,10 +724,23 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 | `packages/integrations/src/index.ts` | Integrations package re-exports |
 | `packages/types/src/index.ts` | All Zod schemas + TS types |
 | `packages/types/src/index.test.ts` | Tests for OnboardingStep + UpdateOnboarding schemas |
+| `packages/ui/src/github-icon.tsx` | GitHub SVG icon (lucide v1 removed brand icons) |
+| `packages/ui/src/index.ts` | UI package exports (cn, GithubIcon) |
+| `packages/config/src/env.ts` | Zod env validation schema (fails fast on boot) |
+| `packages/config/src/env.test.ts` | Tests for env validation |
+| `packages/config/src/index.ts` | Config package exports |
+| `packages/db/src/extension.ts` | Prisma client extension (soft-delete, workspace scoping) |
+| `packages/db/src/extension.test.ts` | Tests for Prisma extension |
+| `apps/web/src/lib/rate-limit.ts` | Rate limiting logic (Upstash Redis + in-memory fallback) |
+| `apps/web/src/lib/rate-limit.test.ts` | Tests for rate limiting |
 | `packages/logger/src/index.ts` | Structured JSON logger |
 | `apps/web/next.config.ts` | Next.js config (transpile + external packages) |
 | `docker-compose.yml` | Postgres 16 + Redis 7 |
 | `turbo.json` | Turborepo task definitions |
 | `pnpm-workspace.yaml` | Workspace + build allowlist |
 | `.env.example` | All environment variables |
-| `PRD.md` | Full PRD + sprint backlog |
+| `PRD.md` | Full PRD + sprint backlog (single source of truth) |
+| `NEXT-STEPS.md` | Action plan + 19 founder decisions |
+| `product.md` | GTM/marketing layer |
+| `engine-CHANGES.md` | Apache-2.0 §4b modification log |
+| `engine-NOTICE.md` | Apache-2.0 NOTICE file |
