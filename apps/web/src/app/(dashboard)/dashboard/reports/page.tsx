@@ -1,15 +1,12 @@
-import { FileText } from "lucide-react"
-import { EmptyState } from "@lyrashield/ui"
+import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { ReportsClient } from "./reports-client"
 
-export default function ReportsPage() {
-  return (
-    <div>
-      <h1 className="mb-6 text-2xl font-bold">Reports</h1>
-      <EmptyState
-        icon={FileText}
-        title="Reports coming soon"
-        description="Shareable security reports are not yet built. You'll be able to generate and share compliance-ready reports from this page."
-      />
-    </div>
-  )
+export default async function ReportsPage() {
+  const session = await getCachedSession()
+  if (!session) return null
+
+  const workspaceId = await getCachedWorkspaceId(session.userId)
+  if (!workspaceId) return null
+
+  return <ReportsClient workspaceId={workspaceId} />
 }

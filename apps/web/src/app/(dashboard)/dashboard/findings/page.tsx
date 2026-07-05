@@ -1,15 +1,14 @@
-import { Bug } from "lucide-react"
-import { EmptyState } from "@lyrashield/ui"
+import { getCachedSession, getCachedWorkspaceId, getCachedFindings } from "@/lib/cache"
+import { FindingsClient, type FindingListItem } from "./findings-client"
 
-export default function FindingsPage() {
-  return (
-    <div>
-      <h1 className="mb-6 text-2xl font-bold">Findings</h1>
-      <EmptyState
-        icon={Bug}
-        title="Findings coming soon"
-        description="The findings pipeline is not yet built. Security vulnerabilities detected by scans will appear here."
-      />
-    </div>
-  )
+export default async function FindingsPage() {
+  const session = await getCachedSession()
+  if (!session) return null
+
+  const workspaceId = await getCachedWorkspaceId(session.userId)
+  if (!workspaceId) return null
+
+  const initialData = await getCachedFindings(workspaceId)
+
+  return <FindingsClient workspaceId={workspaceId} initialData={initialData as unknown as FindingListItem[]} />
 }

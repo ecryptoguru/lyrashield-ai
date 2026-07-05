@@ -53,3 +53,20 @@ export const getCachedOnboardingState = cache(async (userId: string) => {
     where: { userId },
   })
 })
+
+export const getCachedFindings = cache(async (workspaceId: string) => {
+  return prisma.finding.findMany({
+    where: { workspaceId, deletedAt: null },
+    orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
+    take: 50,
+    include: {
+      target: { select: { id: true, name: true, type: true } },
+      _count: {
+        select: {
+          evidence: { where: { redactionStatus: { not: "deleted" } } },
+          fixProposals: { where: { deletedAt: null } },
+        },
+      },
+    },
+  })
+})

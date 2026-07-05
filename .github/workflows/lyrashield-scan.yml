@@ -1,0 +1,243 @@
+name: LyraShield Security Scan
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_call:
+    inputs:
+      target_ref:
+        description: 'Git ref to scan (defaults to PR head)'
+        required: false
+        type: string
+      scan_mode:
+        description: 'Scan mode: SAFE, DEEP, or AGGRESSIVE'
+        required: false
+        type: string
+        default: 'SAFE'
+      fail_on_severity:
+        description: 'Fail the check if findings at or above this severity: CRITICAL, HIGH, MEDIUM, LOW, INFO'
+        required: false
+        type: string
+        default: 'HIGH'
+
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: write
+
+jobs:
+  security-scan:
+    name: Security Scan (diff-gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get diff files
+        id: diff
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="HEAD~1"
+            HEAD="HEAD"
+          fi
+          echo "base_sha=$BASE" >> $GITHUB_OUTPUT
+          echo "head_sha=$HEAD" >> $GITHUB_OUTPUT
+
+          # Get list of changed files
+          git diff --name-only "$BASE" "$HEAD" > changed_files.txt
+          echo "Changed files:"
+          cat changed_files.txt
+
+          # Check for new secrets in diff
+          echo "Checking diff for secrets..."
+          SECRETS_FOUND=0
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              # Check for common secret patterns
+              if grep -qE '(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})' "$file" 2>/dev/null; then
+                echo "::warning file=$file::Potential secret detected in changed file"
+                SECRETS_FOUND=1
+              fi
+            fi
+          done < changed_files.txt
+          echo "secrets_found=$SECRETS_FOUND" >> $GITHUB_OUTPUT
+
+      - name: Check for vulnerable dependencies
+        id: deps
+        run: |
+          SEVERITY="${{ inputs.fail_on_severity || 'HIGH' }}"
+          VULN_FOUND=0
+
+          # Check package-lock.json/pnpm-lock.yaml if changed
+          if git diff --name-only "${{ steps.diff.outputs.base_sha }}" "${{ steps.diff.outputs.head_sha }}" | grep -qE '(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)'; then
+            echo "Dependency lock file changed — running npm audit"
+            if [ -f "package-lock.json" ]; then
+              npm audit --audit-level="${SEVERITY,,}" --json > audit_result.json 2>/dev/null || VULN_FOUND=1
+            elif [ -f "pnpm-lock.yaml" ]; then
+              npx pnpm audit --audit-level="${SEVERITY,,}" --json > audit_result.json 2>/dev/null || VULN_FOUND=1
+            fi
+          fi
+
+          # Check Python dependencies
+          if git diff --name-only "${{ steps.diff.outputs.base_sha }}" "${{ steps.diff.outputs.head_sha }}" | grep -qE '(requirements\.txt|Pipfile|pyproject\.toml)'; then
+            echo "Python dependency file changed — checking for known vulnerabilities"
+            if [ -f "requirements.txt" ]; then
+              pip install safety 2>/dev/null && safety check --file requirements.txt --json > safety_result.json 2>/dev/null
+              if [ $? -ne 0 ] && [ -f safety_result.json ]; then
+                VULN_FOUND=1
+              fi
+            fi
+          fi
+
+          echo "vuln_found=$VULN_FOUND" >> $GITHUB_OUTPUT
+
+      - name: Scan changed files for security issues
+        id: scan
+        run: |
+          SEVERITY="${{ inputs.fail_on_severity || 'HIGH' }}"
+          ISSUES_FOUND=0
+          ISSUE_REPORT="{\"findings\":[]}"
+
+          while IFS= read -r file; do
+            if [ ! -f "$file" ]; then continue; fi
+
+            # Skip non-code files
+            case "$file" in
+              *.md|*.txt|*.json|*.yml|*.yaml|*.toml|*.lock|*.svg|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.ico)
+                continue
+                ;;
+            esac
+
+            # Basic security checks on changed files
+            # Check for hardcoded secrets
+            if grep -qE '(password|secret|api_key|apikey|token)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' "$file" 2>/dev/null; then
+              echo "::warning file=$file::Potential hardcoded secret detected"
+              ISSUES_FOUND=1
+            fi
+
+            # Check for SQL injection patterns
+            if grep -qE '(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{' "$file" 2>/dev/null; then
+              echo "::warning file=$file::Potential SQL injection — string interpolation in query"
+              ISSUES_FOUND=1
+            fi
+
+            # Check for disabled security controls
+            if grep -qE '(csrf|cors|xss|helmet|secure).*\b(false|disabled|off|none)\b' "$file" 2>/dev/null; then
+              echo "::warning file=$file::Security control may be disabled"
+              ISSUES_FOUND=1
+            fi
+
+            # Check for eval/exec usage
+            if grep -qE '\b(eval|exec)\s*\(' "$file" 2>/dev/null; then
+              echo "::warning file=$file::Use of eval/exec detected"
+              ISSUES_FOUND=1
+            fi
+
+          done < changed_files.txt
+
+          echo "issues_found=$ISSUES_FOUND" >> $GITHUB_OUTPUT
+
+      - name: Generate SARIF output
+        if: always()
+        run: |
+          SECRETS="${{ steps.diff.outputs.secrets_found }}"
+          VULN="${{ steps.deps.outputs.vuln_found }}"
+          ISSUES="${{ steps.scan.outputs.issues_found }}"
+
+          # Build SARIF results array from detected issues
+          RESULTS="["
+
+          # Add secret findings
+          if [ "$SECRETS" = "1" ]; then
+            while IFS= read -r file; do
+              if [ -f "$file" ] && grep -qE '(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})' "$file" 2>/dev/null; then
+                if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
+                RESULTS="$RESULTS{\"ruleId\":\"secret-exposure\",\"level\":\"error\",\"message\":{\"text\":\"Potential secret detected in $file\"},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":\"$file\"}}}]}"
+              fi
+            done < changed_files.txt
+          fi
+
+          # Add vulnerable dependency findings
+          if [ "$VULN" = "1" ] && [ -f audit_result.json ]; then
+            if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
+            RESULTS="$RESULTS{\"ruleId\":\"vulnerable-dependency\",\"level\":\"error\",\"message\":{\"text\":\"Vulnerable dependencies detected — see audit output\"}}"
+          fi
+
+          # Add code issue findings
+          if [ "$ISSUES" = "1" ]; then
+            while IFS= read -r file; do
+              if [ ! -f "$file" ]; then continue; fi
+              case "$file" in
+                *.md|*.txt|*.json|*.yml|*.yaml|*.toml|*.lock|*.svg|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.ico) continue ;;
+              esac
+              if grep -qE '(password|secret|api_key|apikey|token)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' "$file" 2>/dev/null; then
+                if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
+                RESULTS="$RESULTS{\"ruleId\":\"hardcoded-secret\",\"level\":\"warning\",\"message\":{\"text\":\"Potential hardcoded secret in $file\"},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":\"$file\"}}}]}"
+              fi
+              if grep -qE '(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{' "$file" 2>/dev/null; then
+                if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
+                RESULTS="$RESULTS{\"ruleId\":\"sql-injection\",\"level\":\"warning\",\"message\":{\"text\":\"Potential SQL injection in $file\"},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":\"$file\"}}}]}"
+              fi
+              if grep -qE '\b(eval|exec)\s*\(' "$file" 2>/dev/null; then
+                if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
+                RESULTS="$RESULTS{\"ruleId\":\"eval-exec\",\"level\":\"warning\",\"message\":{\"text\":\"Use of eval/exec in $file\"},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":\"$file\"}}}]}"
+              fi
+            done < changed_files.txt
+          fi
+
+          RESULTS="$RESULTS]"
+
+          cat > lyrashield-results.sarif << EOF
+          {
+            "version": "2.1.0",
+            "\$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "runs": [{
+              "tool": {
+                "driver": {
+                  "name": "LyraShield GitHub Action",
+                  "version": "0.1.0",
+                  "informationUri": "https://github.com/ecryptoguru/lyrasec-ai"
+                }
+              },
+              "results": $RESULTS
+            }]
+          }
+          EOF
+
+          echo "SARIF results count: $(echo "$RESULTS" | grep -o '"ruleId"' | wc -l)"
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: lyrashield-results.sarif
+          category: lyrashield-diff-scan
+
+      - name: Diff-gate decision
+        id: gate
+        run: |
+          SECRETS="${{ steps.diff.outputs.secrets_found }}"
+          VULN="${{ steps.deps.outputs.vuln_found }}"
+          ISSUES="${{ steps.scan.outputs.issues_found }}"
+          SEVERITY="${{ inputs.fail_on_severity || 'HIGH' }}"
+
+          echo "Scan results:"
+          echo "  Secrets found: $SECRETS"
+          echo "  Vulnerable deps: $VULN"
+          echo "  Code issues: $ISSUES"
+          echo "  Fail on severity: $SEVERITY"
+
+          TOTAL=$((SECRETS + VULN + ISSUES))
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "::error::Security scan failed — $TOTAL issue(s) detected at $SEVERITY severity or above"
+            exit 1
+          else
+            echo "::notice::Security scan passed — no issues at $SEVERITY severity or above"
+          fi

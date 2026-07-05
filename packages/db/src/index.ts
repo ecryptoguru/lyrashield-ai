@@ -79,3 +79,24 @@ export {
   type ListScansParams,
 } from "./scan-service"
 export { isValidTransition, VALID_TRANSITIONS } from "./scan-transitions"
+export {
+  listFindings,
+  getFinding,
+  updateFindingStatus,
+  markFalsePositive,
+  acceptRisk,
+  getFindingStats,
+  listFindingsByScan,
+  type ListFindingsParams,
+  type FindingStats,
+} from "./finding-service"
+export {
+  createReport,
+  generateShareToken,
+  revokeShareToken,
+  getReportByShareToken,
+  getShareableReport,
+  listReports,
+  type CreateReportParams,
+  type ShareableReport,
+} from "./report-service"

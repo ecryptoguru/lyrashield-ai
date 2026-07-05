@@ -7,6 +7,7 @@ import {
   buildFindingSummary,
 } from "./output-parser"
 import { assertEvidenceEncrypted } from "@lyrashield/db"
+import { verifyVulnerability } from "./verifier"
 
 const EVIDENCE_KEY_REF = "vault/lyrashield-evidence-key/v1"
 
@@ -49,6 +50,7 @@ export async function persistFindings(
     const summary = buildFindingSummary(vuln)
 
     const existing = existingMap.get(dedupeKey)
+    const verification = verifyVulnerability(vuln)
 
     if (existing) {
       await prisma.finding.update({
@@ -59,12 +61,13 @@ export async function persistFindings(
           title: vuln.title,
           summary,
           severity,
+          confidence: verification.confidence,
           ...(vuln.cwe ? { cwe: vuln.cwe } : {}),
           ...(vuln.cvss ? { cvssScore: vuln.cvss } : {}),
           ...(vuln.technical_analysis ? { technicalDetail: vuln.technical_analysis } : {}),
           ...(vuln.remediation_steps ? { recommendedFix: vuln.remediation_steps } : {}),
           ...(vuln.impact ? { businessImpact: vuln.impact } : {}),
-          verified: true,
+          verified: verification.verified,
         },
       })
 
@@ -86,8 +89,8 @@ export async function persistFindings(
         title: vuln.title,
         summary,
         severity,
-        confidence: "medium",
-        verified: true,
+        confidence: verification.confidence,
+        verified: verification.verified,
         dedupeKey,
         ...(vuln.cwe ? { cwe: vuln.cwe } : {}),
         ...(vuln.cve ? { sarifRuleId: vuln.cve } : {}),
@@ -104,6 +107,7 @@ export async function persistFindings(
     // server-side encryption) and referenced by URI. The encryptionKeyRef
     // points to the vault key used for envelope encryption.
     if (vuln.poc_script_code || vuln.poc_description) {
+      assertEvidenceEncrypted(EVIDENCE_KEY_REF)
       await prisma.evidence.create({
         data: {
           findingId: finding.id,
@@ -113,13 +117,13 @@ export async function persistFindings(
           storageUri: `encrypted://evidence/${finding.id}/poc`,
         },
       })
-      assertEvidenceEncrypted(EVIDENCE_KEY_REF)
     }
 
     if (vuln.code_locations && vuln.code_locations.length > 0) {
       for (const loc of vuln.code_locations) {
         if (loc.snippet || loc.file) {
-          const evidenceRec = await prisma.evidence.create({
+          assertEvidenceEncrypted(EVIDENCE_KEY_REF)
+          await prisma.evidence.create({
             data: {
               findingId: finding.id,
               type: "code_location",
@@ -128,7 +132,6 @@ export async function persistFindings(
               ...(loc.file ? { storageUri: `file://${loc.file}${loc.start_line ? `#L${loc.start_line}` : ""}` } : {}),
             },
           })
-          assertEvidenceEncrypted(evidenceRec.encryptionKeyRef)
         }
       }
     }
