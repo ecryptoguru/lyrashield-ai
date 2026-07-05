@@ -1,4 +1,10 @@
 async function main() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Seed script must NOT run in production — it creates a predictable demo@lyrashield.ai OWNER account."
+    )
+  }
+
   const { PrismaClient } = await import("../src/generated/prisma")
   const { PrismaPg } = await import("@prisma/adapter-pg")
 

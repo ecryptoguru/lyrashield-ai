@@ -13,6 +13,7 @@
     "bullmq": "^5.78.0",
     "ioredis": "^5.4.0",
     "@lyrashield/db": "workspace:*",
+    "@lyrashield/config": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*"
   },

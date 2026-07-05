@@ -51,7 +51,6 @@ export function createAppJWT(): string {
  */
 async function githubFetch(url: string, init: RequestInit, retries = 3): Promise<Response> {
   let attempt = 0
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const res = await fetch(url, init)
     if (res.ok || attempt >= retries) return res

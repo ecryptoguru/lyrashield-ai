@@ -79,7 +79,7 @@ export type FindingStatus = z.infer<typeof FindingStatusSchema>
 export type IntegrationType = z.infer<typeof IntegrationTypeSchema>
 
 export const CreateWorkspaceSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(100).trim().refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
   mode: WorkspaceModeSchema.default("VIBE"),
 })
 
@@ -87,7 +87,7 @@ export type CreateWorkspaceInput = z.infer<typeof CreateWorkspaceSchema>
 
 export const CreateProjectSchema = z.object({
   workspaceId: z.string().min(1),
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(100).trim().refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
   description: z.string().max(500).optional(),
 })
 
@@ -97,11 +97,11 @@ export const CreateRepoTargetSchema = z.object({
   workspaceId: z.string().min(1),
   projectId: z.string().optional(),
   type: z.literal("REPO"),
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(100).trim().refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
   repoProvider: z.string().default("github"),
-  repoOwner: z.string().min(1),
-  repoName: z.string().min(1),
-  branch: z.string().optional(),
+  repoOwner: z.string().min(1).max(100).regex(/^[A-Za-z0-9_.-]+$/, "Invalid repo owner"),
+  repoName: z.string().min(1).max(100).regex(/^[A-Za-z0-9_.-]+$/, "Invalid repo name"),
+  branch: z.string().max(255).optional(),
   environment: TargetEnvironmentSchema.default("STAGING"),
 })
 
@@ -109,7 +109,7 @@ export const CreateUrlTargetSchema = z.object({
   workspaceId: z.string().min(1),
   projectId: z.string().optional(),
   type: z.enum(["WEB_APP", "API"]),
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(100).trim().refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
   url: z.url(),
   environment: TargetEnvironmentSchema.default("STAGING"),
 })
@@ -229,4 +229,27 @@ export interface ScanCostControls {
   actualCostCents?: number
   determinismMode?: DeterminismMode
   sarifUri?: string
+}
+
+// ── Scan queue shared types ───────────────────────────────────────────
+// Single source of truth for the BullMQ job payload exchanged between
+// apps/web (producer) and apps/worker (consumer). Both import from here
+// to prevent drift.
+
+export const SCAN_QUEUE_NAME = "scans"
+
+export interface ScanJobData {
+  scanId: string
+  workspaceId: string
+  targetId: string
+  goal: string
+  mode: string
+  policyId?: string
+}
+
+export type ScanJobResult = {
+  status: "completed" | "failed"
+  summary?: string
+  errorCategory?: string
+  errorMessage?: string
 }

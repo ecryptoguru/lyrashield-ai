@@ -53,11 +53,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Copy only the standalone server output + static assets
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=builder /app/apps/web/public ./apps/web/public
 
 # Copy prisma schema + migrations for runtime
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
 COPY --from=builder /app/packages/db/package.json ./packages/db/package.json
+
+# NOTE: The worker runs from the builder stage (see docker-compose.yml worker service)
+# because workspace packages export TypeScript source (main: "./src/index.ts")
+# which requires tsx at runtime. A dedicated slim worker stage will be added
+# once shared packages are compiled to JS dist output.
 
 EXPOSE 3000
 

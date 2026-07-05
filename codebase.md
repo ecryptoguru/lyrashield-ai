@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the next tasks, and the landmines — then use this file as the deep code map and `PRD.md` PART B §B13 as the backlog source of truth.
 >
-> **⚠️ 2026-07-05:** The GitHub repo is now **`ecryptoguru/lyrasec-ai`** (renamed from `lyrashieldai`). The product name is migrating LyraShield → **LyraSec AI**, but the in-code package scopes (`@lyrashield/*`) and engine env vars (`LYRASHIELD_*`) are intentionally **not** renamed yet (trademark clearance open) — keep using them in code. See **§17 (2026-07-04 Audit — Batch 1)**, **§18 (2026-07-05 UI/UX Premium Upgrade + Deep Code Review)**, and **§19 (2026-07-05 Batch 2 Remainder + Batch 3 Design Contracts + RLS + Deep Code Review)** at the end for the latest merged changes; where they conflict with older sections below, §17/§18/§19 win.
+> **⚠️ 2026-07-05:** The GitHub repo is now **`ecryptoguru/lyrasec-ai`** (renamed from `lyrashieldai`). The product name is migrating LyraShield → **LyraSec AI**, but the in-code package scopes (`@lyrashield/*`) and engine env vars (`LYRASHIELD_*`) are intentionally **not** renamed yet (trademark clearance open) — keep using them in code. See **§17 (2026-07-04 Audit — Batch 1)**, **§18 (2026-07-05 UI/UX Premium Upgrade + Deep Code Review)**, **§19 (2026-07-05 Batch 2 Remainder + Batch 3 Design Contracts + RLS + Deep Code Review)**, **§20 (2026-07-05 Round-2 Remaining Items — ALL COMPLETED)**, and **§21 (2026-07-05 Sprint 4 — Scan Orchestrator + Queue + Review Fixes)** at the end for the latest merged changes; where they conflict with older sections below, §17/§18/§19/§20/§21 win.
 
 ---
 
@@ -155,8 +155,10 @@ lyrashield/
 │   │   │   ├── cache.ts               # React cache() wrappers (getCachedSession/getCachedWorkspaceId/getCachedWorkspaces/getCachedProjects/getCachedDashboardStats/getCachedOnboardingState)
 │   │   │   ├── ssrf.ts                # SSRF protection (DNS-resolution-aware URL validation)
 │   │   │   ├── ssrf.test.ts           # SSRF tests (35 tests)
-│   │   │   ├── rate-limit.ts          # Rate limiting middleware (Upstash Redis)
-│   │   │   └── rate-limit.test.ts     # Rate limit tests (8 tests)
+│   │   │   ├── rate-limit.ts          # Rate limiting logic (Upstash Redis + in-memory fallback)
+│   │   │   ├── rate-limit.test.ts     # Rate limit tests (8 tests)
+│   │   │   └── csp.test.ts            # CSP nonce proxy tests (14 tests)
+│   │   ├── proxy.ts                       # Next.js proxy: rate limiting + nonce-based CSP (renamed from middleware.ts)
 │   │   ├── next.config.ts                        # output: standalone + transpilePackages + serverExternalPackages
 │   │   └── package.json
 │   └── worker/                                   # Worker service (stub for Sprint 4)
@@ -496,7 +498,7 @@ docker compose down       # Stop services
 ### Pre-Sprint-3 Hardening (PRD §B1.4 + §B4) — ✅ Complete
 - **Env validation**: Zod schema in `@lyrashield/config` — fails fast on missing/invalid `BETTER_AUTH_SECRET`, `DATABASE_URL`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`
 - **Email verification**: `requireEmailVerification: true` in `auth.ts`; Brevo integration for production, console.log in dev; `sendOnSignUp: true`
-- **Rate limiting**: `middleware.ts` — auth endpoints 5/min per IP, general API 30/min per IP; Upstash Redis in prod, in-memory fallback in dev
+- **Rate limiting**: `proxy.ts` (renamed from `middleware.ts` per Next.js 16) — auth endpoints 5/min per IP, general API 30/min per IP; Upstash Redis in prod, in-memory fallback in dev
 - **Schema retrofits (§B4)**:
   - Finding dedupe key: `@@unique([targetId, dedupeKey])` (was `[workspaceId, dedupeKey]`)
   - ApiKey model: hashedKey, prefix, scopes, expiresAt, revokedAt, lastUsedAt
@@ -785,7 +787,7 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 - `transpilePackages`: All `@lyrashield/*` packages
 - `serverExternalPackages`: `@prisma/client`, `@prisma/adapter-pg`, `@prisma/client-runtime-utils`
 
-**Middleware** (`apps/web/src/middleware.ts`) — Rate limiting on API routes:
+**Proxy** (`apps/web/src/proxy.ts`) — Rate limiting + nonce-based CSP on every request:
 - Auth endpoints (`/api/auth/*`): 5 requests/min per IP
 - General API (`/api/*`): 30 requests/min per IP
 - Uses Upstash Redis in production, in-memory Map fallback in dev
@@ -854,7 +856,7 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 | `apps/web/src/app/api/integrations/github/repos/route.ts` | GET list installation repos |
 | `apps/web/src/app/api/webhooks/github/route.ts` | POST GitHub webhook handler (signature verification) |
 | `apps/web/src/lib/api-auth.ts` | authErrorResponse helper for API routes |
-| `apps/web/src/middleware.ts` | Rate limiting middleware (auth 5/min, API 30/min) |
+| `apps/web/src/proxy.ts` | Rate limiting + nonce-based CSP proxy (auth 5/min, API 30/min, per-request nonce) |
 | `apps/web/src/components/sidebar.tsx` | Dashboard sidebar navigation (with Integrations) |
 | `apps/web/src/components/workspace-switcher.tsx` | Workspace dropdown switcher |
 | `packages/auth/src/auth.ts` | Better Auth config |
@@ -890,6 +892,7 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 | `packages/db/src/rls.test.ts` | RLS helper tests (9 tests) |
 | `apps/web/src/lib/rate-limit.ts` | Rate limiting logic (Upstash Redis + in-memory fallback) |
 | `apps/web/src/lib/rate-limit.test.ts` | Tests for rate limiting |
+| `apps/web/src/lib/csp.test.ts` | CSP nonce proxy tests (14 tests: nonce uniqueness, directives, 429 responses) |
 | `packages/logger/src/index.ts` | Structured JSON logger |
 | `apps/web/next.config.ts` | Next.js config (output: standalone, transpile + external packages) |
 | `docker-compose.yml` | Postgres 16 + Redis 7 (env-interpolated secrets, Redis password) |
@@ -920,12 +923,210 @@ A code-grounded deep audit produced these fixes, all now merged to `main`. Where
 - **CI (`.github/workflows/ci.yml`)** — adds a `pnpm test` step, reads pnpm from `packageManager`, adds `NEXT_PUBLIC_APP_URL` (landed via Codex, PR #14).
 
 **Round-2 hardening (merged; findings in PRD §B13.7):**
-- **Web security headers (`apps/web/next.config.ts`)** — `headers()` adds HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy; `poweredByHeader:false`, `reactStrictMode:true`, `images.remotePatterns` (GitHub/Google avatars). (Full nonce-based **CSP** still deferred.)
+- **Web security headers (`apps/web/next.config.ts`)** — `headers()` adds HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy; `poweredByHeader:false`, `reactStrictMode:true`, `images.remotePatterns` (GitHub/Google avatars). **Nonce-based CSP implemented in `proxy.ts`** (per-request nonce, `'strict-dynamic'`, `connect-src 'self'`, `blob:` in `img-src`).
 - **Logger (`packages/logger`)** — now **redacts** sensitive keys (password/secret/token/authorization/apikey/privatekey/cookie/credential/vaultref/verificationurl/otp), captures `Error`, breaks circular refs, truncates oversized output. Use it freely; still never log raw secrets deliberately.
 - **GitHub integration (`packages/integrations/src/github.ts`)** — installation-token **caching** (per `installationId`, using `expires_at`), retry/backoff (`githubFetch`, honors `Retry-After`), paginated `getAppInstallations`, `crypto.timingSafeEqual`.
 - **Auth (`packages/auth/src/auth.ts`)** — `trustedOrigins` = `BETTER_AUTH_URL` + `ADDITIONAL_TRUSTED_ORIGINS` (comma-separated).
 - **Dependabot** (`.github/dependabot.yml`) — weekly npm + github-actions; majors excluded from auto-PRs.
 
-**🔴 KNOWN ISSUE — Prisma migration drift (latent P0 on deploy):** only 2 migrations exist and `schema.prisma` is far ahead (tables `ApiKey`/`OnboardingState`/`Retest` + many columns/indexes/constraints were applied via `db push`, never migrated). `prisma migrate deploy` on a **fresh** DB (CI/prod) yields a DB that mismatches the generated client. **Use `prisma db push` for local dev until a reconciling migration is generated** (`prisma migrate dev`) and a CI drift-check is added. See PRD §B13.7 R-C/R-F.
+**✅ RESOLVED — Prisma migration drift reconciled (2026-07-05):** A reconciling migration (`20260705095000_batch3_missing_tables_columns`) now creates all missing tables (`ApiKey`, `Retest`, `OnboardingState`) and adds all missing columns/indexes/constraints. CI runs `prisma migrate diff --exit-code` to catch future drift. See §20 for details.
 
-Remaining audit backlog (Batches 2–4, plus the round-2 Codex items: migration-drift reconciliation, CI hardening, supply-chain pinning + `eslint-plugin-security`, CSP) is in **PRD PART B §B13.5 / §B13.6 / §B13.7** — the PRD is the single source of truth.
+Remaining audit backlog (Batches 2–4) is in **PRD PART B §B13.5 / §B13.6 / §B13.7** — the PRD is the single source of truth. Round-2 handoff items (migration drift, CI hardening, supply-chain, CSP) are all **DONE** — see §20.
+
+---
+
+## 20. 2026-07-05 Round-2 Remaining Items — ALL COMPLETED
+
+The four Codex handoff items from PRD §B13.7 are now done. All changes verified: `pnpm lint` ✅, `pnpm typecheck` ✅, `pnpm test` (211 tests, 12 files) ✅, `pnpm build` ✅.
+
+### 20.1 Prisma Migration-Drift Reconciliation
+
+- **Reconciling migration** `20260705095000_batch3_missing_tables_columns` creates all missing tables (`ApiKey`, `Retest`, `OnboardingState`) and adds all missing columns/indexes/constraints that were applied via `db push` but never captured in a migration.
+- Migration runs **before** the RLS migration (`20260705100000`) which references `ApiKey` and `Retest` tables.
+- **CI drift check** added: `prisma migrate diff --from-migrations ./prisma/migrations --to-schema-datamodel ./prisma/schema.prisma --exit-code` — fails CI if schema and migrations diverge.
+- **Verify before prod deploy:** `prisma migrate reset && prisma migrate deploy` should reproduce `schema.prisma` exactly.
+
+### 20.2 CI Hardening
+
+- **Least-privilege `permissions:`** — `contents: read` at workflow level; `security-events: write` only on the security job.
+- **Security job** — separate job running `pnpm audit` (advisory, `continue-on-error: true`) + **gitleaks** secret scan.
+- **Migration drift check** — runs after `db:generate` and before `migrate deploy`.
+- **Turbo build cache** — `actions/cache` for `.turbo` + `next` cache.
+
+### 20.3 Supply-Chain Hardening
+
+- **`eslint-plugin-security`** added to root `devDependencies` with 6 active rules: `detect-non-literal-regexp`, `detect-non-literal-fs-filename`, `detect-unsafe-regex`, `detect-buffer-noassert`, `detect-pseudoRandomBytes`, `detect-object-injection` (disabled — false positives in TypeScript).
+- **Exact version pinning:** `better-auth` → `1.6.23`, `@prisma/client`/`prisma`/`@prisma/adapter-pg` → `7.8.0`.
+- **Lockfile refreshed** after pinning.
+
+### 20.4 Nonce-Based CSP
+
+- **`middleware.ts` → `proxy.ts`** — renamed per Next.js 16 convention (middleware is deprecated; proxy is the new entry point). Export renamed `middleware` → `proxy`.
+- **Per-request nonce** generated via `crypto.randomUUID()` → base64, set on `Content-Security-Policy` header with `'strict-dynamic'` + `'nonce-<value>'`.
+- **CSP directives:** `default-src 'self'`, `script-src 'self' 'nonce-<nonce>' 'strict-dynamic'` (+ `'unsafe-eval'` in dev), `style-src 'self' 'unsafe-inline'`, `img-src 'self' blob: data: https://avatars.githubusercontent.com https://lh3.googleusercontent.com`, `connect-src 'self'` (+ `ws:` in dev), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`, `upgrade-insecure-requests`.
+- **`x-nonce` request header** set for server components; root layout calls `headers()` to force dynamic rendering.
+- **CSP on all responses** — including 429 rate-limited responses (both API and auth routes).
+- **14 CSP tests** in `apps/web/src/lib/csp.test.ts` (nonce uniqueness, CSP on API/non-API routes, all directives, 429 responses, x-nonce forwarding).
+
+### 20.5 Deep Code Review (post-implementation)
+
+- **Migration SQL** cross-referenced against `schema.prisma` — all tables, columns, indexes, constraints, and FKs match. `SOFT_DELETE_MODELS` (19) and `WORKSPACE_SCOPED_MODELS` (17) verified against schema columns.
+- **RLS migration** correctly references tables created in the reconciling migration (ordering verified).
+- **CI workflow** reviewed — permissions, security job, drift check, build cache all correct.
+- **ESLint config** reviewed — `detect-object-injection` disabled for TypeScript false positives, 5 other rules active as warnings.
+- **CSP** improved during review: added `connect-src 'self'` (was missing), `blob:` in `img-src` (for Next.js image processing), `ws:` in dev (for HMR).
+- **Test count:** 211 (up from 197 — 14 CSP tests added).
+
+### 20.6 R-G / R-I / R-E Quick Wins (2026-07-05)
+
+**R-I: Config / correctness / a11y:**
+- **`turbo.json` `globalEnv`** expanded from 8 → 35 env vars (added `NODE_ENV`, `DATABASE_DIRECT_URL`, `UPSTASH_*`, `ADDITIONAL_TRUSTED_ORIGINS`, `GITHUB_APP_*`, `GITHUB_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_URL`, `LYRASHIELD_*`, `LLM_API_KEY`, `S3_*`, `BREVO_*`, `EMAIL_FROM`, `POLAR_*`, `RAZORPAY_*`, `SENTRY_*`).
+- **`seed.ts`** production guard — throws if `NODE_ENV=production` (prevents creating predictable demo OWNER account on prod DB).
+- **`.gitignore`** — added `*.pem`, `*.key`, `*.crt`, `*.p12` (secrets/keys), `.vercel` (build artifacts).
+- **`scoping.ts`** docstring on `setWorkspaceContext` updated — was stale ("nothing calls this yet"), now reflects auto-scoping is active + RLS is implemented.
+- **`globals.css`** — added `color-scheme: light/dark` (native controls/scrollbars match theme) + `@media (prefers-reduced-motion: reduce)` (accessibility — disables animations/transitions).
+- **`env.ts`** — added `.refine()` on `GITHUB_APP_PRIVATE_KEY` to catch `\n`-escaping footgun at boot (must contain `-----BEGIN`).
+- **`docker-compose.yml`** — all ports bound to `127.0.0.1` (was `0.0.0.0`), memory limits added (Postgres 512M, Redis 256M), `# DEV ONLY` header.
+- **`(dashboard)/layout.tsx`** — parallelized onboarding + workspaces queries with `Promise.all` (was sequential waterfall).
+
+**R-E: Auth hardening:**
+- **`auth.ts`** — added `cookieCache` (5min maxAge, reduces DB hits), `useSecureCookies: isProd`, explicit `sameSite: "lax"` + `secure: isProd` on `session_token` cookie `attributes`.
+
+**R-G: Deployment doc security (`docs/deployment/PRODUCTION_DEPLOYMENT.md`):**
+- **Non-root worker** — `useradd lyrashield`, `usermod -aG docker`, systemd `User=lyrashield`, `WorkingDirectory=/home/lyrashield/...`, CI deploy `username: lyrashield`.
+- **SSH hardening** — `PasswordAuthentication no`, optional source-IP restriction via `ufw allow from <ip> to any port 22`.
+- **TLS in connection strings** — all Postgres examples include `?sslmode=require`, Redis shows `rediss://` format with explicit URL example.
+- **Backup & Restore** — new section: Postgres `pg_dump`/`pg_restore` commands + R2 object versioning enablement via `wrangler` + RPO/RTO numbers.
+- **Security checklist** — 5 new items (non-root worker, SSH key-only, SSH source-IP, R2 versioning, DB backups).
+
+### 20.7 Deferred R-I Items (2026-07-05)
+
+**Types validation (`packages/types/src/index.ts`):**
+- `.trim()` + control-char strip (`/[\u0000-\u001F\u007F]/`) on all name fields (CreateWorkspace, CreateProject, CreateRepoTarget, CreateUrlTarget).
+- Regex bounds on `repoOwner`/`repoName` (`^[A-Za-z0-9_.-]+$`), `.max(255)` on `branch`.
+- 11 enum-parity tests (Zod schemas vs Prisma enums) — catches migration drift at test time.
+- 17 input validation tests (trim, control chars, length bounds, regex, URL validation).
+- 28 new tests total (239 overall, up from 211).
+
+**Worker hardening (`apps/worker/src/index.ts`):**
+- Now imports validated `env` from `@lyrashield/config` (added as dep) instead of raw `process.env`.
+- `SIGTERM`/`SIGINT` graceful shutdown handlers with idempotent guard.
+- `runWithWorkspaceContext` wrapping implemented in Sprint 4 — `processScanJob` wraps all DB queries in `runWithWorkspaceContext(workspaceId, ...)` (see §21.7).
+
+**tsconfig evaluation:**
+- `verbatimModuleSyntax` evaluated — requires `"type": "module"` in all package.json files (breaking change, deferred to pre-launch).
+- Root `tsconfig.json` is not orphaned (extended by `packages/config/tsconfig.json` → `library.json` chain); left as-is.
+
+---
+
+## 21. Sprint 4 (Scan Orchestrator + Queue) + Review Fixes (2026-07-05)
+
+### 21.1 Scan Queue (BullMQ)
+
+- **`apps/web/src/lib/queue.ts`** — scan job producer. `enqueueScanJob()` adds jobs to the `scans` queue with default options (3 attempts, exponential backoff, 100 complete / 200 fail retention). Imports `SCAN_QUEUE_NAME` and `ScanJobData` from `@lyrashield/types` (single source of truth).
+- **`apps/worker/src/queue.ts`** — worker-side queue utilities. `getScanQueue()`, `getScanQueueEvents()`, `enqueueScan()`. Re-exports `SCAN_QUEUE_NAME`, `ScanJobData`, `ScanJobResult` from `@lyrashield/types`.
+- **`apps/worker/src/types.ts`** — thin re-export layer: `export { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "@lyrashield/types"`.
+- **`packages/types/src/index.ts`** — **single source of truth** for `SCAN_QUEUE_NAME`, `ScanJobData` (scanId, workspaceId, targetId, goal, mode, policyId?), `ScanJobResult` (status, summary?, errorCategory?, errorMessage?). Both web and worker import from here to prevent drift.
+
+### 21.2 Preflight Checks (`apps/worker/src/jobs/preflight.job.ts`)
+
+- **`runPreflight(scanId, targetId)`** — validates target existence, URL/repo configuration, and no concurrent active scans. Returns `{ passed, checks[], errorCategory?, errorMessage? }`.
+- **Checks:** `target_exists` (target in DB, not soft-deleted), `url_configured` / `repo_configured` (depending on target type), `no_concurrent_scan` (no other scan in QUEUED/PREFLIGHT/RUNNING/VERIFYING for same target).
+- Emits `PREFLIGHT` scan event via `addScanEvent`.
+- **7 tests** in `preflight.job.test.ts` (all target types, missing target, missing URL/repo, concurrent scan).
+
+### 21.3 Engine Runner (`apps/worker/src/engine/runner.ts`)
+
+- **`runEngine(scanId, target, config)`** — orchestrates engine execution:
+  1. Creates temp workspace dir (`lyrashield_runs/{scanId}`)
+  2. Builds engine command via `buildEngineCommand()`
+  3. Spawns child process with filtered env vars (`buildEngineEnv()`)
+  4. Captures stdout/stderr with 10MB buffer truncation
+  5. 30-minute timeout with SIGTERM → SIGKILL escalation
+  6. Emits scan events for RUNNING, output capture, completion
+  7. Reads `vulnerabilities.json` + `run.json` from output dir
+  8. Returns `{ exitCode, output: ParsedScanOutput }`
+- **`interpretExitCode(code)`** — maps engine exit codes: 0/1 → COMPLETED (SUCCESS), 2 → COMPLETED (VULNERABILITIES_FOUND), 3+ → FAILED (ENGINE_ERROR/CONFIG_ERROR/LLM_ERROR).
+- **`cleanupEngineWorkspace(dir)`** — removes temp workspace (best-effort, non-fatal).
+- **6 tests** in `runner.test.ts` (exit code mapping).
+
+### 21.4 Command Builder (`apps/worker/src/engine/command-builder.ts`)
+
+- **`buildEngineCommand(config)`** — constructs CLI args for the scan engine. Maps `TargetType` (REPO → `--repo`, WEB_APP/API → `--url`, IAC → `--url`) and `ScanMode` (SAFE → `quick`, STANDARD → `standard`, DEEP → `deep`, CUSTOM → `custom`). Adds optional `--instruction` and `--max-budget-usd` flags.
+- **14 tests** in `command-builder.test.ts`.
+
+### 21.5 Output Parser (`apps/worker/src/engine/output-parser.ts`)
+
+- **`parseVulnerabilitiesJson(content)`** — validates and parses `vulnerabilities.json` as `EngineVulnerability[]`.
+- **`parseRunJson(content)`** — parses `run.json` as `EngineRunRecord`.
+- **`parseEngineOutput(vulns, run)`** — combines into `ParsedScanOutput` with summary and finding count.
+- **`mapSeverity(severity)`** — normalizes severity strings to CRITICAL/HIGH/MEDIUM/LOW/INFO.
+- **`generateDedupeKey(vuln, targetId)`** — creates deterministic fingerprint from targetId + CWE + endpoint + method + title.
+- **`buildFindingSummary(vuln)`** — concise one-line summary.
+- **21 tests** in `output-parser.test.ts`.
+
+### 21.6 Finding Persister (`apps/worker/src/engine/finding-persister.ts`)
+
+- **`persistFindings(params)`** — persists engine vulnerabilities as `Finding` records:
+  - **Batch dedupe:** single `findMany` with `dedupeKey: { in: dedupeKeys }` instead of N individual `findFirst` calls (reduces N+1 to 1 query).
+  - Updates existing findings (lastSeenAt, severity, details) or creates new ones.
+  - **Evidence encryption:** PoC evidence stored as `encrypted://evidence/{findingId}/poc` URI (NOT plaintext base64 data URIs). `assertEvidenceEncrypted()` enforces that `encryptionKeyRef` is non-empty before storage.
+  - Code location evidence stored with `file://` URI + `encryptionKeyRef`.
+
+### 21.7 Scan Job Processor (`apps/worker/src/jobs/run-scan.job.ts`)
+
+- **`processScanJob(job)`** — main entry point for BullMQ worker:
+  1. Wraps entire job in `runWithWorkspaceContext(workspaceId, ...)` — ensures all DB queries are workspace-scoped via AsyncLocalStorage (defense-in-depth against cross-tenant leaks).
+  2. Updates scan status → PREFLIGHT → runs preflight → RUNNING → runs engine → VERIFYING → persists findings → COMPLETED/FAILED.
+  3. Error handling: catches all errors, updates scan to FAILED with errorCategory/errorMessage.
+  4. Cleanup: always runs `cleanupEngineWorkspace()` in `finally` block.
+- **7 tests** in `run-scan.job.test.ts` (success, preflight failure, target disappearance, engine error, unexpected error, cleanup, finding persistence).
+
+### 21.8 Scan API Routes
+
+- **`POST /api/scans`** — creates scan, validates target/policy, checks no concurrent scan, enqueues BullMQ job, writes audit log. Returns 201 with scan record.
+- **`GET /api/scans`** — lists scans with cursor-based pagination, filters by workspaceId/targetId/status. Uses `PERMISSIONS.scan.view` (not `scan.create`) so VIEWER/AUDITOR roles can list scans.
+- **`GET /api/scans/[id]`** — fetches scan with events. Uses `PERMISSIONS.scan.view`.
+- **`POST /api/scans/[id]`** (cancel) — uses `PERMISSIONS.scan.cancel`, validates scan is in a cancellable state.
+- **12 tests** in `route.test.ts` (POST validation, target/policy lookup, concurrent scan, enqueue success/failure, auth; GET pagination, filtering, auth).
+
+### 21.9 Scan Detail UI (`apps/web/src/app/(dashboard)/dashboard/scans/[id]/scan-detail-client.tsx`)
+
+- Client component with summary, target info, severity counts, findings list, events log.
+- **Client-side polling:** uses `fetch("/api/scans/{id}")` every 5s for active scans (QUEUED/PREFLIGHT/RUNNING/VERIFYING/REQUIRES_APPROVAL). Updates only local `scan` state — avoids full server re-renders from `router.refresh()`.
+
+### 21.10 Worker Index (`apps/worker/src/index.ts`)
+
+- BullMQ `Worker` instance processing `scans` queue.
+- Imports validated `env` from `@lyrashield/config` (not raw `process.env`).
+- `SIGTERM`/`SIGINT` graceful shutdown handlers with idempotent guard.
+
+### 21.11 Scan Service (`packages/db/src/scan-service.ts`)
+
+- `createScan()` — creates scan record + initial QUEUED event.
+- `updateScanStatus(scanId, status, extra?)` — validates state transition via `isValidTransition()`, updates scan, emits scan event.
+- `addScanEvent()` — logs scan events.
+- `getScanWithEvents(id)` — fetches scan with ordered events.
+- `listScans()` — cursor-based pagination with filters.
+- `cancelScan()` — validates scan is in a cancellable (non-terminal) state, updates to CANCELLED.
+- **25 tests** in `scan-service.test.ts` (state machine transitions).
+
+### 21.12 Permissions Update (`packages/auth/src/permissions.ts`)
+
+- Added `scan.view` permission (`"scan:view"`) to the PERMISSIONS object.
+- Granted to all 8 roles: OWNER (via `Object.values`), ADMIN, SECURITY_ADMIN, APPSEC_MANAGER, DEVELOPER, MEMBER, EXTERNAL_PENTESTER, AUDITOR, VIEWER.
+- VIEWER and AUDITOR previously had no scan access at all — now they can view/list scans (read-only).
+
+### 21.13 Dockerfile Cleanup
+
+- Removed 15 lines of unused worker/shared-package copies from the runner stage. The runner stage is for the web app only (`CMD ["node", "server.js"]`). The worker runs from the builder stage via docker-compose `target: builder` (workspace packages export TypeScript source, requiring `tsx` at runtime).
+
+### 21.14 CSP Request Header Fix (`apps/web/src/proxy.ts`)
+
+- Removed `requestHeaders.set("Content-Security-Policy", csp)` — CSP is a response header, not a request header. It was redundantly set on request headers (non-standard) while already being set on all response objects (5 locations: non-API routes, API routes, 429 responses for both API and auth routes).
+
+### 21.15 Test Summary
+
+- **396 tests** across **26 test files** (up from 239 tests / 12 files pre-Sprint 4).
+- New test files: `preflight.job.test.ts` (7), `run-scan.job.test.ts` (7), `route.test.ts` (12), `runner.test.ts` (6), `command-builder.test.ts` (14), `output-parser.test.ts` (21), `queue.test.ts` (5), `scan-service.test.ts` (25).
+- All tests pass: `pnpm test` → 396 passed, 0 failed.

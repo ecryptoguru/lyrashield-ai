@@ -1,5 +1,6 @@
 export { cn } from "./utils"
 export { GithubIcon } from "./github-icon"
+export { MicrosoftIcon } from "./microsoft-icon"
 export { Button, buttonVariants, type ButtonProps } from "./button"
 export { Card, CardHeader, CardTitle, CardContent, CardFooter } from "./card"
 export { Badge, badgeVariants, type BadgeProps } from "./badge"

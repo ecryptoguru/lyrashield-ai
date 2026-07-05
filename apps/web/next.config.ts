@@ -1,10 +1,8 @@
 import type { NextConfig } from "next"
 
 // Baseline HTTP security headers applied to every response.
-// NOTE: a full Content-Security-Policy is intentionally NOT set here yet — a
-// strict CSP for the Next.js App Router needs per-request nonces (middleware)
-// and must be validated against the real app, so it's a dedicated follow-up
-// (see PRD PART B §B13.7 R-A). These headers are the safe, high-value subset.
+// Content-Security-Policy is set per-request in proxy.ts with a nonce
+// (see PRD PART B §B13.7 R-A). These are the static security headers.
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },

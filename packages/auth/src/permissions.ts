@@ -36,6 +36,7 @@ export const PERMISSIONS = {
     validate: "target:validate",
   },
   scan: {
+    view: "scan:view",
     create: "scan:create",
     cancel: "scan:cancel",
     retry: "scan:retry",
@@ -93,6 +94,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.target.update,
     PERMISSIONS.target.delete,
     PERMISSIONS.target.validate,
+    PERMISSIONS.scan.view,
     PERMISSIONS.scan.create,
     PERMISSIONS.scan.cancel,
     PERMISSIONS.scan.retry,
@@ -115,6 +117,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.integration.manage,
   ],
   SECURITY_ADMIN: [
+    PERMISSIONS.scan.view,
     PERMISSIONS.target.create,
     PERMISSIONS.target.update,
     PERMISSIONS.target.validate,
@@ -135,6 +138,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.audit.export,
   ],
   APPSEC_MANAGER: [
+    PERMISSIONS.scan.view,
     PERMISSIONS.target.create,
     PERMISSIONS.target.validate,
     PERMISSIONS.scan.create,
@@ -154,6 +158,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.report.download,
   ],
   DEVELOPER: [
+    PERMISSIONS.scan.view,
     PERMISSIONS.target.create,
     PERMISSIONS.target.validate,
     PERMISSIONS.scan.create,
@@ -166,6 +171,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
   ],
   MEMBER: [
     PERMISSIONS.project.create,
+    PERMISSIONS.scan.view,
     PERMISSIONS.target.create,
     PERMISSIONS.scan.create,
     PERMISSIONS.finding.view,
@@ -174,19 +180,21 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.report.download,
   ],
   EXTERNAL_PENTESTER: [
+    PERMISSIONS.scan.view,
     PERMISSIONS.scan.create,
     PERMISSIONS.finding.view,
     PERMISSIONS.report.create,
     PERMISSIONS.report.download,
   ],
   AUDITOR: [
+    PERMISSIONS.scan.view,
     PERMISSIONS.finding.view,
     PERMISSIONS.audit.view,
     PERMISSIONS.audit.export,
     PERMISSIONS.report.create,
     PERMISSIONS.report.download,
   ],
-  VIEWER: [PERMISSIONS.finding.view, PERMISSIONS.report.download],
+  VIEWER: [PERMISSIONS.scan.view, PERMISSIONS.finding.view, PERMISSIONS.report.download],
 }
 
 export function hasPermission(role: MemberRole, permission: Permission): boolean {

@@ -131,6 +131,7 @@ export function expandIpv6(input: string): number[] | null {
   if (net.isIP(ip) !== 6) return null
 
   // Convert a trailing embedded IPv4 (e.g. ::ffff:1.2.3.4) into two hex groups.
+  // eslint-disable-next-line security/detect-unsafe-regex
   const embedded = ip.match(/^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/)
   if (embedded) {
     const prefix = embedded[1] ?? ""

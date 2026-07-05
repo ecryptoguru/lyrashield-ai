@@ -39,5 +39,14 @@ packages/db/src/generated/
 # Docker
 docker-data/
 
+# Secrets / keys (deploy doc has you download GitHub App .pem)
+*.pem
+*.key
+*.crt
+*.p12
+
+# Vercel
+.vercel
+
 # TypeScript build info
 *.tsbuildinfo

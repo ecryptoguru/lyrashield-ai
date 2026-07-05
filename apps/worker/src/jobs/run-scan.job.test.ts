@@ -1,0 +1,201 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
+vi.mock("@lyrashield/db", () => ({
+  prisma: {
+    target: {
+      findFirst: vi.fn(),
+    },
+  },
+  updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
+  addScanEvent: vi.fn().mockResolvedValue(undefined),
+  runWithWorkspaceContext: <T>(_wsId: string | null, fn: () => T): T => fn(),
+}))
+
+vi.mock("@lyrashield/logger", () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
+vi.mock("../engine/runner", () => ({
+  runEngine: vi.fn().mockResolvedValue({
+    exitCode: 0,
+    output: {
+      vulnerabilities: [],
+      runRecord: { run_id: "r1", status: "completed" },
+      summary: "Scan completed with 0 findings",
+      findingCount: 0,
+    },
+  }),
+  cleanupEngineWorkspace: vi.fn().mockResolvedValue(undefined),
+  interpretExitCode: vi.fn((code: number) => {
+    if (code === 0 || code === 1) return { status: "COMPLETED", category: "SUCCESS" }
+    if (code === 2) return { status: "COMPLETED", category: "VULNERABILITIES_FOUND" }
+    return { status: "FAILED", category: "ENGINE_ERROR", message: `Engine error (code ${code})` }
+  }),
+}))
+
+vi.mock("../engine/finding-persister", () => ({
+  persistFindings: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock("./preflight.job", () => ({
+  runPreflight: vi.fn().mockResolvedValue({ passed: true, checks: [] }),
+}))
+
+import { processScanJob } from "./run-scan.job"
+import { runPreflight } from "./preflight.job"
+import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
+import { persistFindings } from "../engine/finding-persister"
+import { updateScanStatus, prisma } from "@lyrashield/db"
+
+const mockJob = {
+  id: "job-1",
+  data: {
+    scanId: "scan-1",
+    workspaceId: "ws-1",
+    targetId: "target-1",
+    goal: "TEST_APP",
+    mode: "SAFE",
+  },
+} as never
+
+const mockTarget = {
+  id: "target-1",
+  name: "Test Target",
+  type: "WEB_APP",
+  url: "https://example.com",
+  repoFullName: null,
+  deletedAt: null,
+}
+
+describe("processScanJob", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // Restore default mock implementations after clearAllMocks
+    vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 0,
+      output: {
+        vulnerabilities: [],
+        runRecord: { run_id: "r1", status: "completed" },
+        summary: "Scan completed with 0 findings",
+        findingCount: 0,
+      },
+    } as never)
+    vi.mocked(interpretExitCode).mockImplementation((code: number) => {
+      if (code === 0 || code === 1) return { status: "COMPLETED" as const, category: "SUCCESS", message: "" }
+      if (code === 2) return { status: "COMPLETED" as const, category: "VULNERABILITIES_FOUND", message: "" }
+      return { status: "FAILED" as const, category: "ENGINE_ERROR", message: `Engine error (code ${code})` }
+    })
+    vi.mocked(persistFindings).mockResolvedValue([])
+    vi.mocked(updateScanStatus).mockResolvedValue({ id: "scan-1" } as never)
+    vi.mocked(cleanupEngineWorkspace).mockResolvedValue(undefined)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(mockTarget as never)
+  })
+
+  it("completes successfully when engine returns exit code 0", async () => {
+    const result = await processScanJob(mockJob)
+
+    expect(result.status).toBe("completed")
+    expect(result.summary).toBe("Scan completed with 0 findings")
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "PREFLIGHT")
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "RUNNING")
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "COMPLETED", expect.objectContaining({
+      summary: "Scan completed with 0 findings",
+    }))
+  })
+
+  it("fails when preflight fails", async () => {
+    vi.mocked(runPreflight).mockResolvedValue({
+      passed: false,
+      checks: [],
+      errorCategory: "PREFLIGHT",
+      errorMessage: "Target not found",
+    })
+
+    const result = await processScanJob(mockJob)
+
+    expect(result.status).toBe("failed")
+    expect(result.errorCategory).toBe("PREFLIGHT")
+    expect(result.errorMessage).toBe("Target not found")
+  })
+
+  it("fails when target disappears after preflight", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(null as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result.status).toBe("failed")
+    expect(result.errorCategory).toBe("TARGET_NOT_FOUND")
+  })
+
+  it("fails when engine returns error exit code", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 3,
+      output: {
+        vulnerabilities: [],
+        runRecord: null,
+        summary: "Engine failed",
+        findingCount: 0,
+      },
+    } as never)
+    vi.mocked(interpretExitCode).mockReturnValue({
+      status: "FAILED" as const,
+      category: "ENGINE_ERROR",
+      message: "Engine error (code 3)",
+    })
+
+    const result = await processScanJob(mockJob)
+
+    expect(result.status).toBe("failed")
+    expect(result.errorCategory).toBe("ENGINE_ERROR")
+  })
+
+  it("catches unexpected errors and marks scan as FAILED", async () => {
+    vi.mocked(runPreflight).mockRejectedValue(new Error("Unexpected DB error") as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result.status).toBe("failed")
+    expect(result.errorMessage).toBe("Unexpected DB error")
+  })
+
+  it("always cleans up engine workspace", async () => {
+    await processScanJob(mockJob)
+
+    expect(cleanupEngineWorkspace).toHaveBeenCalledWith("lyrashield_runs/scan-1")
+  })
+
+  it("persists findings from engine output", async () => {
+    const vulns = [
+      { id: "v1", title: "XSS", severity: "high", timestamp: "now" },
+    ]
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 2,
+      output: {
+        vulnerabilities: vulns,
+        runRecord: { run_id: "r1", status: "completed" },
+        summary: "1 finding",
+        findingCount: 1,
+      },
+    } as never)
+    vi.mocked(interpretExitCode).mockReturnValue({
+      status: "COMPLETED" as const,
+      category: "VULNERABILITIES_FOUND",
+      message: "",
+    })
+
+    await processScanJob(mockJob)
+
+    expect(persistFindings).toHaveBeenCalledWith({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: vulns,
+    })
+  })
+})

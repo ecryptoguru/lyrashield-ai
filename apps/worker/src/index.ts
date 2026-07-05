@@ -1,12 +1,71 @@
+import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
+import { env } from "@lyrashield/config"
+import { getScanQueueEvents } from "./queue"
+import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
+import { processScanJob } from "./jobs/run-scan.job"
 
-async function main() {
-  logger.info("LyraShield worker starting", {
-    redisUrl: process.env.REDIS_URL ?? "redis://localhost:6379",
+let worker: Worker<ScanJobData, ScanJobResult> | null = null
+let queueEvents: ReturnType<typeof getScanQueueEvents> | null = null
+let shuttingDown = false
+
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return
+  shuttingDown = true
+
+  logger.info("Worker shutting down", { signal })
+
+  if (worker) {
+    const closed = worker.close()
+    if (!closed) {
+      logger.warn("Worker.close() returned null, forcing shutdown")
+    } else {
+      await closed
+    }
+    logger.info("BullMQ worker closed")
+  }
+
+  if (queueEvents) {
+    await queueEvents.close()
+    logger.info("Queue events closed")
+  }
+
+  process.exit(0)
+}
+
+process.on("SIGTERM", () => void shutdown("SIGTERM"))
+process.on("SIGINT", () => void shutdown("SIGINT"))
+
+async function main(): Promise<void> {
+  logger.info("LyraShield worker starting", { redisUrl: env.REDIS_URL || "redis://localhost:6379" })
+
+  worker = new Worker<ScanJobData, ScanJobResult>(
+    SCAN_QUEUE_NAME,
+    processScanJob,
+    {
+      connection: {
+        url: env.REDIS_URL || "redis://localhost:6379",
+        maxRetriesPerRequest: null,
+      },
+      concurrency: 3,
+    }
+  )
+
+  queueEvents = getScanQueueEvents()
+  queueEvents.on("completed", ({ jobId, returnvalue }) => {
+    logger.info("Job completed", { jobId, result: returnvalue })
+  })
+  queueEvents.on("failed", ({ jobId, failedReason }) => {
+    logger.error("Job failed in queue", { jobId, reason: failedReason })
   })
 
-  // Worker queue setup will be added in Sprint 4
-  logger.info("Worker ready (stub mode — scan jobs will be implemented in Sprint 4)")
+  worker.on("ready", () => {
+    logger.info("Worker ready — processing scan jobs", { queue: SCAN_QUEUE_NAME, concurrency: 3 })
+  })
+
+  worker.on("error", (error) => {
+    logger.error("Worker error", { error: error.message, stack: error.stack })
+  })
 }
 
 main().catch((error) => {

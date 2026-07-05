@@ -42,12 +42,24 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional().or(z.literal("")),
   GOOGLE_CLIENT_SECRET: z.string().optional().or(z.literal("")),
 
+  // Microsoft Entra ID (Azure AD) OAuth
+  AZURE_AD_CLIENT_ID: z.string().optional().or(z.literal("")),
+  AZURE_AD_CLIENT_SECRET: z.string().optional().or(z.literal("")),
+  AZURE_AD_TENANT_ID: z.string().optional().or(z.literal("")),
+
   // GitHub App (Sprint 3)
   GITHUB_APP_ID: z.string().optional().or(z.literal("")),
   // App slug (from the GitHub App settings URL) — used to build the public
   // installation URL `https://github.com/apps/{slug}/installations/new`.
   GITHUB_APP_SLUG: z.string().optional().or(z.literal("")),
-  GITHUB_APP_PRIVATE_KEY: z.string().optional().or(z.literal("")),
+  GITHUB_APP_PRIVATE_KEY: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .refine(
+      (val) => !val || val.includes("-----BEGIN"),
+      "GITHUB_APP_PRIVATE_KEY must be a PEM-formatted key starting with '-----BEGIN'"
+    ),
   GITHUB_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
 
   // App

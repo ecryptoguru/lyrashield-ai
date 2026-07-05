@@ -67,3 +67,15 @@ export {
   withWorkspaceRLS,
   withoutWorkspaceRLS,
 } from "./rls"
+export {
+  createScan,
+  updateScanStatus,
+  addScanEvent,
+  getScanWithEvents,
+  listScans,
+  cancelScan,
+  type CreateScanParams,
+  type ScanWithEvents,
+  type ListScansParams,
+} from "./scan-service"
+export { isValidTransition, VALID_TRANSITIONS } from "./scan-transitions"

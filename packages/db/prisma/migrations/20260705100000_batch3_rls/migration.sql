@@ -35,6 +35,9 @@ ALTER TABLE "Invitation" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "WebhookEvent" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Retest" ENABLE ROW LEVEL SECURITY;
 
+-- Create app schema for RLS helper functions
+CREATE SCHEMA IF NOT EXISTS app;
+
 -- Helper function: safely get the current workspace setting as text.
 -- Returns NULL if the setting is not set or is empty.
 CREATE OR REPLACE FUNCTION app.current_workspace_id() RETURNS TEXT

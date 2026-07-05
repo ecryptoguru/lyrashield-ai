@@ -13,13 +13,13 @@
   - A0 tenant-isolation: AsyncLocalStorage rewrite + corrected model sets (found a latent crash: soft-delete set wrongly included 4 columnless models → `getWorkspaceMembership` would throw on a real DB) + auth-guard auto-activation + tests. RLS = follow-up (needs DB validation).
   - A1 Redis/Upstash rate-limit (prod limiting was silently no-op); A2/A4 webhook idempotency + exact repo match; A3 onboarding IDOR; A5 GitHub install-URL slug.
   - A7 CI-runs-tests: **blocked** on granting the GitHub App `Workflows: write`.
-- **Still open:** domain (#1); Batches 2–4 of the audit. **Done:** Batch 2 (server-fetched initialData + React cache() (B1/B2) ✅, pagination (A6) ✅, API/fetch helpers (B4) ✅, nav-404 stubs (A8 remainder) ✅, shared component library (B3) ✅, frontend a11y + mobile sidebar + dark mode fixes (A8 partial) ✅, premium UI upgrade across all pages ✅). **Batch 3 done (except Postgres RLS):** audit-log hash-chain (A9) ✅, Evidence encryption enforcement ✅, cost/determinism + SARIF 2.1.0 + dual CVSS fields (B5/B6) ✅. **Remaining:** Postgres RLS + validate on CI Postgres; Batch 4: differentiated features (several need the unbuilt worker/engine).
+- **Still open:** domain (#1); Batches 2–4 of the audit. **Done:** Batch 2 (server-fetched initialData + React cache() (B1/B2) ✅, pagination (A6) ✅, API/fetch helpers (B4) ✅, nav-404 stubs (A8 remainder) ✅, shared component library (B3) ✅, frontend a11y + mobile sidebar + dark mode fixes (A8 partial) ✅, premium UI upgrade across all pages ✅). **Batch 3 done:** audit-log hash-chain (A9) ✅, Evidence encryption enforcement ✅, cost/determinism + SARIF 2.1.0 + dual CVSS fields (B5/B6) ✅, Postgres RLS + validate on CI Postgres ✅. **Round-2 handoff done:** migration drift reconciled ✅, CI hardened ✅, supply-chain hardened ✅, nonce-based CSP in `proxy.ts` ✅. **R-G/R-I/R-E quick wins done:** turbo.json globalEnv (8→35) ✅, seed.ts prod guard ✅, .gitignore secrets ✅, scoping.ts docstring ✅, globals.css a11y ✅, env.ts PEM validation ✅, auth cookie hardening ✅, docker-compose localhost binding + limits ✅, deployment doc security (non-root worker, SSH, TLS, backup/restore) ✅, dashboard layout Promise.all ✅. **Sprint 4 done:** BullMQ scan queue, preflight checks, engine runner (child process), output parser, finding persister, scan lifecycle state machine, scan API routes (POST/GET/GET-by-id/POST-cancel), scan detail UI with client-side polling, 396 tests (26 files). **Review fixes done:** evidence encryption (encrypted:// URI), worker workspace context wrapping, `scan.view` permission for read-only roles, `ScanJobData` deduplication in `@lyrashield/types`, CSP removed from request headers, Dockerfile runner stage cleanup, scan detail client-side polling, batch finding persister queries, 26 new tests. **Remaining:** Batch 4: differentiated features (worker/engine now available for SCA + secrets, AI-builder-aware URL scan, launch-readiness gate, plain-language findings, shareable report, MCP server, GitHub Action diff-gate).
 
 ### Round-2 audit + hardening (2026-07-04, MERGED to main)
 
 - Batch 1 (PRs #7–#12) and the CI test step (#14) are **merged to main** (not just branches). A second audit pass over current main → findings in **PRD §B13.7**. Merged round-2: web security headers (next.config), logger secret redaction, GitHub token caching/retry/pagination, auth multi-origin `trustedOrigins` (`ADDITIONAL_TRUSTED_ORIGINS`), Dependabot config.
-- 🔴 **Migration drift found (latent P0 on deploy):** only 2 Prisma migrations exist; `schema.prisma` is far ahead (`ApiKey`/`OnboardingState`/`Retest` tables + many columns/indexes never migrated — synced via `db push`). `prisma migrate deploy` on a fresh DB mismatches the client. Use `db push` in dev until reconciled.
-- **Codex handoff (needs live DB / `Workflows` scope / lockfile regen):** (1) migration-drift reconciliation via `prisma migrate dev` + fold in R-C (`Report.scanId` FK, `Finding` `projectId` index); (2) CI hardening (least-priv `permissions`, SCA + secret-scan + SARIF, migration-drift check, build cache); (3) `eslint-plugin-security` + pin `better-auth`/Prisma exact + refresh `pnpm-lock.yaml`; (4) nonce-based CSP.
+- 🔴 ~~**Migration drift found (latent P0 on deploy):** only 2 Prisma migrations exist; `schema.prisma` is far ahead~~ **✅ RESOLVED 2026-07-05** — reconciling migration `20260705095000_batch3_missing_tables_columns` creates all missing tables/columns/indexes/constraints. CI drift check (`prisma migrate diff --exit-code`) added.
+- **Codex handoff (needs live DB / `Workflows` scope / lockfile regen):** ✅ **ALL DONE 2026-07-05** — (1) migration-drift reconciliation via reconciling migration + R-C additions ✅; (2) CI hardening (least-priv `permissions`, SCA + secret-scan, migration-drift check, build cache) ✅; (3) `eslint-plugin-security` + pin `better-auth`/Prisma exact + refresh `pnpm-lock.yaml` ✅; (4) nonce-based CSP in `proxy.ts` (renamed from `middleware.ts` per Next.js 16) with `connect-src`, `blob:` in `img-src`, `ws:` in dev, 14 CSP tests ✅. See `codebase.md` §20.
 - **Note:** §5/§9 below are historical (pre-Batch-1) — PRD §B13 is the authoritative current status.
 
 ---
@@ -145,20 +145,28 @@ These block downstream work. Status as of 2026-07-02 — all PENDING.
 - Sprint 2.5: Onboarding flow (7-step wizard, OnboardingState model, GET/PATCH API)
 - Sprint 3: GitHub App integration (JWT, installation tokens, repo listing, webhook signature verification, integrations UI)
 - Rate limiting middleware (auth 5/min, API 30/min)
-- Tests: 176 passing (env, onboarding schemas, GitHub webhook signature, install URL, Prisma extension, SSRF, rate-limit, types, API client helpers, audit hash-chain, RLS helpers, UI components). 10 test files.
+- Tests: 396 passing (env, onboarding schemas, GitHub webhook signature, install URL, Prisma extension, SSRF, rate-limit, types, API client helpers, audit hash-chain, RLS helpers, UI components, CSP nonce proxy, scan service state machine, preflight checks, scan job processing, API route handlers, engine runner, command builder, output parser, queue). 26 test files.
 
-### Not started (PRD PART B §B0.1)
+### Completed (previously listed as "Not started")
 
-- Email verification (currently disabled in `auth.ts`)
-- Env/secret startup validation
-- Postgres RLS + Prisma query extension
-- ApiKey/ServiceToken model
-- Finding dedupe key fix (include `targetId`)
-- Report shareToken hashing
-- UsageRecord idempotency key
-- Soft-delete standardization
-- Duplicate-target constraints
-- Sprint 4+: Scan queue, engine integration, findings pipeline, fix PRs, retest, reports, billing, agent/MCP layer
+- [x] Email verification — enabled in `auth.ts` with Brevo integration
+- [x] Env/secret startup validation — `@lyrashield/config` with Zod schema
+- [x] Postgres RLS + Prisma query extension — RLS on all 17 workspace-scoped tables, `withWorkspaceRLS` helper
+- [x] ApiKey/ServiceToken model — in schema + reconciling migration
+- [x] Finding dedupe key fix — `@@unique([targetId, dedupeKey])`
+- [x] Report shareToken hashing — `shareTokenHash` + `revokedAt`
+- [x] UsageRecord idempotency key — `idempotencyKey` field
+- [x] Soft-delete standardization — `deletedAt` on all models
+- [x] Duplicate-target constraints — `@@unique` on `(workspaceId, repoFullName)` + `(workspaceId, url)`
+- [x] Missing composite indexes — `Finding(workspaceId, status, severity)`, `AuditLog(workspaceId, createdAt)`
+- [x] Prisma migration drift — reconciling migration + CI drift check
+- [x] CI hardening — least-priv permissions, security job, build cache
+- [x] Supply-chain hardening — `eslint-plugin-security`, exact version pinning
+- [x] Nonce-based CSP — `proxy.ts` with per-request nonce, 14 tests
+
+### Not started (needs findings pipeline)
+
+- Sprint 5+: Findings normalization, verification, dedupe fingerprint, fix PRs, retest, reports, billing, agent/MCP layer. The scan queue/worker/engine **is now built** (Sprint 4) — BullMQ queue, preflight, engine runner, output parser, finding persister are all implemented and tested.
 
 ---
 
@@ -180,7 +188,7 @@ These are cheap now, expensive after launch data exists:
 
 1. **Enable email verification** in `auth.ts` (`requireEmailVerification: true`)
 2. **Add env/secret startup validation** — Zod schema in `packages/config` that fails fast on boot
-3. **Rate limiting** — ✅ Done (middleware.ts: auth 5/min, API 30/min)
+3. **Rate limiting** — ✅ Done (`proxy.ts`: auth 5/min, API 30/min)
 4. **Postgres RLS + Prisma Client Extension** — inject `workspaceId` scope and `deletedAt IS NULL` on every workspace-scoped query
 5. **Fix Finding dedupe key** — change `@@unique([workspaceId, dedupeKey])` → `@@unique([targetId, dedupeKey])`
 6. **Add ApiKey/ServiceToken model** — hashed secret, workspace scope, scopes, expiresAt, lastUsedAt, revokedAt
@@ -222,16 +230,16 @@ The Notion **Landing Page + Waitlist Dev-Ready Brief** has exact copy, layout, A
 6. PR status check (pending/pass/fail)
 7. PR comment with findings summary
 
-### Tier 5 — Sprint 4: Scan Orchestrator and Queue
+### Tier 5 — Sprint 4: Scan Orchestrator and Queue — ✅ Complete
 
-1. Redis + BullMQ queue setup
-2. Scan job producer (API route → queue)
-3. Scan job consumer (worker service)
-4. Scan status tracking (ScanEvent model)
-5. Live scan timeline via SSE or polling
-6. Scan cancellation
-7. Scan retry on failure
-8. Worker Docker image with `lyrashield` CLI installed
+1. ✅ Redis + BullMQ queue setup
+2. ✅ Scan job producer (API route → queue)
+3. ✅ Scan job consumer (worker service)
+4. ✅ Scan status tracking (ScanEvent model)
+5. ✅ Live scan timeline via client-side polling
+6. ✅ Scan cancellation
+7. ✅ Scan retry on failure (BullMQ default 3 attempts)
+8. ⏳ Worker Docker image with `lyrashield` CLI installed (engine subprocess not yet available)
 
 ### Tier 6 — Sprint 5: LyraShield Scan Engine MVP
 
@@ -264,7 +272,7 @@ The Notion **Landing Page + Waitlist Dev-Ready Brief** has exact copy, layout, A
 | 2.5 | Onboarding Flow | DONE | codebase.md + PRD |
 | 3 | GitHub App Integration | DONE | codebase.md + PRD |
 | 3.5 | Agent Action Layer MVP | NOT STARTED | PRD (Agent-Native) |
-| 4 | Scan Orchestrator and Queue | NOT STARTED | PRD (canonical) |
+| 4 | Scan Orchestrator and Queue | DONE | codebase.md + PRD |
 | 5 | LyraShield Scan Engine MVP | NOT STARTED | PRD (canonical) |
 | 5.5 | Security Copilot Sidebar | NOT STARTED | PRD (Agent-Native) |
 | 6 | Findings Normalization | NOT STARTED | PRD |
@@ -310,7 +318,7 @@ These are hard rules from the Brand & Content System. Any public-facing content 
 
 - [x] Enable email verification in `auth.ts` — `requireEmailVerification: true`, Brevo integration, `sendOnSignUp: true`
 - [x] Add env/secret startup validation (Zod schema in `packages/config`) — `@lyrashield/config` package with `envSchema`, fails fast on boot
-- [x] Add rate limiting to auth endpoints — `middleware.ts` with auth (5/min) + API (30/min) limiters, Upstash Redis in prod, in-memory in dev
+- [x] Add rate limiting to auth endpoints — `proxy.ts` (renamed from `middleware.ts` per Next.js 16) with auth (5/min) + API (30/min) limiters, Upstash Redis in prod, in-memory in dev
 - [x] Postgres RLS + Prisma Client Extension for workspace scoping — `packages/db/src/extension.ts` auto-injects `deletedAt: null` + `workspaceId` scope, redirects `delete` → soft-delete
 - [x] Fix Finding dedupe key (include `targetId`) — `@@unique([targetId, dedupeKey])`
 - [x] Add ApiKey/ServiceToken model to Prisma schema — hashedKey, prefix, scopes, expiresAt, revokedAt, lastUsedAt

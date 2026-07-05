@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@lyrashield/auth"
 import { ShieldCheck } from "lucide-react"
-import { Button, Input, Spinner, GithubIcon } from "@lyrashield/ui"
+import { Button, Input, Spinner, GithubIcon, MicrosoftIcon } from "@lyrashield/ui"
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -46,6 +46,21 @@ export default function SignUpPage() {
       })
     } catch {
       setError("GitHub sign up failed. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleMicrosoft() {
+    setLoading(true)
+    setError(null)
+    try {
+      await authClient.signIn.oauth2({
+        providerId: "microsoft-entra-id",
+        callbackURL: "/onboarding",
+      })
+    } catch {
+      setError("Microsoft sign up failed. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -125,16 +140,28 @@ export default function SignUpPage() {
             <div className="h-px flex-1 bg-border" />
           </div>
 
-          <Button
-            onClick={handleGitHub}
-            disabled={loading}
-            variant="secondary"
-            className="w-full"
-            size="lg"
-          >
-            <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-            Sign up with GitHub
-          </Button>
+          <div className="space-y-3">
+            <Button
+              onClick={handleGitHub}
+              disabled={loading}
+              variant="secondary"
+              className="w-full"
+              size="lg"
+            >
+              <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+              Sign up with GitHub
+            </Button>
+            <Button
+              onClick={handleMicrosoft}
+              disabled={loading}
+              variant="secondary"
+              className="w-full"
+              size="lg"
+            >
+              <MicrosoftIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+              Sign up with Microsoft
+            </Button>
+          </div>
         </div>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">

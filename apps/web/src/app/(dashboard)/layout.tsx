@@ -13,13 +13,14 @@ export default async function DashboardLayout({
     redirect("/sign-in")
   }
 
-  const onboardingState = await getCachedOnboardingState(session.userId)
+  const [onboardingState, workspaces] = await Promise.all([
+    getCachedOnboardingState(session.userId),
+    getCachedWorkspaces(session.userId),
+  ])
 
   if (onboardingState && !onboardingState.completed && !onboardingState.skipped) {
     redirect("/onboarding")
   }
-
-  const workspaces = await getCachedWorkspaces(session.userId)
 
   return (
     <div className="flex min-h-screen">

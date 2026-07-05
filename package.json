@@ -20,6 +20,7 @@
   "devDependencies": {
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.10",
+    "eslint-plugin-security": "^3.0.1",
     "prettier": "^3.9.4",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "turbo": "^2.10.3",

@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth"
 import { prismaAdapter } from "better-auth/adapters/prisma"
+import { genericOAuth, microsoftEntraId } from "better-auth/plugins"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd } from "@lyrashield/config"
@@ -9,6 +10,9 @@ const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
 const GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET
 const GOOGLE_CLIENT_ID = env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = env.GOOGLE_CLIENT_SECRET
+const AZURE_AD_CLIENT_ID = env.AZURE_AD_CLIENT_ID
+const AZURE_AD_CLIENT_SECRET = env.AZURE_AD_CLIENT_SECRET
+const AZURE_AD_TENANT_ID = env.AZURE_AD_TENANT_ID
 
 // Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; additional
 // origins (staging, apex+www, preview deploys) come from a comma-separated
@@ -86,9 +90,38 @@ export const auth = betterAuth({
       enabled: !!GOOGLE_CLIENT_ID,
     },
   },
+  plugins: [
+    genericOAuth({
+      config: [
+        microsoftEntraId({
+          clientId: AZURE_AD_CLIENT_ID ?? "",
+          clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
+          tenantId: AZURE_AD_TENANT_ID || "common",
+          ...(AZURE_AD_CLIENT_ID
+            ? {}
+            : { disableSignUp: true }),
+        }),
+      ],
+    }),
+  ],
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // 1 day
+    expiresIn: 60 * 60 * 24 * 7, // 7 days (rolling)
+    updateAge: 60 * 60 * 24, // 1 day (refresh interval)
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60, // 5 minutes
+    },
+  },
+  advanced: {
+    useSecureCookies: isProd,
+    cookies: {
+      session_token: {
+        attributes: {
+          sameSite: "lax",
+          secure: isProd,
+        },
+      },
+    },
   },
 })
 

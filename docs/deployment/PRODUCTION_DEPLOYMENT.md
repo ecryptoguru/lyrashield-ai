@@ -134,7 +134,7 @@ Contabo VPS 10 gives you a full KVM VM with 4 vCPU AMD EPYC, 8GB RAM, 75GB NVMe.
 # 2. Wait for provisioning email (~2-5 minutes)
 #    You'll get: IP address, root password
 
-# 3. SSH into the VPS
+# 3. SSH into the VPS (use a non-root user — see Step 2b)
 ssh root@<vps-ip>
 
 # 4. Update system and install Docker
@@ -169,6 +169,13 @@ nano .env
 pnpm --filter @lyrashield/worker start
 
 # 11. Set up as systemd service (auto-restart on reboot)
+# IMPORTANT: Run as a dedicated non-root user, NOT root.
+# The worker shells out to Docker to run untrusted scan targets —
+# a compromise via the sandbox should not give root on the host.
+useradd -m -s /bin/bash lyrashield
+usermod -aG docker lyrashield
+chown -R lyrashield:lyrashield /home/lyrashield/lyrasec-ai
+
 cat > /etc/systemd/system/lyrashield-worker.service << 'EOF'
 [Unit]
 Description=LyraShield Worker
@@ -177,9 +184,9 @@ Requires=docker.service
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/lyrasec-ai/apps/worker
-EnvironmentFile=/root/lyrasec-ai/.env
+User=lyrashield
+WorkingDirectory=/home/lyrashield/lyrasec-ai/apps/worker
+EnvironmentFile=/home/lyrashield/lyrasec-ai/.env
 ExecStart=/usr/bin/node dist/index.js
 Restart=always
 RestartSec=10
@@ -198,13 +205,21 @@ systemctl status lyrashield-worker
 journalctl -u lyrashield-worker -f  # tail logs
 ```
 
-**Firewall setup** (only allow SSH + outbound):
+**Firewall + SSH hardening** (only allow SSH + outbound):
 
 ```bash
+# Disable password auth — key-only SSH
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+systemctl restart sshd
+
+# Firewall: only SSH + outbound
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow 22/tcp
 ufw enable
+
+# Optional: restrict SSH to a known source IP
+# ufw allow from <your-office-ip> to any port 22
 ```
 
 ### Step 3: Set Up Supabase (Postgres)
@@ -218,15 +233,15 @@ Supabase gives you 500MB Postgres + 50K auth users for free.
 
 # Postgres connection:
 # Settings → Database → Connection string → URI
-# Format: postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres
+# Format: postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres?sslmode=require
 
 # Run migrations against Supabase
 cd ~/Desktop/lyrasec-ai
-DATABASE_URL="postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres" pnpm db:migrate
-DATABASE_URL="postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres" pnpm db:generate
+DATABASE_URL="postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres?sslmode=require" pnpm db:migrate
+DATABASE_URL="postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres?sslmode=require" pnpm db:generate
 
 # Set in Vercel + Contabo VPS:
-# DATABASE_URL=postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres
+# DATABASE_URL=postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres?sslmode=require
 ```
 
 **Supabase Free Tier Limits**:
@@ -270,7 +285,9 @@ R2 gives you 10GB S3-compatible storage with **zero egress fees** — free forev
 # 1. Sign up at https://upstash.com (free, no credit card)
 # 2. Create a Redis database
 # 3. Copy connection string (use the rediss:// URL for TLS)
+#    Format: rediss://default:<password>@<instance>.upstash.io:6379
 # 4. Set as REDIS_URL in Vercel + Contabo VPS
+#    REDIS_URL=rediss://default:<password>@<instance>.upstash.io:6379
 
 # Free tier: 10,000 commands/day, 256MB max data size
 # Plenty for MVP — BullMQ queues are lightweight
@@ -400,10 +417,10 @@ jobs:
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.WORKER_VPS_IP }}
-          username: root
+          username: lyrashield
           key: ${{ secrets.WORKER_VPS_SSH_KEY }}
           script: |
-            cd /root/lyrasec-ai
+            cd /home/lyrashield/lyrasec-ai
             git pull origin main
             pnpm install --frozen-lockfile
             pnpm build --filter @lyrashield/worker
@@ -445,9 +462,9 @@ jobs:
 
 ```env
 # Database (Supabase)
-DATABASE_URL=postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres?sslmode=require
 
-# Redis (Upstash)
+# Redis (Upstash — TLS)
 REDIS_URL=rediss://default:<password>@<instance>.upstash.io:6379
 
 # Auth
@@ -493,6 +510,43 @@ RAZORPAY_KEY_SECRET=<key-secret>
 SENTRY_DSN=<dsn>
 NEXT_PUBLIC_SENTRY_DSN=<dsn>
 ```
+
+## Backup & Restore
+
+### Postgres (Supabase)
+
+Supabase Free tier includes daily automatic backups with 7-day retention.
+
+```bash
+# Manual backup (pg_dump — run from VPS or local)
+pg_dump "postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres?sslmode=require" \
+  --no-owner --no-privileges -F c -f backup-$(date +%Y%m%d).dump
+
+# Restore (to a new Supabase project or local)
+pg_restore --dbname "postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres?sslmode=require" \
+  --no-owner --no-privileges backup-20260705.dump
+```
+
+**RPO:** 24h (Supabase automatic) · **RTO:** <1h (manual pg_restore)
+
+### Cloudflare R2 (Evidence Storage)
+
+R2 does NOT provide automatic versioning by default. Enable it:
+
+```bash
+# Enable versioning on the evidence bucket (via Cloudflare dashboard or API)
+# Dashboard → R2 → lyrashield-evidence → Settings → Object Versioning → Enable
+
+# Or via wrangler CLI:
+wrangler r2 bucket versioning put lyrashield-evidence --enabled
+```
+
+**Backup strategy:**
+- Enable R2 object versioning (protects against accidental deletes/overwrites)
+- Periodic sync to a secondary bucket or local storage (for disaster recovery)
+- Evidence retention is governed by `Policy.evidenceRetentionDays` (default 30d)
+
+**RPO:** Real-time (versioning) · **RTO:** <5min (version restore)
 
 ## Scaling Considerations
 
@@ -559,14 +613,18 @@ helm install lyrashield lyrashield/lyrashield \
 
 - [ ] BETTER_AUTH_SECRET is 32+ characters and generated with `openssl rand -base64 32`
 - [ ] All secrets stored in Infisical or cloud secrets manager (not in .env files in git)
-- [ ] DATABASE_URL uses SSL (`sslmode=require`)
+- [ ] Worker runs as a dedicated non-root user (NOT root)
+- [ ] SSH password auth disabled (key-only)
+- [ ] SSH access restricted to known source IPs (optional but recommended)
+- [ ] DATABASE_URL uses SSL (`?sslmode=require`)
 - [ ] REDIS_URL uses TLS (`rediss://`)
+- [ ] R2 bucket has object versioning enabled
+- [ ] Database backups are configured (Supabase automatic + periodic pg_dump)
 - [ ] CORS configured to only allow your domain
 - [ ] Rate limiting enabled on auth endpoints
 - [ ] GitHub webhook secret is set and verified
 - [ ] Sandbox image is pinned to a specific version (not :latest in production)
 - [ ] Sentry error monitoring is active
-- [ ] Database backups are configured (Supabase handles this automatically)
 - [ ] Evidence storage bucket is private (no public read access)
 - [ ] LLM API key has spending limits set at the provider level
 - [ ] Worker VPS firewall only allows port 22 (SSH) and outbound

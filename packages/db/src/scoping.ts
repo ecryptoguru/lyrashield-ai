@@ -92,10 +92,11 @@ export function runWithWorkspaceContext<T>(workspaceId: string | null, fn: () =>
  * handler). Each request runs in its own async context, so this does not leak
  * across requests the way a module-level variable would.
  *
- * NOTE: as of this change nothing calls this in request handlers yet — routes
- * still scope explicitly with `where: { workspaceId }`. Activating auto-scoping
- * (calling this from the auth guard) + Postgres RLS is a deliberate follow-up
- * that needs integration tests against a live database.
+ * Auto-scoping is ACTIVE: `requireWorkspaceAccess` calls this after resolving
+ * the workspace. The Prisma client extension auto-injects `workspaceId` on all
+ * workspace-scoped models. Postgres RLS is also enabled with strict policies
+ * that enforce `workspaceId` at the database level — use `withWorkspaceRLS()`
+ * for queries that need DB-level isolation.
  */
 export function setWorkspaceContext(workspaceId: string | null): void {
   workspaceStore.enterWith({ workspaceId })
