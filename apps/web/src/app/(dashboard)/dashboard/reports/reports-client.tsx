@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { FileText, Share2, Trash2, Copy, CheckCircle2, AlertCircle } from "lucide-react"
+import { FileText, Share2, Trash2, Copy, CheckCircle2, AlertCircle, Download, Plus } from "lucide-react"
 import { Button, Badge, Card, EmptyState, Spinner, LoadMore } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
 
@@ -62,6 +62,45 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
     return () => { cancelled = true }
   }, [workspaceId])
 
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [reportTitle, setReportTitle] = useState("")
+  const [creatingReport, setCreatingReport] = useState(false)
+  const [scans, setScans] = useState<Array<{ id: string; targetName: string; status: string }>>([])
+  const [selectedScanId, setSelectedScanId] = useState<string>("")
+
+  useEffect(() => {
+    let cancelled = false
+    apiGetPaginated<{ id: string; target: { name: string }; status: string }>(`/api/scans`, { workspaceId })
+      .then((res) => {
+        if (cancelled) return
+        setScans(res.items.map((s) => ({ id: s.id, targetName: s.target.name, status: s.status })))
+      })
+      .catch(() => {
+        // scans optional — ignore errors
+      })
+    return () => { cancelled = true }
+  }, [workspaceId])
+
+  const handleCreateReport = async () => {
+    setCreatingReport(true)
+    setError(null)
+    try {
+      await apiPost(`/api/reports`, {
+        workspaceId,
+        title: reportTitle || "Security Report",
+        ...(selectedScanId ? { scanId: selectedScanId } : {}),
+      })
+      setShowCreateForm(false)
+      setReportTitle("")
+      setSelectedScanId("")
+      await loadReports()
+    } catch {
+      setError("Failed to create report.")
+    } finally {
+      setCreatingReport(false)
+    }
+  }
+
   const handleShare = async (reportId: string) => {
     try {
       const res = await apiPost<{ token: string; shareUrl: string }>(
@@ -113,7 +152,57 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Reports</h1>
+        <Button
+          size="sm"
+          onClick={() => setShowCreateForm(!showCreateForm)}
+        >
+          <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
+          Generate Report
+        </Button>
       </div>
+
+      {showCreateForm && (
+        <Card className="mb-4 p-4">
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium">Generate New Report</h3>
+            <input
+              type="text"
+              className="w-full rounded-lg border bg-background p-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              placeholder="Report title (optional)"
+              value={reportTitle}
+              onChange={(e) => setReportTitle(e.target.value)}
+            />
+            {scans.length > 0 && (
+              <select
+                className="w-full rounded-lg border bg-background p-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={selectedScanId}
+                onChange={(e) => setSelectedScanId(e.target.value)}
+              >
+                <option value="">Select a scan (optional)</option>
+                {scans.map((s) => (
+                  <option key={s.id} value={s.id}>{s.targetName} — {s.status}</option>
+                ))}
+              </select>
+            )}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                disabled={creatingReport}
+                onClick={() => void handleCreateReport()}
+              >
+                {creatingReport ? <Spinner /> : "Create"}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => { setShowCreateForm(false); setReportTitle(""); setSelectedScanId("") }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {error && (
         <Card className="mb-4 p-4 border-destructive/50">
@@ -157,7 +246,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-medium truncate">{report.title}</h3>
                     <Badge variant="info">{report.type}</Badge>
-                    <Badge variant={report.status === "generated" ? "success" : "muted"}>
+                    <Badge variant={report.status === "generated" || report.status === "downloaded" ? "success" : "muted"}>
                       {report.status}
                     </Badge>
                     {report.revokedAt && (
@@ -172,6 +261,16 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Download report"
+                    onClick={() => {
+                      window.open(`/api/reports/${report.id}/download?workspaceId=${workspaceId}`, "_blank")
+                    }}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
                   {!report.revokedAt && (
                     <Button
                       size="sm"

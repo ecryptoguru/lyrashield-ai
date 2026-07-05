@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the next tasks, and the landmines — then use this file as the deep code map and `PRD.md` PART B §B13 as the backlog source of truth.
 >
-> **⚠️ 2026-07-05:** The GitHub repo is now **`ecryptoguru/lyrasec-ai`** (renamed from `lyrashieldai`). The product name is migrating LyraShield → **LyraSec AI**, but the in-code package scopes (`@lyrashield/*`) and engine env vars (`LYRASHIELD_*`) are intentionally **not** renamed yet (trademark clearance open) — keep using them in code. See **§17 (2026-07-04 Audit — Batch 1)**, **§18 (2026-07-05 UI/UX Premium Upgrade + Deep Code Review)**, **§19 (2026-07-05 Batch 2 Remainder + Batch 3 Design Contracts + RLS + Deep Code Review)**, **§20 (2026-07-05 Round-2 Remaining Items — ALL COMPLETED)**, and **§21 (2026-07-05 Sprint 4 — Scan Orchestrator + Queue + Review Fixes)** at the end for the latest merged changes; where they conflict with older sections below, §17/§18/§19/§20/§21 win.
+> **⚠️ 2026-07-05:** The GitHub repo is now **`ecryptoguru/lyrasec-ai`** (renamed from `lyrashieldai`). The product name is migrating LyraShield → **LyraSec AI**, but the in-code package scopes (`@lyrashield/*`) and engine env vars (`LYRASHIELD_*`) are intentionally **not** renamed yet (trademark clearance open) — keep using them in code. See **§17 (2026-07-04 Audit — Batch 1)**, **§18 (2026-07-05 UI/UX Premium Upgrade + Deep Code Review)**, **§19 (2026-07-05 Batch 2 Remainder + Batch 3 Design Contracts + RLS + Deep Code Review)**, **§20 (2026-07-05 Round-2 Remaining Items — ALL COMPLETED)**, **§21 (2026-07-05 Sprint 4 — Scan Orchestrator + Queue + Review Fixes)**, and **§22 (2026-07-06 Batch 4 — Fix Proposals, Retests, Reports, Notifications, Schedules, Plain-Language Findings + Code Review Fixes)** at the end for the latest merged changes; where they conflict with older sections below, §17/§18/§19/§20/§21/§22 win.
 
 ---
 
@@ -1130,3 +1130,167 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 - **396 tests** across **26 test files** (up from 239 tests / 12 files pre-Sprint 4).
 - New test files: `preflight.job.test.ts` (7), `run-scan.job.test.ts` (7), `route.test.ts` (12), `runner.test.ts` (6), `command-builder.test.ts` (14), `output-parser.test.ts` (21), `queue.test.ts` (5), `scan-service.test.ts` (25).
 - All tests pass: `pnpm test` → 396 passed, 0 failed.
+
+---
+
+## §22 — 2026-07-06 Batch 4: Fix Proposals, Retests, Reports, Notifications, Schedules, Plain-Language Findings + Code Review Fixes
+
+This section covers the Batch 4 differentiated-build features that build on top of the Sprint 4 scan orchestrator/queue, plus a comprehensive code review and all identified fixes.
+
+### 22.1 Fix Proposals + GitHub PR Creation
+
+**DB Service** (`packages/db/src/fix-proposal-service.ts`):
+- `createFixProposal()` — creates a fix proposal linked to a finding (kind, summary, diff refs, safety score, generatedByModel).
+- `getFixProposal()` — fetches proposal with associated finding and pull requests.
+- `listFixProposals()` — cursor-based pagination with filters (workspaceId, findingId, status).
+- `updateFixProposalStatus()` — validates status transitions.
+- `createPullRequestRecord()` — links a GitHub PR to a fix proposal (provider, repo, branch, PR number/URL).
+- `FixProposalWithDetails` interface for enriched proposal data.
+- **11 tests** in `fix-proposal-service.test.ts`.
+
+**API Routes**:
+- `POST /api/findings/[id]/fix-proposals` — creates a fix proposal for a finding. Zod-validated, permission-checked (`fix.create`), audit-logged.
+- `GET /api/fix-proposals` — lists proposals with pagination + filters.
+- `POST /api/fix-proposals/[id]/create-pr` — creates a GitHub PR from a fix proposal. Fetches target/integration details, calls GitHub API (create branch, update file, create PR), updates proposal/finding status in a transaction, sends notifications. Uses `PERMISSIONS.fix.create_pr`.
+
+**UI** (`apps/web/src/app/(dashboard)/dashboard/fixes/fixes-client.tsx`):
+- Paginated list of fix proposals with status badges, severity, safety scores, PR links.
+- Empty state handling.
+
+### 22.2 Retests
+
+**DB Service** (`packages/db/src/retest-service.ts`):
+- `createRetest()` — creates a retest request for a finding (linked to the scan that found it).
+- `getRetest()` — fetches retest with finding + scan details.
+- `listRetests()` — cursor-based pagination with filters.
+- `updateRetestStatus()` — validates status transitions (pending → running → passed/failed).
+- `RetestWithDetails` interface.
+- **10 tests** in `retest-service.test.ts`.
+
+**API Routes**:
+- `POST /api/findings/[id]/retests` — creates a retest. Validates no existing pending retest. Transactional with audit logging. Uses `PERMISSIONS.retest.create`.
+- `GET /api/retests` — lists retests with pagination + filters.
+
+### 22.3 Reports
+
+**Report Generator** (`packages/db/src/report-generator.ts`):
+- `ReportData` interface — structured report data (scan info, findings, severity counts, retest summary, truncation flag).
+- `gatherReportData(workspaceId, scanId?)` — queries workspace, scan (optional), and findings. Findings are limited to 500 most recent (`FINDINGS_LIMIT = 500`), with a `findingsTruncated` flag set when the limit is exceeded. Severity counts, verified/fixed counts, and retest summary computed from the fetched findings.
+- `generateReportHTML(data)` — renders a full HTML report with styled severity bars, findings table, scan details, and a truncation notice when applicable. All user content is HTML-escaped.
+- **4 tests** in `report-generator.test.ts` (with/without scan, empty, XSS escaping).
+
+**Report Service** (`packages/db/src/report-service.ts`):
+- `createReport()` — creates a report record.
+- `generateShareToken()` / `revokeShareToken()` — share token management.
+- `getReportByShareToken()` / `getShareableReport()` — public report access.
+- `listReports()` — cursor-based pagination.
+
+**API Route**:
+- `GET /api/reports/[id]/download` — generates and downloads the HTML report. Permission-checked (`report.download`), updates report status to "downloaded".
+
+### 22.4 Notifications
+
+**Integration Channels** (`packages/integrations/src/notifications.ts`):
+- `NotificationChannel` type: `"email" | "slack" | "discord" | "in_app"`.
+- `NotificationPayload` interface: type, title, body, workspaceName, metadata.
+- `EmailChannel` — sends via Brevo API (`api.brevo.com/v3/smtp/email`). 10s timeout via `AbortSignal.timeout(10_000)`.
+- `SlackChannel` — sends via Slack webhook URL. 10s timeout.
+- `DiscordChannel` — sends via Discord webhook URL. 10s timeout.
+- `InAppChannel` — always succeeds (record persisted in DB).
+- `sendNotification(channel, payload)` — dispatches to the appropriate channel.
+- `channels` map — channel registry.
+
+**DB Service** (`packages/db/src/notification-service.ts`):
+- `createNotification()` — persists a notification record (workspaceId, optional userId, channel, type, title, body, status).
+- `getNotification()` / `listNotifications()` — fetch with workspace scoping + pagination.
+- `markNotificationSent()` / `markNotificationRead()` / `updateNotificationStatus()` — status management with validation.
+- `createAndSendNotification()` — **shared helper** that creates notification records across channels and dispatches via a `sendFn` callback. Eliminates duplication between worker and API routes. Accepts custom channels list. Used by both `apps/worker/src/notifications.ts` and `apps/web/src/app/api/fix-proposals/[id]/create-pr/route.ts`.
+- **8 tests** in `notification-service.test.ts` (3 new tests for `createAndSendNotification`: success, failed send, custom channels).
+
+**Worker Notifications** (`apps/worker/src/notifications.ts`):
+- `notifyScanCompleted()` — sends "scan.completed" notification on successful scan.
+- `notifyScanFailed()` — sends "scan.failed" notification on scan failure.
+- `notifyCriticalFinding()` — sends "finding.critical" notification for critical-severity findings.
+- All use `createAndSendNotification` from `@lyrashield/db` with `sendNotification` as the `sendFn`.
+
+**API Routes**:
+- `GET /api/notifications` — lists notifications with optional `userId` filter (worker-created notifications have no userId — they're workspace-level). Permission: `notification.view`.
+- `POST /api/notifications` — creates a notification. Permission: `notification.manage`.
+- `PATCH /api/notifications/[id]` — updates notification status (mark read, mark sent, general status update). Permission: `notification.manage` for status changes, `notification.view` for marking read.
+
+**UI** (`apps/web/src/app/(dashboard)/dashboard/notifications/notifications-client.tsx`):
+- Paginated notification list with channel icons, type badges (color-coded by notification type), read status.
+- Mark individual notifications as read or mark all as read.
+- Filter by status and type.
+- `TYPE_COLORS` map typed with `NonNullable<BadgeProps["variant"]>` (no `as never` casts).
+
+### 22.5 Schedules
+
+**DB Service** (`packages/db/src/schedule-service.ts`):
+- `createSchedule()` — creates a CRON-based scan schedule (targetId, cron, goal, mode). Uses `ScanGoal` and `ScanMode` enum types (no `as never` casts).
+- `getSchedule()` — fetches schedule with target details.
+- `listSchedules()` — cursor-based pagination with filters.
+- `updateSchedule()` — updates cron, goal, mode, enabled flag.
+- `deleteSchedule()` — soft-deletes a schedule.
+- `updateScheduleRunTimes()` — updates lastRunAt/nextRunAt after a scheduled scan.
+- `getDueSchedules()` — fetches schedules with `nextRunAt <= now` and `enabled = true`.
+- `ScheduleWithDetails` interface.
+- **7 tests** in `schedule-service.test.ts`.
+
+**Migration** (`packages/db/prisma/migrations/20260706010000_schedule_target_fk/migration.sql`):
+- Adds the missing `Schedule_targetId_fkey` foreign key constraint (`Schedule.targetId` → `Target.id`, `ON DELETE CASCADE`).
+
+**API Routes**:
+- `GET /api/schedules` — lists schedules with pagination. Permission: `schedule.view`.
+- `POST /api/schedules` — creates a schedule. Validates target existence, uniqueness of active schedules per target. Permission: `schedule.create`.
+- `GET /api/schedules/[id]` — fetches a single schedule. Permission: `schedule.view`.
+- `PATCH /api/schedules/[id]` — updates a schedule. Permission: `schedule.update`.
+- `DELETE /api/schedules/[id]` — soft-deletes a schedule. Permission: `schedule.delete` (ADMIN+ only, not MEMBER).
+
+**UI** (`apps/web/src/app/(dashboard)/dashboard/schedules/schedules-client.tsx`):
+- Full CRUD UI for schedules with form (cron expression, goal selector, mode selector, target selector).
+- Enable/disable toggle, delete with confirmation.
+- Paginated list with badges and timestamps.
+
+### 22.6 Plain-Language Findings
+
+**Plain-Language Explainer** (`apps/web/src/lib/plain-language.ts`):
+- `PlainLanguageFinding` interface — title, whatItIs, whyItMatters, howToFix, difficulty, estimatedTimeToFix.
+- `CWE_EXPLANATIONS` — maps 8 common CWE IDs (CWE-79, 89, 352, 287, 22, 798, 200, 918) to plain-language explanations.
+- `GENERIC_EXPLANATIONS` — maps severity levels (CRITICAL, HIGH, MEDIUM, LOW, INFO) to generic explanations.
+- `CATEGORY_LABELS` — maps category strings (injection, xss, csrf, ssrf, auth, crypto, config, disclosure, access_control, deserialization, dependencies, secrets) to human-readable labels.
+- `explainFinding(params)` — looks up by CWE first, falls back to severity-based generic. Wires up `category` (for better fallback titles) and `technicalDetail` (appended to `whatItIs` as "Technical detail: ..."). Overrides `howToFix` with `recommendedFix` when provided.
+- **6 tests** in `apps/worker/src/engine/plain-language.test.ts`.
+
+### 22.7 Permissions Update
+
+**Permissions** (`packages/auth/src/permissions.ts`):
+- Added permissions for new features: `fix.create`, `fix.view`, `fix.create_pr`, `fix.update`, `retest.create`, `retest.view`, `retest.update`, `report.create`, `report.view`, `report.download`, `notification.view`, `notification.manage`, `schedule.view`, `schedule.create`, `schedule.update`, `schedule.delete`.
+- **MEMBER role** restricted: `notification.manage` and `schedule.delete` removed. Members retain view/create/update for schedules and view for notifications. ADMIN/SECURITY_ADMIN/BILLING_ADMIN retain all permissions.
+
+### 22.8 Code Review Fixes (P1/P2/P3)
+
+A comprehensive code review identified 10 issues across the new features. All fixed:
+
+**P1 — Critical:**
+1. **Missing migration for `Schedule.target` FK** — Created `20260706010000_schedule_target_fk/migration.sql` adding the `Schedule_targetId_fkey` foreign key constraint. CI's `migrate diff` drift check will now pass.
+2. **In-app notifications invisible** — Worker-created notifications (scan completed, critical finding, fix PR) have no `userId` (they're workspace-level). The notifications list API was filtering by `session.userId` by default, making them invisible. Fixed by removing the default `userId` filter and adding an optional `userId` query parameter.
+
+**P2 — High Priority:**
+3. **`createPullRequestRecord` bypassed transaction** — In `create-pr/route.ts`, the PR record was created via `createPullRequestRecord()` outside the `$transaction`, risking orphaned records if subsequent steps failed. Fixed by inlining `tx.pullRequest.create()` inside the transaction.
+4. **Permissive MEMBER permissions** — `notification.manage` and `schedule.delete` were granted to MEMBER role, allowing members to manage notification settings and delete schedules. Removed from MEMBER; ADMIN+ only.
+5. **No timeout on external HTTP calls** — Brevo, Slack, and Discord `fetch` calls had no timeout, risking indefinite hangs. Added `AbortSignal.timeout(10_000)` (10s) to all notification channel calls and `AbortSignal.timeout(30_000)` (30s) to `githubFetch` (GitHub API wrapper).
+6. **Unbounded `findMany` in report generator** — `gatherReportData` fetched all findings with no limit, risking OOM for large workspaces. Added `take: FINDINGS_LIMIT + 1` (500) with a `findingsTruncated` boolean in `ReportData` and a user-visible truncation notice in the HTML report.
+
+**P3 — Quality:**
+7. **`explainFinding` ignored params** — `category` and `technicalDetail` parameters were accepted but unused. Fixed: `category` maps to human-readable labels via `CATEGORY_LABELS` for better fallback titles; `technicalDetail` is appended to `whatItIs` as "Technical detail: ...".
+8. **`as never` casts** — Replaced with proper type casts: `as ScanGoal`/`as ScanMode` in `schedule-service.ts` (importing the enum types from generated Prisma), and `NonNullable<BadgeProps["variant"]>` in `notifications-client.tsx` (importing `BadgeProps` from `@lyrashield/ui`).
+9. **Duplicate notification logic** — `createAndSendNotification` logic was duplicated between `apps/worker/src/notifications.ts` and the `create-pr` API route. Extracted into `packages/db/src/notification-service.ts` as a shared function with a `sendFn` callback (avoids cross-package dependency). Both consumers now use it. 3 new tests added.
+10. **Dead cleanup effect in findings-client** — `FindingDetailModal` had a `useEffect` that reset state on unmount — unnecessary since React handles this automatically. Removed.
+
+### 22.9 Test Summary
+
+- **565 tests** across **44 test files** (up from 396 tests / 26 files pre-Batch 4).
+- New test files: `fix-proposal-service.test.ts` (11), `retest-service.test.ts` (10), `schedule-service.test.ts` (7), `report-generator.test.ts` (4), `notification-service.test.ts` (8, 3 new for `createAndSendNotification`), `plain-language.test.ts` (6), `api-client.test.ts` (13), `launch-readiness.test.ts` (8), `rate-limit.test.ts` (8), `ssrf.test.ts` (35), `prompt-injection-guard.test.ts` (9), `github.test.ts` (9), `secret-scanner.test.ts` (10), `sca-scanner.test.ts` (8), `sarif-generator.test.ts` (6), `verifier.test.ts` (13), `runner.test.ts` (6), `queue.test.ts` (5), `preflight.job.test.ts` (7), `run-scan.job.test.ts` (7), `scan-service.test.ts` (25), `audit-hash.test.ts` (21), `components.test.ts` (UI).
+- All tests pass: `pnpm test` → 565 passed, 0 failed.
+- `pnpm lint` → 0 errors. `pnpm typecheck` → 0 errors. `pnpm build` → 3/3 successful.

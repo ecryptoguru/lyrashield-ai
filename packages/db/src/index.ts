@@ -100,3 +100,43 @@ export {
   type CreateReportParams,
   type ShareableReport,
 } from "./report-service"
+export {
+  createFixProposal,
+  getFixProposal,
+  listFixProposals,
+  updateFixProposalStatus,
+  createPullRequestRecord,
+  type CreateFixProposalParams,
+  type FixProposalWithDetails,
+} from "./fix-proposal-service"
+export {
+  createRetest,
+  getRetest,
+  listRetests,
+  updateRetestStatus,
+  type RetestWithDetails,
+} from "./retest-service"
+export {
+  gatherReportData,
+  generateReportHTML,
+  type ReportData,
+} from "./report-generator"
+export {
+  createNotification,
+  getNotification,
+  listNotifications,
+  markNotificationSent,
+  markNotificationRead,
+  updateNotificationStatus,
+  createAndSendNotification,
+} from "./notification-service"
+export {
+  createSchedule,
+  getSchedule,
+  listSchedules,
+  updateSchedule,
+  deleteSchedule,
+  updateScheduleRunTimes,
+  getDueSchedules,
+  type ScheduleWithDetails,
+} from "./schedule-service"

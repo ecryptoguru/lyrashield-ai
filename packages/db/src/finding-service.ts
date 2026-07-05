@@ -69,7 +69,7 @@ export async function listFindings(params: ListFindingsParams): Promise<{
 export async function getFinding(
   findingId: string,
   workspaceId: string,
-): Promise<(Finding & { evidence: { id: string; type: string; storageUri: string | null; redactionStatus: string }[]; fixProposals: { id: string; status: string; summary: string }[] }) | null> {
+): Promise<(Finding & { evidence: { id: string; type: string; storageUri: string | null; redactionStatus: string }[]; fixProposals: { id: string; status: string; summary: string }[]; retests: { id: string; status: string; createdAt: Date }[] }) | null> {
   return prisma.finding.findFirst({
     where: { id: findingId, workspaceId, deletedAt: null },
     include: {
@@ -88,6 +88,14 @@ export async function getFinding(
           status: true,
           summary: true,
         },
+      },
+      retests: {
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
       },
     },
   })

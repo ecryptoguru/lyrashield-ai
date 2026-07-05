@@ -82,6 +82,11 @@ const envSchema = z.object({
   BREVO_API_KEY: z.string().optional().or(z.literal("")),
   EMAIL_FROM: z.string().optional().or(z.literal("")),
 
+  // Notifications — Slack & Discord webhooks
+  SLACK_WEBHOOK_URL: z.string().optional().or(z.literal("")),
+  DISCORD_WEBHOOK_URL: z.string().optional().or(z.literal("")),
+  NOTIFICATION_FROM_EMAIL: z.string().optional().or(z.literal("")),
+
   // Billing (Sprint 10)
   POLAR_ACCESS_TOKEN: z.string().optional().or(z.literal("")),
   POLAR_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),

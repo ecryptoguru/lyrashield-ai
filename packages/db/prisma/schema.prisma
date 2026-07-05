@@ -290,6 +290,7 @@ model Target {
   scans           Scan[]
   findings        Finding[]
   credentials     CredentialSet[]
+  schedules       Schedule[]
 
   @@unique([workspaceId, repoFullName])
   @@unique([workspaceId, url])
@@ -664,6 +665,7 @@ model Schedule {
   updatedAt     DateTime @updatedAt
 
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target        Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([targetId])

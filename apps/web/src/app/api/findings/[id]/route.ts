@@ -5,6 +5,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { explainFinding } from "@/lib/plain-language"
 import { z } from "zod"
 
 const VALID_STATUSES = ["OPEN", "FIX_READY", "PR_OPENED", "FIXED", "FIXED_PENDING_RETEST", "ACCEPTED_RISK", "FALSE_POSITIVE", "DUPLICATE"] as const
@@ -36,7 +37,16 @@ export async function GET(
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }
 
-    return apiSuccess(finding)
+    const plainLanguage = explainFinding({
+      title: finding.title,
+      severity: finding.severity,
+      cwe: finding.cwe,
+      category: finding.category,
+      technicalDetail: finding.technicalDetail,
+      recommendedFix: finding.recommendedFix,
+    })
+
+    return apiSuccess({ ...finding, plainLanguage })
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

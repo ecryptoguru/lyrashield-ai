@@ -45,6 +45,9 @@ importers:
       '@lyrashield/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@lyrashield/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../../packages/logger
@@ -128,6 +131,9 @@ importers:
       '@lyrashield/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@lyrashield/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../../packages/logger

@@ -10,6 +10,7 @@ import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import type { TargetType } from "../engine/command-builder"
 import { persistFindings } from "../engine/finding-persister"
+import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
 import type { ScanJobData, ScanJobResult } from "../types"
 
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
@@ -106,6 +107,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorMessage: exitInterpretation.message,
         summary: engineResult.output.summary,
       })
+      await notifyScanFailed(workspaceId, scanId, exitInterpretation.message)
       return {
         status: "failed",
         errorCategory: exitInterpretation.category,
@@ -124,6 +126,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       findings: persistedFindings.length,
       newFindings,
     })
+
+    await notifyScanCompleted(workspaceId, scanId, engineResult.output.summary, persistedFindings.length)
+
+    const criticalFindings = persistedFindings.filter((f) => f.severity === "CRITICAL")
+    if (criticalFindings.length > 0) {
+      for (const f of criticalFindings) {
+        await notifyCriticalFinding(workspaceId, f.id, f.title, target.name)
+      }
+    }
 
     return {
       status: "completed",

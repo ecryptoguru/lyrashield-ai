@@ -10,9 +10,10 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Wrench,
 } from "lucide-react"
 import { Button, Badge, Card, EmptyState, Spinner, LoadMore } from "@lyrashield/ui"
-import { apiGet, apiGetPaginated } from "@/lib/api-client"
+import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 
 export interface FindingListItem {
   id: string
@@ -225,15 +226,31 @@ export function FindingsClient({
   )
 }
 
+interface PlainLanguage {
+  title: string
+  whatItIs: string
+  whyItMatters: string
+  howToFix: string
+  difficulty: string
+  estimatedTimeToFix: string
+}
+
 interface FindingDetail {
   id: string
   title: string
   summary: string
+  category?: string | null
+  cwe?: string | null
+  cvssScore?: number | null
   technicalDetail?: string | null
   recommendedFix?: string | null
   businessImpact?: string | null
+  exploitability?: string | null
   evidence?: Array<{ id: string; type: string; storageUri: string | null; redactionStatus: string }>
   fixProposals?: Array<{ id: string; status: string; summary: string }>
+  retests?: Array<{ id: string; status: string; createdAt: string }>
+  scanId?: string | null
+  plainLanguage?: PlainLanguage
 }
 
 function FindingDetailDrawer({
@@ -247,6 +264,12 @@ function FindingDetailDrawer({
 }) {
   const [detail, setDetail] = useState<FindingDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showFixForm, setShowFixForm] = useState(false)
+  const [fixSummary, setFixSummary] = useState("")
+  const [creatingFix, setCreatingFix] = useState(false)
+  const [fixError, setFixError] = useState<string | null>(null)
+  const [creatingRetest, setCreatingRetest] = useState(false)
+  const [retestError, setRetestError] = useState<string | null>(null)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -255,6 +278,7 @@ function FindingDetailDrawer({
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [onClose])
+
 
   useEffect(() => {
     let cancelled = false
@@ -297,10 +321,51 @@ function FindingDetailDrawer({
           <div className="flex justify-center py-8"><Spinner /></div>
         ) : detail ? (
           <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={SEVERITY_BADGE[finding.severity] ?? "muted"}>{finding.severity}</Badge>
+              <Badge variant={STATUS_BADGE[finding.status] ?? "muted"}>{finding.status}</Badge>
+              {finding.verified ? (
+                <Badge variant="success"><CheckCircle2 className="h-3 w-3 mr-1" aria-hidden="true" />Verified</Badge>
+              ) : (
+                <Badge variant="muted">Unverified</Badge>
+              )}
+              {finding.confidence && <Badge variant="muted">{finding.confidence} confidence</Badge>}
+            </div>
+
             <div>
               <h3 className="text-sm font-medium mb-1">Summary</h3>
               <p className="text-sm text-muted-foreground">{detail.summary}</p>
             </div>
+
+            {(detail.cwe || detail.cvssScore || detail.category) && (
+              <div className="flex flex-wrap gap-2 text-xs">
+                {detail.cwe && <Badge variant="info">{detail.cwe}</Badge>}
+                {detail.cvssScore != null && <Badge variant="warning">CVSS {detail.cvssScore}</Badge>}
+                {detail.category && <Badge variant="muted">{detail.category}</Badge>}
+              </div>
+            )}
+
+            {detail.plainLanguage && (
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <h3 className="text-sm font-semibold">Plain-Language Explanation</h3>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-0.5">What it is</p>
+                  <p className="text-sm">{detail.plainLanguage.whatItIs}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-0.5">Why it matters</p>
+                  <p className="text-sm">{detail.plainLanguage.whyItMatters}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-0.5">How to fix</p>
+                  <p className="text-sm">{detail.plainLanguage.howToFix}</p>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
+                  <span>Difficulty: <span className="font-medium">{detail.plainLanguage.difficulty}</span></span>
+                  <span>Est. time: <span className="font-medium">{detail.plainLanguage.estimatedTimeToFix}</span></span>
+                </div>
+              </div>
+            )}
 
             {detail.technicalDetail && (
               <div>
@@ -308,6 +373,13 @@ function FindingDetailDrawer({
                 <pre className="text-xs bg-muted p-3 rounded-lg overflow-x-auto whitespace-pre-wrap">
                   {detail.technicalDetail}
                 </pre>
+              </div>
+            )}
+
+            {detail.exploitability && (
+              <div>
+                <h3 className="text-sm font-medium mb-1">Exploitability</h3>
+                <p className="text-sm text-muted-foreground">{detail.exploitability}</p>
               </div>
             )}
 
@@ -330,9 +402,12 @@ function FindingDetailDrawer({
                 <h3 className="text-sm font-medium mb-1">Evidence ({detail.evidence.length})</h3>
                 <div className="space-y-2">
                   {detail.evidence.map((ev) => (
-                    <div key={ev.id} className="flex items-center gap-2 text-sm">
-                      <Badge variant="muted">{ev.type}</Badge>
-                      <span className="text-muted-foreground">{ev.redactionStatus}</span>
+                    <div key={ev.id} className="flex items-center justify-between gap-2 text-sm rounded-lg border p-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="muted">{ev.type}</Badge>
+                        {ev.storageUri && <span className="text-xs text-muted-foreground font-mono">{ev.storageUri}</span>}
+                      </div>
+                      <Badge variant={ev.redactionStatus === "complete" ? "success" : "warning"}>{ev.redactionStatus}</Badge>
                     </div>
                   ))}
                 </div>
@@ -352,6 +427,131 @@ function FindingDetailDrawer({
                 </div>
               </div>
             )}
+
+            {detail.retests && detail.retests.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium mb-1">Retests ({detail.retests.length})</h3>
+                <div className="space-y-2">
+                  {detail.retests.map((rt) => (
+                    <div key={rt.id} className="flex items-center gap-2 text-sm">
+                      <Badge variant={rt.status === "passed" ? "success" : rt.status === "failed" ? "danger" : "info"}>
+                        {rt.status}
+                      </Badge>
+                      <span className="text-muted-foreground">{new Date(rt.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="border-t pt-4">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={creatingRetest || !detail.scanId}
+                  onClick={async () => {
+                    if (!detail.scanId) return
+                    setCreatingRetest(true)
+                    setRetestError(null)
+                    try {
+                      await apiPost(`/api/findings/${finding.id}/retests`, {
+                        workspaceId,
+                        scanId: detail.scanId,
+                      })
+                      const res = await apiGet<FindingDetail>(`/api/findings/${finding.id}?workspaceId=${workspaceId}`)
+                      setDetail(res ?? null)
+                    } catch (err) {
+                      setRetestError(err instanceof Error ? err.message : "Failed to create retest")
+                    } finally {
+                      setCreatingRetest(false)
+                    }
+                  }}
+                >
+                  {creatingRetest ? (
+                    <span className="flex items-center gap-2">
+                      <Spinner /> Retesting...
+                    </span>
+                  ) : (
+                    "Retest Finding"
+                  )}
+                </Button>
+                {!detail.scanId && (
+                  <span className="text-xs text-muted-foreground">No scan linked to this finding</span>
+                )}
+              </div>
+              {retestError && (
+                <p className="mt-2 text-xs text-destructive">{retestError}</p>
+              )}
+            </div>
+
+            <div className="border-t pt-4">
+              {showFixForm ? (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium">Generate Fix Proposal</h3>
+                  <textarea
+                    className="w-full rounded-lg border bg-background p-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    rows={3}
+                    placeholder="Describe the proposed fix..."
+                    value={fixSummary}
+                    onChange={(e) => setFixSummary(e.target.value)}
+                  />
+                  {fixError && (
+                    <p className="text-xs text-destructive">{fixError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={creatingFix || fixSummary.length < 10}
+                      onClick={async () => {
+                        setCreatingFix(true)
+                        setFixError(null)
+                        try {
+                          await apiPost(`/api/findings/${finding.id}/fix-proposals`, {
+                            workspaceId,
+                            summary: fixSummary,
+                          })
+                          setShowFixForm(false)
+                          setFixSummary("")
+                          setDetail(null)
+                          setLoading(true)
+                          try {
+                            const res = await apiGet<FindingDetail>(`/api/findings/${finding.id}?workspaceId=${workspaceId}`)
+                            setDetail(res ?? null)
+                          } catch {
+                            setFixError("Proposal created but failed to reload details. Close and reopen the drawer.")
+                          } finally {
+                            setLoading(false)
+                          }
+                        } catch (err) {
+                          setFixError(err instanceof Error ? err.message : "Failed to create fix proposal")
+                        } finally {
+                          setCreatingFix(false)
+                        }
+                      }}
+                    >
+                      {creatingFix ? <Spinner /> : "Create Proposal"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { setShowFixForm(false); setFixSummary(""); setFixError(null) }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowFixForm(true)}
+                >
+                  <Wrench className="h-4 w-4 mr-1" aria-hidden="true" />
+                  Generate Fix Proposal
+                </Button>
+              )}
+            </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Failed to load finding details.</p>

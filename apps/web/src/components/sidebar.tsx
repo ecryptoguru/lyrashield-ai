@@ -18,6 +18,8 @@ import {
   Users,
   Radar,
   Plug,
+  Bell,
+  Calendar,
   Menu,
   X,
 } from "lucide-react"
@@ -31,6 +33,8 @@ const navItems = [
   { href: "/dashboard/findings", label: "Findings", icon: Bug },
   { href: "/dashboard/fixes", label: "Fixes", icon: Wrench },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
+  { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
+  { href: "/dashboard/schedules", label: "Schedules", icon: Calendar },
   { href: "/dashboard/team", label: "Team", icon: Users },
   { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },

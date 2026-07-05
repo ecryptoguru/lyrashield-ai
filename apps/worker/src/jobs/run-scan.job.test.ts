@@ -45,6 +45,12 @@ vi.mock("./preflight.job", () => ({
   runPreflight: vi.fn().mockResolvedValue({ passed: true, checks: [] }),
 }))
 
+vi.mock("../notifications", () => ({
+  notifyScanCompleted: vi.fn().mockResolvedValue(undefined),
+  notifyScanFailed: vi.fn().mockResolvedValue(undefined),
+  notifyCriticalFinding: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { processScanJob } from "./run-scan.job"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"

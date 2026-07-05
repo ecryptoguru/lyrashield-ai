@@ -52,7 +52,10 @@ export function createAppJWT(): string {
 async function githubFetch(url: string, init: RequestInit, retries = 3): Promise<Response> {
   let attempt = 0
   while (true) {
-    const res = await fetch(url, init)
+    const res = await fetch(url, {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(30_000),
+    })
     if (res.ok || attempt >= retries) return res
 
     const retryAfter = res.headers.get("retry-after")
@@ -206,4 +209,124 @@ export function getInstallAppUrl(): string {
   // /api/integrations/github/install sets it to the workspaceId, which the GET
   // callback then reads back), so we intentionally do not embed one here.
   return `https://github.com/apps/${slug}/installations/new`
+}
+
+export async function getDefaultBranch(
+  installationId: number,
+  owner: string,
+  repo: string
+): Promise<string> {
+  const token = await getInstallationToken(installationId)
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}`,
+    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS } }
+  )
+  if (!res.ok) {
+    throw new Error(`Failed to get repo info: ${res.status}`)
+  }
+  const data = (await res.json()) as { default_branch: string }
+  return data.default_branch
+}
+
+export async function getBranchRefSha(
+  installationId: number,
+  owner: string,
+  repo: string,
+  branch: string
+): Promise<string> {
+  const token = await getInstallationToken(installationId)
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS } }
+  )
+  if (!res.ok) {
+    throw new Error(`Failed to get branch ref: ${res.status}`)
+  }
+  const data = (await res.json()) as { object: { sha: string } }
+  return data.object.sha
+}
+
+export async function createBranch(
+  installationId: number,
+  owner: string,
+  repo: string,
+  branchName: string,
+  fromSha: string
+): Promise<void> {
+  const token = await getInstallationToken(installationId)
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/git/refs`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
+      body: JSON.stringify({
+        ref: `refs/heads/${branchName}`,
+        sha: fromSha,
+      }),
+    }
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Failed to create branch: ${res.status} ${body}`)
+  }
+}
+
+export async function createOrUpdateFile(
+  installationId: number,
+  owner: string,
+  repo: string,
+  path: string,
+  content: string,
+  message: string,
+  branch: string
+): Promise<void> {
+  const token = await getInstallationToken(installationId)
+  const encodedContent = Buffer.from(content).toString("base64")
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/contents/${path}`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
+      body: JSON.stringify({
+        message,
+        content: encodedContent,
+        branch,
+      }),
+    }
+  )
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Failed to update file: ${res.status} ${body}`)
+  }
+}
+
+export async function createPullRequest(
+  installationId: number,
+  owner: string,
+  repo: string,
+  title: string,
+  body: string,
+  headBranch: string,
+  baseBranch: string
+): Promise<{ number: number; url: string }> {
+  const token = await getInstallationToken(installationId)
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
+      body: JSON.stringify({
+        title,
+        body,
+        head: headBranch,
+        base: baseBranch,
+      }),
+    }
+  )
+  if (!res.ok) {
+    const respBody = await res.text()
+    throw new Error(`Failed to create PR: ${res.status} ${respBody}`)
+  }
+  const data = (await res.json()) as { number: number; html_url: string }
+  return { number: data.number, url: data.html_url }
 }
