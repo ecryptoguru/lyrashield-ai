@@ -14,6 +14,7 @@ COPY packages/logger/package.json ./packages/logger/
 COPY packages/types/package.json ./packages/types/
 COPY packages/ui/package.json ./packages/ui/
 COPY apps/worker/package.json ./apps/worker/
+COPY apps/agent/package.json ./apps/agent/
 
 RUN pnpm install --frozen-lockfile
 
