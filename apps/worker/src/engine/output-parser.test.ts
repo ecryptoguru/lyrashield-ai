@@ -64,6 +64,38 @@ describe("output-parser", () => {
       const result = parseVulnerabilitiesJson(raw)
       expect(result).toHaveLength(1)
     })
+
+    it("defaults invalid severity to info", () => {
+      const raw = JSON.stringify([{ ...SAMPLE_VULN, id: "v-bad-sev", severity: "super critical" }])
+      const result = parseVulnerabilitiesJson(raw)
+      expect(result).toHaveLength(1)
+      expect(result[0]!.severity).toBe("info")
+    })
+
+    it("removes invalid CVSS scores", () => {
+      const raw = JSON.stringify([{ ...SAMPLE_VULN, id: "v-bad-cvss", cvss: 15 }])
+      const result = parseVulnerabilitiesJson(raw)
+      expect(result).toHaveLength(1)
+      expect(result[0]!.cvss).toBeUndefined()
+    })
+
+    it("normalizes CWE format", () => {
+      const raw = JSON.stringify([{ ...SAMPLE_VULN, id: "v-cwe-num", cwe: "89" }])
+      const result = parseVulnerabilitiesJson(raw)
+      expect(result[0]!.cwe).toBe("CWE-89")
+    })
+
+    it("removes invalid CWE format", () => {
+      const raw = JSON.stringify([{ ...SAMPLE_VULN, id: "v-bad-cwe", cwe: "not-a-cwe" }])
+      const result = parseVulnerabilitiesJson(raw)
+      expect(result[0]!.cwe).toBeUndefined()
+    })
+
+    it("filters out entries with missing title", () => {
+      const raw = JSON.stringify([{ ...SAMPLE_VULN, id: "v-no-title", title: "" }])
+      const result = parseVulnerabilitiesJson(raw)
+      expect(result).toHaveLength(0)
+    })
   })
 
   describe("parseRunJson", () => {

@@ -23,6 +23,10 @@ function buildCspHeader(nonce: string): string {
   return directives.join("; ")
 }
 
+// IMPORTANT: This function trusts the x-forwarded-for header. Deploy behind a
+// trusted reverse proxy (Vercel, Cloudflare, nginx) that strips client-provided
+// x-forwarded-for and sets it to the real client IP. Without a trusted proxy,
+// an attacker can spoof their IP to bypass rate limits.
 function getClientIP(request: NextRequest): string {
   const forwarded = request.headers.get("x-forwarded-for")
   if (forwarded) {

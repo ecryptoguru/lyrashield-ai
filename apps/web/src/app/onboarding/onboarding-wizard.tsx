@@ -16,7 +16,7 @@ import {
   GitBranch,
   Clock,
 } from "lucide-react"
-import { Button, Input, Spinner, GithubIcon } from "@lyrashield/ui"
+import { Button, Input, Spinner, GithubIcon, FormField } from "@lyrashield/ui"
 import { apiPost, apiPatch } from "@/lib/api-client"
 
 const STEPS = [
@@ -246,10 +246,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 Workspace already created. Click Next to continue.
               </div>
             )}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" htmlFor="ws-name">
-                Workspace name
-              </label>
+            <FormField label="Workspace name" htmlFor="ws-name">
               <Input
                 id="ws-name"
                 type="text"
@@ -257,13 +254,13 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 onChange={(e) => setWsName(e.target.value)}
                 placeholder="My Security Team"
               />
-            </div>
+            </FormField>
             <div>
               <label className="mb-1 block text-sm font-medium">Mode</label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setWsMode("VIBE")}
-                  className={`flex-1 rounded-lg border p-3 text-left text-sm transition-[border-color,box-shadow] ${
+                  className={`flex-1 cursor-pointer rounded-lg border p-3 text-left text-sm transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     wsMode === "VIBE" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
                   }`}
                 >
@@ -272,7 +269,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 </button>
                 <button
                   onClick={() => setWsMode("TEAM")}
-                  className={`flex-1 rounded-lg border p-3 text-left text-sm transition-[border-color,box-shadow] ${
+                  className={`flex-1 cursor-pointer rounded-lg border p-3 text-left text-sm transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     wsMode === "TEAM" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
                   }`}
                 >
@@ -312,7 +309,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 onClick={() => setTargetType("REPO")}
-                className={`flex flex-1 items-center gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] ${
+                className={`flex flex-1 cursor-pointer items-center gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   targetType === "REPO" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
                 }`}
               >
@@ -324,7 +321,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               </button>
               <button
                 onClick={() => setTargetType("URL")}
-                className={`flex flex-1 items-center gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] ${
+                className={`flex flex-1 cursor-pointer items-center gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   targetType === "URL" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
                 }`}
               >
@@ -335,10 +332,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 </div>
               </button>
             </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" htmlFor="target-name">
-                Target name
-              </label>
+            <FormField label="Target name" htmlFor="target-name">
               <Input
                 id="target-name"
                 type="text"
@@ -346,13 +340,10 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 onChange={(e) => setTargetName(e.target.value)}
                 placeholder="My Web App"
               />
-            </div>
+            </FormField>
             {targetType === "REPO" ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium" htmlFor="repo-owner">
-                    Repo owner
-                  </label>
+                <FormField label="Repo owner" htmlFor="repo-owner">
                   <Input
                     id="repo-owner"
                     type="text"
@@ -360,11 +351,8 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                     onChange={(e) => setRepoOwner(e.target.value)}
                     placeholder="octocat"
                   />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium" htmlFor="repo-name">
-                    Repo name
-                  </label>
+                </FormField>
+                <FormField label="Repo name" htmlFor="repo-name">
                   <Input
                     id="repo-name"
                     type="text"
@@ -372,13 +360,10 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                     onChange={(e) => setRepoName(e.target.value)}
                     placeholder="Hello-World"
                   />
-                </div>
+                </FormField>
               </div>
             ) : (
-              <div>
-                <label className="mb-1.5 block text-sm font-medium" htmlFor="target-url">
-                  App URL
-                </label>
+              <FormField label="App URL" htmlFor="target-url">
                 <Input
                   id="target-url"
                   type="url"
@@ -386,7 +371,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                   onChange={(e) => setTargetUrl(e.target.value)}
                   placeholder="https://myapp.example.com"
                 />
-              </div>
+              </FormField>
             )}
             <div className="flex justify-between">
               <Button
@@ -425,7 +410,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                   key={goal.value}
                   onClick={() => handleSelectGoal(goal.value)}
                   disabled={loading}
-                  className={`flex items-start gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] ${
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     selectedGoal === goal.value
                       ? "border-primary bg-primary/5 shadow-sm"
                       : "hover:bg-accent"
@@ -496,14 +481,13 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
             <div>
               <h2 className="text-xl font-bold">Start your first scan</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                The scan engine integration is coming in Sprint 5.
+                Your scan engine is ready. Start a scan to detect security vulnerabilities.
               </p>
             </div>
             <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center">
               <Rocket className="mx-auto mb-3 h-10 w-10 text-muted-foreground" aria-hidden="true" />
               <p className="text-sm text-muted-foreground">
-                The LyraShield scan engine is being integrated. Once ready, you&apos;ll be able to
-                start a scan directly from this wizard.
+                Once you complete onboarding, you can start a scan from the Scans page and monitor results in real-time.
               </p>
             </div>
             <div className="flex justify-between">
@@ -533,7 +517,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
             <div>
               <h2 className="text-xl font-bold">View your results</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Scan results will appear here once the engine is integrated.
+                Scan results will appear in the Findings page with severity ratings and evidence.
               </p>
             </div>
             <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center">
@@ -569,13 +553,13 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
             <div>
               <h2 className="text-xl font-bold">Create a fix PR</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Fix proposals and PR creation will be available after scan engine integration.
+                Generate fix proposals and create pull requests directly from LyraShield.
               </p>
             </div>
             <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center">
               <GitBranch className="mx-auto mb-3 h-10 w-10 text-muted-foreground" aria-hidden="true" />
               <p className="text-sm text-muted-foreground">
-                Once scans produce findings, you&apos;ll be able to generate fix proposals and create
+                Once scans produce findings, you can generate fix proposals and create
                 pull requests directly from LyraShield.
               </p>
             </div>

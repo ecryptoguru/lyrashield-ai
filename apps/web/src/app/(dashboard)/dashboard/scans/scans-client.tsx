@@ -2,8 +2,8 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Radar, Play, Loader2, X, RefreshCw, ChevronRight } from "lucide-react"
-import { Button, Card, Badge, Select, EmptyState, Spinner } from "@lyrashield/ui"
+import { Radar, Play, X, RefreshCw, ChevronRight } from "lucide-react"
+import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@lyrashield/ui"
 import { apiPost, apiGetPaginated } from "@/lib/api-client"
 
 interface ScanItem {
@@ -162,7 +162,10 @@ export function ScansClient({
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Scans</h1>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Scans</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Run and monitor security scans against your targets</p>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
@@ -180,7 +183,7 @@ export function ScansClient({
       {error && (
         <div
           role="alert"
-          className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+          className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
         >
           {error}
         </div>
@@ -195,9 +198,8 @@ export function ScansClient({
             </Button>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">Target</label>
-              <Select value={selectedTarget} onChange={(e) => setSelectedTarget(e.target.value)}>
+            <FormField label="Target" htmlFor="scan-target">
+              <Select id="scan-target" value={selectedTarget} onChange={(e) => setSelectedTarget(e.target.value)}>
                 <option value="">Select a target…</option>
                 {targets.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -205,10 +207,9 @@ export function ScansClient({
                   </option>
                 ))}
               </Select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">Goal</label>
-              <Select value={selectedGoal} onChange={(e) => setSelectedGoal(e.target.value)}>
+            </FormField>
+            <FormField label="Goal" htmlFor="scan-goal">
+              <Select id="scan-goal" value={selectedGoal} onChange={(e) => setSelectedGoal(e.target.value)}>
                 <option value="CHECK_PR">Check PR</option>
                 <option value="TEST_APP">Test App</option>
                 <option value="LAUNCH_REVIEW">Launch Review</option>
@@ -216,22 +217,21 @@ export function ScansClient({
                 <option value="FULL_PENTEST">Full Pentest</option>
                 <option value="COMPLIANCE_REVIEW">Compliance Review</option>
               </Select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">Mode</label>
-              <Select value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)}>
+            </FormField>
+            <FormField label="Mode" htmlFor="scan-mode">
+              <Select id="scan-mode" value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)}>
                 <option value="SAFE">Safe</option>
                 <option value="QUICK">Quick</option>
                 <option value="STANDARD">Standard</option>
                 <option value="DEEP">Deep</option>
               </Select>
-            </div>
+            </FormField>
           </div>
           <div className="mt-4 flex gap-2">
             <Button onClick={handleCreateScan} disabled={creating || !selectedTarget}>
               {creating ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Spinner className="mr-2 h-4 w-4" />
                   Starting…
                 </>
               ) : (
@@ -261,7 +261,7 @@ export function ScansClient({
       ) : (
         <div className="space-y-3">
           {scans.map((scan) => (
-            <Card key={scan.id} className="p-4">
+            <Card key={scan.id} className="p-4 transition-shadow duration-200 hover:shadow-card-hover">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -281,7 +281,7 @@ export function ScansClient({
                     <p className="text-sm text-muted-foreground">{scan.summary}</p>
                   )}
                   {scan.errorMessage && (
-                    <p className="text-sm text-red-600 dark:text-red-400">{scan.errorMessage}</p>
+                    <p className="text-sm text-destructive">{scan.errorMessage}</p>
                   )}
                   <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
                     <span>{new Date(scan.createdAt).toLocaleString()}</span>
@@ -300,7 +300,7 @@ export function ScansClient({
                       disabled={cancelling === scan.id}
                     >
                       {cancelling === scan.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        <Spinner className="h-4 w-4" />
                       ) : (
                         <X className="h-4 w-4" aria-hidden="true" />
                       )}

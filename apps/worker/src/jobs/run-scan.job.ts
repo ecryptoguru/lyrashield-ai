@@ -10,6 +10,7 @@ import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import type { TargetType } from "../engine/command-builder"
 import { persistFindings } from "../engine/finding-persister"
+import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
 import type { ScanJobData, ScanJobResult } from "../types"
 
@@ -23,44 +24,62 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
   // auto-scoping safety net is active for all DB queries. Without this, a
   // missed manual workspaceId filter could leak cross-tenant data.
   return runWithWorkspaceContext(workspaceId, async () => {
-  try {
-    // 1. Preflight checks
-    await updateScanStatus(scanId, "PREFLIGHT" as ScanStatus)
-    const preflight = await runPreflight(scanId, targetId)
+    try {
+      // 1. Preflight checks
+      await updateScanStatus(scanId, "PREFLIGHT" as ScanStatus)
+      const preflight = await runPreflight(scanId, targetId)
 
-    if (!preflight.passed) {
-      await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-        errorCategory: preflight.errorCategory,
-        errorMessage: preflight.errorMessage,
-      })
-      return {
-        status: "failed",
-        errorCategory: preflight.errorCategory,
-        errorMessage: preflight.errorMessage,
+      if (!preflight.passed) {
+        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+          errorCategory: preflight.errorCategory,
+          errorMessage: preflight.errorMessage,
+        })
+        return {
+          status: "failed",
+          errorCategory: preflight.errorCategory,
+          errorMessage: preflight.errorMessage,
+        }
       }
-    }
 
-    // 2. Fetch target details for the engine
-    const target = await prisma.target.findFirst({
-      where: { id: targetId, deletedAt: null },
-    })
-
-    if (!target) {
-      await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-        errorCategory: "TARGET_NOT_FOUND",
-        errorMessage: "Target disappeared between preflight and execution",
+      // 2. Fetch target details for the engine
+      const target = await prisma.target.findFirst({
+        where: { id: targetId, deletedAt: null },
       })
-      return { status: "failed", errorCategory: "TARGET_NOT_FOUND", errorMessage: "Target not found" }
-    }
 
-    // 3. Run the scan engine
-    await updateScanStatus(scanId, "RUNNING" as ScanStatus)
+      if (!target) {
+        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+          errorCategory: "TARGET_NOT_FOUND",
+          errorMessage: "Target disappeared between preflight and execution",
+        })
+        return { status: "failed", errorCategory: "TARGET_NOT_FOUND", errorMessage: "Target not found" }
+      }
 
-    const engineResult = await runEngine(
-      {
+      // 3. Run the scan engine
+      await updateScanStatus(scanId, "RUNNING" as ScanStatus)
+
+      const engineResult = await runEngine(
+        {
+          scanId,
+          goal,
+          mode,
+          target: {
+            id: target.id,
+            type: target.type as TargetType,
+            url: target.url,
+            repoFullName: target.repoFullName,
+            name: target.name,
+          },
+        },
         scanId,
-        goal,
-        mode,
+      )
+
+      // 4. Run scanner orchestrator (SCA + secrets + normalization)
+      await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
+
+      const orchestratorResult = await runScannerOrchestrator({
+        scanId,
+        workspaceId,
+        targetId,
         target: {
           id: target.id,
           type: target.type as TargetType,
@@ -68,107 +87,140 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           repoFullName: target.repoFullName,
           name: target.name,
         },
-      },
-      scanId,
-    )
-
-    // 4. Verify and persist findings
-    await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
-
-    const persistedFindings = await persistFindings({
-      scanId,
-      workspaceId,
-      targetId,
-      vulnerabilities: engineResult.output.vulnerabilities,
-    })
-
-    const newFindings = persistedFindings.filter((f) => f.isNew).length
-    const dupFindings = persistedFindings.length - newFindings
-
-    try {
-      await addScanEvent(scanId, "findings_persisted", "info", `Persisted ${persistedFindings.length} finding(s): ${newFindings} new, ${dupFindings} duplicate`, {
-        total: persistedFindings.length,
-        new: newFindings,
-        duplicate: dupFindings,
+        goal,
+        mode,
+        engineFindings: engineResult.output.vulnerabilities,
+        workspaceDir: `lyrashield_runs/${scanId}`,
       })
-    } catch (eventErr) {
-      log.warn("Failed to persist findings_persisted event", {
+
+      try {
+        await addScanEvent(scanId, "scanners_complete", "info",
+          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
+          {
+            engine: orchestratorResult.engineFindings.length,
+            sca: orchestratorResult.scaFindings.length,
+            secrets: orchestratorResult.secretsFindings.length,
+            falsePositivesFiltered: orchestratorResult.filteredFalsePositives,
+            stats: orchestratorResult.stats,
+          },
+        )
+      } catch (eventErr) {
+        log.warn("Failed to persist scanners_complete event", {
+          scanId,
+          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+        })
+      }
+
+      // Persist LLM usage data from engine run record for cost observability
+      if (engineResult.output.runRecord?.llm_usage) {
+        try {
+          await addScanEvent(scanId, "llm_usage", "info",
+            `LLM usage: ${JSON.stringify(engineResult.output.runRecord.llm_usage)}`,
+            { llm_usage: engineResult.output.runRecord.llm_usage },
+          )
+        } catch (eventErr) {
+          log.warn("Failed to persist llm_usage event", {
+            scanId,
+            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+          })
+        }
+      }
+
+      // 5. Persist normalized findings
+      const persistedFindings = await persistFindings({
         scanId,
-        error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+        workspaceId,
+        targetId,
+        vulnerabilities: orchestratorResult.allFindings,
       })
-    }
 
-    // 5. Interpret exit code and finalize
-    const exitInterpretation = interpretExitCode(engineResult.exitCode)
+      const newFindings = persistedFindings.filter((f) => f.isNew).length
+      const dupFindings = persistedFindings.length - newFindings
 
-    if (exitInterpretation.status === "FAILED") {
-      await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-        errorCategory: exitInterpretation.category,
-        errorMessage: exitInterpretation.message,
+      try {
+        await addScanEvent(scanId, "findings_persisted", "info", `Persisted ${persistedFindings.length} finding(s): ${newFindings} new, ${dupFindings} duplicate`, {
+          total: persistedFindings.length,
+          new: newFindings,
+          duplicate: dupFindings,
+        })
+      } catch (eventErr) {
+        log.warn("Failed to persist findings_persisted event", {
+          scanId,
+          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+        })
+      }
+
+      // 6. Interpret exit code and finalize
+      const exitInterpretation = interpretExitCode(engineResult.exitCode)
+
+      if (exitInterpretation.status === "FAILED") {
+        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+          errorCategory: exitInterpretation.category,
+          errorMessage: exitInterpretation.message,
+          summary: engineResult.output.summary,
+        })
+        await notifyScanFailed(workspaceId, scanId, exitInterpretation.message)
+        return {
+          status: "failed",
+          errorCategory: exitInterpretation.category,
+          errorMessage: exitInterpretation.message,
+        }
+      }
+
+      await updateScanStatus(scanId, "COMPLETED" as ScanStatus, {
         summary: engineResult.output.summary,
       })
-      await notifyScanFailed(workspaceId, scanId, exitInterpretation.message)
+
+      log.info("Scan job completed", {
+        scanId,
+        targetId,
+        exitCode: engineResult.exitCode,
+        findings: persistedFindings.length,
+        newFindings,
+      })
+
+      await notifyScanCompleted(workspaceId, scanId, engineResult.output.summary, persistedFindings.length)
+
+      const criticalFindings = persistedFindings.filter((f) => f.severity === "CRITICAL")
+      if (criticalFindings.length > 0) {
+        for (const f of criticalFindings) {
+          await notifyCriticalFinding(workspaceId, f.id, f.title, target.name)
+        }
+      }
+
+      return {
+        status: "completed",
+        summary: engineResult.output.summary,
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorCategory = error instanceof Error ? error.name : "UNKNOWN"
+
+      log.error("Scan job failed", { scanId, error: errorMessage })
+
+      try {
+        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+          errorCategory,
+          errorMessage,
+        })
+      } catch (updateErr) {
+        log.error("Failed to update scan status on error", {
+          scanId,
+          error: updateErr instanceof Error ? updateErr.message : String(updateErr),
+        })
+      }
+
       return {
         status: "failed",
-        errorCategory: exitInterpretation.category,
-        errorMessage: exitInterpretation.message,
-      }
-    }
-
-    await updateScanStatus(scanId, "COMPLETED" as ScanStatus, {
-      summary: engineResult.output.summary,
-    })
-
-    log.info("Scan job completed", {
-      scanId,
-      targetId,
-      exitCode: engineResult.exitCode,
-      findings: persistedFindings.length,
-      newFindings,
-    })
-
-    await notifyScanCompleted(workspaceId, scanId, engineResult.output.summary, persistedFindings.length)
-
-    const criticalFindings = persistedFindings.filter((f) => f.severity === "CRITICAL")
-    if (criticalFindings.length > 0) {
-      for (const f of criticalFindings) {
-        await notifyCriticalFinding(workspaceId, f.id, f.title, target.name)
-      }
-    }
-
-    return {
-      status: "completed",
-      summary: engineResult.output.summary,
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    const errorCategory = error instanceof Error ? error.name : "UNKNOWN"
-
-    log.error("Scan job failed", { scanId, error: errorMessage })
-
-    try {
-      await updateScanStatus(scanId, "FAILED" as ScanStatus, {
         errorCategory,
         errorMessage,
-      })
-    } catch (updateErr) {
-      log.error("Failed to update scan status on error", {
-        scanId,
-        error: updateErr instanceof Error ? updateErr.message : String(updateErr),
-      })
+      }
+    } finally {
+      try {
+        await cleanupEngineWorkspace(`lyrashield_runs/${scanId}`)
+      } catch {
+        // Non-fatal — workspace cleanup is best-effort
+      }
     }
-
-    return {
-      status: "failed",
-      errorCategory,
-      errorMessage,
-    }
-  } finally {
-    try {
-      await cleanupEngineWorkspace(`lyrashield_runs/${scanId}`)
-    } catch {
-      // Non-fatal — workspace cleanup is best-effort
-    }
-  }
   }) // end runWithWorkspaceContext
 }

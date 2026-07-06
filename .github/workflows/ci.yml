@@ -39,8 +39,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Dependency vulnerability scan
-        run: pnpm audit --audit-level=high --prod
-        continue-on-error: true
+        run: pnpm audit --audit-level=critical --prod
 
       - name: Secret scan (gitleaks)
         uses: gitleaks/gitleaks-action@v2

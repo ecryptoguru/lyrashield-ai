@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft } from "lucide-react"
-import { Button, Badge, EmptyState, FormField, Input, Select, LoadMore } from "@lyrashield/ui"
+import { Button, Badge, EmptyState, FormField, Input, Select, Spinner, LoadMore } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
 
 interface Target {
@@ -148,7 +148,8 @@ export function TargetsClient({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12" aria-busy="true">
+      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
+        <Spinner className="h-6 w-6" />
         <p className="text-sm text-muted-foreground">Loading targets...</p>
       </div>
     )
@@ -175,7 +176,7 @@ export function TargetsClient({
                 setFilterProjectId(null)
                 router.push("/dashboard/targets")
               }}
-              className="mb-2 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+              className="mb-2 flex cursor-pointer items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="h-3 w-3" aria-hidden="true" />
               All targets

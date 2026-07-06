@@ -89,10 +89,10 @@ const SEVERITY_ICON: Record<string, typeof Shield> = {
 }
 
 const SEVERITY_COLOR: Record<string, string> = {
-  CRITICAL: "text-red-600 dark:text-red-400",
+  CRITICAL: "text-destructive",
   HIGH: "text-orange-600 dark:text-orange-400",
-  MEDIUM: "text-yellow-600 dark:text-yellow-400",
-  LOW: "text-blue-600 dark:text-blue-400",
+  MEDIUM: "text-amber-600 dark:text-amber-400",
+  LOW: "text-sky-600 dark:text-sky-400",
   INFO: "text-muted-foreground",
 }
 
@@ -107,8 +107,8 @@ const GOAL_LABELS: Record<string, string> = {
 
 const EVENT_LEVEL_COLOR: Record<string, string> = {
   info: "text-muted-foreground",
-  warn: "text-yellow-600 dark:text-yellow-400",
-  error: "text-red-600 dark:text-red-400",
+  warn: "text-amber-600 dark:text-amber-400",
+  error: "text-destructive",
 }
 
 function formatDuration(start: string | null, end: string | null): string {
@@ -197,7 +197,7 @@ export function ScanDetailClient({
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="flex items-center gap-3 text-2xl font-bold">
+            <h1 className="flex items-center gap-3 text-2xl font-bold tracking-tight">
               <Radar className="h-6 w-6" aria-hidden="true" />
               Scan Details
             </h1>
@@ -271,7 +271,7 @@ export function ScanDetailClient({
                 href={scan.target.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:underline dark:text-blue-400"
+                className="text-primary hover:underline"
               >
                 {scan.target.url}
               </a>
@@ -283,7 +283,7 @@ export function ScanDetailClient({
       {scan.errorMessage && (
         <div
           role="alert"
-          className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+          className="mb-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive"
         >
           <p className="font-semibold">{scan.errorCategory}</p>
           <p className="mt-1">{scan.errorMessage}</p>
@@ -338,7 +338,7 @@ export function ScanDetailClient({
                           {finding.cwe && <span>CWE: {finding.cwe}</span>}
                           {finding.cvssScore !== null && <span>CVSS: {finding.cvssScore}</span>}
                           {finding.verified && (
-                            <span className="text-green-600 dark:text-green-400">Verified</span>
+                            <span className="text-emerald-600 dark:text-emerald-400">Verified</span>
                           )}
                         </div>
                       </div>

@@ -51,10 +51,22 @@ vi.mock("../notifications", () => ({
   notifyCriticalFinding: vi.fn().mockResolvedValue(undefined),
 }))
 
+vi.mock("../engine/scanner-orchestrator", () => ({
+  runScannerOrchestrator: vi.fn().mockResolvedValue({
+    allFindings: [],
+    engineFindings: [],
+    scaFindings: [],
+    secretsFindings: [],
+    stats: { total: 0, bySeverity: {}, byConfidence: { high: 0, medium: 0, low: 0 }, verified: 0, unverified: 0, falsePositiveRisk: { low: 0, medium: 0, high: 0 } },
+    filteredFalsePositives: 0,
+  }),
+}))
+
 import { processScanJob } from "./run-scan.job"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
+import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { updateScanStatus, prisma } from "@lyrashield/db"
 
 const mockJob = {
@@ -100,6 +112,14 @@ describe("processScanJob", () => {
     vi.mocked(updateScanStatus).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(cleanupEngineWorkspace).mockResolvedValue(undefined)
     vi.mocked(prisma.target.findFirst).mockResolvedValue(mockTarget as never)
+    vi.mocked(runScannerOrchestrator).mockResolvedValue({
+      allFindings: [],
+      engineFindings: [],
+      scaFindings: [],
+      secretsFindings: [],
+      stats: { total: 0, bySeverity: {}, byConfidence: { high: 0, medium: 0, low: 0 }, verified: 0, unverified: 0, falsePositiveRisk: { low: 0, medium: 0, high: 0 } },
+      filteredFalsePositives: 0,
+    } as never)
   })
 
   it("completes successfully when engine returns exit code 0", async () => {
@@ -176,6 +196,12 @@ describe("processScanJob", () => {
     expect(cleanupEngineWorkspace).toHaveBeenCalledWith("lyrashield_runs/scan-1")
   })
 
+  it("transitions through VERIFYING status before completion", async () => {
+    await processScanJob(mockJob)
+
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
+  })
+
   it("persists findings from engine output", async () => {
     const vulns = [
       { id: "v1", title: "XSS", severity: "high", timestamp: "now" },
@@ -197,11 +223,17 @@ describe("processScanJob", () => {
 
     await processScanJob(mockJob)
 
+    expect(runScannerOrchestrator).toHaveBeenCalledWith(expect.objectContaining({
+      scanId: "scan-1",
+      targetId: "target-1",
+      engineFindings: vulns,
+      workspaceDir: "lyrashield_runs/scan-1",
+    }))
     expect(persistFindings).toHaveBeenCalledWith({
       scanId: "scan-1",
       workspaceId: "ws-1",
       targetId: "target-1",
-      vulnerabilities: vulns,
+      vulnerabilities: [],
     })
   })
 })

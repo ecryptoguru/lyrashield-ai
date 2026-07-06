@@ -6,20 +6,21 @@
 ┌──────────────────────────────────────────────────────────────────┐
 │  Production                                                      │
 │                                                                  │
-│  ┌────────────┐     ┌──────────────┐     ┌────────────────────┐  │
-│  │ Vercel     │     │ Contabo VPS  │     │ Docker Registry    │  │
-│  │ (Next.js)  │     │ 10           │     │ (GHCR)             │  │
-│  │ Web + API  │     │ (Worker)     │     │ Sandbox image      │  │
-│  └─────┬──────┘     └──────┬───────┘     └─────────┬──────────┘  │
-│        │                   │                       │             │
-│        │          ┌────────┴────────┐              │             │
-│        │          │                 │              │             │
-│        ├─────────►│  Supabase       │              │             │
-│        │          │  (Postgres)     │              │             │
-│        │          │                 │              │             │
-│        ├─────────►│  Upstash        │              │             │
-│        │          │  (Redis)        │              │             │
-│        │          └─────────────────┘              │             │
+│  ┌────────────┐     ┌──────────────┐                             │
+│  │ Vercel     │     │ Contabo VPS  │                             │
+│  │ (Next.js)  │     │ 10           │                             │
+│  │ Web + API  │     │ (Worker +    │                             │
+│  │            │     │  Engine)     │                             │
+│  └─────┬──────┘     └──────┬───────┘                             │
+│        │                   │                                     │
+│        │          ┌────────┴────────┐                            │
+│        │          │                 │                            │
+│        ├─────────►│  Supabase       │                            │
+│        │          │  (Postgres)     │                            │
+│        │          │                 │                            │
+│        ├─────────►│  Upstash        │                            │
+│        │          │  (Redis)        │                            │
+│        │          └─────────────────┘                            │
 │        │                                           │             │
 │        │          ┌─────────────────┐              │             │
 │        ├─────────►│  Cloudflare R2  │              │             │
@@ -32,12 +33,12 @@
 │                   └─────────────────┘              │             │
 │                                                    │             │
 │                   ┌─────────────────┐              │             │
-│                   │ Contabo VPS     │◄─────────────┘             │
-│                   │ runs Docker     │                            │
-│                   │ daemon +        │                            │
-│                   │ spawns sandbox  │                            │
-│                   │ per scan        │                            │
-│                   └─────────────────┘                            │
+│                   │ Contabo VPS     │              │             │
+│                   │ runs engine     │              │             │
+│                   │ binary as       │              │             │
+│                   │ subprocess      │              │             │
+│                   │ per scan        │              │             │
+│                   └─────────────────┘              │             │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -48,12 +49,12 @@
 | Service | Platform | Why | Cost (MVP) |
 |---|---|---|---|
 | Web + API | Vercel | Best Next.js support, free tier | $0 |
-| Worker | Contabo VPS 10 | 4 vCPU AMD EPYC, 8GB RAM, 75GB NVMe, full Docker access | €6.55/mo (~$7) |
+| Worker | Contabo VPS 10 | 4 vCPU AMD EPYC, 8GB RAM, 75GB NVMe, runs engine binary as subprocess | €6.55/mo (~$7) |
 | Postgres | Supabase Free | 500MB Postgres + auth + real-time | $0 |
 | Evidence Storage | Cloudflare R2 Free | 10GB S3 storage, zero egress fees, free forever | $0 |
 | Redis | Upstash Free | 10K commands/day, serverless, TLS | $0 |
 | Email | Brevo Free | 300 emails/day, unlimited contacts | $0 |
-| Sandbox Image | GitHub Container Registry | Free for public repos | $0 |
+| Engine Binary | lyrashield-engine repo | External subprocess, installed on worker VPS | $0 |
 | Error Monitoring | Sentry Free | 5K errors/month | $0 |
 | DNS | Cloudflare | Free DNS management | $0 |
 
@@ -72,7 +73,7 @@
 | Price | €6.55/mo (1-month) / €5.24/mo (12-month) |
 | Setup fee | None |
 
-x86 AMD EPYC means the existing Kali sandbox image works as-is — no ARM rebuild needed.
+x86 AMD EPYC means the engine binary runs natively — no ARM rebuild needed.
 
 ### Step 1: Deploy Web App to Vercel
 
@@ -153,12 +154,12 @@ apt install -y git
 git clone https://github.com/ecryptoguru/lyrasec-ai.git
 cd lyrasec-ai
 
-# 7. Install dependencies and build worker
+# 7. Install dependencies
 pnpm install --frozen-lockfile
-pnpm build --filter @lyrashield/worker
 
-# 8. Pull the sandbox image
-docker pull ghcr.io/lyrashield/lyrashield-sandbox:latest
+# 8. Install the lyrashield-engine binary (external dependency)
+# The engine runs as a subprocess — install it separately from the lyrashield-engine repo
+# See docs/deployment/LOCAL_SETUP.md §6 for engine setup instructions
 
 # 9. Configure environment
 cp .env.example .env
@@ -166,28 +167,26 @@ nano .env
 # Fill in production values (see Step 8 for complete list)
 
 # 10. Test the worker
-pnpm --filter @lyrashield/worker start
+pnpm --filter @lyrashield/worker dev
 
 # 11. Set up as systemd service (auto-restart on reboot)
 # IMPORTANT: Run as a dedicated non-root user, NOT root.
-# The worker shells out to Docker to run untrusted scan targets —
-# a compromise via the sandbox should not give root on the host.
+# The worker shells out to the engine binary to run scans —
+# a compromise should not give root on the host.
 useradd -m -s /bin/bash lyrashield
-usermod -aG docker lyrashield
 chown -R lyrashield:lyrashield /home/lyrashield/lyrasec-ai
 
 cat > /etc/systemd/system/lyrashield-worker.service << 'EOF'
 [Unit]
 Description=LyraShield Worker
-After=network.target docker.service
-Requires=docker.service
+After=network.target
 
 [Service]
 Type=simple
 User=lyrashield
 WorkingDirectory=/home/lyrashield/lyrasec-ai/apps/worker
 EnvironmentFile=/home/lyrashield/lyrasec-ai/.env
-ExecStart=/usr/bin/node dist/index.js
+ExecStart=/usr/bin/npx tsx src/index.ts
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -293,21 +292,28 @@ R2 gives you 10GB S3-compatible storage with **zero egress fees** — free forev
 # Plenty for MVP — BullMQ queues are lightweight
 ```
 
-### Step 6: Build & Push Sandbox Image
+### Step 6: Install the Scan Engine Binary
+
+The `lyrashield-engine` binary is an external dependency that runs as a subprocess. Install it on the VPS alongside the worker:
 
 ```bash
-cd ~/Desktop/lyrashield-engine/containers
+# As the lyrashield user
+cd /home/lyrashield
+git clone https://github.com/lyrashield/lyrashield-engine.git
+cd lyrashield-engine
 
-# Build the sandbox image
-docker build -t ghcr.io/lyrashield/lyrashield-sandbox:latest -f Dockerfile ..
+# Install with uv (recommended)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync
 
-# Push to GitHub Container Registry
-echo $GITHUB_TOKEN | docker login ghcr.io -u <your-github-username> --password-stdin
-docker push ghcr.io/lyrashield/lyrashield-sandbox:latest
+# Or install globally with pip
+pip install -e .
 
-# Tag a version
-docker tag ghcr.io/lyrashield/lyrashield-sandbox:latest ghcr.io/lyrashield/lyrashield-sandbox:v0.1.0
-docker push ghcr.io/lyrashield/lyrashield-sandbox:v0.1.0
+# Verify
+lyrashield --help
+
+# The worker calls the engine via `runner.ts` — ensure `lyrashield` is on PATH
+# or set LYRASHIELD_ENGINE_PATH in .env to the full path
 ```
 
 ### Step 7: Set Up GitHub OAuth App
@@ -411,7 +417,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build --filter @lyrashield/worker
 
       - name: Deploy to Contabo VPS
         uses: appleboy/ssh-action@v1
@@ -423,40 +428,12 @@ jobs:
             cd /home/lyrashield/lyrasec-ai
             git pull origin main
             pnpm install --frozen-lockfile
-            pnpm build --filter @lyrashield/worker
             systemctl restart lyrashield-worker
 ```
 
 ### GitHub Actions — Engine
 
-In the `lyrashield-engine` repo, create `.github/workflows/build-sandbox.yml`:
-
-```yaml
-name: Build Sandbox Image
-
-on:
-  push:
-    branches: [main]
-    paths:
-      - "containers/**"
-      - "lyrashield/**"
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build sandbox image
-        run: |
-          cd containers
-          docker build -t ghcr.io/lyrashield/lyrashield-sandbox:latest -f Dockerfile ..
-      - name: Push to GHCR
-        run: |
-          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker push ghcr.io/lyrashield/lyrashield-sandbox:latest
-          docker tag ghcr.io/lyrashield/lyrashield-sandbox:latest ghcr.io/lyrashield/lyrashield-sandbox:${{ github.sha }}
-          docker push ghcr.io/lyrashield/lyrashield-sandbox:${{ github.sha }}
-```
+In the `lyrashield-engine` repo, CI builds and publishes the engine binary. See the engine repo's own CI configuration for details.
 
 ## Production Environment Variables (Complete)
 

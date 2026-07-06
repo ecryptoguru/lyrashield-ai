@@ -12,7 +12,7 @@ import {
   AlertCircle,
   Wrench,
 } from "lucide-react"
-import { Button, Badge, Card, EmptyState, Spinner, LoadMore } from "@lyrashield/ui"
+import { Button, Badge, Card, EmptyState, Spinner, LoadMore, Select, Textarea } from "@lyrashield/ui"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 
 export interface FindingListItem {
@@ -100,8 +100,9 @@ export function FindingsClient({
 
   if (loading && findings.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Spinner />
+      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
+        <Spinner className="h-6 w-6" />
+        <p className="text-sm text-muted-foreground">Loading findings...</p>
       </div>
     )
   }
@@ -109,19 +110,22 @@ export function FindingsClient({
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Findings</h1>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Findings</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Security vulnerabilities detected by your scans</p>
+        </div>
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <select
+          <Select
             value={filter}
             onChange={(e) => void handleFilterChange(e.target.value)}
             aria-label="Filter findings"
-            className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
+            className="w-auto"
           >
             {filters.map((f) => (
               <option key={f} value={f}>{f}</option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -163,7 +167,7 @@ export function FindingsClient({
                       {finding.severity}
                     </Badge>
                     {finding.verified ? (
-                      <span className="flex items-center gap-1 text-xs text-green-600">
+                      <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
                         <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Verified
                       </span>
                     ) : (
@@ -489,8 +493,8 @@ function FindingDetailDrawer({
               {showFixForm ? (
                 <div className="space-y-3">
                   <h3 className="text-sm font-medium">Generate Fix Proposal</h3>
-                  <textarea
-                    className="w-full rounded-lg border bg-background p-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  <Textarea
+                    className="w-full"
                     rows={3}
                     placeholder="Describe the proposed fix..."
                     value={fixSummary}

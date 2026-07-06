@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@lyrashield/auth"
 import { ShieldCheck } from "lucide-react"
-import { Button, Input, Spinner, GithubIcon, MicrosoftIcon } from "@lyrashield/ui"
+import { Button, Input, Spinner, GithubIcon, MicrosoftIcon, FormField } from "@lyrashield/ui"
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -74,16 +74,13 @@ export default function SignUpPage() {
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl gradient-primary shadow-primary-glow">
             <ShieldCheck className="h-7 w-7 text-primary-foreground" aria-hidden="true" />
           </div>
-          <h1 className="text-2xl font-bold">Create your account</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Create your account</h1>
           <p className="text-sm text-muted-foreground">Start securing your apps with LyraShield</p>
         </div>
 
         <div className="rounded-xl border bg-card p-6 shadow-lg sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" htmlFor="name">
-                Name
-              </label>
+            <FormField label="Name" htmlFor="name">
               <Input
                 id="name"
                 type="text"
@@ -93,11 +90,8 @@ export default function SignUpPage() {
                 autoComplete="name"
                 placeholder="Jane Doe"
               />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" htmlFor="email">
-                Email
-              </label>
+            </FormField>
+            <FormField label="Email" htmlFor="email">
               <Input
                 id="email"
                 type="email"
@@ -107,11 +101,8 @@ export default function SignUpPage() {
                 autoComplete="email"
                 placeholder="you@example.com"
               />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" htmlFor="password">
-                Password
-              </label>
+            </FormField>
+            <FormField label="Password" htmlFor="password">
               <Input
                 id="password"
                 type="password"
@@ -122,7 +113,7 @@ export default function SignUpPage() {
                 autoComplete="new-password"
                 placeholder="At least 8 characters"
               />
-            </div>
+            </FormField>
 
             {error && (
               <p className="text-sm text-destructive" role="alert">{error}</p>

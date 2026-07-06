@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { UserPlus, Mail, Clock, Users } from "lucide-react"
-import { Button, Badge, FormField, Input, Select } from "@lyrashield/ui"
+import { Button, Badge, FormField, Input, Select, Spinner } from "@lyrashield/ui"
 import { apiGet, apiPost } from "@/lib/api-client"
 
 interface Member {
@@ -82,7 +82,8 @@ export function TeamClient({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12" aria-busy="true">
+      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
+        <Spinner className="h-6 w-6" />
         <p className="text-sm text-muted-foreground">Loading team...</p>
       </div>
     )

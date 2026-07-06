@@ -42,9 +42,25 @@ function buildEngineEnv(): Record<string, string> {
     "LYRASHIELD_REASONING_EFFORT", "LYRASHIELD_TELEMETRY",
     "PERPLEXITY_API_KEY",
   ])
+  // Prefix-based allowlist for LLM/AI provider API keys so new providers
+  // work without code changes. Each prefix matches env vars like
+  // ANTHROPIC_API_KEY, OPENAI_API_KEY, GROQ_API_KEY, etc.
+  const ALLOWED_PREFIXES = [
+    "LLM_",
+    "AI_",
+    "ANTHROPIC_",
+    "OPENAI_",
+    "GROQ_",
+    "MISTRAL_",
+    "TOGETHER_",
+    "FIREWORKS_",
+    "DEEPSEEK_",
+    "GOOGLE_AI_", // Google Vertex AI / Gemini
+  ]
   const filtered: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
-    if (allow.has(key) && value !== undefined) {
+    if (value === undefined) continue
+    if (allow.has(key) || ALLOWED_PREFIXES.some((p) => key.startsWith(p))) {
       filtered[key] = value
     }
   }

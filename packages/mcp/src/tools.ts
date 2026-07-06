@@ -14,134 +14,197 @@ export interface McpTool {
   handler: (args: Record<string, unknown>) => Promise<McpToolResult>
 }
 
-export const scanTargetTool: McpTool = {
-  name: "lyrashield_scan_target",
-  description: "Trigger a security scan on a registered target. Requires workspaceId and targetId.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      workspaceId: { type: "string", description: "Workspace ID" },
-      targetId: { type: "string", description: "Target ID to scan" },
-      goal: { type: "string", description: "Scan goal (e.g., 'full_audit', 'quick_check')" },
-      mode: { type: "string", description: "Scan mode: SAFE, DEEP, or AGGRESSIVE" },
-    },
-    required: ["workspaceId", "targetId"],
-  },
-  handler: async (args) => {
-    const workspaceId = args.workspaceId as string
-    const targetId = args.targetId as string
-    const goal = (args.goal as string) ?? "full_audit"
-    const mode = (args.mode as string) ?? "SAFE"
-
-    return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          action: "scan_triggered",
-          workspaceId,
-          targetId,
-          goal,
-          mode,
-          message: "Scan queued. Poll /api/scans/{id} for status.",
-        }),
-      }],
-    }
-  },
+export interface ToolHandlerContext {
+  apiBaseUrl: string
+  apiKey?: string
+  fetchFn?: typeof fetch
 }
 
-export const getFindingsTool: McpTool = {
-  name: "lyrashield_get_findings",
-  description: "Retrieve security findings for a workspace, optionally filtered by severity or target.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      workspaceId: { type: "string", description: "Workspace ID" },
-      targetId: { type: "string", description: "Optional target ID filter" },
-      severity: { type: "string", description: "Optional severity filter: CRITICAL, HIGH, MEDIUM, LOW, INFO" },
-      limit: { type: "number", description: "Max results (default 50, max 100)" },
-    },
-    required: ["workspaceId"],
-  },
-  handler: async (args) => {
-    const workspaceId = args.workspaceId as string
-    const severity = args.severity as string | undefined
-    const targetId = args.targetId as string | undefined
+async function apiCall(
+  context: ToolHandlerContext,
+  method: string,
+  path: string,
+  body?: Record<string, unknown>,
+): Promise<unknown> {
+  const fetchImpl = context.fetchFn ?? globalThis.fetch
+  const url = `${context.apiBaseUrl}${path}`
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  }
+  if (context.apiKey) {
+    headers["Authorization"] = `Bearer ${context.apiKey}`
+  }
 
-    return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          action: "get_findings",
-          workspaceId,
-          ...(targetId ? { targetId } : {}),
-          ...(severity ? { severity } : {}),
-          message: "Query /api/findings?workspaceId=... to retrieve findings.",
-        }),
-      }],
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30000)
+  try {
+    const res = await fetchImpl(url, {
+      method,
+      headers,
+      signal: controller.signal,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+    clearTimeout(timeout)
+
+    if (!res.ok) {
+      let errorMsg = `API returned ${res.status} ${res.statusText}`
+      try {
+        const errorJson = (await res.json()) as { error?: { message?: string } }
+        if (errorJson.error?.message) errorMsg = errorJson.error.message
+      } catch {
+        // Response body is not JSON — use status text
+      }
+      throw new Error(errorMsg)
     }
-  },
+
+    const json = (await res.json()) as { success: boolean; data?: unknown; error?: { message?: string } }
+    if (!json.success) {
+      throw new Error(json.error?.message ?? "API call failed")
+    }
+    return json.data
+  } catch (err) {
+    clearTimeout(timeout)
+    throw err
+  }
 }
 
-export const getLaunchReadinessTool: McpTool = {
-  name: "lyrashield_get_launch_readiness",
-  description: "Get a launch-readiness verdict (GO / GO_WITH_CONDITIONS / NO_GO) based on open findings.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      workspaceId: { type: "string", description: "Workspace ID" },
-      targetId: { type: "string", description: "Optional target ID filter" },
-    },
-    required: ["workspaceId"],
-  },
-  handler: async (args) => {
-    const workspaceId = args.workspaceId as string
-    return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          action: "get_launch_readiness",
-          workspaceId,
-          message: "Query /api/launch-readiness?workspaceId=... to get the verdict.",
-        }),
-      }],
-    }
-  },
+function makeToolResult(data: unknown): McpToolResult {
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify(data, null, 2),
+    }],
+  }
 }
 
-export const createReportTool: McpTool = {
-  name: "lyrashield_create_report",
-  description: "Generate a shareable security report from scan findings.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      workspaceId: { type: "string", description: "Workspace ID" },
-      scanId: { type: "string", description: "Optional scan ID to report on" },
-      title: { type: "string", description: "Report title" },
-      type: { type: "string", description: "Report type: developer, executive, compliance" },
-    },
-    required: ["workspaceId", "title"],
-  },
-  handler: async (args) => {
-    const workspaceId = args.workspaceId as string
-    const title = args.title as string
-
-    return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          action: "create_report",
-          workspaceId,
-          title,
-          message: "POST /api/reports to create the report.",
-        }),
-      }],
-    }
-  },
+function makeErrorResult(message: string): McpToolResult {
+  return {
+    content: [{ type: "text", text: JSON.stringify({ error: message }) }],
+    isError: true,
+  }
 }
 
-export const ALL_TOOLS: McpTool[] = [
-  scanTargetTool,
-  getFindingsTool,
-  getLaunchReadinessTool,
-  createReportTool,
-]
+export function createScanTargetTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_scan_target",
+    description: "Trigger a security scan on a registered target. Requires workspaceId and targetId.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", description: "Workspace ID" },
+        targetId: { type: "string", description: "Target ID to scan" },
+        goal: { type: "string", description: "Scan goal (e.g., 'full_audit', 'quick_check')" },
+        mode: { type: "string", description: "Scan mode: SAFE, DEEP, or AGGRESSIVE" },
+      },
+      required: ["workspaceId", "targetId"],
+    },
+    handler: async (args) => {
+      try {
+        const data = await apiCall(context, "POST", "/api/scans", {
+          workspaceId: args.workspaceId,
+          targetId: args.targetId,
+          goal: (args.goal as string) ?? "full_audit",
+          mode: (args.mode as string) ?? "SAFE",
+        })
+        return makeToolResult({ action: "scan_triggered", scan: data })
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+export function createGetFindingsTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_get_findings",
+    description: "Retrieve security findings for a workspace, optionally filtered by severity or target.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", description: "Workspace ID" },
+        targetId: { type: "string", description: "Optional target ID filter" },
+        severity: { type: "string", description: "Optional severity filter: CRITICAL, HIGH, MEDIUM, LOW, INFO" },
+        limit: { type: "number", description: "Max results (default 50, max 100)" },
+      },
+      required: ["workspaceId"],
+    },
+    handler: async (args) => {
+      try {
+        const params = new URLSearchParams({ workspaceId: args.workspaceId as string })
+        if (args.targetId) params.set("targetId", args.targetId as string)
+        if (args.severity) params.set("severity", args.severity as string)
+        if (args.limit) params.set("limit", String(args.limit))
+
+        const data = await apiCall(context, "GET", `/api/findings?${params.toString()}`)
+        return makeToolResult(data)
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+export function createGetLaunchReadinessTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_get_launch_readiness",
+    description: "Get a launch-readiness verdict (GO / GO_WITH_CONDITIONS / NO_GO) based on open findings.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", description: "Workspace ID" },
+        targetId: { type: "string", description: "Optional target ID filter" },
+      },
+      required: ["workspaceId"],
+    },
+    handler: async (args) => {
+      try {
+        const params = new URLSearchParams({ workspaceId: args.workspaceId as string })
+        if (args.targetId) params.set("targetId", args.targetId as string)
+
+        const data = await apiCall(context, "GET", `/api/launch-readiness?${params.toString()}`)
+        return makeToolResult(data)
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+export function createCreateReportTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_create_report",
+    description: "Generate a shareable security report from scan findings.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", description: "Workspace ID" },
+        scanId: { type: "string", description: "Optional scan ID to report on" },
+        title: { type: "string", description: "Report title" },
+        type: { type: "string", description: "Report type: developer, executive, compliance" },
+      },
+      required: ["workspaceId", "title"],
+    },
+    handler: async (args) => {
+      try {
+        const data = await apiCall(context, "POST", "/api/reports", {
+          workspaceId: args.workspaceId,
+          ...(args.scanId ? { scanId: args.scanId } : {}),
+          title: args.title,
+          type: args.type ?? "developer",
+        })
+        return makeToolResult({ action: "report_created", report: data })
+      } catch (err) {
+        return makeErrorResult(err instanceof Error ? err.message : String(err))
+      }
+    },
+  }
+}
+
+export function createAllTools(context: ToolHandlerContext): McpTool[] {
+  return [
+    createScanTargetTool(context),
+    createGetFindingsTool(context),
+    createGetLaunchReadinessTool(context),
+    createCreateReportTool(context),
+  ]
+}

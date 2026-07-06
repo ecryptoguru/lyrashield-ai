@@ -125,13 +125,14 @@ describe("api-client", () => {
       await expect(apiGet("/api/test")).rejects.toMatchObject({ code: "PARSE_ERROR", status: 200 })
     })
 
-    it("throws ApiError when data is undefined", async () => {
+    it("returns undefined when data is undefined but success is true", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
         json: async () => ({ success: true }),
       })
-      await expect(apiGet("/api/test")).rejects.toMatchObject({ code: "UNKNOWN_ERROR" })
+      const result = await apiGet("/api/test")
+      expect(result).toBeUndefined()
     })
 
     it("throws ApiError on paginated network failure", async () => {

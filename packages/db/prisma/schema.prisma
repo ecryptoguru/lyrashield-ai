@@ -224,6 +224,7 @@ model Workspace {
   webhookEvents     WebhookEvent[]
   apiKeys           ApiKey[]
   retests           Retest[]
+  agentApprovals    AgentApproval[]
 }
 
 model WorkspaceMember {
@@ -746,6 +747,36 @@ model Retest {
   @@index([workspaceId])
   @@index([findingId])
   @@index([scanId])
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  DENIED
+  EXPIRED
+}
+
+model AgentApproval {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  actionName    String
+  inputHash     String
+  status        ApprovalStatus @default(PENDING)
+  input         Json
+  requestedById String
+  approvedById  String?
+  approvedAt    DateTime?
+  deniedAt      DateTime?
+  expiresAt     DateTime?
+  result        Json?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([requestedById])
 }
 
 model OnboardingState {

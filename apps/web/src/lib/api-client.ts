@@ -42,13 +42,13 @@ async function request<T>(
     throw new ApiError("PARSE_ERROR", `Failed to parse response (status ${res.status})`, res.status)
   }
 
-  if (!json.success || json.data === undefined) {
+  if (!json.success) {
     const code = json.error?.code ?? "UNKNOWN_ERROR"
     const message = json.error?.message ?? "An unknown error occurred"
     throw new ApiError(code, message, res.status)
   }
 
-  return json.data
+  return json.data as T
 }
 
 export async function apiGet<T>(url: string, options?: FetchOptions): Promise<T> {

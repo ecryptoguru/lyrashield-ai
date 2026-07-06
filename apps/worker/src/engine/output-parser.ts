@@ -50,6 +50,34 @@ export interface ParsedScanOutput {
   findingCount: number
 }
 
+const VALID_SEVERITIES = new Set(["critical", "high", "medium", "moderate", "low", "info", "informational"])
+
+function validateVulnerability(v: Record<string, unknown>): EngineVulnerability | null {
+  if (typeof v.id !== "string" || !v.id.trim()) return null
+  if (typeof v.title !== "string" || !v.title.trim()) {
+    logger.warn("Engine output: missing title, skipping", { id: v.id })
+    return null
+  }
+  if (typeof v.severity !== "string" || !VALID_SEVERITIES.has(v.severity.toLowerCase())) {
+    logger.warn("Engine output: invalid severity, defaulting to info", { id: v.id, severity: v.severity })
+    v.severity = "info"
+  }
+  if (v.cvss !== undefined && (typeof v.cvss !== "number" || v.cvss < 0 || v.cvss > 10)) {
+    logger.warn("Engine output: invalid CVSS score, removing", { id: v.id, cvss: v.cvss })
+    delete v.cvss
+  }
+  if (v.cwe !== undefined && typeof v.cwe === "string") {
+    const cweMatch = v.cwe.match(/^(?:CWE-)?(\d+)$/i)
+    if (!cweMatch) {
+      logger.warn("Engine output: invalid CWE format, removing", { id: v.id, cwe: v.cwe })
+      delete v.cwe
+    } else {
+      v.cwe = `CWE-${cweMatch[1]}`
+    }
+  }
+  return v as unknown as EngineVulnerability
+}
+
 export function parseVulnerabilitiesJson(raw: string): EngineVulnerability[] {
   if (!raw.trim()) return []
   try {
@@ -58,9 +86,13 @@ export function parseVulnerabilitiesJson(raw: string): EngineVulnerability[] {
       logger.warn("vulnerabilities.json is not an array", { type: typeof data })
       return []
     }
-    return data.filter((v): v is EngineVulnerability =>
-      typeof v === "object" && v !== null && typeof v.id === "string"
-    )
+    const validated: EngineVulnerability[] = []
+    for (const item of data) {
+      if (typeof item !== "object" || item === null) continue
+      const vuln = validateVulnerability(item as Record<string, unknown>)
+      if (vuln) validated.push(vuln)
+    }
+    return validated
   } catch (err) {
     logger.error("Failed to parse vulnerabilities.json", {
       error: err instanceof Error ? err.message : String(err),

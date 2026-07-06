@@ -1,7 +1,7 @@
 import { getFinding, updateFindingStatus, markFalsePositive, acceptRisk } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
-import { PERMISSIONS } from "@lyrashield/auth"
+import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
@@ -71,7 +71,18 @@ export async function PATCH(
 
     const { workspaceId, action } = parsed.data
 
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const actionPermission: Record<string, Permission> = {
+      false_positive: PERMISSIONS.finding.falsePositive,
+      accept_risk: PERMISSIONS.finding.acceptRisk,
+      update_status: PERMISSIONS.finding.update,
+    }
+
+    const requiredPermission = actionPermission[action]
+    if (!requiredPermission) {
+      return apiError("INVALID_ACTION", `Unknown action: ${action}`, 400)
+    }
+
+    const { session } = await requirePermission(workspaceId, requiredPermission)
 
     const finding = await getFinding(id, workspaceId)
     if (!finding) {
@@ -80,7 +91,6 @@ export async function PATCH(
 
     switch (action) {
       case "false_positive": {
-        await requirePermission(workspaceId, PERMISSIONS.finding.falsePositive)
         const updated = await markFalsePositive(id, workspaceId)
         await prisma.auditLog.create({
           data: {
@@ -94,7 +104,6 @@ export async function PATCH(
         return apiSuccess({ id: updated.id, status: updated.status })
       }
       case "accept_risk": {
-        await requirePermission(workspaceId, PERMISSIONS.finding.acceptRisk)
         const updated = await acceptRisk(id, workspaceId)
         await prisma.auditLog.create({
           data: {
@@ -108,7 +117,6 @@ export async function PATCH(
         return apiSuccess({ id: updated.id, status: updated.status })
       }
       case "update_status": {
-        await requirePermission(workspaceId, PERMISSIONS.finding.update)
         const status = parsed.data.status
         if (!status) {
           return apiError("MISSING_PARAM", "status is required for update_status action", 400)
@@ -125,8 +133,6 @@ export async function PATCH(
         })
         return apiSuccess({ id: updated.id, status: updated.status })
       }
-      default:
-        return apiError("INVALID_ACTION", `Unknown action: ${action}`, 400)
     }
   } catch (error) {
     const authErr = authErrorResponse(error)

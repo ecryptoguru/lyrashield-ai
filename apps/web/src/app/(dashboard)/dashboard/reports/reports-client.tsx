@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { FileText, Share2, Trash2, Copy, CheckCircle2, AlertCircle, Download, Plus } from "lucide-react"
-import { Button, Badge, Card, EmptyState, Spinner, LoadMore } from "@lyrashield/ui"
+import { Button, Badge, Card, EmptyState, Spinner, LoadMore, Input, Select } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
 
 interface ReportItem {
@@ -142,8 +142,9 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
 
   if (loading && reports.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Spinner />
+      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
+        <Spinner className="h-6 w-6" />
+        <p className="text-sm text-muted-foreground">Loading reports...</p>
       </div>
     )
   }
@@ -151,7 +152,10 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Reports</h1>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Generate and share security reports with stakeholders</p>
+        </div>
         <Button
           size="sm"
           onClick={() => setShowCreateForm(!showCreateForm)}
@@ -165,16 +169,14 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
         <Card className="mb-4 p-4">
           <div className="space-y-3">
             <h3 className="text-sm font-medium">Generate New Report</h3>
-            <input
+            <Input
               type="text"
-              className="w-full rounded-lg border bg-background p-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               placeholder="Report title (optional)"
               value={reportTitle}
               onChange={(e) => setReportTitle(e.target.value)}
             />
             {scans.length > 0 && (
-              <select
-                className="w-full rounded-lg border bg-background p-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              <Select
                 value={selectedScanId}
                 onChange={(e) => setSelectedScanId(e.target.value)}
               >
@@ -182,7 +184,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                 {scans.map((s) => (
                   <option key={s.id} value={s.id}>{s.targetName} — {s.status}</option>
                 ))}
-              </select>
+              </Select>
             )}
             <div className="flex gap-2">
               <Button
@@ -224,7 +226,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
               <p className="text-sm text-muted-foreground truncate font-mono">{shareUrl}</p>
             </div>
             <Button size="sm" variant="secondary" onClick={copyToClipboard}>
-              {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
               {copied ? "Copied" : "Copy"}
             </Button>
           </div>
@@ -240,7 +242,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
       ) : (
         <div className="space-y-3">
           {reports.map((report) => (
-            <Card key={report.id} className="p-4">
+            <Card key={report.id} className="p-4 transition-shadow duration-200 hover:shadow-card-hover">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -269,7 +271,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                       window.open(`/api/reports/${report.id}/download?workspaceId=${workspaceId}`, "_blank")
                     }}
                   >
-                    <Download className="h-4 w-4" />
+                    <Download className="h-4 w-4" aria-hidden="true" />
                   </Button>
                   {!report.revokedAt && (
                     <Button
@@ -278,7 +280,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                       aria-label={report.shareTokenHash ? "Regenerate share link" : "Create share link"}
                       onClick={() => void handleShare(report.id)}
                     >
-                      <Share2 className="h-4 w-4" />
+                      <Share2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   )}
                   {!report.revokedAt && report.shareTokenHash && (
@@ -288,7 +290,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                       aria-label="Revoke share link"
                       onClick={() => void handleRevoke(report.id)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   )}
                 </div>

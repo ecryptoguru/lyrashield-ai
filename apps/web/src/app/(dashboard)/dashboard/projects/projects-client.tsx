@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Plus, FolderKanban, Bug, Crosshair, Radar } from "lucide-react"
-import { Button, Badge, EmptyState, FormField, Input, Textarea, LoadMore } from "@lyrashield/ui"
+import { Button, Badge, EmptyState, FormField, Input, Textarea, Spinner, LoadMore } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
 
 interface Project {
@@ -77,7 +77,8 @@ export function ProjectsClient({ workspaceId, initialData, initialNextCursor }: 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12" aria-busy="true">
+      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
+        <Spinner className="h-6 w-6" />
         <p className="text-sm text-muted-foreground">Loading projects...</p>
       </div>
     )

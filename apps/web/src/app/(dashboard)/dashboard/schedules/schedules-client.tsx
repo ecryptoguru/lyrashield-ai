@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Calendar, Plus, AlertCircle, Trash2, Power } from "lucide-react"
-import { Button, Badge, Card, EmptyState, Spinner, LoadMore } from "@lyrashield/ui"
+import { Button, Badge, Card, EmptyState, Spinner, LoadMore, Input, Select, FormField } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 
 interface ScheduleItem {
@@ -132,8 +132,9 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
 
   if (loading && schedules.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Spinner />
+      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
+        <Spinner className="h-6 w-6" />
+        <p className="text-sm text-muted-foreground">Loading schedules...</p>
       </div>
     )
   }
@@ -141,7 +142,10 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Schedules</h1>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Schedules</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Set up recurring scans to monitor your targets</p>
+        </div>
         <Button size="sm" onClick={() => setShowCreateForm(!showCreateForm)}>
           <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
           New Schedule
@@ -153,8 +157,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
           <div className="space-y-3">
             <h3 className="text-sm font-medium">Create Scheduled Scan</h3>
             {targets.length > 0 ? (
-              <select
-                className="w-full rounded-lg border bg-background p-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              <Select
                 value={selectedTargetId}
                 onChange={(e) => setSelectedTargetId(e.target.value)}
               >
@@ -162,26 +165,25 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                 {targets.map((t) => (
                   <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
                 ))}
-              </select>
+              </Select>
             ) : (
               <p className="text-sm text-muted-foreground">No targets available. Create a target first.</p>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Cron Expression</label>
-                <input
+              <FormField label="Cron Expression" htmlFor="cron-expr">
+                <Input
+                  id="cron-expr"
                   type="text"
-                  className="w-full rounded-lg border bg-background p-2 text-sm font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="font-mono"
                   placeholder="0 0 * * 0"
                   value={cron}
                   onChange={(e) => setCron(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground mt-1">Default: weekly (Sunday midnight)</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Scan Goal</label>
-                <select
-                  className="w-full rounded-lg border bg-background p-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              </FormField>
+              <FormField label="Scan Goal" htmlFor="scan-goal">
+                <Select
+                  id="scan-goal"
                   value={goal}
                   onChange={(e) => setGoal(e.target.value)}
                 >
@@ -189,20 +191,19 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                   <option value="sca">Software Composition Analysis</option>
                   <option value="secrets">Secrets Scan</option>
                   <option value="full_audit">Full Audit</option>
-                </select>
-              </div>
+                </Select>
+              </FormField>
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Mode</label>
-              <select
-                className="w-full rounded-lg border bg-background p-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            <FormField label="Mode" htmlFor="scan-mode">
+              <Select
+                id="scan-mode"
                 value={mode}
                 onChange={(e) => setMode(e.target.value)}
               >
                 <option value="SAFE">Safe</option>
                 <option value="AGGRESSIVE">Aggressive</option>
-              </select>
-            </div>
+              </Select>
+            </FormField>
             <div className="flex gap-2">
               <Button size="sm" disabled={creating || !selectedTargetId} onClick={() => void handleCreate()}>
                 {creating ? <Spinner /> : "Create"}
@@ -236,7 +237,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       ) : (
         <div className="space-y-3">
           {schedules.map((schedule) => (
-            <Card key={schedule.id} className="p-4">
+            <Card key={schedule.id} className="p-4 transition-shadow duration-200 hover:shadow-card-hover">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -265,7 +266,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                     aria-label={schedule.enabled ? "Disable schedule" : "Enable schedule"}
                     onClick={() => void handleToggle(schedule.id, schedule.enabled)}
                   >
-                    <Power className="h-4 w-4" />
+                    <Power className="h-4 w-4" aria-hidden="true" />
                   </Button>
                   <Button
                     size="sm"
@@ -273,7 +274,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                     aria-label="Delete schedule"
                     onClick={() => void handleDelete(schedule.id)}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </Button>
                 </div>
               </div>

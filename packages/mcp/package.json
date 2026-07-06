@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "bin": {
+    "lyrashield-mcp": "./src/stdio-transport.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc",

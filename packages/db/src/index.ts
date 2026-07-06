@@ -38,11 +38,14 @@ export type {
   WebhookEvent,
   Retest,
   OnboardingState,
+  AgentApproval,
   User,
   Session,
   Account,
   Verification,
 } from "./generated/prisma"
+
+export { ApprovalStatus } from "./generated/prisma"
 
 export { Prisma } from "./generated/prisma"
 
@@ -140,3 +143,16 @@ export {
   getDueSchedules,
   type ScheduleWithDetails,
 } from "./schedule-service"
+export {
+  createApproval,
+  getApproval,
+  listApprovals,
+  approveApproval,
+  denyApproval,
+  saveApprovalResult,
+  expireStaleApprovals,
+  hashInput,
+  verifyInputHash,
+  type CreateApprovalParams,
+  type ListApprovalsParams,
+} from "./agent-approval-service"

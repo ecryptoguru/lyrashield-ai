@@ -8,6 +8,7 @@ import {
 } from "./output-parser"
 import { assertEvidenceEncrypted } from "@lyrashield/db"
 import { verifyVulnerability } from "./verifier"
+import type { NormalizedFinding } from "./normalizer"
 
 const EVIDENCE_KEY_REF = "vault/lyrashield-evidence-key/v1"
 
@@ -15,7 +16,7 @@ export interface PersistFindingsParams {
   scanId: string
   workspaceId: string
   targetId: string
-  vulnerabilities: EngineVulnerability[]
+  vulnerabilities: EngineVulnerability[] | NormalizedFinding[]
 }
 
 export interface PersistedFinding {
@@ -38,19 +39,30 @@ export async function persistFindings(
   }
 
   // Batch dedupe: fetch all existing findings for these dedupe keys in one query
-  const dedupeKeys = vulnerabilities.map((v) => generateDedupeKey(v, targetId))
+  const dedupeKeys = vulnerabilities.map((v) => {
+    if ("dedupeKey" in v && "normalizedSeverity" in v) return (v as NormalizedFinding).dedupeKey
+    return generateDedupeKey(v, targetId)
+  })
   const existingFindings = await prisma.finding.findMany({
     where: { targetId, dedupeKey: { in: dedupeKeys }, deletedAt: null },
   })
   const existingMap = new Map(existingFindings.map((f) => [f.dedupeKey, f]))
 
   for (const vuln of vulnerabilities) {
-    const dedupeKey = generateDedupeKey(vuln, targetId)
-    const severity = mapSeverity(vuln.severity)
+    const isNormalized = "dedupeKey" in vuln && "normalizedSeverity" in vuln
+    const dedupeKey = isNormalized ? (vuln as NormalizedFinding).dedupeKey : generateDedupeKey(vuln, targetId)
+    const severity = isNormalized ? (vuln as NormalizedFinding).normalizedSeverity : mapSeverity(vuln.severity)
     const summary = buildFindingSummary(vuln)
+    const verification = verifyVulnerability(vuln)
+    const confidence = isNormalized
+      ? (vuln as NormalizedFinding).confidenceScore >= 80 ? "high"
+        : (vuln as NormalizedFinding).confidenceScore >= 50 ? "medium" : "low"
+      : verification.confidence
+    const cwe = isNormalized ? (vuln as NormalizedFinding).normalizedCwe : vuln.cwe
+    const cvss = isNormalized ? (vuln as NormalizedFinding).normalizedCvss : vuln.cvss
+    const verified = isNormalized ? (vuln as NormalizedFinding).confidenceScore >= 50 : verification.verified
 
     const existing = existingMap.get(dedupeKey)
-    const verification = verifyVulnerability(vuln)
 
     if (existing) {
       await prisma.finding.update({
@@ -61,13 +73,13 @@ export async function persistFindings(
           title: vuln.title,
           summary,
           severity,
-          confidence: verification.confidence,
-          ...(vuln.cwe ? { cwe: vuln.cwe } : {}),
-          ...(vuln.cvss ? { cvssScore: vuln.cvss } : {}),
+          confidence,
+          ...(cwe ? { cwe } : {}),
+          ...(cvss != null ? { cvssScore: cvss } : {}),
           ...(vuln.technical_analysis ? { technicalDetail: vuln.technical_analysis } : {}),
           ...(vuln.remediation_steps ? { recommendedFix: vuln.remediation_steps } : {}),
           ...(vuln.impact ? { businessImpact: vuln.impact } : {}),
-          verified: verification.verified,
+          verified,
         },
       })
 
@@ -89,12 +101,12 @@ export async function persistFindings(
         title: vuln.title,
         summary,
         severity,
-        confidence: verification.confidence,
-        verified: verification.verified,
+        confidence,
+        verified,
         dedupeKey,
-        ...(vuln.cwe ? { cwe: vuln.cwe } : {}),
+        ...(cwe ? { cwe } : {}),
         ...(vuln.cve ? { sarifRuleId: vuln.cve } : {}),
-        ...(vuln.cvss ? { cvssScore: vuln.cvss } : {}),
+        ...(cvss != null ? { cvssScore: cvss } : {}),
         ...(vuln.technical_analysis ? { technicalDetail: vuln.technical_analysis } : {}),
         ...(vuln.remediation_steps ? { recommendedFix: vuln.remediation_steps } : {}),
         ...(vuln.impact ? { businessImpact: vuln.impact } : {}),

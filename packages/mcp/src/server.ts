@@ -1,11 +1,12 @@
 import { logger } from "@lyrashield/logger"
-import { ALL_TOOLS, type McpTool, type McpToolResult } from "./tools"
+import { createAllTools, type McpTool, type McpToolResult, type ToolHandlerContext } from "./tools"
 import { PromptInjectionGuard } from "./prompt-injection-guard"
 
 export interface McpServerOptions {
   serverName?: string
   serverVersion?: string
   strictMode?: boolean
+  toolContext?: ToolHandlerContext
 }
 
 export class McpServer {
@@ -15,7 +16,11 @@ export class McpServer {
   private serverVersion: string
 
   constructor(options?: McpServerOptions) {
-    this.tools = new Map(ALL_TOOLS.map((t) => [t.name, t]))
+    const context: ToolHandlerContext = options?.toolContext ?? {
+      apiBaseUrl: process.env.LYRASHIELD_API_URL ?? "http://localhost:3000",
+      apiKey: process.env.LYRASHIELD_API_KEY,
+    }
+    this.tools = new Map(createAllTools(context).map((t) => [t.name, t]))
     this.guard = new PromptInjectionGuard({
       strictMode: options?.strictMode ?? true,
     })
@@ -34,6 +39,7 @@ export class McpServer {
   async callTool(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
     const tool = this.tools.get(name)
     if (!tool) {
+      logger.warn("MCP tool call — unknown tool", { tool: name })
       return {
         content: [{ type: "text", text: JSON.stringify({ error: `Unknown tool: ${name}` }) }],
         isError: true,
@@ -45,6 +51,8 @@ export class McpServer {
       logger.warn("MCP tool call blocked by prompt injection guard", {
         tool: name,
         reason: guardResult.reason,
+        detectedPatterns: guardResult.detectedPatterns,
+        args,
       })
       return {
         content: [{
@@ -68,6 +76,11 @@ export class McpServer {
         logger.warn("MCP sanitization produced invalid JSON, using original args", { tool: name })
       }
     }
+
+    logger.info("MCP tool call allowed", {
+      tool: name,
+      suspiciousPatterns: guardResult.detectedPatterns.length > 0 ? guardResult.detectedPatterns : undefined,
+    })
 
     try {
       return await tool.handler(safeArgs)

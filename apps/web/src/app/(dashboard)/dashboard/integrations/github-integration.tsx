@@ -117,7 +117,7 @@ export function GithubIntegration({
       {connected && !reposLoaded && (
         <div className="mt-4">
           <Button onClick={loadRepos} disabled={loading} variant="secondary">
-            {loading ? <Spinner /> : <RefreshCw className="h-4 w-4" />}
+            {loading ? <Spinner /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
             Load repositories
           </Button>
         </div>
@@ -134,7 +134,7 @@ export function GithubIntegration({
                 <button
                   key={repo.id}
                   onClick={() => setSelectedRepo(repo)}
-                  className={`flex w-full items-center justify-between rounded-lg border p-3 text-left text-sm transition-colors ${
+                  className={`flex w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     selectedRepo?.id === repo.id ? "border-primary bg-primary/5" : "hover:bg-accent"
                   }`}
                 >
@@ -145,14 +145,14 @@ export function GithubIntegration({
                       <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">private</span>
                     )}
                   </div>
-                  {selectedRepo?.id === repo.id && <Check className="h-4 w-4 text-primary" />}
+                  {selectedRepo?.id === repo.id && <Check className="h-4 w-4 text-primary" aria-hidden="true" />}
                 </button>
               ))
             )}
           </div>
           {selectedRepo && !targetCreated && (
             <Button onClick={handleCreateTarget} disabled={loading}>
-              {loading ? <Spinner /> : <Plus className="h-4 w-4" />}
+              {loading ? <Spinner /> : <Plus className="h-4 w-4" aria-hidden="true" />}
               Add &ldquo;{selectedRepo.fullName}&rdquo; as target
             </Button>
           )}

@@ -104,8 +104,9 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
 
   if (loading && notifications.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Spinner />
+      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
+        <Spinner className="h-6 w-6" />
+        <p className="text-sm text-muted-foreground">Loading notifications...</p>
       </div>
     )
   }
@@ -113,7 +114,10 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Notifications</h1>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Scan alerts, finding warnings, and fix PR updates</p>
+        </div>
         {notifications.some((n) => n.status !== "read") && (
           <Button size="sm" variant="ghost" onClick={() => void handleMarkAllRead()}>
             <CheckCircle2 className="h-4 w-4 mr-1" aria-hidden="true" />
@@ -146,7 +150,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
             const Icon = CHANNEL_ICONS[notification.channel] ?? Bell
             const badgeVariant = TYPE_COLORS[notification.type] ?? "muted"
             return (
-              <Card key={notification.id} className="p-4">
+              <Card key={notification.id} className="p-4 transition-shadow duration-200 hover:shadow-card-hover">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 shrink-0">
                     <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
@@ -175,7 +179,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
                       variant="ghost"
                       onClick={() => void handleMarkRead(notification.id)}
                     >
-                      <CheckCircle2 className="h-4 w-4" />
+                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   )}
                 </div>

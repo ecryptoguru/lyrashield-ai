@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { authClient } from "@lyrashield/auth"
 import { useRouter } from "next/navigation"
 import {
   ShieldCheck,
+  Rocket,
   LayoutDashboard,
   FolderKanban,
   Crosshair,
@@ -23,6 +24,7 @@ import {
   Menu,
   X,
 } from "lucide-react"
+import { Button } from "@lyrashield/ui"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 
 const navItems = [
@@ -33,6 +35,7 @@ const navItems = [
   { href: "/dashboard/findings", label: "Findings", icon: Bug },
   { href: "/dashboard/fixes", label: "Fixes", icon: Wrench },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
+  { href: "/dashboard/launch-readiness", label: "Launch Readiness", icon: Rocket },
   { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/schedules", label: "Schedules", icon: Calendar },
   { href: "/dashboard/team", label: "Team", icon: Users },
@@ -60,17 +63,13 @@ export function Sidebar({
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
-    workspaces[0]?.id ?? null
-  )
-  const [mobileOpen, setMobileOpen] = useState(false)
-
-  useEffect(() => {
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return workspaces[0]?.id ?? null
     const stored = localStorage.getItem("activeWorkspaceId")
-    if (stored && workspaces.some((w) => w.id === stored)) {
-      queueMicrotask(() => setActiveWorkspaceId(stored))
-    }
-  }, [workspaces])
+    if (stored && workspaces.some((w) => w.id === stored)) return stored
+    return workspaces[0]?.id ?? null
+  })
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   function handleSelectWorkspace(id: string) {
     setActiveWorkspaceId(id)
@@ -135,14 +134,15 @@ export function Sidebar({
             <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
           </div>
         </div>
-        <button
+        <Button
           onClick={handleSignOut}
           aria-label="Sign out"
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+          variant="ghost"
+          className="w-full justify-start gap-3 px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" />
           Sign out
-        </button>
+        </Button>
       </div>
     </>
   )

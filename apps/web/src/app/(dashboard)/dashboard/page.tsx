@@ -26,7 +26,7 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">Welcome back, {session.userName}</p>
         </div>
-        <Link href="/dashboard/scans" title="Scan engine coming soon — view scan history">
+        <Link href="/dashboard/scans">
           <Button>
             <Plus className="h-4 w-4" aria-hidden="true" />
             New Scan

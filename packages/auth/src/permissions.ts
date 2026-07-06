@@ -84,6 +84,11 @@ export const PERMISSIONS = {
   integration: {
     manage: "integration:manage",
   },
+  agent: {
+    view: "agent:view",
+    act: "agent:act",
+    approve: "agent:approve",
+  },
 } as const
 
 // Derive a type-safe union of every permission string from PERMISSIONS.
@@ -137,6 +142,9 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.audit.view,
     PERMISSIONS.audit.export,
     PERMISSIONS.integration.manage,
+    PERMISSIONS.agent.view,
+    PERMISSIONS.agent.act,
+    PERMISSIONS.agent.approve,
   ],
   SECURITY_ADMIN: [
     PERMISSIONS.scan.view,
@@ -166,6 +174,9 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.policy.update,
     PERMISSIONS.audit.view,
     PERMISSIONS.audit.export,
+    PERMISSIONS.agent.view,
+    PERMISSIONS.agent.act,
+    PERMISSIONS.agent.approve,
   ],
   APPSEC_MANAGER: [
     PERMISSIONS.scan.view,
@@ -188,6 +199,8 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.schedule.create,
     PERMISSIONS.schedule.update,
     PERMISSIONS.schedule.delete,
+    PERMISSIONS.agent.view,
+    PERMISSIONS.agent.act,
   ],
   BILLING_ADMIN: [
     PERMISSIONS.billing.manage,
@@ -214,6 +227,8 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.schedule.create,
     PERMISSIONS.schedule.update,
     PERMISSIONS.schedule.delete,
+    PERMISSIONS.agent.view,
+    PERMISSIONS.agent.act,
   ],
   MEMBER: [
     PERMISSIONS.project.create,
@@ -230,6 +245,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.schedule.view,
     PERMISSIONS.schedule.create,
     PERMISSIONS.schedule.update,
+    PERMISSIONS.agent.view,
   ],
   EXTERNAL_PENTESTER: [
     PERMISSIONS.scan.view,
@@ -240,6 +256,7 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.report.download,
     PERMISSIONS.notification.view,
     PERMISSIONS.schedule.view,
+    PERMISSIONS.agent.view,
   ],
   AUDITOR: [
     PERMISSIONS.scan.view,
@@ -251,8 +268,9 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.report.download,
     PERMISSIONS.notification.view,
     PERMISSIONS.schedule.view,
+    PERMISSIONS.agent.view,
   ],
-  VIEWER: [PERMISSIONS.scan.view, PERMISSIONS.finding.view, PERMISSIONS.retest.view, PERMISSIONS.report.download, PERMISSIONS.notification.view],
+  VIEWER: [PERMISSIONS.scan.view, PERMISSIONS.finding.view, PERMISSIONS.retest.view, PERMISSIONS.report.download, PERMISSIONS.notification.view, PERMISSIONS.agent.view],
 }
 
 export function hasPermission(role: MemberRole, permission: Permission): boolean {

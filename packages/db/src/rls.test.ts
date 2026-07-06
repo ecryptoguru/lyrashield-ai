@@ -106,6 +106,7 @@ describe("RLS helpers", () => {
       "Invitation",
       "WebhookEvent",
       "Retest",
+      "AgentApproval",
     ]
 
     it("WORKSPACE_SCOPED_MODELS matches the RLS-protected table set exactly", () => {

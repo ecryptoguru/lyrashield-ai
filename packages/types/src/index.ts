@@ -253,3 +253,98 @@ export type ScanJobResult = {
   errorCategory?: string
   errorMessage?: string
 }
+
+// ── Agent Action Layer types ───────────────────────────────────────
+
+export const ApprovalStatusSchema = z.enum(["PENDING", "APPROVED", "DENIED", "EXPIRED"])
+export type ApprovalStatus = z.infer<typeof ApprovalStatusSchema>
+
+export interface ServiceTokenPayload {
+  userId: string
+  workspaceId: string
+  role: string
+  issuedAt: number
+  expiresAt: number
+}
+
+export interface AgentActionContext {
+  userId: string
+  workspaceId: string
+  role: string
+  serviceToken?: string
+  approvalId?: string
+}
+
+export interface AgentActionResult<T = unknown> {
+  success: boolean
+  data?: T
+  error?: { code: string; message: string }
+  needsApproval?: boolean
+  approvalId?: string
+}
+
+export interface AgentActionDefinition<TInput = unknown, TOutput = unknown> {
+  name: string
+  description: string
+  inputSchema: z.ZodSchema<TInput>
+  permission: string
+  needsApproval?: (input: TInput) => boolean
+  handler: (input: TInput, context: AgentActionContext) => Promise<TOutput>
+  auditAction: string
+  auditResourceType: string
+}
+
+// Action input schemas
+
+export const ListTargetsInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  projectId: z.string().optional(),
+  cursor: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+})
+
+export const RunScanInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  targetId: z.string().min(1),
+  goal: ScanGoalSchema,
+  mode: ScanModeSchema.default("SAFE"),
+  policyId: z.string().optional(),
+})
+
+export const GetScanStatusInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  scanId: z.string().min(1),
+})
+
+export const ListFindingsInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  targetId: z.string().optional(),
+  scanId: z.string().optional(),
+  severity: FindingSeveritySchema.optional(),
+  status: FindingStatusSchema.optional(),
+  cursor: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+})
+
+export const GetFindingInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  findingId: z.string().min(1),
+})
+
+export const ExplainFindingInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  findingId: z.string().min(1),
+})
+
+// Approval input schemas
+
+export const CreateApprovalInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  actionName: z.string().min(1),
+  input: z.record(z.string(), z.unknown()),
+})
+
+export const ApproveDenyInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  approvalId: z.string().min(1),
+})

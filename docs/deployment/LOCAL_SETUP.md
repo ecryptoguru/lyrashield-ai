@@ -129,19 +129,14 @@ Verify:
 - Sign up / sign in works
 - Dashboard loads
 
-### 6. (Sprint 5+) Set Up the Scan Engine
+### 6. (Optional) Set Up the Scan Engine
 
-The engine runs inside a Docker sandbox container. You need to build it once.
+The engine runs as an external subprocess. Install the `lyrashield-engine` CLI to enable real scans.
 
 ```bash
 cd ~/Desktop/lyrashield-engine
 
-# Build the sandbox Docker image (Kali-based, ~15 min first time)
-cd containers
-docker build -t lyrashield-sandbox:latest -f Dockerfile ..
-cd ..
-
-# Install the engine CLI locally (for testing without Docker)
+# Install the engine CLI locally
 uv sync
 uv run lyrashield --help
 
@@ -150,7 +145,9 @@ pip install -e .
 lyrashield --help
 ```
 
-### 7. (Sprint 5+) Test a Scan Locally
+Without the engine binary, scans will fail at the `RUNNING` stage with `spawn lyrashield ENOENT` — this is expected. The scan lifecycle (QUEUED → PREFLIGHT → RUNNING → FAILED) still works correctly.
+
+### 7. Test a Scan Locally
 
 ```bash
 # Set LLM provider
@@ -167,7 +164,33 @@ lyrashield -n --target ./my-test-app --scan-mode quick
 # 4. Watch the scan timeline
 ```
 
-### 8. (Optional) Add MinIO for Evidence Storage
+### 8. Docker Deployment (Full Stack)
+
+The project includes a `docker-compose.yml` and `Dockerfile` for full-stack Docker deployment.
+
+```bash
+cd ~/Desktop/lyrasec-ai
+
+# Build and start all containers (postgres, redis, migrate, web, worker)
+docker compose up --build -d
+
+# Verify all containers are running
+docker ps
+# Should see: lyrashield-postgres (healthy), lyrashield-redis (healthy), lyrashield-web (running), lyrashield-worker (running)
+
+# Test the web app
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/
+# Should return: 200
+
+# Run tests inside the container
+docker exec lyrashield-worker sh -c "cd /app && pnpm vitest run"
+# Should show: 727 tests passed
+
+# Stop and clean up
+docker compose down
+```
+
+### 9. (Optional) Add MinIO for Evidence Storage
 
 ```bash
 # Add to docker-compose.yml:
@@ -205,7 +228,7 @@ pnpm dev
 # 3. Make changes in apps/web or packages/*
 
 # 4. Run tests
-pnpm test          # unit tests (115 passing: env, onboarding, GitHub webhook)
+pnpm test          # unit tests (727 passing, 56 files)
 pnpm typecheck     # TypeScript checks
 pnpm lint          # ESLint
 

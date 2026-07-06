@@ -1,0 +1,27 @@
+{
+  "name": "@lyrashield/agent",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings 0"
+  },
+  "dependencies": {
+    "@lyrashield/auth": "workspace:*",
+    "@lyrashield/config": "workspace:*",
+    "@lyrashield/db": "workspace:*",
+    "@lyrashield/logger": "workspace:*",
+    "@lyrashield/types": "workspace:*",
+    "bullmq": "^5.78.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.0",
+    "vitest": "^3.0.0",
+    "zod": "^4.0.0"
+  }
+}

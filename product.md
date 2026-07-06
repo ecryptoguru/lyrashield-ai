@@ -629,7 +629,7 @@ Stack-specific security skill packs that catch common mistakes in popular framew
 
 ## 12. Roadmap Highlights
 
-### Shipped (Sprint 0-2)
+### Shipped (Sprint 0–2)
 
 - Monorepo foundation (Next.js 16, TypeScript 6, Prisma 7, Better Auth)
 - Full Prisma schema with 20+ models
@@ -640,28 +640,53 @@ Stack-specific security skill packs that catch common mistakes in popular framew
 - Audit logging for all operations
 - RBAC with 10 roles and permission matrix
 
-### Completed (Sprint 2.5-3)
+### Completed (Sprint 2.5–3)
 
 - Onboarding flow (7-step wizard: Workspace → Target → Goal → Preflight → Scan → Results → Fix)
 - GitHub App integration (JWT auth, installation tokens, repo listing, webhook signature verification)
 - Integrations UI page with GitHub connect + repo picker + target creation
 - Rate limiting middleware (auth 5/min, API 30/min)
-- Tests: 115 passing (env, onboarding schemas, GitHub webhook signature, install URL)
 
-### Next up (Sprint 4-5)
+### Completed (Sprint 4 — Scan Orchestrator + Queue)
 
-- Scan orchestrator with Redis/BullMQ queue
-- LyraShield scan engine MVP (structured JSON findings, exit codes, event streaming)
+- BullMQ scan queue with Redis
+- Preflight checks (URL reachability, DNS, SSRF validation)
+- Engine runner (child process subprocess invocation)
+- Output parser (structured JSON findings)
+- Finding persister (encrypted evidence storage)
+- Scan lifecycle state machine (QUEUED → PREFLIGHT → RUNNING → COMPLETED/FAILED/CANCELLED)
+- Scan API routes (POST create, GET list, GET by ID, POST cancel)
+- Scan detail UI with client-side polling
 
-### Agent-Native layer (Sprint 3.5-9.5)
+### Completed (Batch 4 — Fix Proposals, Retests, Reports, Notifications, Schedules, Plain-Language Findings)
+
+- Fix proposals + GitHub PR creation (DB service, API routes, UI)
+- Retests (DB service, API routes)
+- Reports (HTML generation with 500-finding limit + truncation notice, download, share tokens)
+- Notifications (email/Slack/Discord/in-app channels with 10s timeouts, `createAndSendNotification` shared helper)
+- Schedules (CRON-based scan scheduling, DB service, API routes, UI)
+- Plain-language findings (CWE explanations + category labels + technicalDetail wiring)
+- Permissions extended for all new features (MEMBER restricted from `notification.manage`/`schedule.delete`)
+
+### Completed (Sprint 5–7 + UI/UX Refinement)
+
+- **Sprint 5 (Engine MVP):** External `lyrashield-engine` binary wired via `runner.ts` + `command-builder.ts`
+- **Sprint 6 (Findings Normalization):** `normalizer.ts` with severity normalization, CWE enrichment (40+ mappings), CVSS v3.1 estimation, confidence scoring, false-positive risk assessment, cross-source deduplication, finding statistics
+- **Sprint 6.5 (SCA + Secrets Scanning):** `sca-scanner.ts` (7 dep file formats, OSV API), `secrets-scanner.ts` (12 secret patterns), `scanner-orchestrator.ts` (parallel scan, normalize, merge)
+- **Sprint 7 (Tier 2):** AI-builder-aware URL scanner (10 detectors), launch-readiness UI (score gauge, verdict card, severity breakdown), shareable report public page + badge, MCP server with real API calls + stdio transport, prompt-injection defense (27 patterns), GitHub Action diff-gate
+- **UI/UX refinement sweep:** Raw `<label>` → `FormField` component, raw color classes → design tokens, `aria-hidden` on all decorative icons, `tracking-tight` on all headings, `Spinner` in all loading states
+- **Docker deployment verified (fresh build 2026-07-06):** All 5 containers build and run, 17 pages return correct HTTP codes (200/307), 13 API endpoints respond correctly (400/401/405 for unauthenticated/missing params), scan lifecycle works end-to-end (QUEUED → PREFLIGHT → RUNNING → FAILED), audit log + scan events verified, 727 tests pass inside container
+- **AI pipeline audit (2026-07-06):** 7 fixes (2 HIGH, 3 MEDIUM, 2 LOW) — engine env var allowlist, output schema validation, narrowed FP patterns, LLM usage tracking, MCP audit logging, technicalDetail fix, golden-file regression test. 36 new tests. See `codebase.md` §26.
+- **727 tests (56 files), all green**
+
+### Next up (Sprint 3.5–9.5 — Agent-Native Layer)
 
 - Agent action layer (every core operation as `defineAction()`)
 - Security Copilot sidebar with page-aware context
 - Human approval gates for high-risk actions
 - Visual security plans and recaps
-- MCP server for Cursor, Codex, Claude Code, Windsurf, OpenCode
 
-### Enterprise (Sprint 12-19)
+### Enterprise (Sprint 12–19)
 
 - SAML/OIDC SSO, SCIM provisioning
 - Policy engine with production scan approval
