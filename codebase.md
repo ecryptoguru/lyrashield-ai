@@ -558,7 +558,7 @@ docker compose down       # Stop services
 - See §25 for full details
 
 ### Docker Deployment — ✅ Verified
-- All 5 containers build and run, 17 pages return correct HTTP codes (200/307), 13 API endpoints respond correctly, scan lifecycle works end-to-end, 727 tests pass inside container
+- All 5 containers build and run, 18 pages return correct HTTP codes (200/307/404), 13 API endpoints respond correctly, 7 migrations applied, 18 RLS tables confirmed, 781 tests pass inside container
 
 ### UI/UX Premium Upgrade (2026-07-05) — ✅ Complete
 
@@ -1574,13 +1574,13 @@ Workflow runs on PRs, checks diffs for:
 
 Full-stack Docker deployment tested and verified:
 - **5 containers** build and run: `lyrashield-postgres` (healthy), `lyrashield-redis` (healthy), `lyrashield-migrate` (exited 0), `lyrashield-web` (running), `lyrashield-worker` (running)
-- **6 Prisma migrations** applied successfully, 30 tables created
+- **7 Prisma migrations** applied successfully (including `agent_approval_layer`), 30 tables created, 18 RLS-enabled
 - **All 12 dashboard pages** return 200 (authenticated): dashboard, projects, targets, scans, findings, reports, notifications, schedules, team, settings, integrations, launch-readiness, fixes
 - **All 10 API endpoints** return `success: true`: projects, targets, scans, findings, reports, notifications, schedules, team, launch-readiness, fix-proposals
 - **Auth flow**: sign-up → email verification → sign-in → session cookies set correctly
 - **Scan lifecycle**: QUEUED → PREFLIGHT → RUNNING → FAILED (expected — engine binary not mounted in Docker)
 - **Security headers verified**: CSP with per-request nonce, X-Frame-Options DENY, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
-- **691 tests pass inside container** (at time of Sprint 7; now 727 after AI pipeline audit — see §26.5)
+- **781 tests pass inside container** (at time of Agent Action Layer; see §26.5 and §27 for later verifications)
 - **Unauthenticated API access** correctly returns 401
 - **404 pages** return 404 correctly
 
@@ -1691,12 +1691,12 @@ Full-stack Docker deployment tested and verified with fresh build (`docker compo
 
 - **3 Docker images** built successfully: `lyrashieldai-web`, `lyrashieldai-worker`, `lyrashieldai-migrate` (152.8s build time).
 - **5 containers** running: `lyrashield-postgres` (healthy), `lyrashield-redis` (healthy), `lyrashield-migrate` (exited 0), `lyrashield-web` (running), `lyrashield-worker` (running).
-- **6 Prisma migrations** applied successfully, 30 tables created.
-- **17 pages** tested: 3 return 200 (landing, sign-in, sign-up, onboarding), 14 return 307 (auth redirect — expected for dashboard pages without session). **0 failures.**
-- **13 API endpoints** tested: 6 return 400 (missing workspaceId/params — correct), 5 return 401 (auth required — correct), 1 returns 405 (GET not allowed on webhook endpoint — correct), 1 returns 400 (validation error — correct). **0 unexpected failures.**
+- **7 Prisma migrations** applied successfully (including `agent_approval_layer`), 30 tables created, 18 RLS-enabled.
+- **18 pages** tested: 3 return 200 (landing, sign-in, sign-up), 14 return 307 (auth redirect — expected for dashboard pages without session), 1 returns 404 (non-existent route — expected). **0 failures.**
+- **13 API endpoints** tested: 6 return 400 (missing workspaceId/params — correct), 5 return 401 (auth required — correct), 2 return 400 (validation error — correct). **0 unexpected failures.**
 - **Scan lifecycle** verified: QUEUED → PREFLIGHT (3/3 checks passed) → RUNNING (engine started) → FAILED (`spawn lyrashield ENOENT` — expected without engine binary). 6 ScanEvent records created with stage/level/message. AuditLog entry created (`scan.created`).
 - **Worker logs** verified: structured JSON with scanId, status transitions, preflight results, engine start, error, cleanup.
-- **727 tests pass inside container**: `docker exec lyrashield-worker pnpm vitest run` → 727 passed, 0 failed (3.24s).
+- **781 tests pass inside container**: `docker exec lyrashield-worker pnpm vitest run` → 781 passed, 0 failed (3.42s).
 - **Rate limiting** verified: burst requests trigger 429, resets after window.
 
 ---
