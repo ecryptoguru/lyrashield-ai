@@ -77,6 +77,7 @@ jobs:
 
     env:
       DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
+      SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
       REDIS_URL: "redis://localhost:6379"
       BETTER_AUTH_SECRET: "ci-test-secret-key-at-least-32-characters-long"
       BETTER_AUTH_URL: "http://localhost:3000"
@@ -110,11 +111,14 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm db:generate
 
+      - name: Create shadow database
+        run: docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -c 'CREATE DATABASE lyrashield_shadow;'
+
       - name: Migration drift check
         run: |
           pnpm --filter @lyrashield/db exec prisma migrate diff \
             --from-migrations ./prisma/migrations \
-            --to-schema-datamodel ./prisma/schema.prisma \
+            --to-schema ./prisma/schema.prisma \
             --exit-code
 
       - name: Run database migrations

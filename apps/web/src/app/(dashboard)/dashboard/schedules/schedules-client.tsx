@@ -33,7 +33,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   const [targets, setTargets] = useState<TargetOption[]>([])
   const [selectedTargetId, setSelectedTargetId] = useState("")
   const [cron, setCron] = useState("0 0 * * 0")
-  const [goal, setGoal] = useState("url_scan")
+  const [goal, setGoal] = useState("WEEKLY_MONITOR")
   const [mode, setMode] = useState("SAFE")
   const [creating, setCreating] = useState(false)
 
@@ -96,11 +96,11 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       setShowCreateForm(false)
       setSelectedTargetId("")
       setCron("0 0 * * 0")
-      setGoal("url_scan")
+      setGoal("WEEKLY_MONITOR")
       setMode("SAFE")
       await loadSchedules()
-    } catch {
-      setError("Failed to create schedule.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create schedule.")
     } finally {
       setCreating(false)
     }
@@ -115,8 +115,8 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       setSchedules((prev) =>
         prev.map((s) => (s.id === scheduleId ? { ...s, enabled: !currentEnabled } : s))
       )
-    } catch {
-      setError("Failed to toggle schedule.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to toggle schedule.")
     }
   }
 
@@ -125,8 +125,8 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
     try {
       await apiDelete(`/api/schedules/${scheduleId}?workspaceId=${workspaceId}`)
       setSchedules((prev) => prev.filter((s) => s.id !== scheduleId))
-    } catch {
-      setError("Failed to delete schedule.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete schedule.")
     }
   }
 
@@ -157,19 +157,22 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
           <div className="space-y-3">
             <h3 className="text-sm font-medium">Create Scheduled Scan</h3>
             {targets.length > 0 ? (
-              <Select
-                value={selectedTargetId}
-                onChange={(e) => setSelectedTargetId(e.target.value)}
-              >
-                <option value="">Select a target</option>
-                {targets.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
-                ))}
-              </Select>
+              <FormField label="Target" htmlFor="schedule-target">
+                <Select
+                  id="schedule-target"
+                  value={selectedTargetId}
+                  onChange={(e) => setSelectedTargetId(e.target.value)}
+                >
+                  <option value="">Select a target</option>
+                  {targets.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
+                  ))}
+                </Select>
+              </FormField>
             ) : (
               <p className="text-sm text-muted-foreground">No targets available. Create a target first.</p>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label="Cron Expression" htmlFor="cron-expr">
                 <Input
                   id="cron-expr"
@@ -179,7 +182,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                   value={cron}
                   onChange={(e) => setCron(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground mt-1">Default: weekly (Sunday midnight)</p>
+                <p className="text-xs text-muted-foreground mt-1">UTC. Use weekly like 0 0 * * 0 or daily like 30 8 * * *</p>
               </FormField>
               <FormField label="Scan Goal" htmlFor="scan-goal">
                 <Select
@@ -187,10 +190,12 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                   value={goal}
                   onChange={(e) => setGoal(e.target.value)}
                 >
-                  <option value="url_scan">URL Scan</option>
-                  <option value="sca">Software Composition Analysis</option>
-                  <option value="secrets">Secrets Scan</option>
-                  <option value="full_audit">Full Audit</option>
+                  <option value="WEEKLY_MONITOR">Weekly Monitor</option>
+                  <option value="TEST_APP">Test App</option>
+                  <option value="LAUNCH_REVIEW">Launch Review</option>
+                  <option value="CHECK_PR">Check PR</option>
+                  <option value="FULL_PENTEST">Full Pentest</option>
+                  <option value="COMPLIANCE_REVIEW">Compliance Review</option>
                 </Select>
               </FormField>
             </div>
@@ -201,7 +206,9 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                 onChange={(e) => setMode(e.target.value)}
               >
                 <option value="SAFE">Safe</option>
-                <option value="AGGRESSIVE">Aggressive</option>
+                <option value="QUICK">Quick</option>
+                <option value="STANDARD">Standard</option>
+                <option value="DEEP">Deep</option>
               </Select>
             </FormField>
             <div className="flex gap-2">

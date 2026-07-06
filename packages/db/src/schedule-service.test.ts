@@ -20,6 +20,7 @@ import {
   deleteSchedule,
   updateScheduleRunTimes,
   getDueSchedules,
+  getNextRunAt,
 } from "./schedule-service"
 
 const mockPrisma = prisma as unknown as {
@@ -36,7 +37,7 @@ const baseSchedule = {
   workspaceId: "ws-1",
   targetId: "target-1",
   cron: "0 0 * * 0",
-  goal: "url_scan",
+  goal: "TEST_APP",
   mode: "SAFE",
   enabled: true,
   lastRunAt: null,
@@ -62,7 +63,7 @@ describe("schedule-service", () => {
         workspaceId: "ws-1",
         targetId: "target-1",
         cron: "0 0 * * 0",
-        goal: "url_scan",
+        goal: "TEST_APP",
         createdById: "user-1",
       })
 
@@ -72,12 +73,23 @@ describe("schedule-service", () => {
           workspaceId: "ws-1",
           targetId: "target-1",
           cron: "0 0 * * 0",
-          goal: "url_scan",
+          goal: "TEST_APP",
           mode: "SAFE",
           createdById: "user-1",
           enabled: true,
+          nextRunAt: expect.any(Date),
         },
       })
+    })
+
+    it("rejects unsupported cron expressions", async () => {
+      await expect(createSchedule({
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        cron: "*/5 * * * *",
+        goal: "TEST_APP",
+        createdById: "user-1",
+      })).rejects.toThrow("Unsupported cron expression")
     })
   })
 
@@ -168,15 +180,33 @@ describe("schedule-service", () => {
 
     it("updates goal and mode", async () => {
       mockPrisma.schedule.findFirst.mockResolvedValue(baseSchedule)
-      mockPrisma.schedule.update.mockResolvedValue({ ...baseSchedule, goal: "sca", mode: "AGGRESSIVE" })
+      mockPrisma.schedule.update.mockResolvedValue({ ...baseSchedule, goal: "LAUNCH_REVIEW", mode: "DEEP" })
 
-      const result = await updateSchedule("sched-1", "ws-1", { goal: "sca", mode: "AGGRESSIVE" })
+      const result = await updateSchedule("sched-1", "ws-1", { goal: "LAUNCH_REVIEW", mode: "DEEP" })
 
-      expect(result.goal).toBe("sca")
+      expect(result.goal).toBe("LAUNCH_REVIEW")
       expect(mockPrisma.schedule.update).toHaveBeenCalledWith({
         where: { id: "sched-1" },
-        data: { goal: "sca", mode: "AGGRESSIVE" },
+        data: { goal: "LAUNCH_REVIEW", mode: "DEEP" },
       })
+    })
+  })
+
+  describe("getNextRunAt", () => {
+    it("returns the next weekly run using UTC fields", () => {
+      const result = getNextRunAt("0 0 * * 0", new Date("2026-01-01T12:00:00Z"))
+
+      expect(result?.toISOString()).toBe("2026-01-04T00:00:00.000Z")
+    })
+
+    it("returns the next daily run when day-of-week is wildcard", () => {
+      const result = getNextRunAt("30 8 * * *", new Date("2026-01-01T08:31:00Z"))
+
+      expect(result?.toISOString()).toBe("2026-01-02T08:30:00.000Z")
+    })
+
+    it("returns null for unsupported cron syntax", () => {
+      expect(getNextRunAt("*/15 * * * *")).toBeNull()
     })
   })
 
@@ -232,7 +262,10 @@ describe("schedule-service", () => {
           where: {
             enabled: true,
             deletedAt: null,
-            nextRunAt: { lte: now },
+            OR: [
+              { nextRunAt: null },
+              { nextRunAt: { lte: now } },
+            ],
           },
           take: 50,
         })

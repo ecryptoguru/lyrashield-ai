@@ -1,4 +1,4 @@
-import { getSchedule, updateSchedule, deleteSchedule, prisma } from "@lyrashield/db"
+import { getSchedule, updateSchedule, deleteSchedule, getNextRunAt, prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -38,9 +38,16 @@ export async function GET(
 
 const PatchScheduleSchema = z.object({
   workspaceId: z.string().min(1),
-  cron: z.string().min(1).optional(),
-  goal: z.enum(["url_scan", "sca", "secrets", "full_audit"]).optional(),
-  mode: z.enum(["SAFE", "AGGRESSIVE"]).optional(),
+  cron: z
+    .string()
+    .min(1)
+    .refine(
+      (c) => getNextRunAt(c.trim()) !== null,
+      "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'"
+    )
+    .optional(),
+  goal: z.enum(["CHECK_PR", "TEST_APP", "LAUNCH_REVIEW", "WEEKLY_MONITOR", "FULL_PENTEST", "COMPLIANCE_REVIEW"]).optional(),
+  mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).optional(),
   enabled: z.boolean().optional(),
 })
 
@@ -59,6 +66,7 @@ export async function PATCH(
     }
 
     const { workspaceId, ...updateData } = parsed.data
+    if (updateData.cron) updateData.cron = updateData.cron.trim()
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.schedule.update)
 

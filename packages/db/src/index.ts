@@ -141,6 +141,7 @@ export {
   deleteSchedule,
   updateScheduleRunTimes,
   getDueSchedules,
+  getNextRunAt,
   type ScheduleWithDetails,
 } from "./schedule-service"
 export {

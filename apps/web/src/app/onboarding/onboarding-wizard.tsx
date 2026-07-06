@@ -65,6 +65,8 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
 
   // Goal state
   const [selectedGoal, setSelectedGoal] = useState<string | null>(initialState.selectedGoal)
+  const [scanId, setScanId] = useState<string | null>(null)
+  const [scanStatus, setScanStatus] = useState<string | null>(null)
 
   const updateState = useCallback(async (updates: Partial<OnboardingData>) => {
     setError(null)
@@ -141,6 +143,32 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
     const updated = await updateState({ currentStep: nextStep })
     setLoading(false)
     if (updated) setStep(nextStep)
+  }
+
+  async function handleStartScan() {
+    if (!data.workspaceId || !data.targetId) {
+      setError("Create a workspace and target before starting a scan")
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      const scan = await apiPost<{ id: string; status: string }>("/api/scans", {
+        workspaceId: data.workspaceId,
+        targetId: data.targetId,
+        goal: selectedGoal ?? data.selectedGoal ?? "TEST_APP",
+        mode: "SAFE",
+      })
+      setScanId(scan.id)
+      setScanStatus(scan.status)
+      const updated = await updateState({ currentStep: 5 })
+      if (updated) setStep(5)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start scan")
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleBack() {
@@ -475,20 +503,27 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
           </div>
         )}
 
-        {/* Step 4: Scan (placeholder) */}
+        {/* Step 4: Scan */}
         {step === 4 && (
           <div className="space-y-4">
             <div>
               <h2 className="text-xl font-bold">Start your first scan</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Your scan engine is ready. Start a scan to detect security vulnerabilities.
+                Queue a safe first scan for the target you just configured.
               </p>
             </div>
-            <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center">
-              <Rocket className="mx-auto mb-3 h-10 w-10 text-muted-foreground" aria-hidden="true" />
-              <p className="text-sm text-muted-foreground">
-                Once you complete onboarding, you can start a scan from the Scans page and monitor results in real-time.
-              </p>
+            <div className="rounded-xl border bg-card/50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Rocket className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium">Safe scan mode</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    LyraShield will validate the target, enqueue the scan, and stream progress from the Scans page.
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="flex justify-between">
               <Button
@@ -501,32 +536,44 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 Back
               </Button>
               <Button
-                onClick={handleNext}
-                disabled={loading}
+                onClick={handleStartScan}
+                disabled={loading || !data.targetId}
               >
-                Continue
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                {loading && <Spinner className="mr-1" />}
+                <Rocket className="h-4 w-4" aria-hidden="true" />
+                Start scan
               </Button>
             </div>
           </div>
         )}
 
-        {/* Step 5: Results (placeholder) */}
+        {/* Step 5: Results */}
         {step === 5 && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-xl font-bold">View your results</h2>
+              <h2 className="text-xl font-bold">Track results</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Scan results will appear in the Findings page with severity ratings and evidence.
+                Follow scan progress, then review verified findings with severity, evidence, and plain-language context.
               </p>
             </div>
-            <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center">
-              <Bug className="mx-auto mb-3 h-10 w-10 text-muted-foreground" aria-hidden="true" />
-              <p className="text-sm text-muted-foreground">
-                Findings, severity ratings, and evidence will be displayed here after your first scan.
-              </p>
+            <div className="rounded-xl border bg-card/50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Bug className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    {scanId ? `Scan ${scanStatus?.toLowerCase() ?? "queued"}` : "Scan workspace ready"}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {scanId
+                      ? "Open the scan detail page to watch lifecycle events and findings as they are persisted."
+                      : "Open Scans to start or inspect runs whenever you are ready."}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row">
               <Button
                 onClick={handleBack}
                 disabled={loading}
@@ -536,32 +583,53 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 Back
               </Button>
-              <Button
-                onClick={handleNext}
-                disabled={loading}
-              >
-                Continue
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  onClick={() => router.push(scanId ? `/dashboard/scans/${scanId}` : "/dashboard/scans")}
+                  disabled={loading}
+                  variant="secondary"
+                >
+                  <Rocket className="h-4 w-4" aria-hidden="true" />
+                  Open scan
+                </Button>
+                <Button
+                  onClick={handleNext}
+                  disabled={loading}
+                >
+                  Continue
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Step 6: Fix (placeholder) */}
+        {/* Step 6: Fix */}
         {step === 6 && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-xl font-bold">Create a fix PR</h2>
+              <h2 className="text-xl font-bold">Turn findings into fixes</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Generate fix proposals and create pull requests directly from LyraShield.
+                Review findings, generate fix proposals, and create pull requests from the Fixes page when results are available.
               </p>
             </div>
-            <div className="rounded-xl border border-dashed bg-card/50 p-8 text-center">
-              <GitBranch className="mx-auto mb-3 h-10 w-10 text-muted-foreground" aria-hidden="true" />
-              <p className="text-sm text-muted-foreground">
-                Once scans produce findings, you can generate fix proposals and create
-                pull requests directly from LyraShield.
-              </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button
+                onClick={() => router.push("/dashboard/findings")}
+                className="rounded-xl border bg-card/50 p-4 text-left transition-[border-color,box-shadow] hover:border-primary/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Bug className="mb-3 h-5 w-5 text-primary" aria-hidden="true" />
+                <div className="font-medium">Review findings</div>
+                <div className="mt-1 text-sm text-muted-foreground">Triage severity, evidence, confidence, and status.</div>
+              </button>
+              <button
+                onClick={() => router.push("/dashboard/fixes")}
+                className="rounded-xl border bg-card/50 p-4 text-left transition-[border-color,box-shadow] hover:border-primary/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <GitBranch className="mb-3 h-5 w-5 text-primary" aria-hidden="true" />
+                <div className="font-medium">Prepare fixes</div>
+                <div className="mt-1 text-sm text-muted-foreground">Create fix proposals and GitHub pull requests.</div>
+              </button>
             </div>
             <div className="flex justify-between">
               <Button

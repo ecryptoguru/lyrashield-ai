@@ -4,9 +4,11 @@ import { env } from "@lyrashield/config"
 import { getScanQueueEvents } from "./queue"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
+import { startScheduleRunner } from "./schedules"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let queueEvents: ReturnType<typeof getScanQueueEvents> | null = null
+let scheduleRunner: NodeJS.Timeout | null = null
 let shuttingDown = false
 
 async function shutdown(signal: string): Promise<void> {
@@ -14,6 +16,12 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true
 
   logger.info("Worker shutting down", { signal })
+
+  if (scheduleRunner) {
+    clearInterval(scheduleRunner)
+    scheduleRunner = null
+    logger.info("Schedule runner stopped")
+  }
 
   if (worker) {
     const closed = worker.close()
@@ -66,6 +74,9 @@ async function main(): Promise<void> {
   worker.on("error", (error) => {
     logger.error("Worker error", { error: error.message, stack: error.stack })
   })
+
+  scheduleRunner = startScheduleRunner()
+  logger.info("Schedule runner started", { intervalMs: 60_000 })
 }
 
 main().catch((error) => {

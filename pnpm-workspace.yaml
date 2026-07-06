@@ -2,6 +2,10 @@ packages:
   - "apps/*"
   - "packages/*"
 
+overrides:
+  "@hono/node-server": "1.19.13"
+  postcss: "8.5.16"
+
 onlyBuiltDependencies:
   - "@prisma/engines"
   - "esbuild"

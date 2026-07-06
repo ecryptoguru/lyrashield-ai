@@ -6,6 +6,43 @@ export interface ScheduleWithDetails extends Schedule {
   target: { id: string; name: string; type: string; url: string | null }
 }
 
+function parseCronField(value: string, min: number, max: number): number | "*" | null {
+  if (value === "*") return "*"
+  if (!/^\d+$/.test(value)) return null
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) return null
+  return parsed
+}
+
+export function getNextRunAt(cron: string, after = new Date()): Date | null {
+  const parts = cron.trim().split(/\s+/)
+  if (parts.length !== 5) return null
+
+  const [minuteRaw, hourRaw, , , dayOfWeekRaw] = parts
+  const minute = parseCronField(minuteRaw!, 0, 59)
+  const hour = parseCronField(hourRaw!, 0, 23)
+  const dayOfWeek = parseCronField(dayOfWeekRaw!, 0, 6)
+  if (minute === null || hour === null || dayOfWeek === null) return null
+
+  const candidate = new Date(after)
+  candidate.setUTCSeconds(0, 0)
+  candidate.setUTCMinutes(candidate.getUTCMinutes() + 1)
+
+  for (let i = 0; i < 60 * 24 * 8; i += 1) {
+    const minuteMatches = minute === "*" || candidate.getUTCMinutes() === minute
+    const hourMatches = hour === "*" || candidate.getUTCHours() === hour
+    const dayMatches = dayOfWeek === "*" || candidate.getUTCDay() === dayOfWeek
+
+    if (minuteMatches && hourMatches && dayMatches) {
+      return new Date(candidate)
+    }
+
+    candidate.setUTCMinutes(candidate.getUTCMinutes() + 1)
+  }
+
+  return null
+}
+
 export async function createSchedule(params: {
   workspaceId: string
   targetId: string
@@ -14,6 +51,11 @@ export async function createSchedule(params: {
   mode?: string
   createdById: string
 }): Promise<Schedule> {
+  const nextRunAt = getNextRunAt(params.cron)
+  if (!nextRunAt) {
+    throw new Error("Unsupported cron expression. Use five fields with numeric minute/hour and optional day-of-week.")
+  }
+
   const schedule = await prisma.schedule.create({
     data: {
       workspaceId: params.workspaceId,
@@ -23,6 +65,7 @@ export async function createSchedule(params: {
       mode: (params.mode ?? "SAFE") as ScanMode,
       createdById: params.createdById,
       enabled: true,
+      nextRunAt,
     },
   })
 
@@ -93,10 +136,20 @@ export async function updateSchedule(
     throw new Error(`Schedule not found: ${scheduleId}`)
   }
 
+  const nextRunAt = data.cron
+    ? getNextRunAt(data.cron)
+    : data.enabled === true && !schedule.nextRunAt
+      ? getNextRunAt(schedule.cron)
+      : null
+  if (data.cron && !nextRunAt) {
+    throw new Error("Unsupported cron expression. Use five fields with numeric minute/hour and optional day-of-week.")
+  }
+
   return prisma.schedule.update({
     where: { id: scheduleId },
     data: {
       ...(data.cron ? { cron: data.cron } : {}),
+      ...(nextRunAt ? { nextRunAt } : {}),
       ...(data.goal ? { goal: data.goal as ScanGoal } : {}),
       ...(data.mode ? { mode: data.mode as ScanMode } : {}),
       ...(data.enabled !== undefined ? { enabled: data.enabled } : {}),
@@ -138,7 +191,10 @@ export async function getDueSchedules(now: Date): Promise<ScheduleWithDetails[]>
     where: {
       enabled: true,
       deletedAt: null,
-      nextRunAt: { lte: now },
+      OR: [
+        { nextRunAt: null },
+        { nextRunAt: { lte: now } },
+      ],
     },
     include: {
       target: { select: { id: true, name: true, type: true, url: true } },

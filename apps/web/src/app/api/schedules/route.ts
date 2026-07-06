@@ -1,4 +1,4 @@
-import { listSchedules, createSchedule, prisma } from "@lyrashield/db"
+import { listSchedules, createSchedule, getNextRunAt, prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -45,11 +45,11 @@ const CreateScheduleSchema = z.object({
     .string()
     .min(1, "cron expression is required")
     .refine(
-      (c) => /^[\d*/,-\s]+$/.test(c) && c.trim().split(/\s+/).length >= 5,
-      "Invalid cron expression — must have at least 5 fields"
+      (c) => getNextRunAt(c.trim()) !== null,
+      "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'"
     ),
-  goal: z.enum(["url_scan", "sca", "secrets", "full_audit"]),
-  mode: z.enum(["SAFE", "AGGRESSIVE"]).default("SAFE"),
+  goal: z.enum(["CHECK_PR", "TEST_APP", "LAUNCH_REVIEW", "WEEKLY_MONITOR", "FULL_PENTEST", "COMPLIANCE_REVIEW"]),
+  mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).default("SAFE"),
 })
 
 export async function POST(request: Request) {
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     const schedule = await createSchedule({
       workspaceId,
       targetId,
-      cron,
+      cron: cron.trim(),
       goal,
       mode,
       createdById: session.userId,
