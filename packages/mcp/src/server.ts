@@ -2,11 +2,32 @@ import { logger } from "@lyrashield/logger"
 import { createAllTools, type McpTool, type McpToolResult, type ToolHandlerContext } from "./tools"
 import { PromptInjectionGuard } from "./prompt-injection-guard"
 
+/**
+ * Human-approval gate for mutating MCP tools. Returns whether the mutating call
+ * may proceed. Invoked AT EXECUTION time (after the injection guard, before the
+ * handler) so approval is re-validated against the exact arguments — no TOCTOU
+ * gap between listing/approval and execution. (S8)
+ *
+ * Wire this to the product's Agent Action Layer / a human confirmation prompt.
+ * If omitted, the server is fail-closed: mutating tools are blocked.
+ */
+export type ApprovalGate = (
+  toolName: string,
+  args: Record<string, unknown>,
+) => Promise<{ approved: boolean; reason?: string }> | { approved: boolean; reason?: string }
+
 export interface McpServerOptions {
   serverName?: string
   serverVersion?: string
   strictMode?: boolean
   toolContext?: ToolHandlerContext
+  /**
+   * Approval gate for mutating tools. Omit to fail-closed (mutations blocked).
+   * Pass `allowMutations: true` explicitly to opt out (e.g. trusted CI contexts).
+   */
+  approvalGate?: ApprovalGate
+  /** Explicit opt-out of the mutation gate. Defaults to false (gate enforced). */
+  allowMutations?: boolean
 }
 
 export class McpServer {
@@ -14,6 +35,8 @@ export class McpServer {
   private guard: PromptInjectionGuard
   private serverName: string
   private serverVersion: string
+  private approvalGate?: ApprovalGate
+  private allowMutations: boolean
 
   constructor(options?: McpServerOptions) {
     const context: ToolHandlerContext = options?.toolContext ?? {
@@ -26,6 +49,8 @@ export class McpServer {
     })
     this.serverName = options?.serverName ?? "lyrashield-mcp"
     this.serverVersion = options?.serverVersion ?? "0.1.0"
+    this.approvalGate = options?.approvalGate
+    this.allowMutations = options?.allowMutations ?? false
   }
 
   listTools() {
@@ -75,6 +100,31 @@ export class McpServer {
       } catch {
         logger.warn("MCP sanitization produced invalid JSON, using original args", { tool: name })
       }
+    }
+
+    // Human-approval gate for mutating tools, evaluated against the exact
+    // (sanitized) args right before execution — no TOCTOU window. Read-only
+    // tools skip this. Fail-closed: with no gate and no explicit opt-in, a
+    // mutating call is blocked rather than silently executed. (S8)
+    if (tool.mutating && !this.allowMutations) {
+      const decision = this.approvalGate
+        ? await this.approvalGate(name, safeArgs)
+        : { approved: false, reason: "No approval gate configured; mutating tools are blocked by default." }
+      if (!decision.approved) {
+        logger.warn("MCP mutating tool blocked — not approved", { tool: name, reason: decision.reason })
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: "Mutating tool requires human approval",
+              tool: name,
+              reason: decision.reason ?? "Approval denied",
+            }),
+          }],
+          isError: true,
+        }
+      }
+      logger.info("MCP mutating tool approved", { tool: name })
     }
 
     logger.info("MCP tool call allowed", {

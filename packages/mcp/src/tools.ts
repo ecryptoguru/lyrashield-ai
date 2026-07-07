@@ -6,6 +6,12 @@ export type McpToolResult = {
 export interface McpTool {
   name: string
   description: string
+  /**
+   * Whether this tool mutates state (triggers a scan, creates a report, opens a
+   * PR, …). Mutating tools are gated behind a human-approval check in the server
+   * before their handler runs — read-only tools are not. (S8)
+   */
+  mutating: boolean
   inputSchema: {
     type: "object"
     properties: Record<string, unknown>
@@ -87,6 +93,7 @@ function makeErrorResult(message: string): McpToolResult {
 export function createScanTargetTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_scan_target",
+    mutating: true,
     description: "Trigger a security scan on a registered target. Requires workspaceId and targetId.",
     inputSchema: {
       type: "object",
@@ -117,6 +124,7 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
 export function createGetFindingsTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_get_findings",
+    mutating: false,
     description: "Retrieve security findings for a workspace, optionally filtered by severity or target.",
     inputSchema: {
       type: "object",
@@ -147,6 +155,7 @@ export function createGetFindingsTool(context: ToolHandlerContext): McpTool {
 export function createGetLaunchReadinessTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_get_launch_readiness",
+    mutating: false,
     description: "Get a launch-readiness verdict (GO / GO_WITH_CONDITIONS / NO_GO) based on open findings.",
     inputSchema: {
       type: "object",
@@ -173,6 +182,7 @@ export function createGetLaunchReadinessTool(context: ToolHandlerContext): McpTo
 export function createCreateReportTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_create_report",
+    mutating: true,
     description: "Generate a shareable security report from scan findings.",
     inputSchema: {
       type: "object",

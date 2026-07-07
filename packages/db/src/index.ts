@@ -75,6 +75,7 @@ export {
   updateScanStatus,
   addScanEvent,
   getScanWithEvents,
+  getScanForWorkspace,
   listScans,
   cancelScan,
   type CreateScanParams,

@@ -123,6 +123,18 @@ export async function getScanWithEvents(scanId: string): Promise<ScanWithEvents 
   })
 }
 
+/**
+ * Fetch a scan by id, explicitly scoped to a workspace. Use this whenever a
+ * caller-supplied scanId must be proven to belong to the caller's workspace
+ * before it is trusted (e.g. attaching a scan to a report) — do NOT rely on the
+ * Prisma extension's implicit read-scoping for a security boundary.
+ */
+export async function getScanForWorkspace(scanId: string, workspaceId: string): Promise<Scan | null> {
+  return prisma.scan.findFirst({
+    where: { id: scanId, workspaceId, deletedAt: null },
+  })
+}
+
 export interface ListScansParams {
   workspaceId: string
   targetId?: string

@@ -1,6 +1,7 @@
 import { listApprovals } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
+import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiPaginated, parsePaginationParams } from "../../../lib/api-response"
 
@@ -27,6 +28,10 @@ export async function GET(request: Request) {
     })
     return apiPaginated(result.items, result.nextCursor)
   } catch (err) {
-    return authErrorResponse(err)
+    const authErr = authErrorResponse(err)
+    if (authErr) return authErr
+    // Fallback for non-auth errors — previously this returned null. (Q7)
+    logger.error("Failed to list agent approvals", { error: String(err) })
+    return apiError("INTERNAL_ERROR", "Failed to list agent approvals", 500)
   }
 }

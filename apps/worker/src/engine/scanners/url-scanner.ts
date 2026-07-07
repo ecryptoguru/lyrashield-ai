@@ -2,12 +2,15 @@
 import { logger } from "@lyrashield/logger"
 import { readFile } from "fs/promises"
 import { join } from "path"
+import { safeFetch, type HostResolver } from "@lyrashield/security"
 import type { EngineVulnerability } from "../output-parser"
 
 export interface UrlScanConfig {
   targetUrl: string
   repoPath?: string
   fetchFn?: typeof fetch
+  /** Injectable DNS resolver — only for tests. */
+  resolver?: HostResolver
 }
 
 const AI_BUILDER_PLATFORMS = [
@@ -42,63 +45,23 @@ function makeFinding(
   }
 }
 
-function isPrivateIp(hostname: string): boolean {
-  const lower = hostname.toLowerCase()
-  if (lower === "localhost" || lower === "0.0.0.0") return true
-  // IPv4 private ranges: 10.x, 172.16-31.x, 192.168.x, 127.x, 169.254.x
-  const ipv4Match = lower.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/)
-  if (ipv4Match) {
-    const a = Number(ipv4Match[1])
-    const b = Number(ipv4Match[2])
-    if (a === 10) return true
-    if (a === 172 && b >= 16 && b <= 31) return true
-    if (a === 192 && b === 168) return true
-    if (a === 127) return true
-    if (a === 169 && b === 254) return true
-  }
-  // IPv6 loopback and link-local
-  if (lower === "::1" || lower.startsWith("fe80:")) return true
-  return false
-}
-
-function isSsrfSafe(url: string): boolean {
-  try {
-    const parsed = new URL(url)
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false
-    if (isPrivateIp(parsed.hostname)) return false
-    return true
-  } catch {
-    return false
-  }
-}
-
+/**
+ * Fetch the target URL through the shared, hardened, fetch-time SSRF guard
+ * (`@lyrashield/security` → `safeFetch`): the host is DNS-resolved and
+ * range-checked on every hop, redirects are re-validated manually, alternate IP
+ * encodings are canonicalized, and the body is size-bounded. This replaces the
+ * previous weak inline `isPrivateIp` string check, which did no DNS resolution,
+ * missed decimal/hex/octal IPv4 and many reserved ranges, and auto-followed
+ * redirects.
+ */
 async function fetchUrl(
   url: string,
   fetchFn?: typeof fetch,
+  resolver?: HostResolver,
 ): Promise<{ html: string; status: number; headers: Record<string, string> } | null> {
-  if (!isSsrfSafe(url)) {
-    logger.warn("URL fetch skipped — SSRF protection", { url })
-    return null
-  }
-  const fetchImpl = fetchFn ?? globalThis.fetch
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
-    const res = await fetchImpl(url, {
-      signal: controller.signal,
-      headers: { "User-Agent": "LyraSec-Scanner/1.0" },
-    })
-    clearTimeout(timeout)
-    const html = await res.text()
-    const headers: Record<string, string> = {}
-    res.headers.forEach((value, key) => {
-      headers[key.toLowerCase()] = value
-    })
-    return { html, status: res.status, headers }
-  } catch (err) {
-    logger.warn("URL fetch failed", { url, error: err instanceof Error ? err.message : String(err) })
-    return null
-  }
+  const result = await safeFetch(url, { fetchFn, resolver })
+  if (!result) return null
+  return { html: result.html, status: result.status, headers: result.headers }
 }
 
 function detectSupabaseAnonKey(html: string): EngineVulnerability[] {
@@ -389,10 +352,10 @@ function detectOpenRedirects(html: string): EngineVulnerability[] {
 }
 
 export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerability[]> {
-  const { targetUrl, repoPath, fetchFn } = config
+  const { targetUrl, repoPath, fetchFn, resolver } = config
   logger.info("Starting AI-builder-aware URL scan", { targetUrl })
 
-  const result = await fetchUrl(targetUrl, fetchFn)
+  const result = await fetchUrl(targetUrl, fetchFn, resolver)
   if (!result) {
     logger.warn("URL scan skipped — could not fetch target", { targetUrl })
     return []

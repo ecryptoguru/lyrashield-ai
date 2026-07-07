@@ -1,4 +1,4 @@
-import { listReports, createReport } from "@lyrashield/db"
+import { listReports, createReport, getScanForWorkspace } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -48,6 +48,16 @@ export async function POST(request: Request) {
     const { workspaceId, scanId, type, title } = parsed.data
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.report.create)
+
+    // Prove any caller-supplied scanId belongs to this workspace before attaching
+    // it. Without this a member could reference another tenant's scan, then leak
+    // its summary via the public share link (see getShareableReport). (S4)
+    if (scanId) {
+      const scan = await getScanForWorkspace(scanId, workspaceId)
+      if (!scan) {
+        return apiError("INVALID_PARAM", "scanId not found in this workspace", 400)
+      }
+    }
 
     const report = await createReport({
       workspaceId,

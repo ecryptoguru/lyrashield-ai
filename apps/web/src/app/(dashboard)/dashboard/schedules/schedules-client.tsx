@@ -225,7 +225,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
 
       {error && (
         <Card className="mb-4 p-4 border-destructive/50">
-          <div className="flex items-center gap-2 text-sm text-destructive">
+          <div className="flex items-center gap-2 text-sm text-destructive" role="alert">
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
             <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { setError(null); void loadSchedules() }}>

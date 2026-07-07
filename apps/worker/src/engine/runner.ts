@@ -32,6 +32,41 @@ export function interpretExitCode(code: number): {
 }
 
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024
+const SIGKILL_GRACE_MS = 5000
+
+export interface KillableChild {
+  kill(signal?: NodeJS.Signals): boolean
+}
+
+/**
+ * Two-stage kill escalation for the engine child process. `onTimeout()` sends
+ * SIGTERM and schedules a SIGKILL after `graceMs` UNLESS the process has exited
+ * (signalled via `markExited()`). This deliberately tracks its own `exited`
+ * flag rather than `child.killed`, which Node sets on signal *send* — see the
+ * call site. Exported for unit testing. (S5)
+ */
+export function createKillEscalation(
+  child: KillableChild,
+  graceMs: number,
+): { onTimeout: () => void; markExited: () => void } {
+  let exited = false
+  let killTimer: ReturnType<typeof setTimeout> | null = null
+  return {
+    onTimeout() {
+      child.kill("SIGTERM")
+      killTimer = setTimeout(() => {
+        if (!exited) child.kill("SIGKILL")
+      }, graceMs)
+    },
+    markExited() {
+      exited = true
+      if (killTimer) {
+        clearTimeout(killTimer)
+        killTimer = null
+      }
+    },
+  }
+}
 
 function buildEngineEnv(): Record<string, string> {
   const allow = new Set([
@@ -103,12 +138,14 @@ async function runEngineProcess(
     let stderrTruncated = false
     let killed = false
 
+    // Force-kill escalation. NOTE: do NOT gate the SIGKILL on `child.killed` —
+    // Node sets that flag as soon as a signal is *sent* (SIGTERM), regardless of
+    // whether the process actually died, so `!child.killed` is always false and
+    // the SIGKILL never fires. Track a real `exited` flag instead. (S5)
+    const escalation = createKillEscalation(child, SIGKILL_GRACE_MS)
     const timer = setTimeout(() => {
       killed = true
-      child.kill("SIGTERM")
-      setTimeout(() => {
-        if (!child.killed) child.kill("SIGKILL")
-      }, 5000)
+      escalation.onTimeout()
     }, timeoutMs)
 
     child.stdout?.on("data", (chunk: Buffer) => {
@@ -145,12 +182,14 @@ async function runEngineProcess(
 
     child.on("close", (code) => {
       clearTimeout(timer)
+      escalation.markExited()
       const exitCode = code ?? (killed ? -1 : 1)
       resolvePromise({ exitCode, stdout, stderr, timedOut: killed })
     })
 
     child.on("error", (err) => {
       clearTimeout(timer)
+      escalation.markExited()
       reject(err)
     })
   })

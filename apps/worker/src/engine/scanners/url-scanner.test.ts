@@ -1,17 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { scanUrl } from "./url-scanner"
+import type { HostResolver } from "@lyrashield/security"
 
 const mockFetch = vi.fn()
+
+// Stub DNS resolver so tests never touch the network and always resolve target
+// hosts to a safe public IP. SSRF-blocking behavior is covered explicitly below.
+const stubResolver: HostResolver = async () => ["93.184.216.34"]
 
 beforeEach(() => {
   mockFetch.mockReset()
 })
 
 function makeResponse(html: string, headers: Record<string, string> = {}, status = 200) {
+  const lower: Record<string, string> = {}
+  for (const [k, v] of Object.entries(headers)) lower[k.toLowerCase()] = v
   return {
     ok: true,
     status,
+    body: null,
     headers: {
+      get: (key: string): string | null => lower[key.toLowerCase()] ?? null,
       forEach: (cb: (value: string, key: string) => void) => {
         for (const [key, value] of Object.entries(headers)) {
           cb(value, key)
@@ -34,6 +43,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const supabaseFinding = findings.find((f) => f.id.includes("supabase-anon-key"))
     expect(supabaseFinding).toBeDefined()
@@ -54,6 +64,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const firebaseFinding = findings.find((f) => f.id.includes("firebase-config"))
     expect(firebaseFinding).toBeDefined()
@@ -65,6 +76,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const headerFindings = findings.filter((f) => f.id.includes("missing-header"))
     expect(headerFindings.length).toBeGreaterThanOrEqual(3)
@@ -82,6 +94,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const headerFindings = findings.filter((f) => f.id.includes("missing-header"))
     expect(headerFindings).toHaveLength(0)
@@ -97,6 +110,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const corsFinding = findings.find((f) => f.id.includes("cors-wildcard-with-credentials"))
     expect(corsFinding).toBeDefined()
@@ -110,6 +124,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const idorFinding = findings.find((f) => f.id.includes("idor-pattern"))
     expect(idorFinding).toBeDefined()
@@ -122,6 +137,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const aiFinding = findings.find((f) => f.id.includes("ai-builder"))
     expect(aiFinding).toBeDefined()
@@ -134,6 +150,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const redirectFinding = findings.find((f) => f.id.includes("open-redirect"))
     expect(redirectFinding).toBeDefined()
@@ -146,6 +163,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const stripeFinding = findings.find((f) => f.id.includes("stripe-secret-key"))
     expect(stripeFinding).toBeDefined()
@@ -157,6 +175,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     expect(findings).toHaveLength(0)
   })
@@ -166,6 +185,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch as unknown as typeof fetch,
+      resolver: stubResolver,
     })
     expect(findings).toHaveLength(0)
   })
@@ -176,6 +196,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const webhookFinding = findings.find((f) => f.id.includes("webhook-no-verification"))
     expect(webhookFinding).toBeDefined()
@@ -189,6 +210,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const webhookFinding = findings.find((f) => f.id.includes("webhook-no-verification"))
     expect(webhookFinding).toBeUndefined()
@@ -207,6 +229,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const googleKeyFindings = findings.filter((f) => f.id.includes("google-api-key"))
     const firebaseFindings = findings.filter((f) => f.id.includes("firebase-config"))
@@ -226,6 +249,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     const headerFindings = findings.filter((f) => f.id.includes("missing-header"))
     expect(headerFindings).toHaveLength(0)
@@ -235,6 +259,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "http://localhost:3000",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     expect(findings).toHaveLength(0)
     expect(mockFetch).not.toHaveBeenCalled()
@@ -244,6 +269,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "http://192.168.1.1/admin",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     expect(findings).toHaveLength(0)
     expect(mockFetch).not.toHaveBeenCalled()
@@ -253,6 +279,7 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "http://10.0.0.1/internal",
       fetchFn: mockFetch,
+      resolver: stubResolver,
     })
     expect(findings).toHaveLength(0)
     expect(mockFetch).not.toHaveBeenCalled()
@@ -262,8 +289,50 @@ describe("scanUrl", () => {
     const findings = await scanUrl({
       targetUrl: "file:///etc/passwd",
       fetchFn: mockFetch as unknown as typeof fetch,
+      resolver: stubResolver,
     })
     expect(findings).toHaveLength(0)
     expect(mockFetch).not.toHaveBeenCalled()
+  })
+})
+
+describe("scanUrl — SSRF protection (fetch-time)", () => {
+  it("blocks a target whose hostname resolves to the cloud-metadata IP (rebinding)", async () => {
+    const rebindResolver: HostResolver = async () => ["169.254.169.254"]
+    mockFetch.mockResolvedValue(makeResponse("<html></html>"))
+    const findings = await scanUrl({
+      targetUrl: "https://internal.attacker.example",
+      fetchFn: mockFetch,
+      resolver: rebindResolver,
+    })
+    expect(findings).toHaveLength(0)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it("blocks a decimal-encoded loopback address (http://2130706433 = 127.0.0.1)", async () => {
+    mockFetch.mockResolvedValue(makeResponse("<html></html>"))
+    const findings = await scanUrl({
+      targetUrl: "http://2130706433/",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
+    expect(findings).toHaveLength(0)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it("does not follow a redirect into a private range", async () => {
+    // First hop: a 302 to an internal host; safeFetch must re-validate and stop.
+    mockFetch.mockResolvedValueOnce(
+      makeResponse("", { location: "http://169.254.169.254/latest/meta-data/" }, 302),
+    )
+    const findings = await scanUrl({
+      targetUrl: "https://example.com",
+      fetchFn: mockFetch,
+      resolver: async (host: string) =>
+        host === "example.com" ? ["93.184.216.34"] : ["169.254.169.254"],
+    })
+    expect(findings).toHaveLength(0)
+    // The redirect target must never be fetched (only the first hop).
+    expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 })
