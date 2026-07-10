@@ -68,6 +68,21 @@ it("selects the newest valid output across both layouts", async () => {
   await expect(findRunOutputDir(workDir)).resolves.toBe(expected)
 })
 
+it("ignores newer runs whose expected artifact is a directory", async () => {
+  const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+  cleanupPaths.push(workDir)
+  const expected = await createRun(
+    workDir, "lyrashield_runs", "valid", "run.json", new Date(1_000),
+  )
+  const invalidRunDir = join(workDir, "strix_runs", "invalid")
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await mkdir(join(invalidRunDir, "run.json"), { recursive: true })
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await utimes(invalidRunDir, new Date(2_000), new Date(2_000))
+
+  await expect(findRunOutputDir(workDir)).resolves.toBe(expected)
+})
+
 it("ignores directories without expected output artifacts", async () => {
   const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
   cleanupPaths.push(workDir)
