@@ -1,0 +1,16 @@
+---
+import Base from "@layouts/Base.astro"
+
+const title = "Page not found — LyraSec AI"
+const description = "The page you're looking for doesn't exist."
+---
+
+<Base title={title} description={description}>
+  <section class="px-4 py-24 text-center sm:px-6 lg:px-8">
+    <h1 class="text-4xl font-semibold tracking-tight text-text sm:text-5xl">404</h1>
+    <p class="mt-4 text-lg text-text-muted">This page doesn't exist.</p>
+    <a href="/" class="mt-8 inline-block rounded-lg bg-accent px-5 py-3 text-sm font-medium text-bg hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+      Back to home
+    </a>
+  </section>
+</Base>

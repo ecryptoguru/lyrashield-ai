@@ -1,0 +1,39 @@
+{
+  "name": "lyrasec-marketing",
+  "compatibility_date": "2026-07-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "PUBLIC_SITE_URL": "",
+    "PUBLIC_X_URL": "",
+    "PUBLIC_INDEXABLE": "false",
+    "PUBLIC_POSTHOG_KEY": "",
+    "PUBLIC_POSTHOG_HOST": "https://eu.i.posthog.com"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lyrasec-marketing-waitlist",
+      // Replace with your D1 database ID before deploying.
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "WAITLIST_RL",
+      // Replace with your Rate Limit namespace ID before deploying.
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 5,
+        "period": 60
+      }
+    }
+  ]
+}

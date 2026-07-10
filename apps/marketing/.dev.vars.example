@@ -1,0 +1,2 @@
+# Secret: random 32+ character salt for ip_hash. Replace before any real use.
+WAITLIST_IP_SALT="local-dev-salt-replace-me"

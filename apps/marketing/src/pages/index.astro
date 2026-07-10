@@ -1,0 +1,55 @@
+---
+import Base from "@layouts/Base.astro"
+import Hero from "@components/landing/Hero.astro"
+import Problem from "@components/landing/Problem.astro"
+import Loop from "@components/landing/Loop.astro"
+import WhereYouWork from "@components/landing/WhereYouWork.astro"
+import TwoDepths from "@components/landing/TwoDepths.astro"
+import Faq from "@components/landing/Faq.astro"
+import FinalCta from "@components/landing/FinalCta.astro"
+
+const siteUrl = (import.meta.env.PUBLIC_SITE_URL as string | undefined) || "http://localhost:4321"
+const siteOrigin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
+const pageUrl = new URL("/", siteOrigin).toString()
+const siteHostname = new URL(siteOrigin).hostname
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "LyraSec AI",
+    url: siteUrl,
+    potentialAction: {
+      "@type": "SearchAction",
+      target: `https://www.google.com/search?q=site:${siteHostname}+%7Bsearch_term_string%7D`,
+      "query-input": "required name=search_term_string",
+    },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "LyraSec AI",
+    applicationCategory: "SecurityApplication",
+    description: "AI security agent for AI-built apps: scan, verify, fix, retest.",
+    url: pageUrl,
+    sameAs: [
+      (import.meta.env.PUBLIC_X_URL as string | undefined) || undefined,
+    ].filter(Boolean),
+  },
+]
+---
+
+<Base
+  title="LyraSec AI — Secure AI-built apps before they ship"
+  description="AI security agent for AI-built apps. Scan, verify, fix, and retest in one loop. From vibe-coded to verified."
+  canonical={pageUrl}
+  jsonLd={jsonLd}
+>
+  <Hero />
+  <Problem />
+  <Loop />
+  <WhereYouWork />
+  <TwoDepths />
+  <Faq />
+  <FinalCta />
+</Base>
