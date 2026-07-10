@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { mkdtemp, mkdir, rm, utimes, writeFile } from "fs/promises"
+import { tmpdir } from "os"
+import { join } from "path"
 
 vi.mock("@lyrashield/config", () => ({
   env: {
@@ -12,13 +15,66 @@ vi.mock("@lyrashield/db", () => ({
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: {
+    debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
   },
 }))
 
-import { interpretExitCode } from "./runner"
+import { findRunOutputDir, interpretExitCode } from "./runner"
+
+const cleanupPaths: string[] = []
+
+afterEach(async () => {
+  await Promise.all(
+    cleanupPaths.splice(0).map((path) => rm(path, { recursive: true, force: true })),
+  )
+})
+
+async function createRun(
+  workDir: string,
+  layout: "strix_runs" | "lyrashield_runs",
+  name: string,
+  artifact: "run.json" | "vulnerabilities.json",
+  mtime: Date,
+): Promise<string> {
+  const runDir = join(workDir, layout, name)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await mkdir(runDir, { recursive: true })
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(runDir, artifact), "{}", "utf8")
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await utimes(runDir, mtime, mtime)
+  return runDir
+}
+
+it("finds an upstream Strix output directory", async () => {
+  const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+  cleanupPaths.push(workDir)
+  const expected = await createRun(
+    workDir, "strix_runs", "upstream", "run.json", new Date(1_000),
+  )
+  await expect(findRunOutputDir(workDir)).resolves.toBe(expected)
+})
+
+it("selects the newest valid output across both layouts", async () => {
+  const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+  cleanupPaths.push(workDir)
+  await createRun(workDir, "lyrashield_runs", "legacy", "run.json", new Date(1_000))
+  const expected = await createRun(
+    workDir, "strix_runs", "current", "vulnerabilities.json", new Date(2_000),
+  )
+  await expect(findRunOutputDir(workDir)).resolves.toBe(expected)
+})
+
+it("ignores directories without expected output artifacts", async () => {
+  const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+  cleanupPaths.push(workDir)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await mkdir(join(workDir, "strix_runs", "empty"), { recursive: true })
+  await expect(findRunOutputDir(workDir)).resolves.toBeNull()
+})
 
 describe("interpretExitCode", () => {
   it("maps exit 0 to COMPLETED", () => {

@@ -85,6 +85,8 @@ cp .env.example .env
 # LYRASHIELD_ENGINE_PATH=~/Desktop/lyrashield-engine
 # LYRASHIELD_LLM=openai/gpt-4o
 # LLM_API_KEY=your-openai-key
+# # Local development uses the upstream sandbox tag from docker-compose.yml.
+# # LYRASHIELD_IMAGE=ghcr.io/usestrix/strix-sandbox:1.0.0
 #
 # # GitHub OAuth (create at https://github.com/settings/developers)
 # GITHUB_CLIENT_ID=your-client-id
@@ -320,8 +322,9 @@ docker compose exec worker lyrashield --version
 
 ### Docker sandbox won't start
 ```bash
-docker images | grep lyrashield-sandbox
-# If missing:
-cd ~/Desktop/lyrashield-engine/containers
-docker build -t lyrashield-sandbox:latest -f Dockerfile ..
+docker pull ghcr.io/usestrix/strix-sandbox:1.0.0
+docker image inspect ghcr.io/usestrix/strix-sandbox:1.0.0
 ```
+
+Local development uses the upstream `ghcr.io/usestrix/strix-sandbox:1.0.0` tag.
+Use a LyraShield-named image only after LyraShield publishes, signs, and maintains it.

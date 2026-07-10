@@ -464,7 +464,8 @@ GITHUB_WEBHOOK_SECRET=<webhook-secret>
 # Engine
 LYRASHIELD_LLM=openai/gpt-4o
 LLM_API_KEY=sk-...
-LYRASHIELD_IMAGE=ghcr.io/lyrashield/lyrashield-sandbox:v0.1.0
+# Pin the digest returned by `docker image inspect`; never deploy a mutable tag.
+LYRASHIELD_IMAGE=ghcr.io/usestrix/strix-sandbox@sha256:REPLACE_WITH_VERIFIED_DIGEST
 
 # Evidence Storage (Cloudflare R2)
 S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
@@ -487,6 +488,10 @@ RAZORPAY_KEY_SECRET=<key-secret>
 SENTRY_DSN=<dsn>
 NEXT_PUBLIC_SENTRY_DSN=<dsn>
 ```
+
+Local development may use `ghcr.io/usestrix/strix-sandbox:1.0.0`, but production
+must use the inspected image digest. A LyraShield-named image is permitted only
+after it is published, signed, and maintained by LyraShield.
 
 ## Backup & Restore
 
