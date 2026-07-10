@@ -149,6 +149,8 @@ These block downstream work. Status as of 2026-07-02 — all PENDING.
 
 ### Completed (previously listed as "Not started")
 
+- [x] Deep-review remediation (2026-07-10) — tenant-bound agent/report access, server-persisted active-workspace selection, atomic schedule/scan admission, cancellation-safe worker lifecycle, notification fault isolation, DNS/redirect revalidation, nested SCA manifests, and terminal scan-detail refresh. **597 source tests across 47 files** pass. See `codebase.md` §28. A transport-level egress proxy with DNS pinning remains the connection-time SSRF control.
+
 - [x] Email verification — enabled in `auth.ts` with Brevo integration
 - [x] Env/secret startup validation — `@lyrashield/config` with Zod schema
 - [x] Postgres RLS + Prisma query extension — RLS on all 18 workspace-scoped tables, `withWorkspaceRLS` helper
@@ -251,7 +253,7 @@ The Notion **Landing Page + Waitlist Dev-Ready Brief** has exact copy, layout, A
 5. ✅ Live scan timeline via client-side polling
 6. ✅ Scan cancellation
 7. ✅ Scan retry on failure (BullMQ default 3 attempts)
-8. ⏳ Worker Docker image with `lyrashield` CLI installed (engine subprocess not yet available)
+8. ✅ Worker Docker image includes the locked `lyrashield-engine` CLI via the sibling-repo build context; Docker socket connectivity and `lyrashield --version` verified
 
 ### Tier 6 — Sprint 5: LyraShield Scan Engine MVP
 

@@ -1,17 +1,21 @@
 import { cache } from "react"
+import { cookies } from "next/headers"
 import { prisma } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
+import { selectActiveWorkspaceId } from "./workspace-selection"
 
 export const getCachedSession = cache(async () => {
   return getSession()
 })
 
 export const getCachedWorkspaceId = cache(async (userId: string) => {
+  const cookieStore = await cookies()
   const memberships = await prisma.workspaceMember.findMany({
     where: { userId, status: "active" },
     select: { workspaceId: true },
+    orderBy: { createdAt: "asc" },
   })
-  return memberships[0]?.workspaceId ?? null
+  return selectActiveWorkspaceId(memberships, cookieStore.get("activeWorkspaceId")?.value)
 })
 
 export const getCachedProjects = cache(async (workspaceId: string) => {

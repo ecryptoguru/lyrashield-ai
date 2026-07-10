@@ -15,6 +15,11 @@ describe("Scan Lifecycle — State Machine Transitions", () => {
     it("PREFLIGHT → RUNNING", () => {
       expect(isValidTransition("PREFLIGHT", "RUNNING")).toBe(true)
     })
+    it("allows a retry to return to PREFLIGHT from an interrupted stage", () => {
+      expect(isValidTransition("PREFLIGHT", "PREFLIGHT")).toBe(true)
+      expect(isValidTransition("RUNNING", "PREFLIGHT")).toBe(true)
+      expect(isValidTransition("VERIFYING", "PREFLIGHT")).toBe(true)
+    })
     it("PREFLIGHT → REQUIRES_APPROVAL", () => {
       expect(isValidTransition("PREFLIGHT", "REQUIRES_APPROVAL")).toBe(true)
     })

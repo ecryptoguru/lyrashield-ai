@@ -27,6 +27,7 @@ interface ScanEvent {
 
 interface ScanData {
   id: string
+  workspaceId: string
   status: string
   goal: string
   mode: string
@@ -129,6 +130,7 @@ export function ScanDetailClient({
   findings: FindingItem[]
 }) {
   const [scan, setScan] = useState<ScanData>(initialScan)
+  const [currentFindings, setCurrentFindings] = useState<FindingItem[]>(findings)
   const [expandedEvents, setExpandedEvents] = useState(false)
   const [expandedFindings, setExpandedFindings] = useState<Set<string>>(new Set())
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -151,6 +153,13 @@ export function ScanDetailClient({
             createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : String(e.createdAt),
           })),
         })
+        if (["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(updated.status)) {
+          const findingsResponse = await fetch(`/api/findings?workspaceId=${updated.workspaceId}&scanId=${scan.id}`)
+          if (findingsResponse.ok) {
+            const findingsJson = await findingsResponse.json()
+            if (Array.isArray(findingsJson.data)) setCurrentFindings(findingsJson.data)
+          }
+        }
       }
     } catch {
       // Network errors during polling are non-fatal — keep showing stale data
@@ -165,11 +174,11 @@ export function ScanDetailClient({
     }
   }, [isActive, refresh])
 
-  const sortedFindings = [...findings].sort(
+  const sortedFindings = [...currentFindings].sort(
     (a, b) => (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99),
   )
 
-  const severityCounts = findings.reduce(
+  const severityCounts = currentFindings.reduce(
     (acc, f) => {
       acc[f.severity] = (acc[f.severity] ?? 0) + 1
       return acc
@@ -237,7 +246,7 @@ export function ScanDetailClient({
             <ShieldAlert className="h-4 w-4" aria-hidden="true" />
             Findings
           </div>
-          <p className="mt-1 text-lg font-semibold">{findings.length}</p>
+          <p className="mt-1 text-lg font-semibold">{currentFindings.length}</p>
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -245,7 +254,7 @@ export function ScanDetailClient({
             Verified
           </div>
           <p className="mt-1 text-lg font-semibold">
-            {findings.filter((f) => f.verified).length}
+            {currentFindings.filter((f) => f.verified).length}
           </p>
         </Card>
         <Card className="p-4">
@@ -297,10 +306,10 @@ export function ScanDetailClient({
         </Card>
       )}
 
-      {findings.length > 0 && (
+      {currentFindings.length > 0 && (
         <div className="mb-6">
           <h2 className="mb-3 text-lg font-semibold">
-            Findings ({findings.length})
+            Findings ({currentFindings.length})
           </h2>
           {Object.entries(severityCounts)
             .sort(([a], [b]) => (SEVERITY_ORDER[a] ?? 99) - (SEVERITY_ORDER[b] ?? 99))
@@ -364,7 +373,7 @@ export function ScanDetailClient({
         </div>
       )}
 
-      {findings.length === 0 && !isActive && (
+      {currentFindings.length === 0 && !isActive && (
         <EmptyState
           icon={ShieldCheck}
           title="No findings"

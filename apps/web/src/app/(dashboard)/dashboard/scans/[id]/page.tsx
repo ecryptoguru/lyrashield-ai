@@ -61,6 +61,7 @@ export default async function ScanDetailPage({
 
   const scanData = {
     id: scan.id,
+    workspaceId: scan.workspaceId,
     status: scan.status,
     goal: scan.goal,
     mode: scan.mode,

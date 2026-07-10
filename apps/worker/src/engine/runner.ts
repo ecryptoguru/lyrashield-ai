@@ -8,6 +8,7 @@ import { parseEngineOutput, type ParsedScanOutput } from "./output-parser"
 
 export interface EngineRunResult {
   exitCode: number
+  cancelled: boolean
   output: ParsedScanOutput
   stdout: string
   stderr: string
@@ -15,7 +16,7 @@ export interface EngineRunResult {
 
 const EXIT_CODE_MAP: Record<number, { status: "COMPLETED" | "FAILED"; category: string; message: string }> = {
   0: { status: "COMPLETED", category: "SUCCESS", message: "Scan completed successfully" },
-  1: { status: "COMPLETED", category: "SUCCESS", message: "Scan completed (exit 1 — non-critical)" },
+  1: { status: "FAILED", category: "ENGINE_ERROR", message: "Engine exited with an error" },
   2: { status: "COMPLETED", category: "VULNERABILITIES_FOUND", message: "Scan completed with vulnerabilities found" },
 }
 
@@ -32,6 +33,7 @@ export function interpretExitCode(code: number): {
 }
 
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024
+const MAX_STREAM_EVENTS = 200
 
 function buildEngineEnv(): Record<string, string> {
   const allow = new Set([
@@ -89,7 +91,8 @@ async function runEngineProcess(
   absWorkDir: string,
   scanId: string,
   timeoutMs: number,
-): Promise<{ exitCode: number; stdout: string; stderr: string; timedOut: boolean }> {
+  shouldCancel?: () => Promise<boolean>,
+): Promise<{ exitCode: number; stdout: string; stderr: string; timedOut: boolean; cancelled: boolean }> {
   return new Promise((resolvePromise, reject) => {
     const child: ChildProcess = spawn(cmd.executable, cmd.args, {
       cwd: absWorkDir,
@@ -101,15 +104,32 @@ async function runEngineProcess(
     let stderr = ""
     let stdoutTruncated = false
     let stderrTruncated = false
-    let killed = false
+    let streamEvents = 0
+    let timedOut = false
+    let cancelled = false
+    let closed = false
 
-    const timer = setTimeout(() => {
-      killed = true
+    const terminate = () => {
       child.kill("SIGTERM")
       setTimeout(() => {
-        if (!child.killed) child.kill("SIGKILL")
+        if (!closed) child.kill("SIGKILL")
       }, 5000)
+    }
+
+    const timer = setTimeout(() => {
+      timedOut = true
+      terminate()
     }, timeoutMs)
+    const cancellationTimer = shouldCancel
+      ? setInterval(() => {
+          void shouldCancel().then((isCancelled) => {
+            if (!closed && isCancelled) {
+              cancelled = true
+              terminate()
+            }
+          }).catch(() => {})
+        }, 1000)
+      : null
 
     child.stdout?.on("data", (chunk: Buffer) => {
       const text = chunk.toString()
@@ -121,7 +141,7 @@ async function runEngineProcess(
       }
       const lines = text.trim().split("\n")
       for (const line of lines) {
-        if (line.trim()) {
+        if (line.trim() && streamEvents++ < MAX_STREAM_EVENTS) {
           emitScanEvent(scanId, "engine_stdout", "info", line.slice(0, 500), {}).catch(() => {})
         }
       }
@@ -137,20 +157,24 @@ async function runEngineProcess(
       }
       const lines = text.trim().split("\n")
       for (const line of lines) {
-        if (line.trim()) {
+        if (line.trim() && streamEvents++ < MAX_STREAM_EVENTS) {
           emitScanEvent(scanId, "engine_stderr", "warn", line.slice(0, 500), {}).catch(() => {})
         }
       }
     })
 
     child.on("close", (code) => {
+      closed = true
       clearTimeout(timer)
-      const exitCode = code ?? (killed ? -1 : 1)
-      resolvePromise({ exitCode, stdout, stderr, timedOut: killed })
+      if (cancellationTimer) clearInterval(cancellationTimer)
+      const exitCode = code ?? ((timedOut || cancelled) ? -1 : 1)
+      resolvePromise({ exitCode, stdout, stderr, timedOut, cancelled })
     })
 
     child.on("error", (err) => {
+      closed = true
       clearTimeout(timer)
+      if (cancellationTimer) clearInterval(cancellationTimer)
       reject(err)
     })
   })
@@ -211,6 +235,7 @@ export async function runEngine(
   config: ScanConfig,
   scanId: string,
   timeoutMs = 30 * 60 * 1000,
+  shouldCancel?: () => Promise<boolean>,
 ): Promise<EngineRunResult> {
   const cmd = buildEngineCommand(config)
 
@@ -231,7 +256,13 @@ export async function runEngine(
     target: config.target.name,
   })
 
-  const { exitCode, stdout, stderr, timedOut } = await runEngineProcess(cmd, absWorkDir, scanId, timeoutMs)
+  const { exitCode, stdout, stderr, timedOut, cancelled } = await runEngineProcess(
+    cmd,
+    absWorkDir,
+    scanId,
+    timeoutMs,
+    shouldCancel,
+  )
 
   if (timedOut) {
     await emitScanEvent(scanId, "engine_timeout", "error", `Engine timed out after ${timeoutMs / 1000}s`, {
@@ -259,7 +290,7 @@ export async function runEngine(
     outputDir: outputDir ?? "not_found",
   })
 
-  return { exitCode, output, stdout, stderr }
+  return { exitCode, cancelled, output, stdout, stderr }
 }
 
 export async function cleanupEngineWorkspace(workDir: string): Promise<void> {

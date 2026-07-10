@@ -108,6 +108,12 @@ export async function POST(request: Request) {
       createdAt: scan.createdAt,
     }, 201)
   } catch (error) {
+    if (
+      (error && typeof error === "object" && (error as { code?: string }).code === "P2002") ||
+      (error instanceof Error && error.message === "Target already has an active scan")
+    ) {
+      return apiError("SCAN_IN_PROGRESS", "Target already has an active scan. Cancel it or wait for completion.", 409)
+    }
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
     logger.error("Failed to create scan", { error: String(error) })

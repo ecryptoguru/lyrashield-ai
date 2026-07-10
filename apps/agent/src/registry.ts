@@ -52,6 +52,20 @@ export class ActionRegistry {
 
     const input = parsed.data
 
+    if (
+      "workspaceId" in input &&
+      typeof input.workspaceId === "string" &&
+      input.workspaceId !== context.workspaceId
+    ) {
+      return {
+        success: false,
+        error: {
+          code: "WORKSPACE_MISMATCH",
+          message: "Action input must use the authenticated workspace",
+        },
+      }
+    }
+
     if (!hasPermission(context.role as never, action.permission as Permission)) {
       logger.warn("Agent action denied — insufficient permission", {
         action: actionName,

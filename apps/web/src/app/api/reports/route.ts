@@ -1,4 +1,4 @@
-import { listReports, createReport } from "@lyrashield/db"
+import { listReports, createReport, prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -48,6 +48,16 @@ export async function POST(request: Request) {
     const { workspaceId, scanId, type, title } = parsed.data
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.report.create)
+
+    if (scanId) {
+      const scan = await prisma.scan.findFirst({
+        where: { id: scanId, workspaceId, deletedAt: null },
+        select: { id: true },
+      })
+      if (!scan) {
+        return apiError("SCAN_NOT_FOUND", "Scan not found in this workspace", 404)
+      }
+    }
 
     const report = await createReport({
       workspaceId,

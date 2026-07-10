@@ -2,12 +2,15 @@
 import { logger } from "@lyrashield/logger"
 import { readFile } from "fs/promises"
 import { join } from "path"
+import { lookup } from "node:dns/promises"
+import net from "node:net"
 import type { EngineVulnerability } from "../output-parser"
 
 export interface UrlScanConfig {
   targetUrl: string
   repoPath?: string
   fetchFn?: typeof fetch
+  resolveHost?: (hostname: string) => Promise<string[]>
 }
 
 const AI_BUILDER_PLATFORMS = [
@@ -44,29 +47,38 @@ function makeFinding(
 
 function isPrivateIp(hostname: string): boolean {
   const lower = hostname.toLowerCase()
-  if (lower === "localhost" || lower === "0.0.0.0") return true
+  if (lower === "localhost" || lower.endsWith(".localhost") || lower === "0.0.0.0") return true
   // IPv4 private ranges: 10.x, 172.16-31.x, 192.168.x, 127.x, 169.254.x
   const ipv4Match = lower.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/)
   if (ipv4Match) {
     const a = Number(ipv4Match[1])
     const b = Number(ipv4Match[2])
+    if (a === 0 || a >= 224) return true
     if (a === 10) return true
+    if (a === 100 && b >= 64 && b <= 127) return true
     if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 192 && b === 0) return true
     if (a === 192 && b === 168) return true
     if (a === 127) return true
+    if (a === 198 && (b === 18 || b === 19)) return true
     if (a === 169 && b === 254) return true
   }
   // IPv6 loopback and link-local
-  if (lower === "::1" || lower.startsWith("fe80:")) return true
+  if (lower === "::1" || lower.startsWith("fe80:") || lower.startsWith("fc") || lower.startsWith("fd") || lower.startsWith("ff")) return true
   return false
 }
 
-function isSsrfSafe(url: string): boolean {
+async function isSsrfSafe(
+  rawUrl: string,
+  resolveHost: (hostname: string) => Promise<string[]>,
+): Promise<boolean> {
   try {
-    const parsed = new URL(url)
+    const parsed = new URL(rawUrl)
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false
     if (isPrivateIp(parsed.hostname)) return false
-    return true
+    if (net.isIP(parsed.hostname)) return true
+    const addresses = await resolveHost(parsed.hostname)
+    return addresses.length > 0 && addresses.every((address) => !isPrivateIp(address))
   } catch {
     return false
   }
@@ -75,8 +87,13 @@ function isSsrfSafe(url: string): boolean {
 async function fetchUrl(
   url: string,
   fetchFn?: typeof fetch,
+  resolveHost: (hostname: string) => Promise<string[]> = async (hostname) => {
+    const records = await lookup(hostname, { all: true, verbatim: true })
+    return records.map((record) => record.address)
+  },
+  redirects = 0,
 ): Promise<{ html: string; status: number; headers: Record<string, string> } | null> {
-  if (!isSsrfSafe(url)) {
+  if (!await isSsrfSafe(url, resolveHost)) {
     logger.warn("URL fetch skipped — SSRF protection", { url })
     return null
   }
@@ -86,9 +103,16 @@ async function fetchUrl(
     const timeout = setTimeout(() => controller.abort(), 15000)
     const res = await fetchImpl(url, {
       signal: controller.signal,
-      headers: { "User-Agent": "LyraSec-Scanner/1.0" },
+      redirect: "manual",
+      headers: { "User-Agent": "LyraSec-Scanner/1.0", "Accept-Encoding": "identity" },
     })
     clearTimeout(timeout)
+    const location = res.headers.get?.("location")
+    if (res.status >= 300 && res.status < 400 && location) {
+      if (redirects >= 3) return null
+      return fetchUrl(new URL(location, url).toString(), fetchFn, resolveHost, redirects + 1)
+    }
+    if (!res.ok) return null
     const html = await res.text()
     const headers: Record<string, string> = {}
     res.headers.forEach((value, key) => {
@@ -389,10 +413,10 @@ function detectOpenRedirects(html: string): EngineVulnerability[] {
 }
 
 export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerability[]> {
-  const { targetUrl, repoPath, fetchFn } = config
+  const { targetUrl, repoPath, fetchFn, resolveHost } = config
   logger.info("Starting AI-builder-aware URL scan", { targetUrl })
 
-  const result = await fetchUrl(targetUrl, fetchFn)
+  const result = await fetchUrl(targetUrl, fetchFn, resolveHost)
   if (!result) {
     logger.warn("URL scan skipped — could not fetch target", { targetUrl })
     return []

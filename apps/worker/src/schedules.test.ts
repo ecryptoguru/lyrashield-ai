@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => ({
   createScan: vi.fn(),
+  claimDueSchedule: vi.fn(),
   getDueSchedules: vi.fn(),
   getNextRunAt: vi.fn(),
   updateScanStatus: vi.fn(),
-  updateScheduleRunTimes: vi.fn(),
   prisma: {
     scan: {
       count: vi.fn(),
@@ -30,11 +30,11 @@ vi.mock("./queue", () => ({
 
 import {
   createScan,
+  claimDueSchedule,
   getDueSchedules,
   getNextRunAt,
   prisma,
   updateScanStatus,
-  updateScheduleRunTimes,
 } from "@lyrashield/db"
 import { enqueueScan } from "./queue"
 import { processDueSchedules } from "./schedules"
@@ -69,7 +69,7 @@ describe("processDueSchedules", () => {
     vi.mocked(createScan).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(enqueueScan).mockResolvedValue("scan-1")
     vi.mocked(updateScanStatus).mockResolvedValue({ id: "scan-1" } as never)
-    vi.mocked(updateScheduleRunTimes).mockResolvedValue(undefined)
+    vi.mocked(claimDueSchedule).mockResolvedValue(true)
     mockPrisma.scan.count.mockResolvedValue(0)
     mockPrisma.schedule.update.mockResolvedValue(schedule)
   })
@@ -80,7 +80,7 @@ describe("processDueSchedules", () => {
     const enqueued = await processDueSchedules(now)
 
     expect(enqueued).toBe(1)
-    expect(updateScheduleRunTimes).toHaveBeenCalledWith(
+    expect(claimDueSchedule).toHaveBeenCalledWith(
       "schedule-1",
       now,
       new Date("2026-01-04T00:00:00Z")
@@ -112,6 +112,15 @@ describe("processDueSchedules", () => {
     expect(enqueueScan).not.toHaveBeenCalled()
   })
 
+  it("skips a schedule another worker has already claimed", async () => {
+    vi.mocked(claimDueSchedule).mockResolvedValue(false)
+
+    const enqueued = await processDueSchedules()
+
+    expect(enqueued).toBe(0)
+    expect(createScan).not.toHaveBeenCalled()
+  })
+
   it("disables schedules with unsupported cron expressions", async () => {
     vi.mocked(getNextRunAt).mockReturnValue(null)
 
@@ -140,9 +149,9 @@ describe("processDueSchedules", () => {
   it("continues processing other schedules when one schedule fails", async () => {
     const secondSchedule = { ...schedule, id: "schedule-2", targetId: "target-2" }
     vi.mocked(getDueSchedules).mockResolvedValue([schedule, secondSchedule] as never)
-    vi.mocked(updateScheduleRunTimes)
+    vi.mocked(claimDueSchedule)
       .mockRejectedValueOnce(new Error("database timeout") as never)
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(true)
 
     const enqueued = await processDueSchedules()
 

@@ -1783,3 +1783,52 @@ Implemented the Agent Action Layer that exposes core LyraShield operations as ty
 ### Test count
 
 **781 tests (62 files), all green.** Up from 758 tests (60 files) — 23 new tests from deep code review.
+
+---
+
+## §28 — Reliability, Tenant-Safety, and UX Hardening (2026-07-10)
+
+Focused remediation after a fresh full-repository review.
+
+### Security and tenant isolation
+
+- **Agent workspace binding** (`apps/agent/src/registry.ts`) rejects an input `workspaceId` that differs from the authenticated service-token context.
+- **Report ownership enforcement** (`apps/web/src/app/api/reports/route.ts`, `packages/db/src/report-service.ts`) uses workspace-scoped scan/finding queries, preventing cross-workspace scan IDs from being attached or exposed.
+- **URL scanner SSRF defense-in-depth** (`apps/worker/src/engine/scanners/url-scanner.ts`) resolves the hostname before requesting it, rejects private/reserved addresses, manually revalidates each redirect target, and disables automatic redirects. A transport-level egress proxy with pinned DNS remains the durable deployment control.
+
+### Correctness and reliability
+
+- **Server-owned workspace selection** (`apps/web/src/app/api/workspaces/active/route.ts`, `apps/web/src/lib/cache.ts`, `apps/web/src/components/sidebar.tsx`) stores a validated selection in a secure HttpOnly cookie and only selects a current membership.
+- **Atomic scheduling and scan admission** (`packages/db/src/schedule-service.ts`, `packages/db/src/scan-service.ts`) prevent duplicate scheduler enqueueing and serialize scans per target.
+- **Cancellation/retry correctness** (`packages/db/src/scan-transitions.ts`, `apps/worker/src/jobs/run-scan.job.ts`, `apps/worker/src/engine/runner.ts`) guards concurrent updates, re-enters valid retry states, stops cancelled jobs cleanly, and escalates process shutdown only when needed.
+- **Notification fault isolation** (`apps/worker/src/jobs/run-scan.job.ts`) logs notification delivery failures without reversing an already-finalized scan or creating a spurious retry.
+- **Monorepo SCA discovery** (`apps/worker/src/engine/scanners/sca-scanner.ts`) finds nested dependency manifests while ignoring build/dependency directories.
+
+### UX
+
+- Terminal scan polling refreshes findings so scan-detail results do not remain stale.
+- Settings labels now accurately describe request-scoped filtering and audit logging rather than implying unavailable runtime controls.
+
+### Verification
+
+- Regression coverage covers workspace mismatch rejection, report ownership, workspace selection, schedule claims, scan lifecycle concurrency/retries, subprocess cancellation, notification failure isolation, DNS/redirect validation, and nested manifests.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` pass: **597 source tests in 47 test files**. Generated `dist` artifacts are excluded so test results are not double-counted in Docker.
+- `pnpm db:generate` passes. The migration-diff remained CI-gated during this pass; Docker was subsequently brought online and reverified in §29.
+
+---
+
+## §29 — Engine Repository Bootstrap and Docker Integration (2026-07-10)
+
+- Restored the sibling `lyrashield-engine` toolchain with `uv`, reconciled the frozen lockfile from the stale `strix-agent` package name to `lyrashield-engine` 1.0.4, and added a focused CLI version regression test.
+- Fixed `lyrashield --version`, Pydantic 2.11 configuration persistence deprecation, a shared mutable Docker mount default, and the missing-configuration startup order. The CLI now validates model configuration before Docker/sandbox setup.
+- Added an engine `.dockerignore` so local virtual environments and generated output are excluded from Docker build contexts.
+- Added a dedicated `worker` Docker target. Compose supplies the sibling engine as a named build context, installs its frozen production environment, exposes the CLI on `PATH`, and mounts the Docker socket in the explicitly local/dev stack for sandbox launches.
+- Aligned the worker exit-code contract with the real CLI: engine exit `1` is a runtime/configuration failure, while exit `2` means a completed scan with findings. This prevents missing engine configuration from being recorded as a successful scan.
+
+### Verification
+
+- Engine: **62 tests pass** with Pydantic deprecations treated as errors; Ruff lint and formatting pass; headless mypy passes across 58 source files; Bandit reports zero findings.
+- Worker image build runs `lyrashield --version` as a build-time smoke gate and reports **1.0.4**.
+- Running worker reports ready, reaches the Docker daemon, and passes the app's **597 tests across 47 files**.
+- Missing `LYRASHIELD_LLM` exits cleanly before sandbox setup. A paid/full scan was not started because no LLM configuration is present.
+- Known engine debt: full TUI mypy currently reports 69 Textual/Pygments typing errors, and repository-wide Pyright reports broad pre-existing unknown-type debt. These do not block the non-interactive worker path but should be handled as a separate typing-hardening batch.

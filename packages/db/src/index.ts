@@ -140,6 +140,7 @@ export {
   updateSchedule,
   deleteSchedule,
   updateScheduleRunTimes,
+  claimDueSchedule,
   getDueSchedules,
   getNextRunAt,
   type ScheduleWithDetails,

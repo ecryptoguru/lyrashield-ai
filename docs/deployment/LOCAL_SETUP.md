@@ -129,23 +129,34 @@ Verify:
 - Sign up / sign in works
 - Dashboard loads
 
-### 6. (Optional) Set Up the Scan Engine
+### 6. Set Up the Scan Engine
 
-The engine runs as an external subprocess. Install the `lyrashield-engine` CLI to enable real scans.
+Docker Compose builds the engine from the sibling Desktop repository into the worker image. Keep both repositories next to each other:
+
+```text
+~/Desktop/lyrasec-ai
+~/Desktop/lyrashield-engine
+```
+
+Build and verify the integrated worker:
+
+```bash
+cd ~/Desktop/lyrasec-ai
+docker compose build worker
+docker compose up -d worker
+docker compose exec worker lyrashield --version
+```
+
+For direct engine development on the host:
 
 ```bash
 cd ~/Desktop/lyrashield-engine
 
-# Install the engine CLI locally
-uv sync
+uv sync --frozen
 uv run lyrashield --help
-
-# Or install globally
-pip install -e .
-lyrashield --help
 ```
 
-Without the engine binary, scans will fail at the `RUNNING` stage with `spawn lyrashield ENOENT` — this is expected. The scan lifecycle (QUEUED → PREFLIGHT → RUNNING → FAILED) still works correctly.
+Set `LYRASHIELD_ENGINE_SOURCE` only when the sibling engine repository lives somewhere else. `LYRASHIELD_LLM` is required for a real scan; provider credentials depend on the selected model.
 
 ### 7. Test a Scan Locally
 
@@ -302,9 +313,9 @@ npx prisma studio --schema packages/db/prisma/schema.prisma  # inspect data
 
 ### Engine not found
 ```bash
-which lyrashield
-# If not found:
-cd ~/Desktop/lyrashield-engine && pip install -e .
+docker compose build worker
+docker compose up -d worker
+docker compose exec worker lyrashield --version
 ```
 
 ### Docker sandbox won't start

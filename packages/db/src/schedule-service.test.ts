@@ -7,6 +7,7 @@ vi.mock("./client", () => ({
       findFirst: vi.fn(),
       findMany: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }))
@@ -29,6 +30,7 @@ const mockPrisma = prisma as unknown as {
     findFirst: ReturnType<typeof vi.fn>
     findMany: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
+    updateMany: ReturnType<typeof vi.fn>
   }
 }
 
@@ -208,6 +210,10 @@ describe("schedule-service", () => {
     it("returns null for unsupported cron syntax", () => {
       expect(getNextRunAt("*/15 * * * *")).toBeNull()
     })
+
+    it("rejects day-of-month and month fields it does not implement", () => {
+      expect(getNextRunAt("0 0 31 2 *")).toBeNull()
+    })
   })
 
   describe("deleteSchedule", () => {
@@ -246,6 +252,33 @@ describe("schedule-service", () => {
         where: { id: "sched-1" },
         data: { lastRunAt: lastRun, nextRunAt: nextRun },
       })
+    })
+  })
+
+  describe("claimDueSchedule", () => {
+    it("claims a due schedule exactly once", async () => {
+      mockPrisma.schedule.updateMany.mockResolvedValue({ count: 1 })
+      const now = new Date("2026-01-01T12:00:00Z")
+      const nextRunAt = new Date("2026-01-08T12:00:00Z")
+
+      const { claimDueSchedule } = await import("./schedule-service")
+      await expect(claimDueSchedule("sched-1", now, nextRunAt)).resolves.toBe(true)
+      expect(mockPrisma.schedule.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "sched-1",
+          enabled: true,
+          deletedAt: null,
+          nextRunAt: { lte: now },
+        },
+        data: { lastRunAt: now, nextRunAt },
+      })
+    })
+
+    it("does not claim a schedule another worker already advanced", async () => {
+      mockPrisma.schedule.updateMany.mockResolvedValue({ count: 0 })
+      const { claimDueSchedule } = await import("./schedule-service")
+
+      await expect(claimDueSchedule("sched-1", new Date(), new Date())).resolves.toBe(false)
     })
   })
 

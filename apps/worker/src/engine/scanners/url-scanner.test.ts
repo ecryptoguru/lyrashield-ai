@@ -249,6 +249,34 @@ describe("scanUrl", () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
+  it("blocks a hostname that resolves to a private address at fetch time", async () => {
+    const findings = await scanUrl({
+      targetUrl: "https://rebind.example.test",
+      fetchFn: mockFetch,
+      resolveHost: async () => ["169.254.169.254"],
+    })
+
+    expect(findings).toHaveLength(0)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it("validates every redirect target before following it", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 302,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "location" ? "http://127.0.0.1/admin" : null,
+        forEach: () => undefined,
+      },
+      text: async () => "",
+    })
+
+    const findings = await scanUrl({ targetUrl: "https://example.com", fetchFn: mockFetch })
+
+    expect(findings).toHaveLength(0)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
   it("blocks SSRF — skips fetch to 10.x range", async () => {
     const findings = await scanUrl({
       targetUrl: "http://10.0.0.1/internal",

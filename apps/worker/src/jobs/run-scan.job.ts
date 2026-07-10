@@ -71,7 +71,23 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           },
         },
         scanId,
+        undefined,
+        async () => {
+          const current = await prisma.scan.findUnique({
+            where: { id: scanId },
+            select: { status: true },
+          })
+          return current?.status === "CANCELLED"
+        },
       )
+
+      if (engineResult.cancelled) {
+        return {
+          status: "failed",
+          errorCategory: "CANCELLED",
+          errorMessage: "Scan cancelled by user",
+        }
+      }
 
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
       await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
@@ -159,7 +175,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           errorMessage: exitInterpretation.message,
           summary: engineResult.output.summary,
         })
-        await notifyScanFailed(workspaceId, scanId, exitInterpretation.message)
+        try {
+          await notifyScanFailed(workspaceId, scanId, exitInterpretation.message)
+        } catch (notificationError) {
+          log.warn("Failed to send scan failure notification", {
+            scanId,
+            error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+          })
+        }
         return {
           status: "failed",
           errorCategory: exitInterpretation.category,
@@ -179,13 +202,31 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         newFindings,
       })
 
-      await notifyScanCompleted(workspaceId, scanId, engineResult.output.summary, persistedFindings.length)
-
-      const criticalFindings = persistedFindings.filter((f) => f.severity === "CRITICAL")
-      if (criticalFindings.length > 0) {
-        for (const f of criticalFindings) {
-          await notifyCriticalFinding(workspaceId, f.id, f.title, target.name)
+      try {
+        const criticalFindings = persistedFindings.filter((f) => f.severity === "CRITICAL")
+        const notifications = await Promise.allSettled([
+          notifyScanCompleted(workspaceId, scanId, engineResult.output.summary, persistedFindings.length),
+          ...criticalFindings.map((finding) =>
+            notifyCriticalFinding(workspaceId, finding.id, finding.title, target.name),
+          ),
+        ])
+        const failedNotifications = notifications.filter(
+          (notification): notification is PromiseRejectedResult => notification.status === "rejected",
+        )
+        if (failedNotifications.length > 0) {
+          log.warn("Some scan completion notifications failed", {
+            scanId,
+            failures: failedNotifications.map((notification) =>
+              notification.reason instanceof Error ? notification.reason.message : String(notification.reason),
+            ),
+          })
         }
+      } catch (notificationError) {
+        // A notification provider outage must not retry or reverse an already-completed scan.
+        log.warn("Failed to send scan completion notification", {
+          scanId,
+          error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+        })
       }
 
       return {
@@ -197,6 +238,28 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const errorCategory = error instanceof Error ? error.name : "UNKNOWN"
 
       log.error("Scan job failed", { scanId, error: errorMessage })
+
+      const currentScan = await prisma.scan.findUnique({
+        where: { id: scanId },
+        select: { status: true },
+      }).catch(() => null)
+      if (currentScan?.status === "CANCELLED") {
+        return {
+          status: "failed",
+          errorCategory: "CANCELLED",
+          errorMessage: "Scan cancelled by user",
+        }
+      }
+
+      const maxAttempts = job.opts?.attempts ?? 1
+      if ((job.attemptsMade ?? 0) + 1 < maxAttempts) {
+        log.warn("Scan job failed and will be retried", {
+          scanId,
+          attempt: (job.attemptsMade ?? 0) + 1,
+          maxAttempts,
+        })
+        throw error
+      }
 
       try {
         await updateScanStatus(scanId, "FAILED" as ScanStatus, {

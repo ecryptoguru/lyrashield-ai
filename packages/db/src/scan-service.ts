@@ -17,18 +17,35 @@ export interface ScanWithEvents extends Scan {
   events: ScanEvent[]
 }
 
+const ACTIVE_SCAN_STATUSES: ScanStatus[] = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"]
+
 export async function createScan(params: CreateScanParams): Promise<Scan> {
-  const scan = await prisma.scan.create({
-    data: {
-      workspaceId: params.workspaceId,
-      targetId: params.targetId,
-      goal: params.goal as Scan["goal"],
-      mode: (params.mode ?? "SAFE") as Scan["mode"],
-      policyId: params.policyId ?? null,
-      status: "QUEUED",
-      triggerType: params.triggerType ?? "manual",
-      createdById: params.createdById,
-    },
+  const scan = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.targetId}))`
+
+    const activeScans = await tx.scan.count({
+      where: {
+        targetId: params.targetId,
+        status: { in: ACTIVE_SCAN_STATUSES },
+        deletedAt: null,
+      },
+    })
+    if (activeScans > 0) {
+      throw new Error("Target already has an active scan")
+    }
+
+    return tx.scan.create({
+      data: {
+        workspaceId: params.workspaceId,
+        targetId: params.targetId,
+        goal: params.goal as Scan["goal"],
+        mode: (params.mode ?? "SAFE") as Scan["mode"],
+        policyId: params.policyId ?? null,
+        status: "QUEUED",
+        triggerType: params.triggerType ?? "manual",
+        createdById: params.createdById,
+      },
+    })
   })
 
   await addScanEvent(scan.id, "queued", "info", "Scan queued", {
@@ -83,10 +100,17 @@ export async function updateScanStatus(
     updateData.endedAt = now
   }
 
-  const updated = await prisma.scan.update({
-    where: { id: scanId },
+  const result = await prisma.scan.updateMany({
+    where: { id: scanId, status: currentStatus },
     data: updateData,
   })
+  if (result.count !== 1) {
+    const latest = await prisma.scan.findUnique({ where: { id: scanId } })
+    throw new Error(`Scan status changed concurrently to ${latest?.status ?? "unknown"}`)
+  }
+
+  const updated = await prisma.scan.findUnique({ where: { id: scanId } })
+  if (!updated) throw new Error(`Scan not found after status update: ${scanId}`)
 
   await addScanEvent(scanId, newStatus.toLowerCase(), "info", `Scan status: ${newStatus}`, metadata ?? {})
 
@@ -118,6 +142,7 @@ export async function getScanWithEvents(scanId: string): Promise<ScanWithEvents 
     include: {
       events: {
         orderBy: { createdAt: "asc" },
+        take: 200,
       },
     },
   })

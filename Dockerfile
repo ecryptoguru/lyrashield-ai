@@ -69,3 +69,27 @@ EXPOSE 3000
 WORKDIR /app/apps/web
 
 CMD ["node", "server.js"]
+
+# ─── Stage 4: Worker + local engine CLI ──────────────────────────────────────
+# The `engine` named build context is supplied only by the worker service in
+# docker-compose.yml, so web/migration builds remain independent of the sibling
+# engine repository.
+FROM builder AS worker
+
+RUN apk add --no-cache python3 py3-pip
+
+COPY --from=engine . /opt/lyrashield-engine
+
+RUN python3 -m venv /opt/uv-bootstrap && \
+    /opt/uv-bootstrap/bin/pip install --no-cache-dir uv==0.11.28 && \
+    UV_PROJECT_ENVIRONMENT=/opt/lyrashield-venv \
+      /opt/uv-bootstrap/bin/uv sync \
+        --project /opt/lyrashield-engine \
+        --frozen \
+        --no-dev && \
+    /opt/lyrashield-venv/bin/lyrashield --version
+
+ENV PATH="/opt/lyrashield-venv/bin:$PATH"
+
+WORKDIR /app
+CMD ["pnpm", "--filter", "@lyrashield/worker", "exec", "tsx", "src/index.ts"]

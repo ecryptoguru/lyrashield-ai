@@ -100,8 +100,8 @@ export async function getShareableReport(reportId: string, workspaceId: string):
   let scanSummary: ShareableReport["scanSummary"] = null
 
   if (report.scanId) {
-    const scan = await prisma.scan.findUnique({
-      where: { id: report.scanId },
+    const scan = await prisma.scan.findFirst({
+      where: { id: report.scanId, workspaceId, deletedAt: null },
       include: {
         target: { select: { name: true } },
         _count: { select: { findings: { where: { deletedAt: null } } } },
@@ -110,7 +110,7 @@ export async function getShareableReport(reportId: string, workspaceId: string):
 
     if (scan) {
       const findings = await prisma.finding.findMany({
-        where: { scanId: scan.id, deletedAt: null },
+        where: { scanId: scan.id, workspaceId, deletedAt: null },
         select: { severity: true },
       })
 

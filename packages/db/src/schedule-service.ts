@@ -18,7 +18,8 @@ export function getNextRunAt(cron: string, after = new Date()): Date | null {
   const parts = cron.trim().split(/\s+/)
   if (parts.length !== 5) return null
 
-  const [minuteRaw, hourRaw, , , dayOfWeekRaw] = parts
+  const [minuteRaw, hourRaw, dayOfMonthRaw, monthRaw, dayOfWeekRaw] = parts
+  if (dayOfMonthRaw !== "*" || monthRaw !== "*") return null
   const minute = parseCronField(minuteRaw!, 0, 59)
   const hour = parseCronField(hourRaw!, 0, 23)
   const dayOfWeek = parseCronField(dayOfWeekRaw!, 0, 6)
@@ -184,6 +185,28 @@ export async function updateScheduleRunTimes(
     where: { id: scheduleId },
     data: { lastRunAt, nextRunAt },
   })
+}
+
+/**
+ * Atomically claim a due schedule before creating a scan. This prevents two
+ * worker replicas from enqueueing the same run after reading it concurrently.
+ */
+export async function claimDueSchedule(
+  scheduleId: string,
+  lastRunAt: Date,
+  nextRunAt: Date
+): Promise<boolean> {
+  const result = await prisma.schedule.updateMany({
+    where: {
+      id: scheduleId,
+      enabled: true,
+      deletedAt: null,
+      nextRunAt: { lte: lastRunAt },
+    },
+    data: { lastRunAt, nextRunAt },
+  })
+
+  return result.count === 1
 }
 
 export async function getDueSchedules(now: Date): Promise<ScheduleWithDetails[]> {

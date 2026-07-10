@@ -90,6 +90,22 @@ describe("scanSca", () => {
     }
   })
 
+  it("discovers dependency manifests in nested workspaces", async () => {
+    const dir = await setupRepo({
+      "apps/api/package.json": JSON.stringify({ dependencies: { "nested-pkg": "1.2.3" } }),
+    })
+    const fetchFn = makeMockFetch({
+      "nested-pkg@1.2.3": [{ id: "GHSA-nested", summary: "Nested dependency issue" }],
+    })
+
+    try {
+      const findings = await scanSca({ repoPath: dir, workspaceDir: dir, fetchFn })
+      expect(findings.some((finding) => finding.title.includes("nested-pkg"))).toBe(true)
+    } finally {
+      cleanupRepo()
+    }
+  })
+
   it("parses requirements.txt dependencies", async () => {
     const dir = await setupRepo({
       "requirements.txt": "requests==2.25.0\nflask>=1.1.0\nnumpy==1.19.0\n",

@@ -1,6 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex */
-import { readFile } from "fs/promises"
-import { join } from "path"
+import { readFile, readdir } from "fs/promises"
+import { basename, join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
 
@@ -41,18 +41,26 @@ const DEP_FILE_PATTERNS = [
   "composer.json",
 ]
 
-async function findDependencyFiles(repoPath: string): Promise<string[]> {
-  const found: string[] = []
-  for (const pattern of DEP_FILE_PATTERNS) {
-    try {
-      const filePath = join(repoPath, pattern)
-      await readFile(filePath, "utf-8")
-      found.push(pattern)
-    } catch {
-      // File doesn't exist — skip
+const IGNORED_DIRECTORIES = new Set(["node_modules", ".git", "dist", "build", ".next", "coverage", "vendor"])
+
+async function findDependencyFiles(repoPath: string, directory = repoPath): Promise<string[]> {
+  try {
+    const entries = await readdir(directory, { withFileTypes: true, encoding: "utf8" })
+    const found: string[] = []
+    for (const entry of entries) {
+      const fullPath = join(directory, entry.name)
+      if (entry.isDirectory()) {
+        if (!IGNORED_DIRECTORIES.has(entry.name)) {
+          found.push(...await findDependencyFiles(repoPath, fullPath))
+        }
+      } else if (entry.isFile() && DEP_FILE_PATTERNS.includes(entry.name)) {
+        found.push(relative(repoPath, fullPath))
+      }
     }
+    return found
+  } catch {
+    return []
   }
-  return found
 }
 
 function parsePackageJson(content: string, filePath: string): Dependency[] {
@@ -181,7 +189,7 @@ async function parseDependencyFile(filePath: string, repoPath: string): Promise<
   const fullPath = join(repoPath, filePath)
   try {
     const content = await readFile(fullPath, "utf-8")
-    switch (filePath) {
+    switch (basename(filePath)) {
       case "package.json":
         return parsePackageJson(content, filePath)
       case "requirements.txt":

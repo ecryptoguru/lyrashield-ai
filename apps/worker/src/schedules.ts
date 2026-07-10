@@ -1,10 +1,10 @@
 import {
   createScan,
+  claimDueSchedule,
   getDueSchedules,
   getNextRunAt,
   prisma,
   updateScanStatus,
-  updateScheduleRunTimes,
 } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { enqueueScan } from "./queue"
@@ -31,7 +31,9 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
         continue
       }
 
-      await updateScheduleRunTimes(schedule.id, now, nextRunAt)
+      if (!await claimDueSchedule(schedule.id, now, nextRunAt)) {
+        continue
+      }
 
       const activeScans = await prisma.scan.count({
         where: {

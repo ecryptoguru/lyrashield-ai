@@ -14,8 +14,8 @@
     "db:push": "pnpm --filter @lyrashield/db push",
     "db:seed": "pnpm --filter @lyrashield/db seed",
     "db:studio": "pnpm --filter @lyrashield/db studio",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "vitest run --exclude '**/dist/**'",
+    "test:watch": "vitest --exclude '**/dist/**'"
   },
   "devDependencies": {
     "eslint": "^9.39.4",

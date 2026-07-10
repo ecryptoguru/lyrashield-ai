@@ -5,6 +5,9 @@ vi.mock("@lyrashield/db", () => ({
     target: {
       findFirst: vi.fn(),
     },
+    scan: {
+      findUnique: vi.fn(),
+    },
   },
   updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
   addScanEvent: vi.fn().mockResolvedValue(undefined),
@@ -31,7 +34,7 @@ vi.mock("../engine/runner", () => ({
   }),
   cleanupEngineWorkspace: vi.fn().mockResolvedValue(undefined),
   interpretExitCode: vi.fn((code: number) => {
-    if (code === 0 || code === 1) return { status: "COMPLETED", category: "SUCCESS" }
+    if (code === 0) return { status: "COMPLETED", category: "SUCCESS" }
     if (code === 2) return { status: "COMPLETED", category: "VULNERABILITIES_FOUND" }
     return { status: "FAILED", category: "ENGINE_ERROR", message: `Engine error (code ${code})` }
   }),
@@ -67,6 +70,7 @@ import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
+import { notifyScanCompleted } from "../notifications"
 import { updateScanStatus, prisma } from "@lyrashield/db"
 
 const mockJob = {
@@ -104,7 +108,7 @@ describe("processScanJob", () => {
       },
     } as never)
     vi.mocked(interpretExitCode).mockImplementation((code: number) => {
-      if (code === 0 || code === 1) return { status: "COMPLETED" as const, category: "SUCCESS", message: "" }
+      if (code === 0) return { status: "COMPLETED" as const, category: "SUCCESS", message: "" }
       if (code === 2) return { status: "COMPLETED" as const, category: "VULNERABILITIES_FOUND", message: "" }
       return { status: "FAILED" as const, category: "ENGINE_ERROR", message: `Engine error (code ${code})` }
     })
@@ -112,6 +116,7 @@ describe("processScanJob", () => {
     vi.mocked(updateScanStatus).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(cleanupEngineWorkspace).mockResolvedValue(undefined)
     vi.mocked(prisma.target.findFirst).mockResolvedValue(mockTarget as never)
+    vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
     vi.mocked(runScannerOrchestrator).mockResolvedValue({
       allFindings: [],
       engineFindings: [],
@@ -133,6 +138,16 @@ describe("processScanJob", () => {
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "COMPLETED", expect.objectContaining({
       summary: "Scan completed with 0 findings",
     }))
+  })
+
+  it("keeps a completed scan completed when a completion notification fails", async () => {
+    vi.mocked(notifyScanCompleted).mockRejectedValueOnce(new Error("notification provider unavailable"))
+
+    const result = await processScanJob(mockJob)
+
+    expect(result.status).toBe("completed")
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "COMPLETED", expect.anything())
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
   it("fails when preflight fails", async () => {
@@ -181,6 +196,25 @@ describe("processScanJob", () => {
     expect(result.errorCategory).toBe("ENGINE_ERROR")
   })
 
+  it("stops without overwriting a cancellation reported by the engine", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: -1,
+      cancelled: true,
+      output: {
+        vulnerabilities: [],
+        runRecord: null,
+        summary: "Cancelled",
+        findingCount: 0,
+      },
+    } as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result).toMatchObject({ status: "failed", errorCategory: "CANCELLED" })
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "VERIFYING")
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+  })
+
   it("catches unexpected errors and marks scan as FAILED", async () => {
     vi.mocked(runPreflight).mockRejectedValue(new Error("Unexpected DB error") as never)
 
@@ -188,6 +222,25 @@ describe("processScanJob", () => {
 
     expect(result.status).toBe("failed")
     expect(result.errorMessage).toBe("Unexpected DB error")
+  })
+
+  it("rethrows a transient failure while BullMQ attempts remain", async () => {
+    vi.mocked(runPreflight).mockRejectedValue(new Error("temporary database error") as never)
+    const retryingJob = {
+      id: "job-retry-1",
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      },
+    } as never
+
+    await expect(processScanJob(retryingJob)).rejects.toThrow("temporary database error")
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
   it("always cleans up engine workspace", async () => {

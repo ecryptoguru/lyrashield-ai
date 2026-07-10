@@ -27,10 +27,10 @@ describe("interpretExitCode", () => {
     expect(result.category).toBe("SUCCESS")
   })
 
-  it("maps exit 1 to COMPLETED (non-critical)", () => {
+  it("maps exit 1 to FAILED because the engine uses it for runtime errors", () => {
     const result = interpretExitCode(1)
-    expect(result.status).toBe("COMPLETED")
-    expect(result.category).toBe("SUCCESS")
+    expect(result.status).toBe("FAILED")
+    expect(result.category).toBe("ENGINE_ERROR")
   })
 
   it("maps exit 2 to COMPLETED with VULNERABILITIES_FOUND", () => {

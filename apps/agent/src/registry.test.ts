@@ -76,6 +76,31 @@ describe("ActionRegistry", () => {
     expect(result.error?.code).toBe("VALIDATION_ERROR")
   })
 
+  it("rejects input that names a different workspace than the authenticated context", async () => {
+    let called = false
+    registry.register(
+      makeTestAction({
+        inputSchema: z.object({ workspaceId: z.string(), value: z.string() }) as unknown as AgentActionDefinition["inputSchema"],
+        handler: async () => {
+          called = true
+          return { result: "unexpected" }
+        },
+      })
+    )
+
+    const result = await registry.execute(
+      "test-action",
+      { workspaceId: "ws-other", value: "ok" },
+      createContext(),
+    )
+
+    expect(result).toEqual({
+      success: false,
+      error: { code: "WORKSPACE_MISMATCH", message: "Action input must use the authenticated workspace" },
+    })
+    expect(called).toBe(false)
+  })
+
   it("denies action when permission is insufficient", async () => {
     registry.register(makeTestAction({ permission: "agent:approve" }))
     const result = await registry.execute("test-action", { value: "ok" }, createContext("MEMBER"))

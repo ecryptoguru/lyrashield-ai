@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 import { Button } from "@lyrashield/ui"
 import { WorkspaceSwitcher } from "./workspace-switcher"
+import { apiPost } from "@/lib/api-client"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -56,25 +57,26 @@ export function Sidebar({
   userName,
   userEmail,
   workspaces,
+  activeWorkspaceId: initialWorkspaceId,
 }: {
   userName: string
   userEmail: string
   workspaces: Workspace[]
+  activeWorkspaceId: string | null
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(() => {
-    if (typeof window === "undefined") return workspaces[0]?.id ?? null
-    const stored = localStorage.getItem("activeWorkspaceId")
-    if (stored && workspaces.some((w) => w.id === stored)) return stored
-    return workspaces[0]?.id ?? null
-  })
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(initialWorkspaceId)
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  function handleSelectWorkspace(id: string) {
-    setActiveWorkspaceId(id)
-    localStorage.setItem("activeWorkspaceId", id)
-    router.refresh()
+  async function handleSelectWorkspace(id: string) {
+    try {
+      await apiPost("/api/workspaces/active", { workspaceId: id })
+      setActiveWorkspaceId(id)
+      router.refresh()
+    } catch {
+      // Keep the last server-confirmed workspace selected if persistence fails.
+    }
   }
 
   async function handleSignOut() {

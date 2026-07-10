@@ -103,7 +103,7 @@ async function initUpstash() {
         return {
           success: result.success,
           remaining: result.remaining,
-          reset: Date.now() + result.reset,
+          reset: result.reset,
         }
       },
     }

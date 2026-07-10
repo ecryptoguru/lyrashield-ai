@@ -22,11 +22,11 @@ import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 
 const securityControls = [
   "Workspace-scoped RBAC",
-  "Postgres RLS policies",
+  "Request-scoped tenant filtering",
   "Nonce-based CSP",
   "PII-safe logging",
   "Rate limiting",
-  "Audit hash chain",
+  "Audit logging",
 ]
 
 export default async function SettingsPage() {
