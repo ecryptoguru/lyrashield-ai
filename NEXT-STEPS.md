@@ -5,6 +5,15 @@
 
 ---
 
+## 🔄 2026-07-11 Thin-Fork Release-Gate Handoff
+
+- **Baseline and adapter:** Engine baseline is `7b639505fecf20a2d9e356f96bd91470aa828182`. The adapter maps product `LYRASHIELD_*` variables only when their `STRIX_*` counterparts are absent; upstream values win and telemetry defaults off. The worker reads both `strix_runs` and `lyrashield_runs` output directories, preserving `0`/`2`/error lifecycle semantics.
+- **Automation:** Local engine commit `909493f` adds a Monday 03:23 UTC/manual, PR-only sync workflow. It uses the ancestry gate, exits `20` before rebasing rewritten upstream history, verifies before creating `automation/upstream-<short-sha>`, and has no auto-merge, force-push, or conflict resolver. There is no engine `origin` remote, so it was not published, dispatched, or used to create a PR.
+- **Evidence:** Engine frozen verification passed (155 tests, Ruff, formatting, headless mypy over 61 source files, Bandit). App lint, typecheck, build, and 600-test/47-file suite pass. `git diff --check` passes.
+- **Release blockers, do not paper over:** The current worker Docker build fails before image creation because Docker's root build includes the unrelated uncommitted marketing workspace and its Cloudflare `workerd` Linux binary is absent. Do not claim an image digest, `lyrashield --version` container smoke, missing-model container proof, or sandbox run from this attempt. Production still needs a pinned sandbox image digest. `LYRASHIELD_LLM` and `LLM_API_KEY` are both absent, so no controlled scan may use a substitute target; after the image gate is restored, missing LLM configuration remains the only controlled-scan blocker.
+
+---
+
 ## 🔄 2026-07-04 Update
 
 - **Repo renamed** → `github.com/ecryptoguru/lyrasec-ai` (was `lyrashieldai`). In-code `@lyrashield/*` scopes + `LYRASHIELD_*` env vars intentionally NOT renamed yet (trademark clearance open). *Decision #2 (keep "Lyra-" prefix): trending KEEP — new name retains it; formal trademark clearance (#3) still pending.*
