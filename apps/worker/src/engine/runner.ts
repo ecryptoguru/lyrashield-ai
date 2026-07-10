@@ -187,8 +187,8 @@ async function hasEngineOutputArtifact(runDir: string): Promise<boolean> {
   for (const artifact of ENGINE_OUTPUT_ARTIFACTS) {
     try {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      await stat(join(runDir, artifact))
-      return true
+      const artifactStat = await stat(join(runDir, artifact))
+      if (artifactStat.isFile()) return true
     } catch {
       // Try the next expected artifact.
     }
