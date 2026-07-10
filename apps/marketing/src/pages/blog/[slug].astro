@@ -15,7 +15,26 @@ export async function getStaticPaths() {
 }
 
 const { post } = Astro.props
-const { Content } = await render(post)
+const { Content, headings = [] } = await render(post)
+
+// Reading time: computed from the raw body word count (Astro 7 runs Markdown/MDX
+// through the native Sätteri pipeline, not remark — no remark-reading-time plugin
+// is installed, per landingpage.md §2.5 item 3).
+const wordCount = post.body ? post.body.trim().split(/\s+/).filter(Boolean).length : 0
+const readingMinutes = Math.max(1, Math.round(wordCount / 200))
+
+// Related posts: tag-overlap scoring, ties broken by recency, top 3.
+const allPosts = await getCollection("blog", (entry) => !entry.data.draft)
+const relatedPosts = allPosts
+  .filter((p) => p.id !== post.id)
+  .map((p) => ({
+    entry: p,
+    overlap: p.data.tags.filter((tag) => post.data.tags.includes(tag)).length,
+  }))
+  .filter((p) => p.overlap > 0)
+  .sort((a, b) => b.overlap - a.overlap || b.entry.data.pubDate.getTime() - a.entry.data.pubDate.getTime())
+  .slice(0, 3)
+  .map((p) => p.entry)
 ---
 
 <BlogPost
@@ -26,6 +45,11 @@ const { Content } = await render(post)
   authorId={post.data.author.id}
   tags={post.data.tags}
   draft={post.data.draft}
+  canonical={post.data.canonical}
+  faq={post.data.faq}
+  headings={headings}
+  readingMinutes={readingMinutes}
+  relatedPosts={relatedPosts}
 >
   <Content />
 </BlogPost>
