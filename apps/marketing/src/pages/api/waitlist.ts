@@ -18,6 +18,9 @@ const bodySchema = z.object({
 
 export const prerender = false
 
+const RATE_LIMIT_MAX = 5
+const RATE_LIMIT_WINDOW_MS = 60_000
+
 async function parseBody(request: Request): Promise<Record<string, unknown>> {
   const contentType = request.headers.get("content-type") || ""
 
@@ -95,6 +98,47 @@ function htmlResponse(status: number, body: string): Response {
   })
 }
 
+function successResponse(request: Request): Response {
+  // Always identical regardless of insert/duplicate/honeypot — never leak signup state.
+  if (acceptsHtml(request)) {
+    return htmlResponse(201, "<p>You're on the list. One email when your invite is ready.</p>")
+  }
+  return new Response(JSON.stringify({ success: true }), {
+    status: 201,
+    headers: { "Content-Type": "application/json" },
+  })
+}
+
+/**
+ * Fallback limiter used only when the Workers rate-limiting binding
+ * (WAITLIST_RL) is unavailable. Single-table sliding window on D1, as
+ * specified in the build plan (§6.5). Fails open (allows the request) on
+ * any D1 error so an outage in the limiter never blocks real signups.
+ */
+async function checkD1RateLimit(db: Env["DB"], ipHash: string): Promise<boolean> {
+  try {
+    const now = Date.now()
+    const windowStart = now - RATE_LIMIT_WINDOW_MS
+
+    await db.prepare(`DELETE FROM waitlist_rate_limit WHERE ts < ?`).bind(windowStart).run()
+
+    const row = await db
+      .prepare(`SELECT COUNT(*) as count FROM waitlist_rate_limit WHERE ip_hash = ? AND ts >= ?`)
+      .bind(ipHash, windowStart)
+      .first<{ count: number }>()
+
+    if ((row?.count ?? 0) >= RATE_LIMIT_MAX) {
+      return false
+    }
+
+    await db.prepare(`INSERT INTO waitlist_rate_limit (ip_hash, ts) VALUES (?, ?)`).bind(ipHash, now).run()
+    return true
+  } catch {
+    // Fail open: a broken fallback limiter must not block real signups.
+    return true
+  }
+}
+
 export const POST: APIRoute = async ({ request, site }) => {
   const rawSiteOrigin = site?.origin ?? (import.meta.env.PUBLIC_SITE_URL as string | undefined) ?? "http://localhost:4321"
   const siteOrigin = rawSiteOrigin.endsWith("/") ? rawSiteOrigin.slice(0, -1) : rawSiteOrigin
@@ -138,35 +182,37 @@ export const POST: APIRoute = async ({ request, site }) => {
     })
   }
 
-  const { website, ...data } = parsed.data
-  if (website) {
-    if (acceptsHtml(request)) {
-      return htmlResponse(400, "<p>Something went wrong.</p>")
+  const db = env.DB as Env["DB"]
+  const rateLimit = env.WAITLIST_RL as Env["WAITLIST_RL"] | undefined
+
+  let allowed = true
+  if (rateLimit) {
+    try {
+      const result = await rateLimit.limit({ key: ipHash })
+      allowed = result.success
+    } catch {
+      // Binding present but errored — fall back to the D1 limiter rather than failing open blindly.
+      allowed = await checkD1RateLimit(db, ipHash)
     }
-    return new Response(JSON.stringify({ error: "honeypot", message: "Rejected." }), {
-      status: 400,
+  } else {
+    allowed = await checkD1RateLimit(db, ipHash)
+  }
+
+  if (!allowed) {
+    if (acceptsHtml(request)) {
+      return htmlResponse(429, "<p>Too many attempts — try again in a minute.</p>")
+    }
+    return new Response(JSON.stringify({ error: "rate_limited", message: "Too many attempts." }), {
+      status: 429,
       headers: { "Content-Type": "application/json" },
     })
   }
 
-  const db = env.DB as Env["DB"]
-  const rateLimit = env.WAITLIST_RL as Env["WAITLIST_RL"] | undefined
-
-  if (rateLimit) {
-    try {
-      const result = await rateLimit.limit({ key: ipHash })
-      if (!result.success) {
-        if (acceptsHtml(request)) {
-          return htmlResponse(429, "<p>Too many attempts — try again in a minute.</p>")
-        }
-        return new Response(JSON.stringify({ error: "rate_limited", message: "Too many attempts." }), {
-          status: 429,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
-    } catch {
-      // Continue on rate-limit binding outage; do not block the user.
-    }
+  const { website, ...data } = parsed.data
+  if (website) {
+    // Honeypot tripped — return the exact same generic success as a real signup so a bot
+    // (or a human probing the endpoint) can't distinguish "rejected" from "accepted".
+    return successResponse(request)
   }
 
   try {
@@ -187,22 +233,11 @@ export const POST: APIRoute = async ({ request, site }) => {
       ipHash
     ).run()
 
-    if (acceptsHtml(request)) {
-      return htmlResponse(201, "<p>You're on the list. One email when your invite is ready.</p>")
-    }
-    return new Response(JSON.stringify({ success: true }), {
-      status: 201,
-      headers: { "Content-Type": "application/json" },
-    })
+    return successResponse(request)
   } catch (error: unknown) {
     if ((error as Error).message?.includes("UNIQUE constraint failed")) {
-      if (acceptsHtml(request)) {
-        return htmlResponse(200, "<p>You're on the list. One email when your invite is ready.</p>")
-      }
-      return new Response(JSON.stringify({ success: true, duplicate: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
+      // Duplicate email: identical success response, no distinguishing status/body — non-leaking per spec.
+      return successResponse(request)
     }
 
     if (acceptsHtml(request)) {

@@ -3,7 +3,7 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
 ---
 
 <form
-  id="waitlist"
+  id="waitlist-form"
   action="/api/waitlist"
   method="POST"
   class="mx-auto max-w-md rounded-lg border border-border bg-bg-raised p-6 sm:p-8"
@@ -34,9 +34,9 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
       >
         <option value="">—</option>
         <option value="Indie builder">Indie builder</option>
-        <option value="Startup CTO/eng lead">Startup CTO/eng lead</option>
+        <option value="Startup CTO⁄eng lead">Startup CTO⁄eng lead</option>
         <option value="Security engineer">Security engineer</option>
-        <option value="Agency/dev shop">Agency/dev shop</option>
+        <option value="Agency⁄dev shop">Agency⁄dev shop</option>
         <option value="Other">Other</option>
       </select>
     </div>
@@ -92,7 +92,7 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
 
 <script>
   (function () {
-    const form = document.getElementById("waitlist") as HTMLFormElement | null
+    const form = document.getElementById("waitlist-form") as HTMLFormElement | null
     if (!form) return
 
     const url = new URL(window.location.href)

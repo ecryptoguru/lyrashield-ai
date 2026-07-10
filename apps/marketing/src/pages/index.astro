@@ -11,37 +11,71 @@ import FinalCta from "@components/landing/FinalCta.astro"
 const siteUrl = (import.meta.env.PUBLIC_SITE_URL as string | undefined) || "http://localhost:4321"
 const siteOrigin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
 const pageUrl = new URL("/", siteOrigin).toString()
-const siteHostname = new URL(siteOrigin).hostname
+const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || undefined
+
+const description =
+  "LyraSec AI scans AI-built apps like an attacker, verifies every finding, opens the fix PR, and retests until it's gone. Join the early-access waitlist."
+
+const faqItems = [
+  {
+    q: "Is this live today?",
+    a: "We're pre-launch, building in the open. The waitlist gets first invites and early design-partner access.",
+  },
+  {
+    q: "Another scanner that cries wolf?",
+    a: "The core design rule: a finding must be verified before it reaches you. If it can't be demonstrated, it doesn't ping you.",
+  },
+  {
+    q: "Does it replace my existing tools?",
+    a: "No. LyraSec AI is one loop for AI-built code, from scan to verified fix. Many teams will run it alongside their existing SAST and SCA.",
+  },
+  {
+    q: "What does it cost?",
+    a: "Pricing lands with early access.",
+  },
+]
 
 const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "LyraSec AI",
+    url: siteUrl,
+    ...(xUrl ? { sameAs: [xUrl] } : {}),
+  },
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: "LyraSec AI",
     url: siteUrl,
-    potentialAction: {
-      "@type": "SearchAction",
-      target: `https://www.google.com/search?q=site:${siteHostname}+%7Bsearch_term_string%7D`,
-      "query-input": "required name=search_term_string",
-    },
   },
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: "LyraSec AI",
     applicationCategory: "SecurityApplication",
-    description: "AI security agent for AI-built apps: scan, verify, fix, retest.",
+    operatingSystem: "Web",
+    description,
     url: pageUrl,
-    sameAs: [
-      (import.meta.env.PUBLIC_X_URL as string | undefined) || undefined,
-    ].filter(Boolean),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqItems.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.a,
+      },
+    })),
   },
 ]
 ---
 
 <Base
   title="LyraSec AI — Secure AI-built apps before they ship"
-  description="AI security agent for AI-built apps. Scan, verify, fix, and retest in one loop. From vibe-coded to verified."
+  description={description}
   canonical={pageUrl}
   jsonLd={jsonLd}
 >
