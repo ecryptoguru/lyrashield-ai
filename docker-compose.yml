@@ -129,6 +129,7 @@ services:
       LYRASHIELD_LLM: "${LYRASHIELD_LLM:-}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-ghcr.io/usestrix/strix-sandbox:1.0.0}"
+      LYRASHIELD_TELEMETRY: "${LYRASHIELD_TELEMETRY:-0}"
       LYRASHIELD_ENGINE_PATH: "${LYRASHIELD_ENGINE_PATH:-lyrashield}"
     volumes:
       # DEV ONLY: the engine launches its isolated sandbox through Docker.
