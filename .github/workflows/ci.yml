@@ -81,8 +81,8 @@ jobs:
       SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
       REDIS_URL: "redis://localhost:6379"
       BETTER_AUTH_SECRET: "ci-test-secret-key-at-least-32-characters-long"
-      BETTER_AUTH_URL: "http://localhost:3000"
-      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      BETTER_AUTH_URL: "http://127.0.0.1:3100"
+      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3100"
       TRUSTED_PROXY_IP_HEADER: "x-forwarded-for"
 
     steps:
