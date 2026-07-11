@@ -19,7 +19,7 @@ const { Content, headings = [] } = await render(post)
 
 // Reading time: computed from the raw body word count (Astro 7 runs Markdown/MDX
 // through the native Sätteri pipeline, not remark — no remark-reading-time plugin
-// is installed, per landingpage.md §2.5 item 3).
+// is installed.
 const wordCount = post.body ? post.body.trim().split(/\s+/).filter(Boolean).length : 0
 const readingMinutes = Math.max(1, Math.round(wordCount / 200))
 

@@ -1,7 +1,7 @@
 # BLOG_AUTHORING.md — Writing for the LyraSec AI Blog
 
 **Audience of this guide:** whoever writes or edits posts (the LyraSec Marketing Agent, the founder, future contributors).
-**Companion to:** `landingpage.md` (the site build plan — §8 blog architecture, §10 SEO/GEO/AEO). This guide covers _content_; the build plan covers _infrastructure_.
+**Companion to:** `README.md` (local/deploy operations) and the implemented Astro site. This guide covers _content_; code and `codebase.md` cover infrastructure.
 
 The blog has one job pre-launch: earn trust with developers, CTOs, and security engineers, and feed the waitlist. Every post ends at the waitlist CTA. Write like an engineering blog, not a content farm.
 
