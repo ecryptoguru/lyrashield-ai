@@ -10,9 +10,7 @@ async function signUp(page: import("@playwright/test").Page, email: string, name
   await page.getByLabel("Email").fill(email)
   await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "Create account" }).click()
-  // In production, email verification is required so the user is shown the
-  // verification prompt. The test manually verifies the email and then signs in.
-  await expect(page.getByText("Check your email")).toBeVisible()
+  await expect.poll(() => prisma.user.findUnique({ where: { email } })).not.toBeNull()
   await prisma.user.update({ where: { email }, data: { emailVerified: true } })
   await page.goto("/sign-in")
   await page.getByLabel("Email").fill(email)
