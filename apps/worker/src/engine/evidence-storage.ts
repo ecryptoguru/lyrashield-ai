@@ -31,7 +31,7 @@ function getS3Client(): S3Client {
     region: env.S3_REGION || "auto",
     credentials: {
       accessKeyId: env.S3_ACCESS_KEY ?? "",
-      secretAccessKey: env.S3_SECRET_KEY ?? "",
+      secretAccessKey: env.S3_SECRET_KEY ?? "", // gitleaks:allow - environment lookup, not a credential
     },
     forcePathStyle: true,
   })
