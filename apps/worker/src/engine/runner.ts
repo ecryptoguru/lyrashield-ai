@@ -94,6 +94,7 @@ function buildEngineEnv(): Record<string, string> {
     "LYRASHIELD_LLM",
     "LLM_API_KEY",
     "LLM_API_BASE",
+    "LLM_API_VERSION",
     "LLM_TIMEOUT",
     "LYRASHIELD_IMAGE",
     "LYRASHIELD_RUNTIME_BACKEND",
@@ -101,6 +102,13 @@ function buildEngineEnv(): Record<string, string> {
     "LYRASHIELD_REASONING_EFFORT",
     "LYRASHIELD_TELEMETRY",
     "PERPLEXITY_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "AZURE_OPENAI_API_BASE",
+    "AZURE_AI_API_KEY",
+    "AZURE_AI_API_BASE",
+    "AZURE_API_VERSION",
+    "AZURE_OPENAI_API_VERSION",
   ])
   // Prefix-based allowlist for LLM/AI provider API keys so new providers
   // work without code changes. Each prefix matches env vars like
@@ -110,6 +118,8 @@ function buildEngineEnv(): Record<string, string> {
     "AI_",
     "ANTHROPIC_",
     "OPENAI_",
+    "AZURE_OPENAI_",
+    "AZURE_AI_",
     "GROQ_",
     "MISTRAL_",
     "TOGETHER_",

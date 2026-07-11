@@ -1,6 +1,6 @@
-> **CURRENT SOURCE OF TRUTH — 2026-07-11:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
+> **CURRENT SOURCE OF TRUTH — 2026-07-12:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
-> The canonical repositories are `github.com/ecryptoguru/lyrasec-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, **625 Vitest tests in 56 files**, and **2 Playwright tests**. Core auth, tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, and the GitHub diff gate are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, and marketing gates.
+> The canonical repositories are `github.com/ecryptoguru/lyrasec-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, **625 Vitest tests in 56 files**, and **2 Playwright tests**. Core auth (with email verification), tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, and the GitHub diff gate are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, and marketing gates.
 
 ---
 
@@ -1732,11 +1732,11 @@ Every protected route must:
 Additional middleware requirements:
 
 ```txt
-Rate limiting: Per-user and per-IP rate limits on auth endpoints (sign-in, sign-up) and scan creation.
-  Use Redis-backed rate limiter (e.g. upstash/ratelimit).
-  Auth endpoints: 10 requests per minute per IP.
-  Scan creation: 5 requests per minute per user.
-  General API: 100 requests per minute per user.
+Rate limiting: Per-IP rate limits on auth endpoints (sign-in, sign-up) and general API routes.
+  Use Redis-backed rate limiter (e.g. upstash/ratelimit) in production; in-memory Map fallback in dev.
+  Auth endpoints: 5 requests per minute per IP.
+  General API: 30 requests per minute per IP.
+  Scan creation currently uses the general API rate limit.
 
 CORS: Configure Access-Control-Allow-Origin to only allow the web app origin.
   Do not use wildcard (*) in production.
@@ -5221,7 +5221,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 
 # PART C — Current Implementation and Release Readiness
 
-> **Status date:** 2026-07-11. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
+> **Status date:** 2026-07-12. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
 
 ## C0. Verified repository baseline
 
@@ -5264,6 +5264,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - AI-builder-aware URL checks, security-header/CORS checks, redirect and DNS revalidation, and shared SSRF-safe fetch utilities.
 - GitHub Action diff gate with secret, dependency, and code checks plus SARIF output.
 - Hardened prompt-injection detection and sanitization for agent-controlled inputs, with `normalizeInput()` (zero-width characters, NFKC normalization, HTML entity decoding) and an expanded/tightened pattern set.
+- Azure AI / GPT 5.6 Terra model support wired through `LYRASHIELD_LLM`, `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION`/`LLM_API_VERSION`, with platform propagation through `packages/config`, `apps/worker/src/engine/runner.ts`, and `docker-compose.yml`.
 
 ### C1.4 Agent-native surfaces
 
@@ -5278,14 +5279,14 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - Dashboard pages for projects, targets, scans, findings, fixes, reports, notifications, schedules, launch readiness, integrations, team, and settings.
 - Account deletion blocks sole owners, anonymizes loose user attribution, removes auth/membership data, and rebuilds affected audit chains.
 - Liveness/readiness endpoints, structured Next.js request-error instrumentation, and maintained Playwright coverage for auth, onboarding, target/scan creation, and tenant denial boundaries.
-- Astro 7 marketing site with landing page, blog, authoring rules, RSS, sitemap, robots, JSON-LD, canonical/social metadata, and a Cloudflare D1 waitlist.
+- Astro 7 marketing site with landing page, blog, authoring rules, RSS, sitemap, robots, JSON-LD, canonical/social metadata, and a Cloudflare D1 waitlist. The marketing header links to the app via `PUBLIC_APP_URL`; the app root redirects unauthenticated users to `NEXT_PUBLIC_MARKETING_URL` (or `/sign-in` as a fallback).
 - Marketing previews are deliberately non-indexable. Indexable builds require a public HTTPS origin and founder approval.
 
 ## C2. Phase 1 gaps and release gates
 
 ### C2.1 Required before a controlled product pilot
 
-1. **Controlled scan proof:** provide an authorized model configuration and approved target; pin the inspected sandbox image by digest; run the full Target → Scan → Finding → Fix/Report lifecycle and retain audit evidence.
+1. **Controlled scan proof:** provide an approved target and authorized model configuration. The Azure AI / GPT 5.6 Terra environment is wired (`LYRASHIELD_LLM`, `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, `AZURE_API_VERSION`/`LLM_API_VERSION`), but a live sandbox scan with pinned image digest and retained audit evidence is still required.
 2. **Transport-level egress control:** application SSRF checks are present, but untrusted multi-tenant scanning still requires a deployment-level proxy or equivalent DNS-pinned network enforcement.
 3. **Production infrastructure:** provision production PostgreSQL, Redis, mandatory S3-compatible evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all migrations on a fresh database. Evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
 

@@ -22,6 +22,7 @@ const configuredSiteUrl = process.env.PUBLIC_SITE_URL || wranglerVar("PUBLIC_SIT
 const siteUrl = configuredSiteUrl || "http://localhost:4321"
 const indexable = (process.env.PUBLIC_INDEXABLE || wranglerVar("PUBLIC_INDEXABLE") || "false") === "true"
 const xUrl = process.env.PUBLIC_X_URL || wranglerVar("PUBLIC_X_URL") || ""
+const configuredAppUrl = process.env.PUBLIC_APP_URL || wranglerVar("PUBLIC_APP_URL")
 
 if (indexable) {
   try {
@@ -29,6 +30,9 @@ if (indexable) {
     if (url.protocol !== "https:" || url.hostname === "localhost") throw new Error("not a public HTTPS URL")
   } catch {
     throw new Error("PUBLIC_SITE_URL must be a public HTTPS URL when PUBLIC_INDEXABLE=true")
+  }
+  if (!configuredAppUrl || configuredAppUrl === "http://localhost:3001") {
+    throw new Error("PUBLIC_APP_URL must be set to the production app origin when PUBLIC_INDEXABLE=true")
   }
 }
 
@@ -47,6 +51,11 @@ export default defineConfig({
         context: "client",
         access: "public",
         default: "http://localhost:4321",
+      }),
+      PUBLIC_APP_URL: envField.string({
+        context: "client",
+        access: "public",
+        default: "http://localhost:3001",
       }),
       PUBLIC_X_URL: envField.string({
         context: "client",

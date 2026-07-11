@@ -29,6 +29,7 @@ The canonical engine repo is `ecryptoguru/lyrashield-engine`. It is a thin adapt
 - **Recorded upstream baseline:** `7b639505fecf20a2d9e356f96bd91470aa828182`
 - **Adapter version:** `1.0.4.post1`
 - **Compatibility:** maps `LYRASHIELD_*` only when the corresponding `STRIX_*` value is unset; explicit upstream values win; telemetry defaults to `0`
+- **Model config:** `strix/config/settings.py` accepts `LYRASHIELD_LLM`/`STRIX_LLM`, `LLM_API_KEY`/`LLM_API_BASE`/`LLM_API_VERSION`, and Azure-specific aliases (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, `AZURE_API_VERSION`). `strix/config/models.py` mirrors these into the LiteLLM env vars that `azure/`, `azure_ai/`, and `litellm/` providers expect.
 - **Artifacts:** worker accepts `strix_runs` and legacy `lyrashield_runs`, with `run.json` or `vulnerabilities.json`
 - **Sync model:** ancestry-checked, review-only PRs; no auto-merge, force-push, or conflict resolution
 - **Verification:** 155 tests, Ruff, formatting, headless mypy, and Bandit
@@ -177,10 +178,12 @@ Generated directories such as `node_modules/`, `.next/`, `dist/`, `.astro/`, `.w
 
 The auth package has a **client-safe / server-only split** to avoid importing `next/headers` or Prisma into client bundles:
 
-- **`@lyrashield/auth`** (client-safe): `authClient`, `signIn`, `signOut`, `signUp`, `useSession`, `PERMISSIONS`, `hasPermission`, `hasMinimumRole`
+- **`@lyrashield/auth`** (client-safe): `authClient`, `signIn`, `signOut`, `signUp`, `getClientSession`, `useSession`, `PERMISSIONS`, `hasPermission`, `hasMinimumRole`
 - **`@lyrashield/auth/server`** (server-only): `auth`, `getSession`, `requireAuth`, `getWorkspaceMembership`, `requireWorkspaceAccess`, `requirePermission`
 
 **Import rule**: Client components import from `@lyrashield/auth`. Server components and API routes import from `@lyrashield/auth/server`.
+
+**Session access in client components**: prefer `getClientSession()` (a Promise-based `authClient.getSession()` wrapper) for one-off session checks. The `useSession()` hook is a nanostore atom that can produce a non-callable type error in the current `better-auth` client; avoid calling it as a function in React components.
 
 ### 4.2 Session Interface
 
@@ -318,20 +321,20 @@ CI applies migrations to PostgreSQL 16 and runs a Prisma migration-diff gate. Pr
 
 The root `.env.example` is the canonical template. `@lyrashield/config` validates the product runtime at import time.
 
-| Area                    | Variables                                                                                                                  |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Database                | `DATABASE_URL`, optional `DATABASE_DIRECT_URL`                                                                             |
-| Queue                   | `REDIS_URL`                                                                                                                |
-| Distributed API limits  | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`                                                                       |
-| Better Auth             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADDITIONAL_TRUSTED_ORIGINS`                                                      |
-| OAuth                   | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, optional Google and Azure AD values                                            |
-| GitHub App              | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`                                      |
-| Public app              | `NEXT_PUBLIC_APP_URL`                                                                                                      |
-| Engine                  | `LYRASHIELD_LLM`, `LLM_API_KEY`, `LYRASHIELD_IMAGE`, `LYRASHIELD_ENGINE_PATH`, optional runtime/reasoning/telemetry values |
-| Evidence storage        | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`                                                  |
-| Email/notifications     | `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL`, `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`                       |
-| Billing placeholders    | Polar and Razorpay variables; no billing runtime exists yet                                                                |
-| Monitoring placeholders | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`                                                                                     |
+| Area                    | Variables                                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| Database                | `DATABASE_URL`, optional `DATABASE_DIRECT_URL`                                                       |
+| Queue                   | `REDIS_URL`                                                                                          |
+| Distributed API limits  | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`                                                 |
+| Better Auth             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_COOKIE_DOMAIN`, `ADDITIONAL_TRUSTED_ORIGINS`   |
+| OAuth                   | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, optional Google and Azure AD values                      |
+| GitHub App              | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`                |
+| Public app              | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MARKETING_URL`, `PORT`                                           |
+| Engine                  | LYRASHIELD_LLM, LLM_API_KEY, LLM_API_BASE, LLM_API_VERSION, LYRASHIELD_IMAGE, Azure aliases          |
+| Evidence storage        | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`                            |
+| Email/notifications     | `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL`, `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL` |
+| Billing placeholders    | Polar and Razorpay variables; no billing runtime exists yet                                          |
+| Monitoring placeholders | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`                                                               |
 
 Required boot values are `DATABASE_URL`, a 32+ character `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `NEXT_PUBLIC_APP_URL`. If the Upstash URL is configured, its token is required. GitHub private keys must be PEM-formatted.
 
@@ -347,7 +350,8 @@ Next.js page-data collection does not reliably load the root `.env`; export requ
 
 `apps/marketing/.env.example` documents public build inputs:
 
-- `PUBLIC_SITE_URL`
+- `PUBLIC_SITE_URL` — canonical marketing origin
+- `PUBLIC_APP_URL` — app origin used for "Sign in" / "Go to app" links (strip trailing slash before build)
 - `PUBLIC_X_URL`
 - `PUBLIC_INDEXABLE`
 - `PUBLIC_POSTHOG_KEY`
@@ -402,7 +406,7 @@ pnpm --filter @lyrashield/marketing preview  # Worker-backed preview on port 878
 3. `pnpm db:generate` — generate Prisma client
 4. `pnpm db:migrate` — run migrations
 5. `pnpm db:seed` — seed demo data
-6. `pnpm dev` — start dev server at http://localhost:3000
+6. `pnpm dev` — start dev server at `http://localhost:3001` (set `PORT` in `apps/web/.env` if you need a different port)
 
 ---
 
@@ -1684,7 +1688,7 @@ Focused remediation after a fresh full-repository review.
 - Terminal scan polling refreshes findings so scan-detail results do not remain stale.
 - Settings labels now accurately describe request-scoped filtering and audit logging rather than implying unavailable runtime controls.
 
-### Verification
+### Verification (app)
 
 - Regression coverage covers workspace mismatch rejection, report ownership, workspace selection, schedule claims, scan lifecycle concurrency/retries, subprocess cancellation, notification failure isolation, DNS/redirect validation, and nested manifests.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` pass: **597 source tests in 47 test files**. Generated `dist` artifacts are excluded so test results are not double-counted in Docker.
@@ -1700,7 +1704,7 @@ Focused remediation after a fresh full-repository review.
 - Added a dedicated `worker` Docker target. Compose supplies the sibling engine as a named build context, installs its frozen production environment, exposes the CLI on `PATH`, and mounts the Docker socket in the explicitly local/dev stack for sandbox launches.
 - Aligned the worker exit-code contract with the real CLI: engine exit `1` is a runtime/configuration failure, while exit `2` means a completed scan with findings. This prevents missing engine configuration from being recorded as a successful scan.
 
-### Verification
+### Verification (engine)
 
 - Engine: **62 tests pass** with Pydantic deprecations treated as errors; Ruff lint and formatting pass; headless mypy passes across 58 source files; Bandit reports zero findings.
 - Worker image build runs `lyrashield --version` as a build-time smoke gate and reports **1.0.4**.

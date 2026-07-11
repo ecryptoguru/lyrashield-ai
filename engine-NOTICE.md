@@ -4,31 +4,31 @@ This product includes software developed by the following projects:
 
 ## Strix (upstream)
 
-- Source: https://github.com/usestrix/strix
+- Source: <https://github.com/usestrix/strix>
 - License: Apache-2.0
 - Usage: Forked and modified. The divergence from upstream is recorded below as required by Apache-2.0 §4(b).
 
 ## LiteLLM
 
-- Source: https://github.com/BerriAI/litellm
+- Source: <https://github.com/BerriAI/litellm>
 - License: MIT
 - Usage: LLM provider abstraction layer (dependency)
 
 ## Caido
 
-- Source: https://github.com/caido/caido
+- Source: <https://github.com/caido/caido>
 - License: MIT
 - Usage: HTTP proxy and request interception (dependency)
 
 ## OpenAI Agents SDK
 
-- Source: https://github.com/openai/openai-agents-python
+- Source: <https://github.com/openai/openai-agents-python>
 - License: MIT
 - Usage: Agent framework (dependency)
 
 ## Textual
 
-- Source: https://github.com/Textualize/textual
+- Source: <https://github.com/Textualize/textual>
 - License: MIT
 - Usage: Terminal UI framework (dependency)
 
@@ -43,6 +43,8 @@ This product includes software developed by the following projects:
 ### Modified upstream files
 
 - `strix/config/loader.py`
+- `strix/config/settings.py` — added Azure AI env aliases (`AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`) and `LLM_API_VERSION` support
+- `strix/config/models.py` — mirrors Azure / Azure AI config into LiteLLM env vars; avoids `OPENAI_BASE_URL` for Azure providers
 - `strix/core/hooks.py`
 - `strix/interface/main.py`
 - `strix/interface/utils.py`

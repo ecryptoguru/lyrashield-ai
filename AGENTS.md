@@ -14,12 +14,14 @@ LyraSec AI is an agent-native application-security platform for AI-built softwar
 
 Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables without founder approval. Public copy uses **LyraSec AI**; the public domain remains undecided.
 
-## Current verified state — 2026-07-11
+## Current verified state — 2026-07-12
 
 - Sprints 0–7, the agent action layer, SCA/secrets scanning, URL scanning, reports, schedules, notifications, MCP, the GitHub diff gate, and reliability/tenant-safety hardening are implemented. The latest hardening is on `codex/docs-update`; do not call it merged until its PR lands.
+- Auth and routing review completed: sign-up/sign-in now handle email verification, redirect via `callbackURL`, and avoid `useSession` atom issues in `apps/web/src/app/sign-in/page.tsx` and `apps/web/src/app/sign-up/page.tsx`.
 - `pnpm test` passes **625 tests in 56 files** and `pnpm test:e2e` passes **2 Chromium tests**. Lint, typecheck, build, formatting, dependency audit, and Docker worker builds pass locally; the branch still requires PR CI.
 - The engine thin fork is merged in [engine PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1). It keeps the Strix upstream contract, defaults telemetry off, and syncs only through reviewable PRs. The engine gate passed 155 tests plus Ruff, formatting, headless mypy, and Bandit.
 - The worker image builds the sibling engine source, exposes the CLI on `PATH`, and fails before sandbox setup when model configuration is missing. A controlled scan still requires authorized `LYRASHIELD_LLM` and `LLM_API_KEY`; do not claim one was run.
+- **Azure AI / GPT 5.6 Terra integration complete**: `strix/config/settings.py` and `strix/config/models.py` accept and mirror `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, `LLM_API_VERSION`, and `AZURE_API_VERSION`; the `lyrashield-engine` `.env` and `.vscode/settings.json` are wired; the worker allowlist, `packages/config/src/env.ts`, `docker-compose.yml`, and `.env.example` propagate the variables.
 - The marketing site is implemented. Its metadata, sitemap, robots, JSON-LD, and social URLs share one build-time origin; indexable builds require public HTTPS. Pre-launch previews are noindex and return 404 for `llms.txt`. See `apps/marketing/README.md`.
 
 ### Recent hardening and infrastructure merge

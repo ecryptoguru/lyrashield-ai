@@ -31,14 +31,32 @@ REDIS_URL="rediss://..."
 BETTER_AUTH_SECRET="..."
 BETTER_AUTH_URL="https://app.example.com"
 NEXT_PUBLIC_APP_URL="https://app.example.com"
+NEXT_PUBLIC_MARKETING_URL="https://www.example.com"
+BETTER_AUTH_COOKIE_DOMAIN=".example.com" # only when app and marketing share a parent domain
 ADDITIONAL_TRUSTED_ORIGINS="https://www.example.com"
 TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming copies
+
+# Email (required for email verification in production)
+BREVO_API_KEY="..."
+EMAIL_FROM="noreply@example.com"
 
 LYRASHIELD_LLM="provider/model"
 LLM_API_KEY="..."
 LYRASHIELD_ENGINE_PATH="lyrashield"
 LYRASHIELD_IMAGE="ghcr.io/usestrix/strix-sandbox@sha256:<approved-digest>"
 LYRASHIELD_TELEMETRY="0"
+
+# Azure OpenAI alternative (use these OR the generic LLM_API_KEY/LLM_API_BASE)
+# LYRASHIELD_LLM="azure/gpt-5.6-terra"
+# AZURE_OPENAI_API_KEY="..."
+# AZURE_OPENAI_ENDPOINT="https://<resource>.openai.azure.com"
+# AZURE_API_VERSION="v1"
+
+# Azure AI project / serverless alternative
+# LYRASHIELD_LLM="azure_ai/gpt-5.6-terra"
+# AZURE_AI_API_KEY="..."
+# AZURE_AI_API_BASE="https://<resource>.services.ai.azure.com"
+# AZURE_API_VERSION="v1"
 
 # S3-compatible evidence storage (required before controlled scans)
 S3_ENDPOINT="https://..."
@@ -77,16 +95,18 @@ Before deploying the Cloudflare marketing Worker:
 
 1. Replace the D1 database ID and Rate Limit namespace placeholder in `apps/marketing/wrangler.jsonc`.
 2. Set `WAITLIST_IP_SALT` with `wrangler secret put`; do not retain the example value.
-3. Build with the intended public origin. `PUBLIC_INDEXABLE=true` is rejected unless `PUBLIC_SITE_URL` is public HTTPS.
+3. Build with the intended public origins. `PUBLIC_INDEXABLE=true` is rejected unless `PUBLIC_SITE_URL` is public HTTPS.
 4. Deploy using Astro's generated configuration:
 
-```bash
-PUBLIC_SITE_URL="https://www.example.com" PUBLIC_INDEXABLE=true \
-  pnpm --filter @lyrashield/marketing build
-pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
-```
+   ```bash
+   PUBLIC_SITE_URL="https://www.example.com" \
+   PUBLIC_APP_URL="https://app.example.com" \
+   PUBLIC_INDEXABLE=true \
+     pnpm --filter @lyrashield/marketing build
+   pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
+   ```
 
-5. On the live domain, verify the waitlist submission, canonical URL, Open Graph image, JSON-LD, `robots.txt`, sitemap, and HTTPS redirect. Do not enable indexing until visual QA and founder approval are complete.
+5. On the live domain, verify the waitlist submission, canonical URL, Open Graph image, JSON-LD, `robots.txt`, sitemap, app-header links, and HTTPS redirect. Do not enable indexing until visual QA and founder approval are complete.
 
 ## Do not claim as verified
 

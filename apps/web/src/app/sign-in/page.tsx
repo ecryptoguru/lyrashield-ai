@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { authClient } from "@lyrashield/auth"
+import { authClient, getAuthErrorMessage, isEmailNotVerifiedError } from "@lyrashield/auth"
 import { ShieldCheck } from "lucide-react"
 import { Button, Input, Spinner, GithubIcon, MicrosoftIcon, FormField } from "@lyrashield/ui"
 
@@ -13,6 +13,7 @@ export default function SignInPage() {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [emailSent, setEmailSent] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -22,10 +23,15 @@ export default function SignInPage() {
     const { error: signInError } = await authClient.signIn.email({
       email,
       password,
+      callbackURL: "/dashboard",
     })
 
     if (signInError) {
-      setError(signInError.message ?? "Sign in failed")
+      if (isEmailNotVerifiedError(signInError)) {
+        setEmailSent(true)
+      } else {
+        setError(getAuthErrorMessage(signInError) ?? "Sign in failed")
+      }
       setLoading(false)
       return
     }
@@ -62,6 +68,35 @@ export default function SignInPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (emailSent) {
+    return (
+      <div className="relative flex min-h-screen items-center justify-center px-4">
+        <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
+        <div className="relative w-full max-w-md">
+          <div className="mb-8 flex flex-col items-center">
+            <div className="gradient-primary shadow-primary-glow mb-3 flex h-12 w-12 items-center justify-center rounded-xl">
+              <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight">Check your email</h1>
+          </div>
+
+          <div className="bg-card rounded-xl border p-6 text-center shadow-lg sm:p-8">
+            <p className="text-muted-foreground text-sm">
+              We sent a verification link to {email}. Click it to verify your account, then sign in.
+            </p>
+            <button
+              type="button"
+              onClick={() => setEmailSent(false)}
+              className="text-primary mt-4 inline-block text-sm font-medium hover:underline"
+            >
+              Try signing in again
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

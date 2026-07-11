@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { authClient } from "@lyrashield/auth"
+import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import { ShieldCheck } from "lucide-react"
 import { Button, Input, Spinner, GithubIcon, MicrosoftIcon, FormField } from "@lyrashield/ui"
 
@@ -14,26 +14,36 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [emailSent, setEmailSent] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    const { error: signUpError } = await authClient.signUp.email({
+    const { data, error: signUpError } = await authClient.signUp.email({
       name,
       email,
       password,
+      callbackURL: "/onboarding",
     })
 
     if (signUpError) {
-      setError(signUpError.message ?? "Sign up failed")
+      setError(getAuthErrorMessage(signUpError) ?? "Sign up failed")
       setLoading(false)
       return
     }
 
-    router.push("/onboarding")
-    router.refresh()
+    // When email verification is required the server returns token: null;
+    // when auto-sign-in is allowed it returns a session token.
+    if (data?.token) {
+      router.push("/onboarding")
+      router.refresh()
+      return
+    }
+
+    setEmailSent(true)
+    setLoading(false)
   }
 
   async function handleGitHub() {
@@ -64,6 +74,28 @@ export default function SignUpPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (emailSent) {
+    return (
+      <div className="relative flex min-h-screen items-center justify-center px-4">
+        <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
+        <div className="relative w-full max-w-md">
+          <div className="bg-card rounded-xl border p-6 text-center shadow-lg sm:p-8">
+            <h2 className="text-xl font-semibold tracking-tight">Check your email</h2>
+            <p className="text-muted-foreground mt-2 text-sm">
+              We sent a verification link to {email}. Click it to verify your account and continue.
+            </p>
+            <p className="text-muted-foreground mt-4 text-sm">
+              Already verified?{" "}
+              <Link href="/sign-in" className="text-primary font-medium hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

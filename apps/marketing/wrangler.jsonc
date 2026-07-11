@@ -12,6 +12,7 @@
   },
   "vars": {
     "PUBLIC_SITE_URL": "",
+    "PUBLIC_APP_URL": "",
     "PUBLIC_X_URL": "",
     "PUBLIC_INDEXABLE": "false",
     "PUBLIC_POSTHOG_KEY": "",

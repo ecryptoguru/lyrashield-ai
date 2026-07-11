@@ -20,6 +20,8 @@ const envSchema = z
     // Comma-separated extra origins trusted for auth/CSRF (staging, apex+www,
     // preview deploys). BETTER_AUTH_URL is always trusted; these are appended.
     ADDITIONAL_TRUSTED_ORIGINS: z.string().optional().or(z.literal("")),
+    // Domain shared by app and marketing subdomains when enabling cross-subdomain cookies.
+    BETTER_AUTH_COOKIE_DOMAIN: z.string().optional().or(z.literal("")),
 
     // GitHub OAuth
     GITHUB_CLIENT_ID: z.string().optional().or(z.literal("")),
@@ -51,6 +53,7 @@ const envSchema = z
 
     // App
     NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
+    NEXT_PUBLIC_MARKETING_URL: z.string().url().optional().or(z.literal("")),
     TRUSTED_PROXY_IP_HEADER: z
       .enum(["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"])
       .optional()
@@ -59,8 +62,20 @@ const envSchema = z
     // Scan Engine (Sprint 5+)
     LYRASHIELD_LLM: z.string().optional().or(z.literal("")),
     LLM_API_KEY: z.string().optional().or(z.literal("")),
+    LLM_API_BASE: z.string().optional().or(z.literal("")),
+    LLM_API_VERSION: z.string().optional().or(z.literal("")),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
+
+    // Azure OpenAI (optional — use these OR the generic LLM_API_KEY/LLM_API_BASE)
+    AZURE_OPENAI_API_KEY: z.string().optional().or(z.literal("")),
+    AZURE_OPENAI_ENDPOINT: z.string().optional().or(z.literal("")),
+    AZURE_OPENAI_API_BASE: z.string().optional().or(z.literal("")),
+    // Azure AI project / serverless (e.g. azure_ai/gpt-5.6-terra)
+    AZURE_AI_API_KEY: z.string().optional().or(z.literal("")),
+    AZURE_AI_API_BASE: z.string().optional().or(z.literal("")),
+    AZURE_API_VERSION: z.string().optional().or(z.literal("")),
+    AZURE_OPENAI_API_VERSION: z.string().optional().or(z.literal("")),
 
     // Evidence Storage
     S3_ENDPOINT: z.string().optional().or(z.literal("")),

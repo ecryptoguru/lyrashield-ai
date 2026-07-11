@@ -10,12 +10,11 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "declaration": true,
-    "declarationMap": true,
+    "noEmit": true,
     "sourceMap": true,
     "incremental": true,
-    "composite": true
+    "typeRoots": ["node_modules/.pnpm/node_modules/@types"]
   },
-  "include": ["vitest.config.ts"],
+  "include": ["vitest.config.ts", "playwright.config.ts"],
   "exclude": ["node_modules", "dist", ".next", ".turbo"]
 }
