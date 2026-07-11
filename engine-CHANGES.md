@@ -1,41 +1,37 @@
 # LyraShield Engine — CHANGES
 
-This file lists modifications made to the upstream Strix project (https://github.com/usestrix/strix)
-as required by the Apache License 2.0, Section 4(b).
+This product includes a modified fork of [Strix](https://github.com/usestrix/strix), licensed under Apache-2.0. This record identifies the current divergence from upstream as required by Apache-2.0 §4(b).
 
-## Modified Files
+## Baseline
 
-<!-- List each file that has been modified from upstream Strix. -->
-<!-- Example entries: -->
+- Upstream baseline: `7b639505fecf20a2d9e356f96bd91470aa828182`
+- Fork repository: `ecryptoguru/lyrashield-engine`
+- Integration model: thin adapter plus review-only upstream-sync PRs
 
-- `strix/__main__.py` — Rebranded CLI entry point, changed default config paths
-- `strix/config.py` — Added LyraShield-specific configuration options
-- `strix/agents/agent.py` — Added budget guard hooks, output normalization
-- `README.md` — Replaced with LyraShield-specific documentation
+## Modified upstream files
 
-## Added Files
+- `strix/config/loader.py`
+- `strix/core/hooks.py`
+- `strix/interface/main.py`
+- `strix/interface/utils.py`
+- `strix/report/state.py`
+- `strix/runtime/docker_client.py`
+- `strix/telemetry/logging.py`
+- `pyproject.toml` and `uv.lock`
+- Existing tests under `tests/`
 
-<!-- List new files added that did not exist in upstream. -->
+These changes support the LyraShield adapter contract, telemetry defaults, output compatibility, sandbox hardening, and regression coverage. They do not grant a right to use upstream or LyraSec trademarks.
 
-- `lyrashield_wrapper.py` — Thin wrapper for output normalization and branding
-- `requirements-lyrashield.txt` — Additional Python dependencies
+## Added fork files
 
-## Removed Files
+- `lyrashield_adapter/` — compatibility entry point and CLI adapter
+- `.lyrashield-upstream-base`, `scripts/check-upstream.sh`, and `scripts/verify-thin-fork.sh` — upstream-boundary verification
+- `.github/workflows/upstream-sync.yml` — weekly/manual, PR-only upstream synchronization
+- `UPGRADES.md` and the thin-fork design/plan records
+- Adapter, hardening, and upstream-sync regression tests
 
-<!-- List files removed from upstream. -->
+## Upstream synchronization
 
-- (none)
+The workflow verifies ancestry, aborts rewritten history, and opens a reviewable PR when a sync is needed. It does not auto-merge, force-push, resolve conflicts, or run mechanical repository-wide renames.
 
----
-
-## Fork Strategy
-
-Per PRD §B9, the fork strategy is to keep the vendored engine as close to pristine
-upstream as possible. Brand and normalize output in the TypeScript worker layer,
-not in the engine itself. This minimizes monthly merge-conflict debt.
-
-A "files we've diverged in" manifest should be maintained alongside this file
-and updated whenever a new divergence is introduced.
-
-A CVE-/security-triggered fast-path merge should be maintained separately from
-the routine monthly feature sync.
+Update this file whenever a new engine divergence is merged. `engine-NOTICE.md` contains the required third-party notices.

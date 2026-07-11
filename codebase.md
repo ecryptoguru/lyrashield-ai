@@ -558,7 +558,7 @@ docker compose down       # Stop services
   - Redundant `@@index([slug])` on Workspace removed (already @unique)
   - Retest model added (P2)
 - **Prisma Client Extension**: auto-injects `deletedAt: null` on reads, `workspaceId` scoping, redirects `delete` → soft-delete
-- **License hygiene**: `engine-NOTICE.md` and `engine-CHANGES.md` templates created for Apache-2.0 §4b compliance
+- **License hygiene**: `engine-NOTICE.md` and `engine-CHANGES.md` record the current Apache-2.0 fork notices and divergence
 
 ### Sprint 3: GitHub App Integration — ✅ Complete
 
@@ -2009,21 +2009,24 @@ Focused remediation after a fresh full-repository review.
 ### SEO / static assets
 
 - `src/components/JsonLd.astro` serializes JSON-LD with `<` escaped to `\u003c` to prevent `</script>` injection.
-- `src/pages/robots.txt.ts` normalizes `PUBLIC_SITE_URL` and emits `Sitemap: <site>/sitemap-index.xml` when `PUBLIC_INDEXABLE=true` (otherwise `Disallow: /`).
+- `astro.config.mjs` is the build-time source for the site origin, indexability, and optional X URL. It rejects indexable builds without a public HTTPS `PUBLIC_SITE_URL`.
+- `SeoHead.astro`, homepage JSON-LD, blog JSON-LD, `robots.txt`, RSS, and the sitemap derive their origin from Astro's configured `site`; canonical, Open Graph, and sitemap URLs therefore cannot diverge during a configured build.
+- `src/pages/robots.txt.ts` emits `Sitemap: <site>/sitemap-index.xml` when indexable and `Disallow: /` otherwise.
 - `src/pages/rss.xml.ts` uses `description` for the RSS summary; raw `post.body` markdown is no longer exposed as `content`.
-- `src/pages/llms.txt.ts` generates an LLM-readable summary of the blog.
+- `src/pages/llms.txt.ts` is a dynamic Worker route: it returns 404 before launch and generates an LLM-readable summary only for an approved indexable build.
 
 ### Generated-file hygiene
 
 - `apps/marketing/.gitignore` ignores `dist/`, `.astro/`, `.wrangler/`, `.dev.vars`, and `worker-configuration.d.ts`.
 - `wrangler types` generates `worker-configuration.d.ts` before build/dev/preview/typecheck.
-- `astro.config.mjs` has `env.validateSecrets: true` for CI/build.
+- `astro.config.mjs` deliberately does not validate secrets at static build time; the waitlist endpoint validates the required Worker secret at request time.
 
 ### Configuration placeholders
 
 - `wrangler.jsonc` has `database_id` and `ratelimits.namespace_id` placeholders with `// Replace before deploying` comments.
 - `.dev.vars.example` provides a local `WAITLIST_IP_SALT` template.
-- `.env.example` points public env vars (`PUBLIC_SITE_URL`, `PUBLIC_INDEXABLE`, `PUBLIC_POSTHOG_*`, `PUBLIC_X_URL`) to `.env` and secrets to `.dev.vars`.
+- `.env.example` documents the public build values; `.dev.vars` carries local Worker secrets.
+- `preview`, `deploy`, and `deploy:preview` use Astro's generated `dist/server/wrangler.json`, which points assets at `dist/client`.
 
 ### Marketing verification
 
@@ -2031,6 +2034,7 @@ Focused remediation after a fresh full-repository review.
 - `pnpm --filter @lyrashield/marketing typecheck` passes.
 - `pnpm --filter @lyrashield/marketing build` passes.
 - `pnpm --filter @lyrashield/marketing lint` passes (`eslint src --max-warnings 0`).
+- A local Worker smoke passes at `http://localhost:8787`: `/`, `/robots.txt`, and `/sitemap-index.xml` return 200; pre-launch `/llms.txt` returns 404.
 
 ### Caveats
 

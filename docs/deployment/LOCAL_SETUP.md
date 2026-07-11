@@ -1,182 +1,85 @@
-# LyraShield — Local Development Setup
+# LyraSec AI — Local Setup
+
+This guide covers local development only. `docker-compose.yml` binds services to localhost and mounts Docker for sandbox work; it is not a production deployment file.
 
 ## Prerequisites
 
-```txt
-Docker Desktop (or OrbStack) — for Postgres, Redis, and scan sandbox
-Node.js 20+ (via nvm)
-pnpm 11+
-Python 3.12+ (only if developing the engine locally)
-uv (Python package manager — only for engine development)
-```
+- Node.js 20+ and pnpm 11
+- Docker Desktop / Docker Engine
+- Git
+- `uv` only when developing the sibling engine repository
 
-## Architecture Overview (Local)
-
-```
-┌─────────────────────────────────────────────────────┐
-│  Host Machine (your Mac)                            │
-│                                                     │
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────┐ │
-│  │ Next.js Web │  │ TS Worker    │  │ LyraShield │ │
-│  │ :3000       │  │ (tsx watch)  │  │ Engine CLI │ │
-│  │             │  │              │  │ (Python)   │ │
-│  └──────┬──────┘  └──────┬───────┘  └─────┬──────┘ │
-│         │                │                 │        │
-│         │     ┌──────────┴──────────┐      │        │
-│         │     │  Docker Compose     │      │        │
-│         │     │                     │      │        │
-│         ├────►│  Postgres :5432     │      │        │
-│         ├────►│  Redis :6379        │      │        │
-│         │     └─────────────────────┘      │        │
-│         │                                  │        │
-│         │     ┌─────────────────────┐      │        │
-│         │     │  Sandbox Container  │◄─────┘        │
-│         │     │  (Kali + tools)     │               │
-│         │     │  Engine runs here   │               │
-│         │     └─────────────────────┘               │
-│         │                                           │
-│         │     ┌─────────────────────┐               │
-│         └────►│  MinIO :9000        │ (S3-compatible│
-│               │  (evidence storage) │  object store) │
-│               └─────────────────────┘               │
-└─────────────────────────────────────────────────────┘
-```
-
-## Step-by-Step Setup
-
-### 1. Clone Both Repos
-
-```bash
-# Platform (TypeScript monorepo)
-git clone https://github.com/ecryptoguru/lyrasec-ai.git ~/Desktop/lyrasec-ai
-cd ~/Desktop/lyrasec-ai
-
-# Engine (Python fork)
-git clone <your-github>/lyrashield-engine.git ~/Desktop/lyrashield-engine
-```
-
-### 2. Start Infrastructure (Docker Compose)
-
-```bash
-cd ~/Desktop/lyrasec-ai
-
-# Start Postgres + Redis (+ MinIO for evidence storage)
-docker compose up -d
-
-# Verify
-docker ps
-# Should see: lyrashield-postgres (healthy), lyrashield-redis (healthy)
-```
-
-### 3. Configure Environment
-
-```bash
-cd ~/Desktop/lyrasec-ai
-cp .env.example .env
-cp apps/marketing/.env.example apps/marketing/.env
-cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
-
-# Edit .env, apps/marketing/.env, and apps/marketing/.dev.vars — minimum required values:
-# DATABASE_URL=postgresql://lyrashield:lyrashield@localhost:5432/lyrashield
-# REDIS_URL=redis://localhost:6379
-# BETTER_AUTH_SECRET=<generate with: openssl rand -base64 32>
-# BETTER_AUTH_URL=http://localhost:3000
-# NEXT_PUBLIC_APP_URL=http://localhost:3000
-#
-# # Engine (for Sprint 5+)
-# LYRASHIELD_ENGINE_PATH=~/Desktop/lyrashield-engine
-# LYRASHIELD_LLM=openai/gpt-4o
-# LLM_API_KEY=your-openai-key
-# # Local development uses the upstream sandbox tag from docker-compose.yml.
-# # LYRASHIELD_IMAGE=ghcr.io/usestrix/strix-sandbox:1.0.0
-#
-# # GitHub OAuth (create at https://github.com/settings/developers)
-# GITHUB_CLIENT_ID=your-client-id
-# GITHUB_CLIENT_SECRET=your-client-secret
-#
-# # GitHub App (for repo scanning — Sprint 3)
-# # Create at https://github.com/settings/apps
-# GITHUB_APP_ID=your-app-id
-# GITHUB_APP_PRIVATE_KEY=<contents-of-pem-file>
-# GITHUB_WEBHOOK_SECRET=<generate-strong-secret>
-#
-# # Marketing (apps/marketing/.dev.vars for WAITLIST_IP_SALT, apps/marketing/.env for PUBLIC_*)
-# PUBLIC_SITE_URL=http://localhost:4321
-# PUBLIC_INDEXABLE=false
-# WAITLIST_IP_SALT=<generate with: openssl rand -base64 32>
-```
-
-### 4. Install Dependencies & Run Migrations
-
-```bash
-cd ~/Desktop/lyrasec-ai
-
-# Install all workspace dependencies
-pnpm install
-
-# Generate Prisma client
-pnpm db:generate
-
-# Run database migrations
-pnpm db:migrate
-
-# (Optional) Seed database
-pnpm db:seed
-```
-
-### 5. Start the Platform
-
-```bash
-cd ~/Desktop/lyrasec-ai
-
-# Starts all apps with dev scripts: web (:3000), worker, agent, and marketing (:4321)
-pnpm dev
-```
-
-Verify:
-
-- Web app: http://localhost:3000
-- Sign up / sign in works
-- Dashboard loads
-- Marketing site: http://localhost:4321
-- Waitlist form works
-
-### 5.5 Start the Marketing Site (Astro)
-
-```bash
-cd ~/Desktop/lyrasec-ai
-
-# The .env and .dev.vars examples should already be copied in Step 3.
-# Edit the values:
-#   apps/marketing/.env      -> PUBLIC_SITE_URL=http://localhost:4321
-#   apps/marketing/.dev.vars -> WAITLIST_IP_SALT=<openssl rand -base64 32>
-
-# Start the Astro dev server and generate worker types
-pnpm --filter @lyrashield/marketing dev
-```
-
-Verify:
-
-- Marketing site: http://localhost:4321
-- Waitlist form works
-- `robots.txt`, `rss.xml`, and `sitemap-index.xml` are generated
-
-If the waitlist table is missing in local dev, apply the local D1 migration:
-
-```bash
-pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrasec-marketing-waitlist --local
-```
-
-### 6. Set Up the Scan Engine
-
-Docker Compose builds the engine from the sibling Desktop repository into the worker image. Keep both repositories next to each other:
+Keep the platform and engine repositories next to each other:
 
 ```text
 ~/Desktop/lyrasec-ai
 ~/Desktop/lyrashield-engine
 ```
 
-Build and verify the integrated worker:
+## 1. Configure the platform
+
+```bash
+cd ~/Desktop/lyrasec-ai
+cp .env.example .env
+pnpm install --frozen-lockfile
+```
+
+Set a real local `BETTER_AUTH_SECRET` in `.env`. When using Compose, set `REDIS_URL` to the password-protected local endpoint shown in `.env.example`.
+
+Next.js production builds read required values from `process.env`; the root `.env` is not loaded automatically for page-data collection. Before `pnpm build`, either export the required variables or copy the local file for the web app:
+
+```bash
+cp .env apps/web/.env
+```
+
+## 2. Start Postgres and Redis
+
+```bash
+docker compose up -d postgres redis
+docker compose ps
+pnpm db:generate
+pnpm --filter @lyrashield/db migrate:deploy
+```
+
+The local services listen only on `127.0.0.1:5432` and `127.0.0.1:6379`.
+
+## 3. Run the platform
+
+```bash
+pnpm dev
+```
+
+The dashboard is available at `http://localhost:3000`. Before submitting a pull request, run:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+git diff --check
+```
+
+The current source suite is 607 tests in 48 files; treat the command output, not a hard-coded count, as authoritative.
+
+## 4. Run the marketing site
+
+```bash
+cd ~/Desktop/lyrasec-ai
+cp apps/marketing/.env.example apps/marketing/.env
+cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
+pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrasec-marketing-waitlist --local
+pnpm --filter @lyrashield/marketing dev
+```
+
+Astro development serves at `http://localhost:4321`. To exercise the actual Worker/asset configuration instead, run:
+
+```bash
+pnpm --filter @lyrashield/marketing preview -- --port 8787
+```
+
+That preview is intentionally noindex. It should return 200 for `/`, `/robots.txt`, and `/sitemap-index.xml`, and 404 for `/llms.txt` before launch.
+
+## 5. Build the worker image and engine
 
 ```bash
 cd ~/Desktop/lyrasec-ai
@@ -185,187 +88,35 @@ docker compose up -d worker
 docker compose exec worker lyrashield --version
 ```
 
-For direct engine development on the host:
+The worker image consumes the sibling engine source through its named Docker build context. It exits before sandbox setup if `LYRASHIELD_LLM` or `LLM_API_KEY` is missing.
+
+For engine work on the host:
 
 ```bash
 cd ~/Desktop/lyrashield-engine
-
 uv sync --frozen
-uv run lyrashield --help
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
 ```
 
-Set `LYRASHIELD_ENGINE_SOURCE` only when the sibling engine repository lives somewhere else. `LYRASHIELD_LLM` is required for a real scan; provider credentials depend on the selected model.
+Do not merge Strix upstream or run mechanical rebranding commands locally. Use the engine repository's review-only upstream-sync workflow, inspect the generated PR, and merge it normally after its checks pass.
 
-### 7. Test a Scan Locally
-
-```bash
-# Set LLM provider
-export LYRASHIELD_LLM="openai/gpt-4o"
-export LLM_API_KEY="sk-..."
-
-# Run a scan directly (without the platform)
-lyrashield -n --target ./my-test-app --scan-mode quick
-
-# Or through the platform UI:
-# 1. Open http://localhost:3000
-# 2. Create a target (repo or URL)
-# 3. Click "New Scan"
-# 4. Watch the scan timeline
-```
-
-### 8. Docker Deployment (Full Stack)
-
-The project includes a `docker-compose.yml` and `Dockerfile` for full-stack Docker deployment.
+## 6. Full Docker smoke
 
 ```bash
 cd ~/Desktop/lyrasec-ai
-
-# Build and start all containers (postgres, redis, migrate, web, worker)
 docker compose up --build -d
-
-# Verify all containers are running
-docker ps
-# Should see: lyrashield-postgres (healthy), lyrashield-redis (healthy), lyrashield-web (running), lyrashield-worker (running)
-
-# Test the web app
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/
-# Should return: 200
-
-# Run tests inside the container
-docker exec lyrashield-worker sh -c "cd /app && pnpm vitest run"
-# Should show: 727 tests passed
-
-# Stop and clean up
+docker compose ps
+curl -fsS http://localhost:3000/ >/dev/null
 docker compose down
 ```
 
-### 9. (Optional) Add MinIO for Evidence Storage
-
-```bash
-# Add to docker-compose.yml:
-# minio:
-#   image: minio/minio:latest
-#   container_name: lyrashield-minio
-#   command: server /data --console-address ":9001"
-#   ports:
-#     - "9000:9000"
-#     - "9001:9001"
-#   environment:
-#     MINIO_ROOT_USER: lyrashield
-#     MINIO_ROOT_PASSWORD: lyrashield123
-#   volumes:
-#     - minio_data:/data
-
-# Then add to .env:
-# S3_ENDPOINT=http://localhost:9000
-# S3_ACCESS_KEY=lyrashield
-# S3_SECRET_KEY=lyrashield123
-# S3_BUCKET=lyrashield-evidence
-```
-
-## Local Development Workflow
-
-### Daily Development
-
-```bash
-# 1. Start infrastructure
-docker compose up -d
-
-# 2. Start platform
-pnpm dev
-
-# 3. Make changes in apps/web, apps/marketing, or packages/*
-
-# 4. Run tests
-pnpm test          # unit tests (727 passing, 56 files)
-pnpm typecheck     # TypeScript checks
-pnpm lint          # ESLint
-
-# 5. Database changes
-pnpm db:migrate    # create + apply migration
-pnpm db:generate   # regenerate Prisma client
-```
-
-### Engine Development
-
-```bash
-cd ~/Desktop/lyrashield-engine
-
-# Run engine directly
-uv run lyrashield -n --target ./test-app --scan-mode quick
-
-# Run tests
-uv run pytest
-
-# Type check
-uv run mypy lyrashield/
-uv run pyright lyrashield/
-
-# Lint
-uv run ruff check .
-uv run ruff format .
-```
-
-### Sync Engine from Upstream
-
-```bash
-cd ~/Desktop/lyrashield-engine
-
-# Fetch latest from Strix
-git fetch upstream
-
-# Merge and resolve conflicts
-git merge upstream/main
-
-# Re-apply rebranding (if new files were added)
-find . -type f \( -name "*.py" -o -name "*.md" \) -not -path "./.git/*" \
-  -exec sed -i '' 's/STRIX_/LYRASHIELD_/g; s/Strix/LyraShield/g; s/strix/lyrashield/g' {} +
-
-# Test
-uv run pytest
-
-# Commit
-git add -A
-git commit -m "sync: merge upstream + rebrand"
-```
+`BETTER_AUTH_SECRET` must be set before this command. Docker health does not prove that a sandbox scan executed.
 
 ## Troubleshooting
 
-### Port already in use
-
-```bash
-lsof -i :3000  # find process
-kill <PID>     # kill it
-```
-
-### Database connection failed
-
-```bash
-docker compose restart postgres
-docker compose logs postgres
-```
-
-### Prisma migration issues
-
-```bash
-pnpm db:push    # sync schema without migration (dev only)
-npx prisma studio --schema packages/db/prisma/schema.prisma  # inspect data
-```
-
-### Engine not found
-
-```bash
-docker compose build worker
-docker compose up -d worker
-docker compose exec worker lyrashield --version
-```
-
-### Docker sandbox won't start
-
-```bash
-docker pull ghcr.io/usestrix/strix-sandbox:1.0.0
-docker image inspect ghcr.io/usestrix/strix-sandbox:1.0.0
-```
-
-Local development uses the upstream `ghcr.io/usestrix/strix-sandbox:1.0.0` tag.
-Use a LyraShield-named image only after LyraShield publishes, signs, and maintains it.
+- If a local port is occupied, stop the existing process rather than changing application configuration.
+- If Prisma reports drift, run the migration checks; do not use `db:push` as a production repair.
+- If the worker cannot find `lyrashield`, confirm the sibling repository path or `LYRASHIELD_ENGINE_SOURCE` before rebuilding.
+- If the waitlist returns 500 locally, set a non-placeholder `WAITLIST_IP_SALT` in `apps/marketing/.dev.vars`.
