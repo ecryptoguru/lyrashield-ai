@@ -3,7 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma"
 import { genericOAuth, microsoftEntraId } from "better-auth/plugins"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
-import { env, isProd } from "@lyrashield/config"
+import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
@@ -72,7 +72,7 @@ export const auth = betterAuth({
   trustedOrigins,
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: true,
+    requireEmailVerification: !isDev,
   },
   emailVerification: {
     sendVerificationEmail,
