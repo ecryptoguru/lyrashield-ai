@@ -22,7 +22,7 @@ vi.mock("@lyrashield/logger", () => ({
   },
 }))
 
-import { findRunOutputDir, interpretExitCode } from "./runner"
+import { createKillEscalation, findRunOutputDir, interpretExitCode } from "./runner"
 
 const cleanupPaths: string[] = []
 
@@ -127,5 +127,31 @@ describe("interpretExitCode", () => {
     const result = interpretExitCode(-1)
     expect(result.status).toBe("FAILED")
     expect(result.message).toContain("code -1")
+  })
+})
+
+describe("createKillEscalation (S5)", () => {
+  it("sends SIGKILL after the grace window when the process has NOT exited", () => {
+    vi.useFakeTimers()
+    const kills: string[] = []
+    const child = { kill: (sig?: NodeJS.Signals) => (kills.push(String(sig)), true) }
+    const esc = createKillEscalation(child, 5000)
+    esc.onTimeout()
+    expect(kills).toEqual(["SIGTERM"])
+    vi.advanceTimersByTime(5000)
+    expect(kills).toEqual(["SIGTERM", "SIGKILL"])
+    vi.useRealTimers()
+  })
+
+  it("does NOT send SIGKILL if the process exits within the grace window", () => {
+    vi.useFakeTimers()
+    const kills: string[] = []
+    const child = { kill: (sig?: NodeJS.Signals) => (kills.push(String(sig)), true) }
+    const esc = createKillEscalation(child, 5000)
+    esc.onTimeout()
+    esc.markExited() // process closed before the grace window elapsed
+    vi.advanceTimersByTime(5000)
+    expect(kills).toEqual(["SIGTERM"])
+    vi.useRealTimers()
   })
 })

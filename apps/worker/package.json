@@ -16,7 +16,8 @@
     "@lyrashield/config": "workspace:*",
     "@lyrashield/integrations": "workspace:*",
     "@lyrashield/logger": "workspace:*",
-    "@lyrashield/types": "workspace:*"
+    "@lyrashield/types": "workspace:*",
+    "@lyrashield/security": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.0",

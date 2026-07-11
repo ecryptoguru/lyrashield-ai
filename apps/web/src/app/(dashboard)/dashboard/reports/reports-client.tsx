@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { FileText, Share2, Trash2, Copy, CheckCircle2, AlertCircle, Download, Plus } from "lucide-react"
-import { Button, Badge, Card, EmptyState, Spinner, LoadMore, Input, Select } from "@lyrashield/ui"
+import { Button, Badge, Card, EmptyState, Spinner, LoadMore, Input, Select, FormField } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
 
 interface ReportItem {
@@ -169,22 +169,28 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
         <Card className="mb-4 p-4">
           <div className="space-y-3">
             <h3 className="text-sm font-medium">Generate New Report</h3>
-            <Input
-              type="text"
-              placeholder="Report title (optional)"
-              value={reportTitle}
-              onChange={(e) => setReportTitle(e.target.value)}
-            />
+            <FormField label="Report title" htmlFor="report-title">
+              <Input
+                id="report-title"
+                type="text"
+                placeholder="Report title (optional)"
+                value={reportTitle}
+                onChange={(e) => setReportTitle(e.target.value)}
+              />
+            </FormField>
             {scans.length > 0 && (
-              <Select
-                value={selectedScanId}
-                onChange={(e) => setSelectedScanId(e.target.value)}
-              >
-                <option value="">Select a scan (optional)</option>
-                {scans.map((s) => (
-                  <option key={s.id} value={s.id}>{s.targetName} — {s.status}</option>
-                ))}
-              </Select>
+              <FormField label="Scan" htmlFor="report-scan">
+                <Select
+                  id="report-scan"
+                  value={selectedScanId}
+                  onChange={(e) => setSelectedScanId(e.target.value)}
+                >
+                  <option value="">Select a scan (optional)</option>
+                  {scans.map((s) => (
+                    <option key={s.id} value={s.id}>{s.targetName} — {s.status}</option>
+                  ))}
+                </Select>
+              </FormField>
             )}
             <div className="flex gap-2">
               <Button
@@ -208,7 +214,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
 
       {error && (
         <Card className="mb-4 p-4 border-destructive/50">
-          <div className="flex items-center gap-2 text-sm text-destructive">
+          <div className="flex items-center gap-2 text-sm text-destructive" role="alert">
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
             <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { setError(null); void loadReports() }}>
@@ -220,7 +226,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
 
       {shareUrl && (
         <Card className="mb-4 p-4">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4" role="status">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium mb-1">Share link generated (valid 30 days):</p>
               <p className="text-sm text-muted-foreground truncate font-mono">{shareUrl}</p>

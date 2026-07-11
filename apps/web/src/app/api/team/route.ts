@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
-import { PERMISSIONS } from "@lyrashield/auth"
+import { PERMISSIONS, canGrantRole } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -38,7 +38,23 @@ export async function POST(request: Request) {
 
   try {
     // Enforces membership + the `member:invite` permission (OWNER and ADMIN only).
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.member.invite)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.member.invite)
+
+    // Role-ceiling: the inviter may only grant roles below their own rank (OWNER
+    // may grant anything). Without this, an ADMIN could invite a peer ADMIN or
+    // otherwise escalate. (S6)
+    if (!canGrantRole(workspace.role, role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "You cannot grant a role equal to or higher than your own",
+          },
+        },
+        { status: 403 }
+      )
+    }
 
     const [existingMember, existingInvitation] = await Promise.all([
       prisma.workspaceMember.findFirst({

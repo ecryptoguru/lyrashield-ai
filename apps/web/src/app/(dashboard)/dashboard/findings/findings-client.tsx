@@ -159,6 +159,14 @@ export function FindingsClient({
               key={finding.id}
               className="p-4 cursor-pointer hover:shadow-card-hover transition-shadow"
               onClick={() => setSelectedFinding(finding)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  setSelectedFinding(finding)
+                }
+              }}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">

@@ -100,6 +100,9 @@ export async function getShareableReport(reportId: string, workspaceId: string):
   let scanSummary: ShareableReport["scanSummary"] = null
 
   if (report.scanId) {
+    // Scope the scan lookup to the report's workspace. This is the public share
+    // path (no request-scoped workspace context is set), so we must NOT rely on
+    // the Prisma extension's implicit read-scoping — filter explicitly. (S4)
     const scan = await prisma.scan.findFirst({
       where: { id: report.scanId, workspaceId, deletedAt: null },
       include: {

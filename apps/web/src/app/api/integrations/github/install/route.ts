@@ -5,6 +5,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { getInstallAppUrl, getAppInstallations } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
+import { createInstallState, verifyInstallState } from "../../../../../lib/github-install-state"
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -17,14 +18,27 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const installationId = searchParams.get("installation_id")
   const setupAction = searchParams.get("setup_action")
-  const workspaceId = searchParams.get("state")
+  const state = searchParams.get("state")
 
-  if (!installationId || !workspaceId) {
+  if (!installationId || !state) {
     return NextResponse.json(
       { success: false, error: { code: "MISSING_PARAM", message: "installation_id and state are required" } },
       { status: 400 }
     )
   }
+
+  // The state must be a token this app signed at POST time for a workspace the
+  // caller could manage. This prevents tampering `state` to point at another
+  // workspace and rejects stale/forged callbacks. (S2)
+  const stateResult = verifyInstallState(state)
+  if (!stateResult.valid) {
+    logger.warn("GitHub install callback rejected — invalid state", { reason: stateResult.reason })
+    return NextResponse.json(
+      { success: false, error: { code: "INVALID_STATE", message: "Invalid or expired install state" } },
+      { status: 400 }
+    )
+  }
+  const workspaceId = stateResult.workspaceId
 
   try {
     const { session: authSession } = await requirePermission(workspaceId, PERMISSIONS.integration.manage)
@@ -36,6 +50,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: { code: "NOT_FOUND", message: "Installation not found" } },
         { status: 404 }
+      )
+    }
+
+    // Anti-hijack: an installation may belong to exactly one workspace. If this
+    // installation id is already linked to a DIFFERENT workspace, refuse — a
+    // caller must not be able to attach another tenant's installation (whose
+    // numeric id is enumerable) into their own workspace. (S2)
+    const existingElsewhere = await prisma.integration.findFirst({
+      where: {
+        type: "GITHUB",
+        externalId: String(installationId),
+        deletedAt: null,
+        NOT: { workspaceId },
+      },
+    })
+    if (existingElsewhere) {
+      logger.warn("GitHub install callback rejected — installation already linked to another workspace", {
+        installationId,
+        requestedWorkspaceId: workspaceId,
+      })
+      return NextResponse.json(
+        { success: false, error: { code: "ALREADY_LINKED", message: "This installation is already connected to another workspace" } },
+        { status: 409 }
       )
     }
 
@@ -133,14 +170,17 @@ export async function POST(request: NextRequest) {
 
     const installUrl = getInstallAppUrl()
     const url = new URL(installUrl)
-    url.searchParams.set("state", workspaceId)
+    // Signed, expiring, workspace-bound state (verified in the GET callback). (S2)
+    url.searchParams.set("state", createInstallState(workspaceId))
 
     return NextResponse.json({ success: true, data: { installUrl: url.toString() } })
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
+    // Do not leak the raw error message to the client. (Q7)
+    logger.error("Failed to build GitHub install URL", { error: String(error) })
     return NextResponse.json(
-      { success: false, error: { code: "CONFIG_ERROR", message: error instanceof Error ? error.message : "GitHub App not configured" } },
+      { success: false, error: { code: "CONFIG_ERROR", message: "GitHub App is not configured" } },
       { status: 500 }
     )
   }

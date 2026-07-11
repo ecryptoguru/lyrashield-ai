@@ -96,6 +96,38 @@ describe("Prisma Extension — Query Guards (workspace scoping)", () => {
   })
 })
 
+describe("Prisma Extension — Query Guards (bulk-write scoping, S7)", () => {
+  it("injects workspaceId into updateMany on a workspace-scoped model", () => {
+    const where = applyQueryGuards("Finding", "updateMany", { where: { status: "OPEN" } }, "ws-123").where
+    expect(where).toEqual({ status: "OPEN", workspaceId: "ws-123" })
+  })
+
+  it("injects workspaceId into deleteMany on a workspace-scoped model", () => {
+    const where = applyQueryGuards("Report", "deleteMany", {}, "ws-123").where
+    expect(where).toEqual({ workspaceId: "ws-123" })
+  })
+
+  it("does NOT inject deletedAt on bulk writes (writes are not soft-delete reads)", () => {
+    const where = applyQueryGuards("Finding", "updateMany", {}, "ws-123").where as Record<string, unknown>
+    expect(where).not.toHaveProperty("deletedAt")
+    expect(where).toEqual({ workspaceId: "ws-123" })
+  })
+
+  it("never overrides a caller-supplied workspaceId on bulk writes", () => {
+    const where = applyQueryGuards("Finding", "deleteMany", { where: { workspaceId: "ws-other" } }, "ws-123").where
+    expect(where).toEqual({ workspaceId: "ws-other" })
+  })
+
+  it("leaves single update/delete unscoped (handled by route-level checks)", () => {
+    expect(applyQueryGuards("Finding", "update", { where: { id: "x" } }, "ws-123")).toEqual({
+      where: { id: "x" },
+    })
+    expect(applyQueryGuards("Finding", "delete", { where: { id: "x" } }, "ws-123")).toEqual({
+      where: { id: "x" },
+    })
+  })
+})
+
 describe("Prisma Extension — request-scoped context isolation", () => {
   it("returns null outside any context", () => {
     expect(getWorkspaceContext()).toBeNull()
