@@ -12,6 +12,7 @@ import {
 } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { DeleteAccount } from "./delete-account"
 
 const securityControls = [
   "Workspace-scoped RBAC",
@@ -156,6 +157,8 @@ export default async function SettingsPage() {
           description={`${enabledSchedules} active schedule${enabledSchedules === 1 ? "" : "s"}`}
         />
       </div>
+
+      <DeleteAccount />
     </div>
   )
 }

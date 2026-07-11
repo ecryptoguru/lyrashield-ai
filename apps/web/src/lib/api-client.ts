@@ -24,18 +24,24 @@ async function request<T>(url: string, options: FetchOptions = {}): Promise<T> {
   const { parseJson = true, timeout = DEFAULT_TIMEOUT_MS, ...init } = options
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeout)
+  let timedOut = false
+  const timeoutId = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeout)
 
   const onParentAbort = () => controller.abort()
   if (init.signal) {
-    init.signal.addEventListener("abort", onParentAbort, { once: true })
+    if (init.signal.aborted) controller.abort()
+    else init.signal.addEventListener("abort", onParentAbort, { once: true })
   }
 
   let res: Response
   try {
     res = await fetch(url, { ...init, signal: controller.signal })
   } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
+    if (typeof err === "object" && err !== null && "name" in err && err.name === "AbortError") {
+      if (!timedOut) throw new ApiError("ABORTED", "Request was cancelled", 0)
       throw new ApiError("TIMEOUT", `Request timed out after ${timeout}ms`, 0)
     }
     throw new ApiError("NETWORK_ERROR", "Network request failed", 0)

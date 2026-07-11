@@ -136,17 +136,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         data: { status: "PR_OPENED" },
       })
 
-      await tx.auditLog.create({
-        data: {
-          workspaceId,
-          actorUserId: session.userId,
-          action: "fix_pr.created",
-          resourceType: "pull_request",
-          resourceId: record.id,
-        },
-      })
-
       return record
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        actorUserId: session.userId,
+        action: "fix_pr.created",
+        resourceType: "pull_request",
+        resourceId: prRecord.id,
+      },
     })
 
     logger.info("Fix PR created", {

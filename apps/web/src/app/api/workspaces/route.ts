@@ -105,17 +105,17 @@ export async function POST(request: Request) {
         },
       })
 
-      await tx.auditLog.create({
-        data: {
-          workspaceId: workspace.id,
-          actorUserId: session.userId,
-          action: "workspace.created",
-          resourceType: "workspace",
-          resourceId: workspace.id,
-        },
-      })
-
       return workspace
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: result.id,
+        actorUserId: session.userId,
+        action: "workspace.created",
+        resourceType: "workspace",
+        resourceId: result.id,
+      },
     })
 
     logger.info("Workspace created", { workspaceId: result.id, userId: session.userId })

@@ -59,17 +59,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
       })
 
-      await tx.auditLog.create({
-        data: {
-          workspaceId,
-          actorUserId: session.userId,
-          action: "retest.created",
-          resourceType: "retest",
-          resourceId: created.id,
-        },
-      })
-
       return created
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        actorUserId: session.userId,
+        action: "retest.created",
+        resourceType: "retest",
+        resourceId: retest.id,
+      },
     })
 
     return apiSuccess(retest, 201)

@@ -98,6 +98,11 @@ services:
       GITHUB_WEBHOOK_SECRET: "${GITHUB_WEBHOOK_SECRET:-}"
     ports:
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   worker:
     build:

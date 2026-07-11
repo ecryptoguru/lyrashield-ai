@@ -23,26 +23,15 @@ function buildCspHeader(nonce: string): string {
   return directives.join("; ")
 }
 
-// IMPORTANT: This function prioritizes trusted proxy headers and the last hop
-// in x-forwarded-for (the closest proxy). If the proxy does not strip/spoof-safe
-// the forwarded header, prefer a provider-specific header like cf-connecting-ip
-// or true-client-ip, which is harder to forge.
-function getClientIP(request: NextRequest): string {
-  const providerIp =
-    request.headers.get("cf-connecting-ip") ??
-    request.headers.get("true-client-ip") ??
-    request.headers.get("x-real-ip")
-  if (providerIp) return providerIp.trim()
+export function getClientIP(request: NextRequest): string {
+  const trustedHeader = process.env.TRUSTED_PROXY_IP_HEADER?.toLowerCase()
+  if (!trustedHeader) return "unknown"
 
-  const forwarded = request.headers.get("x-forwarded-for")
-  if (forwarded) {
-    // In a chain, the last address is the one most recently appended by the
-    // closest trusted proxy, which is less spoofable than the first (client) entry.
-    const parts = forwarded.split(",")
-    return parts[parts.length - 1]!.trim()
-  }
+  const value = request.headers.get(trustedHeader)
+  if (!value) return "unknown"
 
-  return "unknown"
+  const parts = value.split(",")
+  return parts[parts.length - 1]!.trim() || "unknown"
 }
 
 export async function proxy(request: NextRequest) {

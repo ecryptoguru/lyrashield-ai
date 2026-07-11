@@ -51,6 +51,10 @@ const envSchema = z
 
     // App
     NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
+    TRUSTED_PROXY_IP_HEADER: z
+      .enum(["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"])
+      .optional()
+      .or(z.literal("")),
 
     // Scan Engine (Sprint 5+)
     LYRASHIELD_LLM: z.string().optional().or(z.literal("")),

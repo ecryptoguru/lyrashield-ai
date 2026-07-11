@@ -165,20 +165,15 @@ async function checkD1RateLimit(db: Env["DB"], ipHash: string): Promise<boolean>
 
     await db.prepare(`DELETE FROM waitlist_rate_limit WHERE ts < ?`).bind(windowStart).run()
 
-    const row = await db
-      .prepare(`SELECT COUNT(*) as count FROM waitlist_rate_limit WHERE ip_hash = ? AND ts >= ?`)
-      .bind(ipHash, windowStart)
-      .first<{ count: number }>()
-
-    if ((row?.count ?? 0) >= RATE_LIMIT_MAX) {
-      return false
-    }
-
-    await db
-      .prepare(`INSERT INTO waitlist_rate_limit (ip_hash, ts) VALUES (?, ?)`)
-      .bind(ipHash, now)
+    const result = await db
+      .prepare(
+        `INSERT INTO waitlist_rate_limit (ip_hash, ts)
+         SELECT ?, ?
+         WHERE (SELECT COUNT(*) FROM waitlist_rate_limit WHERE ip_hash = ? AND ts >= ?) < ?`
+      )
+      .bind(ipHash, now, ipHash, windowStart, RATE_LIMIT_MAX)
       .run()
-    return true
+    return (result.meta.changes ?? 0) > 0
   } catch {
     // Fail open: a broken fallback limiter must not block real signups.
     return true

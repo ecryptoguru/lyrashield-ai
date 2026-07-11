@@ -59,6 +59,7 @@ export {
   EvidenceEncryptionError,
 } from "./evidence"
 export { withWorkspaceRLS, withoutWorkspaceRLS } from "./rls"
+export { deleteUserAccount, AccountDeletionBlockedError } from "./account-deletion"
 export {
   createScan,
   updateScanStatus,

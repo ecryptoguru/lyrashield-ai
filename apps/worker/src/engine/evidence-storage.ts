@@ -50,15 +50,6 @@ function buildKey(
   return `evidence/${workspaceId}/${findingId}/${type}/${artifactId}`
 }
 
-function buildFallbackUri(
-  workspaceId: string,
-  findingId: string,
-  type: string,
-  artifactId: string
-): string {
-  return `encrypted://${buildKey(workspaceId, findingId, type, artifactId)}`
-}
-
 export async function uploadEvidence(params: UploadEvidenceParams): Promise<UploadEvidenceResult> {
   const {
     workspaceId,
@@ -74,17 +65,13 @@ export async function uploadEvidence(params: UploadEvidenceParams): Promise<Uplo
   const key = buildKey(workspaceId, findingId, type, artifactId)
 
   if (!isS3Configured()) {
-    logger.warn("S3 evidence storage is not configured; using encrypted:// placeholder", {
+    logger.error("Evidence storage is not configured", {
       workspaceId,
       findingId,
       type,
       artifactId,
     })
-    return {
-      storageUri: buildFallbackUri(workspaceId, findingId, type, artifactId),
-      checksum,
-      encryptionKeyRef,
-    }
+    throw new Error("Evidence storage is not configured")
   }
 
   const client = getS3Client()
@@ -107,17 +94,13 @@ export async function uploadEvidence(params: UploadEvidenceParams): Promise<Uplo
       encryptionKeyRef,
     }
   } catch (err) {
-    logger.error("Failed to upload evidence to S3; falling back to encrypted:// placeholder", {
+    logger.error("Failed to upload evidence to S3", {
       workspaceId,
       findingId,
       type,
       artifactId,
       error: err instanceof Error ? err.message : String(err),
     })
-    return {
-      storageUri: buildFallbackUri(workspaceId, findingId, type, artifactId),
-      checksum,
-      encryptionKeyRef,
-    }
+    throw new Error("Failed to store evidence", { cause: err })
   }
 }

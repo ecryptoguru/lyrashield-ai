@@ -32,7 +32,7 @@ Next.js production builds read required values from `process.env`; the root `.en
 cp .env apps/web/.env
 ```
 
-Evidence storage (PoC and code-location artifacts) is optional for local development. If `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and `S3_REGION` are not set, `apps/worker/src/engine/evidence-storage.ts` falls back to `encrypted://` placeholders. Set these variables in `.env` to exercise real uploads.
+The dashboard can run without evidence storage, but any scan that produces PoC or code-location evidence requires `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and `S3_REGION`. Evidence persistence fails closed when these values are absent or upload fails.
 
 ## 2. Start Postgres and Redis
 
@@ -57,11 +57,12 @@ The dashboard is available at `http://localhost:3000`. Before submitting a pull 
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:e2e
 pnpm build
 git diff --check
 ```
 
-The current source suite is 607 tests in 48 files; treat the command output, not a hard-coded count, as authoritative.
+The current source suite is 625 Vitest tests in 56 files plus 2 Chromium E2E tests; treat command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ## 4. Run the marketing site
 

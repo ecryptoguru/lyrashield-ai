@@ -39,6 +39,19 @@ describe("api-client", () => {
       await expect(apiGet("/api/test")).rejects.toThrow(ApiError)
       await expect(apiGet("/api/test")).rejects.toMatchObject({ code: "TEST_ERROR", status: 400 })
     })
+
+    it("propagates an already-aborted parent signal", async () => {
+      mockFetch.mockImplementation(async (_url, init) => {
+        expect(init.signal.aborted).toBe(true)
+        throw new DOMException("Aborted", "AbortError")
+      })
+      const controller = new AbortController()
+      controller.abort()
+
+      await expect(apiGet("/api/test", { signal: controller.signal })).rejects.toMatchObject({
+        code: "ABORTED",
+      })
+    })
   })
 
   describe("apiPost", () => {

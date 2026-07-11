@@ -1,6 +1,6 @@
 > **CURRENT SOURCE OF TRUTH — 2026-07-11:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
-> The canonical repositories are `github.com/ecryptoguru/lyrasec-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current application gate passes lint, typecheck, build, and **607 tests in 48 files**. Core auth, tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, and the GitHub diff gate are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, deployment, privacy, egress, marketing, and E2E gates.
+> The canonical repositories are `github.com/ecryptoguru/lyrasec-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, **625 Vitest tests in 56 files**, and **2 Playwright tests**. Core auth, tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, and the GitHub diff gate are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, and marketing gates.
 
 ---
 
@@ -3245,7 +3245,7 @@ documentation note
 
 ## Sprint 0: Repo and Foundation
 
-Status: **Core complete; billing package and Playwright E2E harness remain deferred**
+Status: **Core complete; Playwright E2E is implemented; billing remains deferred**
 
 Duration: 3–5 days
 
@@ -3304,7 +3304,7 @@ Build the initial LyraShield monorepo using Turborepo, pnpm, Next.js App Router,
 
 ## Sprint 1: Prisma Schema and Better Auth
 
-Status: **Core complete; account deletion and GDPR anonymization flow remain pre-launch work**
+Status: **Complete; account deletion and GDPR-oriented anonymization are implemented with ownership guards**
 
 Duration: 1 week
 
@@ -4076,7 +4076,7 @@ Build billing and usage metering for LyraShield. Use Polar for global payments a
 
 ## Sprint 11: Phase 1 Polish and Launch Readiness
 
-Status: **Partially complete; controlled scan, billing, privacy, E2E, egress, and production deployment gates remain**
+Status: **Partially complete; controlled scan, billing, egress, and production deployment gates remain**
 
 Duration: 1 week
 
@@ -5228,8 +5228,8 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical application repository: `ecryptoguru/lyrasec-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 9 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `security`, `types`, `ui`).
-- Current automated gate: lint, typecheck, production build, and **607 passing tests in 48 files**.
-- Current product surface: **20 page route files** and **31 API route files** in `apps/web`.
+- Current automated gate: lint, typecheck, production build, **625 passing Vitest tests in 56 files**, and **2 passing Playwright tests**.
+- Current product surface: **20 page route files** and **34 API route files** in `apps/web`.
 - Current data surface: **30 Prisma models**, **12 enums**, and **9 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
 - Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
 - Current Docker proof: the web/worker stack and engine-bearing worker image build; the CLI reports `1.0.4.post1`; configuration failure occurs before sandbox pull when model credentials are missing.
@@ -5252,7 +5252,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - GitHub App installation, repository discovery, signed webhook handling, delivery idempotency, installation token caching, pagination, and retry/backoff.
 - Scan creation, target-level serialization, preflight, queueing, lifecycle transitions, cancellation, retry guards, scan events, and scan-detail polling.
 - Finding normalization, CWE/OWASP enrichment, CVSS estimation, confidence and false-positive-risk scoring, deduplication, persistence, filtering, and plain-language explanations.
-- Evidence upload: PoC and code-location artifacts are uploaded to configured S3-compatible storage with `AES256` SSE and a SHA-256 checksum; an `encrypted://` fallback is used when no S3 endpoint is configured. `Evidence.encryptionKeyRef` and `checksum` are validated before persistence.
+- Evidence upload: PoC and code-location artifacts are uploaded to configured S3-compatible storage with `AES256` SSE and a SHA-256 checksum. Missing storage or upload failure fails closed; `Evidence.encryptionKeyRef` and `checksum` are validated before persistence.
 - Fix proposals, approval-aware GitHub PR creation, retests, HTML/downloadable reports, revocable shared reports, and launch-readiness verdicts.
 - Email, Slack, Discord, and in-app notification plumbing plus recurring scan schedules with atomic claims.
 
@@ -5276,6 +5276,8 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 
 - Responsive dashboard, mobile navigation, shared UI components, dark mode, accessible form fields, loading/error/empty states, pagination, and server-fetched initial data.
 - Dashboard pages for projects, targets, scans, findings, fixes, reports, notifications, schedules, launch readiness, integrations, team, and settings.
+- Account deletion blocks sole owners, anonymizes loose user attribution, removes auth/membership data, and rebuilds affected audit chains.
+- Liveness/readiness endpoints, structured Next.js request-error instrumentation, and maintained Playwright coverage for auth, onboarding, target/scan creation, and tenant denial boundaries.
 - Astro 7 marketing site with landing page, blog, authoring rules, RSS, sitemap, robots, JSON-LD, canonical/social metadata, and a Cloudflare D1 waitlist.
 - Marketing previews are deliberately non-indexable. Indexable builds require a public HTTPS origin and founder approval.
 
@@ -5285,15 +5287,13 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 
 1. **Controlled scan proof:** provide an authorized model configuration and approved target; pin the inspected sandbox image by digest; run the full Target → Scan → Finding → Fix/Report lifecycle and retain audit evidence.
 2. **Transport-level egress control:** application SSRF checks are present, but untrusted multi-tenant scanning still requires a deployment-level proxy or equivalent DNS-pinned network enforcement.
-3. **Production infrastructure:** provision production PostgreSQL, Redis, S3-compatible object/evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all migrations on a fresh database. The upload path in `apps/worker/src/engine/evidence-storage.ts` is implemented; it writes to the configured `S3_*` endpoint when present and falls back to `encrypted://` placeholders when not.
-4. **Privacy lifecycle:** implement account deletion and the documented delete/anonymize behavior for user-linked audit and ownership records.
-5. **Browser E2E coverage:** add a maintained Playwright suite for sign-up/sign-in, workspace onboarding, target creation, scan creation, finding/report access, and authorization boundaries.
+3. **Production infrastructure:** provision production PostgreSQL, Redis, mandatory S3-compatible evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all migrations on a fresh database. Evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
 
 ### C2.2 Required before self-serve paid launch
 
 1. **Billing and usage enforcement:** provider decision, plan definitions, checkout, webhooks, subscription sync, usage records, scan limits, and billing UI. The existing `BillingAccount`, `UsageRecord`, plan fields, permissions, and environment placeholders are schema foundation only.
 2. **Abuse and cost controls:** enforce plan-aware scan quotas, concurrency, model budgets, and failure/retry ceilings before offering a free or paid public tier.
-3. **Production observability:** complete actionable error monitoring, product analytics, worker health visibility, and incident/runbook ownership.
+3. **Production observability:** connect the implemented structured request/worker logs and health/readiness routes to actionable monitoring, product analytics, alerts, and incident/runbook ownership.
 4. **Launch validation:** run browser, API, migration, backup/restore, queue recovery, worker cancellation, and security-header smoke checks against the real deployed environment.
 
 ### C2.3 Marketing launch gate
@@ -5310,23 +5310,23 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - Add a database constraint and input validation requiring `Policy.maxBudgetUsd >= 0` when policy CRUD is exposed.
 - Build the user-facing API-key create/list/revoke lifecycle before documenting API-key access as a product capability.
 - Complete MCP client setup documentation and expand the tool catalog only when the corresponding approval-aware actions exist.
-- Replace the `encrypted://` evidence fallback with provisioned S3-compatible storage and a real KMS/Vault key reference in production.
+- Replace the current SSE-S3 key reference with a real KMS/Vault key reference when the production storage provider is selected.
 - Add compliance-lite evidence packs and deeper IaC/container/reachability coverage after the pilot gates, based on customer demand.
 
 ## C3. Current sprint status
 
-| Workstream        | Status           | Current truth                                                                                                                                                                                                                               |
-| ----------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Sprints 0–3 + 2.5 | Core complete    | Foundation, auth, tenancy, dashboard, onboarding, targets, team, and GitHub App are implemented; account deletion and E2E are deferred gates.                                                                                               |
-| Sprint 3.5 / 7.5  | Complete         | Agent actions, service tokens, approval persistence, approval APIs, and verification controls are implemented.                                                                                                                              |
-| Sprints 4–6.5     | Complete in code | Queue, worker lifecycle, engine adapter, normalization, SCA, and secrets scanning are implemented; controlled sandbox proof remains.                                                                                                        |
-| Sprints 7–9       | Complete         | Fix PRs, retests, reports, notifications, schedules, URL scanning, launch readiness, sharing, and diff gate are implemented.                                                                                                                |
-| Sprint 5.5        | Not started      | Security Copilot sidebar remains deferred.                                                                                                                                                                                                  |
-| Sprint 8.5        | Not started      | Visual Security Plan and recap remain deferred.                                                                                                                                                                                             |
-| Sprint 9.5        | Core complete    | MCP tools and stdio transport exist; broader client onboarding and tool coverage remain roadmap work.                                                                                                                                       |
-| Sprint 10         | Not started      | Billing and usage enforcement are the principal self-serve launch blocker.                                                                                                                                                                  |
-| Sprint 11         | Partial          | UX/security hardening, docs, audit hash chaining, evidence storage upload, prompt-injection guard hardening, queue unification, and client-IP extraction are done; release proof, privacy, E2E, observability, and deployment gates remain. |
-| Phase 2           | Not started      | Enterprise identity, SCIM, advanced policy, private worker, VPC/self-hosting, BYOK/BYOM, and enterprise integrations remain roadmap work.                                                                                                   |
+| Workstream        | Status           | Current truth                                                                                                                                                                                                                                                                                                 |
+| ----------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sprints 0–3 + 2.5 | Complete         | Foundation, auth, tenancy, dashboard, onboarding, targets, team, GitHub App, account deletion/anonymization, and browser E2E are implemented.                                                                                                                                                                 |
+| Sprint 3.5 / 7.5  | Complete         | Agent actions, service tokens, approval persistence, approval APIs, and verification controls are implemented.                                                                                                                                                                                                |
+| Sprints 4–6.5     | Complete in code | Queue, worker lifecycle, engine adapter, normalization, SCA, and secrets scanning are implemented; controlled sandbox proof remains.                                                                                                                                                                          |
+| Sprints 7–9       | Complete         | Fix PRs, retests, reports, notifications, schedules, URL scanning, launch readiness, sharing, and diff gate are implemented.                                                                                                                                                                                  |
+| Sprint 5.5        | Not started      | Security Copilot sidebar remains deferred.                                                                                                                                                                                                                                                                    |
+| Sprint 8.5        | Not started      | Visual Security Plan and recap remain deferred.                                                                                                                                                                                                                                                               |
+| Sprint 9.5        | Core complete    | MCP tools and stdio transport exist; broader client onboarding and tool coverage remain roadmap work.                                                                                                                                                                                                         |
+| Sprint 10         | Not started      | Billing and usage enforcement are the principal self-serve launch blocker.                                                                                                                                                                                                                                    |
+| Sprint 11         | Partial          | UX/security hardening, privacy lifecycle, browser E2E, health/readiness, request instrumentation, serialized audit chaining, fail-closed evidence, prompt-injection guard hardening, queue unification, and proxy trust are done; controlled-scan, production operations/egress, and deployment gates remain. |
+| Phase 2           | Not started      | Enterprise identity, SCIM, advanced policy, private worker, VPC/self-hosting, BYOK/BYOM, and enterprise integrations remain roadmap work.                                                                                                                                                                     |
 
 ## C4. Product truth constraints
 
@@ -5341,7 +5341,6 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 
 1. Run and document the first authorized controlled scan with a pinned sandbox digest.
 2. Decide billing provider, plans, and usage metric; implement Sprint 10 with quota enforcement.
-3. Implement account deletion/privacy lifecycle and the critical Playwright E2E suite.
-4. Provision production application infrastructure and transport-level egress controls; validate migrations, backups, recovery, and observability.
-5. Complete the Cloudflare marketing launch gate on the approved public domain.
-6. After pilot evidence, prioritize Security Copilot, visual plans, compliance-lite evidence, and Phase 2 features from real customer demand.
+3. Provision production application infrastructure and transport-level egress controls; validate migrations, backups, recovery, and observability.
+4. Complete the Cloudflare marketing launch gate on the approved public domain.
+5. After pilot evidence, prioritize Security Copilot, visual plans, compliance-lite evidence, and Phase 2 features from real customer demand.

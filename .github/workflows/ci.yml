@@ -83,6 +83,7 @@ jobs:
       BETTER_AUTH_SECRET: "ci-test-secret-key-at-least-32-characters-long"
       BETTER_AUTH_URL: "http://localhost:3000"
       NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      TRUSTED_PROXY_IP_HEADER: "x-forwarded-for"
 
     steps:
       - name: Checkout
@@ -128,6 +129,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Format check
+        run: pnpm format:check
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -136,3 +140,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Browser E2E
+        run: pnpm test:e2e

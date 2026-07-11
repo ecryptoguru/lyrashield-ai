@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current baseline — 2026-07-11:** 4 apps, 9 shared packages, 20 web page files, 31 API route files, 30 Prisma models, 12 enums, 9 migrations, 18 RLS-protected workspace tables, and **607 passing tests in 48 files**. Lint, typecheck, test, and production build pass. Sections 17–31 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current baseline — 2026-07-11:** 4 apps, 9 shared packages, 20 web page files, 34 API route files, 30 Prisma models, 12 enums, 9 migrations, 18 RLS-protected workspace tables, **625 passing Vitest tests in 56 files**, and **2 passing Playwright tests**. Lint, typecheck, test, E2E, and production build pass locally. Sections 17–31 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -18,7 +18,7 @@ LyraSec AI is a multi-tenant, agent-native application-security platform for Git
 
 - **This monorepo** (TypeScript/Astro): product UI and APIs, auth/tenancy, scan orchestration, deterministic scanners, findings, remediation, reports, schedules/notifications, agent actions, MCP, and marketing.
 - **`lyrashield-engine`** (separate Python repo): thin compatibility fork over upstream Strix. The worker calls the `lyrashield` adapter as a subprocess; no engine internals are imported.
-- **Not yet implemented:** billing/usage enforcement, user-facing API-key lifecycle, account deletion/privacy workflow, and maintained browser E2E coverage. See `PRD.md` Part C.
+- **Not yet implemented:** billing/usage enforcement and the user-facing API-key lifecycle. Controlled-scan and production-infrastructure proof remain release gates. See `PRD.md` Part C.
 
 ### Engine Repo Status
 
@@ -67,7 +67,7 @@ Public copy uses **LyraSec AI**. Internal package scopes (`@lyrashield/*`), envi
 | Component variants      | class-variance-authority (cva)   | 0.7.x                                                |
 | Icons                   | lucide-react                     | 1.23.x                                               |
 | Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                      |
-| Testing                 | Vitest                           | 4.1.x (607 tests, 48 files)                          |
+| Testing                 | Vitest + Playwright              | 625 unit/integration tests + 2 Chromium E2E tests    |
 | Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration |
 | Job queue               | BullMQ                           | 5.78.x                                               |
 | Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate      |
@@ -292,7 +292,7 @@ The Prisma schema is `packages/db/prisma/schema.prisma` (30 models, 12 enums). P
 - `WorkspaceMember` is excluded from automatic workspace scoping so the workspace switcher can query memberships. `OnboardingState` is user-scoped. Never add models to an allowlist unless the matching schema column exists.
 - `withWorkspaceRLS(workspaceId, fn)` in `packages/db/src/rls.ts` uses transaction-scoped `SET LOCAL`; 18 workspace tables have Postgres RLS policies.
 - The policies allow legacy/no-context access for compatibility and restrict rows when a workspace context is set. Application-level workspace filtering remains mandatory.
-- Evidence writes require a valid `encryptionKeyRef`; artifacts are uploaded via `apps/worker/src/engine/evidence-storage.ts` to S3-compatible storage with `AES256` SSE and a SHA-256 checksum. The `encrypted://` fallback is used when S3 is unconfigured. Shared report tokens are hashed and revocable; audit logs are written through the Prisma client extension and support SHA-256 chaining.
+- Evidence writes require a valid `encryptionKeyRef`; artifacts are uploaded via `apps/worker/src/engine/evidence-storage.ts` to S3-compatible storage with `AES256` SSE and a SHA-256 checksum. Missing storage or upload failure stops persistence; no placeholder URI is accepted. Shared report tokens are hashed and revocable. Audit writes are serialized per workspace with a PostgreSQL advisory lock, and privacy anonymization rebuilds affected chains.
 
 ### Migrations
 
@@ -410,24 +410,25 @@ pnpm --filter @lyrashield/marketing preview  # Worker-backed preview on port 878
 
 This is the code-facing status summary. Product cutlines and release gates live in `PRD.md` Part C; dated implementation detail lives in §§17–31 below.
 
-| Workstream                          | Status                       | Code truth                                                                                                                                                                                                          |
-| ----------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Foundation/auth/tenancy (0–3 + 2.5) | Core complete                | Better Auth, workspaces, RBAC, onboarding, projects, targets, team, GitHub App, RLS, scoping, pagination, shared UI. Account deletion and browser E2E remain.                                                       |
-| Agent actions/approvals (3.5/7.5)   | Complete                     | Six actions, signed service tokens, registry permissions, queueing, exact input-hash approval checks, approval APIs, RLS model.                                                                                     |
-| Scan orchestration (4)              | Complete                     | BullMQ producer/consumer, preflight, guarded lifecycle, cancellation/retry, engine runner, artifact parsing, findings persistence, polling UI.                                                                      |
-| Engine adapter (5)                  | Code complete, release-gated | Thin adapter and Docker integration pass offline gates. Authorized sandbox/controlled scan remains unproven.                                                                                                        |
-| Normalization/SCA/secrets (6/6.5)   | Complete                     | Normalizer, verifier, SCA, secrets, scanner orchestrator, SARIF, nested manifest discovery.                                                                                                                         |
-| Remediation/output (7–9)            | Complete                     | Finding APIs/UI, fix proposals, GitHub PR creation, retests, reports/sharing, launch readiness, notifications, schedules, URL checks, diff gate. Evidence artifacts upload to S3-compatible storage with checksums. |
-| MCP (9.5)                           | Core complete                | API-backed tools, approval checks, hardened prompt-injection guard (input normalization + expanded pattern set), stdio transport. API-key lifecycle and broader client docs remain.                                 |
-| Billing/usage (10)                  | Not implemented              | `BillingAccount`, `UsageRecord`, permissions, and env values are schema/config foundations only.                                                                                                                    |
-| Launch polish (11)                  | Partial                      | UX, accessibility, security hardening, docs, and local/Docker proof are strong; controlled scan, privacy, E2E, production infrastructure, egress, observability, and marketing launch remain.                       |
-| Phase 2                             | Not implemented              | Enterprise identity, SCIM, advanced policy, private worker, VPC/self-hosting, BYOK/BYOM, and enterprise integrations remain roadmap items.                                                                          |
+| Workstream                          | Status                       | Code truth                                                                                                                                                                                                                                                 |
+| ----------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation/auth/tenancy (0–3 + 2.5) | Core complete                | Better Auth, workspaces, RBAC, onboarding, projects, targets, team, GitHub App, RLS, account deletion/anonymization, scoping, pagination, shared UI.                                                                                                       |
+| Agent actions/approvals (3.5/7.5)   | Complete                     | Six actions, signed service tokens, registry permissions, queueing, exact input-hash approval checks, approval APIs, RLS model.                                                                                                                            |
+| Scan orchestration (4)              | Complete                     | BullMQ producer/consumer, preflight, guarded lifecycle, cancellation/retry, engine runner, artifact parsing, findings persistence, polling UI.                                                                                                             |
+| Engine adapter (5)                  | Code complete, release-gated | Thin adapter and Docker integration pass offline gates. Authorized sandbox/controlled scan remains unproven.                                                                                                                                               |
+| Normalization/SCA/secrets (6/6.5)   | Complete                     | Normalizer, verifier, SCA, secrets, scanner orchestrator, SARIF, nested manifest discovery.                                                                                                                                                                |
+| Remediation/output (7–9)            | Complete                     | Finding APIs/UI, fix proposals, GitHub PR creation, retests, reports/sharing, launch readiness, notifications, schedules, URL checks, diff gate. Evidence artifacts upload to S3-compatible storage with checksums.                                        |
+| MCP (9.5)                           | Core complete                | API-backed tools, approval checks, hardened prompt-injection guard (input normalization + expanded pattern set), stdio transport. API-key lifecycle and broader client docs remain.                                                                        |
+| Billing/usage (10)                  | Not implemented              | `BillingAccount`, `UsageRecord`, permissions, and env values are schema/config foundations only.                                                                                                                                                           |
+| Launch polish (11)                  | Partial                      | UX, accessibility, security hardening, privacy lifecycle, browser E2E, health/readiness, instrumentation, docs, and Docker proof are implemented; controlled scan, production infrastructure, egress, operational monitoring, and marketing launch remain. |
+| Phase 2                             | Not implemented              | Enterprise identity, SCIM, advanced policy, private worker, VPC/self-hosting, BYOK/BYOM, and enterprise integrations remain roadmap items.                                                                                                                 |
 
 ### Current Verification
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **607 tests in 48 files**, pass
+- `pnpm test`: **625 tests in 56 files**, pass
+- `pnpm test:e2e`: **2 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `git diff --check`: pass
 - Engine offline gate: 155 tests + Ruff + formatting + headless mypy + Bandit
@@ -448,6 +449,9 @@ All routes live under `apps/web/src/app/api`. Protected routes use Better Auth p
 
 | Methods            | Path                                | Purpose                                             |
 | ------------------ | ----------------------------------- | --------------------------------------------------- |
+| GET                | `/api/health`                       | Process liveness                                    |
+| GET                | `/api/ready`                        | PostgreSQL and Redis readiness                      |
+| DELETE             | `/api/account`                      | Confirmed account deletion and anonymization        |
 | GET, POST          | `/api/auth/[...all]`                | Better Auth handler                                 |
 | GET, POST          | `/api/workspaces`                   | List memberships / create workspace                 |
 | POST               | `/api/workspaces/active`            | Persist active workspace in HttpOnly cookie         |
@@ -1723,7 +1727,7 @@ Focused remediation after a fresh full-repository review.
 ### Verification evidence and remaining release blockers
 
 - Engine verification passed: frozen sync, Ruff, formatting, **155 pytest tests**, headless mypy across **61 source files**, and Bandit.
-- Current application verification passes: `pnpm lint`, `pnpm typecheck`, `pnpm test` (**607 tests / 48 files**), `pnpm build`, and `git diff --check`.
+- That checkpoint passed 607 tests in 48 files. The current gate is recorded at the top of this document and in §32.
 - `docker compose build worker` now completes after the builder scopes its Next.js compilation to `pnpm --filter @lyrashield/web build`, avoiding the unrelated uncommitted `apps/marketing` Cloudflare `workerd` failure. The resulting local worker image ID is `sha256:71d6c104f5d11e30d8f8ee63cef8aacb1819b5ec8a4c3d1987d7fd3dcaddc4e6`; `docker compose run --rm --no-deps worker lyrashield --version` returned `lyrashield 1.0.4.post1`.
 - With `LYRASHIELD_LLM` and `LLM_API_KEY` explicitly empty, `lyrashield --non-interactive --target https://example.invalid` exited `1` with `STRIX_LLM` configuration guidance and no `Pulling Docker image` or `Downloading` output. No sandbox launch occurred. The local/dev Compose socket mount remains a development-only sandbox mechanism, and production still requires a separately pinned sandbox image digest.
 - Neither `LYRASHIELD_LLM` nor `LLM_API_KEY` is configured for an authorized scan. No external, public, paid, or substitute target was used. The controlled authorized scan, persisted findings, and rendered scan-detail proof remain blocked only by authorized LLM configuration.
@@ -1790,3 +1794,22 @@ Focused remediation after a fresh full-repository review.
 ### Caveats
 
 - `pnpm peers check` still reports an unmet `tailwindcss` peer warning for `@tailwindcss/typography@0.5.20`. `tailwindcss@4.3.2` is installed and satisfies the published range (`>=3.0.0 || >=4.0.0 || insiders`), the lockfile resolves the peer, and build/typecheck/lint pass, so this is a `pnpm peers check` false positive.
+
+---
+
+## §32 — Release-Hardening Closure (2026-07-11)
+
+- Evidence storage now fails closed when S3-compatible storage is absent or an upload fails; placeholder evidence URIs are no longer produced.
+- Audit creation uses a transaction-scoped PostgreSQL advisory lock per workspace. Concurrent writes remain one linear chain. Account deletion blocks sole owners, anonymizes loose user references, deletes auth/membership state, and rebuilds affected audit chains before appending `account.deleted`.
+- MCP stdio reads standard `tools/call.params.arguments`. The API client propagates already-aborted signals and distinguishes cancellation from timeout.
+- Web rate limiting trusts only `TRUSTED_PROXY_IP_HEADER`; ingress must strip incoming copies. The marketing D1 fallback limiter uses one conditional insert statement instead of a count/insert race.
+- `/api/health` reports liveness, `/api/ready` checks PostgreSQL and Redis, and `instrumentation.ts` sends unhandled Next.js request errors through the shared structured logger.
+- Playwright runs an isolated production preview on port 3100 and verifies anonymous denial, email signup/signin, workspace onboarding, target creation, scan queue creation, and cross-tenant scan/finding/report denial.
+- CI now runs `format:check` and Chromium E2E. Docker contexts exclude nested build output and the engine virtualenv; the measured contexts fell from 565/379 MB to 1.09 MB/22.8 KB. The worker image remains intentionally larger than a compiled-only runtime because shared workspace packages still execute TypeScript source.
+
+### Current verification
+
+- `pnpm test`: **625 tests in 56 files**
+- `pnpm test:e2e`: **2 Chromium tests**
+- `pnpm typecheck`: pass
+- Full lint, formatting, build, dependency-audit, Docker, and diff checks must be rerun after documentation formatting before merge.

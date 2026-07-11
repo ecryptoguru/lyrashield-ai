@@ -16,22 +16,24 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 
 ## Current verified state — 2026-07-11
 
-- Sprints 0–7, the agent action layer, SCA/secrets scanning, URL scanning, reports, schedules, notifications, MCP, the GitHub diff gate, and reliability/tenant-safety hardening are merged.
-- `pnpm test` passes **607 tests in 48 files**; lint, typecheck, build, and `format:check` pass on `main` CI.
+- Sprints 0–7, the agent action layer, SCA/secrets scanning, URL scanning, reports, schedules, notifications, MCP, the GitHub diff gate, and reliability/tenant-safety hardening are implemented. The latest hardening is on `codex/docs-update`; do not call it merged until its PR lands.
+- `pnpm test` passes **625 tests in 56 files** and `pnpm test:e2e` passes **2 Chromium tests**. Lint, typecheck, build, formatting, dependency audit, and Docker worker builds pass locally; the branch still requires PR CI.
 - The engine thin fork is merged in [engine PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1). It keeps the Strix upstream contract, defaults telemetry off, and syncs only through reviewable PRs. The engine gate passed 155 tests plus Ruff, formatting, headless mypy, and Bandit.
 - The worker image builds the sibling engine source, exposes the CLI on `PATH`, and fails before sandbox setup when model configuration is missing. A controlled scan still requires authorized `LYRASHIELD_LLM` and `LLM_API_KEY`; do not claim one was run.
 - The marketing site is implemented. Its metadata, sitemap, robots, JSON-LD, and social URLs share one build-time origin; indexable builds require public HTTPS. Pre-launch previews are noindex and return 404 for `llms.txt`. See `apps/marketing/README.md`.
 
 ### Recent hardening and infrastructure merge
 
-- **Audit hash chaining**: implemented as a Prisma client extension in `packages/db/src/client.ts`. Every `auditLog.create()` now computes `prevHash` and `hash` automatically. `packages/db/src/audit-service.ts` has been removed.
-- **Evidence storage**: `apps/worker/src/engine/evidence-storage.ts` uploads PoC and code-location artifacts to S3-compatible storage with `AES256` SSE and SHA-256 checksums; `apps/worker/src/engine/finding-persister.ts` uses it for every `Evidence` record. `packages/db/src/evidence.ts` validates the `encryptionKeyRef` format.
+- **Audit hash chaining**: `packages/db/src/client.ts` serializes each workspace chain with a transaction-scoped PostgreSQL advisory lock. Account deletion anonymizes user attribution and rehashes affected chains under the same lock.
+- **Evidence storage**: `apps/worker/src/engine/evidence-storage.ts` uploads PoC and code-location artifacts to S3-compatible storage with `AES256` SSE and SHA-256 checksums. It fails closed when storage is missing or an upload fails; placeholder evidence is forbidden.
 - **Prompt-injection guard**: `packages/mcp/src/prompt-injection-guard.ts` now normalizes input (zero-width chars, NFKC, HTML entities) and uses a tightened, expanded pattern set with explicit critical-pattern logic.
-- **API client**: `apps/web/src/lib/api-client.ts` uses `AbortController` for fetch timeouts; `apps/web/src/lib/api-client.test.ts` was updated to match.
-- **Client-IP extraction**: `apps/web/src/proxy.ts` and `apps/marketing/src/pages/api/waitlist.ts` use the same provider-first, last-hop-in-`x-forwarded-for` logic.
+- **API client**: `apps/web/src/lib/api-client.ts` distinguishes caller cancellation from timeouts and propagates already-aborted signals.
+- **Client-IP extraction**: the web app trusts only the header named by `TRUSTED_PROXY_IP_HEADER`; production ingress must strip client-supplied copies. Cloudflare marketing uses `cf-connecting-ip` and an atomic D1 fallback limiter.
 - **GitHub token cache**: `packages/integrations/src/redis.ts` and `queue.ts` added; `packages/integrations/src/github.ts` caches installation tokens and `enqueueScan` is centralized.
 - **Queue unification**: `apps/web/src/lib/queue.ts`, `apps/agent/src/queue.ts`, and `apps/worker/src/queue.ts` now consume `packages/integrations/src/queue.ts` (`getScanQueue`, `enqueueScan`).
 - **Prettier scope**: `.prettierignore` excludes `.devin`, `.windsurf`, generated Astro/Wrangler files, and `next-env.d.ts`.
+- **Privacy and E2E**: `DELETE /api/account` blocks sole owners, anonymizes loose attribution, preserves audit-chain validity, and is exposed in Settings. Playwright covers signup/signin, onboarding, target and scan creation, and cross-tenant scan/finding/report denial.
+- **Operations**: `/api/health`, `/api/ready`, and Next.js request-error instrumentation are implemented. CI runs formatting and Chromium E2E. Docker contexts exclude generated output and the sibling engine virtualenv.
 
 ## Current execution queue
 
@@ -50,11 +52,11 @@ Owner: engineering + founder pricing decision.
 
 Sprint 10 is the principal unbuilt self-serve Phase 1 feature. Confirm the provider, plan boundaries, usage metric, quotas, and retry/concurrency policy before implementation. Existing billing models and environment variables are schema foundation only; do not publish draft pricing.
 
-### 3. Privacy and browser E2E
+### 3. Production observability and recovery
 
 Owner: engineering.
 
-Implement account deletion and the delete/anonymize policy for linked records. Add maintained Playwright coverage for authentication, onboarding, target and scan creation, finding/report access, and authorization boundaries.
+Connect structured logs and readiness signals to the selected monitoring platform. Define alerts and incident ownership, then prove backup/restore, queue recovery, worker cancellation, and capacity in the target environment.
 
 ### 4. Deployment defense in depth
 
@@ -102,8 +104,9 @@ Owner: founder + marketing + engineering.
 - Keep the `Schedule.targetId` foreign key migration. Worker-created notifications are workspace-level and must not disappear behind a default `userId` filter. Use `createAndSendNotification` rather than duplicating its create/send loop.
 - The engine fork is thin: do not reintroduce mechanical Strix-to-LyraShield rewrites. Its upstream workflow is PR-only and must never auto-merge, force-push, or resolve conflicts.
 - Cloudflare marketing deployment must use Astro's generated `dist/server/wrangler.json`; root `wrangler.jsonc` is for bindings and build configuration.
-- **Audit logging**: create audit logs through the extended Prisma client (`prisma.auditLog.create()`). The extension computes `prevHash`/`hash`; the deleted `audit-service.ts` is not a source of truth.
-- **Evidence**: every `Evidence` record must go through `uploadEvidence()` with a valid `encryptionKeyRef` and `checksum`. `assertEvidenceEncrypted` validates both presence and key-ref format.
+- **Audit logging**: create audit logs through the extended Prisma client (`prisma.auditLog.create()`). Do not write audit events inside a broader Prisma transaction; the extension owns the advisory-locked chain transaction. Any mutation of hashed fields requires a locked chain rebuild.
+- **Evidence**: every `Evidence` record must go through `uploadEvidence()` with a valid `encryptionKeyRef` and checksum. Missing/unavailable storage is a hard failure; never restore `encrypted://` placeholders.
+- **Proxy trust**: set `TRUSTED_PROXY_IP_HEADER` only when ingress strips incoming copies and writes the authoritative client IP.
 - **Prompt-injection guard**: use `PromptInjectionGuard` and `normalizeInput()` for any new model-facing input checks; do not reintroduce ad-hoc regex bypasses.
 - **Queue and scan job**: use `enqueueScan` and `getScanQueue` from `packages/integrations/src/queue.ts`; do not create one-off `Queue` instances or duplicate scan-enqueue logic in web/agent/worker.
 

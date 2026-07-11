@@ -7,7 +7,7 @@
 - The Next.js web application and BullMQ worker need managed PostgreSQL and Redis.
 - The worker runs the `lyrashield` CLI and may launch a sandbox. Its host and Docker access are high-risk infrastructure.
 - The Astro marketing site is an independent Cloudflare Worker with D1 and Cloudflare Rate Limits.
-- S3-compatible evidence storage for PoC/code-location artifacts, email, GitHub OAuth/App integration, and monitoring are optional integrations with separate credentials.
+- S3-compatible evidence storage is mandatory for scans that may produce PoC/code-location artifacts. Email, GitHub OAuth/App integration, and monitoring providers use separate credentials.
 
 ## Release prerequisites
 
@@ -32,6 +32,7 @@ BETTER_AUTH_SECRET="..."
 BETTER_AUTH_URL="https://app.example.com"
 NEXT_PUBLIC_APP_URL="https://app.example.com"
 ADDITIONAL_TRUSTED_ORIGINS="https://www.example.com"
+TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming copies
 
 LYRASHIELD_LLM="provider/model"
 LLM_API_KEY="..."
@@ -39,7 +40,7 @@ LYRASHIELD_ENGINE_PATH="lyrashield"
 LYRASHIELD_IMAGE="ghcr.io/usestrix/strix-sandbox@sha256:<approved-digest>"
 LYRASHIELD_TELEMETRY="0"
 
-# S3-compatible evidence storage (optional for launch; encrypted:// fallback exists)
+# S3-compatible evidence storage (required before controlled scans)
 S3_ENDPOINT="https://..."
 S3_BUCKET="lyrasec-evidence"
 S3_ACCESS_KEY="..."
@@ -57,6 +58,7 @@ pnpm db:generate
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:e2e
 pnpm build
 git diff --check
 ```
@@ -64,9 +66,9 @@ git diff --check
 Then, in the target environment:
 
 1. Deploy migrations before application processes serve traffic.
-2. Verify authentication, workspace isolation, Redis queue connectivity, and Worker readiness.
+2. Verify `/api/health`, `/api/ready`, authentication, workspace isolation, Redis queue connectivity, and Worker readiness.
 3. Verify the engine version and missing-model early-exit path.
-4. Run one founder-authorized controlled scan. Capture audit evidence, confirm the sandbox image digest used, and verify evidence artifacts are uploaded to the configured S3-compatible endpoint (or remain as `encrypted://` fallback if storage is not yet provisioned).
+4. Run one founder-authorized controlled scan. Capture audit evidence, confirm the sandbox image digest used, and verify evidence artifacts are retrievable from the configured S3-compatible endpoint. Any placeholder or failed upload blocks the gate.
 5. Exercise backup and restore on non-production data before claiming an RPO/RTO.
 
 ## Marketing deployment

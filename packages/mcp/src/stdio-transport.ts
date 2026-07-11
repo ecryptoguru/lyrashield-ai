@@ -62,7 +62,7 @@ async function handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> 
 
       case "tools/call": {
         const toolName = params?.name as string
-        const args = (params?.args as Record<string, unknown>) ?? {}
+        const args = (params?.arguments as Record<string, unknown>) ?? {}
         const result = await server.callTool(toolName, args)
         return {
           jsonrpc: "2.0",

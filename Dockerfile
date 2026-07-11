@@ -1,11 +1,13 @@
 # ─── Stage 1: Install deps ─────────────────────────────────────────────────────
 FROM node:22-alpine AS deps
 RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 WORKDIR /app
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/web/package.json ./apps/web/
+COPY apps/marketing/package.json ./apps/marketing/
 COPY packages/auth/package.json ./packages/auth/
 COPY packages/config/package.json ./packages/config/
 COPY packages/db/package.json ./packages/db/
@@ -13,6 +15,8 @@ COPY packages/integrations/package.json ./packages/integrations/
 COPY packages/logger/package.json ./packages/logger/
 COPY packages/types/package.json ./packages/types/
 COPY packages/ui/package.json ./packages/ui/
+COPY packages/mcp/package.json ./packages/mcp/
+COPY packages/security/package.json ./packages/security/
 COPY apps/worker/package.json ./apps/worker/
 COPY apps/agent/package.json ./apps/agent/
 
@@ -29,18 +33,20 @@ COPY --from=deps /app/ .
 COPY . .
 
 # Prisma config needs env vars to load at build time
-ARG DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
-ARG BETTER_AUTH_SECRET="build-placeholder-not-used-at-runtime"
-ARG BETTER_AUTH_URL="http://localhost:3000"
-ARG NEXT_PUBLIC_APP_URL="http://localhost:3000"
+ARG BUILD_DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
+ARG BUILD_APP_URL="http://localhost:3000"
+ARG BUILD_PUBLIC_APP_URL="http://localhost:3000"
 
-ENV DATABASE_URL=$DATABASE_URL
-ENV BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET
-ENV BETTER_AUTH_URL=$BETTER_AUTH_URL
-ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
-
-RUN pnpm db:generate
-RUN pnpm --filter @lyrashield/web build
+RUN DATABASE_URL="$BUILD_DATABASE_URL" \
+    BETTER_AUTH_SECRET="build-placeholder-not-used-at-runtime" \
+    BETTER_AUTH_URL="$BUILD_APP_URL" \
+    NEXT_PUBLIC_APP_URL="$BUILD_PUBLIC_APP_URL" \
+    pnpm db:generate
+RUN DATABASE_URL="$BUILD_DATABASE_URL" \
+    BETTER_AUTH_SECRET="build-placeholder-not-used-at-runtime" \
+    BETTER_AUTH_URL="$BUILD_APP_URL" \
+    NEXT_PUBLIC_APP_URL="$BUILD_PUBLIC_APP_URL" \
+    pnpm --filter @lyrashield/web build
 
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner

@@ -21,7 +21,7 @@ function createPrismaClient() {
   const auditExtension = Prisma.defineExtension({
     query: {
       auditLog: {
-        async create({ args, query }) {
+        async create({ args }) {
           const data = (args?.data ?? {}) as Record<string, unknown>
 
           const workspaceId =
@@ -33,7 +33,6 @@ function createPrismaClient() {
           }
 
           const id = (data.id as string | undefined) ?? randomUUID()
-          const createdAt = (data.createdAt as Date | undefined) ?? new Date()
           const actorUserId = (data.actorUserId as string | null) ?? null
           const action = (data.action as string) ?? ""
           const resourceType = (data.resourceType as string) ?? ""
@@ -42,40 +41,43 @@ function createPrismaClient() {
           const userAgent = (data.userAgent as string | null) ?? null
           const metadata = data.metadata ?? null
 
-          const last = await prismaWithWorkspace.auditLog.findFirst({
-            where: { workspaceId },
-            orderBy: { createdAt: "desc" },
-            select: { hash: true },
+          return baseClient.$transaction(async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
+            const createdAt = (data.createdAt as Date | undefined) ?? new Date()
+            const last = await tx.auditLog.findFirst({
+              where: { workspaceId },
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              select: { hash: true },
+            })
+            const prevHash = last?.hash ?? null
+            const hash = computeAuditHash(
+              {
+                id,
+                workspaceId,
+                actorUserId,
+                action,
+                resourceType,
+                resourceId,
+                ipAddress,
+                userAgent,
+                metadata,
+                createdAt,
+              },
+              prevHash
+            )
+            const rest = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "workspace"))
+
+            return tx.auditLog.create({
+              data: {
+                ...rest,
+                workspaceId,
+                id,
+                createdAt,
+                prevHash,
+                hash,
+              } as Prisma.AuditLogUncheckedCreateInput,
+            })
           })
-
-          const prevHash = last?.hash ?? null
-          const chainFields = {
-            id,
-            workspaceId,
-            actorUserId,
-            action,
-            resourceType,
-            resourceId,
-            ipAddress,
-            userAgent,
-            metadata,
-            createdAt,
-          }
-          const hash = computeAuditHash(chainFields, prevHash)
-
-          // Strip the relation form (workspace) and write using the unchecked form
-          // so the hash/id/createdAt/prevHash fields are accepted unambiguously.
-          const rest = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "workspace"))
-          const newData = {
-            ...rest,
-            workspaceId,
-            id,
-            createdAt,
-            prevHash,
-            hash,
-          }
-
-          return query({ ...args, data: newData } as typeof args)
         },
       },
     },

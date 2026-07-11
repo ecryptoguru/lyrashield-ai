@@ -13,6 +13,7 @@ const GOOGLE_CLIENT_SECRET = env.GOOGLE_CLIENT_SECRET
 const AZURE_AD_CLIENT_ID = env.AZURE_AD_CLIENT_ID
 const AZURE_AD_CLIENT_SECRET = env.AZURE_AD_CLIENT_SECRET
 const AZURE_AD_TENANT_ID = env.AZURE_AD_TENANT_ID
+const secureCookies = new URL(env.BETTER_AUTH_URL).protocol === "https:"
 
 // Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; additional
 // origins (staging, apex+www, preview deploys) come from a comma-separated
@@ -111,12 +112,12 @@ export const auth = betterAuth({
     },
   },
   advanced: {
-    useSecureCookies: isProd,
+    useSecureCookies: secureCookies,
     cookies: {
       session_token: {
         attributes: {
           sameSite: "lax",
-          secure: isProd,
+          secure: secureCookies,
         },
       },
     },

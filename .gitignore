@@ -32,6 +32,8 @@ pnpm-debug.log*
 # Testing
 coverage/
 .nyc_output/
+test-results/
+playwright-report/
 
 # Prisma generated (tracked via migrations)
 packages/db/src/generated/

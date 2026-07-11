@@ -15,9 +15,11 @@
     "db:seed": "pnpm --filter @lyrashield/db seed",
     "db:studio": "pnpm --filter @lyrashield/db studio",
     "test": "vitest run --exclude '**/dist/**'",
+    "test:e2e": "playwright test",
     "test:watch": "vitest --exclude '**/dist/**'"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.10",
     "eslint-plugin-security": "^3.0.1",

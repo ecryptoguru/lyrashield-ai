@@ -10,6 +10,35 @@ vi.mock("@/lib/rate-limit", () => ({
 // Import after mock
 const { proxy } = await import("../proxy")
 
+it("exports a client-IP extractor with an explicit trusted-header contract", async () => {
+  const proxyExports = (await import("../proxy")) as Record<string, unknown>
+  expect(proxyExports.getClientIP).toBeTypeOf("function")
+})
+
+describe("trusted client IP", () => {
+  it("ignores forwarded headers when no trusted header is configured", async () => {
+    delete process.env.TRUSTED_PROXY_IP_HEADER
+    const { getClientIP } = await import("../proxy")
+    const req = new NextRequest("http://localhost/api/test", {
+      headers: { "cf-connecting-ip": "203.0.113.10", "x-forwarded-for": "198.51.100.2" },
+    })
+    expect(getClientIP(req)).toBe("unknown")
+  })
+
+  it("uses only the configured header and its closest proxy hop", async () => {
+    process.env.TRUSTED_PROXY_IP_HEADER = "x-forwarded-for"
+    const { getClientIP } = await import("../proxy")
+    const req = new NextRequest("http://localhost/api/test", {
+      headers: {
+        "cf-connecting-ip": "203.0.113.10",
+        "x-forwarded-for": "198.51.100.2, 192.0.2.8",
+      },
+    })
+    expect(getClientIP(req)).toBe("192.0.2.8")
+    delete process.env.TRUSTED_PROXY_IP_HEADER
+  })
+})
+
 function makeRequest(pathname: string): NextRequest {
   const url = new URL(`http://localhost:3000${pathname}`)
   return new NextRequest(url, {
