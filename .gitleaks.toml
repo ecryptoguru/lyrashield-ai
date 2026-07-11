@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic secret-scanner fixtures"
+paths = ['''^apps/worker/src/engine/scanners/secrets-scanner\.test\.ts$''']

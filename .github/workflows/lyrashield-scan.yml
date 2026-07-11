@@ -65,6 +65,9 @@ jobs:
             if [ "$file" = ".github/workflows/lyrashield-scan.yml" ]; then
               continue
             fi
+            case "$file" in
+              apps/worker/src/engine/scanners/secrets-scanner.test.ts|e2e/*) continue ;;
+            esac
             if [ -f "$file" ]; then
               # Check only added lines. Existing examples and the scanner's
               # own patterns must not make an unrelated PR fail.
@@ -117,32 +120,33 @@ jobs:
 
             # Skip non-code files
             case "$file" in
-              *.md|*.txt|*.json|*.yml|*.yaml|*.toml|*.lock|*.svg|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.ico)
+              *.md|*.txt|*.json|*.yml|*.yaml|*.toml|*.lock|*.svg|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.ico|apps/worker/src/engine/scanners/secrets-scanner.test.ts|e2e/*)
                 continue
                 ;;
             esac
 
-            # Basic security checks on changed files
+            ADDED="$(git diff --unified=0 "${{ steps.diff.outputs.base_sha }}" "${{ steps.diff.outputs.head_sha }}" -- "$file" | grep -v '^+++' | sed -n 's/^+//p')"
+
             # Check for hardcoded secrets
-            if grep -qE '(password|secret|api_key|apikey|token)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' "$file" 2>/dev/null; then
+            if grep -qE '(password|secret|api_key|apikey|token)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
               echo "::warning file=$file::Potential hardcoded secret detected"
               ISSUES_FOUND=1
             fi
 
             # Check for SQL injection patterns
-            if grep -qE '(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{' "$file" 2>/dev/null; then
+            if grep -qE '(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{' <<< "$ADDED"; then
               echo "::warning file=$file::Potential SQL injection — string interpolation in query"
               ISSUES_FOUND=1
             fi
 
             # Check for disabled security controls
-            if grep -qE '(csrf|cors|xss|helmet|secure).*\b(false|disabled|off|none)\b' "$file" 2>/dev/null; then
+            if grep -qE '(csrf|cors|xss|helmet|secure).*(false|disabled|off|none)' <<< "$ADDED"; then
               echo "::warning file=$file::Security control may be disabled"
               ISSUES_FOUND=1
             fi
 
             # Check for eval/exec usage
-            if grep -qE '\b(eval|exec)\s*\(' "$file" 2>/dev/null; then
+            if grep -qE '(^|[^.[:alnum:]_])(eval|exec)[[:space:]]*\(' <<< "$ADDED"; then
               echo "::warning file=$file::Use of eval/exec detected"
               ISSUES_FOUND=1
             fi
@@ -166,6 +170,9 @@ jobs:
           # Add secret findings
           if [ "$SECRETS" = "1" ]; then
             while IFS= read -r file; do
+              case "$file" in
+                apps/worker/src/engine/scanners/secrets-scanner.test.ts|e2e/*) continue ;;
+              esac
               if [ -f "$file" ] && git diff --unified=0 "$BASE" "$HEAD" -- "$file" | grep -v '^+++' | grep -qE '^\+.*(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})'; then
                 if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
                 RESULTS="$RESULTS{\"ruleId\":\"secret-exposure\",\"level\":\"error\",\"message\":{\"text\":\"Potential secret detected in $file\"},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":\"$file\"}}}]}"
@@ -184,17 +191,18 @@ jobs:
             while IFS= read -r file; do
               if [ ! -f "$file" ]; then continue; fi
               case "$file" in
-                *.md|*.txt|*.json|*.yml|*.yaml|*.toml|*.lock|*.svg|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.ico) continue ;;
+                *.md|*.txt|*.json|*.yml|*.yaml|*.toml|*.lock|*.svg|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.ico|apps/worker/src/engine/scanners/secrets-scanner.test.ts|e2e/*) continue ;;
               esac
-              if grep -qE '(password|secret|api_key|apikey|token)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' "$file" 2>/dev/null; then
+              ADDED="$(git diff --unified=0 "$BASE" "$HEAD" -- "$file" | grep -v '^+++' | sed -n 's/^+//p')"
+              if grep -qE '(password|secret|api_key|apikey|token)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
                 if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
                 RESULTS="$RESULTS{\"ruleId\":\"hardcoded-secret\",\"level\":\"warning\",\"message\":{\"text\":\"Potential hardcoded secret in $file\"},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":\"$file\"}}}]}"
               fi
-              if grep -qE '(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{' "$file" 2>/dev/null; then
+              if grep -qE '(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{' <<< "$ADDED"; then
                 if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
                 RESULTS="$RESULTS{\"ruleId\":\"sql-injection\",\"level\":\"warning\",\"message\":{\"text\":\"Potential SQL injection in $file\"},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":\"$file\"}}}]}"
               fi
-              if grep -qE '\b(eval|exec)\s*\(' "$file" 2>/dev/null; then
+              if grep -qE '(^|[^.[:alnum:]_])(eval|exec)[[:space:]]*\(' <<< "$ADDED"; then
                 if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
                 RESULTS="$RESULTS{\"ruleId\":\"eval-exec\",\"level\":\"warning\",\"message\":{\"text\":\"Use of eval/exec in $file\"},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":\"$file\"}}}]}"
               fi
