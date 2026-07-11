@@ -180,31 +180,48 @@ async function runEngineProcess(
   })
 }
 
-async function findRunOutputDir(workDir: string): Promise<string | null> {
-  const runsDir = join(workDir, "lyrashield_runs")
-  try {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    const entries = await readdir(runsDir)
-    let newest: string | null = null
-    let newestMtime = 0
-    for (const entry of entries) {
-      const entryPath = join(runsDir, entry)
-      try {
-        // eslint-disable-next-line security/detect-non-literal-fs-filename
-        const s = await stat(entryPath)
-        if (s.isDirectory() && s.mtimeMs > newestMtime) {
-          newestMtime = s.mtimeMs
-          newest = entry
-        }
-      } catch {
-        // skip entries that can't be stat'd
-      }
+const ENGINE_RUN_LAYOUTS = ["strix_runs", "lyrashield_runs"] as const
+const ENGINE_OUTPUT_ARTIFACTS = ["run.json", "vulnerabilities.json"] as const
+
+async function hasEngineOutputArtifact(runDir: string): Promise<boolean> {
+  for (const artifact of ENGINE_OUTPUT_ARTIFACTS) {
+    try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const artifactStat = await stat(join(runDir, artifact))
+      if (artifactStat.isFile()) return true
+    } catch {
+      // Try the next expected artifact.
     }
-    return newest ? join(runsDir, newest) : null
-  } catch {
-    logger.warn("lyrashield_runs directory not found", { runsDir })
-    return null
   }
+  return false
+}
+
+export async function findRunOutputDir(workDir: string): Promise<string | null> {
+  let newest: { path: string; mtimeMs: number } | null = null
+
+  for (const layout of ENGINE_RUN_LAYOUTS) {
+    const runsDir = join(workDir, layout)
+    try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      for (const entry of await readdir(runsDir)) {
+        const entryPath = join(runsDir, entry)
+        try {
+          // eslint-disable-next-line security/detect-non-literal-fs-filename
+          const entryStat = await stat(entryPath)
+          if (!entryStat.isDirectory() || !(await hasEngineOutputArtifact(entryPath))) continue
+          if (!newest || entryStat.mtimeMs > newest.mtimeMs) {
+            newest = { path: entryPath, mtimeMs: entryStat.mtimeMs }
+          }
+        } catch {
+          // A disappearing/unreadable run must not fail the worker.
+        }
+      }
+    } catch {
+      logger.debug("Engine run layout not found", { runsDir })
+    }
+  }
+
+  return newest?.path ?? null
 }
 
 async function readEngineOutput(outputDir: string): Promise<{

@@ -1832,3 +1832,27 @@ Focused remediation after a fresh full-repository review.
 - Running worker reports ready, reaches the Docker daemon, and passes the app's **597 tests across 47 files**.
 - Missing `LYRASHIELD_LLM` exits cleanly before sandbox setup. A paid/full scan was not started because no LLM configuration is present.
 - Known engine debt: full TUI mypy currently reports 69 Textual/Pygments typing errors, and repository-wide Pyright reports broad pre-existing unknown-type debt. These do not block the non-interactive worker path but should be handled as a separate typing-hardening batch.
+
+---
+
+## §30 — Thin-Fork Automation and Current Release Gate (2026-07-11)
+
+### Upstream boundary and compatibility contract
+
+- The sibling engine records upstream baseline `7b639505fecf20a2d9e356f96bd91470aa828182`; the local thin-fork branch includes the adapter and its PR-only sync automation at `909493f`.
+- `lyrashield` is an adapter entry point, not a reimplementation of upstream: it maps `LYRASHIELD_LLM`, image, runtime, local-copy, reasoning, and telemetry variables to their `STRIX_*` equivalents only when the upstream value is absent. An explicitly supplied `STRIX_*` value wins; `STRIX_TELEMETRY` defaults to `0`.
+- The worker preserves upstream compatibility by discovering the newest usable artifact directory in both `strix_runs` and `lyrashield_runs`, accepting either `run.json` or `vulnerabilities.json`. Its lifecycle contract remains: `0` = completed without findings, `2` = completed with findings, other/nonzero runtime failures = failed scan.
+
+### Reviewed sync automation
+
+- `.github/workflows/upstream-sync.yml` runs weekly on Monday at 03:23 UTC and on manual dispatch. It runs `scripts/check-upstream.sh`, rebases only after the recorded base is proven ancestral, verifies the fork, and opens `automation/upstream-<short-sha>` for review.
+- It contains no auto-merge, merge queue, force-push, or conflict resolver. The normal no-change check returned `needs_sync=false`; an isolated divergent-upstream test returned exit `20` before rebase.
+- Engine `origin` is now the private `ecryptoguru/lyrashield-engine` repository. The reviewed thin-fork branch and its PR-only sync workflow are in [PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1); no workflow was dispatched before merge.
+
+### Verification evidence and remaining release blockers
+
+- Engine verification passed: frozen sync, Ruff, formatting, **155 pytest tests**, headless mypy across **61 source files**, and Bandit.
+- Application verification passed: `pnpm lint`, `pnpm typecheck`, `pnpm test` (**601 tests / 47 files**), `pnpm build`, and `git diff --check`.
+- `docker compose build worker` now completes after the builder scopes its Next.js compilation to `pnpm --filter @lyrashield/web build`, avoiding the unrelated uncommitted `apps/marketing` Cloudflare `workerd` failure. The resulting local worker image ID is `sha256:71d6c104f5d11e30d8f8ee63cef8aacb1819b5ec8a4c3d1987d7fd3dcaddc4e6`; `docker compose run --rm --no-deps worker lyrashield --version` returned `lyrashield 1.0.4.post1`.
+- With `LYRASHIELD_LLM` and `LLM_API_KEY` explicitly empty, `lyrashield --non-interactive --target https://example.invalid` exited `1` with `STRIX_LLM` configuration guidance and no `Pulling Docker image` or `Downloading` output. No sandbox launch occurred. The local/dev Compose socket mount remains a development-only sandbox mechanism; the inspected production image is pinned at `ghcr.io/usestrix/strix-sandbox@sha256:478e0b37ec83b2ba8c6e159593cb46d5dc9b624a45d6a9bb606851b83058d284`.
+- Neither `LYRASHIELD_LLM` nor `LLM_API_KEY` is configured for an authorized scan. No external, public, paid, or substitute target was used. The controlled authorized scan, persisted findings, and rendered scan-detail proof remain blocked only by authorized LLM configuration.
