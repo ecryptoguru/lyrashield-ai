@@ -40,7 +40,7 @@ ENV BETTER_AUTH_URL=$BETTER_AUTH_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 
 RUN pnpm db:generate
-RUN pnpm build
+RUN pnpm --filter @lyrashield/web build
 
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
