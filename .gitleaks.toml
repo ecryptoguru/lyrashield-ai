@@ -1,11 +1,8 @@
 [extend]
 useDefault = true
 
-[[allowlists]]
-description = "Synthetic secret-scanner fixtures"
-paths = ['''^apps/worker/src/engine/scanners/secrets-scanner\.test\.ts$''']
-
-[[allowlists]]
-description = "AWS SDK credential environment lookup"
+[allowlist]
+description = "Synthetic fixtures and AWS SDK environment lookup"
 regexTarget = "line"
+paths = ['''^apps/worker/src/engine/scanners/secrets-scanner\.test\.ts$''']
 regexes = ['''secretAccessKey:\s*env\.S3_SECRET_KEY''']
