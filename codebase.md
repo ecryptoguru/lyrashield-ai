@@ -1847,12 +1847,12 @@ Focused remediation after a fresh full-repository review.
 
 - `.github/workflows/upstream-sync.yml` runs weekly on Monday at 03:23 UTC and on manual dispatch. It runs `scripts/check-upstream.sh`, rebases only after the recorded base is proven ancestral, verifies the fork, and opens `automation/upstream-<short-sha>` for review.
 - It contains no auto-merge, merge queue, force-push, or conflict resolver. The normal no-change check returned `needs_sync=false`; an isolated divergent-upstream test returned exit `20` before rebase.
-- This local fork has only the `upstream` remote, not a LyraShield-controlled writable `origin`. The workflow commit is local only: no remote was created, no workflow was dispatched, and no PR was opened.
+- Engine `origin` is now the private `ecryptoguru/lyrashield-engine` repository. The reviewed thin-fork branch and its PR-only sync workflow are in [PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1); no workflow was dispatched before merge.
 
 ### Verification evidence and remaining release blockers
 
 - Engine verification passed: frozen sync, Ruff, formatting, **155 pytest tests**, headless mypy across **61 source files**, and Bandit.
-- Application verification passed: `pnpm lint`, `pnpm typecheck`, `pnpm test` (**600 tests / 47 files**), `pnpm build`, and `git diff --check`.
+- Application verification passed: `pnpm lint`, `pnpm typecheck`, `pnpm test` (**601 tests / 47 files**), `pnpm build`, and `git diff --check`.
 - `docker compose build worker` now completes after the builder scopes its Next.js compilation to `pnpm --filter @lyrashield/web build`, avoiding the unrelated uncommitted `apps/marketing` Cloudflare `workerd` failure. The resulting local worker image ID is `sha256:71d6c104f5d11e30d8f8ee63cef8aacb1819b5ec8a4c3d1987d7fd3dcaddc4e6`; `docker compose run --rm --no-deps worker lyrashield --version` returned `lyrashield 1.0.4.post1`.
-- With `LYRASHIELD_LLM` and `LLM_API_KEY` explicitly empty, `lyrashield --non-interactive --target https://example.invalid` exited `1` with `STRIX_LLM` configuration guidance and no `Pulling Docker image` or `Downloading` output. No sandbox launch occurred. The local/dev Compose socket mount remains a development-only sandbox mechanism, and production still requires a separately pinned sandbox image digest.
+- With `LYRASHIELD_LLM` and `LLM_API_KEY` explicitly empty, `lyrashield --non-interactive --target https://example.invalid` exited `1` with `STRIX_LLM` configuration guidance and no `Pulling Docker image` or `Downloading` output. No sandbox launch occurred. The local/dev Compose socket mount remains a development-only sandbox mechanism; the inspected production image is pinned at `ghcr.io/usestrix/strix-sandbox@sha256:478e0b37ec83b2ba8c6e159593cb46d5dc9b624a45d6a9bb606851b83058d284`.
 - Neither `LYRASHIELD_LLM` nor `LLM_API_KEY` is configured for an authorized scan. No external, public, paid, or substitute target was used. The controlled authorized scan, persisted findings, and rendered scan-detail proof remain blocked only by authorized LLM configuration.
