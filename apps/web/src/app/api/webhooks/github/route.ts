@@ -11,14 +11,23 @@ export async function POST(request: NextRequest) {
 
   if (!verifyWebhookSignature(payload, signature)) {
     return NextResponse.json(
-      { success: false, error: { code: "INVALID_SIGNATURE", message: "Webhook signature verification failed" } },
+      {
+        success: false,
+        error: { code: "INVALID_SIGNATURE", message: "Webhook signature verification failed" },
+      },
       { status: 401 }
     )
   }
 
   if (!eventType || !deliveryId) {
     return NextResponse.json(
-      { success: false, error: { code: "MISSING_HEADERS", message: "x-github-event and x-github-delivery are required" } },
+      {
+        success: false,
+        error: {
+          code: "MISSING_HEADERS",
+          message: "x-github-event and x-github-delivery are required",
+        },
+      },
       { status: 400 }
     )
   }
@@ -88,12 +97,18 @@ export async function POST(request: NextRequest) {
             },
           })
 
-          logger.info("GitHub installation deleted, targets disabled", { installationId: installation.id })
+          logger.info("GitHub installation deleted, targets disabled", {
+            installationId: installation.id,
+          })
         }
       }
     } else if (eventType === "pull_request") {
       const action = event.action as string
-      const pullRequest = event.pull_request as { number: number; head: { ref: string }; base: { ref: string } }
+      const pullRequest = event.pull_request as {
+        number: number
+        head: { ref: string }
+        base: { ref: string }
+      }
       const repository = event.repository as { full_name: string; id: number }
       const installation = event.installation as { id: number }
 
@@ -144,7 +159,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: { processed: true } })
   } catch (error) {
-    logger.error("Failed to process GitHub webhook", { error: String(error), eventType, deliveryId })
+    logger.error("Failed to process GitHub webhook", {
+      error: String(error),
+      eventType,
+      deliveryId,
+    })
     return NextResponse.json(
       { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to process webhook" } },
       { status: 500 }

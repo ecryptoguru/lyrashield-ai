@@ -56,7 +56,7 @@ describe("runPreflight", () => {
 
   it("passes for a REPO target with repoFullName", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(
-      mockTarget({ type: "REPO", url: null, repoFullName: "org/repo" }) as never,
+      mockTarget({ type: "REPO", url: null, repoFullName: "org/repo" }) as never
     )
     vi.mocked(prisma.scan.count).mockResolvedValue(1 as never)
 
@@ -80,7 +80,7 @@ describe("runPreflight", () => {
 
   it("fails when REPO target has no repoFullName", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(
-      mockTarget({ type: "REPO", url: null, repoFullName: null }) as never,
+      mockTarget({ type: "REPO", url: null, repoFullName: null }) as never
     )
 
     const result = await runPreflight("scan-4", "target-4")
@@ -91,7 +91,7 @@ describe("runPreflight", () => {
 
   it("fails when WEB_APP target has no url", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(
-      mockTarget({ type: "WEB_APP", url: null }) as never,
+      mockTarget({ type: "WEB_APP", url: null }) as never
     )
 
     const result = await runPreflight("scan-5", "target-5")
@@ -113,7 +113,7 @@ describe("runPreflight", () => {
 
   it("passes for IAC target with url", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(
-      mockTarget({ type: "IAC", url: "https://cloud.example.com/stack" }) as never,
+      mockTarget({ type: "IAC", url: "https://cloud.example.com/stack" }) as never
     )
     vi.mocked(prisma.scan.count).mockResolvedValue(1 as never)
 

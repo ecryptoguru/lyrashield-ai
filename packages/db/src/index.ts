@@ -50,26 +50,16 @@ export { ApprovalStatus } from "./generated/prisma"
 export { Prisma } from "./generated/prisma"
 
 export { prisma } from "./client"
-export {
-  setWorkspaceContext,
-  getWorkspaceContext,
-  runWithWorkspaceContext,
-} from "./extension"
-export {
-  computeAuditHash,
-  verifyAuditChain,
-  type AuditLogChainFields,
-} from "./audit-hash"
+export { setWorkspaceContext, getWorkspaceContext, runWithWorkspaceContext } from "./extension"
+export { computeAuditHash, verifyAuditChain, type AuditLogChainFields } from "./audit-hash"
 export {
   assertEvidenceEncrypted,
   isEvidenceEncrypted,
   isValidKeyRefFormat,
   EvidenceEncryptionError,
 } from "./evidence"
-export {
-  withWorkspaceRLS,
-  withoutWorkspaceRLS,
-} from "./rls"
+export { withWorkspaceRLS, withoutWorkspaceRLS } from "./rls"
+export { deleteUserAccount, AccountDeletionBlockedError } from "./account-deletion"
 export {
   createScan,
   updateScanStatus,
@@ -120,11 +110,7 @@ export {
   updateRetestStatus,
   type RetestWithDetails,
 } from "./retest-service"
-export {
-  gatherReportData,
-  generateReportHTML,
-  type ReportData,
-} from "./report-generator"
+export { gatherReportData, generateReportHTML, type ReportData } from "./report-generator"
 export {
   createNotification,
   getNotification,

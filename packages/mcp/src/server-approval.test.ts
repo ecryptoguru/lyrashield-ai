@@ -23,7 +23,10 @@ describe("McpServer approval gate (S8)", () => {
   it("blocks a mutating tool by default (fail-closed, no gate)", async () => {
     const { context, fetchSpy } = makeCtx()
     const server = new McpServer({ toolContext: context })
-    const res = await server.callTool("lyrashield_scan_target", { workspaceId: "w1", targetId: "t1" })
+    const res = await server.callTool("lyrashield_scan_target", {
+      workspaceId: "w1",
+      targetId: "t1",
+    })
     expect(res.isError).toBe(true)
     expect(res.content[0]!.text).toContain("requires human approval")
     expect(fetchSpy).not.toHaveBeenCalled() // handler never ran
@@ -35,7 +38,10 @@ describe("McpServer approval gate (S8)", () => {
     const server = new McpServer({ toolContext: context, approvalGate: gate })
     const res = await server.callTool("lyrashield_create_report", { workspaceId: "w1", title: "R" })
     expect(res.isError).toBe(true)
-    expect(gate).toHaveBeenCalledWith("lyrashield_create_report", expect.objectContaining({ workspaceId: "w1" }))
+    expect(gate).toHaveBeenCalledWith(
+      "lyrashield_create_report",
+      expect.objectContaining({ workspaceId: "w1" })
+    )
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -43,7 +49,10 @@ describe("McpServer approval gate (S8)", () => {
     const { context, fetchSpy } = makeCtx()
     const gate = vi.fn(async () => ({ approved: true }))
     const server = new McpServer({ toolContext: context, approvalGate: gate })
-    const res = await server.callTool("lyrashield_scan_target", { workspaceId: "w1", targetId: "t1" })
+    const res = await server.callTool("lyrashield_scan_target", {
+      workspaceId: "w1",
+      targetId: "t1",
+    })
     expect(res.isError).toBeFalsy()
     expect(gate).toHaveBeenCalledOnce()
     expect(fetchSpy).toHaveBeenCalledOnce() // handler ran after approval
@@ -61,7 +70,10 @@ describe("McpServer approval gate (S8)", () => {
   it("allowMutations:true opts out of the gate (trusted context)", async () => {
     const { context, fetchSpy } = makeCtx()
     const server = new McpServer({ toolContext: context, allowMutations: true })
-    const res = await server.callTool("lyrashield_scan_target", { workspaceId: "w1", targetId: "t1" })
+    const res = await server.callTool("lyrashield_scan_target", {
+      workspaceId: "w1",
+      targetId: "t1",
+    })
     expect(res.isError).toBeFalsy()
     expect(fetchSpy).toHaveBeenCalledOnce()
   })

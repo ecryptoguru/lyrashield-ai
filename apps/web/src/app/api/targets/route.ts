@@ -14,13 +14,19 @@ export async function POST(request: Request) {
     body = await request.json()
   } catch {
     return NextResponse.json(
-      { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
+      {
+        success: false,
+        error: { code: "INVALID_JSON", message: "Request body must be valid JSON" },
+      },
       { status: 400 }
     )
   }
 
-  const isRepo = typeof body === "object" && body !== null && (body as Record<string, unknown>).type === "REPO"
-  const parsed = isRepo ? CreateRepoTargetSchema.safeParse(body) : CreateUrlTargetSchema.safeParse(body)
+  const isRepo =
+    typeof body === "object" && body !== null && (body as Record<string, unknown>).type === "REPO"
+  const parsed = isRepo
+    ? CreateRepoTargetSchema.safeParse(body)
+    : CreateUrlTargetSchema.safeParse(body)
 
   if (!parsed.success) {
     return NextResponse.json(
@@ -43,7 +49,8 @@ export async function POST(request: Request) {
             success: false,
             error: {
               code: "SSRF_BLOCKED",
-              message: "This URL is not allowed as a scan target (it targets an internal, private, or unresolvable address).",
+              message:
+                "This URL is not allowed as a scan target (it targets an internal, private, or unresolvable address).",
             },
           },
           { status: 400 }
@@ -57,7 +64,10 @@ export async function POST(request: Request) {
       })
       if (!project) {
         return NextResponse.json(
-          { success: false, error: { code: "PROJECT_NOT_FOUND", message: "Project not found in this workspace" } },
+          {
+            success: false,
+            error: { code: "PROJECT_NOT_FOUND", message: "Project not found in this workspace" },
+          },
           { status: 404 }
         )
       }

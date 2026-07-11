@@ -31,7 +31,7 @@ function makeFinding(
   cwe: string,
   description: string,
   remediation: string,
-  extra?: Partial<EngineVulnerability>,
+  extra?: Partial<EngineVulnerability>
 ): EngineVulnerability {
   return {
     id,
@@ -57,7 +57,7 @@ function makeFinding(
 async function fetchUrl(
   url: string,
   fetchFn?: typeof fetch,
-  resolver?: HostResolver,
+  resolver?: HostResolver
 ): Promise<{ html: string; status: number; headers: Record<string, string> } | null> {
   const result = await safeFetch(url, { fetchFn, resolver })
   if (!result) return null
@@ -84,8 +84,8 @@ function detectSupabaseAnonKey(html: string): EngineVulnerability[] {
             poc_description: `Extract the anon key from page source and use it with the Supabase client to query tables directly. If RLS is not enabled, all data is accessible without authentication.`,
             technical_analysis:
               "AI builders like Lovable and Bolt commonly embed Supabase anon keys in client bundles. The anon key alone is not a vulnerability, but combined with missing RLS policies it enables full data exfiltration. This is the root cause of the Lovable CVE-2025-48757 incident.",
-          },
-        ),
+          }
+        )
       )
     }
   }
@@ -108,8 +108,8 @@ function detectFirebaseConfig(html: string): EngineVulnerability[] {
         {
           technical_analysis:
             "AI builders like Bolt and v0 often generate Firebase configurations with permissive default rules. The API key is identifiable by the 'AIza' prefix and is safe to expose only if Security Rules are properly configured.",
-        },
-      ),
+        }
+      )
     )
   }
   return findings
@@ -119,12 +119,18 @@ function detectExposedApiKeys(html: string): EngineVulnerability[] {
   const findings: EngineVulnerability[] = []
   const hasFirebaseConfig = /firebaseConfig\s*=/i.test(html)
   const patterns = [
-    { regex: /(?:api[_-]?key|apikey)\s*[=:]\s*["']([A-Za-z0-9_-]{20,})["']/gi, name: "generic-api-key", cwe: "CWE-200" },
+    {
+      regex: /(?:api[_-]?key|apikey)\s*[=:]\s*["']([A-Za-z0-9_-]{20,})["']/gi,
+      name: "generic-api-key",
+      cwe: "CWE-200",
+    },
     { regex: /sk_live_[A-Za-z0-9]{20,}/g, name: "stripe-secret-key", cwe: "CWE-200" },
     { regex: /AKIA[0-9A-Z]{16}/g, name: "aws-access-key", cwe: "CWE-200" },
     { regex: /gh[pousr]_[A-Za-z0-9]{36}/g, name: "github-token", cwe: "CWE-200" },
     // Skip Google API key pattern if Firebase config is present — it's already reported by detectFirebaseConfig
-    ...(hasFirebaseConfig ? [] : [{ regex: /AIza[0-9A-Za-z_-]{35}/g, name: "google-api-key", cwe: "CWE-200" }]),
+    ...(hasFirebaseConfig
+      ? []
+      : [{ regex: /AIza[0-9A-Za-z_-]{35}/g, name: "google-api-key", cwe: "CWE-200" }]),
   ]
   for (const { regex, name, cwe } of patterns) {
     const matches = html.match(regex)
@@ -140,8 +146,8 @@ function detectExposedApiKeys(html: string): EngineVulnerability[] {
             "1. Move the key to a server-side environment variable.\n2. Rotate the exposed key immediately.\n3. Use a backend proxy for API calls requiring the key.\n4. Implement rate limiting on the API to reduce impact if keys are leaked.",
             {
               poc_description: `Extract the key from the page source and use it directly against the corresponding service API.`,
-            },
-          ),
+            }
+          )
         )
       }
     }
@@ -152,10 +158,30 @@ function detectExposedApiKeys(html: string): EngineVulnerability[] {
 function detectMissingSecurityHeaders(headers: Record<string, string>): EngineVulnerability[] {
   const findings: EngineVulnerability[] = []
   const securityHeaders = [
-    { header: "content-security-policy", title: "Missing Content-Security-Policy header", severity: "MEDIUM", cwe: "CWE-693" },
-    { header: "strict-transport-security", title: "Missing Strict-Transport-Security header", severity: "MEDIUM", cwe: "CWE-319" },
-    { header: "x-frame-options", title: "Missing X-Frame-Options header", severity: "LOW", cwe: "CWE-693" },
-    { header: "x-content-type-options", title: "Missing X-Content-Type-Options header", severity: "LOW", cwe: "CWE-693" },
+    {
+      header: "content-security-policy",
+      title: "Missing Content-Security-Policy header",
+      severity: "MEDIUM",
+      cwe: "CWE-693",
+    },
+    {
+      header: "strict-transport-security",
+      title: "Missing Strict-Transport-Security header",
+      severity: "MEDIUM",
+      cwe: "CWE-319",
+    },
+    {
+      header: "x-frame-options",
+      title: "Missing X-Frame-Options header",
+      severity: "LOW",
+      cwe: "CWE-693",
+    },
+    {
+      header: "x-content-type-options",
+      title: "Missing X-Content-Type-Options header",
+      severity: "LOW",
+      cwe: "CWE-693",
+    },
   ]
   for (const { header, title, severity, cwe } of securityHeaders) {
     if (!headers[header]) {
@@ -166,8 +192,8 @@ function detectMissingSecurityHeaders(headers: Record<string, string>): EngineVu
           severity,
           cwe,
           `The response is missing the ${header} security header. This leaves the application vulnerable to clickjacking, MIME-type sniffing attacks, and other browser-based exploits.`,
-          `Add the ${header} header to your web server or framework configuration.\nFor Next.js, add it to next.config.ts headers() function.\nFor Express, use the helmet middleware.`,
-        ),
+          `Add the ${header} header to your web server or framework configuration.\nFor Next.js, add it to next.config.ts headers() function.\nFor Express, use the helmet middleware.`
+        )
       )
     }
   }
@@ -191,8 +217,8 @@ function detectCorsMisconfiguration(headers: Record<string, string>): EngineVuln
           {
             poc_description:
               "From any malicious website, use fetch() with credentials: 'include' to read responses from this server, stealing user data or session tokens.",
-          },
-        ),
+          }
+        )
       )
     } else {
       findings.push(
@@ -202,8 +228,8 @@ function detectCorsMisconfiguration(headers: Record<string, string>): EngineVuln
           "LOW",
           "CWE-942",
           "The server responds with Access-Control-Allow-Origin: *. While this is common for public APIs, it should be restricted for applications handling user data.",
-          "Restrict Access-Control-Allow-Origin to specific trusted domains rather than using a wildcard.",
-        ),
+          "Restrict Access-Control-Allow-Origin to specific trusted domains rather than using a wildcard."
+        )
       )
     }
   }
@@ -233,8 +259,8 @@ function detectIdorPatterns(html: string): EngineVulnerability[] {
               "Increment or decrement the ID parameter in the API URL and observe whether other users' data is returned without authorization errors.",
             technical_analysis:
               "AI builders often generate CRUD APIs with sequential IDs and forget to add per-resource authorization checks. This is a common pattern in Lovable and Bolt-generated applications.",
-          },
-        ),
+          }
+        )
       )
       break
     }
@@ -242,7 +268,10 @@ function detectIdorPatterns(html: string): EngineVulnerability[] {
   return findings
 }
 
-async function detectMissingWebhookVerification(html: string, repoPath?: string): Promise<EngineVulnerability[]> {
+async function detectMissingWebhookVerification(
+  html: string,
+  repoPath?: string
+): Promise<EngineVulnerability[]> {
   const findings: EngineVulnerability[] = []
   const webhookPatterns = [
     { regex: /webhook/i, context: /stripe|payment|checkout/i, name: "stripe-webhook" },
@@ -250,7 +279,10 @@ async function detectMissingWebhookVerification(html: string, repoPath?: string)
   ]
   for (const { regex, context, name } of webhookPatterns) {
     if (regex.test(html) && context.test(html)) {
-      const hasVerification = /stripe-signature|x-hub-signature|constructEvent|verifySignature|webhooks\.construct/i.test(html)
+      const hasVerification =
+        /stripe-signature|x-hub-signature|constructEvent|verifySignature|webhooks\.construct/i.test(
+          html
+        )
       if (!hasVerification) {
         findings.push(
           makeFinding(
@@ -263,8 +295,8 @@ async function detectMissingWebhookVerification(html: string, repoPath?: string)
             {
               technical_analysis:
                 "AI builders frequently generate webhook handlers without adding signature verification, as it requires platform-specific secrets that aren't available during code generation.",
-            },
-          ),
+            }
+          )
         )
       }
     }
@@ -278,11 +310,19 @@ async function detectMissingWebhookVerification(html: string, repoPath?: string)
 
 async function detectWebhookInRepo(repoPath: string): Promise<EngineVulnerability[]> {
   const findings: EngineVulnerability[] = []
-  const webhookFiles = ["src/app/api/webhooks/stripe/route.ts", "src/app/api/webhooks/github/route.ts", "api/webhook.ts", "src/routes/webhook.ts"]
+  const webhookFiles = [
+    "src/app/api/webhooks/stripe/route.ts",
+    "src/app/api/webhooks/github/route.ts",
+    "api/webhook.ts",
+    "src/routes/webhook.ts",
+  ]
   for (const file of webhookFiles) {
     try {
       const content = await readFile(join(repoPath, file), "utf-8")
-      const hasVerification = /stripe-signature|x-hub-signature|constructEvent|verifySignature|webhooks\.construct|timingSafeEqual/i.test(content)
+      const hasVerification =
+        /stripe-signature|x-hub-signature|constructEvent|verifySignature|webhooks\.construct|timingSafeEqual/i.test(
+          content
+        )
       if (!hasVerification) {
         findings.push(
           makeFinding(
@@ -291,8 +331,8 @@ async function detectWebhookInRepo(repoPath: string): Promise<EngineVulnerabilit
             "HIGH",
             "CWE-345",
             `A webhook handler at ${file} does not verify the incoming request signature. This allows attackers to send forged webhook events.`,
-            "Add signature verification using the platform's SDK (e.g., stripe.webhooks.constructEvent for Stripe, crypto.timingSafeEqual for GitHub).",
-          ),
+            "Add signature verification using the platform's SDK (e.g., stripe.webhooks.constructEvent for Stripe, crypto.timingSafeEqual for GitHub)."
+          )
         )
       }
     } catch {
@@ -317,8 +357,8 @@ function detectAiBuilderDefaults(html: string): EngineVulnerability[] {
           `1. Review all database access policies (RLS for Supabase, Security Rules for Firebase).\n2. Ensure no service-role keys are in client code.\n3. Verify all API endpoints have proper authorization.\n4. Check webhook signature verification.\n5. Run a full LyraSec scan for comprehensive coverage.`,
           {
             technical_analysis: `AI builder platforms like ${platform} generate functional code quickly but often skip security hardening. Common issues: default permissive database rules, exposed credentials in client bundles, missing input validation, and no webhook verification.`,
-          },
-        ),
+          }
+        )
       )
       break
     }
@@ -329,7 +369,10 @@ function detectAiBuilderDefaults(html: string): EngineVulnerability[] {
 function detectOpenRedirects(html: string): EngineVulnerability[] {
   const findings: EngineVulnerability[] = []
   const redirectPatterns = [
-    { regex: /(?:redirect|next|return_?url|callback)\s*[=:]\s*["']?\s*(?:https?:)?\/\//gi, name: "redirect-param" },
+    {
+      regex: /(?:redirect|next|return_?url|callback)\s*[=:]\s*["']?\s*(?:https?:)?\/\//gi,
+      name: "redirect-param",
+    },
     { regex: /window\.location(?:\.href)?\s*=\s*[a-zA-Z_$]/gi, name: "dynamic-redirect" },
   ]
   for (const { regex, name } of redirectPatterns) {
@@ -342,8 +385,8 @@ function detectOpenRedirects(html: string): EngineVulnerability[] {
           "MEDIUM",
           "CWE-601",
           "The application contains redirect logic that may use user-controlled input without validation. Open redirects can be used for phishing attacks and OAuth token theft.",
-          "1. Validate redirect URLs against a whitelist of allowed domains.\n2. Use relative paths for internal redirects.\n3. Never redirect to URLs from query parameters without validation.",
-        ),
+          "1. Validate redirect URLs against a whitelist of allowed domains.\n2. Use relative paths for internal redirects.\n3. Never redirect to URLs from query parameters without validation."
+        )
       )
       break
     }
@@ -370,7 +413,7 @@ export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerabilit
   allFindings.push(...detectMissingSecurityHeaders(headers))
   allFindings.push(...detectCorsMisconfiguration(headers))
   allFindings.push(...detectIdorPatterns(html))
-  allFindings.push(...await detectMissingWebhookVerification(html, repoPath))
+  allFindings.push(...(await detectMissingWebhookVerification(html, repoPath)))
   allFindings.push(...detectAiBuilderDefaults(html))
   allFindings.push(...detectOpenRedirects(html))
 
@@ -381,7 +424,7 @@ export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerabilit
 export async function scanUrlFromRepo(
   repoPath: string,
   targetUrl: string,
-  fetchFn?: typeof fetch,
+  fetchFn?: typeof fetch
 ): Promise<EngineVulnerability[]> {
   return scanUrl({ targetUrl, repoPath, fetchFn })
 }

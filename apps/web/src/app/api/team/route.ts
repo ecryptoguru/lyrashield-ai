@@ -11,7 +11,17 @@ const InviteMemberSchema = z.object({
   workspaceId: z.string().min(1),
   email: z.email(),
   role: z
-    .enum(["ADMIN", "MEMBER", "VIEWER", "SECURITY_ADMIN", "APPSEC_MANAGER", "DEVELOPER", "AUDITOR", "BILLING_ADMIN", "EXTERNAL_PENTESTER"])
+    .enum([
+      "ADMIN",
+      "MEMBER",
+      "VIEWER",
+      "SECURITY_ADMIN",
+      "APPSEC_MANAGER",
+      "DEVELOPER",
+      "AUDITOR",
+      "BILLING_ADMIN",
+      "EXTERNAL_PENTESTER",
+    ])
     .default("MEMBER"),
 })
 
@@ -21,7 +31,10 @@ export async function POST(request: Request) {
     body = await request.json()
   } catch {
     return NextResponse.json(
-      { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
+      {
+        success: false,
+        error: { code: "INVALID_JSON", message: "Request body must be valid JSON" },
+      },
       { status: 400 }
     )
   }
@@ -67,7 +80,10 @@ export async function POST(request: Request) {
 
     if (existingMember || existingInvitation) {
       return NextResponse.json(
-        { success: false, error: { code: "ALREADY_INVITED", message: "This email has already been invited" } },
+        {
+          success: false,
+          error: { code: "ALREADY_INVITED", message: "This email has already been invited" },
+        },
         { status: 409 }
       )
     }

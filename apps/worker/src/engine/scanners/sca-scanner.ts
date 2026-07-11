@@ -25,7 +25,10 @@ interface OsvVulnerability {
   references?: Array<{ url: string }>
   affected?: Array<{
     package?: { name: string; ecosystem: string }
-    ranges?: Array<{ type: string; events: Array<{ introduced?: string; fixed?: string; last_affected?: string }> }>
+    ranges?: Array<{
+      type: string
+      events: Array<{ introduced?: string; fixed?: string; last_affected?: string }>
+    }>
   }>
   database_specific?: { severity?: string; cvss?: { vectorString?: string } }
 }
@@ -41,7 +44,15 @@ const DEP_FILE_PATTERNS = [
   "composer.json",
 ]
 
-const IGNORED_DIRECTORIES = new Set(["node_modules", ".git", "dist", "build", ".next", "coverage", "vendor"])
+const IGNORED_DIRECTORIES = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  "coverage",
+  "vendor",
+])
 
 async function findDependencyFiles(repoPath: string, directory = repoPath): Promise<string[]> {
   try {
@@ -51,7 +62,7 @@ async function findDependencyFiles(repoPath: string, directory = repoPath): Prom
       const fullPath = join(directory, entry.name)
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) {
-          found.push(...await findDependencyFiles(repoPath, fullPath))
+          found.push(...(await findDependencyFiles(repoPath, fullPath)))
         }
       } else if (entry.isFile() && DEP_FILE_PATTERNS.includes(entry.name)) {
         found.push(relative(repoPath, fullPath))
@@ -116,7 +127,12 @@ function parseGoMod(content: string, filePath: string): Dependency[] {
     if (trimmed.startsWith("require ")) {
       const parts = trimmed.split(/\s+/)
       if (parts.length >= 3 && parts[1] && parts[2]) {
-        deps.push({ name: parts[1], version: parts[2].replace(/^v/, ""), ecosystem: "Go", filePath })
+        deps.push({
+          name: parts[1],
+          version: parts[2].replace(/^v/, ""),
+          ecosystem: "Go",
+          filePath,
+        })
       }
     }
   }
@@ -154,7 +170,12 @@ function parseGemfile(content: string, filePath: string): Dependency[] {
     const trimmed = line.trim()
     const match = /^(?:gem|dependency)\s+["']([^"']+)["']\s*,?\s*["']?([^"']*)?["']?/.exec(trimmed)
     if (match && match[1]) {
-      deps.push({ name: match[1], version: (match[2] ?? "0").replace(/[\^~>=<]/g, ""), ecosystem: "RubyGems", filePath })
+      deps.push({
+        name: match[1],
+        version: (match[2] ?? "0").replace(/[\^~>=<]/g, ""),
+        ecosystem: "RubyGems",
+        filePath,
+      })
     }
   }
   return deps
@@ -210,7 +231,10 @@ async function parseDependencyFile(filePath: string, repoPath: string): Promise<
   }
 }
 
-export async function queryOsv(dependency: Dependency, fetchFn?: typeof fetch): Promise<OsvVulnerability[]> {
+export async function queryOsv(
+  dependency: Dependency,
+  fetchFn?: typeof fetch
+): Promise<OsvVulnerability[]> {
   const url = "https://api.osv.dev/v1/query"
   const body = {
     package: { name: dependency.name, ecosystem: dependency.ecosystem },
@@ -234,10 +258,13 @@ export async function queryOsv(dependency: Dependency, fetchFn?: typeof fetch): 
       return []
     }
 
-    const data = await res.json() as { vulns?: OsvVulnerability[] }
+    const data = (await res.json()) as { vulns?: OsvVulnerability[] }
     return data.vulns ?? []
   } catch (err) {
-    logger.warn("OSV API query failed", { dep: dependency.name, error: err instanceof Error ? err.message : String(err) })
+    logger.warn("OSV API query failed", {
+      dep: dependency.name,
+      error: err instanceof Error ? err.message : String(err),
+    })
     return []
   }
 }
@@ -323,8 +350,11 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
         target: dep.filePath,
         cve,
         cwe: "CWE-1104", // Use of Unmaintained Third Party Components
-        description: vuln.summary ?? `Vulnerability ${vuln.id} affects ${dep.name} version ${dep.version}`,
-        technical_analysis: vuln.details?.slice(0, 500) ?? `The dependency ${dep.name}@${dep.version} is affected by ${vuln.id}.`,
+        description:
+          vuln.summary ?? `Vulnerability ${vuln.id} affects ${dep.name} version ${dep.version}`,
+        technical_analysis:
+          vuln.details?.slice(0, 500) ??
+          `The dependency ${dep.name}@${dep.version} is affected by ${vuln.id}.`,
         impact: `The package ${dep.name}@${dep.version} has a known vulnerability (${vuln.id}). If this package is used in a production code path, it may expose the application to attack.`,
         remediation_steps: fixedVersion
           ? `Upgrade ${dep.name} to version ${fixedVersion} or later. Update the dependency in ${dep.filePath}.`
@@ -334,6 +364,10 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
     }
   }
 
-  logger.info("SCA scan complete", { repoPath, findingCount: findings.length, depsScanned: allDeps.length })
+  logger.info("SCA scan complete", {
+    repoPath,
+    findingCount: findings.length,
+    depsScanned: allDeps.length,
+  })
   return findings
 }

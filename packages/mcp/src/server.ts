@@ -13,7 +13,7 @@ import { PromptInjectionGuard } from "./prompt-injection-guard"
  */
 export type ApprovalGate = (
   toolName: string,
-  args: Record<string, unknown>,
+  args: Record<string, unknown>
 ) => Promise<{ approved: boolean; reason?: string }> | { approved: boolean; reason?: string }
 
 export interface McpServerOptions {
@@ -80,14 +80,16 @@ export class McpServer {
         args,
       })
       return {
-        content: [{
-          type: "text",
-          text: JSON.stringify({
-            error: "Tool call blocked by security guard",
-            reason: guardResult.reason,
-            detectedPatterns: guardResult.detectedPatterns,
-          }),
-        }],
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: "Tool call blocked by security guard",
+              reason: guardResult.reason,
+              detectedPatterns: guardResult.detectedPatterns,
+            }),
+          },
+        ],
         isError: true,
       }
     }
@@ -109,18 +111,26 @@ export class McpServer {
     if (tool.mutating && !this.allowMutations) {
       const decision = this.approvalGate
         ? await this.approvalGate(name, safeArgs)
-        : { approved: false, reason: "No approval gate configured; mutating tools are blocked by default." }
+        : {
+            approved: false,
+            reason: "No approval gate configured; mutating tools are blocked by default.",
+          }
       if (!decision.approved) {
-        logger.warn("MCP mutating tool blocked — not approved", { tool: name, reason: decision.reason })
+        logger.warn("MCP mutating tool blocked — not approved", {
+          tool: name,
+          reason: decision.reason,
+        })
         return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              error: "Mutating tool requires human approval",
-              tool: name,
-              reason: decision.reason ?? "Approval denied",
-            }),
-          }],
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: "Mutating tool requires human approval",
+                tool: name,
+                reason: decision.reason ?? "Approval denied",
+              }),
+            },
+          ],
           isError: true,
         }
       }
@@ -129,7 +139,8 @@ export class McpServer {
 
     logger.info("MCP tool call allowed", {
       tool: name,
-      suspiciousPatterns: guardResult.detectedPatterns.length > 0 ? guardResult.detectedPatterns : undefined,
+      suspiciousPatterns:
+        guardResult.detectedPatterns.length > 0 ? guardResult.detectedPatterns : undefined,
     })
 
     try {
@@ -140,13 +151,15 @@ export class McpServer {
         error: err instanceof Error ? err.message : String(err),
       })
       return {
-        content: [{
-          type: "text",
-          text: JSON.stringify({
-            error: "Tool execution failed",
-            message: err instanceof Error ? err.message : "Unknown error",
-          }),
-        }],
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: "Tool execution failed",
+              message: err instanceof Error ? err.message : "Unknown error",
+            }),
+          },
+        ],
         isError: true,
       }
     }

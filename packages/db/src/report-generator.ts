@@ -39,10 +39,7 @@ export interface ReportData {
   generatedAt: Date
 }
 
-export async function gatherReportData(
-  workspaceId: string,
-  scanId?: string
-): Promise<ReportData> {
+export async function gatherReportData(workspaceId: string, scanId?: string): Promise<ReportData> {
   const workspace = await prisma.workspace.findFirst({
     where: { id: workspaceId },
     select: { name: true },
@@ -137,9 +134,7 @@ export async function gatherReportData(
   }
 
   return {
-    title: scanInfo
-      ? `Security Report — ${scanInfo.targetName}`
-      : "Security Report",
+    title: scanInfo ? `Security Report — ${scanInfo.targetName}` : "Security Report",
     type: "developer",
     workspaceName: workspace?.name ?? "Unknown Workspace",
     scanInfo,
@@ -281,7 +276,9 @@ export function generateReportHTML(data: ReportData): string {
       </div>
     </div>
 
-    ${data.scanInfo ? `
+    ${
+      data.scanInfo
+        ? `
     <div class="section">
       <h2>Scan Information</h2>
       <table>
@@ -294,7 +291,9 @@ export function generateReportHTML(data: ReportData): string {
         ${data.scanInfo.summary ? `<tr><td style="font-weight:600;padding:4px 0;">Summary</td><td style="padding:4px 0;">${escapeHtml(data.scanInfo.summary)}</td></tr>` : ""}
       </table>
     </div>
-    ` : ""}
+    `
+        : ""
+    }
 
     <div class="section">
       <h2>Findings by Severity</h2>
@@ -304,7 +303,9 @@ export function generateReportHTML(data: ReportData): string {
     <div class="section">
       <h2>Findings Detail (${data.totalFindings})</h2>
       ${data.findingsTruncated ? "<p style='color:#ea580c;font-size:12px;margin-bottom:12px;'>Showing the 500 most recent findings. Additional findings exist but are not included in this report.</p>" : ""}
-      ${data.findings.length > 0 ? `
+      ${
+        data.findings.length > 0
+          ? `
       <table>
         <thead>
           <tr>
@@ -320,7 +321,9 @@ export function generateReportHTML(data: ReportData): string {
           ${findingsRows}
         </tbody>
       </table>
-      ` : "<p style='color:#6b7280;font-size:13px;'>No findings recorded.</p>"}
+      `
+          : "<p style='color:#6b7280;font-size:13px;'>No findings recorded.</p>"
+      }
     </div>
 
     <div class="footer">

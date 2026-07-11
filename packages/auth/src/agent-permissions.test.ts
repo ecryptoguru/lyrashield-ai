@@ -64,7 +64,18 @@ describe("Agent Permissions", () => {
   })
 
   it("every role has agent.view except BILLING_ADMIN", () => {
-    const roles: MemberRole[] = ["OWNER", "ADMIN", "SECURITY_ADMIN", "APPSEC_MANAGER", "BILLING_ADMIN", "DEVELOPER", "MEMBER", "EXTERNAL_PENTESTER", "AUDITOR", "VIEWER"]
+    const roles: MemberRole[] = [
+      "OWNER",
+      "ADMIN",
+      "SECURITY_ADMIN",
+      "APPSEC_MANAGER",
+      "BILLING_ADMIN",
+      "DEVELOPER",
+      "MEMBER",
+      "EXTERNAL_PENTESTER",
+      "AUDITOR",
+      "VIEWER",
+    ]
     for (const role of roles) {
       if (role === "BILLING_ADMIN") {
         expect(hasPermission(role, PERMISSIONS.agent.view)).toBe(false)

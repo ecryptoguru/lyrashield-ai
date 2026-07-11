@@ -39,7 +39,7 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 
 ## Product status
 
-Implemented: core workspaces/targets/scans, GitHub integration, scan orchestration, findings normalization, SCA and secret scanning, URL scanning, fix proposals, retests, reports, notifications, schedules, MCP, agent approvals, and the GitHub diff gate.
+Implemented: core workspaces/targets/scans, GitHub integration, scan orchestration, findings normalization, SCA and secret scanning, URL scanning, fix proposals, retests, reports, notifications, schedules, MCP, agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksums, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, and Azure AI / GPT 5.6 Terra model support.
 
 Not implemented: billing/usage limits, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities. See `PRD.md` for the authoritative roadmap.
 
@@ -66,5 +66,5 @@ Initial themes: secure AI-generated code, security review before SaaS launch, de
 
 - `PRD.md` — roadmap and acceptance scope
 - `codebase.md` — implemented architecture
-- `NEXT-STEPS.md` — immediate blockers and sequence
+- `AGENTS.md` — current handoff, immediate blockers, and execution sequence
 - `apps/marketing/BLOG_AUTHORING.md` — authoring and publication checklist

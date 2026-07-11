@@ -99,7 +99,9 @@ class SlackChannel implements NotificationChannelSender {
               color,
               title: payload.title,
               text: payload.body,
-              footer: payload.workspaceName ? `LyraSec AI · ${payload.workspaceName}` : "LyraSec AI",
+              footer: payload.workspaceName
+                ? `LyraSec AI · ${payload.workspaceName}`
+                : "LyraSec AI",
               ts: Math.floor(Date.now() / 1000),
             },
           ],
@@ -146,7 +148,11 @@ class DiscordChannel implements NotificationChannelSender {
               title: payload.title,
               description: payload.body,
               color,
-              footer: { text: payload.workspaceName ? `LyraSec AI · ${payload.workspaceName}` : "LyraSec AI" },
+              footer: {
+                text: payload.workspaceName
+                  ? `LyraSec AI · ${payload.workspaceName}`
+                  : "LyraSec AI",
+              },
               timestamp: new Date().toISOString(),
             },
           ],

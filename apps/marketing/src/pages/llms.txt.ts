@@ -15,7 +15,10 @@ export const GET: APIRoute = async (context) => {
     })
   }
 
-  const siteUrl = context.site?.toString() || (import.meta.env.PUBLIC_SITE_URL as string | undefined) || "http://localhost:4321"
+  const siteUrl =
+    context.site?.toString() ||
+    (import.meta.env.PUBLIC_SITE_URL as string | undefined) ||
+    "http://localhost:4321"
   const origin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
 
   const posts = await getCollection("blog", (entry) => !entry.data.draft)

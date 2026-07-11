@@ -4,7 +4,12 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateScanSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
-import { apiError, apiPaginated, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
+import {
+  apiError,
+  apiPaginated,
+  apiSuccess,
+  parsePaginationParams,
+} from "../../../lib/api-response"
 import { enqueueScanJob } from "../../../lib/queue"
 
 export async function POST(request: Request) {
@@ -49,7 +54,11 @@ export async function POST(request: Request) {
       },
     })
     if (activeScans > 0) {
-      return apiError("SCAN_IN_PROGRESS", "Target already has an active scan. Cancel it or wait for completion.", 409)
+      return apiError(
+        "SCAN_IN_PROGRESS",
+        "Target already has an active scan. Cancel it or wait for completion.",
+        409
+      )
     }
 
     const scan = await createScan({
@@ -84,7 +93,11 @@ export async function POST(request: Request) {
           endedAt: new Date(),
         },
       })
-      return apiError("QUEUE_ERROR", "Scan created but failed to enqueue. Check Redis connectivity.", 503)
+      return apiError(
+        "QUEUE_ERROR",
+        "Scan created but failed to enqueue. Check Redis connectivity.",
+        503
+      )
     }
 
     await prisma.auditLog.create({
@@ -97,22 +110,33 @@ export async function POST(request: Request) {
       },
     })
 
-    logger.info("Scan created and enqueued", { scanId: scan.id, workspaceId, targetId: data.targetId })
+    logger.info("Scan created and enqueued", {
+      scanId: scan.id,
+      workspaceId,
+      targetId: data.targetId,
+    })
 
-    return apiSuccess({
-      id: scan.id,
-      status: scan.status,
-      goal: scan.goal,
-      mode: scan.mode,
-      targetId: scan.targetId,
-      createdAt: scan.createdAt,
-    }, 201)
+    return apiSuccess(
+      {
+        id: scan.id,
+        status: scan.status,
+        goal: scan.goal,
+        mode: scan.mode,
+        targetId: scan.targetId,
+        createdAt: scan.createdAt,
+      },
+      201
+    )
   } catch (error) {
     if (
       (error && typeof error === "object" && (error as { code?: string }).code === "P2002") ||
       (error instanceof Error && error.message === "Target already has an active scan")
     ) {
-      return apiError("SCAN_IN_PROGRESS", "Target already has an active scan. Cancel it or wait for completion.", 409)
+      return apiError(
+        "SCAN_IN_PROGRESS",
+        "Target already has an active scan. Cancel it or wait for completion.",
+        409
+      )
     }
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

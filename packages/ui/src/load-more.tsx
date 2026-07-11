@@ -3,26 +3,26 @@
 import { useState, useCallback } from "react"
 import { Button, Spinner } from "./"
 
-interface LoadMoreProps {
+interface LoadMoreProps<T> {
   /** Fetch the next page. Returns items + nextCursor. */
-  onLoadMore: (cursor: string) => Promise<{ items: unknown[]; nextCursor: string | null }>
+  onLoadMore: (cursor: string) => Promise<{ items: T[]; nextCursor: string | null }>
   /** Current cursor to start from. */
   cursor: string | null
   /** Callback when new items are loaded. */
-  onItems: (items: unknown[]) => void
+  onItems: (items: T[]) => void
   /** Called when the next cursor is determined (null = no more pages). */
   onNextCursor: (cursor: string | null) => void
   /** Label for the button. */
   label?: string
 }
 
-export function LoadMore({
+export function LoadMore<T>({
   onLoadMore,
   cursor,
   onItems,
   onNextCursor,
   label = "Load more",
-}: LoadMoreProps) {
+}: LoadMoreProps<T>) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -46,7 +46,9 @@ export function LoadMore({
   return (
     <div className="flex flex-col items-center gap-2 pt-4">
       {error && (
-        <p className="text-sm text-destructive" role="alert">{error}</p>
+        <p className="text-destructive text-sm" role="alert">
+          {error}
+        </p>
       )}
       <Button
         variant="secondary"

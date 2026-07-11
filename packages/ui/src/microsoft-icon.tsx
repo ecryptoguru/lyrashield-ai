@@ -2,12 +2,7 @@ import type { SVGProps } from "react"
 
 export function MicrosoftIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg
-      viewBox="0 0 23 23"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      {...props}
-    >
+    <svg viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
       <path d="M1 1h10v10H1z" fill="#f25022" />
       <path d="M12 1h10v10H12z" fill="#7fba00" />
       <path d="M1 12h10v10H1z" fill="#00a4ef" />

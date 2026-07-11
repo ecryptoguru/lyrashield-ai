@@ -36,12 +36,14 @@ describe("verifyVulnerability", () => {
   it("returns high confidence with code location + fix diff", () => {
     const result = verifyVulnerability({
       ...baseVuln,
-      code_locations: [{
-        file: "src/app.ts",
-        start_line: 10,
-        fix_before: "bad code",
-        fix_after: "good code",
-      }],
+      code_locations: [
+        {
+          file: "src/app.ts",
+          start_line: 10,
+          fix_before: "bad code",
+          fix_after: "good code",
+        },
+      ],
     })
     expect(result.verified).toBe(true)
     expect(result.confidence).toBe("high")
@@ -114,18 +116,31 @@ describe("verifyFindings", () => {
 
 describe("getConfidenceScore", () => {
   it("returns 0 for unverified", () => {
-    expect(getConfidenceScore({ verified: false, confidence: "low", reason: "", verificationMethod: "" })).toBe(0)
+    expect(
+      getConfidenceScore({ verified: false, confidence: "low", reason: "", verificationMethod: "" })
+    ).toBe(0)
   })
 
   it("returns 90 for high confidence", () => {
-    expect(getConfidenceScore({ verified: true, confidence: "high", reason: "", verificationMethod: "" })).toBe(90)
+    expect(
+      getConfidenceScore({ verified: true, confidence: "high", reason: "", verificationMethod: "" })
+    ).toBe(90)
   })
 
   it("returns 60 for medium confidence", () => {
-    expect(getConfidenceScore({ verified: true, confidence: "medium", reason: "", verificationMethod: "" })).toBe(60)
+    expect(
+      getConfidenceScore({
+        verified: true,
+        confidence: "medium",
+        reason: "",
+        verificationMethod: "",
+      })
+    ).toBe(60)
   })
 
   it("returns 30 for low confidence", () => {
-    expect(getConfidenceScore({ verified: true, confidence: "low", reason: "", verificationMethod: "" })).toBe(30)
+    expect(
+      getConfidenceScore({ verified: true, confidence: "low", reason: "", verificationMethod: "" })
+    ).toBe(30)
   })
 })

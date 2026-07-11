@@ -31,7 +31,13 @@ export async function GET(request: Request) {
 
     if (!integration || !integration.externalId) {
       return NextResponse.json(
-        { success: false, error: { code: "NOT_CONNECTED", message: "GitHub App is not connected to this workspace" } },
+        {
+          success: false,
+          error: {
+            code: "NOT_CONNECTED",
+            message: "GitHub App is not connected to this workspace",
+          },
+        },
         { status: 404 }
       )
     }

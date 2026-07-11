@@ -1,4 +1,5 @@
 ---
+const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:3001"
 ---
 
 <header class="border-b border-border bg-bg/80 backdrop-blur">
@@ -16,6 +17,11 @@
         <li>
           <a href="/blog" class="text-sm text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             Blog
+          </a>
+        </li>
+        <li>
+          <a href={`${appUrl}/sign-in`} class="text-sm text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            Sign in
           </a>
         </li>
       </ul>

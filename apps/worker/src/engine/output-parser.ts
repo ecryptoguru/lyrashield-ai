@@ -50,7 +50,15 @@ export interface ParsedScanOutput {
   findingCount: number
 }
 
-const VALID_SEVERITIES = new Set(["critical", "high", "medium", "moderate", "low", "info", "informational"])
+const VALID_SEVERITIES = new Set([
+  "critical",
+  "high",
+  "medium",
+  "moderate",
+  "low",
+  "info",
+  "informational",
+])
 
 function validateVulnerability(v: Record<string, unknown>): EngineVulnerability | null {
   if (typeof v.id !== "string" || !v.id.trim()) return null
@@ -59,7 +67,10 @@ function validateVulnerability(v: Record<string, unknown>): EngineVulnerability 
     return null
   }
   if (typeof v.severity !== "string" || !VALID_SEVERITIES.has(v.severity.toLowerCase())) {
-    logger.warn("Engine output: invalid severity, defaulting to info", { id: v.id, severity: v.severity })
+    logger.warn("Engine output: invalid severity, defaulting to info", {
+      id: v.id,
+      severity: v.severity,
+    })
     v.severity = "info"
   }
   if (v.cvss !== undefined && (typeof v.cvss !== "number" || v.cvss < 0 || v.cvss > 10)) {
@@ -117,7 +128,7 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
 
 export function parseEngineOutput(
   vulnerabilitiesRaw: string,
-  runJsonRaw: string,
+  runJsonRaw: string
 ): ParsedScanOutput {
   const vulnerabilities = parseVulnerabilitiesJson(vulnerabilitiesRaw)
   const runRecord = parseRunJson(runJsonRaw)
@@ -142,18 +153,16 @@ const SEVERITY_MAP: Record<string, "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INF
   info: "INFO",
 }
 
-export function mapSeverity(engineSeverity: string): "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO" {
+export function mapSeverity(
+  engineSeverity: string
+): "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO" {
   return SEVERITY_MAP[engineSeverity.toLowerCase()] ?? "INFO"
 }
 
 export function generateDedupeKey(vuln: EngineVulnerability, targetId: string): string {
-  const raw = [
-    targetId,
-    vuln.cwe ?? "",
-    vuln.endpoint ?? "",
-    vuln.method ?? "",
-    vuln.title,
-  ].join("|").toLowerCase()
+  const raw = [targetId, vuln.cwe ?? "", vuln.endpoint ?? "", vuln.method ?? "", vuln.title]
+    .join("|")
+    .toLowerCase()
   return createHash("sha256").update(raw).digest("hex").slice(0, 32)
 }
 

@@ -3,7 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma"
 import { genericOAuth, microsoftEntraId } from "better-auth/plugins"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
-import { env, isProd } from "@lyrashield/config"
+import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
@@ -13,6 +13,7 @@ const GOOGLE_CLIENT_SECRET = env.GOOGLE_CLIENT_SECRET
 const AZURE_AD_CLIENT_ID = env.AZURE_AD_CLIENT_ID
 const AZURE_AD_CLIENT_SECRET = env.AZURE_AD_CLIENT_SECRET
 const AZURE_AD_TENANT_ID = env.AZURE_AD_TENANT_ID
+const secureCookies = new URL(env.BETTER_AUTH_URL).protocol === "https:"
 
 // Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; additional
 // origins (staging, apex+www, preview deploys) come from a comma-separated
@@ -27,6 +28,14 @@ const trustedOrigins = [
     : []),
 ]
 
+if (env.NEXT_PUBLIC_MARKETING_URL) {
+  try {
+    trustedOrigins.push(new URL(env.NEXT_PUBLIC_MARKETING_URL).origin)
+  } catch {
+    // Ignore malformed marketing URL; the env schema already validates it.
+  }
+}
+
 async function sendVerificationEmail({
   user,
   url,
@@ -36,7 +45,10 @@ async function sendVerificationEmail({
   token: string
 }) {
   if (isProd && env.BREVO_API_KEY) {
-    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    // Do not await the provider call — awaiting can leak timing information
+    // about whether an email exists during sign-up/sign-in. The response is
+    // processed in a detached promise and errors are logged asynchronously.
+    void fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -49,12 +61,24 @@ async function sendVerificationEmail({
         htmlContent: `<p>Hi ${user.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")},</p><p>Click the link below to verify your email address:</p><p><a href="${url}">Verify Email</a></p><p>If you didn't create an account, you can safely ignore this email.</p>`,
       }),
     })
-    if (!res.ok) {
-      logger.error("Failed to send verification email via Brevo", {
-        status: res.status,
-        email: user.email,
+      .then((res) => {
+        if (!res.ok) {
+          logger.error("Failed to send verification email via Brevo", {
+            status: res.status,
+            email: user.email,
+          })
+        }
       })
-    }
+      .catch((err) => {
+        logger.error("Exception while sending verification email", {
+          error: err instanceof Error ? err.message : String(err),
+          email: user.email,
+        })
+      })
+  } else if (isProd && !env.BREVO_API_KEY) {
+    logger.error("BREVO_API_KEY is required to send verification emails in production", {
+      email: user.email,
+    })
   } else {
     logger.info("Email verification (dev mode — no email sent)", {
       email: user.email,
@@ -72,11 +96,13 @@ export const auth = betterAuth({
   trustedOrigins,
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: true,
+    requireEmailVerification: !isDev,
   },
   emailVerification: {
     sendVerificationEmail,
     sendOnSignUp: true,
+    sendOnSignIn: true,
+    autoSignInAfterVerification: true,
   },
   socialProviders: {
     github: {
@@ -97,9 +123,7 @@ export const auth = betterAuth({
           clientId: AZURE_AD_CLIENT_ID ?? "",
           clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
           tenantId: AZURE_AD_TENANT_ID || "common",
-          ...(AZURE_AD_CLIENT_ID
-            ? {}
-            : { disableSignUp: true }),
+          ...(AZURE_AD_CLIENT_ID ? {} : { disableSignUp: true }),
         }),
       ],
     }),
@@ -113,12 +137,20 @@ export const auth = betterAuth({
     },
   },
   advanced: {
-    useSecureCookies: isProd,
+    useSecureCookies: secureCookies,
+    ...(env.BETTER_AUTH_COOKIE_DOMAIN
+      ? {
+          crossSubDomainCookies: {
+            enabled: true,
+            domain: env.BETTER_AUTH_COOKIE_DOMAIN,
+          },
+        }
+      : {}),
     cookies: {
       session_token: {
         attributes: {
           sameSite: "lax",
-          secure: isProd,
+          secure: secureCookies,
         },
       },
     },

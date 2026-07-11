@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest"
-import {
-  computeAuditHash,
-  verifyAuditChain,
-  type AuditLogChainFields,
-} from "./audit-hash"
+import { computeAuditHash, verifyAuditChain, type AuditLogChainFields } from "./audit-hash"
 import {
   assertEvidenceEncrypted,
   isEvidenceEncrypted,

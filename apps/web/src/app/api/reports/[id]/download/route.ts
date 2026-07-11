@@ -5,10 +5,7 @@ import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError } from "../../../../../lib/api-response"
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -35,12 +32,14 @@ export async function GET(
 
     const html = generateReportHTML(reportData)
 
-    await prisma.report.update({
-      where: { id },
-      data: { status: "downloaded" },
-    }).catch((err) => {
-      logger.warn("Failed to update report download status", { reportId: id, error: String(err) })
-    })
+    await prisma.report
+      .update({
+        where: { id },
+        data: { status: "downloaded" },
+      })
+      .catch((err) => {
+        logger.warn("Failed to update report download status", { reportId: id, error: String(err) })
+      })
 
     return new Response(html, {
       headers: {

@@ -59,9 +59,7 @@ describe("Service Token", () => {
     expect(payload).not.toBeNull()
 
     const parts = token.split(".")
-    const payloadData = JSON.parse(
-      Buffer.from(parts[1]!, "base64url").toString("utf8")
-    )
+    const payloadData = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8"))
     payloadData.expiresAt = Math.floor(Date.now() / 1000) - 100
     const tamperedPayload = Buffer.from(JSON.stringify(payloadData)).toString("base64url")
     const tamperedToken = `lst.${tamperedPayload}.${parts[2]}`
@@ -78,23 +76,22 @@ describe("Service Token", () => {
 
   it("throws if BETTER_AUTH_SECRET is missing", () => {
     delete process.env.BETTER_AUTH_SECRET
-    expect(() =>
-      signServiceToken({ userId: "u", workspaceId: "w", role: "ADMIN" })
-    ).toThrow()
+    expect(() => signServiceToken({ userId: "u", workspaceId: "w", role: "ADMIN" })).toThrow()
   })
 
   it("throws if BETTER_AUTH_SECRET is too short", () => {
     process.env.BETTER_AUTH_SECRET = "short"
-    expect(() =>
-      signServiceToken({ userId: "u", workspaceId: "w", role: "ADMIN" })
-    ).toThrow()
+    expect(() => signServiceToken({ userId: "u", workspaceId: "w", role: "ADMIN" })).toThrow()
   })
 
   it("rejects token with valid signature but missing payload fields", () => {
     const secret = TEST_SECRET
     const malformedPayload = { userId: "u" } // missing workspaceId, role, issuedAt, expiresAt
     const payloadEncoded = Buffer.from(JSON.stringify(malformedPayload)).toString("base64url")
-    const signature = require("node:crypto").createHmac("sha256", secret).update(payloadEncoded).digest()
+    const signature = require("node:crypto")
+      .createHmac("sha256", secret)
+      .update(payloadEncoded)
+      .digest()
     const signatureEncoded = signature.toString("base64url")
     const token = `lst.${payloadEncoded}.${signatureEncoded}`
 

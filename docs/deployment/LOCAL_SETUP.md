@@ -26,11 +26,19 @@ pnpm install --frozen-lockfile
 
 Set a real local `BETTER_AUTH_SECRET` in `.env`. When using Compose, set `REDIS_URL` to the password-protected local endpoint shown in `.env.example`.
 
+The web app expects `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_MARKETING_URL` (and optionally `PORT`) in `apps/web/.env`:
+
+```bash
+cp apps/web/.env.example apps/web/.env
+```
+
 Next.js production builds read required values from `process.env`; the root `.env` is not loaded automatically for page-data collection. Before `pnpm build`, either export the required variables or copy the local file for the web app:
 
 ```bash
 cp .env apps/web/.env
 ```
+
+The dashboard can run without evidence storage, but any scan that produces PoC or code-location evidence requires `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and `S3_REGION`. Evidence persistence fails closed when these values are absent or upload fails.
 
 ## 2. Start Postgres and Redis
 
@@ -49,17 +57,18 @@ The local services listen only on `127.0.0.1:5432` and `127.0.0.1:6379`.
 pnpm dev
 ```
 
-The dashboard is available at `http://localhost:3000`. Before submitting a pull request, run:
+The dashboard is available at `http://localhost:3001` (set `PORT` in `apps/web/.env` to change it). Before submitting a pull request, run:
 
 ```bash
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:e2e
 pnpm build
 git diff --check
 ```
 
-The current source suite is 607 tests in 48 files; treat the command output, not a hard-coded count, as authoritative.
+The current source suite is 625 Vitest tests in 56 files plus 2 Chromium E2E tests; treat command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ## 4. Run the marketing site
 
@@ -89,6 +98,35 @@ docker compose exec worker lyrashield --version
 ```
 
 The worker image consumes the sibling engine source through its named Docker build context. It exits before sandbox setup if `LYRASHIELD_LLM` or `LLM_API_KEY` is missing.
+
+For Azure OpenAI, use the `azure/` prefix and endpoint or the Azure-specific variables:
+
+```bash
+LYRASHIELD_LLM="azure/gpt-5.6-terra"
+LLM_API_KEY="<azure-key>"
+LLM_API_BASE="https://<resource>.openai.azure.com"
+# Optional:
+LLM_API_VERSION="v1"
+```
+
+Or:
+
+```bash
+LYRASHIELD_LLM="azure/gpt-5.6-terra"
+AZURE_OPENAI_API_KEY="<azure-key>"
+AZURE_OPENAI_ENDPOINT="https://<resource>.openai.azure.com"
+AZURE_API_VERSION="v1"
+```
+
+For Azure AI project / serverless endpoints, use the `azure_ai/` prefix with the **inference base URL** (not the project API path):
+
+```bash
+LYRASHIELD_LLM="azure_ai/gpt-5.6-terra"
+AZURE_AI_API_KEY="<azure-key>"
+AZURE_AI_API_BASE="https://<resource>.services.ai.azure.com"
+# Optional:
+AZURE_API_VERSION="v1"
+```
 
 For engine work on the host:
 

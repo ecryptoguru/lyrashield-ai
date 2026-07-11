@@ -4,7 +4,16 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Plus, FolderKanban, Bug, Crosshair, Radar } from "lucide-react"
-import { Button, Badge, EmptyState, FormField, Input, Textarea, Spinner, LoadMore } from "@lyrashield/ui"
+import {
+  Button,
+  Badge,
+  EmptyState,
+  FormField,
+  Input,
+  Textarea,
+  Spinner,
+  LoadMore,
+} from "@lyrashield/ui"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
 
 interface Project {
@@ -18,7 +27,15 @@ interface Project {
   findingCount: number
 }
 
-export function ProjectsClient({ workspaceId, initialData, initialNextCursor }: { workspaceId: string; initialData?: Project[]; initialNextCursor?: string | null }) {
+export function ProjectsClient({
+  workspaceId,
+  initialData,
+  initialNextCursor,
+}: {
+  workspaceId: string
+  initialData?: Project[]
+  initialNextCursor?: string | null
+}) {
   const router = useRouter()
   const [projects, setProjects] = useState<Project[]>(initialData ?? [])
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor ?? null)
@@ -71,15 +88,18 @@ export function ProjectsClient({ workspaceId, initialData, initialNextCursor }: 
     }
   }
 
-  const loadMore = useCallback(async (cursor: string) => {
-    return apiGetPaginated<Project>(`/api/projects`, { workspaceId, cursor })
-  }, [workspaceId])
+  const loadMore = useCallback(
+    async (cursor: string) => {
+      return apiGetPaginated<Project>(`/api/projects`, { workspaceId, cursor })
+    },
+    [workspaceId]
+  )
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
         <Spinner className="h-6 w-6" />
-        <p className="text-sm text-muted-foreground">Loading projects...</p>
+        <p className="text-muted-foreground text-sm">Loading projects...</p>
       </div>
     )
   }
@@ -87,7 +107,9 @@ export function ProjectsClient({ workspaceId, initialData, initialNextCursor }: 
   if (fetchError) {
     return (
       <div className="flex flex-col items-center justify-center p-12">
-        <p className="mb-4 text-sm text-destructive" role="alert">{fetchError}</p>
+        <p className="text-destructive mb-4 text-sm" role="alert">
+          {fetchError}
+        </p>
         <Button variant="secondary" onClick={() => fetchProjects()}>
           Retry
         </Button>
@@ -100,7 +122,9 @@ export function ProjectsClient({ workspaceId, initialData, initialNextCursor }: 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Organize your scan targets and findings</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Organize your scan targets and findings
+          </p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} className="shrink-0">
           <Plus className="h-4 w-4" aria-hidden="true" />
@@ -109,10 +133,16 @@ export function ProjectsClient({ workspaceId, initialData, initialNextCursor }: 
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreate} className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <form
+          onSubmit={handleCreate}
+          className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6"
+        >
           <h2 className="mb-4 text-lg font-semibold">Create Project</h2>
           {error && (
-            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+            <div
+              className="bg-destructive/10 text-destructive mb-4 rounded-md p-3 text-sm"
+              role="alert"
+            >
               {error}
             </div>
           )}
@@ -146,10 +176,14 @@ export function ProjectsClient({ workspaceId, initialData, initialNextCursor }: 
             <Button type="submit" disabled={creating}>
               {creating ? "Creating..." : "Create"}
             </Button>
-            <Button type="button" variant="secondary" onClick={() => {
-              setShowForm(false)
-              setError(null)
-            }}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setShowForm(false)
+                setError(null)
+              }}
+            >
               Cancel
             </Button>
           </div>
@@ -174,16 +208,18 @@ export function ProjectsClient({ workspaceId, initialData, initialNextCursor }: 
             <Link
               key={project.id}
               href={`/dashboard/targets?projectId=${project.id}`}
-              className="group block rounded-xl border bg-card p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              className="group bg-card block rounded-xl border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
             >
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="font-semibold">{project.name}</h3>
-                <Badge variant={project.riskScore > 0 ? "warning" : "muted"}>Risk: {project.riskScore}</Badge>
+                <Badge variant={project.riskScore > 0 ? "warning" : "muted"}>
+                  Risk: {project.riskScore}
+                </Badge>
               </div>
               {project.description && (
-                <p className="mb-4 text-sm text-muted-foreground">{project.description}</p>
+                <p className="text-muted-foreground mb-4 text-sm">{project.description}</p>
               )}
-              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+              <div className="text-muted-foreground flex flex-wrap gap-3 text-sm">
                 <span className="flex items-center gap-1">
                   <Crosshair className="h-3 w-3" aria-hidden="true" />
                   {project.targetCount} targets
@@ -205,7 +241,7 @@ export function ProjectsClient({ workspaceId, initialData, initialNextCursor }: 
       <LoadMore
         cursor={nextCursor}
         onLoadMore={loadMore}
-        onItems={(items) => setProjects((prev) => [...prev, ...items as Project[]])}
+        onItems={(items) => setProjects((prev) => [...prev, ...(items as Project[])])}
         onNextCursor={setNextCursor}
       />
     </div>

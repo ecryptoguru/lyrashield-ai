@@ -60,9 +60,7 @@ describe("RLS helpers", () => {
       const { prisma } = await import("./client")
       vi.mocked(prisma.$transaction).mockRejectedValueOnce(new Error("SET LOCAL failed"))
 
-      await expect(
-        withWorkspaceRLS("ws-1", vi.fn())
-      ).rejects.toThrow("SET LOCAL failed")
+      await expect(withWorkspaceRLS("ws-1", vi.fn())).rejects.toThrow("SET LOCAL failed")
     })
   })
 

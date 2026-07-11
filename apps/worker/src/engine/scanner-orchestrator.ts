@@ -2,7 +2,12 @@
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "./output-parser"
 import { generateDedupeKey } from "./output-parser"
-import { normalizeFindings, filterFalsePositives, getFindingStats, type NormalizedFinding } from "./normalizer"
+import {
+  normalizeFindings,
+  filterFalsePositives,
+  getFindingStats,
+  type NormalizedFinding,
+} from "./normalizer"
 import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
@@ -36,10 +41,7 @@ export interface ScannerOrchestratorResult {
   filteredFalsePositives: number
 }
 
-async function runScaScan(
-  scanId: string,
-  workspaceDir: string,
-): Promise<EngineVulnerability[]> {
+async function runScaScan(scanId: string, workspaceDir: string): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting SCA scan phase", { scanId })
     const findings = await scanSca({ repoPath: workspaceDir, workspaceDir })
@@ -56,7 +58,7 @@ async function runScaScan(
 
 async function runSecretsScan(
   scanId: string,
-  workspaceDir: string,
+  workspaceDir: string
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting secrets scan phase", { scanId })
@@ -75,7 +77,7 @@ async function runSecretsScan(
 async function runUrlScan(
   scanId: string,
   targetUrl: string,
-  workspaceDir: string,
+  workspaceDir: string
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting URL scan phase", { scanId, targetUrl })
@@ -92,7 +94,7 @@ async function runUrlScan(
 }
 
 export async function runScannerOrchestrator(
-  config: ScannerOrchestratorConfig,
+  config: ScannerOrchestratorConfig
 ): Promise<ScannerOrchestratorResult> {
   const { scanId, targetId, target, engineFindings, workspaceDir } = config
 
@@ -112,7 +114,9 @@ export async function runScannerOrchestrator(
   const [scaRaw, secretsRaw, urlRaw] = await Promise.all([
     runScaScan(scanId, absWorkspace),
     runSecretsScan(scanId, absWorkspace),
-    targetUrl ? runUrlScan(scanId, targetUrl, absWorkspace) : Promise.resolve([] as EngineVulnerability[]),
+    targetUrl
+      ? runUrlScan(scanId, targetUrl, absWorkspace)
+      : Promise.resolve([] as EngineVulnerability[]),
   ])
 
   // Normalize each category separately with the dedupe key function
@@ -128,7 +132,8 @@ export async function runScannerOrchestrator(
   const urlFiltered = filterFalsePositives(urlNormalized)
 
   const filteredFalsePositives =
-    (engineNormalized.length - engineFiltered.length) +
+    engineNormalized.length -
+    engineFiltered.length +
     (scaNormalized.length - scaFiltered.length) +
     (secretsNormalized.length - secretsFiltered.length) +
     (urlNormalized.length - urlFiltered.length)
@@ -146,7 +151,10 @@ export async function runScannerOrchestrator(
     }
     const existingRank = SEVERITY_RANK[existing.normalizedSeverity] ?? 0
     const newRank = SEVERITY_RANK[finding.normalizedSeverity] ?? 0
-    if (newRank > existingRank || (newRank === existingRank && finding.confidenceScore > existing.confidenceScore)) {
+    if (
+      newRank > existingRank ||
+      (newRank === existingRank && finding.confidenceScore > existing.confidenceScore)
+    ) {
       merged.set(finding.dedupeKey, finding)
     }
   }

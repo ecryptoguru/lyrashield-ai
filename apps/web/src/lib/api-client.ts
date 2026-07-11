@@ -4,7 +4,7 @@ export class ApiError extends Error {
   constructor(
     public code: string,
     message: string,
-    public status: number,
+    public status: number
   ) {
     super(message)
     this.name = "ApiError"
@@ -14,18 +14,42 @@ export class ApiError extends Error {
 interface FetchOptions extends RequestInit {
   /** Parse the response as JSON and return `data` on success, throw on failure. */
   parseJson?: boolean
+  /** Request timeout in milliseconds. Defaults to 30 seconds. */
+  timeout?: number
 }
 
-async function request<T>(
-  url: string,
-  options: FetchOptions = {},
-): Promise<T> {
-  const { parseJson = true, ...init } = options
+const DEFAULT_TIMEOUT_MS = 30_000
+
+async function request<T>(url: string, options: FetchOptions = {}): Promise<T> {
+  const { parseJson = true, timeout = DEFAULT_TIMEOUT_MS, ...init } = options
+
+  const controller = new AbortController()
+  let timedOut = false
+  const timeoutId = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeout)
+
+  const onParentAbort = () => controller.abort()
+  if (init.signal) {
+    if (init.signal.aborted) controller.abort()
+    else init.signal.addEventListener("abort", onParentAbort, { once: true })
+  }
+
   let res: Response
   try {
-    res = await fetch(url, init)
-  } catch {
+    res = await fetch(url, { ...init, signal: controller.signal })
+  } catch (err) {
+    if (typeof err === "object" && err !== null && "name" in err && err.name === "AbortError") {
+      if (!timedOut) throw new ApiError("ABORTED", "Request was cancelled", 0)
+      throw new ApiError("TIMEOUT", `Request timed out after ${timeout}ms`, 0)
+    }
     throw new ApiError("NETWORK_ERROR", "Network request failed", 0)
+  } finally {
+    clearTimeout(timeoutId)
+    if (init.signal) {
+      init.signal.removeEventListener("abort", onParentAbort)
+    }
   }
 
   if (!parseJson) {
@@ -55,11 +79,7 @@ export async function apiGet<T>(url: string, options?: FetchOptions): Promise<T>
   return request<T>(url, { ...options, method: "GET" })
 }
 
-export async function apiPost<T>(
-  url: string,
-  body?: unknown,
-  options?: FetchOptions,
-): Promise<T> {
+export async function apiPost<T>(url: string, body?: unknown, options?: FetchOptions): Promise<T> {
   return request<T>(url, {
     ...options,
     method: "POST",
@@ -68,11 +88,7 @@ export async function apiPost<T>(
   })
 }
 
-export async function apiPatch<T>(
-  url: string,
-  body?: unknown,
-  options?: FetchOptions,
-): Promise<T> {
+export async function apiPatch<T>(url: string, body?: unknown, options?: FetchOptions): Promise<T> {
   return request<T>(url, {
     ...options,
     method: "PATCH",
@@ -92,7 +108,7 @@ export async function apiDelete<T>(url: string, options?: FetchOptions): Promise
 export async function apiGetPaginated<T>(
   url: string,
   params?: Record<string, string | undefined>,
-  options?: FetchOptions,
+  options?: FetchOptions
 ): Promise<PaginatedResponse<T>> {
   const searchParams = new URLSearchParams()
   if (params) {
@@ -104,31 +120,5 @@ export async function apiGetPaginated<T>(
   }
   const fullUrl = searchParams.toString() ? `${url}?${searchParams}` : url
 
-  let res: Response
-  try {
-    res = await fetch(fullUrl, { ...options, method: "GET" })
-  } catch {
-    throw new ApiError("NETWORK_ERROR", "Network request failed", 0)
-  }
-
-  let json: ApiResponse<T[]> & { nextCursor?: string | null; total?: number }
-  try {
-    json = await res.json()
-  } catch {
-    throw new ApiError("PARSE_ERROR", `Failed to parse response (status ${res.status})`, res.status)
-  }
-
-  if (!json.success || json.data === undefined) {
-    throw new ApiError(
-      json.error?.code ?? "UNKNOWN_ERROR",
-      json.error?.message ?? "An unknown error occurred",
-      res.status,
-    )
-  }
-
-  return {
-    items: json.data,
-    nextCursor: json.nextCursor ?? null,
-    total: json.total,
-  }
+  return request<PaginatedResponse<T>>(fullUrl, { ...options, method: "GET" })
 }

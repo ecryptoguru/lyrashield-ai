@@ -60,7 +60,14 @@ vi.mock("../engine/scanner-orchestrator", () => ({
     engineFindings: [],
     scaFindings: [],
     secretsFindings: [],
-    stats: { total: 0, bySeverity: {}, byConfidence: { high: 0, medium: 0, low: 0 }, verified: 0, unverified: 0, falsePositiveRisk: { low: 0, medium: 0, high: 0 } },
+    stats: {
+      total: 0,
+      bySeverity: {},
+      byConfidence: { high: 0, medium: 0, low: 0 },
+      verified: 0,
+      unverified: 0,
+      falsePositiveRisk: { low: 0, medium: 0, high: 0 },
+    },
     filteredFalsePositives: 0,
   }),
 }))
@@ -109,8 +116,13 @@ describe("processScanJob", () => {
     } as never)
     vi.mocked(interpretExitCode).mockImplementation((code: number) => {
       if (code === 0) return { status: "COMPLETED" as const, category: "SUCCESS", message: "" }
-      if (code === 2) return { status: "COMPLETED" as const, category: "VULNERABILITIES_FOUND", message: "" }
-      return { status: "FAILED" as const, category: "ENGINE_ERROR", message: `Engine error (code ${code})` }
+      if (code === 2)
+        return { status: "COMPLETED" as const, category: "VULNERABILITIES_FOUND", message: "" }
+      return {
+        status: "FAILED" as const,
+        category: "ENGINE_ERROR",
+        message: `Engine error (code ${code})`,
+      }
     })
     vi.mocked(persistFindings).mockResolvedValue([])
     vi.mocked(updateScanStatus).mockResolvedValue({ id: "scan-1" } as never)
@@ -122,7 +134,14 @@ describe("processScanJob", () => {
       engineFindings: [],
       scaFindings: [],
       secretsFindings: [],
-      stats: { total: 0, bySeverity: {}, byConfidence: { high: 0, medium: 0, low: 0 }, verified: 0, unverified: 0, falsePositiveRisk: { low: 0, medium: 0, high: 0 } },
+      stats: {
+        total: 0,
+        bySeverity: {},
+        byConfidence: { high: 0, medium: 0, low: 0 },
+        verified: 0,
+        unverified: 0,
+        falsePositiveRisk: { low: 0, medium: 0, high: 0 },
+      },
       filteredFalsePositives: 0,
     } as never)
   })
@@ -135,13 +154,19 @@ describe("processScanJob", () => {
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "PREFLIGHT")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "RUNNING")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
-    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "COMPLETED", expect.objectContaining({
-      summary: "Scan completed with 0 findings",
-    }))
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "COMPLETED",
+      expect.objectContaining({
+        summary: "Scan completed with 0 findings",
+      })
+    )
   })
 
   it("keeps a completed scan completed when a completion notification fails", async () => {
-    vi.mocked(notifyScanCompleted).mockRejectedValueOnce(new Error("notification provider unavailable"))
+    vi.mocked(notifyScanCompleted).mockRejectedValueOnce(
+      new Error("notification provider unavailable")
+    )
 
     const result = await processScanJob(mockJob)
 
@@ -256,9 +281,7 @@ describe("processScanJob", () => {
   })
 
   it("persists findings from engine output", async () => {
-    const vulns = [
-      { id: "v1", title: "XSS", severity: "high", timestamp: "now" },
-    ]
+    const vulns = [{ id: "v1", title: "XSS", severity: "high", timestamp: "now" }]
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 2,
       output: {
@@ -276,12 +299,14 @@ describe("processScanJob", () => {
 
     await processScanJob(mockJob)
 
-    expect(runScannerOrchestrator).toHaveBeenCalledWith(expect.objectContaining({
-      scanId: "scan-1",
-      targetId: "target-1",
-      engineFindings: vulns,
-      workspaceDir: "lyrashield_runs/scan-1",
-    }))
+    expect(runScannerOrchestrator).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanId: "scan-1",
+        targetId: "target-1",
+        engineFindings: vulns,
+        workspaceDir: "lyrashield_runs/scan-1",
+      })
+    )
     expect(persistFindings).toHaveBeenCalledWith({
       scanId: "scan-1",
       workspaceId: "ws-1",

@@ -1,25 +1,19 @@
-> ⚠️ **2026-07 UPDATE:** This PRD has an authoritative engineering addendum — see **"PART B — 2026-07 Research & Code-Grounded Engineering Update"** at the end of this file. **Current build status: Sprints 0–7 + 2.5 + 3.5 + 7.6 complete + Batches 1–4 complete + Round-2 hardening + review fixes + AI pipeline audit + Agent Action Layer** (see PART B §B0 for the code-grounded reality, §B13 for the deep-audit backlog, and §B13.6 for the backlog→sprint mapping with current status). Where PART B conflicts with the original spec below, PART B is authoritative.
+> **CURRENT SOURCE OF TRUTH — 2026-07-12:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
-> ⚠️ **2026-07-11 CURRENT STATUS:** The repository is `github.com/ecryptoguru/lyrasec-ai`; internal `@lyrashield/*` scopes and `LYRASHIELD_*` variables remain intentionally unchanged. Sprints 0–7, the agent action layer, SCA/secrets/URL scanning, reports, notifications, schedules, MCP, the GitHub diff gate, and reliability hardening are complete. The current application gate is lint, typecheck, build, and **607 tests in 48 files**. Billing, enterprise features, Security Copilot, and visual security planning remain open. The marketing site is implemented but stays noindex until founder-approved production launch. See `codebase.md` §§28–31 and `NEXT-STEPS.md` for the current handoff.
-
-> ⚠️ **2026-07-10 UPDATE:** A focused deep-review remediation pass added tenant-bound agent actions and reports, server-persisted workspace selection, atomic scheduler claims and target scan creation, cancellation-safe scan retries/subprocess shutdown, notification fault isolation, DNS-and-redirect validation for URL scanning, nested-workspace SCA discovery, and refreshed scan-detail findings. **597 source tests across 47 files**, lint, typecheck, and production build pass. This is a defense-in-depth improvement; a transport-level egress proxy with DNS pinning remains the durable deployment control described in §B2.2.
->
-> ⚠️ **2026-07-10 ENGINE UPDATE:** Local Compose now builds `lyrashield-engine` 1.0.4 from the sibling repository into a dedicated worker target using its corrected frozen lockfile. The worker has the CLI on `PATH` and Docker access for sandbox launches. Missing model configuration fails before sandbox setup. Offline engine gates pass: 62 tests, Ruff, formatting, headless mypy, and Bandit. See `codebase.md` §29.
->
-> ⚠️ **2026-07-11 THIN-FORK RELEASE-GATE UPDATE:** Engine [PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1) is merged. The fork records upstream baseline `7b639505fecf20a2d9e356f96bd91470aa828182`; its review-only workflow verifies ancestry, opens a PR when needed, and never auto-merges, force-pushes, or resolves conflicts. The adapter maps product variables only when explicit `STRIX_*` variables are absent, defaults telemetry off, and supports both `strix_runs` and `lyrashield_runs`. Offline engine proof is 155 tests plus Ruff, formatting, headless mypy, and Bandit. The worker image passed `lyrashield --version` (`1.0.4.post1`) and missing-model validation before any sandbox pull. No sandbox execution or controlled scan is claimed; it requires authorized model credentials and a target. See `codebase.md` §30.
+> The canonical repositories are `github.com/ecryptoguru/lyrasec-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, **625 Vitest tests in 56 files**, and **2 Playwright tests**. Core auth (with email verification), tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, and the GitHub diff gate are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, and marketing gates.
 
 ---
 
 # Developer-Ready PRD, Architecture Doc, and Sprint Backlog
 
-## Product: LyraShield — AI AppSec Agent Platform Built on LyraShield OSS
+## Product: LyraSec AI — Agent-Native Application Security Platform
 
 Version: 1.0
 Primary stack: Next.js, TypeScript, Better Auth, Prisma, PostgreSQL, Redis, LyraShield Worker Runtime
 Product phases:
 
-* Phase 1: Vibe coders, solopreneurs, startups, agencies, small teams
-* Phase 2: Enterprise, regulated teams, large engineering orgs, security teams
+- Phase 1: Vibe coders, solopreneurs, startups, agencies, small teams
+- Phase 2: Enterprise, regulated teams, large engineering orgs, security teams
 
 ---
 
@@ -27,22 +21,22 @@ Product phases:
 
 ## 1.1 Product Name
 
-Working name: **LyraShield**
+Current public working name: **LyraSec AI**
 
 Alternative names:
 
-* LyraSec
-* Lyra AppSec Agent
-* LyraShield AI
-* Lyra Security Agent
+- LyraSec
+- Lyra AppSec Agent
+- LyraShield AI
+- Lyra Security Agent
 
-Recommended name: **LyraShield**
+Internal compatibility name: **LyraShield** (`@lyrashield/*`, `LYRASHIELD_*`, and the engine CLI). Do not rename these surfaces until trademark and migration decisions are approved.
 
 ## 1.2 Product Promise
 
 For small teams:
 
-> Connect a GitHub repo or paste an app URL. LyraShield safely scans it, verifies real vulnerabilities, explains the risk, and helps create fix PRs.
+> Connect a GitHub repo or paste an app URL. LyraSec AI safely scans it, explains evidence-backed risks, and helps create fix PRs and retest them.
 
 For enterprises:
 
@@ -148,22 +142,22 @@ Upgrade plan
 
 Primary:
 
-* vibe coders
-* AI app builders
-* indie hackers
-* solopreneurs
-* agencies
-* small SaaS teams
-* early-stage startups
-* Web3 + AI app builders
+- vibe coders
+- AI app builders
+- indie hackers
+- solopreneurs
+- agencies
+- small SaaS teams
+- early-stage startups
+- Web3 + AI app builders
 
 Secondary:
 
-* fractional CTOs
-* dev shops
-* startup accelerators
-* technical founders
-* small compliance-conscious teams
+- fractional CTOs
+- dev shops
+- startup accelerators
+- technical founders
+- small compliance-conscious teams
 
 ## 3.3 Phase 1 Jobs To Be Done
 
@@ -224,56 +218,58 @@ Shareable report link
 
 ## 3.4 Phase 1 MVP Features
 
+This is the product cutline, not a completion claim. See Part C for the current implementation matrix and release gates.
+
 Must-have:
 
-* Better Auth sign-up/sign-in
-* GitHub OAuth
-* GitHub App installation
-* workspace creation
-* project creation
-* repo target creation
-* URL target creation
-* safe preflight check
-* scan creation
-* LyraShield scan engine execution
-* live scan timeline
-* normalized finding storage
-* finding detail page
-* fix proposal generation
-* GitHub PR creation
-* retest
-* basic reports
-* email notifications
-* Slack or Discord notifications
-* billing foundation
-* usage limits
-* basic team invites
-* basic roles: owner, admin, member, viewer
+- Better Auth sign-up/sign-in
+- GitHub OAuth
+- GitHub App installation
+- workspace creation
+- project creation
+- repo target creation
+- URL target creation
+- safe preflight check
+- scan creation
+- LyraShield scan engine execution
+- live scan timeline
+- normalized finding storage
+- finding detail page
+- fix proposal generation
+- GitHub PR creation
+- retest
+- basic reports
+- email notifications
+- Slack or Discord notifications
+- billing foundation
+- usage limits
+- basic team invites
+- basic roles: owner, admin, member, viewer
 
 Should-have:
 
-* Linear integration
-* Jira integration
-* OpenAPI upload
-* shareable report link
-* scheduled weekly scans
-* scan history
-* dashboard risk score
-* agent assistant for explaining findings
+- Linear integration
+- Jira integration
+- OpenAPI upload
+- shareable report link
+- scheduled weekly scans
+- scan history
+- dashboard risk score
+- agent assistant for explaining findings
 
 Not in Phase 1:
 
-* SAML SSO
-* SCIM
-* VPC deployment
-* self-hosted deployment
-* cloud account scanning
-* ServiceNow
-* SIEM export
-* advanced policy engine
-* advanced compliance packs
-* full enterprise RBAC
-* human-validated pentest workflow
+- SAML SSO
+- SCIM
+- VPC deployment
+- self-hosted deployment
+- cloud account scanning
+- ServiceNow
+- SIEM export
+- advanced policy engine
+- advanced compliance packs
+- full enterprise RBAC
+- human-validated pentest workflow
 
 ---
 
@@ -309,15 +305,15 @@ Integrations
 
 Primary:
 
-* AppSec teams
-* CISOs
-* security engineering teams
-* platform engineering teams
-* regulated SaaS companies
-* fintech teams
-* healthcare teams
-* large engineering orgs
-* MSPs and MSSPs
+- AppSec teams
+- CISOs
+- security engineering teams
+- platform engineering teams
+- regulated SaaS companies
+- fintech teams
+- healthcare teams
+- large engineering orgs
+- MSPs and MSSPs
 
 ## 3.7 Enterprise Jobs To Be Done
 
@@ -383,40 +379,40 @@ Drata
 
 Must-have:
 
-* SAML SSO
-* OIDC SSO
-* SCIM provisioning
-* advanced RBAC
-* policy engine
-* production scan approval
-* audit logs
-* evidence retention controls
-* BYOK
-* BYOM
-* private worker
-* VPC deployment
-* self-hosted Helm deployment
-* GitHub Enterprise
-* GitLab self-managed
-* Azure DevOps
-* Jira
-* Slack
-* Microsoft Teams
-* ServiceNow
-* compliance reports
-* SIEM export
-* admin dashboard
+- SAML SSO
+- OIDC SSO
+- SCIM provisioning
+- advanced RBAC
+- policy engine
+- production scan approval
+- audit logs
+- evidence retention controls
+- BYOK
+- BYOM
+- private worker
+- VPC deployment
+- self-hosted Helm deployment
+- GitHub Enterprise
+- GitLab self-managed
+- Azure DevOps
+- Jira
+- Slack
+- Microsoft Teams
+- ServiceNow
+- compliance reports
+- SIEM export
+- admin dashboard
 
 Should-have:
 
-* cloud account scanning
-* IaC scanning
-* container scanning dashboard
-* ASPM-style risk graph
-* data residency controls
-* private evidence storage
-* human-validated pentest add-on
-* MSP multi-client console
+- cloud account scanning
+- IaC scanning
+- container scanning dashboard
+- ASPM-style risk graph
+- data residency controls
+- private evidence storage
+- human-validated pentest add-on
+- MSP multi-client console
 
 ---
 
@@ -489,24 +485,33 @@ Expansion revenue
 
 ## 5.1 Monorepo Stack
 
+Current:
+
 ```txt
 Turborepo
 pnpm
 TypeScript
-Next.js App Router
+Next.js 16 App Router + React 19
 TailwindCSS
-shadcn/ui
 Better Auth
 Prisma
 PostgreSQL
 Redis
 BullMQ
 Docker
-Azure Blob Storage / S3-compatible storage
-Azure Key Vault / Infisical / AWS Secrets Manager
-OpenTelemetry
-Sentry
-Langfuse or Helicone for LLM observability
+Astro 7
+Cloudflare Workers + D1
+Python engine CLI through a subprocess boundary
+```
+
+Production choices still to provision or finalize:
+
+```txt
+S3-compatible evidence/object storage
+Managed secrets service
+Error monitoring and product analytics
+Transport-level scan egress control
+Billing provider and usage metering
 ```
 
 ## 5.2 App Structure
@@ -514,31 +519,25 @@ Langfuse or Helicone for LLM observability
 ```txt
 lyrashield/
   apps/
-    web/
-    api/
-    worker/
+    web/          Next.js 16 product app and REST route handlers
+    worker/       BullMQ scan worker, schedulers, scanners, engine runner
+    agent/        Headless Agent Action Layer and approval-aware actions
+    marketing/    Astro 7 site on Cloudflare Workers with D1 waitlist
   packages/
-    db/
     auth/
-    ui/
     config/
-    types/
+    db/
     integrations/
-    security/
-    billing/
     logger/
-  infra/
-    docker/
-    terraform/
-    helm/
-    github-actions/
-  docs/
-    prd/
-    architecture/
-    api/
+    mcp/
     security/
-    runbooks/
+    types/
+    ui/
+  docs/
+    deployment/
 ```
+
+There is no separate `apps/api`: Next.js route handlers in `apps/web` provide the product API. There is no `packages/billing` yet; billing remains an explicit Phase 1 gap. Terraform, Helm, and a dedicated infrastructure tree are future deployment work, not current repository structure.
 
 ## 5.3 Package Responsibilities
 
@@ -570,37 +569,34 @@ packages/types
 
 packages/integrations
   GitHub App client
-  GitLab client
-  Slack client
-  Jira client
-  Linear client
+  Slack and Discord delivery
   email client
 
 packages/security
-  RBAC
-  policy checks
-  scope validation
-  redaction utilities
-  secret masking
-  audit helpers
+  shared SSRF validation
+  pinned-address safe fetch helpers
 
-packages/billing
-  Polar integration
-  Razorpay integration
-  plan definitions
-  usage metering
+packages/mcp
+  MCP tools and stdio transport
+  approval-aware API calls
 
 packages/logger
   structured logging
-  OpenTelemetry setup
-  Sentry setup
+  secret and PII redaction
 
 packages/config
   shared ESLint config
   shared TypeScript config
-  shared Tailwind config
   environment variable schemas
-  feature flags
+
+apps/agent
+  signed service tokens
+  action registry, permissions, approval gate, audit logging
+
+apps/marketing
+  landing page and blog
+  Cloudflare D1 waitlist and rate limiting
+  canonical, robots, sitemap, RSS, JSON-LD, and noindex launch controls
 ```
 
 ---
@@ -609,18 +605,18 @@ packages/config
 
 ## 6.0 Scan Engine Integration Strategy
 
-LyraShield is built on top of the [usestrix/strix](https://github.com/usestrix/strix) open-source AI pentesting CLI.
+The scan engine is a separate Python repository at `ecryptoguru/lyrashield-engine`. It is a **thin compatibility fork** over the recorded upstream Strix baseline `7b639505fecf20a2d9e356f96bd91470aa828182`, not a repository-wide rebrand.
 
-**Decision: Fork + Rebrand + Wrap**
+**Decision: Thin adapter + subprocess boundary + review-only upstream sync**
 
 ```txt
-1. Fork usestrix/strix into lyraShield/lyrashield-engine (separate GitHub repo)
-2. Rename all Strix references to LyraShield inside the fork
-3. Rename CLI binary from strix to lyrashield
-4. Pin a version tag for reproducible builds
-5. Install the forked CLI in the worker Docker image
-6. Worker calls it as a subprocess: lyrashield -n --target ...
-7. Sync from upstream monthly: git merge upstream/main, resolve conflicts, rebrand
+1. Keep upstream source and STRIX_* contracts intact wherever possible.
+2. Expose the lyrashield CLI through lyrashield_adapter/.
+3. Map LYRASHIELD_* variables only when the corresponding STRIX_* value is unset.
+4. Default upstream telemetry off.
+5. Build the locked engine into the worker image from the sibling canonical repo.
+6. Accept current strix_runs and legacy lyrashield_runs artifact layouts.
+7. Sync upstream only through ancestry-checked, reviewable PRs; never auto-merge or force-push.
 ```
 
 Architecture boundaries:
@@ -630,8 +626,8 @@ lyrashield-engine (separate repo, Python)
   - AI pentesting agents
   - Vulnerability scanning
   - Exploit validation
-  - CLI interface
-  - Owned by LyraShield team, synced from Strix upstream
+  - Upstream-compatible CLI internals
+  - LyraShield compatibility adapter
 
 lyrashield (this monorepo, TypeScript)
   - Web platform (Next.js)
@@ -639,69 +635,52 @@ lyrashield (this monorepo, TypeScript)
   - Multi-tenant workspace + RBAC
   - Finding management + normalization
   - Fix proposals + GitHub PRs
-  - Billing + usage limits
+  - Reports, retests, notifications, and schedules
+  - Agent actions, approvals, and MCP
   - Policy enforcement
-  - Reports + compliance
+  - Billing + usage limits (planned, not implemented)
 ```
 
 The worker wraps the scan engine as a CLI subprocess. It does NOT import engine internals. Communication is via:
-- **Input**: CLI flags, rules-of-engagement file, environment variables (LLM API key)
-- **Output**: stdout (streamed as ScanEvents), JSON findings file (parsed by normalizer), exit code
+
+- **Input**: CLI flags, rules-of-engagement file, allowlisted environment variables, and authorized model credentials
+- **Output**: bounded stdout/stderr, `run.json`/`vulnerabilities.json` artifacts, and an interpreted exit code
 
 This separation allows:
-- Full modification of the engine (we own the fork)
+
 - Clean language boundary (Python engine, TypeScript platform)
-- Upstream sync path (merge from Strix)
+- Small, auditable product-specific divergence
+- Reviewable upstream synchronization
 - Independent versioning and release cycles
-- Custom output format and branded CLI
+- A stable branded CLI without renaming upstream internals
 
 ### Engine Repo Status
 
-Status: **Forked, rebranded, and ready for upgrades**
+Status: **Thin-fork release gate passed offline; controlled scan still pending**
 
 ```txt
-Repo: lyraShield/lyrashield-engine (separate GitHub repo)
+Repo: ecryptoguru/lyrashield-engine
 Upstream remote: https://github.com/usestrix/strix.git
-Commits: 2 (rebrand + telemetry disable + upgrade roadmap)
-Zero "Strix" references remaining
-CLI binary renamed: strix → lyrashield
+Recorded baseline: 7b639505fecf20a2d9e356f96bd91470aa828182
+Adapter version: 1.0.4.post1
+Offline proof: 155 tests, Ruff, formatting, headless mypy, Bandit
+Worker proof: image builds, lyrashield --version succeeds, missing model config exits before sandbox pull
 ```
 
 Telemetry:
 
 ```txt
-PostHog and Scarf telemetry turned off by default
-Env var: LYRASHIELD_TELEMETRY=false
+Upstream telemetry defaults to 0 through the adapter
+Explicit STRIX_* values take precedence over LYRASHIELD_* compatibility values
 ```
 
-Upgrade roadmap (UPGRADES.md in engine repo):
+Current release gates:
 
-```txt
-Priority 1 — Sprint 5 (Scan Engine MVP):
-  Structured JSON findings output (matching LyraShield's Finding schema)
-  Exit code mapping (0-9 for different outcomes)
-  Event streaming via stdout JSON lines
-  Policy enforcement hooks (--policy-file)
-
-Priority 2 — Sprint 6 (Findings Normalization):
-  Deterministic dedupe key generation
-  Evidence packaging (HTTP req/res, screenshots)
-  CVSS auto-scoring
-
-Priority 3 — Sprint 7 (Fix Proposals):
-  Structured patch output with safety score
-
-Priority 4 — Platform Enhancements:
-  Webhook callback support
-  Multi-target parallel orchestration
-  Custom skill loading from platform
-  Sandbox security hardening (seccomp, network isolation)
-```
-
-Next steps for engine:
-1. Push to GitHub: Create lyraShield/lyrashield-engine repo and push
-2. Start upgrading: Begin with Priority 1 items (structured JSON output, exit codes)
-3. Continue LyraShield platform: Build Sprint 3+ in the monorepo
+1. Configure a founder-authorized `LYRASHIELD_LLM` and `LLM_API_KEY`.
+2. Pin and inspect the production sandbox image by digest.
+3. Run one approved target through the full worker lifecycle and retain audit evidence.
+4. Add transport-level egress enforcement before untrusted multi-tenant scanning at scale.
+5. Keep `engine-NOTICE.md` current whenever fork divergence or third-party notices change.
 
 ## 6.1 Phase 1 Architecture
 
@@ -1753,11 +1732,11 @@ Every protected route must:
 Additional middleware requirements:
 
 ```txt
-Rate limiting: Per-user and per-IP rate limits on auth endpoints (sign-in, sign-up) and scan creation.
-  Use Redis-backed rate limiter (e.g. upstash/ratelimit).
-  Auth endpoints: 10 requests per minute per IP.
-  Scan creation: 5 requests per minute per user.
-  General API: 100 requests per minute per user.
+Rate limiting: Per-IP rate limits on auth endpoints (sign-in, sign-up) and general API routes.
+  Use Redis-backed rate limiter (e.g. upstash/ratelimit) in production; in-memory Map fallback in dev.
+  Auth endpoints: 5 requests per minute per IP.
+  General API: 30 requests per minute per IP.
+  Scan creation currently uses the general API rate limit.
 
 CORS: Configure Access-Control-Allow-Origin to only allow the web app origin.
   Do not use wildcard (*) in production.
@@ -2441,12 +2420,15 @@ Every scan must generate a rules file.
 ## Authorized Scope
 
 Target:
+
 - {{target}}
 
 Allowed Domains:
+
 - {{allowedDomains}}
 
 Blocked Paths:
+
 - {{blockedPaths}}
 
 ## Safety Rules
@@ -2466,6 +2448,7 @@ Blocked Paths:
 ## Output Requirements
 
 For each finding:
+
 - title
 - severity
 - confidence
@@ -3262,6 +3245,8 @@ documentation note
 
 ## Sprint 0: Repo and Foundation
 
+Status: **Core complete; Playwright E2E is implemented; billing remains deferred**
+
 Duration: 3–5 days
 
 Goal:
@@ -3318,6 +3303,8 @@ Build the initial LyraShield monorepo using Turborepo, pnpm, Next.js App Router,
 ---
 
 ## Sprint 1: Prisma Schema and Better Auth
+
+Status: **Complete; account deletion and GDPR-oriented anonymization are implemented with ownership guards**
 
 Duration: 1 week
 
@@ -3552,6 +3539,8 @@ Implement GitHub App integration for LyraShield. Include installation callback, 
 
 ## Sprint 4: Scan Orchestrator and Queue
 
+Status: **Complete**
+
 Duration: 1 week
 
 Goal:
@@ -3597,6 +3586,8 @@ Implement scan orchestration foundation using Prisma and BullMQ. Add scan creati
 
 ## Sprint 5: LyraShield Scan Engine MVP
 
+Status: **Integration complete; authorized controlled-scan release gate pending**
+
 Duration: 1–2 weeks
 
 Goal:
@@ -3640,6 +3631,8 @@ Build the LyraShield scan engine MVP. The worker should pull scan jobs, prepare 
 ---
 
 ## Sprint 6: Findings Normalization
+
+Status: **Complete**
 
 Duration: 1 week
 
@@ -3685,6 +3678,8 @@ Implement finding normalization for LyraShield scan outputs. Create parser, norm
 ---
 
 ## Sprint 7: Fix Proposal and GitHub PR Beta
+
+Status: **Complete**
 
 Duration: 1–2 weeks
 
@@ -3732,6 +3727,8 @@ Build Fix PR beta. From a verified finding, generate a minimal safe patch propos
 
 ## Sprint 8: Retest and Reports
 
+Status: **Complete**
+
 Duration: 1 week
 
 Goal:
@@ -3774,6 +3771,8 @@ Implement finding retest workflow and basic report generation. Retest should rer
 
 ## Sprint 9: Notifications and Scheduling
 
+Status: **Complete**
+
 Duration: 1 week
 
 Goal:
@@ -3815,6 +3814,8 @@ Implement Phase 1 notifications and scheduled scans. Add email, Slack, and optio
 ---
 
 ## Sprint 3.5: Agent Action Layer MVP
+
+Status: **Complete**
 
 Duration: 1 week
 
@@ -3863,6 +3864,8 @@ Create the Agent-Native action layer for LyraShield. Set up apps/agent as a head
 
 ## Sprint 5.5: Security Copilot Sidebar
 
+Status: **Not started**
+
 Duration: 1 week
 
 Goal:
@@ -3900,6 +3903,8 @@ Add the Agent-Native security copilot sidebar to the LyraShield dashboard. The s
 ---
 
 ## Sprint 7.5: Agent Approval Layer
+
+Status: **Complete**
 
 Duration: 3-5 days
 
@@ -3941,6 +3946,8 @@ Add human-in-the-loop approval gates to LyraShield Agent-Native actions. Gate cr
 
 ## Sprint 8.5: Visual Security Plan and Recap
 
+Status: **Not started**
+
 Duration: 1 week
 
 Goal:
@@ -3977,6 +3984,8 @@ Create visual security plan and recap skills for LyraShield. /security-plan gene
 ---
 
 ## Sprint 9.5: MCP Server for Coding Agents
+
+Status: **Core server complete; broader tool catalog and client setup documentation remain**
 
 Duration: 1-2 weeks
 
@@ -4022,6 +4031,8 @@ Expose LyraShield Agent-Native actions as MCP tools. Set up the MCP server at /_
 
 ## Sprint 10: Billing and Usage Limits
 
+Status: **Not started; principal self-serve launch blocker**
+
 Duration: 1 week
 
 Goal:
@@ -4064,6 +4075,8 @@ Build billing and usage metering for LyraShield. Use Polar for global payments a
 ---
 
 ## Sprint 11: Phase 1 Polish and Launch Readiness
+
+Status: **Partially complete; controlled scan, billing, egress, and production deployment gates remain**
 
 Duration: 1 week
 
@@ -4684,6 +4697,7 @@ Agent-Native's `defineAction()` exposes a single action across multiple surfaces
 Add an Agent-Native sidebar to every major page (Dashboard, Project, Target, Scan, Finding, Fix Proposal, Report, Policy, Audit Log). The agent should know the current page context.
 
 Examples:
+
 - On a finding page: "Explain this like I'm a founder", "Show the exact file I need to fix", "Generate a minimal safe patch"
 - On a scan page: "What is the agent doing now?", "Stop if it touches production data", "Summarize only confirmed risks"
 - On a policy page: "Create a safe production scan policy", "Block deep scans outside business hours"
@@ -4805,15 +4819,15 @@ export default defineAction({
     mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).default("SAFE"),
   }),
   needsApproval: async (args) => {
-    return args.mode === "DEEP";
+    return args.mode === "DEEP"
   },
   run: async (args, ctx) => {
     return await lyraApi.createScan({
       ...args,
       actorUserId: ctx.userId,
-    });
+    })
   },
-});
+})
 ```
 
 ### create-fix-pr action
@@ -4831,16 +4845,17 @@ export default defineAction({
     return await lyraApi.createFixPullRequest({
       ...args,
       actorUserId: ctx.userId,
-    });
+    })
   },
-});
+})
 ```
 
 ### explain-finding action
 
 ```ts
 export default defineAction({
-  description: "Explain a verified LyraShield finding for a founder, developer, auditor, or security engineer.",
+  description:
+    "Explain a verified LyraShield finding for a founder, developer, auditor, or security engineer.",
   schema: z.object({
     findingId: z.string(),
     mode: z.enum(["FOUNDER", "DEVELOPER", "AUDITOR", "SECURITY_ENGINEER"]),
@@ -4851,9 +4866,9 @@ export default defineAction({
       findingId,
       mode,
       actorUserId: ctx.userId,
-    });
+    })
   },
-});
+})
 ```
 
 ## 22.7 New Sprints Added
@@ -4899,14 +4914,13 @@ From "AI AppSec scanner" to **"Agent-native security for AI-built apps."**
 3. **Unsafe agent autonomy** — Read actions run freely; mutating actions require permission; high-impact actions require approval; production/deep scans require approval; PR creation requires approval; risk acceptance requires approval.
 4. **User confusion** — Use plain-language modes; hide advanced AppSec terminology; offer "Can I launch?" as the primary experience.
 
-
 ---
 
 # PART B — 2026-07 Research & Code-Grounded Engineering Update
 
-> **Status:** Authoritative engineering addendum, 2026-07. Produced from (a) a deep external research pass, (b) a **code-grounded review of the repo at `e02853f`** (Sprints 0–2 complete), and (c) reconciliation with the Agent-Native integration analysis (now inlined into §22 above). Where this addendum conflicts with the original PRD above, **this addendum is authoritative** (the running code and current research win over the original spec). Companion: the marketing/GTM layer lives in `product.md`'s 2026-07 update; the full reasoning + sources live in the research doc.
+> **Status:** Historical engineering addendum. It records the July audit sequence and why changes were made, but its intermediate counts and open/closed labels are snapshots. **Part C and running code are authoritative for current status.**
 
-## B0. Current build status (code-verified, not aspirational)
+## B0. Historical build snapshot (superseded by Part C)
 
 - **Complete: Sprints 0–4 + Batch 1–3 + Round-2 hardening + review fixes.** Turborepo + pnpm monorepo; all packages scaffolded (`auth`, `db`, `types`, `ui`, `config`, `logger`, `integrations` — note: **no `security` or `billing` package and no `apps/agent`** yet, unlike the original PRD's proposed layout; RBAC lives in `packages/auth`). Better Auth (email/password + GitHub OAuth + optional Google, email verification). Full Prisma schema with soft-delete extension. 10-role RBAC matrix (incl. `scan.view` for read-only roles). Workspace/Project/Target/Team CRUD + REST APIs with cursor-based pagination. SSRF hardening (DNS resolution, IPv6, CIDR). Rate-limiting middleware. Audit logging with SHA-256 hash-chain. Dashboard UI with shared component library (OKLCH tokens, dark mode, a11y). Onboarding wizard (7-step). GitHub App integration (JWT, installation tokens, repo listing, webhook signature verification). Postgres RLS on 17 workspace-scoped tables. SARIF 2.1.0 + dual CVSS + cost/determinism types. Typed API client helpers. React `cache()` server-side deduplication. **Sprint 4: BullMQ scan queue, preflight checks, engine runner (child process), output parser, finding persister (encrypted evidence), scan lifecycle state machine, scan API routes (POST/GET/GET-by-id/POST-cancel), scan detail UI with client-side polling.** 396 tests, 26 files, all green.
 - **Not started:** findings pipeline (normalization, verification, dedupe fingerprint), fix PRs, retest, reports, notifications, billing, agent/MCP layer. The scan queue/worker/engine **is now built** (Sprint 4) — BullMQ queue, preflight, engine runner, output parser, finding persister are all implemented and tested.
@@ -4920,13 +4934,16 @@ From "AI AppSec scanner" to **"Agent-native security for AI-built apps."**
 This addendum is **not** an all-done checklist. Current state:
 
 **DONE — merged to `main`:**
+
 - §B1.1 SSRF hardening (shared `checkScanUrlSafe` helper) — PR #2.
 - §B1.2 RBAC enforcement on mutating routes + §B1.3 ADMIN `audit`/`policy` permissions + type-safe `Permission` — PR #4.
 
 **IN REVIEW — open PR, not merged:**
+
 - CI green-up (typecheck/build fix for the merges above) — PR #5. Actually **running vitest in CI** is still pending a GitHub `workflows` permission grant + a `pnpm-lock.yaml` refresh (see PR #5).
 
 **STILL OPEN — NOT STARTED (nothing below has been implemented):**
+
 - **§B1.4 Auth hardening** — **email verification** (currently disabled in `auth.ts`), **env/secret startup validation**, and **rate limiting** (auth + scan-creation endpoints).
 - **§B4 Schema retrofits (all of them)** — **Postgres RLS + Prisma query extension**; **`targetId` in the `Finding` dedupe key**; **`ApiKey`/`ServiceToken` model**; **`Evidence.encryptionKeyRef` + serve-redacted-only**; **`AuditLog` hash-chain**; **soft-delete standardization**; **duplicate-target constraints**; **`Report.shareToken` hashing + revocation**; **`UsageRecord.idempotencyKey`**; **`Retest` model**; **composite indexes**; **pgcrypto/pgvector + `directUrl`**; **GDPR delete/anonymize for loose user FKs**. These are cheapest to do now, while there is no scan/finding data.
 - **Greenfield — design-in when the feature is built (not applicable yet):** §B2 sandbox isolation + egress proxy + prompt-injection defense; §B5 verification layer + deterministic fingerprint; §B6 MCP OAuth 2.1; §B7 SARIF/CVSS/OWASP-2025/EPSS-KEV; §B8 SCA/secrets/IaC coverage; §B10 LLM cost controls.
@@ -4936,14 +4953,15 @@ This addendum is **not** an all-done checklist. Current state:
 ## B1. Confirmed issues in shipped code (fix now — cheapest while there is no scan/finding data)
 
 **B1.1 SSRF blocklist is bypassable `[P0 · security]`.** `apps/web/src/app/api/targets/route.ts → isSsrfSafe()` string-prefix-matches `URL.hostname` only and never resolves DNS. Confirmed bypasses:
-- **Domain → internal IP** (`http://x.attacker.com` resolving to `169.254.169.254`/`10.x`) passes; DNS rebinding possible because the check is at *create* time, not *fetch* time.
+
+- **Domain → internal IP** (`http://x.attacker.com` resolving to `169.254.169.254`/`10.x`) passes; DNS rebinding possible because the check is at _create_ time, not _fetch_ time.
 - **IPv6 brackets:** `new URL("http://[::1]/").hostname === "[::1]"`, so the `"::1"` checks never match → **`[::1]` / `[::ffff:169.254.169.254]` are NOT blocked.**
 - **Partial IPv4 ranges:** only exact `0.0.0.0` is blocked, so `0.0.0.1` (and the rest of `0.0.0.0/8`) slips through; CGNAT `100.64.0.0/10` and benchmarking `198.18.0.0/15` are also uncovered.
 - Over-broad: `startsWith("10.")` also blocks legitimate hosts like `10.example.com`.
-- *Correction (verified against Node):* decimal/octal/hex IPv4 literals (e.g. `2130706433`) are **not** a bypass here — Node's WHATWG `URL` normalizes them to dotted-decimal for http(s), so the prefix check already catches loopback/private forms. The genuine confirmed gaps are the three above (IPv6-in-brackets, DNS-resolves-to-internal, and partial ranges).
-**Fix:** resolve the hostname and reject if *any* resolved A/AAAA is in a blocked range; parse IPs properly (strip IPv6 brackets, reject non-standard encodings); allow only `http(s)`. **The real defense is at fetch time in the worker:** resolve→validate→connect-to-that-IP (pin), re-validate every redirect hop, route all scan egress through the allow-listed proxy (see B2.2). Ship before any server-side fetching (Sprint 3/4). **Status: FIXED in PR #2 (`fix/ssrf-hardening`) — new shared helper `apps/web/src/lib/ssrf.ts` with DNS resolution + full CIDR/IPv6 validation + Vitest tests, wired into the targets route.**
+- _Correction (verified against Node):_ decimal/octal/hex IPv4 literals (e.g. `2130706433`) are **not** a bypass here — Node's WHATWG `URL` normalizes them to dotted-decimal for http(s), so the prefix check already catches loopback/private forms. The genuine confirmed gaps are the three above (IPv6-in-brackets, DNS-resolves-to-internal, and partial ranges).
+  **Fix:** resolve the hostname and reject if _any_ resolved A/AAAA is in a blocked range; parse IPs properly (strip IPv6 brackets, reject non-standard encodings); allow only `http(s)`. **The real defense is at fetch time in the worker:** resolve→validate→connect-to-that-IP (pin), re-validate every redirect hop, route all scan egress through the allow-listed proxy (see B2.2). Ship before any server-side fetching (Sprint 3/4). **Status: FIXED in PR #2 (`fix/ssrf-hardening`) — new shared helper `apps/web/src/lib/ssrf.ts` with DNS resolution + full CIDR/IPv6 validation + Vitest tests, wired into the targets route.**
 
-**B1.2 RBAC is defined but not enforced at the route layer `[P0 · security]`.** `packages/auth/src/session.ts` exposes `requirePermission()` / `requireWorkspaceAccess()` and `permissions.ts` has a clean 10-role matrix — but `api/targets/route.ts` checks *membership only*, not `target:create`, so a **VIEWER/AUDITOR can create targets**. The `team` route *does* gate OWNER/ADMIN → enforcement is inconsistent. **Fix:** route every mutating API through `requirePermission(...)`; add a route-handler wrapper so permission checks can't be omitted; audit `projects`/`workspaces`/`team`. **Status: FIXED in PR #3 (`fix/rbac-enforcement`) — `projects`/`targets`/`team` POST now enforce `requirePermission()`; added a shared `authErrorResponse()` 401/403 mapper. (`workspaces` POST intentionally unchanged — no parent workspace to gate.)**
+**B1.2 RBAC is defined but not enforced at the route layer `[P0 · security]`.** `packages/auth/src/session.ts` exposes `requirePermission()` / `requireWorkspaceAccess()` and `permissions.ts` has a clean 10-role matrix — but `api/targets/route.ts` checks _membership only_, not `target:create`, so a **VIEWER/AUDITOR can create targets**. The `team` route _does_ gate OWNER/ADMIN → enforcement is inconsistent. **Fix:** route every mutating API through `requirePermission(...)`; add a route-handler wrapper so permission checks can't be omitted; audit `projects`/`workspaces`/`team`. **Status: FIXED in PR #3 (`fix/rbac-enforcement`) — `projects`/`targets`/`team` POST now enforce `requirePermission()`; added a shared `authErrorResponse()` 401/403 mapper. (`workspaces` POST intentionally unchanged — no parent workspace to gate.)**
 
 **B1.3 RBAC hierarchy vs. capability mismatch `[P1]`.** In `permissions.ts`, `ADMIN` (rank 80) lacks `audit:view`/`audit:export`/`policy:*` while lower-ranked `SECURITY_ADMIN` (75) has them → an org ADMIN can't view audit logs (likely unintended). Decide whether sets nest by hierarchy; at minimum grant ADMIN `audit:view`. Also derive a union `Permission` type from `PERMISSIONS` (currently `string`, so a typo silently denies). **Status: FIXED in PR #3 — ADMIN granted `audit:view`/`audit:export` + `policy:*`; `Permission` is now a derived union type.**
 
@@ -4951,7 +4969,7 @@ This addendum is **not** an all-done checklist. Current state:
 
 ## B2. Security hardening (design-in for unbuilt features)
 
-**B2.1 Scan sandbox — isolation `[P0 when worker lands]`.** Plain hardened Docker/runc is insufficient for an adversarial workload (recent runc escapes: CVE-2024-21626 "Leaky Vessels", procfs/`core_pattern` races) — and the forked engine's own container runs with **passwordless sudo** (root-capable) and documents `--mount` as *not* a security boundary. **Move the per-scan sandbox to gVisor (`runsc`)** (moderate effort) or **Firecracker/Kata microVMs** (hardware boundary; e2b / GKE Agent Sandbox precedent). Add warm pools to offset provisioning latency. Independently security-review the inherited engine sandbox before scanning third-party targets in multi-tenant SaaS.
+**B2.1 Scan sandbox — isolation `[P0 when worker lands]`.** Plain hardened Docker/runc is insufficient for an adversarial workload (recent runc escapes: CVE-2024-21626 "Leaky Vessels", procfs/`core_pattern` races) — and the forked engine's own container runs with **passwordless sudo** (root-capable) and documents `--mount` as _not_ a security boundary. **Move the per-scan sandbox to gVisor (`runsc`)** (moderate effort) or **Firecracker/Kata microVMs** (hardware boundary; e2b / GKE Agent Sandbox precedent). Add warm pools to offset provisioning latency. Independently security-review the inherited engine sandbox before scanning third-party targets in multi-tenant SaaS.
 
 **B2.2 Egress proxy + DNS pinning `[P0 when worker lands]`.** All scan egress through an HTTP proxy that: resolves once, validates the literal IP against the blocklist, connects to that IP (no re-resolution), re-validates each redirect hop, normalizes IDN/PunyCode, re-checks after CONNECT-tunnel establishment. (Reference: Stripe Smokescreen.) This is the durable fix for B1.1.
 
@@ -4984,7 +5002,7 @@ Add: (9) **engine supply-chain** (heavy Kali/LiteLLM/Caido dep tree — pin, SBO
 ## B5. Detection quality, determinism & the "verified" promise
 
 **B5.1 Independent verification layer `[P0]`.** Do **not** trust the engine's `confidence.py` as ground truth (open upstream bugs: fabricated file paths/line numbers in black-box mode; missed findings). Insert a layer between engine output and `Finding` records: verify path/line existence in the cloned repo before showing code locations; re-map severity via a deterministic rubric; drop findings whose PoC can't be re-derived. Add a **budget-gated exploit replay** for HIGH/CRITICAL against a frozen target snapshot.
-**B5.2 Deterministic fingerprint, not deterministic scanning `[P0]`.** Market/spec the *dedupe key* as deterministic (B4.2), not the agentic scan. Demote the LLM-judge dedupe to a secondary cross-fingerprint merge pass. Use Schema-Aligned Parsing (generate→validate→retry) for tool/finding outputs rather than relying on `temperature=0+seed`; self-consistency voting for narrow "is this exploitable?" classification only.
+**B5.2 Deterministic fingerprint, not deterministic scanning `[P0]`.** Market/spec the _dedupe key_ as deterministic (B4.2), not the agentic scan. Demote the LLM-judge dedupe to a secondary cross-fingerprint merge pass. Use Schema-Aligned Parsing (generate→validate→retry) for tool/finding outputs rather than relying on `temperature=0+seed`; self-consistency voting for narrow "is this exploitable?" classification only.
 
 ## B6. Agent layer & MCP (reconciles + extends §22 above)
 
@@ -4998,11 +5016,11 @@ Add: (9) **engine supply-chain** (heavy Kali/LiteLLM/Caido dep tree — pin, SBO
 - **`[P0]` SARIF 2.1.0 export** → GitHub `upload-sarif` (Security tab + PR annotations) + downstream ASOC/SIEM (DefectDojo, GitLab, Azure DevOps). Include `partialFingerprints`/`primaryLocationLineHash`, `rules` with CWE/OWASP `tags`, consistent repo-relative URIs, and the `fixes[]` array (powers commit-suggestion UX).
 - **`[P1]` Dual CVSS v3.1 (default/SLA) + v4.0 (stored field)** from schema design — retrofitting v4.0 later means re-scoring history.
 - **`[P1]` OWASP mapping refresh to Top 10:2025** (SSRF folded into Broken Access Control; new Software Supply Chain Failures #3) + API Top 10 (2023) tags + LLM Top 10 (2025) tags. These slot into SARIF `rules.tags`.
-- **`[P2]` EPSS + CISA KEV** prioritization — adopt *when* SCA ships (CVE-scoped).
+- **`[P2]` EPSS + CISA KEV** prioritization — adopt _when_ SCA ships (CVE-scoped).
 
 ## B8. Detection-coverage expansion (table stakes)
 
-- **`[v1 — CONFIRMED]` SCA / dependency + malicious-package detection** (OSV/GHSA + Socket-style signals) — deterministic, high-confidence, often the *first* thing buyers check; unlocks EPSS/KEV. **Founder-confirmed 2026-07-04: ships in v1** (decision #15), not agentic-pentest-only.
+- **`[v1 — CONFIRMED]` SCA / dependency + malicious-package detection** (OSV/GHSA + Socket-style signals) — deterministic, high-confidence, often the _first_ thing buyers check; unlocks EPSS/KEV. **Founder-confirmed 2026-07-04: ships in v1** (decision #15), not agentic-pentest-only.
 - **`[v1 — CONFIRMED]` Secrets scanning** (gitleaks/trufflehog-style, incl. git history). **Ships in v1.**
 - **`[P2]` IaC + container-image scanning** (backs the "code + cloud + infra" positioning).
 - **`[P2]` Reachability analysis** (noise reduction + prioritization).
@@ -5018,6 +5036,7 @@ Add: (9) **engine supply-chain** (heavy Kali/LiteLLM/Caido dep tree — pin, SBO
 ## B10. LLM cost & unit economics (protects gross-margin-per-scan)
 
 Superlinear token growth with target size is the top margin threat ($38–104 full-repo; ~$0.02–0.07 diff-only). Levers, in build order:
+
 - **`[P0]` In-loop budget guard** — synchronous pre-call checks (step/token/$/time/tool-count + loop detection); no provider offers a native hard cap. `STOPPED_BUDGET` returns partial, clearly-labeled findings (enum already exists).
 - **`[P0]` Diff-only / incremental scan mode** as the default (also powers the PR gate).
 - **`[P1]` Model cascade** (cheap triage → expensive only for exploit validation; 30–70% cut) + **provider prompt caching** (~90% off reads for the tool-heavy loop).
@@ -5029,19 +5048,19 @@ Superlinear token growth with target size is the top margin threat ($38–104 fu
 - **Sprint 3/4 (scan queue + engine) — add gates:** B2.1/B2.2 sandbox + egress proxy; B10 budget guard + diff-only + cascade + caching.
 - **Sprint 5/6 (engine + findings) — expand:** B5 verification layer + deterministic fingerprint; B7 SARIF + dual CVSS + OWASP 2025.
 - **New Sprint ~6.5 (deterministic scanners):** B8 SCA + secrets — pull ahead of some agentic polish.
-- **Sprint 7–9 (pull CI forward):** SARIF + GitHub Action + reusable workflow + diff-aware gate + Checks API annotations — this *is* the pre-merge product.
+- **Sprint 7–9 (pull CI forward):** SARIF + GitHub Action + reusable workflow + diff-aware gate + Checks API annotations — this _is_ the pre-merge product.
 - **Agent sprints:** B2.3 prompt-injection defense before agent GA; B6 MCP OAuth 2.1 + scoping.
 - **Phase 2:** EPSS/KEV (post-SCA), IaC/container, reachability, tamper-evident compliance exports, Better-Auth SSO/SCIM (pilot SCIM), BYOK/BYOM.
 
 ## B12. Kept as-is (strong already)
 
-Better-Auth-owns-identity / Prisma-owns-app boundary; webhook idempotency model (`@@unique([provider, externalId])`); secrets-as-vault-refs; human-approval-gate model; definition-of-done incl. a11y/empty/error states; the "one product, two depths" principle. The SSRF *intent* is good — the *implementation* needs B1.1.
+Better-Auth-owns-identity / Prisma-owns-app boundary; webhook idempotency model (`@@unique([provider, externalId])`); secrets-as-vault-refs; human-approval-gate model; definition-of-done incl. a11y/empty/error states; the "one product, two depths" principle. The SSRF _intent_ is good — the _implementation_ needs B1.1.
 
 ---
 
 ## B13. 2026-07-04 Deep-Audit Findings & Batch 1 (authoritative status)
 
-> A code-grounded deep audit of the repo at `396ca63` (now `ecryptoguru/lyrasec-ai`). This section is the **current source of truth for build status**, superseding §B0 / §B0.1 where they disagree.
+> A code-grounded deep audit of the repo at `396ca63` (now `ecryptoguru/lyrasec-ai`). This section superseded §B0 at the time; **Part C now supersedes it for current build status**. Retain this section as the audit and remediation history.
 
 ### B13.1 Corrected status — what is actually DONE
 
@@ -5061,9 +5080,11 @@ Better-Auth-owns-identity / Prisma-owns-app boundary; webhook idempotency model 
 - **[P1] CI never ran the test suite.** **Fix prepared** (`ci.yml` adds a `pnpm test` step, aligns pnpm to `packageManager`, adds `NEXT_PUBLIC_APP_URL`) — **blocked** on granting the GitHub App the `Workflows: write` permission.
 
 ### B13.3 Verification note
+
 The Next 16 / Prisma 7 / Postgres suite is not runnable in the authoring environment; Batch 1 ships with unit tests in the existing Vitest style and relies on CI as the gate — which is why the CI-runs-tests fix (B13.2, blocked) matters. **The full post-Batch-1 backlog (Batches 2–4) is embedded below in §B13.5, with the sprint mapping in §B13.6 — this PRD is the single source of truth.**
 
 ### B13.4 v1 coverage — FINAL
+
 Founder-confirmed 2026-07-04: **v1 = agentic pentest + SCA + secrets + GitHub Action/reusable workflow (diff-aware gate) + SARIF.** Pair the DAST-strong forked engine with **unmodified** independent tools for the deterministic layers (Semgrep-style SAST, OSV/Trivy-style deps, gitleaks/trufflehog-style secrets) rather than extending the fork's prompt system. This resolves decision #15 and pulls §B8's SCA/secrets recommendation into v1 scope (see §B8, and MVP Cutline §18).
 
 ## B13.5 Post-Batch-1 backlog (full detail — PRD is the single source of truth)
@@ -5089,28 +5110,31 @@ The complete prioritized backlog from the 2026-07-04 deep audit. Severity **P0/P
 
 ### Part C — feature additions (differentiated for the ICP)
 
-Every competitor matches *some* individual feature; the moat is the **combination for an audience nobody built the information-architecture for**. Documented breaches (Lovable CVE-2025-48757, Base44 auth-bypass, RedAccess's 380K exposed assets) cluster at the **deployed-app + backend-config** layer (missing Supabase RLS, exposed `anon_key`, IDOR/broken-auth), not classic SQLi/XSS.
+Every competitor matches _some_ individual feature; the moat is the **combination for an audience nobody built the information-architecture for**. Documented breaches (Lovable CVE-2025-48757, Base44 auth-bypass, RedAccess's 380K exposed assets) cluster at the **deployed-app + backend-config** layer (missing Supabase RLS, exposed `anon_key`, IDOR/broken-auth), not classic SQLi/XSS.
 
 - **Bet 1 — "Can I launch?" as the primary experience:** **C1 · Launch-readiness gate (P1, M)** — one yes/no verdict + 1–3 things to fix, deploy-check style, honest copy. **C2 · Plain-language findings as a hard constraint (P1, M)** — actionable by a non-engineer without googling a term; 5 explanation modes, "founder mode" default, CWE/CVSS behind a disclosure.
 - **Bet 2 — Scan the layer competitors ignore (live app + backend config):** **C3 · AI-builder-aware URL scan (P0 for differentiation, L — needs worker)** — tune detectors for Lovable/Bolt/v0/Replit/Base44 defaults (Supabase/Firebase RLS gaps, exposed public keys in client bundles, IDOR, missing webhook verification, apps defaulting public). **C4 · SCA + secrets (P0, v1 — CONFIRMED)** — unmodified Semgrep/OSV/gitleaks as independent deps.
 - **Bet 3 — Close the full agent-native loop:** **C5 · MCP server (P1, L)** — detect → exploit-validate → fix-PR → retest across Cursor/Claude Code/Windsurf/Codex/OpenCode; OAuth 2.1 (PKCE, RFC 8707/8693), `needsApproval` on mutating tools re-validated at execution; never "only we have MCP." **C6 · Prompt-injection defense (P0 before agent GA, M)** — treat target-controlled content as delimited untrusted data, least-privilege tools, scan the AI fix patch before opening a PR.
 - **Bet 4 — Make the output a shareable trust artifact:** **C7 · Shareable report/badge (P1, M)** — public, revocable mini-SOC2 using `Report.shareTokenHash`+`revokedAt`+`shareExpiresAt` (schema present) + rate-limited token access; PLG viral loop. **C8 · Compliance-lite evidence pack (P2, M)** — auto-generated SOC2/GDPR-flavored evidence; honest claims (evidence, not certification).
-- **Table-stakes:** PR comments; Slack/Discord alerts; one-click fix PRs; real free tier; GitHub Action + `workflow_call` reusable workflow with a diff-aware gate + Checks API annotations (this *is* the pre-merge product — pull forward); AI autotriage/noise-reduction as a headline metric (quantify only once measured + founder-approved).
+- **Table-stakes:** PR comments; Slack/Discord alerts; one-click fix PRs; real free tier; GitHub Action + `workflow_call` reusable workflow with a diff-aware gate + Checks API annotations (this _is_ the pre-merge product — pull forward); AI autotriage/noise-reduction as a headline metric (quantify only once measured + founder-approved).
 
 ## B13.6 Backlog → sprint mapping (extends §B11 overlay)
 
 **Batch 2 — DX & UX foundation (interleave with Sprint 3.5/4; mostly pre-worker):**
+
 - **Sprint 2.6 — Shared component library** (B3) ✅ **DONE 2026-07-05**.
 - **Sprint 2.7 — Frontend correctness & a11y** (A8) ✅ **DONE 2026-07-05** (keyboard a11y, responsive sidebar, dark mode tokens, mobile tables, aria attrs, nav-404 stubs for findings/fixes/scans/reports/settings; remaining: onboarding re-entry, aria-live banners, Zod enums).
 - **Sprint 2.8 — Data-fetch + perf** (B1/B2/A6/B4) ✅ **DONE 2026-07-05** (server-fetched `initialData` + React `cache()` wrappers, cursor-based pagination on projects/targets/team APIs, typed API client helpers `apiGet`/`apiPost`/`apiPatch`/`apiDelete`/`apiGetPaginated` with `ApiError` class, `LoadMore` component with a11y). 6 deep code review fixes applied (api-client network/parse error handling, LoadMore a11y, raw fetch migration in projects/targets clients, cache memoization bug fix, onboarding double-loading flash fix). See `codebase.md` §19.
 
 **Batch 3 — Design-in contracts before the worker (schema/interfaces, cheap now):**
+
 - **Sprint 4.1 — Tenant-isolation hardening**: `Evidence.encryptionKeyRef` enforcement ✅ **DONE 2026-07-05** (`packages/db/src/evidence.ts`); `AuditLog` `prevHash` hash-chain (A9) ✅ **DONE 2026-07-05** (`packages/db/src/audit-hash.ts`, 21 tests); Postgres RLS ✅ **DONE 2026-07-05** — RLS enabled on all 17 workspace-scoped tables with permissive + strict policies, `withWorkspaceRLS(workspaceId, fn)` helper uses `SET LOCAL` inside a transaction (connection-safe with Prisma pooling), 9 tests in `rls.test.ts`, CI validates migration on Postgres 16. See `codebase.md` §19.
 - **Sprint 4.2 — Cost/determinism + standards contracts** (B5/B6) ✅ **DONE 2026-07-05** (SARIF 2.1.0 types, dual CVSS v2/v3 score+vector fields on `Finding`, cost estimate + determinism mode fields on `Scan`, types in `packages/types/src/index.ts`). **Not yet implemented:** runtime budget guard, diff-only default, model cascade + prompt caching, fingerprint dedupe, verification layer, thin-wrapper fork + CVE fast-path + §4b/NOTICE (these need the worker/engine).
 
 **Sprint 4 — Scan Orchestrator + Queue:** ✅ **DONE 2026-07-05** — BullMQ scan queue (`apps/web/src/lib/queue.ts` producer, `apps/worker/src/queue.ts` consumer), preflight checks (`preflight.job.ts` — target existence, URL/repo config, concurrent scan guard), engine runner (`runner.ts` — child process with 30min timeout, 10MB output truncation, exit code mapping), command builder (`command-builder.ts`), output parser (`output-parser.ts` — vulnerabilities.json + run.json parsing, severity mapping, dedupe key generation), finding persister (`finding-persister.ts` — batch dedupe queries, encrypted evidence URIs), scan job processor (`run-scan.job.ts` — wraps entire job in `runWithWorkspaceContext`, state machine PREFLIGHT→RUNNING→VERIFYING→COMPLETED/FAILED), scan API routes (POST create, GET list with `scan.view` permission, GET by-id, POST cancel), scan detail UI with client-side polling (fetch every 5s, no `router.refresh()`), scan service with state machine transitions (`scan-service.ts`). `ScanJobData`/`ScanJobResult`/`SCAN_QUEUE_NAME` single source of truth in `@lyrashield/types`. `scan.view` permission added for VIEWER/AUDITOR read-only roles. Dockerfile runner stage cleaned up. CSP removed from request headers. 396 tests, 26 files. See `codebase.md` §21.
 
 **Batch 4 — Differentiated build (worker/engine now available; sequence within Sprints 5–9 + the §22 agent sprints):**
+
 - **✅ DONE 2026-07-06:** Fix proposals + GitHub PR creation (DB service, API routes, UI), retests (DB service, API routes), reports (HTML generation with 500-finding limit + truncation notice, download, share tokens), notifications (email/Slack/Discord/in-app channels with 10s timeouts, `createAndSendNotification` shared helper, worker notification functions, API routes, UI with type-colored badges), schedules (CRON-based scan scheduling, DB service, API routes, UI, `Schedule_targetId_fkey` migration), plain-language findings (CWE explanations for 8 common CWEs, severity-based generics, category labels, `technicalDetail` wiring, `explainFinding` function), permissions extended for all new features (MEMBER restricted from `notification.manage`/`schedule.delete`), code review fixes (10 issues: P1×2, P2×4, P3×4). 565 tests, 44 files. See `codebase.md` §22.
 - **✅ DONE 2026-07-06 (Sprint 5):** Engine MVP — external `lyrashield-engine` binary already wired via `runner.ts` + `command-builder.ts`. No new code needed.
 - **✅ DONE 2026-07-06 (Sprint 6):** Findings normalization — `normalizer.ts` with severity normalization (CRITICAL/HIGH/MEDIUM/LOW/INFO), CWE enrichment (40+ CWE mappings with OWASP categories), CVSS v3.1 score estimation, confidence scoring (0-100 based on PoC, code locations, CVE, technical analysis), false-positive risk assessment (high/medium/low), cross-source deduplication by dedupe key + severity + confidence, finding statistics aggregation. 14 tests. See `codebase.md` §23.
@@ -5126,46 +5150,59 @@ A second code-grounded pass over current `main` (post-merge), covering the never
 > **2026-07-05 UPDATE:** Round-2 handoff items R-A (CSP), R-C (migration drift), R-F (CI hardening), R-H (supply-chain) are **ALL COMPLETED**. See `codebase.md` §20 for details. Status markers below updated.
 
 ### R-A · Web app hardening (`apps/web/next.config.ts`) — ✅ DONE
+
 - **`[P0·S]` ✅ DONE** No HTTP security headers at all.** Add a `headers()` export: CSP, `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`. An AppSec product scoring an F on securityheaders.com is a credibility risk any prospect can check in 5s.
 - **`[P1·S]` ✅ DONE** `poweredByHeader: false`** (stop leaking `X-Powered-By: Next.js`) and **`reactStrictMode: true`** explicit.
 - **`[P1·S]` ✅ DONE** `images.remotePatterns`** scoped to `avatars.githubusercontent.com` + `lh3.googleusercontent.com` — imminent once OAuth avatars render.
 - **`[P2·S]` ✅ DONE** `output: "standalone"`** for the documented self-host/VPC (Phase 2) path.
 - **`[P0·S]` ✅ DONE (2026-07-05)** Nonce-based CSP** implemented in `proxy.ts` (renamed from `middleware.ts` per Next.js 16 convention). Per-request nonce via `crypto.randomUUID()`, `'strict-dynamic'` + `'nonce-<value>'`, `connect-src 'self'`, `blob:` in `img-src`, `ws:` in dev. 14 CSP tests.
 
-### R-B · Shared logger has zero secret/PII redaction (`packages/logger`) `[P1·M]`
+### R-B · Shared logger secret/PII redaction (`packages/logger`) — ✅ DONE
+
 `log()` spreads `meta` straight into JSON with no redaction. Real call sites already log sensitive data: `auth.ts` logs the email-verification `url` (contains the token) in dev; `github.ts` logs raw GitHub error bodies. Add a recursive redaction pass masking sensitive key names (`token`, `secret`, `password`, `authorization`, `apiKey`, `accessToken`, `refreshToken`, `url`/`verificationUrl`, `vaultRef`, …) before stringify. Also wrap `JSON.stringify` in try/catch (circular refs) + truncate oversized payloads. High leverage — every package uses this primitive.
 
+- **Resolution:** Recursive key/value redaction, circular-safe serialization, and payload truncation are implemented in `@lyrashield/logger` and covered by tests.
+
 ### R-C · Schema integrity + MIGRATION DRIFT (`packages/db`) — ✅ MIGRATION DRIFT RESOLVED
+
 - **`[P1 — latent P0 on deploy]` ✅ RESOLVED 2026-07-05** Prisma migrations are badly drifted from `schema.prisma`.** Only 2 migrations exist (`init` + `add_new_models_and_indexes`); they create 26 tables but are **missing** (present in `schema.prisma`, never migrated): tables **`ApiKey`, `OnboardingState`, `Retest`**; columns `shareTokenHash` (migration made plain `shareToken`), `revokedAt`, `idempotencyKey`, `prevHash`, `encryptionKeyRef`; the composite indexes `Finding(workspaceId,status,severity)` + `AuditLog(workspaceId,createdAt)`; the dup-target uniques `(workspaceId,repoFullName)`/`(workspaceId,url)`; `@@unique([targetId,dedupeKey])`; and `deletedAt` on ~16 more models. The schema was synced to dev DBs via `prisma db push`, not migrations. **Impact:** `prisma migrate deploy` (CI + any prod/staging) produces a DB that does NOT match the generated client → onboarding/apikey/retest queries fail at runtime; CI stays green because unit tests don't hit those tables and `build` is typecheck-only. **Fix (needs a live DB → Codex):** generate a reconciling migration with `prisma migrate dev`, verify `migrate reset`+`deploy` reproduces `schema.prisma` exactly, and add a CI drift check (R-F). Fold R-C's two additions below into that same migration.
   - **Resolution:** Reconciling migration `20260705095000_batch3_missing_tables_columns` creates all missing tables/columns/indexes/constraints. CI drift check (`prisma migrate diff --exit-code`) added. See `codebase.md` §20.1.
 - **`[P1·S]` ✅ DONE** `Report.scanId` is a dangling FK** — no `@relation` (every other `scanId` has one). Add `scan Scan? @relation(fields:[scanId], references:[id], onDelete: SetNull)` (+ `reports Report[]` on `Scan`).
 - **`[P2·S]` ✅ DONE** `Finding` missing `@@index([projectId])`** — project-detail finding lists fall back to the `workspaceId` index. Add `@@index([projectId])` (or composite `[projectId, status, severity]`).
 - **`[P2·S]`** `Policy.maxBudgetUsd`** has no floor — add a `CHECK (>= 0)` migration + a `PolicySchema` bound when policy CRUD lands (protects the budget-guard logic).
 
-### R-D · GitHub integration efficiency (`packages/integrations/src/github.ts`) `[P1·M]`
+### R-D · GitHub integration efficiency (`packages/integrations/src/github.ts`) — ✅ DONE
+
 - Installation tokens are **re-minted on every call** and the `expires_at` GitHub returns is **discarded** (only `token` is read). Cache per `installationId` (module Map for single-instance, Redis for multi) with TTL just under 1h. Critical before the worker/webhooks call this per-event.
 - `[P2·S]` add retry/backoff honoring `Retry-After` (GitHub 403/429/5xx); paginate `getAppInstallations()` (currently unpaginated → silently drops installations past page 1); swap the hand-rolled constant-time compare for `crypto.timingSafeEqual`.
 
+- **Resolution:** Installation-token caching with expiry, retry/backoff, pagination, and `crypto.timingSafeEqual` are implemented. The in-process cache is sufficient for the current deployment; move it to Redis if token churn across multiple web replicas becomes material.
+
 ### R-E · Auth hardening (`packages/auth/src/auth.ts`) — ✅ DONE (2026-07-05)
+
 - **`[P1·S]` ✅ DONE** `trustedOrigins: [BETTER_AUTH_URL]`** — now supports comma-separated `ADDITIONAL_TRUSTED_ORIGINS` (merged in earlier round-2).
-- `[P2·S]` ✅ DONE **Cookie hardening** — `useSecureCookies: isProd`, `sameSite: "lax"`, `secure: isProd` on `session_token` cookie attributes, `cookieCache` enabled (5min maxAge, reduces DB hits). Rolling session `expiresIn: 7d` + `updateAge: 1d` retained. *(Absolute max lifetime + GDPR account-deletion flow deferred — not blocking, will address pre-launch.)*
+- `[P2·S]` ✅ DONE **Cookie hardening** — `useSecureCookies: isProd`, `sameSite: "lax"`, `secure: isProd` on `session_token` cookie attributes, `cookieCache` enabled (5min maxAge, reduces DB hits). Rolling session `expiresIn: 7d` + `updateAge: 1d` retained. _(Absolute max lifetime + GDPR account-deletion flow deferred — not blocking, will address pre-launch.)_
 
 ### R-F · CI/CD hardening (`.github/workflows/ci.yml`) — ✅ DONE
+
 - **`[P1·S]` ✅ DONE** No least-privilege `permissions:` block** → workflow inherits broad default `GITHUB_TOKEN`. Add `permissions: { contents: read }` top-level; elevate per-job only where needed.
 - **`[P1·M]` ✅ DONE** No SCA / secret-scan on our own repo** (ironic for AppSec). Add a `security` job: `pnpm audit`/OSV-Scanner + gitleaks, SARIF-uploaded to the Security tab. (Overlaps the "dogfood" B7 goal; do this now with off-the-shelf tools, swap in LyraSec later.)
 - `[P1·S]` ✅ DONE **No migration-drift check** (`prisma migrate status`/`diff --exit-code`) → schema.prisma edits without a migration pass CI silently. **No Turbo/Next build cache** in CI (add `actions/cache` for `.turbo` + `.next/cache` or Vercel Remote Cache). `[P2]` add `paths-ignore` for docs; consider a Node 20+24 matrix (engines says >=20, CI only runs 24).
 
 ### R-G · Deployment-doc security (`docs/deployment/PRODUCTION_DEPLOYMENT.md`) — ✅ DONE (2026-07-05)
+
 - **`[P1]` ✅ DONE** Worker documented to run as `root`** — replaced with dedicated `lyrashield` non-root user (`useradd`, `usermod -aG docker`, systemd `User=lyrashield`, CI deploy `username: lyrashield`).
 - `[P1]` ✅ DONE **TLS in connection strings** — all Postgres examples now include `?sslmode=require`, Redis shows `rediss://` format. `[P1]` ✅ DONE **Backup/restore procedure** — added Postgres `pg_dump`/`pg_restore` commands + R2 object versioning enablement with RPO/RTO. `[P2]` ✅ DONE **SSH hardening** — `PasswordAuthentication no`, optional source-IP restriction, updated security checklist (5 new items).
 
 ### R-H · Supply chain & lint — ✅ DONE
+
 - **`[P1·S]` ✅ DONE** Caret ranges on security-sensitive deps** (`better-auth`, `@prisma/client`, `pg`, `bullmq`) + no Renovate/Dependabot. Pin `better-auth` and Prisma exactly (as already done for `@prisma/client-runtime-utils`); add Dependabot/Renovate with grouped, reviewed updates.
   - **Resolution:** `better-auth` pinned to `1.6.23`, `@prisma/client`/`prisma`/`@prisma/adapter-pg` pinned to `7.8.0`. Dependabot already configured.
 - `[P1·S]` ✅ DONE **No `eslint-plugin-security`** (or `no-unsanitized`) despite the worker shelling out to Docker/Python — add at least to `apps/worker` + `packages/integrations`. `[P2]` document the pnpm `onlyBuiltDependencies` allowlist review process; confirm `minimumReleaseAge` is actually set (only the Exclude list is present → may be a no-op); sanity-check `lucide-react ^1.23` isn't a typosquat.
   - **Resolution:** `eslint-plugin-security` added to root ESLint config with 6 active rules (1 disabled for TS false positives).
 
 ### R-I · Config / correctness / a11y (mostly `[P2·S]`) — ✅ DONE (2026-07-05)
+
 - **`[P2·S]` ✅ DONE** `turbo.json` `globalEnv`** — expanded from 8 → 35 env vars (added `NEXT_PUBLIC_APP_URL`, all `GITHUB_APP_*`, `UPSTASH_*`, `BREVO_*`, `S3_*`, `POLAR_*`, `RAZORPAY_*`, `SENTRY_*`, `DATABASE_DIRECT_URL`, `NODE_ENV`, `ADDITIONAL_TRUSTED_ORIGINS`).
 - **`[P2·S]` ✅ DONE** `docker-compose.yml`** — all ports bound to `127.0.0.1`, memory limits added (Postgres 512M, Redis 256M), `# DEV ONLY` header, Redis `--requirepass` already present.
 - **`[P2·S]` ✅ DONE** `seed.ts` prod guard** — throws if `NODE_ENV=production` (prevents creating predictable demo OWNER account on prod DB).
@@ -5177,4 +5214,134 @@ A second code-grounded pass over current `main` (post-merge), covering the never
 - **`[P2·S]` ✅ DONE** `scoping.ts` docstring** — updated stale "nothing calls this yet" to reflect auto-scoping is active. **`(dashboard)/layout.tsx`** — parallelized onboarding + workspaces queries with `Promise.all`.
 
 ### R-J · Sprint mapping for round-2
+
 Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + Finding index), R-F (CI permissions + drift + cache), R-I quick wins (turbo globalEnv, seed guard, .gitignore, docker-compose, types bounds). Into **Batch 3**: R-D (token cache), R-E (auth hardening), R-H (supply chain + eslint-security), R-G (deploy-doc security). The **P0 security headers (R-A)** and **logger redaction (R-B)** are the two to pull to the very front — both are small, high-credibility, and independent of the unbuilt worker.
+
+---
+
+# PART C — Current Implementation and Release Readiness
+
+> **Status date:** 2026-07-12. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
+
+## C0. Verified repository baseline
+
+- Canonical application repository: `ecryptoguru/lyrasec-ai`, local source at `lyrashieldai`.
+- Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
+- Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 9 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `security`, `types`, `ui`).
+- Current automated gate: lint, typecheck, production build, **625 passing Vitest tests in 56 files**, and **2 passing Playwright tests**.
+- Current product surface: **20 page route files** and **34 API route files** in `apps/web`.
+- Current data surface: **30 Prisma models**, **12 enums**, and **9 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
+- Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
+- Current Docker proof: the web/worker stack and engine-bearing worker image build; the CLI reports `1.0.4.post1`; configuration failure occurs before sandbox pull when model credentials are missing.
+- Current engine proof: 155 engine tests plus Ruff, formatting, headless mypy, and Bandit passed on the thin fork.
+
+Historical test and migration counts elsewhere in this PRD describe earlier checkpoints. They must not be used as the current release gate.
+
+## C1. Implemented product capabilities
+
+### C1.1 Identity, tenancy, and access
+
+- Better Auth email/password, GitHub OAuth, optional Google OAuth, and email verification.
+- Workspace creation, active-workspace persistence in an HttpOnly cookie, membership, invitations, and role management.
+- Permission checks on protected operations, tenant-scoped queries, AsyncLocalStorage workspace context, and Postgres RLS defense in depth.
+- Signed short-lived agent service tokens, secret/PII-redacting structured logs, rate limits, audit events, and audit hash chaining. The `ApiKey` model is schema foundation; a user-facing API-key lifecycle is not yet shipped.
+
+### C1.2 Core application loop
+
+- Project and target creation for GitHub repositories and URLs.
+- GitHub App installation, repository discovery, signed webhook handling, delivery idempotency, installation token caching, pagination, and retry/backoff.
+- Scan creation, target-level serialization, preflight, queueing, lifecycle transitions, cancellation, retry guards, scan events, and scan-detail polling.
+- Finding normalization, CWE/OWASP enrichment, CVSS estimation, confidence and false-positive-risk scoring, deduplication, persistence, filtering, and plain-language explanations.
+- Evidence upload: PoC and code-location artifacts are uploaded to configured S3-compatible storage with `AES256` SSE and a SHA-256 checksum. Missing storage or upload failure fails closed; `Evidence.encryptionKeyRef` and `checksum` are validated before persistence.
+- Fix proposals, approval-aware GitHub PR creation, retests, HTML/downloadable reports, revocable shared reports, and launch-readiness verdicts.
+- Email, Slack, Discord, and in-app notification plumbing plus recurring scan schedules with atomic claims.
+
+### C1.3 Detection and engine coverage
+
+- Thin-fork engine adapter with explicit environment precedence, telemetry off by default, bounded subprocess execution, SIGTERM-to-SIGKILL cancellation, and current/legacy artifact discovery.
+- SCA for supported dependency manifests, including nested workspaces, with OSV lookup and result normalization.
+- Secret scanning with redaction and false-positive filtering.
+- AI-builder-aware URL checks, security-header/CORS checks, redirect and DNS revalidation, and shared SSRF-safe fetch utilities.
+- GitHub Action diff gate with secret, dependency, and code checks plus SARIF output.
+- Hardened prompt-injection detection and sanitization for agent-controlled inputs, with `normalizeInput()` (zero-width characters, NFKC normalization, HTML entity decoding) and an expanded/tightened pattern set.
+- Azure AI / GPT 5.6 Terra model support wired through `LYRASHIELD_LLM`, `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION`/`LLM_API_VERSION`, with platform propagation through `packages/config`, `apps/worker/src/engine/runner.ts`, and `docker-compose.yml`.
+
+### C1.4 Agent-native surfaces
+
+- Headless Agent Action Layer with six registered actions: list targets, run scan, get scan status, list findings, get finding, and explain finding.
+- Permission enforcement, workspace matching, signed service tokens, audit logging, queue error handling, and exact `actionName` plus input-hash approval verification.
+- Approval list/approve/deny APIs and an `AgentApproval` persistence model protected by RLS.
+- MCP package with real API-backed tools and stdio JSON-RPC transport.
+
+### C1.5 User experience and marketing
+
+- Responsive dashboard, mobile navigation, shared UI components, dark mode, accessible form fields, loading/error/empty states, pagination, and server-fetched initial data.
+- Dashboard pages for projects, targets, scans, findings, fixes, reports, notifications, schedules, launch readiness, integrations, team, and settings.
+- Account deletion blocks sole owners, anonymizes loose user attribution, removes auth/membership data, and rebuilds affected audit chains.
+- Liveness/readiness endpoints, structured Next.js request-error instrumentation, and maintained Playwright coverage for auth, onboarding, target/scan creation, and tenant denial boundaries.
+- Astro 7 marketing site with landing page, blog, authoring rules, RSS, sitemap, robots, JSON-LD, canonical/social metadata, and a Cloudflare D1 waitlist. The marketing header links to the app via `PUBLIC_APP_URL`; the app root redirects unauthenticated users to `NEXT_PUBLIC_MARKETING_URL` (or `/sign-in` as a fallback).
+- Marketing previews are deliberately non-indexable. Indexable builds require a public HTTPS origin and founder approval.
+
+## C2. Phase 1 gaps and release gates
+
+### C2.1 Required before a controlled product pilot
+
+1. **Controlled scan proof:** provide an approved target and authorized model configuration. The Azure AI / GPT 5.6 Terra environment is wired (`LYRASHIELD_LLM`, `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, `AZURE_API_VERSION`/`LLM_API_VERSION`), but a live sandbox scan with pinned image digest and retained audit evidence is still required.
+2. **Transport-level egress control:** application SSRF checks are present, but untrusted multi-tenant scanning still requires a deployment-level proxy or equivalent DNS-pinned network enforcement.
+3. **Production infrastructure:** provision production PostgreSQL, Redis, mandatory S3-compatible evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all migrations on a fresh database. Evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
+
+### C2.2 Required before self-serve paid launch
+
+1. **Billing and usage enforcement:** provider decision, plan definitions, checkout, webhooks, subscription sync, usage records, scan limits, and billing UI. The existing `BillingAccount`, `UsageRecord`, plan fields, permissions, and environment placeholders are schema foundation only.
+2. **Abuse and cost controls:** enforce plan-aware scan quotas, concurrency, model budgets, and failure/retry ceilings before offering a free or paid public tier.
+3. **Production observability:** connect the implemented structured request/worker logs and health/readiness routes to actionable monitoring, product analytics, alerts, and incident/runbook ownership.
+4. **Launch validation:** run browser, API, migration, backup/restore, queue recovery, worker cancellation, and security-header smoke checks against the real deployed environment.
+
+### C2.3 Marketing launch gate
+
+1. Confirm the public product name, trademark direction, and HTTPS domain.
+2. Replace Cloudflare D1 and Rate Limit placeholder IDs and store `WAITLIST_IP_SALT` as a Worker secret.
+3. Apply D1 migrations and build with the production `PUBLIC_SITE_URL`.
+4. Keep `PUBLIC_INDEXABLE=false` until real-domain canonical, sitemap, robots, waitlist, analytics, and visual QA pass.
+5. Publish only founder-approved posts and claims; no public pricing, unsupported metrics, exclusivity claims, or public naming of the upstream engine.
+
+### C2.4 Known follow-up debt
+
+- Store the numeric GitHub installation ID on each target and use it for exact `installation.deleted` matching instead of repository-owner prefix matching.
+- Add a database constraint and input validation requiring `Policy.maxBudgetUsd >= 0` when policy CRUD is exposed.
+- Build the user-facing API-key create/list/revoke lifecycle before documenting API-key access as a product capability.
+- Complete MCP client setup documentation and expand the tool catalog only when the corresponding approval-aware actions exist.
+- Replace the current SSE-S3 key reference with a real KMS/Vault key reference when the production storage provider is selected.
+- Add compliance-lite evidence packs and deeper IaC/container/reachability coverage after the pilot gates, based on customer demand.
+
+## C3. Current sprint status
+
+| Workstream        | Status           | Current truth                                                                                                                                                                                                                                                                                                 |
+| ----------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sprints 0–3 + 2.5 | Complete         | Foundation, auth, tenancy, dashboard, onboarding, targets, team, GitHub App, account deletion/anonymization, and browser E2E are implemented.                                                                                                                                                                 |
+| Sprint 3.5 / 7.5  | Complete         | Agent actions, service tokens, approval persistence, approval APIs, and verification controls are implemented.                                                                                                                                                                                                |
+| Sprints 4–6.5     | Complete in code | Queue, worker lifecycle, engine adapter, normalization, SCA, and secrets scanning are implemented; controlled sandbox proof remains.                                                                                                                                                                          |
+| Sprints 7–9       | Complete         | Fix PRs, retests, reports, notifications, schedules, URL scanning, launch readiness, sharing, and diff gate are implemented.                                                                                                                                                                                  |
+| Sprint 5.5        | Not started      | Security Copilot sidebar remains deferred.                                                                                                                                                                                                                                                                    |
+| Sprint 8.5        | Not started      | Visual Security Plan and recap remain deferred.                                                                                                                                                                                                                                                               |
+| Sprint 9.5        | Core complete    | MCP tools and stdio transport exist; broader client onboarding and tool coverage remain roadmap work.                                                                                                                                                                                                         |
+| Sprint 10         | Not started      | Billing and usage enforcement are the principal self-serve launch blocker.                                                                                                                                                                                                                                    |
+| Sprint 11         | Partial          | UX/security hardening, privacy lifecycle, browser E2E, health/readiness, request instrumentation, serialized audit chaining, fail-closed evidence, prompt-injection guard hardening, queue unification, and proxy trust are done; controlled-scan, production operations/egress, and deployment gates remain. |
+| Phase 2           | Not started      | Enterprise identity, SCIM, advanced policy, private worker, VPC/self-hosting, BYOK/BYOM, and enterprise integrations remain roadmap work.                                                                                                                                                                     |
+
+## C4. Product truth constraints
+
+- A green unit/build gate is not proof of a successful sandbox scan.
+- A healthy Docker stack is not proof that model credentials, sandbox image, egress controls, and engine artifacts work end to end.
+- A schema model is not an implemented product feature: billing is not built merely because billing tables exist.
+- A merged marketing app is not a live site: Cloudflare provisioning, deployment, domain attachment, indexing, and production QA remain separate gates.
+- Shared reports are evidence summaries, not certifications. Do not claim SOC 2, GDPR, or other compliance certification from generated evidence.
+- Do not claim verified-finding accuracy, noise reduction, speed, or exclusivity without measured, founder-approved evidence.
+
+## C5. Ordered next work
+
+1. Run and document the first authorized controlled scan with a pinned sandbox digest.
+2. Decide billing provider, plans, and usage metric; implement Sprint 10 with quota enforcement.
+3. Provision production application infrastructure and transport-level egress controls; validate migrations, backups, recovery, and observability.
+4. Complete the Cloudflare marketing launch gate on the approved public domain.
+5. After pilot evidence, prioritize Security Copilot, visual plans, compliance-lite evidence, and Phase 2 features from real customer demand.

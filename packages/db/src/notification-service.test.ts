@@ -173,7 +173,11 @@ describe("notification-service", () => {
   describe("markNotificationSent", () => {
     it("updates status to sent with sentAt", async () => {
       mockPrisma.notification.findFirst.mockResolvedValue(baseNotification)
-      mockPrisma.notification.update.mockResolvedValue({ ...baseNotification, status: "sent", sentAt: new Date() })
+      mockPrisma.notification.update.mockResolvedValue({
+        ...baseNotification,
+        status: "sent",
+        sentAt: new Date(),
+      })
 
       const result = await markNotificationSent("notif-1", "ws-1")
 

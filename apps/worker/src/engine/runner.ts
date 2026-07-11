@@ -14,10 +14,17 @@ export interface EngineRunResult {
   stderr: string
 }
 
-const EXIT_CODE_MAP: Record<number, { status: "COMPLETED" | "FAILED"; category: string; message: string }> = {
+const EXIT_CODE_MAP: Record<
+  number,
+  { status: "COMPLETED" | "FAILED"; category: string; message: string }
+> = {
   0: { status: "COMPLETED", category: "SUCCESS", message: "Scan completed successfully" },
   1: { status: "FAILED", category: "ENGINE_ERROR", message: "Engine exited with an error" },
-  2: { status: "COMPLETED", category: "VULNERABILITIES_FOUND", message: "Scan completed with vulnerabilities found" },
+  2: {
+    status: "COMPLETED",
+    category: "VULNERABILITIES_FOUND",
+    message: "Scan completed with vulnerabilities found",
+  },
 }
 
 export function interpretExitCode(code: number): {
@@ -25,11 +32,13 @@ export function interpretExitCode(code: number): {
   category: string
   message: string
 } {
-  return EXIT_CODE_MAP[code] ?? {
-    status: "FAILED",
-    category: "ENGINE_ERROR",
-    message: `Engine exited with code ${code}`,
-  }
+  return (
+    EXIT_CODE_MAP[code] ?? {
+      status: "FAILED",
+      category: "ENGINE_ERROR",
+      message: `Engine exited with code ${code}`,
+    }
+  )
 }
 
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024
@@ -49,7 +58,7 @@ export interface KillableChild {
  */
 export function createKillEscalation(
   child: KillableChild,
-  graceMs: number,
+  graceMs: number
 ): { onTimeout: () => void; markExited: () => void } {
   let exited = false
   let killTimer: ReturnType<typeof setTimeout> | null = null
@@ -72,12 +81,34 @@ export function createKillEscalation(
 
 function buildEngineEnv(): Record<string, string> {
   const allow = new Set([
-    "PATH", "HOME", "USER", "SHELL", "LANG", "LC_ALL", "TERM",
-    "DOCKER_HOST", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH",
-    "LYRASHIELD_LLM", "LLM_API_KEY", "LLM_API_BASE", "LLM_TIMEOUT",
-    "LYRASHIELD_IMAGE", "LYRASHIELD_RUNTIME_BACKEND", "LYRASHIELD_MAX_LOCAL_COPY_MB",
-    "LYRASHIELD_REASONING_EFFORT", "LYRASHIELD_TELEMETRY",
+    "PATH",
+    "HOME",
+    "USER",
+    "SHELL",
+    "LANG",
+    "LC_ALL",
+    "TERM",
+    "DOCKER_HOST",
+    "DOCKER_TLS_VERIFY",
+    "DOCKER_CERT_PATH",
+    "LYRASHIELD_LLM",
+    "LLM_API_KEY",
+    "LLM_API_BASE",
+    "LLM_API_VERSION",
+    "LLM_TIMEOUT",
+    "LYRASHIELD_IMAGE",
+    "LYRASHIELD_RUNTIME_BACKEND",
+    "LYRASHIELD_MAX_LOCAL_COPY_MB",
+    "LYRASHIELD_REASONING_EFFORT",
+    "LYRASHIELD_TELEMETRY",
     "PERPLEXITY_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "AZURE_OPENAI_API_BASE",
+    "AZURE_AI_API_KEY",
+    "AZURE_AI_API_BASE",
+    "AZURE_API_VERSION",
+    "AZURE_OPENAI_API_VERSION",
   ])
   // Prefix-based allowlist for LLM/AI provider API keys so new providers
   // work without code changes. Each prefix matches env vars like
@@ -87,6 +118,8 @@ function buildEngineEnv(): Record<string, string> {
     "AI_",
     "ANTHROPIC_",
     "OPENAI_",
+    "AZURE_OPENAI_",
+    "AZURE_AI_",
     "GROQ_",
     "MISTRAL_",
     "TOGETHER_",
@@ -109,13 +142,14 @@ async function emitScanEvent(
   stage: string,
   level: string,
   message: string,
-  metadata?: Record<string, unknown>,
+  metadata?: Record<string, unknown>
 ): Promise<void> {
   try {
     await addScanEvent(scanId, stage, level, message, metadata)
   } catch (err) {
     logger.warn("Failed to persist scan event", {
-      scanId, stage,
+      scanId,
+      stage,
       error: err instanceof Error ? err.message : String(err),
     })
   }
@@ -126,8 +160,14 @@ async function runEngineProcess(
   absWorkDir: string,
   scanId: string,
   timeoutMs: number,
-  shouldCancel?: () => Promise<boolean>,
-): Promise<{ exitCode: number; stdout: string; stderr: string; timedOut: boolean; cancelled: boolean }> {
+  shouldCancel?: () => Promise<boolean>
+): Promise<{
+  exitCode: number
+  stdout: string
+  stderr: string
+  timedOut: boolean
+  cancelled: boolean
+}> {
   return new Promise((resolvePromise, reject) => {
     const child: ChildProcess = spawn(cmd.executable, cmd.args, {
       cwd: absWorkDir,
@@ -158,12 +198,14 @@ async function runEngineProcess(
     }, timeoutMs)
     const cancellationTimer = shouldCancel
       ? setInterval(() => {
-          void shouldCancel().then((isCancelled) => {
-            if (!closed && isCancelled) {
-              cancelled = true
-              terminate()
-            }
-          }).catch(() => {})
+          void shouldCancel()
+            .then((isCancelled) => {
+              if (!closed && isCancelled) {
+                cancelled = true
+                terminate()
+              }
+            })
+            .catch(() => {})
         }, 1000)
       : null
 
@@ -204,7 +246,7 @@ async function runEngineProcess(
       clearTimeout(timer)
       if (cancellationTimer) clearInterval(cancellationTimer)
       escalation.markExited()
-      const exitCode = code ?? ((timedOut || cancelled) ? -1 : 1)
+      const exitCode = code ?? (timedOut || cancelled ? -1 : 1)
       resolvePromise({ exitCode, stdout, stderr, timedOut, cancelled })
     })
 
@@ -290,7 +332,7 @@ export async function runEngine(
   config: ScanConfig,
   scanId: string,
   timeoutMs = 30 * 60 * 1000,
-  shouldCancel?: () => Promise<boolean>,
+  shouldCancel?: () => Promise<boolean>
 ): Promise<EngineRunResult> {
   const cmd = buildEngineCommand(config)
 
@@ -316,13 +358,19 @@ export async function runEngine(
     absWorkDir,
     scanId,
     timeoutMs,
-    shouldCancel,
+    shouldCancel
   )
 
   if (timedOut) {
-    await emitScanEvent(scanId, "engine_timeout", "error", `Engine timed out after ${timeoutMs / 1000}s`, {
-      timeoutMs,
-    })
+    await emitScanEvent(
+      scanId,
+      "engine_timeout",
+      "error",
+      `Engine timed out after ${timeoutMs / 1000}s`,
+      {
+        timeoutMs,
+      }
+    )
     logger.error("Engine timed out", { scanId, timeoutMs })
   } else {
     await emitScanEvent(scanId, "engine_exit", "info", `Engine exited with code ${exitCode}`, {
@@ -330,7 +378,13 @@ export async function runEngine(
     })
   }
 
-  logger.info("Engine process finished", { scanId, exitCode, stdoutLen: stdout.length, stderrLen: stderr.length, timedOut })
+  logger.info("Engine process finished", {
+    scanId,
+    exitCode,
+    stdoutLen: stdout.length,
+    stderrLen: stderr.length,
+    timedOut,
+  })
 
   const outputDir = await findRunOutputDir(absWorkDir)
   const { vulnerabilitiesRaw, runJsonRaw } = outputDir
@@ -339,11 +393,17 @@ export async function runEngine(
 
   const output = parseEngineOutput(vulnerabilitiesRaw, runJsonRaw)
 
-  await emitScanEvent(scanId, "engine_output_parsed", "info", `Parsed ${output.findingCount} finding(s) from engine output`, {
-    findingCount: output.findingCount,
-    engineStatus: output.runRecord?.status ?? "unknown",
-    outputDir: outputDir ?? "not_found",
-  })
+  await emitScanEvent(
+    scanId,
+    "engine_output_parsed",
+    "info",
+    `Parsed ${output.findingCount} finding(s) from engine output`,
+    {
+      findingCount: output.findingCount,
+      engineStatus: output.runRecord?.status ?? "unknown",
+      outputDir: outputDir ?? "not_found",
+    }
+  )
 
   return { exitCode, cancelled, output, stdout, stderr }
 }

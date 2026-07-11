@@ -89,7 +89,9 @@ export function canonicalizeIpv4(host: string): string | null {
       ipNum = (v0 << 24) | (v1 << 16) | (v2 << 8) | v3
   }
   ipNum >>>= 0
-  return [(ipNum >>> 24) & 0xff, (ipNum >>> 16) & 0xff, (ipNum >>> 8) & 0xff, ipNum & 0xff].join(".")
+  return [(ipNum >>> 24) & 0xff, (ipNum >>> 16) & 0xff, (ipNum >>> 8) & 0xff, ipNum & 0xff].join(
+    "."
+  )
 }
 
 function ipv4ToInt(ip: string): number {

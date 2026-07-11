@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
-import { getCachedSession, getCachedWorkspaces, getCachedOnboardingState, getCachedWorkspaceId } from "@/lib/cache"
+import {
+  getCachedSession,
+  getCachedWorkspaces,
+  getCachedOnboardingState,
+  getCachedWorkspaceId,
+} from "@/lib/cache"
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getCachedSession()
 
   if (!session) {

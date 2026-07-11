@@ -29,7 +29,7 @@ export default async function IntegrationsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Connect external services to your workspace ({workspaceName}).
         </p>
       </div>
@@ -37,9 +37,7 @@ export default async function IntegrationsPage() {
       <GithubIntegration
         workspaceId={workspaceId}
         connected={!!githubIntegration}
-        accountLogin={
-          githubIntegration?.metadata as { accountLogin?: string } | null
-        }
+        accountLogin={githubIntegration?.metadata as { accountLogin?: string } | null}
       />
     </div>
   )

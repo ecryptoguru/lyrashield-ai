@@ -1,11 +1,7 @@
 import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import {
-  updateScanStatus,
-  addScanEvent,
-  type ScanStatus,
-} from "@lyrashield/db"
+import { updateScanStatus, addScanEvent, type ScanStatus } from "@lyrashield/db"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import type { TargetType } from "../engine/command-builder"
@@ -51,7 +47,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           errorCategory: "TARGET_NOT_FOUND",
           errorMessage: "Target disappeared between preflight and execution",
         })
-        return { status: "failed", errorCategory: "TARGET_NOT_FOUND", errorMessage: "Target not found" }
+        return {
+          status: "failed",
+          errorCategory: "TARGET_NOT_FOUND",
+          errorMessage: "Target not found",
+        }
       }
 
       // 3. Run the scan engine
@@ -78,7 +78,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             select: { status: true },
           })
           return current?.status === "CANCELLED"
-        },
+        }
       )
 
       if (engineResult.cancelled) {
@@ -110,7 +110,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
 
       try {
-        await addScanEvent(scanId, "scanners_complete", "info",
+        await addScanEvent(
+          scanId,
+          "scanners_complete",
+          "info",
           `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
           {
             engine: orchestratorResult.engineFindings.length,
@@ -118,7 +121,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             secrets: orchestratorResult.secretsFindings.length,
             falsePositivesFiltered: orchestratorResult.filteredFalsePositives,
             stats: orchestratorResult.stats,
-          },
+          }
         )
       } catch (eventErr) {
         log.warn("Failed to persist scanners_complete event", {
@@ -130,9 +133,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // Persist LLM usage data from engine run record for cost observability
       if (engineResult.output.runRecord?.llm_usage) {
         try {
-          await addScanEvent(scanId, "llm_usage", "info",
+          await addScanEvent(
+            scanId,
+            "llm_usage",
+            "info",
             `LLM usage: ${JSON.stringify(engineResult.output.runRecord.llm_usage)}`,
-            { llm_usage: engineResult.output.runRecord.llm_usage },
+            { llm_usage: engineResult.output.runRecord.llm_usage }
           )
         } catch (eventErr) {
           log.warn("Failed to persist llm_usage event", {
@@ -154,11 +160,17 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const dupFindings = persistedFindings.length - newFindings
 
       try {
-        await addScanEvent(scanId, "findings_persisted", "info", `Persisted ${persistedFindings.length} finding(s): ${newFindings} new, ${dupFindings} duplicate`, {
-          total: persistedFindings.length,
-          new: newFindings,
-          duplicate: dupFindings,
-        })
+        await addScanEvent(
+          scanId,
+          "findings_persisted",
+          "info",
+          `Persisted ${persistedFindings.length} finding(s): ${newFindings} new, ${dupFindings} duplicate`,
+          {
+            total: persistedFindings.length,
+            new: newFindings,
+            duplicate: dupFindings,
+          }
+        )
       } catch (eventErr) {
         log.warn("Failed to persist findings_persisted event", {
           scanId,
@@ -180,7 +192,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         } catch (notificationError) {
           log.warn("Failed to send scan failure notification", {
             scanId,
-            error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+            error:
+              notificationError instanceof Error
+                ? notificationError.message
+                : String(notificationError),
           })
         }
         return {
@@ -205,19 +220,27 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       try {
         const criticalFindings = persistedFindings.filter((f) => f.severity === "CRITICAL")
         const notifications = await Promise.allSettled([
-          notifyScanCompleted(workspaceId, scanId, engineResult.output.summary, persistedFindings.length),
+          notifyScanCompleted(
+            workspaceId,
+            scanId,
+            engineResult.output.summary,
+            persistedFindings.length
+          ),
           ...criticalFindings.map((finding) =>
-            notifyCriticalFinding(workspaceId, finding.id, finding.title, target.name),
+            notifyCriticalFinding(workspaceId, finding.id, finding.title, target.name)
           ),
         ])
         const failedNotifications = notifications.filter(
-          (notification): notification is PromiseRejectedResult => notification.status === "rejected",
+          (notification): notification is PromiseRejectedResult =>
+            notification.status === "rejected"
         )
         if (failedNotifications.length > 0) {
           log.warn("Some scan completion notifications failed", {
             scanId,
             failures: failedNotifications.map((notification) =>
-              notification.reason instanceof Error ? notification.reason.message : String(notification.reason),
+              notification.reason instanceof Error
+                ? notification.reason.message
+                : String(notification.reason)
             ),
           })
         }
@@ -225,7 +248,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         // A notification provider outage must not retry or reverse an already-completed scan.
         log.warn("Failed to send scan completion notification", {
           scanId,
-          error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+          error:
+            notificationError instanceof Error
+              ? notificationError.message
+              : String(notificationError),
         })
       }
 
@@ -239,10 +265,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       log.error("Scan job failed", { scanId, error: errorMessage })
 
-      const currentScan = await prisma.scan.findUnique({
-        where: { id: scanId },
-        select: { status: true },
-      }).catch(() => null)
+      const currentScan = await prisma.scan
+        .findUnique({
+          where: { id: scanId },
+          select: { status: true },
+        })
+        .catch(() => null)
       if (currentScan?.status === "CANCELLED") {
         return {
           status: "failed",

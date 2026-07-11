@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest"
 import { generateLaunchReadinessReport } from "./launch-readiness"
 
-const makeFinding = (overrides: Partial<{
-  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"
-  status: string
-  verified: boolean
-}> = {}) => ({
+const makeFinding = (
+  overrides: Partial<{
+    severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"
+    status: string
+    verified: boolean
+  }> = {}
+) => ({
   id: `finding-${Math.random()}`,
   severity: (overrides.severity ?? "MEDIUM") as never,
   status: (overrides.status ?? "OPEN") as never,
@@ -83,7 +85,7 @@ describe("generateLaunchReadinessReport", () => {
       makeFinding({ verified: false, severity: "LOW", status: "OPEN" }),
     ])
     expect(report.recommendations).toContain(
-      "No findings have been verified — run a deeper scan to confirm vulnerabilities",
+      "No findings have been verified — run a deeper scan to confirm vulnerabilities"
     )
   })
 })

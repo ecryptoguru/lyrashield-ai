@@ -4,7 +4,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../lib/api-response"
 import { logger } from "@lyrashield/logger"
-import { generateLaunchReadinessReport } from "@/lib/launch-readiness"
+import { generateLaunchReadinessReport, type FindingForReadiness } from "@/lib/launch-readiness"
 
 export async function GET(request: Request) {
   try {
@@ -24,7 +24,19 @@ export async function GET(request: Request) {
       limit: 100,
     })
 
-    const report = generateLaunchReadinessReport(items as unknown as Parameters<typeof generateLaunchReadinessReport>[0])
+    const findings: FindingForReadiness[] = items.map((f) => ({
+      id: f.id,
+      severity: f.severity,
+      status: f.status,
+      verified: f.verified,
+      confidence: f.confidence,
+      category: f.category,
+      cwe: f.cwe,
+      title: f.title,
+      summary: f.summary ?? "",
+    }))
+
+    const report = generateLaunchReadinessReport(findings)
 
     return apiSuccess(report)
   } catch (error) {

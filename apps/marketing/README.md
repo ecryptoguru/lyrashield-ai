@@ -12,6 +12,7 @@ cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
 ```
 
 - Set `PUBLIC_SITE_URL` in `.env`.
+- Set `PUBLIC_APP_URL` in `.env` to the app origin (e.g. `http://localhost:3001` for local dev, `https://app.lyrasecai.com` for production). The build strips a trailing slash if present.
 - Replace `WAITLIST_IP_SALT` in `.dev.vars` with a random 32+ character string (wrangler reads secrets from `.dev.vars` in local dev, not `.env`).
 
 ## Local dev
@@ -53,11 +54,15 @@ pnpm --filter @lyrashield/marketing exec wrangler secret put WAITLIST_IP_SALT
 
 ```bash
 # Preview / staging
-PUBLIC_SITE_URL=https://lyrasec-marketing.YOUR_SUBDOMAIN.workers.dev PUBLIC_INDEXABLE=false pnpm --filter @lyrashield/marketing build
+PUBLIC_SITE_URL=https://lyrasec-marketing.YOUR_SUBDOMAIN.workers.dev \
+PUBLIC_APP_URL=https://app.YOUR_SUBDOMAIN.workers.dev \
+PUBLIC_INDEXABLE=false pnpm --filter @lyrashield/marketing build
 pnpm --filter @lyrashield/marketing exec wrangler versions upload --config dist/server/wrangler.json
 
 # Production (only after founder approval and domain attach)
-PUBLIC_SITE_URL=https://lyrasecai.com PUBLIC_INDEXABLE=true pnpm --filter @lyrashield/marketing build
+PUBLIC_SITE_URL=https://lyrasecai.com \
+PUBLIC_APP_URL=https://app.lyrasecai.com \
+PUBLIC_INDEXABLE=true pnpm --filter @lyrashield/marketing build
 pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
 ```
 
@@ -73,6 +78,6 @@ curl -X POST -d "email=you@example.com" -d "source=landing" http://localhost:432
 
 ## Notes
 
-- No pricing, no fake metrics, no Strix.
+- No pricing, no fake metrics, no public mention of the forked engine.
 - Blog posts are `draft: true` by default. Only un-draft a post after founder sign-off.
 - See `BLOG_AUTHORING.md` for content rules.

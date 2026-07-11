@@ -143,7 +143,7 @@ describe("command-builder", () => {
           goal: "VULNERABILITY_SCAN",
           mode: "SAFE",
           target: { id: "t", type: "REPO", name: "bad" },
-        }),
+        })
       ).toThrow("REPO target missing")
     })
 
@@ -154,7 +154,7 @@ describe("command-builder", () => {
           goal: "VULNERABILITY_SCAN",
           mode: "SAFE",
           target: { id: "t", type: "WEB_APP", name: "bad" },
-        }),
+        })
       ).toThrow("WEB_APP target missing url")
     })
 
@@ -165,7 +165,7 @@ describe("command-builder", () => {
           goal: "VULNERABILITY_SCAN",
           mode: "SAFE",
           target: { id: "t", type: "IAC", name: "bad" },
-        }),
+        })
       ).toThrow("IAC target missing url")
     })
 

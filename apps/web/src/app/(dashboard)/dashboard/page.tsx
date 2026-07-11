@@ -11,7 +11,9 @@ export default async function DashboardPage() {
   const workspaces = await getCachedWorkspaces(session.userId)
   const workspaceIds = workspaces.map((w) => w.id)
 
-  const { scanCount, findingCount, projectCount } = await getCachedDashboardStats(workspaceIds.join(","))
+  const { scanCount, findingCount, projectCount } = await getCachedDashboardStats(
+    workspaceIds.join(",")
+  )
 
   const stats = [
     { label: "Projects", value: projectCount, icon: ShieldCheck },
@@ -24,7 +26,7 @@ export default async function DashboardPage() {
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Welcome back, {session.userName}</p>
+          <p className="text-muted-foreground mt-1 text-sm">Welcome back, {session.userName}</p>
         </div>
         <Link href="/dashboard/scans">
           <Button>
@@ -52,14 +54,17 @@ export default async function DashboardPage() {
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {stats.map((stat) => (
-              <Card key={stat.label} className="group p-5 transition-all duration-200 hover:shadow-md">
+              <Card
+                key={stat.label}
+                className="group p-5 transition-all duration-200 hover:shadow-md"
+              >
                 <div className="flex items-center justify-between">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/5 transition-colors group-hover:bg-primary/10">
-                    <stat.icon className="h-5 w-5 text-primary" aria-hidden="true" />
+                  <div className="bg-primary/5 group-hover:bg-primary/10 flex h-10 w-10 items-center justify-center rounded-xl transition-colors">
+                    <stat.icon className="text-primary h-5 w-5" aria-hidden="true" />
                   </div>
                   <span className="text-3xl font-bold tracking-tight">{stat.value}</span>
                 </div>
-                <p className="mt-3 text-sm font-medium text-muted-foreground">{stat.label}</p>
+                <p className="text-muted-foreground mt-3 text-sm font-medium">{stat.label}</p>
               </Card>
             ))}
           </div>
@@ -73,7 +78,7 @@ export default async function DashboardPage() {
                     <h3 className="font-semibold">{ws.name}</h3>
                     <Badge variant={ws.role === "OWNER" ? "info" : "muted"}>{ws.role}</Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Plan: {ws.plan} · Mode: {ws.mode}
                   </p>
                 </Card>
