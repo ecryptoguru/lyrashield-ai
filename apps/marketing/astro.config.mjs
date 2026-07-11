@@ -1,10 +1,28 @@
+import { readFileSync } from "node:fs"
 import { defineConfig, envField } from "astro/config"
 import cloudflare from "@astrojs/cloudflare"
 import mdx from "@astrojs/mdx"
 import sitemap from "@astrojs/sitemap"
 import tailwindcss from "@tailwindcss/vite"
 
-const siteUrl = process.env.PUBLIC_SITE_URL || "http://localhost:4321"
+// The Cloudflare adapter (v14+) feeds `vars` from wrangler.jsonc into
+// import.meta.env / astro:env at build time — but Astro's own `site` config is
+// resolved HERE, from process.env, before the adapter runs. If the two sources
+// disagree, sitemap/RSS/llms.txt URLs (driven by `site`) diverge from
+// canonical/robots URLs (driven by import.meta.env). Fall back to the wrangler
+// vars so wrangler.jsonc is the single source of truth; a PUBLIC_SITE_URL
+// shell env var still wins when explicitly set (e.g. one-off preview builds).
+function wranglerVar(name) {
+  try {
+    const raw = readFileSync(new URL("./wrangler.jsonc", import.meta.url), "utf8")
+    const json = JSON.parse(raw.replace(/^\s*\/\/.*$/gm, ""))
+    return json.vars?.[name] || undefined
+  } catch {
+    return undefined
+  }
+}
+
+const siteUrl = process.env.PUBLIC_SITE_URL || wranglerVar("PUBLIC_SITE_URL") || "http://localhost:4321"
 
 export default defineConfig({
   site: siteUrl,
