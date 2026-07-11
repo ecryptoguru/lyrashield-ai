@@ -21,11 +21,10 @@ const {
   article,
 } = Astro.props
 
-const siteUrl = ((import.meta.env.PUBLIC_SITE_URL as string | undefined) || "http://localhost:4321")
-const siteOrigin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
+const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const pageUrl = canonical ?? new URL(Astro.url.pathname, siteOrigin).toString()
 const imageUrl = ogImage.startsWith("http") ? ogImage : new URL(ogImage, siteOrigin).toString()
-const indexable = (import.meta.env.PUBLIC_INDEXABLE as string | undefined) === "true"
+const indexable = __MARKETING_INDEXABLE__
 ---
 
 <meta charset="utf-8" />

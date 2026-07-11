@@ -8,12 +8,12 @@
     "prebuild": "wrangler types",
     "build": "astro build",
     "prepreview": "wrangler types",
-    "preview": "astro preview",
+    "preview": "astro build && wrangler dev --local --config dist/server/wrangler.json",
     "pretypecheck": "wrangler types",
     "typecheck": "astro check",
     "lint": "eslint src --max-warnings 0",
-    "deploy": "wrangler deploy",
-    "deploy:preview": "wrangler versions upload"
+    "deploy": "astro build && wrangler deploy --config dist/server/wrangler.json",
+    "deploy:preview": "astro build && wrangler versions upload --config dist/server/wrangler.json"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.1.2",

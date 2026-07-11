@@ -5,13 +5,9 @@ import mdx from "@astrojs/mdx"
 import sitemap from "@astrojs/sitemap"
 import tailwindcss from "@tailwindcss/vite"
 
-// The Cloudflare adapter (v14+) feeds `vars` from wrangler.jsonc into
-// import.meta.env / astro:env at build time — but Astro's own `site` config is
-// resolved HERE, from process.env, before the adapter runs. If the two sources
-// disagree, sitemap/RSS/llms.txt URLs (driven by `site`) diverge from
-// canonical/robots URLs (driven by import.meta.env). Fall back to the wrangler
-// vars so wrangler.jsonc is the single source of truth; a PUBLIC_SITE_URL
-// shell env var still wins when explicitly set (e.g. one-off preview builds).
+// Astro resolves `site` and prerendered metadata during the build, before the
+// Cloudflare Worker receives runtime vars. Keep those values in this one build
+// configuration so sitemaps, canonical URLs, and indexing directives agree.
 function wranglerVar(name) {
   try {
     const raw = readFileSync(new URL("./wrangler.jsonc", import.meta.url), "utf8")
@@ -22,7 +18,19 @@ function wranglerVar(name) {
   }
 }
 
-const siteUrl = process.env.PUBLIC_SITE_URL || wranglerVar("PUBLIC_SITE_URL") || "http://localhost:4321"
+const configuredSiteUrl = process.env.PUBLIC_SITE_URL || wranglerVar("PUBLIC_SITE_URL")
+const siteUrl = configuredSiteUrl || "http://localhost:4321"
+const indexable = (process.env.PUBLIC_INDEXABLE || wranglerVar("PUBLIC_INDEXABLE") || "false") === "true"
+const xUrl = process.env.PUBLIC_X_URL || wranglerVar("PUBLIC_X_URL") || ""
+
+if (indexable) {
+  try {
+    const url = new URL(configuredSiteUrl)
+    if (url.protocol !== "https:" || url.hostname === "localhost") throw new Error("not a public HTTPS URL")
+  } catch {
+    throw new Error("PUBLIC_SITE_URL must be a public HTTPS URL when PUBLIC_INDEXABLE=true")
+  }
+}
 
 export default defineConfig({
   site: siteUrl,
@@ -69,5 +77,9 @@ export default defineConfig({
   },
   vite: {
     plugins: [tailwindcss()],
+    define: {
+      __MARKETING_INDEXABLE__: JSON.stringify(indexable),
+      __MARKETING_X_URL__: JSON.stringify(xUrl),
+    },
   },
 })
