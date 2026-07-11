@@ -61,8 +61,9 @@ jobs:
           SECRETS_FOUND=0
           while IFS= read -r file; do
             if [ -f "$file" ]; then
-              # Check for common secret patterns
-              if grep -qE '(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})' "$file" 2>/dev/null; then
+              # Check only added lines. Existing examples and the scanner's
+              # own patterns must not make an unrelated PR fail.
+              if git diff --unified=0 "$BASE" "$HEAD" -- "$file" | grep -v '^+++' | grep -qE '^\+.*(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})'; then
                 echo "::warning file=$file::Potential secret detected in changed file"
                 SECRETS_FOUND=1
               fi
@@ -151,6 +152,8 @@ jobs:
           SECRETS="${{ steps.diff.outputs.secrets_found }}"
           VULN="${{ steps.deps.outputs.vuln_found }}"
           ISSUES="${{ steps.scan.outputs.issues_found }}"
+          BASE="${{ steps.diff.outputs.base_sha }}"
+          HEAD="${{ steps.diff.outputs.head_sha }}"
 
           # Build SARIF results array from detected issues
           RESULTS="["
@@ -158,7 +161,7 @@ jobs:
           # Add secret findings
           if [ "$SECRETS" = "1" ]; then
             while IFS= read -r file; do
-              if [ -f "$file" ] && grep -qE '(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})' "$file" 2>/dev/null; then
+              if [ -f "$file" ] && git diff --unified=0 "$BASE" "$HEAD" -- "$file" | grep -v '^+++' | grep -qE '^\+.*(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})'; then
                 if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
                 RESULTS="$RESULTS{\"ruleId\":\"secret-exposure\",\"level\":\"error\",\"message\":{\"text\":\"Potential secret detected in $file\"},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":\"$file\"}}}]}"
               fi
