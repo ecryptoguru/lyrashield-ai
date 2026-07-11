@@ -1,0 +1,47 @@
+---
+import Base from "@layouts/Base.astro"
+import { getCollection } from "astro:content"
+
+export async function getStaticPaths() {
+  const posts = await getCollection("blog", (entry) => !entry.data.draft)
+  const tags = [...new Set(posts.flatMap((post) => post.data.tags))].sort()
+
+  return tags.map((tag) => ({
+    params: { tag: tag.toLowerCase().replace(/\s+/g, "-") },
+    props: { tag, posts: posts.filter((post) => post.data.tags.includes(tag)) },
+  }))
+}
+
+const { tag, posts } = Astro.props
+const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
+
+const title = `Tag: ${tag} — LyraSec AI Blog`
+const description = `Blog posts tagged ${tag}.`
+---
+
+<Base title={title} description={description}>
+  <section class="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
+    <h1 class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">Tag: {tag}</h1>
+    <p class="mt-4 text-lg text-text-muted">{description}</p>
+
+    {sortedPosts.length === 0 && (
+      <p class="mt-12 text-text-muted">No published posts for this tag.</p>
+    )}
+
+    <ul class="mt-12 space-y-8">
+      {sortedPosts.map((post) => (
+        <li class="rounded-lg border border-border bg-bg-raised p-6">
+          <a href={`/blog/${post.id}`} class="text-xl font-semibold tracking-tight text-text hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            {post.data.title}
+          </a>
+          <p class="mt-2 text-text-muted">{post.data.description}</p>
+          <p class="mt-4 text-sm text-text-muted">
+            <time datetime={post.data.pubDate.toISOString()}>
+              {post.data.pubDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+            </time>
+          </p>
+        </li>
+      ))}
+    </ul>
+  </section>
+</Base>

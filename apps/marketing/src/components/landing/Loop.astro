@@ -1,0 +1,50 @@
+<section id="how-it-works" aria-labelledby="loop-heading" class="px-4 py-24 sm:px-6 lg:px-8">
+  <div class="mx-auto max-w-6xl">
+    <h2 id="loop-heading" class="text-center text-3xl font-semibold tracking-tight text-text sm:text-4xl">
+      One loop: scan → verify → fix → retest.
+    </h2>
+    <ol class="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
+      <li class="reveal rounded-lg border border-border bg-bg-raised p-6">
+        <span class="flex h-10 w-10 items-center justify-center rounded-full bg-accent-dim text-sm font-bold text-accent" aria-hidden="true">1</span>
+        <h3 class="mt-4 text-lg font-medium text-text">Point it at a target.</h3>
+        <p class="mt-2 text-sm text-text-muted">A repo, a PR diff, or a running app.</p>
+      </li>
+      <li class="reveal rounded-lg border border-border bg-bg-raised p-6" style="transition-delay: 80ms;">
+        <span class="flex h-10 w-10 items-center justify-center rounded-full bg-accent-dim text-sm font-bold text-accent" aria-hidden="true">2</span>
+        <h3 class="mt-4 text-lg font-medium text-text">It scans like an attacker.</h3>
+        <p class="mt-2 text-sm text-text-muted">An AI security agent probes your app the way a pentester would, not just pattern-matching your source.</p>
+      </li>
+      <li class="reveal rounded-lg border border-border bg-bg-raised p-6" style="transition-delay: 160ms;">
+        <span class="flex h-10 w-10 items-center justify-center rounded-full bg-accent-dim text-sm font-bold text-accent" aria-hidden="true">3</span>
+        <h3 class="mt-4 text-lg font-medium text-text">Findings are verified, not guessed.</h3>
+        <p class="mt-2 text-sm text-text-muted">A finding only reaches you when it can be demonstrated, with the evidence attached.</p>
+      </li>
+      <li class="reveal rounded-lg border border-border bg-bg-raised p-6" style="transition-delay: 240ms;">
+        <span class="flex h-10 w-10 items-center justify-center rounded-full bg-accent-dim text-sm font-bold text-accent" aria-hidden="true">4</span>
+        <h3 class="mt-4 text-lg font-medium text-text">It opens the fix PR.</h3>
+        <p class="mt-2 text-sm text-text-muted">Plain-language explanation, exact diff, your review.</p>
+      </li>
+      <li class="reveal rounded-lg border border-border bg-bg-raised p-6" style="transition-delay: 320ms;">
+        <span class="flex h-10 w-10 items-center justify-center rounded-full bg-accent-dim text-sm font-bold text-accent" aria-hidden="true">5</span>
+        <h3 class="mt-4 text-lg font-medium text-text">It retests.</h3>
+        <p class="mt-2 text-sm text-text-muted">The loop isn't done until the vulnerability is provably gone, with a report you can share.</p>
+      </li>
+    </ol>
+  </div>
+
+  <script>
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible")
+            observer.unobserve(entry.target)
+          }
+        })
+      },
+      { threshold: 0.1, rootMargin: "0px 0px -50px 0px" }
+    )
+
+    document.querySelectorAll(".reveal").forEach((el) => observer.observe(el))
+  </script>
+</section>

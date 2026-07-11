@@ -1,0 +1,60 @@
+---
+interface Props {
+  title: string
+  description: string
+  canonical?: string
+  ogImage?: string
+  ogType?: "website" | "article"
+  article?: {
+    publishedTime?: string
+    modifiedTime?: string
+    tags?: string[]
+  }
+}
+
+const {
+  title,
+  description,
+  canonical,
+  ogImage = "/og/og-default.png",
+  ogType = "website",
+  article,
+} = Astro.props
+
+const siteUrl = ((import.meta.env.PUBLIC_SITE_URL as string | undefined) || "http://localhost:4321")
+const siteOrigin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
+const pageUrl = canonical ?? new URL(Astro.url.pathname, siteOrigin).toString()
+const imageUrl = ogImage.startsWith("http") ? ogImage : new URL(ogImage, siteOrigin).toString()
+const indexable = (import.meta.env.PUBLIC_INDEXABLE as string | undefined) === "true"
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={pageUrl} />
+{!indexable && <meta name="robots" content="noindex, nofollow" />}
+
+<meta property="og:type" content={ogType} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:image" content={imageUrl} />
+<meta property="og:url" content={pageUrl} />
+<meta property="og:site_name" content="LyraSec AI" />
+<meta property="og:locale" content="en_US" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={imageUrl} />
+
+{ogType === "article" && article?.publishedTime && (
+  <meta property="article:published_time" content={article.publishedTime} />
+)}
+{ogType === "article" && article?.modifiedTime && (
+  <meta property="article:modified_time" content={article.modifiedTime} />
+)}
+{ogType === "article" && article?.tags && article.tags.map((tag) => (
+  <meta property="article:tag" content={tag} />
+))}
+
+{indexable && <link rel="sitemap" href="/sitemap-index.xml" type="application/xml" />}

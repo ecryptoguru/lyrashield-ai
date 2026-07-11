@@ -73,8 +73,10 @@ docker ps
 ```bash
 cd ~/Desktop/lyrasec-ai
 cp .env.example .env
+cp apps/marketing/.env.example apps/marketing/.env
+cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
 
-# Edit .env — minimum required values:
+# Edit .env, apps/marketing/.env, and apps/marketing/.dev.vars — minimum required values:
 # DATABASE_URL=postgresql://lyrashield:lyrashield@localhost:5432/lyrashield
 # REDIS_URL=redis://localhost:6379
 # BETTER_AUTH_SECRET=<generate with: openssl rand -base64 32>
@@ -97,6 +99,11 @@ cp .env.example .env
 # GITHUB_APP_ID=your-app-id
 # GITHUB_APP_PRIVATE_KEY=<contents-of-pem-file>
 # GITHUB_WEBHOOK_SECRET=<generate-strong-secret>
+#
+# # Marketing (apps/marketing/.dev.vars for WAITLIST_IP_SALT, apps/marketing/.env for PUBLIC_*)
+# PUBLIC_SITE_URL=http://localhost:4321
+# PUBLIC_INDEXABLE=false
+# WAITLIST_IP_SALT=<generate with: openssl rand -base64 32>
 ```
 
 ### 4. Install Dependencies & Run Migrations
@@ -122,14 +129,43 @@ pnpm db:seed
 ```bash
 cd ~/Desktop/lyrasec-ai
 
-# Starts both web (:3000) and worker (stub mode)
+# Starts all apps with dev scripts: web (:3000), worker, agent, and marketing (:4321)
 pnpm dev
 ```
 
 Verify:
+
 - Web app: http://localhost:3000
 - Sign up / sign in works
 - Dashboard loads
+- Marketing site: http://localhost:4321
+- Waitlist form works
+
+### 5.5 Start the Marketing Site (Astro)
+
+```bash
+cd ~/Desktop/lyrasec-ai
+
+# The .env and .dev.vars examples should already be copied in Step 3.
+# Edit the values:
+#   apps/marketing/.env      -> PUBLIC_SITE_URL=http://localhost:4321
+#   apps/marketing/.dev.vars -> WAITLIST_IP_SALT=<openssl rand -base64 32>
+
+# Start the Astro dev server and generate worker types
+pnpm --filter @lyrashield/marketing dev
+```
+
+Verify:
+
+- Marketing site: http://localhost:4321
+- Waitlist form works
+- `robots.txt`, `rss.xml`, and `sitemap-index.xml` are generated
+
+If the waitlist table is missing in local dev, apply the local D1 migration:
+
+```bash
+pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrasec-marketing-waitlist --local
+```
 
 ### 6. Set Up the Scan Engine
 
@@ -238,7 +274,7 @@ docker compose up -d
 # 2. Start platform
 pnpm dev
 
-# 3. Make changes in apps/web or packages/*
+# 3. Make changes in apps/web, apps/marketing, or packages/*
 
 # 4. Run tests
 pnpm test          # unit tests (727 passing, 56 files)
@@ -296,24 +332,28 @@ git commit -m "sync: merge upstream + rebrand"
 ## Troubleshooting
 
 ### Port already in use
+
 ```bash
 lsof -i :3000  # find process
 kill <PID>     # kill it
 ```
 
 ### Database connection failed
+
 ```bash
 docker compose restart postgres
 docker compose logs postgres
 ```
 
 ### Prisma migration issues
+
 ```bash
 pnpm db:push    # sync schema without migration (dev only)
 npx prisma studio --schema packages/db/prisma/schema.prisma  # inspect data
 ```
 
 ### Engine not found
+
 ```bash
 docker compose build worker
 docker compose up -d worker
@@ -321,6 +361,7 @@ docker compose exec worker lyrashield --version
 ```
 
 ### Docker sandbox won't start
+
 ```bash
 docker pull ghcr.io/usestrix/strix-sandbox:1.0.0
 docker image inspect ghcr.io/usestrix/strix-sandbox:1.0.0

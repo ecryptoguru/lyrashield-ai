@@ -1,0 +1,218 @@
+---
+const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
+---
+
+<form
+  id="waitlist-form"
+  action="/api/waitlist"
+  method="POST"
+  class="mx-auto max-w-md rounded-lg border border-border bg-bg-raised p-6 sm:p-8"
+>
+  <div id="form-fields" class="space-y-4">
+    <div>
+      <label for="email" class="block text-sm font-medium text-text">Email</label>
+      <input
+        type="email"
+        id="email"
+        name="email"
+        required
+        autocomplete="email"
+        aria-required="true"
+        aria-describedby="email-error"
+        class="mt-2 w-full rounded-lg border border-border bg-bg px-4 py-3 text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        placeholder="you@example.com"
+      />
+      <p id="email-error" class="mt-2 hidden text-sm text-danger" aria-live="polite"></p>
+    </div>
+
+    <div>
+      <label for="role" class="block text-sm font-medium text-text">Role <span class="text-text-muted">(optional)</span></label>
+      <select
+        id="role"
+        name="role"
+        class="mt-2 w-full rounded-lg border border-border bg-bg px-4 py-3 text-text focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <option value="">—</option>
+        <option value="Indie builder">Indie builder</option>
+        <option value="Startup CTO⁄eng lead">Startup CTO⁄eng lead</option>
+        <option value="Security engineer">Security engineer</option>
+        <option value="Agency⁄dev shop">Agency⁄dev shop</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="building" class="block text-sm font-medium text-text">What are you building? <span class="text-text-muted">(optional)</span></label>
+      <input
+        type="text"
+        id="building"
+        name="building"
+        maxlength="200"
+        class="mt-2 w-full rounded-lg border border-border bg-bg px-4 py-3 text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        placeholder="e.g. a Next.js SaaS, mostly AI-generated"
+      />
+    </div>
+
+    <div class="visually-hidden" aria-hidden="true">
+      <label for="website">Website</label>
+      <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
+    </div>
+
+    <input type="hidden" name="source" value="landing" />
+    <input type="hidden" name="utmSource" />
+    <input type="hidden" name="utmMedium" />
+    <input type="hidden" name="utmCampaign" />
+    <input type="hidden" name="referrer" />
+
+    <button
+      type="submit"
+      class="w-full rounded-lg bg-accent px-5 py-3 text-sm font-medium text-bg hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
+      data-cta-id="final"
+    >
+      Join the waitlist
+    </button>
+  </div>
+
+  <p class="mt-4 text-center text-xs text-text-muted">
+    We store your email to send exactly one invite notification. No sharing, no marketing blasts.
+  </p>
+
+  <div id="waitlist-status" class="mt-4 hidden text-center" aria-live="polite" role="status" tabindex="-1">
+    <p class="font-medium text-accent">You're on the list. One email when your invite is ready.</p>
+    <p class="mt-1 text-sm text-text-muted">
+      Building in public
+      {xUrl ? (
+        <a href={xUrl} class="text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">on X</a>
+      ) : (
+        <span> on X</span>
+      )} in the meantime.
+    </p>
+  </div>
+</form>
+
+<script>
+  (function () {
+    const form = document.getElementById("waitlist-form") as HTMLFormElement | null
+    if (!form) return
+
+    const url = new URL(window.location.href)
+    const storageKey = "lyra_utm"
+    const utm = {
+      utmSource: url.searchParams.get("utm_source") || sessionStorage.getItem(storageKey + "_source") || "",
+      utmMedium: url.searchParams.get("utm_medium") || sessionStorage.getItem(storageKey + "_medium") || "",
+      utmCampaign: url.searchParams.get("utm_campaign") || sessionStorage.getItem(storageKey + "_campaign") || "",
+    }
+
+    if (url.searchParams.get("utm_source")) {
+      sessionStorage.setItem(storageKey + "_source", utm.utmSource)
+      sessionStorage.setItem(storageKey + "_medium", utm.utmMedium)
+      sessionStorage.setItem(storageKey + "_campaign", utm.utmCampaign)
+    }
+
+    const referrer = document.referrer || ""
+    ;(form.querySelector("[name=utmSource]") as HTMLInputElement).value = utm.utmSource
+    ;(form.querySelector("[name=utmMedium]") as HTMLInputElement).value = utm.utmMedium
+    ;(form.querySelector("[name=utmCampaign]") as HTMLInputElement).value = utm.utmCampaign
+    ;(form.querySelector("[name=referrer]") as HTMLInputElement).value = referrer
+
+    const emailInput = form.querySelector("[name=email]") as HTMLInputElement
+    const errorEl = document.getElementById("email-error")
+    const statusEl = document.getElementById("waitlist-status")
+    const submitButton = form.querySelector('button[type="submit"]') as HTMLButtonElement
+    const formFields = document.getElementById("form-fields")
+    const originalButtonText = submitButton?.textContent?.trim() || "Join the waitlist"
+    let formStarted = false
+
+    emailInput?.addEventListener("focus", () => {
+      if (!formStarted) {
+        formStarted = true
+        if (window.posthog?.__loaded) {
+          window.posthog.capture("waitlist_form_start")
+        }
+      }
+    })
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault()
+
+      const formData = new FormData(form)
+      const body = {
+        email: String(formData.get("email") || "").trim(),
+        role: String(formData.get("role") || "").trim(),
+        building: String(formData.get("building") || "").trim(),
+        source: String(formData.get("source") || "").trim(),
+        utmSource: String(formData.get("utmSource") || "").trim(),
+        utmMedium: String(formData.get("utmMedium") || "").trim(),
+        utmCampaign: String(formData.get("utmCampaign") || "").trim(),
+        referrer: String(formData.get("referrer") || "").trim(),
+        website: String(formData.get("website") || "").trim(),
+      }
+
+      if (!body.email || !body.email.includes("@")) {
+        if (errorEl) {
+          errorEl.textContent = "Please enter a valid email address."
+          errorEl.classList.remove("hidden")
+        }
+        if (window.posthog?.__loaded) {
+          window.posthog.capture("waitlist_submit_error", { error_type: "invalid_email" })
+        }
+        return
+      }
+
+      if (submitButton) {
+        submitButton.disabled = true
+        submitButton.textContent = "Joining..."
+        submitButton.setAttribute("aria-busy", "true")
+      }
+
+      try {
+        const response = await fetch("/api/waitlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+
+        if (response.status === 429) {
+          if (errorEl) {
+            errorEl.textContent = "Too many attempts — try again in a minute."
+            errorEl.classList.remove("hidden")
+          }
+          if (window.posthog?.__loaded) {
+            window.posthog.capture("waitlist_submit_error", { error_type: "rate_limited" })
+          }
+          return
+        }
+
+        if (!response.ok) {
+          throw new Error(`Server error ${response.status}`)
+        }
+
+        form.reset()
+        formFields?.classList.add("hidden")
+        if (errorEl) errorEl.classList.add("hidden")
+        if (statusEl) {
+          statusEl.classList.remove("hidden")
+          statusEl.focus()
+        }
+
+        if (window.posthog?.__loaded) {
+          window.posthog.capture("waitlist_submit_success", { role: body.role || null })
+        }
+      } catch (error) {
+        if (errorEl) {
+          errorEl.textContent = "Something went wrong. Please try again."
+          errorEl.classList.remove("hidden")
+        }
+        if (window.posthog?.__loaded) {
+          window.posthog.capture("waitlist_submit_error", { error_type: "server" })
+        }
+      } finally {
+        if (submitButton) {
+          submitButton.disabled = false
+          submitButton.textContent = originalButtonText
+          submitButton.removeAttribute("aria-busy")
+        }
+      }
+    })
+  })()
+</script>
