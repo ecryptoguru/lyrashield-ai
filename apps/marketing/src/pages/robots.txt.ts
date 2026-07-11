@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro"
 
-export const GET: APIRoute = async () => {
-  const indexable = (import.meta.env.PUBLIC_INDEXABLE as string | undefined) === "true"
+export const GET: APIRoute = async (context) => {
+  const indexable = __MARKETING_INDEXABLE__
 
   if (!indexable) {
     return new Response("User-agent: *\nDisallow: /\n", {
@@ -9,7 +9,7 @@ export const GET: APIRoute = async () => {
     })
   }
 
-  const siteUrl = (import.meta.env.PUBLIC_SITE_URL as string | undefined) || "http://localhost:4321"
+  const siteUrl = context.site?.toString() || "http://localhost:4321"
   const siteOrigin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
 
   return new Response(

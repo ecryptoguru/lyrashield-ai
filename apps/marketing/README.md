@@ -54,11 +54,11 @@ pnpm --filter @lyrashield/marketing exec wrangler secret put WAITLIST_IP_SALT
 ```bash
 # Preview / staging
 PUBLIC_SITE_URL=https://lyrasec-marketing.YOUR_SUBDOMAIN.workers.dev PUBLIC_INDEXABLE=false pnpm --filter @lyrashield/marketing build
-pnpm --filter @lyrashield/marketing exec wrangler versions upload
+pnpm --filter @lyrashield/marketing exec wrangler versions upload --config dist/server/wrangler.json
 
 # Production (only after founder approval and domain attach)
 PUBLIC_SITE_URL=https://lyrasecai.com PUBLIC_INDEXABLE=true pnpm --filter @lyrashield/marketing build
-pnpm --filter @lyrashield/marketing exec wrangler deploy
+pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
 ```
 
 1. `PUBLIC_INDEXABLE` is `false` by default. Set it to `true` only on the real production domain after Vision QA and founder approval.

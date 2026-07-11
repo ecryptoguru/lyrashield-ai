@@ -1,8 +1,10 @@
 import type { APIRoute } from "astro"
 import { getCollection } from "astro:content"
 
+export const prerender = false
+
 export const GET: APIRoute = async (context) => {
-  const indexable = (import.meta.env.PUBLIC_INDEXABLE as string | undefined) === "true"
+  const indexable = __MARKETING_INDEXABLE__
 
   // Not live yet: don't publish a crawlable/citable summary of an unlaunched
   // preview build. Matches the noindex/robots.txt gating used everywhere else.
