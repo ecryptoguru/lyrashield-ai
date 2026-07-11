@@ -39,7 +39,10 @@ export async function GET() {
   } catch (error) {
     logger.error("Failed to get onboarding state", { error: String(error) })
     return NextResponse.json(
-      { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to get onboarding state" } },
+      {
+        success: false,
+        error: { code: "INTERNAL_ERROR", message: "Failed to get onboarding state" },
+      },
       { status: 500 }
     )
   }
@@ -60,7 +63,10 @@ export async function PATCH(request: Request) {
       body = await request.json()
     } catch {
       return NextResponse.json(
-        { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
+        {
+          success: false,
+          error: { code: "INVALID_JSON", message: "Request body must be valid JSON" },
+        },
         { status: 400 }
       )
     }
@@ -82,7 +88,10 @@ export async function PATCH(request: Request) {
       const membership = await getWorkspaceMembership(parsed.data.workspaceId, session.userId)
       if (!membership) {
         return NextResponse.json(
-          { success: false, error: { code: "FORBIDDEN", message: "You do not have access to this workspace" } },
+          {
+            success: false,
+            error: { code: "FORBIDDEN", message: "You do not have access to this workspace" },
+          },
           { status: 403 }
         )
       }
@@ -100,7 +109,10 @@ export async function PATCH(request: Request) {
         : null
       if (!target || !targetMembership) {
         return NextResponse.json(
-          { success: false, error: { code: "FORBIDDEN", message: "You do not have access to this target" } },
+          {
+            success: false,
+            error: { code: "FORBIDDEN", message: "You do not have access to this target" },
+          },
           { status: 403 }
         )
       }
@@ -135,7 +147,10 @@ export async function PATCH(request: Request) {
   } catch (error) {
     logger.error("Failed to update onboarding state", { error: String(error) })
     return NextResponse.json(
-      { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to update onboarding state" } },
+      {
+        success: false,
+        error: { code: "INTERNAL_ERROR", message: "Failed to update onboarding state" },
+      },
       { status: 500 }
     )
   }

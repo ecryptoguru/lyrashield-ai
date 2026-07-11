@@ -39,5 +39,15 @@
     "../../packages/config/src/**/*.ts",
     "../../packages/config/src/**/*.tsx"
   ],
-  "exclude": ["node_modules", "dist", ".next", ".turbo", "**/*.test.ts", "**/*.test.tsx", "../../packages/**/*.test.ts", "../../packages/**/*.test.tsx", "vitest.config.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".next",
+    ".turbo",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "../../packages/**/*.test.ts",
+    "../../packages/**/*.test.tsx",
+    "vitest.config.ts"
+  ]
 }

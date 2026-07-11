@@ -60,7 +60,10 @@ interface FindingItem {
   createdAt: string
 }
 
-const STATUS_VARIANT: Record<string, "default" | "success" | "danger" | "warning" | "info" | "muted"> = {
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "success" | "danger" | "warning" | "info" | "muted"
+> = {
   QUEUED: "muted",
   PREFLIGHT: "info",
   RUNNING: "default",
@@ -135,7 +138,9 @@ export function ScanDetailClient({
   const [expandedFindings, setExpandedFindings] = useState<Set<string>>(new Set())
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const isActive = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"].includes(scan.status)
+  const isActive = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"].includes(
+    scan.status
+  )
 
   const refresh = useCallback(async () => {
     try {
@@ -150,11 +155,18 @@ export function ScanDetailClient({
           endedAt: updated.endedAt ?? null,
           events: (updated.events ?? []).map((e: { createdAt: string | Date }) => ({
             ...e,
-            createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : String(e.createdAt),
+            createdAt:
+              e.createdAt instanceof Date ? e.createdAt.toISOString() : String(e.createdAt),
           })),
         })
-        if (["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(updated.status)) {
-          const findingsResponse = await fetch(`/api/findings?workspaceId=${updated.workspaceId}&scanId=${scan.id}`)
+        if (
+          ["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(
+            updated.status
+          )
+        ) {
+          const findingsResponse = await fetch(
+            `/api/findings?workspaceId=${updated.workspaceId}&scanId=${scan.id}`
+          )
           if (findingsResponse.ok) {
             const findingsJson = await findingsResponse.json()
             if (Array.isArray(findingsJson.data)) setCurrentFindings(findingsJson.data)
@@ -175,7 +187,7 @@ export function ScanDetailClient({
   }, [isActive, refresh])
 
   const sortedFindings = [...currentFindings].sort(
-    (a, b) => (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99),
+    (a, b) => (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99)
   )
 
   const severityCounts = currentFindings.reduce(
@@ -183,7 +195,7 @@ export function ScanDetailClient({
       acc[f.severity] = (acc[f.severity] ?? 0) + 1
       return acc
     },
-    {} as Record<string, number>,
+    {} as Record<string, number>
   )
 
   const visibleEvents = expandedEvents ? scan.events : scan.events.slice(-10)
@@ -200,7 +212,10 @@ export function ScanDetailClient({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/dashboard/scans" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href="/dashboard/scans"
+          className="text-muted-foreground hover:text-foreground mb-3 inline-flex items-center gap-1.5 text-sm"
+        >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back to scans
         </Link>
@@ -210,13 +225,13 @@ export function ScanDetailClient({
               <Radar className="h-6 w-6" aria-hidden="true" />
               Scan Details
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-sm">
               {GOAL_LABELS[scan.goal] ?? scan.goal} · {scan.mode} · {scan.triggerType}
             </p>
           </div>
           <div className="flex items-center gap-2">
             {isActive && (
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
@@ -233,7 +248,7 @@ export function ScanDetailClient({
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Clock className="h-4 w-4" aria-hidden="true" />
             Duration
           </div>
@@ -242,14 +257,14 @@ export function ScanDetailClient({
           </p>
         </Card>
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <ShieldAlert className="h-4 w-4" aria-hidden="true" />
             Findings
           </div>
           <p className="mt-1 text-lg font-semibold">{currentFindings.length}</p>
         </Card>
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
             Verified
           </div>
@@ -258,7 +273,7 @@ export function ScanDetailClient({
           </p>
         </Card>
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <XCircle className="h-4 w-4" aria-hidden="true" />
             Status
           </div>
@@ -292,7 +307,7 @@ export function ScanDetailClient({
       {scan.errorMessage && (
         <div
           role="alert"
-          className="mb-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive"
+          className="border-destructive/50 bg-destructive/10 text-destructive mb-6 rounded-lg border p-4 text-sm"
         >
           <p className="font-semibold">{scan.errorCategory}</p>
           <p className="mt-1">{scan.errorMessage}</p>
@@ -302,21 +317,22 @@ export function ScanDetailClient({
       {scan.summary && (
         <Card className="mb-6 p-4">
           <h2 className="mb-1 text-sm font-semibold">Summary</h2>
-          <p className="text-sm text-muted-foreground">{scan.summary}</p>
+          <p className="text-muted-foreground text-sm">{scan.summary}</p>
         </Card>
       )}
 
       {currentFindings.length > 0 && (
         <div className="mb-6">
-          <h2 className="mb-3 text-lg font-semibold">
-            Findings ({currentFindings.length})
-          </h2>
+          <h2 className="mb-3 text-lg font-semibold">Findings ({currentFindings.length})</h2>
           {Object.entries(severityCounts)
             .sort(([a], [b]) => (SEVERITY_ORDER[a] ?? 99) - (SEVERITY_ORDER[b] ?? 99))
             .map(([sev, count]) => {
               const Icon = SEVERITY_ICON[sev] ?? Shield
               return (
-                <span key={sev} className={`mr-3 inline-flex items-center gap-1 text-sm font-medium ${SEVERITY_COLOR[sev] ?? ""}`}>
+                <span
+                  key={sev}
+                  className={`mr-3 inline-flex items-center gap-1 text-sm font-medium ${SEVERITY_COLOR[sev] ?? ""}`}
+                >
                   <Icon className="h-4 w-4" aria-hidden="true" />
                   {count} {sev}
                 </span>
@@ -342,7 +358,7 @@ export function ScanDetailClient({
                       />
                       <div className="min-w-0">
                         <p className="font-medium">{finding.title}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
                           <Badge variant="muted">{finding.severity}</Badge>
                           {finding.cwe && <span>CWE: {finding.cwe}</span>}
                           {finding.cvssScore !== null && <span>CVSS: {finding.cvssScore}</span>}
@@ -353,15 +369,21 @@ export function ScanDetailClient({
                       </div>
                     </div>
                     {isExpanded ? (
-                      <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <ChevronDown
+                        className="text-muted-foreground h-5 w-5 shrink-0"
+                        aria-hidden="true"
+                      />
                     ) : (
-                      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <ChevronRight
+                        className="text-muted-foreground h-5 w-5 shrink-0"
+                        aria-hidden="true"
+                      />
                     )}
                   </button>
                   {isExpanded && finding.summary && (
                     <div
                       id={`finding-${finding.id}-detail`}
-                      className="mt-3 border-t pt-3 text-sm text-muted-foreground"
+                      className="text-muted-foreground mt-3 border-t pt-3 text-sm"
                     >
                       {finding.summary}
                     </div>
@@ -385,11 +407,7 @@ export function ScanDetailClient({
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Scan Events ({scan.events.length})</h2>
           {scan.events.length > 10 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setExpandedEvents(!expandedEvents)}
-            >
+            <Button variant="ghost" size="sm" onClick={() => setExpandedEvents(!expandedEvents)}>
               {expandedEvents ? "Show last 10" : `Show all ${scan.events.length}`}
             </Button>
           )}
@@ -408,17 +426,19 @@ export function ScanDetailClient({
                   key={event.id}
                   className="flex items-start gap-3 border-b pb-2 text-sm last:border-0 last:pb-0"
                 >
-                  <span className="shrink-0 text-xs text-muted-foreground">
+                  <span className="text-muted-foreground shrink-0 text-xs">
                     {new Date(event.createdAt).toLocaleTimeString()}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <span className={`font-mono text-xs ${EVENT_LEVEL_COLOR[event.level] ?? "text-muted-foreground"}`}>
+                    <span
+                      className={`font-mono text-xs ${EVENT_LEVEL_COLOR[event.level] ?? "text-muted-foreground"}`}
+                    >
                       [{event.stage}]
                     </span>
                     <span className="ml-2 wrap-break-word">{event.message}</span>
                   </div>
                   {idx === 0 && !expandedEvents && scan.events.length > 10 && (
-                    <span className="shrink-0 text-xs text-muted-foreground">
+                    <span className="text-muted-foreground shrink-0 text-xs">
                       +{scan.events.length - 10} earlier
                     </span>
                   )}

@@ -15,10 +15,7 @@ const CreateFixProposalSchema = z.object({
   safetyScore: z.number().int().min(0).max(100).optional(),
 })
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {

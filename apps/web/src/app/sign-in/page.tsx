@@ -69,14 +69,14 @@ export default function SignInPage() {
       <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
       <div className="relative w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl gradient-primary shadow-primary-glow">
-            <ShieldCheck className="h-7 w-7 text-primary-foreground" aria-hidden="true" />
+          <div className="gradient-primary shadow-primary-glow mb-3 flex h-12 w-12 items-center justify-center rounded-xl">
+            <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
-          <p className="text-sm text-muted-foreground">Sign in to your LyraShield account</p>
+          <p className="text-muted-foreground text-sm">Sign in to your LyraShield account</p>
         </div>
 
-        <div className="rounded-xl border bg-card p-6 shadow-lg sm:p-8">
+        <div className="bg-card rounded-xl border p-6 shadow-lg sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             <FormField label="Email" htmlFor="email">
               <Input
@@ -102,7 +102,9 @@ export default function SignInPage() {
             </FormField>
 
             {error && (
-              <p className="text-sm text-destructive" role="alert">{error}</p>
+              <p className="text-destructive text-sm" role="alert">
+                {error}
+              </p>
             )}
 
             <Button type="submit" disabled={loading} className="w-full" size="lg">
@@ -112,9 +114,9 @@ export default function SignInPage() {
           </form>
 
           <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs font-medium text-muted-foreground">OR</span>
-            <div className="h-px flex-1 bg-border" />
+            <div className="bg-border h-px flex-1" />
+            <span className="text-muted-foreground text-xs font-medium">OR</span>
+            <div className="bg-border h-px flex-1" />
           </div>
 
           <div className="space-y-3">
@@ -141,9 +143,9 @@ export default function SignInPage() {
           </div>
         </div>
 
-        <p className="mt-6 text-center text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-6 text-center text-sm">
           Don&apos;t have an account?{" "}
-          <Link href="/sign-up" className="font-medium text-primary hover:underline">
+          <Link href="/sign-up" className="text-primary font-medium hover:underline">
             Sign up
           </Link>
         </p>

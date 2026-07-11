@@ -14,7 +14,12 @@
 export function assertEvidenceEncrypted(encryptionKeyRef: string | null | undefined): void {
   if (!encryptionKeyRef || encryptionKeyRef.trim().length === 0) {
     throw new EvidenceEncryptionError(
-      "Evidence artifact must have an encryption key reference before storage",
+      "Evidence artifact must have an encryption key reference before storage"
+    )
+  }
+  if (!isValidKeyRefFormat(encryptionKeyRef)) {
+    throw new EvidenceEncryptionError(
+      `Evidence encryption key ref has invalid format: ${encryptionKeyRef}`
     )
   }
 }
@@ -23,7 +28,11 @@ export function assertEvidenceEncrypted(encryptionKeyRef: string | null | undefi
  * Check whether an evidence record is encrypted without throwing.
  */
 export function isEvidenceEncrypted(encryptionKeyRef: string | null | undefined): boolean {
-  return !!encryptionKeyRef && encryptionKeyRef.trim().length > 0
+  return (
+    !!encryptionKeyRef &&
+    encryptionKeyRef.trim().length > 0 &&
+    isValidKeyRefFormat(encryptionKeyRef)
+  )
 }
 
 /**

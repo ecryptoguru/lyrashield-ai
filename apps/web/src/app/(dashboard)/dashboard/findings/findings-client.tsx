@@ -12,7 +12,16 @@ import {
   AlertCircle,
   Wrench,
 } from "lucide-react"
-import { Button, Badge, Card, EmptyState, Spinner, LoadMore, Select, Textarea } from "@lyrashield/ui"
+import {
+  Button,
+  Badge,
+  Card,
+  EmptyState,
+  Spinner,
+  LoadMore,
+  Select,
+  Textarea,
+} from "@lyrashield/ui"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 
 export interface FindingListItem {
@@ -66,35 +75,38 @@ export function FindingsClient({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleFilterChange = useCallback(async (newFilter: string) => {
-    setFilter(newFilter)
-    if (newFilter === "ALL") {
-      setFindings(initialData)
-      setNextCursor(null)
-      setError(null)
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      const params: Record<string, string> = { workspaceId }
-      if (["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].includes(newFilter)) {
-        params.severity = newFilter
-      } else if (["OPEN", "FIXED", "ACCEPTED_RISK", "FALSE_POSITIVE"].includes(newFilter)) {
-        params.status = newFilter
-      } else if (newFilter === "VERIFIED") {
-        params.verified = "true"
+  const handleFilterChange = useCallback(
+    async (newFilter: string) => {
+      setFilter(newFilter)
+      if (newFilter === "ALL") {
+        setFindings(initialData)
+        setNextCursor(null)
+        setError(null)
+        return
       }
-      const res = await apiGetPaginated<FindingListItem>(`/api/findings`, params)
-      setFindings(res.items)
-      setNextCursor(res.nextCursor)
-    } catch {
-      setFindings([])
-      setError("Failed to load findings. Please try again.")
-    } finally {
-      setLoading(false)
-    }
-  }, [workspaceId, initialData])
+      setLoading(true)
+      setError(null)
+      try {
+        const params: Record<string, string> = { workspaceId }
+        if (["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].includes(newFilter)) {
+          params.severity = newFilter
+        } else if (["OPEN", "FIXED", "ACCEPTED_RISK", "FALSE_POSITIVE"].includes(newFilter)) {
+          params.status = newFilter
+        } else if (newFilter === "VERIFIED") {
+          params.verified = "true"
+        }
+        const res = await apiGetPaginated<FindingListItem>(`/api/findings`, params)
+        setFindings(res.items)
+        setNextCursor(res.nextCursor)
+      } catch {
+        setFindings([])
+        setError("Failed to load findings. Please try again.")
+      } finally {
+        setLoading(false)
+      }
+    },
+    [workspaceId, initialData]
+  )
 
   const filters = ["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW", "OPEN", "FIXED", "VERIFIED"]
 
@@ -102,7 +114,7 @@ export function FindingsClient({
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
         <Spinner className="h-6 w-6" />
-        <p className="text-sm text-muted-foreground">Loading findings...</p>
+        <p className="text-muted-foreground text-sm">Loading findings...</p>
       </div>
     )
   }
@@ -112,10 +124,12 @@ export function FindingsClient({
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Findings</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Security vulnerabilities detected by your scans</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Security vulnerabilities detected by your scans
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Filter className="text-muted-foreground h-4 w-4" aria-hidden="true" />
           <Select
             value={filter}
             onChange={(e) => void handleFilterChange(e.target.value)}
@@ -123,18 +137,25 @@ export function FindingsClient({
             className="w-auto"
           >
             {filters.map((f) => (
-              <option key={f} value={f}>{f}</option>
+              <option key={f} value={f}>
+                {f}
+              </option>
             ))}
           </Select>
         </div>
       </div>
 
       {error && (
-        <Card className="mb-4 p-4 border-destructive/50">
-          <div className="flex items-center gap-2 text-sm text-destructive">
+        <Card className="border-destructive/50 mb-4 p-4">
+          <div className="text-destructive flex items-center gap-2 text-sm">
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={() => void handleFilterChange(filter)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => void handleFilterChange(filter)}
+            >
               Retry
             </Button>
           </div>
@@ -157,7 +178,7 @@ export function FindingsClient({
           {findings.map((finding) => (
             <Card
               key={finding.id}
-              className="p-4 cursor-pointer hover:shadow-card-hover transition-shadow"
+              className="hover:shadow-card-hover cursor-pointer p-4 transition-shadow"
               onClick={() => setSelectedFinding(finding)}
               role="button"
               tabIndex={0}
@@ -169,8 +190,8 @@ export function FindingsClient({
               }}
             >
               <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center gap-2">
                     <Badge variant={SEVERITY_BADGE[finding.severity] ?? "muted"}>
                       {finding.severity}
                     </Badge>
@@ -179,7 +200,7 @@ export function FindingsClient({
                         <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Verified
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <span className="text-muted-foreground flex items-center gap-1 text-xs">
                         <XCircle className="h-3 w-3" aria-hidden="true" /> Unverified
                       </span>
                     )}
@@ -187,30 +208,39 @@ export function FindingsClient({
                       {finding.status.replace(/_/g, " ")}
                     </Badge>
                     {finding.cwe && (
-                      <span className="text-xs text-muted-foreground">{finding.cwe}</span>
+                      <span className="text-muted-foreground text-xs">{finding.cwe}</span>
                     )}
                     {finding.cvssScore !== null && finding.cvssScore !== undefined && (
-                      <span className="text-xs text-muted-foreground">CVSS: {finding.cvssScore}</span>
+                      <span className="text-muted-foreground text-xs">
+                        CVSS: {finding.cvssScore}
+                      </span>
                     )}
                   </div>
-                  <h3 className="font-medium truncate">{finding.title}</h3>
-                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{finding.summary}</p>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                  <h3 className="truncate font-medium">{finding.title}</h3>
+                  <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+                    {finding.summary}
+                  </p>
+                  <div className="text-muted-foreground mt-2 flex items-center gap-3 text-xs">
                     {finding.target && <span>Target: {finding.target.name}</span>}
                     {finding._count?.evidence ? (
                       <span className="flex items-center gap-1">
-                        <ShieldCheck className="h-3 w-3" aria-hidden="true" /> {finding._count.evidence} evidence
+                        <ShieldCheck className="h-3 w-3" aria-hidden="true" />{" "}
+                        {finding._count.evidence} evidence
                       </span>
                     ) : null}
                     {finding._count?.fixProposals ? (
                       <span className="flex items-center gap-1">
-                        <ShieldAlert className="h-3 w-3" aria-hidden="true" /> {finding._count.fixProposals} fix proposals
+                        <ShieldAlert className="h-3 w-3" aria-hidden="true" />{" "}
+                        {finding._count.fixProposals} fix proposals
                       </span>
                     ) : null}
                     <span>Confidence: {finding.confidence}</span>
                   </div>
                 </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" aria-hidden="true" />
+                <ChevronRight
+                  className="text-muted-foreground h-5 w-5 shrink-0"
+                  aria-hidden="true"
+                />
               </div>
             </Card>
           ))}
@@ -218,10 +248,13 @@ export function FindingsClient({
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated<FindingListItem>(`/api/findings`, { workspaceId, cursor })
-              return { items: res.items as unknown[], nextCursor: res.nextCursor }
+              const res = await apiGetPaginated<FindingListItem>(`/api/findings`, {
+                workspaceId,
+                cursor,
+              })
+              return { items: res.items, nextCursor: res.nextCursor }
             }}
-            onItems={(items) => setFindings((prev) => [...prev, ...(items as FindingListItem[])])}
+            onItems={(items) => setFindings((prev) => [...prev, ...items])}
             onNextCursor={setNextCursor}
           />
         </div>
@@ -291,12 +324,9 @@ function FindingDetailDrawer({
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [onClose])
 
-
   useEffect(() => {
     let cancelled = false
-    apiGet<FindingDetail>(
-      `/api/findings/${finding.id}?workspaceId=${workspaceId}`
-    )
+    apiGet<FindingDetail>(`/api/findings/${finding.id}?workspaceId=${workspaceId}`)
       .then((res) => {
         if (cancelled) return
         setDetail(res ?? null)
@@ -309,7 +339,9 @@ function FindingDetailDrawer({
         if (cancelled) return
         setLoading(false)
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [finding.id, workspaceId])
 
   return (
@@ -321,23 +353,32 @@ function FindingDetailDrawer({
       aria-label={`Finding details: ${finding.title}`}
     >
       <div
-        className="w-full max-w-lg h-[80vh] overflow-y-auto bg-background rounded-t-xl shadow-premium p-6"
+        className="bg-background shadow-premium h-[80vh] w-full max-w-lg overflow-y-auto rounded-t-xl p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{finding.title}</h2>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close finding details">Close</Button>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close finding details">
+            Close
+          </Button>
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-8"><Spinner /></div>
+          <div className="flex justify-center py-8">
+            <Spinner />
+          </div>
         ) : detail ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={SEVERITY_BADGE[finding.severity] ?? "muted"}>{finding.severity}</Badge>
+              <Badge variant={SEVERITY_BADGE[finding.severity] ?? "muted"}>
+                {finding.severity}
+              </Badge>
               <Badge variant={STATUS_BADGE[finding.status] ?? "muted"}>{finding.status}</Badge>
               {finding.verified ? (
-                <Badge variant="success"><CheckCircle2 className="h-3 w-3 mr-1" aria-hidden="true" />Verified</Badge>
+                <Badge variant="success">
+                  <CheckCircle2 className="mr-1 h-3 w-3" aria-hidden="true" />
+                  Verified
+                </Badge>
               ) : (
                 <Badge variant="muted">Unverified</Badge>
               )}
@@ -345,44 +386,52 @@ function FindingDetailDrawer({
             </div>
 
             <div>
-              <h3 className="text-sm font-medium mb-1">Summary</h3>
-              <p className="text-sm text-muted-foreground">{detail.summary}</p>
+              <h3 className="mb-1 text-sm font-medium">Summary</h3>
+              <p className="text-muted-foreground text-sm">{detail.summary}</p>
             </div>
 
             {(detail.cwe || detail.cvssScore || detail.category) && (
               <div className="flex flex-wrap gap-2 text-xs">
                 {detail.cwe && <Badge variant="info">{detail.cwe}</Badge>}
-                {detail.cvssScore != null && <Badge variant="warning">CVSS {detail.cvssScore}</Badge>}
+                {detail.cvssScore != null && (
+                  <Badge variant="warning">CVSS {detail.cvssScore}</Badge>
+                )}
                 {detail.category && <Badge variant="muted">{detail.category}</Badge>}
               </div>
             )}
 
             {detail.plainLanguage && (
-              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div className="bg-muted/30 space-y-3 rounded-lg border p-4">
                 <h3 className="text-sm font-semibold">Plain-Language Explanation</h3>
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-0.5">What it is</p>
+                  <p className="text-muted-foreground mb-0.5 text-xs font-medium">What it is</p>
                   <p className="text-sm">{detail.plainLanguage.whatItIs}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-0.5">Why it matters</p>
+                  <p className="text-muted-foreground mb-0.5 text-xs font-medium">Why it matters</p>
                   <p className="text-sm">{detail.plainLanguage.whyItMatters}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-0.5">How to fix</p>
+                  <p className="text-muted-foreground mb-0.5 text-xs font-medium">How to fix</p>
                   <p className="text-sm">{detail.plainLanguage.howToFix}</p>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
-                  <span>Difficulty: <span className="font-medium">{detail.plainLanguage.difficulty}</span></span>
-                  <span>Est. time: <span className="font-medium">{detail.plainLanguage.estimatedTimeToFix}</span></span>
+                <div className="text-muted-foreground flex items-center gap-3 pt-1 text-xs">
+                  <span>
+                    Difficulty:{" "}
+                    <span className="font-medium">{detail.plainLanguage.difficulty}</span>
+                  </span>
+                  <span>
+                    Est. time:{" "}
+                    <span className="font-medium">{detail.plainLanguage.estimatedTimeToFix}</span>
+                  </span>
                 </div>
               </div>
             )}
 
             {detail.technicalDetail && (
               <div>
-                <h3 className="text-sm font-medium mb-1">Technical Details</h3>
-                <pre className="text-xs bg-muted p-3 rounded-lg overflow-x-auto whitespace-pre-wrap">
+                <h3 className="mb-1 text-sm font-medium">Technical Details</h3>
+                <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs whitespace-pre-wrap">
                   {detail.technicalDetail}
                 </pre>
               </div>
@@ -390,36 +439,45 @@ function FindingDetailDrawer({
 
             {detail.exploitability && (
               <div>
-                <h3 className="text-sm font-medium mb-1">Exploitability</h3>
-                <p className="text-sm text-muted-foreground">{detail.exploitability}</p>
+                <h3 className="mb-1 text-sm font-medium">Exploitability</h3>
+                <p className="text-muted-foreground text-sm">{detail.exploitability}</p>
               </div>
             )}
 
             {detail.recommendedFix && (
               <div>
-                <h3 className="text-sm font-medium mb-1">Recommended Fix</h3>
-                <p className="text-sm text-muted-foreground">{detail.recommendedFix}</p>
+                <h3 className="mb-1 text-sm font-medium">Recommended Fix</h3>
+                <p className="text-muted-foreground text-sm">{detail.recommendedFix}</p>
               </div>
             )}
 
             {detail.businessImpact && (
               <div>
-                <h3 className="text-sm font-medium mb-1">Business Impact</h3>
-                <p className="text-sm text-muted-foreground">{detail.businessImpact}</p>
+                <h3 className="mb-1 text-sm font-medium">Business Impact</h3>
+                <p className="text-muted-foreground text-sm">{detail.businessImpact}</p>
               </div>
             )}
 
             {detail.evidence && detail.evidence.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium mb-1">Evidence ({detail.evidence.length})</h3>
+                <h3 className="mb-1 text-sm font-medium">Evidence ({detail.evidence.length})</h3>
                 <div className="space-y-2">
                   {detail.evidence.map((ev) => (
-                    <div key={ev.id} className="flex items-center justify-between gap-2 text-sm rounded-lg border p-2">
+                    <div
+                      key={ev.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm"
+                    >
                       <div className="flex items-center gap-2">
                         <Badge variant="muted">{ev.type}</Badge>
-                        {ev.storageUri && <span className="text-xs text-muted-foreground font-mono">{ev.storageUri}</span>}
+                        {ev.storageUri && (
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {ev.storageUri}
+                          </span>
+                        )}
                       </div>
-                      <Badge variant={ev.redactionStatus === "complete" ? "success" : "warning"}>{ev.redactionStatus}</Badge>
+                      <Badge variant={ev.redactionStatus === "complete" ? "success" : "warning"}>
+                        {ev.redactionStatus}
+                      </Badge>
                     </div>
                   ))}
                 </div>
@@ -428,7 +486,9 @@ function FindingDetailDrawer({
 
             {detail.fixProposals && detail.fixProposals.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium mb-1">Fix Proposals ({detail.fixProposals.length})</h3>
+                <h3 className="mb-1 text-sm font-medium">
+                  Fix Proposals ({detail.fixProposals.length})
+                </h3>
                 <div className="space-y-2">
                   {detail.fixProposals.map((fp) => (
                     <div key={fp.id} className="flex items-center gap-2 text-sm">
@@ -442,14 +502,24 @@ function FindingDetailDrawer({
 
             {detail.retests && detail.retests.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium mb-1">Retests ({detail.retests.length})</h3>
+                <h3 className="mb-1 text-sm font-medium">Retests ({detail.retests.length})</h3>
                 <div className="space-y-2">
                   {detail.retests.map((rt) => (
                     <div key={rt.id} className="flex items-center gap-2 text-sm">
-                      <Badge variant={rt.status === "passed" ? "success" : rt.status === "failed" ? "danger" : "info"}>
+                      <Badge
+                        variant={
+                          rt.status === "passed"
+                            ? "success"
+                            : rt.status === "failed"
+                              ? "danger"
+                              : "info"
+                        }
+                      >
                         {rt.status}
                       </Badge>
-                      <span className="text-muted-foreground">{new Date(rt.createdAt).toLocaleDateString()}</span>
+                      <span className="text-muted-foreground">
+                        {new Date(rt.createdAt).toLocaleDateString()}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -471,7 +541,9 @@ function FindingDetailDrawer({
                         workspaceId,
                         scanId: detail.scanId,
                       })
-                      const res = await apiGet<FindingDetail>(`/api/findings/${finding.id}?workspaceId=${workspaceId}`)
+                      const res = await apiGet<FindingDetail>(
+                        `/api/findings/${finding.id}?workspaceId=${workspaceId}`
+                      )
                       setDetail(res ?? null)
                     } catch (err) {
                       setRetestError(err instanceof Error ? err.message : "Failed to create retest")
@@ -489,12 +561,12 @@ function FindingDetailDrawer({
                   )}
                 </Button>
                 {!detail.scanId && (
-                  <span className="text-xs text-muted-foreground">No scan linked to this finding</span>
+                  <span className="text-muted-foreground text-xs">
+                    No scan linked to this finding
+                  </span>
                 )}
               </div>
-              {retestError && (
-                <p className="mt-2 text-xs text-destructive">{retestError}</p>
-              )}
+              {retestError && <p className="text-destructive mt-2 text-xs">{retestError}</p>}
             </div>
 
             <div className="border-t pt-4">
@@ -508,9 +580,7 @@ function FindingDetailDrawer({
                     value={fixSummary}
                     onChange={(e) => setFixSummary(e.target.value)}
                   />
-                  {fixError && (
-                    <p className="text-xs text-destructive">{fixError}</p>
-                  )}
+                  {fixError && <p className="text-destructive text-xs">{fixError}</p>}
                   <div className="flex gap-2">
                     <Button
                       size="sm"
@@ -528,15 +598,21 @@ function FindingDetailDrawer({
                           setDetail(null)
                           setLoading(true)
                           try {
-                            const res = await apiGet<FindingDetail>(`/api/findings/${finding.id}?workspaceId=${workspaceId}`)
+                            const res = await apiGet<FindingDetail>(
+                              `/api/findings/${finding.id}?workspaceId=${workspaceId}`
+                            )
                             setDetail(res ?? null)
                           } catch {
-                            setFixError("Proposal created but failed to reload details. Close and reopen the drawer.")
+                            setFixError(
+                              "Proposal created but failed to reload details. Close and reopen the drawer."
+                            )
                           } finally {
                             setLoading(false)
                           }
                         } catch (err) {
-                          setFixError(err instanceof Error ? err.message : "Failed to create fix proposal")
+                          setFixError(
+                            err instanceof Error ? err.message : "Failed to create fix proposal"
+                          )
                         } finally {
                           setCreatingFix(false)
                         }
@@ -547,26 +623,26 @@ function FindingDetailDrawer({
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => { setShowFixForm(false); setFixSummary(""); setFixError(null) }}
+                      onClick={() => {
+                        setShowFixForm(false)
+                        setFixSummary("")
+                        setFixError(null)
+                      }}
                     >
                       Cancel
                     </Button>
                   </div>
                 </div>
               ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowFixForm(true)}
-                >
-                  <Wrench className="h-4 w-4 mr-1" aria-hidden="true" />
+                <Button size="sm" variant="outline" onClick={() => setShowFixForm(true)}>
+                  <Wrench className="mr-1 h-4 w-4" aria-hidden="true" />
                   Generate Fix Proposal
                 </Button>
               )}
             </div>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Failed to load finding details.</p>
+          <p className="text-muted-foreground text-sm">Failed to load finding details.</p>
         )}
       </div>
     </div>

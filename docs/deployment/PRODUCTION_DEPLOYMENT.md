@@ -7,7 +7,7 @@
 - The Next.js web application and BullMQ worker need managed PostgreSQL and Redis.
 - The worker runs the `lyrashield` CLI and may launch a sandbox. Its host and Docker access are high-risk infrastructure.
 - The Astro marketing site is an independent Cloudflare Worker with D1 and Cloudflare Rate Limits.
-- Evidence storage, email, GitHub OAuth/App integration, and monitoring are optional integrations with separate credentials.
+- S3-compatible evidence storage for PoC/code-location artifacts, email, GitHub OAuth/App integration, and monitoring are optional integrations with separate credentials.
 
 ## Release prerequisites
 
@@ -38,6 +38,13 @@ LLM_API_KEY="..."
 LYRASHIELD_ENGINE_PATH="lyrashield"
 LYRASHIELD_IMAGE="ghcr.io/usestrix/strix-sandbox@sha256:<approved-digest>"
 LYRASHIELD_TELEMETRY="0"
+
+# S3-compatible evidence storage (optional for launch; encrypted:// fallback exists)
+S3_ENDPOINT="https://..."
+S3_BUCKET="lyrasec-evidence"
+S3_ACCESS_KEY="..."
+S3_SECRET_KEY="..."
+S3_REGION="auto"
 ```
 
 Add GitHub OAuth/App, R2/S3, email, notification, billing, and monitoring variables only when those integrations are enabled. Use `.env.example` as the complete variable index, not as a production secret file.
@@ -59,7 +66,7 @@ Then, in the target environment:
 1. Deploy migrations before application processes serve traffic.
 2. Verify authentication, workspace isolation, Redis queue connectivity, and Worker readiness.
 3. Verify the engine version and missing-model early-exit path.
-4. Run one founder-authorized controlled scan. Capture audit evidence and confirm the sandbox image digest used.
+4. Run one founder-authorized controlled scan. Capture audit evidence, confirm the sandbox image digest used, and verify evidence artifacts are uploaded to the configured S3-compatible endpoint (or remain as `encrypted://` fallback if storage is not yet provisioned).
 5. Exercise backup and restore on non-production data before claiming an RPO/RTO.
 
 ## Marketing deployment

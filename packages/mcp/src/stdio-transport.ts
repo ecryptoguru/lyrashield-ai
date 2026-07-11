@@ -86,7 +86,10 @@ async function handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> 
         }
     }
   } catch (err) {
-    logger.error("MCP stdio handler error", { method, error: err instanceof Error ? err.message : String(err) })
+    logger.error("MCP stdio handler error", {
+      method,
+      error: err instanceof Error ? err.message : String(err),
+    })
     return {
       jsonrpc: "2.0",
       id,

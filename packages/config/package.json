@@ -2,7 +2,11 @@
   "name": "@lyrashield/config",
   "version": "0.0.0",
   "private": true,
-  "files": ["tsconfig/**", "src/**", "dist/**"],
+  "files": [
+    "tsconfig/**",
+    "src/**",
+    "dist/**"
+  ],
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "dependencies": {

@@ -30,7 +30,7 @@ async function apiCall(
   context: ToolHandlerContext,
   method: string,
   path: string,
-  body?: Record<string, unknown>,
+  body?: Record<string, unknown>
 ): Promise<unknown> {
   const fetchImpl = context.fetchFn ?? globalThis.fetch
   const url = `${context.apiBaseUrl}${path}`
@@ -63,7 +63,11 @@ async function apiCall(
       throw new Error(errorMsg)
     }
 
-    const json = (await res.json()) as { success: boolean; data?: unknown; error?: { message?: string } }
+    const json = (await res.json()) as {
+      success: boolean
+      data?: unknown
+      error?: { message?: string }
+    }
     if (!json.success) {
       throw new Error(json.error?.message ?? "API call failed")
     }
@@ -76,10 +80,12 @@ async function apiCall(
 
 function makeToolResult(data: unknown): McpToolResult {
   return {
-    content: [{
-      type: "text",
-      text: JSON.stringify(data, null, 2),
-    }],
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(data, null, 2),
+      },
+    ],
   }
 }
 
@@ -94,7 +100,8 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_scan_target",
     mutating: true,
-    description: "Trigger a security scan on a registered target. Requires workspaceId and targetId.",
+    description:
+      "Trigger a security scan on a registered target. Requires workspaceId and targetId.",
     inputSchema: {
       type: "object",
       properties: {
@@ -125,13 +132,17 @@ export function createGetFindingsTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_get_findings",
     mutating: false,
-    description: "Retrieve security findings for a workspace, optionally filtered by severity or target.",
+    description:
+      "Retrieve security findings for a workspace, optionally filtered by severity or target.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: { type: "string", description: "Optional target ID filter" },
-        severity: { type: "string", description: "Optional severity filter: CRITICAL, HIGH, MEDIUM, LOW, INFO" },
+        severity: {
+          type: "string",
+          description: "Optional severity filter: CRITICAL, HIGH, MEDIUM, LOW, INFO",
+        },
         limit: { type: "number", description: "Max results (default 50, max 100)" },
       },
       required: ["workspaceId"],
@@ -156,7 +167,8 @@ export function createGetLaunchReadinessTool(context: ToolHandlerContext): McpTo
   return {
     name: "lyrashield_get_launch_readiness",
     mutating: false,
-    description: "Get a launch-readiness verdict (GO / GO_WITH_CONDITIONS / NO_GO) based on open findings.",
+    description:
+      "Get a launch-readiness verdict (GO / GO_WITH_CONDITIONS / NO_GO) based on open findings.",
     inputSchema: {
       type: "object",
       properties: {

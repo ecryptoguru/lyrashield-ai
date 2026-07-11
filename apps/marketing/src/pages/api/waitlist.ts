@@ -6,14 +6,54 @@ import { createHash } from "node:crypto"
 
 const bodySchema = z.object({
   email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
-  role: z.string().trim().max(50).optional().transform((v) => v || undefined),
-  building: z.string().trim().max(200).optional().transform((v) => v || undefined),
-  source: z.string().trim().max(50).optional().transform((v) => v || undefined),
-  utmSource: z.string().trim().max(100).optional().transform((v) => v || undefined),
-  utmMedium: z.string().trim().max(100).optional().transform((v) => v || undefined),
-  utmCampaign: z.string().trim().max(100).optional().transform((v) => v || undefined),
-  referrer: z.string().trim().max(500).optional().transform((v) => v || undefined),
-  website: z.string().trim().max(100).optional().transform((v) => v || undefined),
+  role: z
+    .string()
+    .trim()
+    .max(50)
+    .optional()
+    .transform((v) => v || undefined),
+  building: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .transform((v) => v || undefined),
+  source: z
+    .string()
+    .trim()
+    .max(50)
+    .optional()
+    .transform((v) => v || undefined),
+  utmSource: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .transform((v) => v || undefined),
+  utmMedium: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .transform((v) => v || undefined),
+  utmCampaign: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .transform((v) => v || undefined),
+  referrer: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .transform((v) => v || undefined),
+  website: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .transform((v) => v || undefined),
 })
 
 export const prerender = false
@@ -92,10 +132,13 @@ function isTrustedOrigin(request: Request, siteOrigin: string): boolean {
 }
 
 function htmlResponse(status: number, body: string): Response {
-  return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LyraSec AI — Waitlist</title></head><body style="background:#0a0c0e;color:#e6e9ec;font-family:system-ui,sans-serif;max-width:600px;margin:3rem auto;padding:0 1rem;line-height:1.6">${body}<p style="margin-top:2rem"><a href="/" style="color:#2dd4a7">Back to home</a></p></body></html>`, {
-    status,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
-  })
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LyraSec AI — Waitlist</title></head><body style="background:#0a0c0e;color:#e6e9ec;font-family:system-ui,sans-serif;max-width:600px;margin:3rem auto;padding:0 1rem;line-height:1.6">${body}<p style="margin-top:2rem"><a href="/" style="color:#2dd4a7">Back to home</a></p></body></html>`,
+    {
+      status,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    }
+  )
 }
 
 function successResponse(request: Request): Response {
@@ -131,7 +174,10 @@ async function checkD1RateLimit(db: Env["DB"], ipHash: string): Promise<boolean>
       return false
     }
 
-    await db.prepare(`INSERT INTO waitlist_rate_limit (ip_hash, ts) VALUES (?, ?)`).bind(ipHash, now).run()
+    await db
+      .prepare(`INSERT INTO waitlist_rate_limit (ip_hash, ts) VALUES (?, ?)`)
+      .bind(ipHash, now)
+      .run()
     return true
   } catch {
     // Fail open: a broken fallback limiter must not block real signups.
@@ -140,17 +186,23 @@ async function checkD1RateLimit(db: Env["DB"], ipHash: string): Promise<boolean>
 }
 
 export const POST: APIRoute = async ({ request, site }) => {
-  const rawSiteOrigin = site?.origin ?? (import.meta.env.PUBLIC_SITE_URL as string | undefined) ?? "http://localhost:4321"
+  const rawSiteOrigin =
+    site?.origin ??
+    (import.meta.env.PUBLIC_SITE_URL as string | undefined) ??
+    "http://localhost:4321"
   const siteOrigin = rawSiteOrigin.endsWith("/") ? rawSiteOrigin.slice(0, -1) : rawSiteOrigin
 
   if (!isTrustedOrigin(request, siteOrigin)) {
     if (acceptsHtml(request)) {
       return htmlResponse(403, "<p>This request is not allowed.</p>")
     }
-    return new Response(JSON.stringify({ error: "forbidden", message: "This request is not allowed." }), {
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-    })
+    return new Response(
+      JSON.stringify({ error: "forbidden", message: "This request is not allowed." }),
+      {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      }
+    )
   }
 
   const salt = getSecret("WAITLIST_IP_SALT")
@@ -158,10 +210,13 @@ export const POST: APIRoute = async ({ request, site }) => {
     if (acceptsHtml(request)) {
       return htmlResponse(500, "<p>Server configuration error.</p>")
     }
-    return new Response(JSON.stringify({ error: "server", message: "Server configuration error." }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    })
+    return new Response(
+      JSON.stringify({ error: "server", message: "Server configuration error." }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    )
   }
 
   const ip = getClientIp(request)
@@ -216,22 +271,25 @@ export const POST: APIRoute = async ({ request, site }) => {
   }
 
   try {
-    await db.prepare(
-      `INSERT INTO waitlist_signups (
+    await db
+      .prepare(
+        `INSERT INTO waitlist_signups (
         id, email, role, building, source, utm_source, utm_medium, utm_campaign, referrer, ip_hash
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      crypto.randomUUID(),
-      data.email,
-      data.role || null,
-      data.building || null,
-      data.source || null,
-      data.utmSource || null,
-      data.utmMedium || null,
-      data.utmCampaign || null,
-      data.referrer || null,
-      ipHash
-    ).run()
+      )
+      .bind(
+        crypto.randomUUID(),
+        data.email,
+        data.role || null,
+        data.building || null,
+        data.source || null,
+        data.utmSource || null,
+        data.utmMedium || null,
+        data.utmCampaign || null,
+        data.referrer || null,
+        ipHash
+      )
+      .run()
 
     return successResponse(request)
   } catch (error: unknown) {

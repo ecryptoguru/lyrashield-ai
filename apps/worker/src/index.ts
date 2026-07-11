@@ -47,17 +47,13 @@ process.on("SIGINT", () => void shutdown("SIGINT"))
 async function main(): Promise<void> {
   logger.info("LyraShield worker starting", { redisUrl: env.REDIS_URL || "redis://localhost:6379" })
 
-  worker = new Worker<ScanJobData, ScanJobResult>(
-    SCAN_QUEUE_NAME,
-    processScanJob,
-    {
-      connection: {
-        url: env.REDIS_URL || "redis://localhost:6379",
-        maxRetriesPerRequest: null,
-      },
-      concurrency: 3,
-    }
-  )
+  worker = new Worker<ScanJobData, ScanJobResult>(SCAN_QUEUE_NAME, processScanJob, {
+    connection: {
+      url: env.REDIS_URL || "redis://localhost:6379",
+      maxRetriesPerRequest: null,
+    },
+    concurrency: 3,
+  })
 
   queueEvents = getScanQueueEvents()
   queueEvents.on("completed", ({ jobId, returnvalue }) => {

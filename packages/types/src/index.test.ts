@@ -90,7 +90,14 @@ describe("UpdateOnboardingSchema", () => {
   })
 
   it("accepts valid selectedGoal", () => {
-    const validGoals = ["CHECK_PR", "TEST_APP", "LAUNCH_REVIEW", "WEEKLY_MONITOR", "FULL_PENTEST", "COMPLIANCE_REVIEW"]
+    const validGoals = [
+      "CHECK_PR",
+      "TEST_APP",
+      "LAUNCH_REVIEW",
+      "WEEKLY_MONITOR",
+      "FULL_PENTEST",
+      "COMPLIANCE_REVIEW",
+    ]
     for (const goal of validGoals) {
       expect(UpdateOnboardingSchema.safeParse({ selectedGoal: goal }).success).toBe(true)
     }
@@ -136,71 +143,109 @@ describe("Enum parity (Zod vs Prisma)", () => {
 
   it("WorkspacePlanSchema matches Prisma enum", () => {
     expect(WorkspacePlanSchema.options).toEqual([
-      "FREE", "PRO", "TEAM", "AGENCY", "BUSINESS", "ENTERPRISE",
+      "FREE",
+      "PRO",
+      "TEAM",
+      "AGENCY",
+      "BUSINESS",
+      "ENTERPRISE",
     ])
   })
 
   it("MemberRoleSchema matches Prisma enum", () => {
     expect(MemberRoleSchema.options).toEqual([
-      "OWNER", "ADMIN", "MEMBER", "VIEWER",
-      "SECURITY_ADMIN", "APPSEC_MANAGER", "DEVELOPER",
-      "AUDITOR", "BILLING_ADMIN", "EXTERNAL_PENTESTER",
+      "OWNER",
+      "ADMIN",
+      "MEMBER",
+      "VIEWER",
+      "SECURITY_ADMIN",
+      "APPSEC_MANAGER",
+      "DEVELOPER",
+      "AUDITOR",
+      "BILLING_ADMIN",
+      "EXTERNAL_PENTESTER",
     ])
   })
 
   it("TargetTypeSchema matches Prisma enum", () => {
     expect(TargetTypeSchema.options).toEqual([
-      "REPO", "WEB_APP", "API", "CLOUD_ACCOUNT", "CONTAINER", "IAC",
+      "REPO",
+      "WEB_APP",
+      "API",
+      "CLOUD_ACCOUNT",
+      "CONTAINER",
+      "IAC",
     ])
   })
 
   it("TargetEnvironmentSchema matches Prisma enum", () => {
-    expect(TargetEnvironmentSchema.options).toEqual([
-      "LOCAL", "PREVIEW", "STAGING", "PRODUCTION",
-    ])
+    expect(TargetEnvironmentSchema.options).toEqual(["LOCAL", "PREVIEW", "STAGING", "PRODUCTION"])
   })
 
   it("ScanGoalSchema matches Prisma enum", () => {
     expect(ScanGoalSchema.options).toEqual([
-      "CHECK_PR", "TEST_APP", "LAUNCH_REVIEW",
-      "WEEKLY_MONITOR", "FULL_PENTEST", "COMPLIANCE_REVIEW",
+      "CHECK_PR",
+      "TEST_APP",
+      "LAUNCH_REVIEW",
+      "WEEKLY_MONITOR",
+      "FULL_PENTEST",
+      "COMPLIANCE_REVIEW",
     ])
   })
 
   it("ScanModeSchema matches Prisma enum", () => {
-    expect(ScanModeSchema.options).toEqual([
-      "SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM",
-    ])
+    expect(ScanModeSchema.options).toEqual(["SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM"])
   })
 
   it("ScanStatusSchema matches Prisma enum", () => {
     expect(ScanStatusSchema.options).toEqual([
-      "QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING",
-      "COMPLETED", "FAILED", "CANCELLED",
-      "REQUIRES_APPROVAL", "STOPPED_BUDGET", "TIMED_OUT",
+      "QUEUED",
+      "PREFLIGHT",
+      "RUNNING",
+      "VERIFYING",
+      "COMPLETED",
+      "FAILED",
+      "CANCELLED",
+      "REQUIRES_APPROVAL",
+      "STOPPED_BUDGET",
+      "TIMED_OUT",
     ])
   })
 
   it("FindingSeveritySchema matches Prisma enum", () => {
-    expect(FindingSeveritySchema.options).toEqual([
-      "INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL",
-    ])
+    expect(FindingSeveritySchema.options).toEqual(["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"])
   })
 
   it("FindingStatusSchema matches Prisma enum", () => {
     expect(FindingStatusSchema.options).toEqual([
-      "OPEN", "FIX_READY", "PR_OPENED", "TICKET_CREATED",
-      "FIXED_PENDING_RETEST", "FIXED",
-      "ACCEPTED_RISK", "FALSE_POSITIVE", "DUPLICATE",
+      "OPEN",
+      "FIX_READY",
+      "PR_OPENED",
+      "TICKET_CREATED",
+      "FIXED_PENDING_RETEST",
+      "FIXED",
+      "ACCEPTED_RISK",
+      "FALSE_POSITIVE",
+      "DUPLICATE",
     ])
   })
 
   it("IntegrationTypeSchema matches Prisma enum", () => {
     expect(IntegrationTypeSchema.options).toEqual([
-      "GITHUB", "GITLAB", "AZURE_DEVOPS",
-      "SLACK", "DISCORD", "JIRA", "LINEAR", "TEAMS",
-      "SERVICENOW", "SPLUNK", "DATADOG", "SENTINEL",
-      "VANTA", "DRATA",
+      "GITHUB",
+      "GITLAB",
+      "AZURE_DEVOPS",
+      "SLACK",
+      "DISCORD",
+      "JIRA",
+      "LINEAR",
+      "TEAMS",
+      "SERVICENOW",
+      "SPLUNK",
+      "DATADOG",
+      "SENTINEL",
+      "VANTA",
+      "DRATA",
     ])
   })
 })
@@ -235,21 +280,19 @@ describe("CreateWorkspaceSchema", () => {
 
 describe("CreateProjectSchema", () => {
   it("accepts valid input", () => {
-    expect(
-      CreateProjectSchema.safeParse({ workspaceId: "ws-1", name: "My Project" }).success
-    ).toBe(true)
+    expect(CreateProjectSchema.safeParse({ workspaceId: "ws-1", name: "My Project" }).success).toBe(
+      true
+    )
   })
 
   it("rejects empty name", () => {
-    expect(
-      CreateProjectSchema.safeParse({ workspaceId: "ws-1", name: "" }).success
-    ).toBe(false)
+    expect(CreateProjectSchema.safeParse({ workspaceId: "ws-1", name: "" }).success).toBe(false)
   })
 
   it("rejects name with control characters", () => {
-    expect(
-      CreateProjectSchema.safeParse({ workspaceId: "ws-1", name: "test\u0001" }).success
-    ).toBe(false)
+    expect(CreateProjectSchema.safeParse({ workspaceId: "ws-1", name: "test\u0001" }).success).toBe(
+      false
+    )
   })
 })
 

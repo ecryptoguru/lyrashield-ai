@@ -270,7 +270,14 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.schedule.view,
     PERMISSIONS.agent.view,
   ],
-  VIEWER: [PERMISSIONS.scan.view, PERMISSIONS.finding.view, PERMISSIONS.retest.view, PERMISSIONS.report.download, PERMISSIONS.notification.view, PERMISSIONS.agent.view],
+  VIEWER: [
+    PERMISSIONS.scan.view,
+    PERMISSIONS.finding.view,
+    PERMISSIONS.retest.view,
+    PERMISSIONS.report.download,
+    PERMISSIONS.notification.view,
+    PERMISSIONS.agent.view,
+  ],
 }
 
 export function hasPermission(role: MemberRole, permission: Permission): boolean {

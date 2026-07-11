@@ -156,10 +156,12 @@ describe("processDueSchedules", () => {
     const enqueued = await processDueSchedules()
 
     expect(enqueued).toBe(1)
-    expect(createScan).toHaveBeenCalledWith(expect.objectContaining({
-      targetId: "target-2",
-      triggerType: "schedule",
-    }))
+    expect(createScan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetId: "target-2",
+        triggerType: "schedule",
+      })
+    )
     expect(enqueueScan).toHaveBeenCalledTimes(1)
   })
 })

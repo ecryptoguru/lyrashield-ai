@@ -89,7 +89,7 @@ describe("scanUrl", () => {
         "strict-transport-security": "max-age=31536000",
         "x-frame-options": "DENY",
         "x-content-type-options": "nosniff",
-      }),
+      })
     )
     const findings = await scanUrl({
       targetUrl: "https://example.com",
@@ -105,7 +105,7 @@ describe("scanUrl", () => {
       makeResponse("<html></html>", {
         "access-control-allow-origin": "*",
         "access-control-allow-credentials": "true",
-      }),
+      })
     )
     const findings = await scanUrl({
       targetUrl: "https://example.com",
@@ -244,7 +244,7 @@ describe("scanUrl", () => {
         "Strict-Transport-Security": "max-age=31536000",
         "X-Frame-Options": "DENY",
         "X-Content-Type-Options": "nosniff",
-      }),
+      })
     )
     const findings = await scanUrl({
       targetUrl: "https://example.com",
@@ -291,7 +291,8 @@ describe("scanUrl", () => {
       ok: false,
       status: 302,
       headers: {
-        get: (name: string) => name.toLowerCase() === "location" ? "http://127.0.0.1/admin" : null,
+        get: (name: string) =>
+          name.toLowerCase() === "location" ? "http://127.0.0.1/admin" : null,
         forEach: () => undefined,
       },
       text: async () => "",
@@ -351,7 +352,7 @@ describe("scanUrl — SSRF protection (fetch-time)", () => {
   it("does not follow a redirect into a private range", async () => {
     // First hop: a 302 to an internal host; safeFetch must re-validate and stop.
     mockFetch.mockResolvedValueOnce(
-      makeResponse("", { location: "http://169.254.169.254/latest/meta-data/" }, 302),
+      makeResponse("", { location: "http://169.254.169.254/latest/meta-data/" }, 302)
     )
     const findings = await scanUrl({
       targetUrl: "https://example.com",

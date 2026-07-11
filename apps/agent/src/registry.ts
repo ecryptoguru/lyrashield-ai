@@ -1,6 +1,16 @@
-import type { AgentActionDefinition, AgentActionContext, AgentActionResult } from "@lyrashield/types"
+import type {
+  AgentActionDefinition,
+  AgentActionContext,
+  AgentActionResult,
+} from "@lyrashield/types"
 import { hasPermission, type Permission } from "@lyrashield/auth"
-import { prisma, createApproval, getApproval, setWorkspaceContext, verifyInputHash } from "@lyrashield/db"
+import {
+  prisma,
+  createApproval,
+  getApproval,
+  setWorkspaceContext,
+  verifyInputHash,
+} from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 
 const APPROVAL_TTL_HOURS = 24
@@ -36,7 +46,10 @@ export class ActionRegistry {
   ): Promise<AgentActionResult> {
     const action = this.actions.get(actionName)
     if (!action) {
-      return { success: false, error: { code: "UNKNOWN_ACTION", message: `Unknown action: ${actionName}` } }
+      return {
+        success: false,
+        error: { code: "UNKNOWN_ACTION", message: `Unknown action: ${actionName}` },
+      }
     }
 
     const parsed = action.inputSchema.safeParse(rawInput)
@@ -106,7 +119,10 @@ export class ActionRegistry {
     if (context.approvalId) {
       const approval = await getApproval(context.approvalId, context.workspaceId)
       if (!approval) {
-        return { success: false, error: { code: "APPROVAL_NOT_FOUND", message: "Approval record not found" } }
+        return {
+          success: false,
+          error: { code: "APPROVAL_NOT_FOUND", message: "Approval record not found" },
+        }
       }
       if (approval.status !== "APPROVED") {
         return {
@@ -118,7 +134,10 @@ export class ActionRegistry {
         }
       }
       if (approval.expiresAt && approval.expiresAt < new Date()) {
-        return { success: false, error: { code: "APPROVAL_EXPIRED", message: "Approval has expired" } }
+        return {
+          success: false,
+          error: { code: "APPROVAL_EXPIRED", message: "Approval has expired" },
+        }
       }
       if (approval.actionName !== actionName) {
         return {

@@ -21,12 +21,7 @@ vi.mock("./client", () => ({
 }))
 
 import { prisma } from "./client"
-import {
-  createRetest,
-  getRetest,
-  listRetests,
-  updateRetestStatus,
-} from "./retest-service"
+import { createRetest, getRetest, listRetests, updateRetestStatus } from "./retest-service"
 
 const mockPrisma = prisma as unknown as {
   retest: {
@@ -177,7 +172,11 @@ describe("retest-service", () => {
 
     it("updates status with resultAfter", async () => {
       mockPrisma.retest.findFirst.mockResolvedValue(baseRetest)
-      mockPrisma.retest.update.mockResolvedValue({ ...baseRetest, status: "passed", resultAfter: "No issues found" })
+      mockPrisma.retest.update.mockResolvedValue({
+        ...baseRetest,
+        status: "passed",
+        resultAfter: "No issues found",
+      })
 
       await updateRetestStatus("retest-1", "ws-1", "passed", "No issues found")
 

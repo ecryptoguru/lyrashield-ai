@@ -3,7 +3,16 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft } from "lucide-react"
-import { Button, Badge, EmptyState, FormField, Input, Select, Spinner, LoadMore } from "@lyrashield/ui"
+import {
+  Button,
+  Badge,
+  EmptyState,
+  FormField,
+  Input,
+  Select,
+  Spinner,
+  LoadMore,
+} from "@lyrashield/ui"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
 
 interface Target {
@@ -106,7 +115,14 @@ export function TargetsClient({
         environment: repoForm.environment,
       })
       setShowForm(false)
-      setRepoForm({ name: "", repoOwner: "", repoName: "", branch: "main", projectId: "", environment: "STAGING" })
+      setRepoForm({
+        name: "",
+        repoOwner: "",
+        repoName: "",
+        branch: "main",
+        projectId: "",
+        environment: "STAGING",
+      })
       await fetchTargets()
       router.refresh()
     } catch (e) {
@@ -140,17 +156,20 @@ export function TargetsClient({
     }
   }
 
-  const loadMore = useCallback(async (cursor: string) => {
-    const params: Record<string, string | undefined> = { workspaceId, cursor }
-    if (filterProjectId) params.projectId = filterProjectId
-    return apiGetPaginated<Target>(`/api/targets`, params)
-  }, [workspaceId, filterProjectId])
+  const loadMore = useCallback(
+    async (cursor: string) => {
+      const params: Record<string, string | undefined> = { workspaceId, cursor }
+      if (filterProjectId) params.projectId = filterProjectId
+      return apiGetPaginated<Target>(`/api/targets`, params)
+    },
+    [workspaceId, filterProjectId]
+  )
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
         <Spinner className="h-6 w-6" />
-        <p className="text-sm text-muted-foreground">Loading targets...</p>
+        <p className="text-muted-foreground text-sm">Loading targets...</p>
       </div>
     )
   }
@@ -158,7 +177,9 @@ export function TargetsClient({
   if (fetchError) {
     return (
       <div className="flex flex-col items-center justify-center p-12">
-        <p className="mb-4 text-sm text-destructive" role="alert">{fetchError}</p>
+        <p className="text-destructive mb-4 text-sm" role="alert">
+          {fetchError}
+        </p>
         <Button variant="secondary" onClick={() => fetchTargets()}>
           Retry
         </Button>
@@ -176,14 +197,14 @@ export function TargetsClient({
                 setFilterProjectId(null)
                 router.push("/dashboard/targets")
               }}
-              className="mb-2 flex cursor-pointer items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground mb-2 flex cursor-pointer items-center gap-1 text-sm transition-colors"
             >
               <ArrowLeft className="h-3 w-3" aria-hidden="true" />
               All targets
             </button>
           )}
           <h1 className="text-2xl font-bold tracking-tight">Targets</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Repositories and URLs to scan</p>
+          <p className="text-muted-foreground mt-1 text-sm">Repositories and URLs to scan</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} className="shrink-0">
           <Plus className="h-4 w-4" aria-hidden="true" />
@@ -192,7 +213,7 @@ export function TargetsClient({
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
           <div className="mb-4 flex flex-wrap gap-2">
             <Button
               variant={formType === "REPO" ? "default" : "secondary"}
@@ -213,7 +234,10 @@ export function TargetsClient({
           </div>
 
           {error && (
-            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+            <div
+              className="bg-destructive/10 text-destructive mb-4 rounded-md p-3 text-sm"
+              role="alert"
+            >
               {error}
             </div>
           )}
@@ -241,7 +265,9 @@ export function TargetsClient({
                   >
                     <option value="">No project</option>
                     {projects.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
                     ))}
                   </Select>
                 </FormField>
@@ -295,7 +321,14 @@ export function TargetsClient({
                 <Button type="submit" disabled={creating}>
                   {creating ? "Creating..." : "Create Target"}
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => { setShowForm(false); setError(null) }}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setShowForm(false)
+                    setError(null)
+                  }}
+                >
                   Cancel
                 </Button>
               </div>
@@ -319,7 +352,9 @@ export function TargetsClient({
                   <Select
                     id="url-type"
                     value={urlForm.type}
-                    onChange={(e) => setUrlForm({ ...urlForm, type: e.target.value as "WEB_APP" | "API" })}
+                    onChange={(e) =>
+                      setUrlForm({ ...urlForm, type: e.target.value as "WEB_APP" | "API" })
+                    }
                   >
                     <option value="WEB_APP">Web App</option>
                     <option value="API">API</option>
@@ -345,7 +380,9 @@ export function TargetsClient({
                   >
                     <option value="">No project</option>
                     {projects.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
                     ))}
                   </Select>
                 </FormField>
@@ -366,7 +403,14 @@ export function TargetsClient({
                 <Button type="submit" disabled={creating}>
                   {creating ? "Creating..." : "Create Target"}
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => { setShowForm(false); setError(null) }}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setShowForm(false)
+                    setError(null)
+                  }}
+                >
                   Cancel
                 </Button>
               </div>
@@ -390,12 +434,14 @@ export function TargetsClient({
       ) : (
         <div className="overflow-x-auto rounded-xl border shadow-sm">
           <table className="w-full text-sm">
-            <thead className="border-b bg-muted/30">
+            <thead className="bg-muted/30 border-b">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Name</th>
                 <th className="px-4 py-3 text-left font-semibold">Type</th>
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Project</th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Environment</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                  Environment
+                </th>
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Scans</th>
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Findings</th>
                 <th className="px-4 py-3 text-left font-semibold">Status</th>
@@ -405,7 +451,7 @@ export function TargetsClient({
               {targets.map((t) => (
                 <tr
                   key={t.id}
-                  className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
+                  className="hover:bg-muted/30 cursor-pointer border-b last:border-0"
                   onClick={() => router.push(`/dashboard/targets/${t.id}`)}
                   tabIndex={0}
                   role="link"
@@ -420,19 +466,21 @@ export function TargetsClient({
                   <td className="px-4 py-3">
                     <div className="font-medium">{t.name}</div>
                     {t.repoFullName && (
-                      <div className="text-xs text-muted-foreground">{t.repoFullName}</div>
+                      <div className="text-muted-foreground text-xs">{t.repoFullName}</div>
                     )}
-                    {t.url && (
-                      <div className="text-xs text-muted-foreground">{t.url}</div>
-                    )}
+                    {t.url && <div className="text-muted-foreground text-xs">{t.url}</div>}
                   </td>
                   <td className="px-4 py-3">
                     <Badge>
-                      {t.type === "REPO" ? <GitBranch className="h-3 w-3" aria-hidden="true" /> : <Globe className="h-3 w-3" aria-hidden="true" />}
+                      {t.type === "REPO" ? (
+                        <GitBranch className="h-3 w-3" aria-hidden="true" />
+                      ) : (
+                        <Globe className="h-3 w-3" aria-hidden="true" />
+                      )}
                       {t.type}
                     </Badge>
                   </td>
-                  <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
+                  <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
                     {t.project?.name ?? "—"}
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
@@ -441,7 +489,7 @@ export function TargetsClient({
                   <td className="hidden px-4 py-3 sm:table-cell">{t.scanCount}</td>
                   <td className="hidden px-4 py-3 sm:table-cell">
                     {t.findingCount > 0 ? (
-                      <span className="flex items-center gap-1 text-destructive">
+                      <span className="text-destructive flex items-center gap-1">
                         <Bug className="h-3 w-3" aria-hidden="true" />
                         {t.findingCount}
                       </span>
@@ -450,9 +498,7 @@ export function TargetsClient({
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={t.status === "active" ? "success" : "muted"}>
-                      {t.status}
-                    </Badge>
+                    <Badge variant={t.status === "active" ? "success" : "muted"}>{t.status}</Badge>
                   </td>
                 </tr>
               ))}
@@ -464,7 +510,7 @@ export function TargetsClient({
       <LoadMore
         cursor={nextCursor}
         onLoadMore={loadMore}
-        onItems={(items) => setTargets((prev) => [...prev, ...items as Target[]])}
+        onItems={(items) => setTargets((prev) => [...prev, ...(items as Target[])])}
         onNextCursor={setNextCursor}
       />
     </div>

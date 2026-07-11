@@ -80,7 +80,10 @@ describe("ActionRegistry", () => {
     let called = false
     registry.register(
       makeTestAction({
-        inputSchema: z.object({ workspaceId: z.string(), value: z.string() }) as unknown as AgentActionDefinition["inputSchema"],
+        inputSchema: z.object({
+          workspaceId: z.string(),
+          value: z.string(),
+        }) as unknown as AgentActionDefinition["inputSchema"],
         handler: async () => {
           called = true
           return { result: "unexpected" }
@@ -91,12 +94,15 @@ describe("ActionRegistry", () => {
     const result = await registry.execute(
       "test-action",
       { workspaceId: "ws-other", value: "ok" },
-      createContext(),
+      createContext()
     )
 
     expect(result).toEqual({
       success: false,
-      error: { code: "WORKSPACE_MISMATCH", message: "Action input must use the authenticated workspace" },
+      error: {
+        code: "WORKSPACE_MISMATCH",
+        message: "Action input must use the authenticated workspace",
+      },
     })
     expect(called).toBe(false)
   })

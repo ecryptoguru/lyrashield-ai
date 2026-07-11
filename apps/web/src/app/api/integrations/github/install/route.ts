@@ -22,7 +22,10 @@ export async function GET(request: NextRequest) {
 
   if (!installationId || !state) {
     return NextResponse.json(
-      { success: false, error: { code: "MISSING_PARAM", message: "installation_id and state are required" } },
+      {
+        success: false,
+        error: { code: "MISSING_PARAM", message: "installation_id and state are required" },
+      },
       { status: 400 }
     )
   }
@@ -34,14 +37,20 @@ export async function GET(request: NextRequest) {
   if (!stateResult.valid) {
     logger.warn("GitHub install callback rejected — invalid state", { reason: stateResult.reason })
     return NextResponse.json(
-      { success: false, error: { code: "INVALID_STATE", message: "Invalid or expired install state" } },
+      {
+        success: false,
+        error: { code: "INVALID_STATE", message: "Invalid or expired install state" },
+      },
       { status: 400 }
     )
   }
   const workspaceId = stateResult.workspaceId
 
   try {
-    const { session: authSession } = await requirePermission(workspaceId, PERMISSIONS.integration.manage)
+    const { session: authSession } = await requirePermission(
+      workspaceId,
+      PERMISSIONS.integration.manage
+    )
 
     const installations = await getAppInstallations()
     const installation = installations.find((i) => i.id === Number(installationId))
@@ -66,12 +75,21 @@ export async function GET(request: NextRequest) {
       },
     })
     if (existingElsewhere) {
-      logger.warn("GitHub install callback rejected — installation already linked to another workspace", {
-        installationId,
-        requestedWorkspaceId: workspaceId,
-      })
+      logger.warn(
+        "GitHub install callback rejected — installation already linked to another workspace",
+        {
+          installationId,
+          requestedWorkspaceId: workspaceId,
+        }
+      )
       return NextResponse.json(
-        { success: false, error: { code: "ALREADY_LINKED", message: "This installation is already connected to another workspace" } },
+        {
+          success: false,
+          error: {
+            code: "ALREADY_LINKED",
+            message: "This installation is already connected to another workspace",
+          },
+        },
         { status: 409 }
       )
     }
@@ -122,7 +140,11 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    logger.info("GitHub App installation connected", { installationId, workspaceId, account: installation.account.login })
+    logger.info("GitHub App installation connected", {
+      installationId,
+      workspaceId,
+      account: installation.account.login,
+    })
 
     const redirectUrl = new URL("/dashboard/integrations", request.url)
     redirectUrl.searchParams.set("connected", "github")
@@ -132,7 +154,10 @@ export async function GET(request: NextRequest) {
     if (authErr) return authErr
     logger.error("Failed to store GitHub installation", { error: String(error), installationId })
     return NextResponse.json(
-      { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to connect GitHub installation" } },
+      {
+        success: false,
+        error: { code: "INTERNAL_ERROR", message: "Failed to connect GitHub installation" },
+      },
       { status: 500 }
     )
   }
@@ -152,7 +177,10 @@ export async function POST(request: NextRequest) {
     body = await request.json()
   } catch {
     return NextResponse.json(
-      { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
+      {
+        success: false,
+        error: { code: "INVALID_JSON", message: "Request body must be valid JSON" },
+      },
       { status: 400 }
     )
   }

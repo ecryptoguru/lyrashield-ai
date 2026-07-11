@@ -6,19 +6,19 @@ on:
   workflow_call:
     inputs:
       target_ref:
-        description: 'Git ref to scan (defaults to PR head)'
+        description: "Git ref to scan (defaults to PR head)"
         required: false
         type: string
       scan_mode:
-        description: 'Scan mode: SAFE, DEEP, or AGGRESSIVE'
+        description: "Scan mode: SAFE, DEEP, or AGGRESSIVE"
         required: false
         type: string
-        default: 'SAFE'
+        default: "SAFE"
       fail_on_severity:
-        description: 'Fail the check if findings at or above this severity: CRITICAL, HIGH, MEDIUM, LOW, INFO'
+        description: "Fail the check if findings at or above this severity: CRITICAL, HIGH, MEDIUM, LOW, INFO"
         required: false
         type: string
-        default: 'HIGH'
+        default: "HIGH"
 
 permissions:
   actions: read

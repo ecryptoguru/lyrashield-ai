@@ -23,17 +23,25 @@ function buildCspHeader(nonce: string): string {
   return directives.join("; ")
 }
 
-// IMPORTANT: This function trusts the x-forwarded-for header. Deploy behind a
-// trusted reverse proxy (Vercel, Cloudflare, nginx) that strips client-provided
-// x-forwarded-for and sets it to the real client IP. Without a trusted proxy,
-// an attacker can spoof their IP to bypass rate limits.
+// IMPORTANT: This function prioritizes trusted proxy headers and the last hop
+// in x-forwarded-for (the closest proxy). If the proxy does not strip/spoof-safe
+// the forwarded header, prefer a provider-specific header like cf-connecting-ip
+// or true-client-ip, which is harder to forge.
 function getClientIP(request: NextRequest): string {
+  const providerIp =
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("true-client-ip") ??
+    request.headers.get("x-real-ip")
+  if (providerIp) return providerIp.trim()
+
   const forwarded = request.headers.get("x-forwarded-for")
   if (forwarded) {
-    return forwarded.split(",")[0]!.trim()
+    // In a chain, the last address is the one most recently appended by the
+    // closest trusted proxy, which is less spoofable than the first (client) entry.
+    const parts = forwarded.split(",")
+    return parts[parts.length - 1]!.trim()
   }
-  const realIP = request.headers.get("x-real-ip")
-  if (realIP) return realIP
+
   return "unknown"
 }
 
@@ -59,7 +67,10 @@ export async function proxy(request: NextRequest) {
     const result = await checkAuthRateLimit(ip)
     if (result.limited) {
       const response = NextResponse.json(
-        { success: false, error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." } },
+        {
+          success: false,
+          error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." },
+        },
         {
           status: 429,
           headers: {
@@ -82,7 +93,10 @@ export async function proxy(request: NextRequest) {
   const result = await checkApiRateLimit(ip)
   if (result.limited) {
     const response = NextResponse.json(
-      { success: false, error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." } },
+      {
+        success: false,
+        error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." },
+      },
       {
         status: 429,
         headers: {

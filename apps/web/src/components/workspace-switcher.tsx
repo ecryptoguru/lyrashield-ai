@@ -51,14 +51,17 @@ export function WorkspaceSwitcher({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-sidebar-accent/50"
+        className="hover:bg-sidebar-accent/50 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
       >
         <span className="truncate">{active?.name ?? "Select workspace"}</span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <ChevronDown className="text-muted-foreground h-4 w-4 shrink-0" aria-hidden="true" />
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border bg-popover p-1 shadow-md" role="listbox">
+        <div
+          className="bg-popover absolute top-full right-0 left-0 z-50 mt-1 rounded-lg border p-1 shadow-md"
+          role="listbox"
+        >
           {workspaces.map((w) => (
             <button
               key={w.id}
@@ -66,7 +69,7 @@ export function WorkspaceSwitcher({
                 onSelect(w.id)
                 setOpen(false)
               }}
-              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-accent"
+              className="hover:bg-accent flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors"
               role="option"
               aria-selected={w.id === activeId}
             >

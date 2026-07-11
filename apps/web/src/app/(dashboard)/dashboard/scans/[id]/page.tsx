@@ -3,11 +3,7 @@ import { redirect } from "next/navigation"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { ScanDetailClient } from "./scan-detail-client"
 
-export default async function ScanDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function ScanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getCachedSession()
   if (!session) redirect("/sign-in")
 
@@ -18,7 +14,7 @@ export default async function ScanDetailPage({
     return (
       <div className="rounded-lg border border-dashed p-12 text-center">
         <h2 className="mb-2 text-lg font-semibold">Scan not found</h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           This scan may have been deleted or you don&apos;t have access to it.
         </p>
       </div>
@@ -30,9 +26,7 @@ export default async function ScanDetailPage({
     return (
       <div className="rounded-lg border border-dashed p-12 text-center">
         <h2 className="mb-2 text-lg font-semibold">Access denied</h2>
-        <p className="text-sm text-muted-foreground">
-          This scan belongs to a different workspace.
-        </p>
+        <p className="text-muted-foreground text-sm">This scan belongs to a different workspace.</p>
       </div>
     )
   }

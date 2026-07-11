@@ -26,16 +26,16 @@ const CreatePRSchema = z.object({
   fileContent: z
     .string()
     .min(1, "fileContent is required")
-    .refine((c) => Buffer.byteLength(c, "utf8") <= MAX_FILE_CONTENT_BYTES, "File content too large (max 10MB)"),
+    .refine(
+      (c) => Buffer.byteLength(c, "utf8") <= MAX_FILE_CONTENT_BYTES,
+      "File content too large (max 10MB)"
+    ),
   commitMessage: z.string().min(1, "commitMessage is required"),
   prTitle: z.string().min(1, "prTitle is required"),
   prBody: z.string().optional(),
 })
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -87,11 +87,20 @@ export async function POST(
     const installationId = parseInt(integration.externalId, 10)
     const { repoOwner, repoName } = target
 
-    const baseBranch = target.branch ?? await getDefaultBranch(installationId, repoOwner, repoName)
+    const baseBranch =
+      target.branch ?? (await getDefaultBranch(installationId, repoOwner, repoName))
     const branchName = `lyrasec/fix-${proposal.id}`
     const sha = await getBranchRefSha(installationId, repoOwner, repoName, baseBranch)
     await createBranch(installationId, repoOwner, repoName, branchName, sha)
-    await createOrUpdateFile(installationId, repoOwner, repoName, filePath, fileContent, commitMessage, branchName)
+    await createOrUpdateFile(
+      installationId,
+      repoOwner,
+      repoName,
+      filePath,
+      fileContent,
+      commitMessage,
+      branchName
+    )
 
     const prResult = await createPullRequest(
       installationId,

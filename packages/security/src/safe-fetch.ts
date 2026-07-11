@@ -54,7 +54,7 @@ const DEFAULT_MAX_BYTES = 5 * 1024 * 1024
  */
 export async function safeFetch(
   rawUrl: string,
-  options: SafeFetchOptions = {},
+  options: SafeFetchOptions = {}
 ): Promise<SafeFetchResult | null> {
   const {
     timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -70,7 +70,11 @@ export async function safeFetch(
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const check = await checkScanUrlSafe(currentUrl, resolver)
     if (!check.safe) {
-      logger.warn("safeFetch blocked URL (SSRF guard)", { url: currentUrl, reason: check.reason, hop })
+      logger.warn("safeFetch blocked URL (SSRF guard)", {
+        url: currentUrl,
+        reason: check.reason,
+        hop,
+      })
       return null
     }
 
@@ -103,7 +107,10 @@ export async function safeFetch(
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get("location")
       if (!location) {
-        logger.warn("safeFetch redirect without Location header", { url: currentUrl, status: res.status })
+        logger.warn("safeFetch redirect without Location header", {
+          url: currentUrl,
+          status: res.status,
+        })
         return null
       }
       let nextUrl: string

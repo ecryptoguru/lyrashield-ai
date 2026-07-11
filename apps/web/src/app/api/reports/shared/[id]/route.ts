@@ -2,10 +2,7 @@ import { getReportByShareToken, getShareableReport } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {

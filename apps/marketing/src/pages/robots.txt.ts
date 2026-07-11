@@ -12,10 +12,7 @@ export const GET: APIRoute = async (context) => {
   const siteUrl = context.site?.toString() || "http://localhost:4321"
   const siteOrigin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
 
-  return new Response(
-    `User-agent: *\nDisallow:\nSitemap: ${siteOrigin}/sitemap-index.xml\n`,
-    {
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    }
-  )
+  return new Response(`User-agent: *\nDisallow:\nSitemap: ${siteOrigin}/sitemap-index.xml\n`, {
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  })
 }

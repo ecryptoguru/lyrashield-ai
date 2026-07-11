@@ -66,7 +66,7 @@ export async function listNotifications(params: {
     ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
   })
 
-  const nextCursor = notifications.length > limit ? notifications[limit]?.id ?? null : null
+  const nextCursor = notifications.length > limit ? (notifications[limit]?.id ?? null) : null
   const items = notifications.slice(0, limit)
 
   return { items, nextCursor }

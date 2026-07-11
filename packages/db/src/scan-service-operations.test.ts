@@ -31,13 +31,20 @@ describe("updateScanStatus", () => {
   it("does not overwrite a concurrent cancellation with a worker transition", async () => {
     mockPrisma.scan.findUnique
       .mockResolvedValueOnce({ id: "scan-1", status: "RUNNING", startedAt: new Date() })
-      .mockResolvedValueOnce({ id: "scan-1", status: "CANCELLED", startedAt: new Date(), endedAt: new Date() })
+      .mockResolvedValueOnce({
+        id: "scan-1",
+        status: "CANCELLED",
+        startedAt: new Date(),
+        endedAt: new Date(),
+      })
     mockPrisma.scan.updateMany.mockResolvedValue({ count: 0 })
 
     await expect(updateScanStatus("scan-1", "VERIFYING")).rejects.toThrow("CANCELLED")
-    expect(mockPrisma.scan.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "scan-1", status: "RUNNING" },
-    }))
+    expect(mockPrisma.scan.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "scan-1", status: "RUNNING" },
+      })
+    )
   })
 })
 
@@ -52,12 +59,14 @@ describe("createScan", () => {
     }
     mockPrisma.$transaction.mockImplementation(async (callback) => callback(tx))
 
-    await expect(createScan({
-      workspaceId: "ws-1",
-      targetId: "target-1",
-      goal: "TEST_APP",
-      createdById: "user-1",
-    })).rejects.toThrow("Target already has an active scan")
+    await expect(
+      createScan({
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        createdById: "user-1",
+      })
+    ).rejects.toThrow("Target already has an active scan")
     expect(tx.$executeRaw).toHaveBeenCalled()
     expect(tx.scan.create).not.toHaveBeenCalled()
   })

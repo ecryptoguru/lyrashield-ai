@@ -6,10 +6,7 @@ import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { z } from "zod"
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -46,15 +43,21 @@ const PatchScheduleSchema = z.object({
       "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'"
     )
     .optional(),
-  goal: z.enum(["CHECK_PR", "TEST_APP", "LAUNCH_REVIEW", "WEEKLY_MONITOR", "FULL_PENTEST", "COMPLIANCE_REVIEW"]).optional(),
+  goal: z
+    .enum([
+      "CHECK_PR",
+      "TEST_APP",
+      "LAUNCH_REVIEW",
+      "WEEKLY_MONITOR",
+      "FULL_PENTEST",
+      "COMPLIANCE_REVIEW",
+    ])
+    .optional(),
   mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).optional(),
   enabled: z.boolean().optional(),
 })
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -96,10 +99,7 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {

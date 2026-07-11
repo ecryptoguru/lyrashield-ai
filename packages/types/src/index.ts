@@ -1,7 +1,14 @@
 import { z } from "zod"
 
 export const WorkspaceModeSchema = z.enum(["VIBE", "TEAM", "ENTERPRISE"])
-export const WorkspacePlanSchema = z.enum(["FREE", "PRO", "TEAM", "AGENCY", "BUSINESS", "ENTERPRISE"])
+export const WorkspacePlanSchema = z.enum([
+  "FREE",
+  "PRO",
+  "TEAM",
+  "AGENCY",
+  "BUSINESS",
+  "ENTERPRISE",
+])
 export const MemberRoleSchema = z.enum([
   "OWNER",
   "ADMIN",
@@ -14,7 +21,14 @@ export const MemberRoleSchema = z.enum([
   "BILLING_ADMIN",
   "EXTERNAL_PENTESTER",
 ])
-export const TargetTypeSchema = z.enum(["REPO", "WEB_APP", "API", "CLOUD_ACCOUNT", "CONTAINER", "IAC"])
+export const TargetTypeSchema = z.enum([
+  "REPO",
+  "WEB_APP",
+  "API",
+  "CLOUD_ACCOUNT",
+  "CONTAINER",
+  "IAC",
+])
 export const TargetEnvironmentSchema = z.enum(["LOCAL", "PREVIEW", "STAGING", "PRODUCTION"])
 export const ScanGoalSchema = z.enum([
   "CHECK_PR",
@@ -79,7 +93,12 @@ export type FindingStatus = z.infer<typeof FindingStatusSchema>
 export type IntegrationType = z.infer<typeof IntegrationTypeSchema>
 
 export const CreateWorkspaceSchema = z.object({
-  name: z.string().min(1).max(100).trim().refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
+  name: z
+    .string()
+    .min(1)
+    .max(100)
+    .trim()
+    .refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
   mode: WorkspaceModeSchema.default("VIBE"),
 })
 
@@ -87,7 +106,12 @@ export type CreateWorkspaceInput = z.infer<typeof CreateWorkspaceSchema>
 
 export const CreateProjectSchema = z.object({
   workspaceId: z.string().min(1),
-  name: z.string().min(1).max(100).trim().refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
+  name: z
+    .string()
+    .min(1)
+    .max(100)
+    .trim()
+    .refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
   description: z.string().max(500).optional(),
 })
 
@@ -97,10 +121,23 @@ export const CreateRepoTargetSchema = z.object({
   workspaceId: z.string().min(1),
   projectId: z.string().optional(),
   type: z.literal("REPO"),
-  name: z.string().min(1).max(100).trim().refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
+  name: z
+    .string()
+    .min(1)
+    .max(100)
+    .trim()
+    .refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
   repoProvider: z.string().default("github"),
-  repoOwner: z.string().min(1).max(100).regex(/^[A-Za-z0-9_.-]+$/, "Invalid repo owner"),
-  repoName: z.string().min(1).max(100).regex(/^[A-Za-z0-9_.-]+$/, "Invalid repo name"),
+  repoOwner: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[A-Za-z0-9_.-]+$/, "Invalid repo owner"),
+  repoName: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[A-Za-z0-9_.-]+$/, "Invalid repo name"),
   branch: z.string().max(255).optional(),
   environment: TargetEnvironmentSchema.default("STAGING"),
 })
@@ -109,7 +146,12 @@ export const CreateUrlTargetSchema = z.object({
   workspaceId: z.string().min(1),
   projectId: z.string().optional(),
   type: z.enum(["WEB_APP", "API"]),
-  name: z.string().min(1).max(100).trim().refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
+  name: z
+    .string()
+    .min(1)
+    .max(100)
+    .trim()
+    .refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
   url: z.url(),
   environment: TargetEnvironmentSchema.default("STAGING"),
 })

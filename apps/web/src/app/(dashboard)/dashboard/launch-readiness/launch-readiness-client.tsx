@@ -1,7 +1,16 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Rocket, ShieldCheck, ShieldAlert, ShieldX, TrendingUp, AlertTriangle, CheckCircle2, Info } from "lucide-react"
+import {
+  Rocket,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+} from "lucide-react"
 import { Card, Badge, Button, Spinner, EmptyState } from "@lyrashield/ui"
 import { apiGet } from "@/lib/api-client"
 
@@ -52,7 +61,15 @@ function ScoreGauge({ score }: { score: number }) {
   return (
     <div className="relative flex h-32 w-32 items-center justify-center">
       <svg className="h-32 w-32 -rotate-90" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="6" className="text-muted/30" />
+        <circle
+          cx="50"
+          cy="50"
+          r="45"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="6"
+          className="text-muted/30"
+        />
         <circle
           cx="50"
           cy="50"
@@ -67,8 +84,10 @@ function ScoreGauge({ score }: { score: number }) {
         />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className="text-3xl font-bold" style={{ color }}>{score}</span>
-        <span className="text-xs text-muted-foreground">/ 100</span>
+        <span className="text-3xl font-bold" style={{ color }}>
+          {score}
+        </span>
+        <span className="text-muted-foreground text-xs">/ 100</span>
       </div>
     </div>
   )
@@ -93,10 +112,13 @@ function SeverityBreakdown({ bySeverity }: { bySeverity: Record<string, number> 
         return (
           <div key={sev} className="flex items-center gap-3">
             <div className={`h-2 w-2 rounded-full ${colors[sev]}`} aria-hidden="true" />
-            <span className="text-sm font-medium w-20">{sev}</span>
-            <div className="flex-1 h-6 bg-muted rounded-md overflow-hidden">
-              <div className={`h-full ${colors[sev]} flex items-center justify-end px-2`} style={{ width: `${Math.min(100, (count / maxCount) * 100)}%` }}>
-                <span className="text-xs text-white font-medium">{count}</span>
+            <span className="w-20 text-sm font-medium">{sev}</span>
+            <div className="bg-muted h-6 flex-1 overflow-hidden rounded-md">
+              <div
+                className={`h-full ${colors[sev]} flex items-center justify-end px-2`}
+                style={{ width: `${Math.min(100, (count / maxCount) * 100)}%` }}
+              >
+                <span className="text-xs font-medium text-white">{count}</span>
               </div>
             </div>
           </div>
@@ -113,7 +135,9 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
 
   const loadReport = useCallback(() => {
     setLoading(true)
-    apiGet<LaunchReadinessReport>(`/api/launch-readiness?workspaceId=${encodeURIComponent(workspaceId)}`)
+    apiGet<LaunchReadinessReport>(
+      `/api/launch-readiness?workspaceId=${encodeURIComponent(workspaceId)}`
+    )
       .then((data) => {
         setReport(data)
         setError(null)
@@ -127,7 +151,9 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
 
   useEffect(() => {
     let cancelled = false
-    apiGet<LaunchReadinessReport>(`/api/launch-readiness?workspaceId=${encodeURIComponent(workspaceId)}`)
+    apiGet<LaunchReadinessReport>(
+      `/api/launch-readiness?workspaceId=${encodeURIComponent(workspaceId)}`
+    )
       .then((data) => {
         if (cancelled) return
         setReport(data)
@@ -141,14 +167,16 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [workspaceId])
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-20" aria-busy="true">
         <Spinner className="h-8 w-8" />
-        <p className="text-sm text-muted-foreground">Loading launch readiness report...</p>
+        <p className="text-muted-foreground text-sm">Loading launch readiness report...</p>
       </div>
     )
   }
@@ -160,11 +188,7 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
         title="Could not load report"
         description={error}
         action={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadReport}
-          >
+          <Button variant="outline" size="sm" onClick={loadReport}>
             Try again
           </Button>
         }
@@ -180,21 +204,21 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Rocket className="h-6 w-6 text-primary" aria-hidden="true" />
+        <Rocket className="text-primary h-6 w-6" aria-hidden="true" />
         <h1 className="text-2xl font-bold tracking-tight">Launch Readiness</h1>
       </div>
 
       {/* Verdict Card */}
       <Card className={`p-6 ${config.bg} ${config.border}`}>
-        <div className="flex flex-col sm:flex-row items-center gap-6">
+        <div className="flex flex-col items-center gap-6 sm:flex-row">
           <ScoreGauge score={report.score} />
           <div className="flex-1 text-center sm:text-left">
-            <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
+            <div className="mb-2 flex items-center justify-center gap-2 sm:justify-start">
               <VerdictIcon className={`h-7 w-7 ${config.color}`} aria-hidden="true" />
               <h2 className={`text-2xl font-bold ${config.color}`}>{config.label}</h2>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">{report.summary}</p>
-            <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+            <p className="text-muted-foreground mb-4 text-sm">{report.summary}</p>
+            <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
               <Badge variant={config.badgeVariant}>Score: {report.score}/100</Badge>
               <Badge variant="muted">{report.totalFindings} total findings</Badge>
               <Badge variant="muted">{report.blockingFindings} blocking</Badge>
@@ -208,14 +232,16 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
       <div className="grid gap-4 md:grid-cols-2">
         {report.conditions.length > 0 && (
           <Card className="p-5">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="mb-3 flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" aria-hidden="true" />
               <h3 className="font-semibold">Conditions</h3>
             </div>
             <ul className="space-y-2">
               {report.conditions.map((cond, i) => (
-                <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
-                  <span className="text-amber-500 mt-0.5" aria-hidden="true">•</span>
+                <li key={i} className="text-foreground/80 flex items-start gap-2 text-sm">
+                  <span className="mt-0.5 text-amber-500" aria-hidden="true">
+                    •
+                  </span>
                   {cond}
                 </li>
               ))}
@@ -225,14 +251,16 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
 
         {report.recommendations.length > 0 && (
           <Card className="p-5">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="mb-3 flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-sky-500" aria-hidden="true" />
               <h3 className="font-semibold">Recommendations</h3>
             </div>
             <ul className="space-y-2">
               {report.recommendations.map((rec, i) => (
-                <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
-                  <span className="text-sky-500 mt-0.5" aria-hidden="true">•</span>
+                <li key={i} className="text-foreground/80 flex items-start gap-2 text-sm">
+                  <span className="mt-0.5 text-sky-500" aria-hidden="true">
+                    •
+                  </span>
                   {rec}
                 </li>
               ))}
@@ -244,8 +272,8 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
       {/* Severity Breakdown */}
       {report.totalFindings > 0 && (
         <Card className="p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Info className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+          <div className="mb-4 flex items-center gap-2">
+            <Info className="text-muted-foreground h-5 w-5" aria-hidden="true" />
             <h3 className="font-semibold">Findings by Severity</h3>
           </div>
           <SeverityBreakdown bySeverity={report.bySeverity} />
@@ -255,9 +283,9 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
       {/* All Clear */}
       {report.totalFindings === 0 && (
         <Card className="p-6 text-center">
-          <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-3" aria-hidden="true" />
-          <h3 className="font-semibold text-lg mb-1">No Security Issues Found</h3>
-          <p className="text-sm text-muted-foreground">
+          <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-emerald-500" aria-hidden="true" />
+          <h3 className="mb-1 text-lg font-semibold">No Security Issues Found</h3>
+          <p className="text-muted-foreground text-sm">
             Your application has no security findings. You&apos;re clear to launch!
           </p>
         </Card>

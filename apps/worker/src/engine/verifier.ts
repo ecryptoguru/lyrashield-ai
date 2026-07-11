@@ -17,7 +17,8 @@ export function verifyVulnerability(vuln: EngineVulnerability): VerificationResu
     return {
       verified: true,
       confidence: "high",
-      reason: "PoC script and description provided — vulnerability confirmed via exploit reproduction",
+      reason:
+        "PoC script and description provided — vulnerability confirmed via exploit reproduction",
       verificationMethod: "poc_reproduction",
     }
   }
@@ -26,7 +27,8 @@ export function verifyVulnerability(vuln: EngineVulnerability): VerificationResu
     return {
       verified: true,
       confidence: "high",
-      reason: "PoC description provided — vulnerability confirmed via documented exploitation steps",
+      reason:
+        "PoC description provided — vulnerability confirmed via documented exploitation steps",
       verificationMethod: "poc_description",
     }
   }
@@ -37,7 +39,8 @@ export function verifyVulnerability(vuln: EngineVulnerability): VerificationResu
       return {
         verified: true,
         confidence: "high",
-        reason: "Code location with before/after fix diff provided — vulnerability confirmed via code analysis",
+        reason:
+          "Code location with before/after fix diff provided — vulnerability confirmed via code analysis",
         verificationMethod: "code_diff_analysis",
       }
     }
@@ -53,7 +56,8 @@ export function verifyVulnerability(vuln: EngineVulnerability): VerificationResu
     return {
       verified: true,
       confidence: "medium",
-      reason: "Technical analysis and business impact documented — vulnerability confirmed via analysis",
+      reason:
+        "Technical analysis and business impact documented — vulnerability confirmed via analysis",
       verificationMethod: "analysis_review",
     }
   }
@@ -62,7 +66,8 @@ export function verifyVulnerability(vuln: EngineVulnerability): VerificationResu
     return {
       verified: false,
       confidence: "medium",
-      reason: "CVE/CWE identifier present — vulnerability mapped to known weakness but not verified via PoC or code analysis",
+      reason:
+        "CVE/CWE identifier present — vulnerability mapped to known weakness but not verified via PoC or code analysis",
       verificationMethod: "cve_cwe_mapping",
     }
   }
@@ -70,7 +75,8 @@ export function verifyVulnerability(vuln: EngineVulnerability): VerificationResu
   return {
     verified: false,
     confidence: "low",
-    reason: "Insufficient evidence for verification — no PoC, code location, or technical analysis provided",
+    reason:
+      "Insufficient evidence for verification — no PoC, code location, or technical analysis provided",
     verificationMethod: "unverified",
   }
 }

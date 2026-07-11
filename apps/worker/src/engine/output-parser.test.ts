@@ -26,7 +26,12 @@ const SAMPLE_VULN = {
   poc_script_code: "curl -X POST https://example.com/api/login -d \"username=' OR '1'='1\"",
   remediation_steps: "Use parameterized queries",
   code_locations: [
-    { file: "src/auth/login.ts", start_line: 42, end_line: 45, snippet: "const q = `SELECT * FROM users WHERE name='${username}'`" },
+    {
+      file: "src/auth/login.ts",
+      start_line: 42,
+      end_line: 45,
+      snippet: "const q = `SELECT * FROM users WHERE name='${username}'`",
+    },
   ],
 }
 

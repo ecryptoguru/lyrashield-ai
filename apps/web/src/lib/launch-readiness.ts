@@ -1,6 +1,6 @@
 import type { FindingSeverity, FindingStatus } from "@lyrashield/types"
 
-interface FindingForReadiness {
+export interface FindingForReadiness {
   id: string
   severity: FindingSeverity
   status: FindingStatus
@@ -36,7 +36,9 @@ const SEVERITY_WEIGHTS: Record<string, number> = {
 
 const BLOCKING_STATUSES = new Set<string>(["OPEN", "FIX_READY"])
 
-export function generateLaunchReadinessReport(findings: FindingForReadiness[]): LaunchReadinessReport {
+export function generateLaunchReadinessReport(
+  findings: FindingForReadiness[]
+): LaunchReadinessReport {
   const total = findings.length
   const verified = findings.filter((f) => f.verified).length
 
@@ -64,7 +66,9 @@ export function generateLaunchReadinessReport(findings: FindingForReadiness[]): 
 
   if (blockingFindings > 0) {
     verdict = "NO_GO"
-    conditions.push(`${blockingFindings} unresolved critical/high finding(s) must be fixed before launch`)
+    conditions.push(
+      `${blockingFindings} unresolved critical/high finding(s) must be fixed before launch`
+    )
   } else if (score >= 80) {
     verdict = "GO"
   } else if (score >= 40) {
@@ -76,7 +80,9 @@ export function generateLaunchReadinessReport(findings: FindingForReadiness[]): 
   }
 
   if (total > 0 && verified === 0) {
-    recommendations.push("No findings have been verified — run a deeper scan to confirm vulnerabilities")
+    recommendations.push(
+      "No findings have been verified — run a deeper scan to confirm vulnerabilities"
+    )
   }
 
   if ((bySeverity.CRITICAL ?? 0) > 0) {
@@ -84,7 +90,9 @@ export function generateLaunchReadinessReport(findings: FindingForReadiness[]): 
   }
 
   if ((bySeverity.HIGH ?? 0) > 0) {
-    recommendations.push(`${bySeverity.HIGH} high-severity finding(s) should be prioritized for remediation`)
+    recommendations.push(
+      `${bySeverity.HIGH} high-severity finding(s) should be prioritized for remediation`
+    )
   }
 
   const summary = `${total} finding(s) detected, ${verified} verified. Security score: ${score}/100. Verdict: ${verdict}.`

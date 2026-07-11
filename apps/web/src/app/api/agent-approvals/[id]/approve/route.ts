@@ -4,10 +4,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: approvalId } = await params
   let body: unknown
   try {
@@ -29,7 +26,10 @@ export async function POST(
     if (err instanceof Error && err.message.includes("not found")) {
       return apiError("NOT_FOUND", err.message, 404)
     }
-    if (err instanceof Error && (err.message.includes("not pending") || err.message.includes("expired"))) {
+    if (
+      err instanceof Error &&
+      (err.message.includes("not pending") || err.message.includes("expired"))
+    ) {
       return apiError("CONFLICT", err.message, 409)
     }
     return authErrorResponse(err)

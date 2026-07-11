@@ -65,11 +65,7 @@ export function buildEngineCommand(config: ScanConfig): EngineCommand {
   const targetArg = resolveTargetArg(config.target)
   const scanMode = SCAN_MODE_MAP[config.mode] ?? "deep"
 
-  const args: string[] = [
-    "--non-interactive",
-    "--target", targetArg,
-    "--scan-mode", scanMode,
-  ]
+  const args: string[] = ["--non-interactive", "--target", targetArg, "--scan-mode", scanMode]
 
   if (config.instruction) {
     args.push("--instruction", config.instruction)

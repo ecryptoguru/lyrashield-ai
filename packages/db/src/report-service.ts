@@ -48,7 +48,9 @@ export async function createReport(params: CreateReportParams): Promise<Report> 
   return report
 }
 
-export async function generateShareToken(reportId: string): Promise<{ token: string; tokenHash: string }> {
+export async function generateShareToken(
+  reportId: string
+): Promise<{ token: string; tokenHash: string }> {
   const token = randomBytes(32).toString("hex")
   const tokenHash = createHash("sha256").update(token).digest("hex")
 
@@ -90,7 +92,10 @@ export async function getReportByShareToken(token: string): Promise<Report | nul
   return report
 }
 
-export async function getShareableReport(reportId: string, workspaceId: string): Promise<ShareableReport | null> {
+export async function getShareableReport(
+  reportId: string,
+  workspaceId: string
+): Promise<ShareableReport | null> {
   const report = await prisma.report.findFirst({
     where: { id: reportId, workspaceId, deletedAt: null },
   })
@@ -147,7 +152,11 @@ export async function getShareableReport(reportId: string, workspaceId: string):
   }
 }
 
-export async function listReports(workspaceId: string, cursor?: string, limit?: number): Promise<{
+export async function listReports(
+  workspaceId: string,
+  cursor?: string,
+  limit?: number
+): Promise<{
   items: Report[]
   nextCursor: string | null
 }> {

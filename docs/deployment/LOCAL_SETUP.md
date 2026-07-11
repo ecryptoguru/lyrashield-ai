@@ -32,6 +32,8 @@ Next.js production builds read required values from `process.env`; the root `.en
 cp .env apps/web/.env
 ```
 
+Evidence storage (PoC and code-location artifacts) is optional for local development. If `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and `S3_REGION` are not set, `apps/worker/src/engine/evidence-storage.ts` falls back to `encrypted://` placeholders. Set these variables in `.env` to exercise real uploads.
+
 ## 2. Start Postgres and Redis
 
 ```bash

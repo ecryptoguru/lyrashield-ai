@@ -114,7 +114,13 @@ describe("fix-proposal-service", () => {
     it("returns proposal with finding and PRs", async () => {
       const proposalWithDetails = {
         ...baseProposal,
-        finding: { id: "finding-1", title: "SQL Injection", severity: "CRITICAL", status: "OPEN", cwe: "CWE-89" },
+        finding: {
+          id: "finding-1",
+          title: "SQL Injection",
+          severity: "CRITICAL",
+          status: "OPEN",
+          cwe: "CWE-89",
+        },
         pullRequests: [],
       }
       mockPrisma.fixProposal.findFirst.mockResolvedValue(proposalWithDetails)

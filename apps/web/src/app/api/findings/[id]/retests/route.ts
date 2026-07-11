@@ -11,10 +11,7 @@ const CreateRetestSchema = z.object({
   scanId: z.string().min(1, "scanId is required"),
 })
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {

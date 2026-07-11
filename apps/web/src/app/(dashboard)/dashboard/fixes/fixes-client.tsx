@@ -1,12 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import {
-  Wrench,
-  GitPullRequest,
-  ShieldCheck,
-  ExternalLink,
-} from "lucide-react"
+import { Wrench, GitPullRequest, ShieldCheck, ExternalLink } from "lucide-react"
 import { Badge, Card, EmptyState, LoadMore } from "@lyrashield/ui"
 import { apiGetPaginated } from "@/lib/api-client"
 
@@ -74,7 +69,7 @@ export function FixesClient({
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Fixes</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-sm">
             Review fix proposals and track pull requests for your findings.
           </p>
         </div>
@@ -94,60 +89,56 @@ export function FixesClient({
               className="group p-5 transition-all duration-200 hover:shadow-md"
             >
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                    <Badge variant={PROPOSAL_STATUS_BADGE[proposal.status] ?? "muted"}>
-                      {proposal.status}
+                <div className="mb-2 flex items-center gap-2">
+                  <Badge variant={PROPOSAL_STATUS_BADGE[proposal.status] ?? "muted"}>
+                    {proposal.status}
+                  </Badge>
+                  <Badge variant={SEVERITY_BADGE[proposal.finding.severity] ?? "muted"}>
+                    {proposal.finding.severity}
+                  </Badge>
+                  {proposal.safetyScore != null && (
+                    <Badge variant={proposal.safetyScore >= 80 ? "success" : "warning"}>
+                      Safety: {proposal.safetyScore}
                     </Badge>
-                    <Badge variant={SEVERITY_BADGE[proposal.finding.severity] ?? "muted"}>
-                      {proposal.finding.severity}
-                    </Badge>
-                    {proposal.safetyScore != null && (
-                      <Badge variant={proposal.safetyScore >= 80 ? "success" : "warning"}>
-                        Safety: {proposal.safetyScore}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <h3 className="font-semibold truncate">{proposal.finding.title}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                    {proposal.summary}
-                  </p>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                    {proposal.finding.cwe && (
-                      <span className="flex items-center gap-1">
-                        <ShieldCheck className="h-3 w-3" aria-hidden="true" />
-                        {proposal.finding.cwe}
-                      </span>
-                    )}
-                    {proposal.finding.target && (
-                      <span>{proposal.finding.target.name}</span>
-                    )}
-                    {proposal.generatedByModel && (
-                      <span>AI: {proposal.generatedByModel}</span>
-                    )}
-                    <span>{new Date(proposal.createdAt).toLocaleDateString()}</span>
-                  </div>
-
-                  {proposal.pullRequests.length > 0 && (
-                    <div className="mt-3 space-y-1">
-                      {proposal.pullRequests.map((pr) => (
-                        <a
-                          key={pr.id}
-                          href={pr.prUrl ?? "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-xs text-primary hover:underline"
-                        >
-                          <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
-                          {pr.repoOwner}/{pr.repoName}
-                          {pr.prNumber != null && ` #${pr.prNumber}`}
-                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                        </a>
-                      ))}
-                    </div>
                   )}
                 </div>
+
+                <h3 className="truncate font-semibold">{proposal.finding.title}</h3>
+                <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+                  {proposal.summary}
+                </p>
+
+                <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-3 text-xs">
+                  {proposal.finding.cwe && (
+                    <span className="flex items-center gap-1">
+                      <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+                      {proposal.finding.cwe}
+                    </span>
+                  )}
+                  {proposal.finding.target && <span>{proposal.finding.target.name}</span>}
+                  {proposal.generatedByModel && <span>AI: {proposal.generatedByModel}</span>}
+                  <span>{new Date(proposal.createdAt).toLocaleDateString()}</span>
+                </div>
+
+                {proposal.pullRequests.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    {proposal.pullRequests.map((pr) => (
+                      <a
+                        key={pr.id}
+                        href={pr.prUrl ?? "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary inline-flex items-center gap-2 text-xs hover:underline"
+                      >
+                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
+                        {pr.repoOwner}/{pr.repoName}
+                        {pr.prNumber != null && ` #${pr.prNumber}`}
+                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
             </Card>
           ))}
 

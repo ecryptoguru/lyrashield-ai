@@ -1,13 +1,6 @@
 import Link from "next/link"
 import type { ComponentType, SVGProps } from "react"
-import {
-  Bell,
-  CalendarClock,
-  Plug,
-  Settings,
-  ShieldCheck,
-  Users,
-} from "lucide-react"
+import { Bell, CalendarClock, Plug, Settings, ShieldCheck, Users } from "lucide-react"
 import {
   Badge,
   Card,
@@ -78,7 +71,7 @@ export default async function SettingsPage() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-sm">
             Workspace posture, access, automation, and connected services.
           </p>
         </div>
@@ -103,14 +96,16 @@ export default async function SettingsPage() {
               <Metric label="Findings" value={workspace._count.findings.toString()} />
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border bg-card/50 p-4">
+              <div className="bg-card/50 rounded-xl border p-4">
                 <p className="text-sm font-medium">Data retention</p>
-                <p className="mt-1 text-sm text-muted-foreground">{workspace.retentionDays} days</p>
+                <p className="text-muted-foreground mt-1 text-sm">{workspace.retentionDays} days</p>
               </div>
-              <div className="rounded-xl border bg-card/50 p-4">
+              <div className="bg-card/50 rounded-xl border p-4">
                 <p className="text-sm font-medium">Product telemetry</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {workspace.telemetryEnabled ? "Enabled for this workspace" : "Disabled for this workspace"}
+                <p className="text-muted-foreground mt-1 text-sm">
+                  {workspace.telemetryEnabled
+                    ? "Enabled for this workspace"
+                    : "Disabled for this workspace"}
                 </p>
               </div>
             </div>
@@ -124,7 +119,10 @@ export default async function SettingsPage() {
           <CardContent className="space-y-2">
             {securityControls.map((control) => (
               <div key={control} className="flex items-center gap-2 text-sm">
-                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                <ShieldCheck
+                  className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
+                  aria-hidden="true"
+                />
                 <span>{control}</span>
               </div>
             ))}
@@ -164,8 +162,8 @@ export default async function SettingsPage() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border bg-card/50 p-4">
-      <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
+    <div className="bg-card/50 rounded-xl border p-4">
+      <p className="text-muted-foreground text-xs font-medium uppercase">{label}</p>
       <p className="mt-1 truncate text-lg font-semibold">{value}</p>
     </div>
   )
@@ -183,12 +181,15 @@ function SettingsLink({
   description: string
 }) {
   return (
-    <Card className="transition-[border-color,box-shadow] hover:border-primary/50 hover:shadow-card-hover">
+    <Card className="hover:border-primary/50 hover:shadow-card-hover transition-[border-color,box-shadow]">
       <CardContent className="p-5">
-        <Icon className="mb-4 h-5 w-5 text-primary" aria-hidden="true" />
+        <Icon className="text-primary mb-4 h-5 w-5" aria-hidden="true" />
         <h2 className="font-semibold tracking-tight">{title}</h2>
-        <p className="mt-1 min-h-10 text-sm text-muted-foreground">{description}</p>
-        <Link className={buttonVariants({ variant: "secondary", size: "sm", className: "mt-4 w-full" })} href={href}>
+        <p className="text-muted-foreground mt-1 min-h-10 text-sm">{description}</p>
+        <Link
+          className={buttonVariants({ variant: "secondary", size: "sm", className: "mt-4 w-full" })}
+          href={href}
+        >
           Open
         </Link>
       </CardContent>

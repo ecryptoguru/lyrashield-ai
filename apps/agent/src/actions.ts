@@ -144,39 +144,40 @@ export const runScanAction: AgentActionDefinition<z.infer<typeof RunScanInputSch
   },
 }
 
-export const getScanStatusAction: AgentActionDefinition<z.infer<typeof GetScanStatusInputSchema>> = {
-  name: "get-scan-status",
-  description: "Get the current status and events of a scan.",
-  inputSchema: GetScanStatusInputSchema,
-  permission: PERMISSIONS.agent.view,
-  auditAction: "agent.action.get_scan_status",
-  auditResourceType: "scan",
-  handler: async (input) => {
-    const scan = await getScanWithEvents(input.scanId)
-    if (!scan || scan.workspaceId !== input.workspaceId) {
-      throw new Error("Scan not found in this workspace")
-    }
+export const getScanStatusAction: AgentActionDefinition<z.infer<typeof GetScanStatusInputSchema>> =
+  {
+    name: "get-scan-status",
+    description: "Get the current status and events of a scan.",
+    inputSchema: GetScanStatusInputSchema,
+    permission: PERMISSIONS.agent.view,
+    auditAction: "agent.action.get_scan_status",
+    auditResourceType: "scan",
+    handler: async (input) => {
+      const scan = await getScanWithEvents(input.scanId)
+      if (!scan || scan.workspaceId !== input.workspaceId) {
+        throw new Error("Scan not found in this workspace")
+      }
 
-    return {
-      id: scan.id,
-      status: scan.status,
-      goal: scan.goal,
-      mode: scan.mode,
-      startedAt: scan.startedAt,
-      endedAt: scan.endedAt,
-      summary: scan.summary,
-      errorCategory: scan.errorCategory,
-      errorMessage: scan.errorMessage,
-      events: scan.events.map((e) => ({
-        id: e.id,
-        stage: e.stage,
-        level: e.level,
-        message: e.message,
-        createdAt: e.createdAt,
-      })),
-    }
-  },
-}
+      return {
+        id: scan.id,
+        status: scan.status,
+        goal: scan.goal,
+        mode: scan.mode,
+        startedAt: scan.startedAt,
+        endedAt: scan.endedAt,
+        summary: scan.summary,
+        errorCategory: scan.errorCategory,
+        errorMessage: scan.errorMessage,
+        events: scan.events.map((e) => ({
+          id: e.id,
+          stage: e.stage,
+          level: e.level,
+          message: e.message,
+          createdAt: e.createdAt,
+        })),
+      }
+    },
+  }
 
 export const listFindingsAction: AgentActionDefinition<z.infer<typeof ListFindingsInputSchema>> = {
   name: "list-findings",
@@ -216,7 +217,8 @@ export const listFindingsAction: AgentActionDefinition<z.infer<typeof ListFindin
 
 export const getFindingAction: AgentActionDefinition<z.infer<typeof GetFindingInputSchema>> = {
   name: "get-finding",
-  description: "Get detailed information about a specific finding, including evidence and fix proposals.",
+  description:
+    "Get detailed information about a specific finding, including evidence and fix proposals.",
   inputSchema: GetFindingInputSchema,
   permission: PERMISSIONS.agent.view,
   auditAction: "agent.action.get_finding",
@@ -247,9 +249,12 @@ export const getFindingAction: AgentActionDefinition<z.infer<typeof GetFindingIn
   },
 }
 
-export const explainFindingAction: AgentActionDefinition<z.infer<typeof ExplainFindingInputSchema>> = {
+export const explainFindingAction: AgentActionDefinition<
+  z.infer<typeof ExplainFindingInputSchema>
+> = {
   name: "explain-finding",
-  description: "Get a plain-language explanation of a finding, including what it is, why it matters, and how to fix it.",
+  description:
+    "Get a plain-language explanation of a finding, including what it is, why it matters, and how to fix it.",
   inputSchema: ExplainFindingInputSchema,
   permission: PERMISSIONS.agent.view,
   auditAction: "agent.action.explain_finding",

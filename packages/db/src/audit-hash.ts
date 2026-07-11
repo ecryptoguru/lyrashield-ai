@@ -24,10 +24,7 @@ export interface AuditLogChainFields {
  *
  * @returns The hex-encoded SHA-256 hash to store on the AuditLog record.
  */
-export function computeAuditHash(
-  entry: AuditLogChainFields,
-  prevHash: string | null,
-): string {
+export function computeAuditHash(entry: AuditLogChainFields, prevHash: string | null): string {
   const payload = {
     id: entry.id,
     workspaceId: entry.workspaceId,
@@ -51,7 +48,7 @@ export function computeAuditHash(
  * Returns true if every entry's hash matches the recomputed value.
  */
 export function verifyAuditChain(
-  entries: Array<AuditLogChainFields & { hash: string | null; prevHash: string | null }>,
+  entries: Array<AuditLogChainFields & { hash: string | null; prevHash: string | null }>
 ): boolean {
   let expectedPrevHash: string | null = null
 

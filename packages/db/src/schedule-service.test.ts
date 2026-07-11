@@ -85,13 +85,15 @@ describe("schedule-service", () => {
     })
 
     it("rejects unsupported cron expressions", async () => {
-      await expect(createSchedule({
-        workspaceId: "ws-1",
-        targetId: "target-1",
-        cron: "*/5 * * * *",
-        goal: "TEST_APP",
-        createdById: "user-1",
-      })).rejects.toThrow("Unsupported cron expression")
+      await expect(
+        createSchedule({
+          workspaceId: "ws-1",
+          targetId: "target-1",
+          cron: "*/5 * * * *",
+          goal: "TEST_APP",
+          createdById: "user-1",
+        })
+      ).rejects.toThrow("Unsupported cron expression")
     })
   })
 
@@ -164,7 +166,11 @@ describe("schedule-service", () => {
   describe("updateSchedule", () => {
     it("updates cron and enabled", async () => {
       mockPrisma.schedule.findFirst.mockResolvedValue(baseSchedule)
-      mockPrisma.schedule.update.mockResolvedValue({ ...baseSchedule, cron: "0 0 * * 1", enabled: false })
+      mockPrisma.schedule.update.mockResolvedValue({
+        ...baseSchedule,
+        cron: "0 0 * * 1",
+        enabled: false,
+      })
 
       const result = await updateSchedule("sched-1", "ws-1", { cron: "0 0 * * 1", enabled: false })
 
@@ -182,9 +188,16 @@ describe("schedule-service", () => {
 
     it("updates goal and mode", async () => {
       mockPrisma.schedule.findFirst.mockResolvedValue(baseSchedule)
-      mockPrisma.schedule.update.mockResolvedValue({ ...baseSchedule, goal: "LAUNCH_REVIEW", mode: "DEEP" })
+      mockPrisma.schedule.update.mockResolvedValue({
+        ...baseSchedule,
+        goal: "LAUNCH_REVIEW",
+        mode: "DEEP",
+      })
 
-      const result = await updateSchedule("sched-1", "ws-1", { goal: "LAUNCH_REVIEW", mode: "DEEP" })
+      const result = await updateSchedule("sched-1", "ws-1", {
+        goal: "LAUNCH_REVIEW",
+        mode: "DEEP",
+      })
 
       expect(result.goal).toBe("LAUNCH_REVIEW")
       expect(mockPrisma.schedule.update).toHaveBeenCalledWith({
@@ -295,10 +308,7 @@ describe("schedule-service", () => {
           where: {
             enabled: true,
             deletedAt: null,
-            OR: [
-              { nextRunAt: null },
-              { nextRunAt: { lte: now } },
-            ],
+            OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }],
           },
           take: 50,
         })

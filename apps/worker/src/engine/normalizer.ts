@@ -17,31 +17,87 @@ export interface NormalizedFinding extends EngineVulnerability {
 }
 
 const CWE_METADATA: Record<string, { name: string; category: string; owasp?: string }> = {
-  "CWE-79": { name: "Cross-site Scripting (XSS)", category: "Injection", owasp: "A03:2021-Injection" },
+  "CWE-79": {
+    name: "Cross-site Scripting (XSS)",
+    category: "Injection",
+    owasp: "A03:2021-Injection",
+  },
   "CWE-89": { name: "SQL Injection", category: "Injection", owasp: "A03:2021-Injection" },
-  "CWE-200": { name: "Information Exposure", category: "Information Disclosure", owasp: "A01:2021-Broken Access Control" },
-  "CWE-209": { name: "Generation of Error Message with Sensitive Information", category: "Information Disclosure" },
-  "CWE-306": { name: "Missing Authentication for Critical Function", category: "Authentication", owasp: "A07:2021-Identification and Authentication Failures" },
-  "CWE-319": { name: "Cleartext Transmission of Sensitive Information", category: "Transport Security" },
-  "CWE-538": { name: "File and Directory Information Exposure", category: "Information Disclosure" },
-  "CWE-614": { name: "Sensitive Cookie in HTTPS Session Without Secure Attribute", category: "Session Management" },
-  "CWE-693": { name: "Protection Mechanism Failure", category: "Security Configuration", owasp: "A05:2021-Security Misconfiguration" },
+  "CWE-200": {
+    name: "Information Exposure",
+    category: "Information Disclosure",
+    owasp: "A01:2021-Broken Access Control",
+  },
+  "CWE-209": {
+    name: "Generation of Error Message with Sensitive Information",
+    category: "Information Disclosure",
+  },
+  "CWE-306": {
+    name: "Missing Authentication for Critical Function",
+    category: "Authentication",
+    owasp: "A07:2021-Identification and Authentication Failures",
+  },
+  "CWE-319": {
+    name: "Cleartext Transmission of Sensitive Information",
+    category: "Transport Security",
+  },
+  "CWE-538": {
+    name: "File and Directory Information Exposure",
+    category: "Information Disclosure",
+  },
+  "CWE-614": {
+    name: "Sensitive Cookie in HTTPS Session Without Secure Attribute",
+    category: "Session Management",
+  },
+  "CWE-693": {
+    name: "Protection Mechanism Failure",
+    category: "Security Configuration",
+    owasp: "A05:2021-Security Misconfiguration",
+  },
   "CWE-749": { name: "Exposed Dangerous Method or Function", category: "Security Configuration" },
   "CWE-787": { name: "Out-of-bounds Write", category: "Memory Safety" },
   "CWE-78": { name: "OS Command Injection", category: "Injection", owasp: "A03:2021-Injection" },
   "CWE-1004": { name: "Sensitive Cookie Without HttpOnly", category: "Session Management" },
-  "CWE-1021": { name: "Improper Restriction of Rendered UI Layers or Frames", category: "Client-side Security" },
-  "CWE-1275": { name: "Sensitive Cookie Without SameSite Attribute", category: "Session Management" },
+  "CWE-1021": {
+    name: "Improper Restriction of Rendered UI Layers or Frames",
+    category: "Client-side Security",
+  },
+  "CWE-1275": {
+    name: "Sensitive Cookie Without SameSite Attribute",
+    category: "Session Management",
+  },
   "CWE-942": { name: "Permissive Cross-domain Policy", category: "Access Control" },
-  "CWE-352": { name: "Cross-Site Request Forgery (CSRF)", category: "Session Management", owasp: "A01:2021-Broken Access Control" },
-  "CWE-434": { name: "Unrestricted Upload of File with Dangerous Type", category: "Input Validation", owasp: "A04:2021-Insecure Design" },
-  "CWE-502": { name: "Deserialization of Untrusted Data", category: "Input Validation", owasp: "A08:2021-Software and Data Integrity Failures" },
-  "CWE-22": { name: "Path Traversal", category: "Path Manipulation", owasp: "A01:2021-Broken Access Control" },
+  "CWE-352": {
+    name: "Cross-Site Request Forgery (CSRF)",
+    category: "Session Management",
+    owasp: "A01:2021-Broken Access Control",
+  },
+  "CWE-434": {
+    name: "Unrestricted Upload of File with Dangerous Type",
+    category: "Input Validation",
+    owasp: "A04:2021-Insecure Design",
+  },
+  "CWE-502": {
+    name: "Deserialization of Untrusted Data",
+    category: "Input Validation",
+    owasp: "A08:2021-Software and Data Integrity Failures",
+  },
+  "CWE-22": {
+    name: "Path Traversal",
+    category: "Path Manipulation",
+    owasp: "A01:2021-Broken Access Control",
+  },
   "CWE-98": { name: "PHP File Inclusion", category: "Injection" },
   "CWE-444": { name: "HTTP Request Smuggling", category: "Protocol Manipulation" },
   "CWE-521": { name: "Weak Password Requirements", category: "Authentication" },
-  "CWE-540": { name: "Information Exposure Through Source Code", category: "Information Disclosure" },
-  "CWE-732": { name: "Incorrect Permission Assignment for Critical Resource", category: "Access Control" },
+  "CWE-540": {
+    name: "Information Exposure Through Source Code",
+    category: "Information Disclosure",
+  },
+  "CWE-732": {
+    name: "Incorrect Permission Assignment for Critical Resource",
+    category: "Access Control",
+  },
   "CWE-770": { name: "Allocation of Resources Without Limits", category: "Resource Management" },
   "CWE-1333": { name: "Inefficient Regular Expression Complexity", category: "ReDoS" },
 }
@@ -55,9 +111,15 @@ const SEVERITY_PRIORITY: Record<string, number> = {
 }
 
 const FALSE_POSITIVE_PATTERNS = [
-  { pattern: /test\s+(?:server|environment|endpoint)/i, reason: "Finding references a test environment" },
+  {
+    pattern: /test\s+(?:server|environment|endpoint)/i,
+    reason: "Finding references a test environment",
+  },
   { pattern: /localhost|127\.0\.0\.1|0\.0\.0\.0/i, reason: "Finding references localhost" },
-  { pattern: /example\.com|example\.org|test\.local/i, reason: "Finding references example domain" },
+  {
+    pattern: /example\.com|example\.org|test\.local/i,
+    reason: "Finding references example domain",
+  },
   { pattern: /placeholder|dummy|fake|sample/i, reason: "Finding references placeholder data" },
 ]
 
@@ -65,13 +127,15 @@ export function assessFalsePositiveRisk(vuln: EngineVulnerability): "low" | "med
   // Only check target and endpoint fields for false-positive patterns.
   // Checking title/description would filter legitimate findings that happen
   // to mention test/example domains in their analysis text.
-  const text = [vuln.target, vuln.endpoint]
-    .filter(Boolean)
-    .join(" ")
+  const text = [vuln.target, vuln.endpoint].filter(Boolean).join(" ")
 
   for (const fp of FALSE_POSITIVE_PATTERNS) {
     if (fp.pattern.test(text)) {
-      logger.debug("False positive pattern matched", { pattern: fp.pattern.source, reason: fp.reason, title: vuln.title })
+      logger.debug("False positive pattern matched", {
+        pattern: fp.pattern.source,
+        reason: fp.reason,
+        title: vuln.title,
+      })
       return "high"
     }
   }
@@ -136,14 +200,20 @@ export function calculateConfidenceScore(vuln: EngineVulnerability): number {
   return score
 }
 
-export function calculateRemediationPriority(severity: string, confidenceScore: number, falsePositiveRisk: string): number {
+export function calculateRemediationPriority(
+  severity: string,
+  confidenceScore: number,
+  falsePositiveRisk: string
+): number {
   const severityScore = SEVERITY_PRIORITY[severity.toUpperCase()] ?? 0
   const fpPenalty = falsePositiveRisk === "high" ? -2 : falsePositiveRisk === "medium" ? -1 : 0
   const confidenceBonus = confidenceScore >= 80 ? 1 : 0
   return Math.max(0, severityScore + confidenceBonus + fpPenalty)
 }
 
-export function normalizeSeverity(engineSeverity: string): "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO" {
+export function normalizeSeverity(
+  engineSeverity: string
+): "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO" {
   const map: Record<string, "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"> = {
     critical: "CRITICAL",
     high: "HIGH",
@@ -167,7 +237,7 @@ export function normalizeCwe(cwe: string | undefined): string | null {
 export function normalizeFindings(
   vulnerabilities: EngineVulnerability[],
   targetId: string,
-  dedupeKeyFn: (vuln: EngineVulnerability, targetId: string) => string,
+  dedupeKeyFn: (vuln: EngineVulnerability, targetId: string) => string
 ): NormalizedFinding[] {
   const seen = new Map<string, NormalizedFinding>()
 
@@ -181,7 +251,7 @@ export function normalizeFindings(
     const remediationPriority = calculateRemediationPriority(
       normalizedSeverity,
       confidenceScore,
-      falsePositiveRisk,
+      falsePositiveRisk
     )
     const normalizedCvss = vuln.cvss ?? calculateCvssFromSeverity(vuln.severity)
 
@@ -203,9 +273,15 @@ export function normalizeFindings(
     if (!existing) {
       seen.set(dedupeKey, normalized)
     } else {
-      if ((SEVERITY_PRIORITY[normalized.normalizedSeverity] ?? 0) > (SEVERITY_PRIORITY[existing.normalizedSeverity] ?? 0)) {
+      if (
+        (SEVERITY_PRIORITY[normalized.normalizedSeverity] ?? 0) >
+        (SEVERITY_PRIORITY[existing.normalizedSeverity] ?? 0)
+      ) {
         seen.set(dedupeKey, normalized)
-      } else if ((SEVERITY_PRIORITY[normalized.normalizedSeverity] ?? 0) === (SEVERITY_PRIORITY[existing.normalizedSeverity] ?? 0)) {
+      } else if (
+        (SEVERITY_PRIORITY[normalized.normalizedSeverity] ?? 0) ===
+        (SEVERITY_PRIORITY[existing.normalizedSeverity] ?? 0)
+      ) {
         if (confidenceScore > existing.confidenceScore) {
           seen.set(dedupeKey, normalized)
         }
@@ -214,7 +290,9 @@ export function normalizeFindings(
   }
 
   const results = Array.from(seen.values()).sort(
-    (a, b) => (SEVERITY_PRIORITY[b.normalizedSeverity] ?? 0) - (SEVERITY_PRIORITY[a.normalizedSeverity] ?? 0),
+    (a, b) =>
+      (SEVERITY_PRIORITY[b.normalizedSeverity] ?? 0) -
+      (SEVERITY_PRIORITY[a.normalizedSeverity] ?? 0)
   )
 
   logger.info("Findings normalized", {

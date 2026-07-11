@@ -54,7 +54,9 @@ export async function createSchedule(params: {
 }): Promise<Schedule> {
   const nextRunAt = getNextRunAt(params.cron)
   if (!nextRunAt) {
-    throw new Error("Unsupported cron expression. Use five fields with numeric minute/hour and optional day-of-week.")
+    throw new Error(
+      "Unsupported cron expression. Use five fields with numeric minute/hour and optional day-of-week."
+    )
   }
 
   const schedule = await prisma.schedule.create({
@@ -143,7 +145,9 @@ export async function updateSchedule(
       ? getNextRunAt(schedule.cron)
       : null
   if (data.cron && !nextRunAt) {
-    throw new Error("Unsupported cron expression. Use five fields with numeric minute/hour and optional day-of-week.")
+    throw new Error(
+      "Unsupported cron expression. Use five fields with numeric minute/hour and optional day-of-week."
+    )
   }
 
   return prisma.schedule.update({
@@ -158,10 +162,7 @@ export async function updateSchedule(
   })
 }
 
-export async function deleteSchedule(
-  scheduleId: string,
-  workspaceId: string
-): Promise<void> {
+export async function deleteSchedule(scheduleId: string, workspaceId: string): Promise<void> {
   const schedule = await prisma.schedule.findFirst({
     where: { id: scheduleId, workspaceId, deletedAt: null },
   })
@@ -214,10 +215,7 @@ export async function getDueSchedules(now: Date): Promise<ScheduleWithDetails[]>
     where: {
       enabled: true,
       deletedAt: null,
-      OR: [
-        { nextRunAt: null },
-        { nextRunAt: { lte: now } },
-      ],
+      OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }],
     },
     include: {
       target: { select: { id: true, name: true, type: true, url: true } },

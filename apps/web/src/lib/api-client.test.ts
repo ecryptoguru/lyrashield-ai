@@ -11,7 +11,10 @@ function jsonResponse(data: unknown, success = true, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
-    json: async () => (success ? { success: true, data } : { success: false, error: { code: "TEST_ERROR", message: "Test error" } }),
+    json: async () =>
+      success
+        ? { success: true, data }
+        : { success: false, error: { code: "TEST_ERROR", message: "Test error" } },
   }
 }
 
@@ -25,7 +28,10 @@ describe("api-client", () => {
       mockFetch.mockResolvedValue(jsonResponse({ id: "1", name: "test" }))
       const result = await apiGet("/api/test")
       expect(result).toEqual({ id: "1", name: "test" })
-      expect(mockFetch).toHaveBeenCalledWith("/api/test", { method: "GET" })
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/test",
+        expect.objectContaining({ method: "GET", signal: expect.any(AbortSignal) })
+      )
     })
 
     it("throws ApiError on failure", async () => {
@@ -78,7 +84,10 @@ describe("api-client", () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({ success: true, data: [{ id: "1" }, { id: "2" }], nextCursor: "3" }),
+        json: async () => ({
+          success: true,
+          data: { items: [{ id: "1" }, { id: "2" }], nextCursor: "3" },
+        }),
       })
       const result = await apiGetPaginated("/api/test", { workspaceId: "ws1", limit: "10" })
       expect(result.items).toEqual([{ id: "1" }, { id: "2" }])
@@ -92,7 +101,10 @@ describe("api-client", () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({ success: true, data: [{ id: "1" }], nextCursor: null }),
+        json: async () => ({
+          success: true,
+          data: { items: [{ id: "1" }], nextCursor: null },
+        }),
       })
       const result = await apiGetPaginated("/api/test")
       expect(result.items).toEqual([{ id: "1" }])
@@ -103,7 +115,10 @@ describe("api-client", () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({ success: true, data: [], nextCursor: null }),
+        json: async () => ({
+          success: true,
+          data: { items: [], nextCursor: null },
+        }),
       })
       await apiGetPaginated("/api/test", { workspaceId: "ws1", cursor: undefined })
       const url = mockFetch.mock.calls[0]![0] as string
@@ -120,7 +135,9 @@ describe("api-client", () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => { throw new Error("Invalid JSON") },
+        json: async () => {
+          throw new Error("Invalid JSON")
+        },
       })
       await expect(apiGet("/api/test")).rejects.toMatchObject({ code: "PARSE_ERROR", status: 200 })
     })
@@ -137,7 +154,10 @@ describe("api-client", () => {
 
     it("throws ApiError on paginated network failure", async () => {
       mockFetch.mockRejectedValue(new TypeError("Failed to fetch"))
-      await expect(apiGetPaginated("/api/test")).rejects.toMatchObject({ code: "NETWORK_ERROR", status: 0 })
+      await expect(apiGetPaginated("/api/test")).rejects.toMatchObject({
+        code: "NETWORK_ERROR",
+        status: 0,
+      })
     })
   })
 })

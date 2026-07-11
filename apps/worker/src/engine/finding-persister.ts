@@ -9,8 +9,7 @@ import {
 import { assertEvidenceEncrypted } from "@lyrashield/db"
 import { verifyVulnerability } from "./verifier"
 import type { NormalizedFinding } from "./normalizer"
-
-const EVIDENCE_KEY_REF = "vault/lyrashield-evidence-key/v1"
+import { uploadEvidence, EVIDENCE_KEY_REF } from "./evidence-storage"
 
 export interface PersistFindingsParams {
   scanId: string
@@ -27,9 +26,7 @@ export interface PersistedFinding {
   isNew: boolean
 }
 
-export async function persistFindings(
-  params: PersistFindingsParams,
-): Promise<PersistedFinding[]> {
+export async function persistFindings(params: PersistFindingsParams): Promise<PersistedFinding[]> {
   const { scanId, workspaceId, targetId, vulnerabilities } = params
   const results: PersistedFinding[] = []
 
@@ -50,17 +47,26 @@ export async function persistFindings(
 
   for (const vuln of vulnerabilities) {
     const isNormalized = "dedupeKey" in vuln && "normalizedSeverity" in vuln
-    const dedupeKey = isNormalized ? (vuln as NormalizedFinding).dedupeKey : generateDedupeKey(vuln, targetId)
-    const severity = isNormalized ? (vuln as NormalizedFinding).normalizedSeverity : mapSeverity(vuln.severity)
+    const dedupeKey = isNormalized
+      ? (vuln as NormalizedFinding).dedupeKey
+      : generateDedupeKey(vuln, targetId)
+    const severity = isNormalized
+      ? (vuln as NormalizedFinding).normalizedSeverity
+      : mapSeverity(vuln.severity)
     const summary = buildFindingSummary(vuln)
     const verification = verifyVulnerability(vuln)
     const confidence = isNormalized
-      ? (vuln as NormalizedFinding).confidenceScore >= 80 ? "high"
-        : (vuln as NormalizedFinding).confidenceScore >= 50 ? "medium" : "low"
+      ? (vuln as NormalizedFinding).confidenceScore >= 80
+        ? "high"
+        : (vuln as NormalizedFinding).confidenceScore >= 50
+          ? "medium"
+          : "low"
       : verification.confidence
     const cwe = isNormalized ? (vuln as NormalizedFinding).normalizedCwe : vuln.cwe
     const cvss = isNormalized ? (vuln as NormalizedFinding).normalizedCvss : vuln.cvss
-    const verified = isNormalized ? (vuln as NormalizedFinding).confidenceScore >= 50 : verification.verified
+    const verified = isNormalized
+      ? (vuln as NormalizedFinding).confidenceScore >= 50
+      : verification.verified
 
     const existing = existingMap.get(dedupeKey)
 
@@ -115,33 +121,58 @@ export async function persistFindings(
     })
 
     // Store evidence as encrypted references — NOT raw PoC data in the DB.
-    // The actual PoC content must be uploaded to encrypted storage (S3 with
-    // server-side encryption) and referenced by URI. The encryptionKeyRef
-    // points to the vault key used for envelope encryption.
+    // The actual PoC content is uploaded to encrypted S3-compatible storage and
+    // referenced by URI. The encryptionKeyRef points to the vault key used for
+    // envelope encryption.
     if (vuln.poc_script_code || vuln.poc_description) {
       assertEvidenceEncrypted(EVIDENCE_KEY_REF)
+      const evidence = await uploadEvidence({
+        workspaceId,
+        findingId: finding.id,
+        type: "poc",
+        artifactId: "poc",
+        content: vuln.poc_script_code ?? vuln.poc_description ?? "",
+        contentType: "text/plain; charset=utf-8",
+        encryptionKeyRef: EVIDENCE_KEY_REF,
+      })
       await prisma.evidence.create({
         data: {
           findingId: finding.id,
           type: "poc",
           redactionStatus: "pending",
-          encryptionKeyRef: EVIDENCE_KEY_REF,
-          storageUri: `encrypted://evidence/${finding.id}/poc`,
+          encryptionKeyRef: evidence.encryptionKeyRef,
+          storageUri: evidence.storageUri,
+          checksum: evidence.checksum,
         },
       })
     }
 
     if (vuln.code_locations && vuln.code_locations.length > 0) {
-      for (const loc of vuln.code_locations) {
+      for (const [i, loc] of vuln.code_locations.entries()) {
         if (loc.snippet || loc.file) {
           assertEvidenceEncrypted(EVIDENCE_KEY_REF)
+          const evidence = await uploadEvidence({
+            workspaceId,
+            findingId: finding.id,
+            type: "code_location",
+            artifactId: `code-loc-${i}`,
+            content: JSON.stringify({
+              file: loc.file,
+              start_line: loc.start_line,
+              end_line: loc.end_line,
+              snippet: loc.snippet,
+            }),
+            contentType: "application/json; charset=utf-8",
+            encryptionKeyRef: EVIDENCE_KEY_REF,
+          })
           await prisma.evidence.create({
             data: {
               findingId: finding.id,
               type: "code_location",
               redactionStatus: "pending",
-              encryptionKeyRef: EVIDENCE_KEY_REF,
-              ...(loc.file ? { storageUri: `file://${loc.file}${loc.start_line ? `#L${loc.start_line}` : ""}` } : {}),
+              encryptionKeyRef: evidence.encryptionKeyRef,
+              storageUri: evidence.storageUri,
+              checksum: evidence.checksum,
             },
           })
         }
@@ -159,7 +190,12 @@ export async function persistFindings(
 
   const newCount = results.filter((r) => r.isNew).length
   const dupCount = results.length - newCount
-  logger.info("Findings persisted", { scanId, total: results.length, new: newCount, duplicate: dupCount })
+  logger.info("Findings persisted", {
+    scanId,
+    total: results.length,
+    new: newCount,
+    duplicate: dupCount,
+  })
 
   return results
 }

@@ -55,7 +55,9 @@ describe("generateSarifReport", () => {
     const report = generateSarifReport(findings, { name: "LyraShield" })
     const results = report.runs[0]!.results
     expect(results[0]!.locations).toBeDefined()
-    expect(results[0]!.locations![0]!.physicalLocation.artifactLocation.uri).toBe("https://example.com")
+    expect(results[0]!.locations![0]!.physicalLocation.artifactLocation.uri).toBe(
+      "https://example.com"
+    )
   })
 
   it("includes properties with finding id and verified status", () => {

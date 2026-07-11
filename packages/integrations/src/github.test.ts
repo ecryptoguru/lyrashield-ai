@@ -39,10 +39,7 @@ describe("verifyWebhookSignature", () => {
   })
 
   function makeValidSignature(): string {
-    return (
-      "sha256=" +
-      createHmac("sha256", "test-webhook-secret").update(payload).digest("hex")
-    )
+    return "sha256=" + createHmac("sha256", "test-webhook-secret").update(payload).digest("hex")
   }
 
   it("accepts a valid signature", () => {
@@ -64,9 +61,7 @@ describe("verifyWebhookSignature", () => {
   })
 
   it("rejects signature with wrong secret", () => {
-    const wrongSig =
-      "sha256=" +
-      createHmac("sha256", "wrong-secret").update(payload).digest("hex")
+    const wrongSig = "sha256=" + createHmac("sha256", "wrong-secret").update(payload).digest("hex")
     expect(verifyWebhookSignature(payload, wrongSig)).toBe(false)
   })
 

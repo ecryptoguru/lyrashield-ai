@@ -43,7 +43,10 @@ interface ScansClientProps {
   initialNextCursor: string | null
 }
 
-const STATUS_VARIANT: Record<string, "default" | "success" | "danger" | "warning" | "info" | "muted"> = {
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "success" | "danger" | "warning" | "info" | "muted"
+> = {
   QUEUED: "muted",
   PREFLIGHT: "info",
   RUNNING: "default",
@@ -116,7 +119,9 @@ export function ScansClient({
         {}
       )
       setScans((prev) =>
-        prev.map((s) => (s.id === scanId ? { ...s, status: result.status, endedAt: result.endedAt } : s))
+        prev.map((s) =>
+          s.id === scanId ? { ...s, status: result.status, endedAt: result.endedAt } : s
+        )
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to cancel scan")
@@ -164,11 +169,16 @@ export function ScansClient({
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Scans</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Run and monitor security scans against your targets</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Run and monitor security scans against your targets
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              aria-hidden="true"
+            />
             Refresh
           </Button>
           {targets.length > 0 && (
@@ -183,7 +193,7 @@ export function ScansClient({
       {error && (
         <div
           role="alert"
-          className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
+          className="border-destructive/50 bg-destructive/10 text-destructive mb-4 rounded-lg border p-3 text-sm"
         >
           {error}
         </div>
@@ -193,13 +203,22 @@ export function ScansClient({
         <Card className="mb-6 p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Start New Scan</h2>
-            <Button variant="ghost" size="sm" aria-label="Close" onClick={() => setShowCreate(false)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Close"
+              onClick={() => setShowCreate(false)}
+            >
               <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <FormField label="Target" htmlFor="scan-target">
-              <Select id="scan-target" value={selectedTarget} onChange={(e) => setSelectedTarget(e.target.value)}>
+              <Select
+                id="scan-target"
+                value={selectedTarget}
+                onChange={(e) => setSelectedTarget(e.target.value)}
+              >
                 <option value="">Select a target…</option>
                 {targets.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -209,7 +228,11 @@ export function ScansClient({
               </Select>
             </FormField>
             <FormField label="Goal" htmlFor="scan-goal">
-              <Select id="scan-goal" value={selectedGoal} onChange={(e) => setSelectedGoal(e.target.value)}>
+              <Select
+                id="scan-goal"
+                value={selectedGoal}
+                onChange={(e) => setSelectedGoal(e.target.value)}
+              >
                 <option value="CHECK_PR">Check PR</option>
                 <option value="TEST_APP">Test App</option>
                 <option value="LAUNCH_REVIEW">Launch Review</option>
@@ -219,7 +242,11 @@ export function ScansClient({
               </Select>
             </FormField>
             <FormField label="Mode" htmlFor="scan-mode">
-              <Select id="scan-mode" value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)}>
+              <Select
+                id="scan-mode"
+                value={selectedMode}
+                onChange={(e) => setSelectedMode(e.target.value)}
+              >
                 <option value="SAFE">Safe</option>
                 <option value="QUICK">Quick</option>
                 <option value="STANDARD">Standard</option>
@@ -254,40 +281,45 @@ export function ScansClient({
           title="No scans yet"
           description={
             targets.length > 0
-              ? "Start your first security scan by clicking \"New Scan\" above."
+              ? 'Start your first security scan by clicking "New Scan" above.'
               : "Add a target first (a repo or URL), then you can run scans against it."
           }
         />
       ) : (
         <div className="space-y-3">
           {scans.map((scan) => (
-            <Card key={scan.id} className="p-4 transition-shadow duration-200 hover:shadow-card-hover">
+            <Card
+              key={scan.id}
+              className="hover:shadow-card-hover p-4 transition-shadow duration-200"
+            >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <Badge variant={STATUS_VARIANT[scan.status] ?? "muted"}>{scan.status}</Badge>
-                    <span className="text-sm font-medium">{GOAL_LABELS[scan.goal] ?? scan.goal}</span>
-                    <span className="text-xs text-muted-foreground">{scan.mode}</span>
+                    <span className="text-sm font-medium">
+                      {GOAL_LABELS[scan.goal] ?? scan.goal}
+                    </span>
+                    <span className="text-muted-foreground text-xs">{scan.mode}</span>
                   </div>
                   {scan.target && (
                     <p className="mb-1 truncate text-sm">
                       <span className="font-medium">{scan.target.name}</span>
-                      <span className="ml-2 text-muted-foreground">
+                      <span className="text-muted-foreground ml-2">
                         {scan.target.repoFullName ?? scan.target.url ?? scan.target.type}
                       </span>
                     </p>
                   )}
-                  {scan.summary && (
-                    <p className="text-sm text-muted-foreground">{scan.summary}</p>
-                  )}
+                  {scan.summary && <p className="text-muted-foreground text-sm">{scan.summary}</p>}
                   {scan.errorMessage && (
-                    <p className="text-sm text-destructive">{scan.errorMessage}</p>
+                    <p className="text-destructive text-sm">{scan.errorMessage}</p>
                   )}
-                  <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                  <div className="text-muted-foreground mt-1 flex items-center gap-3 text-xs">
                     <span>{new Date(scan.createdAt).toLocaleString()}</span>
                     {scan.endedAt && <span>· ended {new Date(scan.endedAt).toLocaleString()}</span>}
                     {scan.findingCount !== undefined && scan.findingCount > 0 && (
-                      <span className="font-medium text-foreground">{scan.findingCount} finding{scan.findingCount !== 1 ? "s" : ""}</span>
+                      <span className="text-foreground font-medium">
+                        {scan.findingCount} finding{scan.findingCount !== 1 ? "s" : ""}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -307,7 +339,10 @@ export function ScansClient({
                       <span className="ml-1">Cancel</span>
                     </Button>
                   )}
-                  <Link href={`/dashboard/scans/${scan.id}`} className="text-muted-foreground hover:text-foreground">
+                  <Link
+                    href={`/dashboard/scans/${scan.id}`}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
                     <ChevronRight className="h-5 w-5" aria-label="View scan details" />
                   </Link>
                 </div>

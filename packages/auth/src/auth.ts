@@ -97,9 +97,7 @@ export const auth = betterAuth({
           clientId: AZURE_AD_CLIENT_ID ?? "",
           clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
           tenantId: AZURE_AD_TENANT_ID || "common",
-          ...(AZURE_AD_CLIENT_ID
-            ? {}
-            : { disableSignUp: true }),
+          ...(AZURE_AD_CLIENT_ID ? {} : { disableSignUp: true }),
         }),
       ],
     }),

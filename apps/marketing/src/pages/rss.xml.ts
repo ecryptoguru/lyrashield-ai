@@ -3,7 +3,10 @@ import { getCollection } from "astro:content"
 import rss from "@astrojs/rss"
 
 export const GET: APIRoute = async (context) => {
-  const siteUrl = context.site?.toString() || (import.meta.env.PUBLIC_SITE_URL as string | undefined) || "http://localhost:4321"
+  const siteUrl =
+    context.site?.toString() ||
+    (import.meta.env.PUBLIC_SITE_URL as string | undefined) ||
+    "http://localhost:4321"
   const posts = await getCollection("blog", (entry) => !entry.data.draft)
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 

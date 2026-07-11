@@ -42,10 +42,7 @@ export async function listFindings(params: ListFindingsParams): Promise<{
 
   const findings = await prisma.finding.findMany({
     where,
-    orderBy: [
-      { severity: "desc" },
-      { createdAt: "desc" },
-    ],
+    orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
     take: limit + 1,
     ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
     include: {
@@ -68,8 +65,15 @@ export async function listFindings(params: ListFindingsParams): Promise<{
 
 export async function getFinding(
   findingId: string,
-  workspaceId: string,
-): Promise<(Finding & { evidence: { id: string; type: string; storageUri: string | null; redactionStatus: string }[]; fixProposals: { id: string; status: string; summary: string }[]; retests: { id: string; status: string; createdAt: Date }[] }) | null> {
+  workspaceId: string
+): Promise<
+  | (Finding & {
+      evidence: { id: string; type: string; storageUri: string | null; redactionStatus: string }[]
+      fixProposals: { id: string; status: string; summary: string }[]
+      retests: { id: string; status: string; createdAt: Date }[]
+    })
+  | null
+> {
   return prisma.finding.findFirst({
     where: { id: findingId, workspaceId, deletedAt: null },
     include: {
@@ -104,7 +108,7 @@ export async function getFinding(
 export async function updateFindingStatus(
   findingId: string,
   workspaceId: string,
-  status: FindingStatus,
+  status: FindingStatus
 ): Promise<Finding> {
   const finding = await prisma.finding.findFirst({
     where: { id: findingId, workspaceId, deletedAt: null },
@@ -125,23 +129,17 @@ export async function updateFindingStatus(
   return updated
 }
 
-export async function markFalsePositive(
-  findingId: string,
-  workspaceId: string,
-): Promise<Finding> {
+export async function markFalsePositive(findingId: string, workspaceId: string): Promise<Finding> {
   return updateFindingStatus(findingId, workspaceId, "FALSE_POSITIVE")
 }
 
-export async function acceptRisk(
-  findingId: string,
-  workspaceId: string,
-): Promise<Finding> {
+export async function acceptRisk(findingId: string, workspaceId: string): Promise<Finding> {
   return updateFindingStatus(findingId, workspaceId, "ACCEPTED_RISK")
 }
 
 export async function getFindingStats(
   workspaceId: string,
-  targetId?: string,
+  targetId?: string
 ): Promise<FindingStats> {
   const where: Record<string, unknown> = {
     workspaceId,
