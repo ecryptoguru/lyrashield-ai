@@ -60,6 +60,11 @@ jobs:
           echo "Checking diff for secrets..."
           SECRETS_FOUND=0
           while IFS= read -r file; do
+            # Gitleaks scans this workflow independently. Skip it here to
+            # avoid the detector matching its own literal patterns.
+            if [ "$file" = ".github/workflows/lyrashield-scan.yml" ]; then
+              continue
+            fi
             if [ -f "$file" ]; then
               # Check only added lines. Existing examples and the scanner's
               # own patterns must not make an unrelated PR fail.
