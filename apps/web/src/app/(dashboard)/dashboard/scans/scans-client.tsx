@@ -193,7 +193,7 @@ export function ScansClient({
         <Card className="mb-6 p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Start New Scan</h2>
-            <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>
+            <Button variant="ghost" size="sm" aria-label="Close" onClick={() => setShowCreate(false)}>
               <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>

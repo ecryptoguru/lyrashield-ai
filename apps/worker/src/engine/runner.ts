@@ -34,6 +34,41 @@ export function interpretExitCode(code: number): {
 
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024
 const MAX_STREAM_EVENTS = 200
+const SIGKILL_GRACE_MS = 5000
+
+export interface KillableChild {
+  kill(signal?: NodeJS.Signals): boolean
+}
+
+/**
+ * Two-stage kill escalation for the engine child process. `onTimeout()` sends
+ * SIGTERM and schedules a SIGKILL after `graceMs` UNLESS the process has exited
+ * (signalled via `markExited()`). This deliberately tracks its own `exited`
+ * flag rather than `child.killed`, which Node sets on signal *send* — see the
+ * call site. Exported for unit testing. (S5)
+ */
+export function createKillEscalation(
+  child: KillableChild,
+  graceMs: number,
+): { onTimeout: () => void; markExited: () => void } {
+  let exited = false
+  let killTimer: ReturnType<typeof setTimeout> | null = null
+  return {
+    onTimeout() {
+      child.kill("SIGTERM")
+      killTimer = setTimeout(() => {
+        if (!exited) child.kill("SIGKILL")
+      }, graceMs)
+    },
+    markExited() {
+      exited = true
+      if (killTimer) {
+        clearTimeout(killTimer)
+        killTimer = null
+      }
+    },
+  }
+}
 
 function buildEngineEnv(): Record<string, string> {
   const allow = new Set([
@@ -108,12 +143,13 @@ async function runEngineProcess(
     let timedOut = false
     let cancelled = false
     let closed = false
+    let terminationRequested = false
 
+    const escalation = createKillEscalation(child, SIGKILL_GRACE_MS)
     const terminate = () => {
-      child.kill("SIGTERM")
-      setTimeout(() => {
-        if (!closed) child.kill("SIGKILL")
-      }, 5000)
+      if (terminationRequested) return
+      terminationRequested = true
+      escalation.onTimeout()
     }
 
     const timer = setTimeout(() => {
@@ -167,6 +203,7 @@ async function runEngineProcess(
       closed = true
       clearTimeout(timer)
       if (cancellationTimer) clearInterval(cancellationTimer)
+      escalation.markExited()
       const exitCode = code ?? ((timedOut || cancelled) ? -1 : 1)
       resolvePromise({ exitCode, stdout, stderr, timedOut, cancelled })
     })
@@ -175,6 +212,7 @@ async function runEngineProcess(
       closed = true
       clearTimeout(timer)
       if (cancellationTimer) clearInterval(cancellationTimer)
+      escalation.markExited()
       reject(err)
     })
   })
