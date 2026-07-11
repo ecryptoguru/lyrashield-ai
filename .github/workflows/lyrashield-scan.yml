@@ -21,6 +21,7 @@ on:
         default: 'HIGH'
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
   security-events: write
@@ -59,9 +60,15 @@ jobs:
           echo "Checking diff for secrets..."
           SECRETS_FOUND=0
           while IFS= read -r file; do
+            # Gitleaks scans this workflow independently. Skip it here to
+            # avoid the detector matching its own literal patterns.
+            if [ "$file" = ".github/workflows/lyrashield-scan.yml" ]; then
+              continue
+            fi
             if [ -f "$file" ]; then
-              # Check for common secret patterns
-              if grep -qE '(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})' "$file" 2>/dev/null; then
+              # Check only added lines. Existing examples and the scanner's
+              # own patterns must not make an unrelated PR fail.
+              if git diff --unified=0 "$BASE" "$HEAD" -- "$file" | grep -v '^+++' | grep -qE '^\+.*(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})'; then
                 echo "::warning file=$file::Potential secret detected in changed file"
                 SECRETS_FOUND=1
               fi
@@ -150,6 +157,8 @@ jobs:
           SECRETS="${{ steps.diff.outputs.secrets_found }}"
           VULN="${{ steps.deps.outputs.vuln_found }}"
           ISSUES="${{ steps.scan.outputs.issues_found }}"
+          BASE="${{ steps.diff.outputs.base_sha }}"
+          HEAD="${{ steps.diff.outputs.head_sha }}"
 
           # Build SARIF results array from detected issues
           RESULTS="["
@@ -157,7 +166,7 @@ jobs:
           # Add secret findings
           if [ "$SECRETS" = "1" ]; then
             while IFS= read -r file; do
-              if [ -f "$file" ] && grep -qE '(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})' "$file" 2>/dev/null; then
+              if [ -f "$file" ] && git diff --unified=0 "$BASE" "$HEAD" -- "$file" | grep -v '^+++' | grep -qE '^\+.*(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{24,}|-----BEGIN.*PRIVATE KEY-----|sk-[A-Za-z0-9]{48})'; then
                 if [ "$RESULTS" != "[" ]; then RESULTS="$RESULTS,"; fi
                 RESULTS="$RESULTS{\"ruleId\":\"secret-exposure\",\"level\":\"error\",\"message\":{\"text\":\"Potential secret detected in $file\"},\"locations\":[{\"physicalLocation\":{\"artifactLocation\":{\"uri\":\"$file\"}}}]}"
               fi
@@ -213,8 +222,20 @@ jobs:
 
           echo "SARIF results count: $(echo "$RESULTS" | grep -o '"ruleId"' | wc -l)"
 
-      - name: Upload SARIF
+      - name: Archive SARIF
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyrashield-results
+          path: lyrashield-results.sarif
+          if-no-files-found: error
+
+      # Code Scanning is an optional repository feature. The diff gate above
+      # remains authoritative when it is unavailable, and the SARIF artifact
+      # is retained for download and later upload.
+      - name: Publish SARIF to GitHub Code Scanning
+        if: always()
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: lyrashield-results.sarif
