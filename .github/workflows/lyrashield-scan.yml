@@ -214,8 +214,20 @@ jobs:
 
           echo "SARIF results count: $(echo "$RESULTS" | grep -o '"ruleId"' | wc -l)"
 
-      - name: Upload SARIF
+      - name: Archive SARIF
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyrashield-results
+          path: lyrashield-results.sarif
+          if-no-files-found: error
+
+      # Code Scanning is an optional repository feature. The diff gate above
+      # remains authoritative when it is unavailable, and the SARIF artifact
+      # is retained for download and later upload.
+      - name: Publish SARIF to GitHub Code Scanning
+        if: always()
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: lyrashield-results.sarif
