@@ -290,6 +290,17 @@ export function isWorkspaceAdmin(role: MemberRole): boolean {
   return hasMinimumRole(role, "ADMIN")
 }
 
+/**
+ * Whether `inviterRole` is allowed to grant `targetRole` to someone else.
+ * OWNER can grant any role; everyone else may only grant roles STRICTLY below
+ * their own rank. This prevents privilege escalation and peer-cloning — e.g. an
+ * ADMIN can no longer mint another ADMIN (or any equal/higher role). (S6)
+ */
+export function canGrantRole(inviterRole: MemberRole, targetRole: MemberRole): boolean {
+  if (inviterRole === "OWNER") return true
+  return (ROLE_HIERARCHY[inviterRole] ?? 0) > (ROLE_HIERARCHY[targetRole] ?? 0)
+}
+
 export function isWorkspaceOwner(role: MemberRole): boolean {
   return role === "OWNER"
 }

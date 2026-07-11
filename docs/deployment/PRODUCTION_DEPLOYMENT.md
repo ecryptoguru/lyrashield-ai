@@ -46,33 +46,32 @@
 
 ### Service Breakdown
 
-| Service          | Platform               | Why                                                                   | Cost (MVP)     |
-| ---------------- | ---------------------- | --------------------------------------------------------------------- | -------------- |
-| Web + API        | Vercel                 | Best Next.js support, free tier                                       | $0             |
-| Worker           | Contabo VPS 10         | 4 vCPU AMD EPYC, 8GB RAM, 75GB NVMe, runs engine binary as subprocess | €6.55/mo (~$7) |
-| Postgres         | Supabase Free          | 500MB Postgres + auth + real-time                                     | $0             |
-| Evidence Storage | Cloudflare R2 Free     | 10GB S3 storage, zero egress fees, free forever                       | $0             |
-| Redis            | Upstash Free           | 10K commands/day, serverless, TLS                                     | $0             |
-| Email            | Brevo Free             | 300 emails/day, unlimited contacts                                    | $0             |
-| Engine Binary    | lyrashield-engine repo | External subprocess, installed on worker VPS                          | $0             |
-| Error Monitoring | Sentry Free            | 5K errors/month                                                       | $0             |
-| DNS              | Cloudflare             | Free DNS management                                                   | $0             |
-| Marketing site   | Cloudflare Workers     | Astro 7 + D1 + Rate Limits, public landing + blog                     | $0             |
+| Service | Platform | Why | Cost (MVP) |
+|---|---|---|---|
+| Web + API | Vercel | Best Next.js support, free tier | $0 |
+| Worker | Contabo VPS 10 | 4 vCPU AMD EPYC, 8GB RAM, 75GB NVMe, runs engine binary as subprocess | €6.55/mo (~$7) |
+| Postgres | Supabase Free | 500MB Postgres + auth + real-time | $0 |
+| Evidence Storage | Cloudflare R2 Free | 10GB S3 storage, zero egress fees, free forever | $0 |
+| Redis | Upstash Free | 10K commands/day, serverless, TLS | $0 |
+| Email | Brevo Free | 300 emails/day, unlimited contacts | $0 |
+| Engine Binary | lyrashield-engine repo | External subprocess, installed on worker VPS | $0 |
+| Error Monitoring | Sentry Free | 5K errors/month | $0 |
+| DNS | Cloudflare | Free DNS management | $0 |
 
 **Estimated MVP cost: ~$7/month** (Contabo VPS only — everything else free tier)
 
 ### Contabo VPS 10 Specs
 
-| Spec           | Value                                          |
-| -------------- | ---------------------------------------------- |
-| CPU            | 4 vCPU AMD EPYC (x86)                          |
-| RAM            | 8 GB                                           |
-| Storage        | 75 GB NVMe or 150 GB SSD                       |
-| Network        | 200 Mbit/s, unlimited traffic                  |
-| Virtualization | KVM (full root access)                         |
-| Locations      | EU, US, UK, Singapore, Japan, Australia, India |
-| Price          | €6.55/mo (1-month) / €5.24/mo (12-month)       |
-| Setup fee      | None                                           |
+| Spec | Value |
+|---|---|
+| CPU | 4 vCPU AMD EPYC (x86) |
+| RAM | 8 GB |
+| Storage | 75 GB NVMe or 150 GB SSD |
+| Network | 200 Mbit/s, unlimited traffic |
+| Virtualization | KVM (full root access) |
+| Locations | EU, US, UK, Singapore, Japan, Australia, India |
+| Price | €6.55/mo (1-month) / €5.24/mo (12-month) |
+| Setup fee | None |
 
 x86 AMD EPYC means the engine binary runs natively — no ARM rebuild needed.
 
@@ -385,56 +384,7 @@ lyrashield --help
 # Add your domain to Cloudflare
 # A/CNAME record: your-domain.com → Vercel
 # CNAME record: www.your-domain.com → Vercel
-#
-# Marketing site: configure a custom domain in the Cloudflare Workers dashboard
-# (e.g., marketing.your-domain.com or your-domain.com). If using a route, add:
-# CNAME record: marketing.your-domain.com → your-worker.your-subdomain.workers.dev
 ```
-
-### Step 12: Deploy Marketing Site to Cloudflare Workers
-
-The marketing site (`apps/marketing`) is deployed to Cloudflare Workers. It uses Cloudflare D1 for the waitlist and Cloudflare Rate Limits for the waitlist API.
-
-1. Create the D1 database and Rate Limits namespace in your Cloudflare account.
-2. Update `apps/marketing/wrangler.jsonc` with the real `database_id` and `ratelimits.namespace_id`.
-3. Copy and edit the marketing environment files:
-
-   ```bash
-   # apps/marketing/.env
-   # PUBLIC_SITE_URL=https://marketing.your-domain.com
-   # PUBLIC_INDEXABLE=true
-   # PUBLIC_POSTHOG_KEY=<optional>
-   # PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
-   # PUBLIC_X_URL=https://x.com/yourhandle
-   ```
-
-4. Set the waitlist secret:
-
-   ```bash
-   pnpm --filter @lyrashield/marketing exec wrangler secret put WAITLIST_IP_SALT
-   ```
-
-5. Apply the D1 migration:
-
-   ```bash
-   pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrasec-marketing-waitlist --remote
-   ```
-
-6. Build and deploy:
-
-   ```bash
-   # Staging
-   PUBLIC_SITE_URL=https://marketing.your-domain.com PUBLIC_INDEXABLE=false pnpm --filter @lyrashield/marketing build
-   pnpm --filter @lyrashield/marketing exec wrangler versions upload
-
-   # Production
-   PUBLIC_SITE_URL=https://marketing.your-domain.com PUBLIC_INDEXABLE=true pnpm --filter @lyrashield/marketing build
-   pnpm --filter @lyrashield/marketing exec wrangler deploy
-   ```
-
-7. Configure a custom domain or route in the Cloudflare Workers dashboard for `marketing.your-domain.com`.
-
-See `apps/marketing/README.md` for local dev commands and more details.
 
 ## CI/CD Pipeline
 
@@ -515,7 +465,7 @@ GITHUB_WEBHOOK_SECRET=<webhook-secret>
 LYRASHIELD_LLM=openai/gpt-4o
 LLM_API_KEY=sk-...
 # Pin the digest returned by `docker image inspect`; never deploy a mutable tag.
-LYRASHIELD_IMAGE=ghcr.io/usestrix/strix-sandbox@sha256:REPLACE_WITH_VERIFIED_DIGEST
+LYRASHIELD_IMAGE=ghcr.io/usestrix/strix-sandbox@sha256:478e0b37ec83b2ba8c6e159593cb46d5dc9b624a45d6a9bb606851b83058d284
 
 # Evidence Storage (Cloudflare R2)
 S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
@@ -537,14 +487,6 @@ RAZORPAY_KEY_SECRET=<key-secret>
 # Monitoring
 SENTRY_DSN=<dsn>
 NEXT_PUBLIC_SENTRY_DSN=<dsn>
-
-# Marketing (Cloudflare Workers — set via wrangler vars or build env)
-# WAITLIST_IP_SALT is a secret: pnpm --filter @lyrashield/marketing exec wrangler secret put WAITLIST_IP_SALT
-PUBLIC_SITE_URL=https://marketing.your-domain.com
-PUBLIC_INDEXABLE=true
-PUBLIC_POSTHOG_KEY=<optional>
-PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
-PUBLIC_X_URL=https://x.com/yourhandle
 ```
 
 Local development may use `ghcr.io/usestrix/strix-sandbox:1.0.0`, but production
@@ -582,7 +524,6 @@ wrangler r2 bucket versioning put lyrashield-evidence --enabled
 ```
 
 **Backup strategy:**
-
 - Enable R2 object versioning (protects against accidental deletes/overwrites)
 - Periodic sync to a secondary bucket or local storage (for disaster recovery)
 - Evidence retention is governed by `Policy.evidenceRetentionDays` (default 30d)
@@ -593,15 +534,15 @@ wrangler r2 bucket versioning put lyrashield-evidence --enabled
 
 ### When to upgrade from free tiers
 
-| Trigger                  | Action                    | Cost            |
-| ------------------------ | ------------------------- | --------------- |
-| > 500MB DB data          | Supabase Pro              | $25/mo          |
-| > 10GB evidence storage  | R2 paid ($0.015/GB)       | ~$0.15/GB extra |
-| > 300 emails/day         | Brevo Starter             | $9/mo           |
-| > 10K Redis commands/day | Upstash Pay-as-you-go     | $0.2/100K cmds  |
-| > 10 concurrent scans    | Add 2nd Contabo VPS       | €6.55/mo extra  |
-| > 10K users              | Supabase Team             | $25/mo          |
-| > 50K scans/month        | Move worker to Kubernetes | varies          |
+| Trigger | Action | Cost |
+|---|---|---|
+| > 500MB DB data | Supabase Pro | $25/mo |
+| > 10GB evidence storage | R2 paid ($0.015/GB) | ~$0.15/GB extra |
+| > 300 emails/day | Brevo Starter | $9/mo |
+| > 10K Redis commands/day | Upstash Pay-as-you-go | $0.2/100K cmds |
+| > 10 concurrent scans | Add 2nd Contabo VPS | €6.55/mo extra |
+| > 10K users | Supabase Team | $25/mo |
+| > 50K scans/month | Move worker to Kubernetes | varies |
 
 ### Worker scaling (Contabo)
 

@@ -6,6 +6,7 @@ export {
   PERMISSIONS,
   hasPermission,
   hasMinimumRole,
+  canGrantRole,
   getRolePermissions,
   isWorkspaceAdmin,
   isWorkspaceOwner,

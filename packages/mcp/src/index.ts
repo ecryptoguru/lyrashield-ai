@@ -9,4 +9,4 @@ export {
   type ToolHandlerContext,
 } from "./tools"
 export { PromptInjectionGuard, type GuardResult } from "./prompt-injection-guard"
-export { McpServer, type McpServerOptions } from "./server"
+export { McpServer, type McpServerOptions, type ApprovalGate } from "./server"

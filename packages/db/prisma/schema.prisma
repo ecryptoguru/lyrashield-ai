@@ -377,12 +377,14 @@ model Scan {
   events          ScanEvent[]
   findings        Finding[]
   retests         Retest[]
+  reports         Report[]
 
   @@index([workspaceId])
   @@index([projectId])
   @@index([targetId])
   @@index([status])
   @@index([createdAt])
+  @@index([workspaceId, createdAt])
 }
 
 model ScanEvent {
@@ -473,6 +475,7 @@ model Finding {
   @@index([lastSeenAt])
   @@index([slaDueAt])
   @@index([workspaceId, status, severity])
+  @@index([workspaceId, createdAt])
   @@unique([targetId, dedupeKey])
 }
 
@@ -565,6 +568,7 @@ model Integration {
 
   @@index([workspaceId])
   @@index([type])
+  @@index([workspaceId, createdAt])
   @@unique([workspaceId, type, externalId])
 }
 
@@ -582,6 +586,7 @@ model UsageRecord {
 
   @@index([workspaceId])
   @@index([kind])
+  @@index([workspaceId, createdAt])
 }
 
 model AuditLog {
@@ -624,9 +629,11 @@ model Report {
   updatedAt      DateTime @updatedAt
 
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scan           Scan?     @relation(fields: [scanId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([scanId])
+  @@index([workspaceId, createdAt])
 }
 
 model Notification {
@@ -648,6 +655,7 @@ model Notification {
   @@index([workspaceId])
   @@index([userId])
   @@index([status])
+  @@index([workspaceId, createdAt])
 }
 
 model Schedule {
@@ -708,6 +716,7 @@ model Invitation {
   @@index([workspaceId])
   @@index([email])
   @@index([status])
+  @@index([workspaceId, createdAt])
 }
 
 model WebhookEvent {
