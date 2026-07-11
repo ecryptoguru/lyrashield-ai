@@ -2,6 +2,17 @@ import type { APIRoute } from "astro"
 import { getCollection } from "astro:content"
 
 export const GET: APIRoute = async (context) => {
+  const indexable = (import.meta.env.PUBLIC_INDEXABLE as string | undefined) === "true"
+
+  // Not live yet: don't publish a crawlable/citable summary of an unlaunched
+  // preview build. Matches the noindex/robots.txt gating used everywhere else.
+  if (!indexable) {
+    return new Response("Not found.", {
+      status: 404,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    })
+  }
+
   const siteUrl = context.site?.toString() || (import.meta.env.PUBLIC_SITE_URL as string | undefined) || "http://localhost:4321"
   const origin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
 
@@ -22,9 +33,6 @@ export const GET: APIRoute = async (context) => {
     "## Copy-safe summary for LLM context",
     "No pricing, no free-tier promises, no benchmark claims, no customer names.",
     "Pre-launch; access is via waitlist.",
-    "",
-    "## Contact / corrections",
-    "Contact: hello@lyrasecai.com (placeholder)",
   ]
 
   return new Response(sections.join("\n"), {

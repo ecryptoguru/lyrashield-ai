@@ -57,4 +57,4 @@ const indexable = (import.meta.env.PUBLIC_INDEXABLE as string | undefined) === "
   <meta property="article:tag" content={tag} />
 ))}
 
-<link rel="sitemap" href="/sitemap-index.xml" type="application/xml" />
+{indexable && <link rel="sitemap" href="/sitemap-index.xml" type="application/xml" />}
