@@ -7,4 +7,5 @@ paths = ['''^apps/worker/src/engine/scanners/secrets-scanner\.test\.ts$''']
 
 [[allowlists]]
 description = "AWS SDK credential environment lookup"
+regexTarget = "line"
 regexes = ['''secretAccessKey:\s*env\.S3_SECRET_KEY''']
