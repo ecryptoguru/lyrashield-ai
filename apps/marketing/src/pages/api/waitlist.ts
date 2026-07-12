@@ -147,8 +147,10 @@ function htmlResponse(status: number, body: string): Response {
   )
 }
 
-function successResponse(request: Request, referralCode?: string): Response {
-  // Always identical regardless of insert/duplicate/honeypot — never leak signup state.
+function successResponse(request: Request, referralCode: string): Response {
+  // Always identical shape regardless of insert/duplicate/honeypot — never leak signup state.
+  // A referralCode is ALWAYS present: real for inserts, the existing row's code for
+  // duplicates, and a decoy for honeypots, so the response is indistinguishable.
   if (acceptsHtml(request)) {
     return htmlResponse(201, "<p>You're on the list. One email when your invite is ready.</p>")
   }
@@ -274,7 +276,8 @@ export const POST: APIRoute = async ({ request, site }) => {
   if (website) {
     // Honeypot tripped — return the exact same generic success as a real signup so a bot
     // (or a human probing the endpoint) can't distinguish "rejected" from "accepted".
-    return successResponse(request)
+    // The decoy code is never persisted, so it attributes nothing.
+    return successResponse(request, makeReferralCode())
   }
 
   try {
@@ -313,8 +316,27 @@ export const POST: APIRoute = async ({ request, site }) => {
     return successResponse(request, referralCode)
   } catch (error: unknown) {
     if ((error as Error).message?.includes("UNIQUE constraint failed")) {
-      // Duplicate email: identical success response, no distinguishing status/body — non-leaking per spec.
-      return successResponse(request)
+      // Duplicate email: identical success response, no distinguishing status/body — non-leaking
+      // per spec. Return the EXISTING row's referral code (backfilling one for pre-referral rows)
+      // so the payload shape matches a fresh signup exactly.
+      try {
+        const existing = await db
+          .prepare(`SELECT referral_code FROM waitlist_signups WHERE email = ?`)
+          .bind(data.email)
+          .first<{ referral_code: string | null }>()
+        if (existing?.referral_code) return successResponse(request, existing.referral_code)
+        const backfill = makeReferralCode()
+        await db
+          .prepare(
+            `UPDATE waitlist_signups SET referral_code = ? WHERE email = ? AND referral_code IS NULL`
+          )
+          .bind(backfill, data.email)
+          .run()
+        return successResponse(request, backfill)
+      } catch {
+        // Even if the lookup fails, keep the response shape identical.
+        return successResponse(request, makeReferralCode())
+      }
     }
 
     console.error("Waitlist signup failed", error)

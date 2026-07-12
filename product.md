@@ -25,6 +25,15 @@ The position is the combination, not a claim of unique capability: a solo builde
 | Agency / dev shop        | Add a security report to each client handoff.                                    |
 | Enterprise AppSec        | One loop from builder workflows to governed controls, audit trail, and CI gates. |
 
+## LyraShield Score & shareable scorecards (approved 2026-07-12)
+
+Every completed Standard/Deep scan produces a deterministic, versioned **LyraShield Score** (0–100 + grade). Users can opt in to a public scorecard page + OG card carrying their referral code; referred signups earn both sides agent-minute credits after the referred workspace completes its first real scan.
+
+Scorecard guardrails (non-negotiable, enforced in code):
+- The public card shows only: grade, scope line, scan date, methodology version, resolved-findings count. Never open findings, severities, CWEs, or target URLs.
+- Copy is scope-qualified and states the score "is not a security guarantee." The scoring methodology is fully public (founder decision #1).
+- Sharing is opt-in, role-restricted, audit-logged, revocable, and carries a supersession notice once a newer scan exists.
+
 ## Differentiation
 
 Lead with a complete review package:

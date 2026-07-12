@@ -83,6 +83,7 @@ export {
   getOrCreateReferralCode,
   attributeReferral,
   qualifyReferralForWorkspace,
+  buildScorecardPayload,
   type ScorecardPayload,
 } from "./score-service"
 export {

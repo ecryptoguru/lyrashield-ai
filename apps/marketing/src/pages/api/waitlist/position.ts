@@ -25,7 +25,7 @@ export const GET: APIRoute = async ({ url }) => {
     .prepare(`SELECT COUNT(*) AS count FROM waitlist_signups WHERE created_at < ?`)
     .bind(signup.created_at)
     .first<{ count: number }>()
-  // ponytail: position is a simple pre-launch ladder; replace with a transactionally ranked queue only when invitations ship.
+  // Pre-launch ladder only: replace with a transactionally ranked queue when invitations ship.
   return new Response(
     JSON.stringify({
       position: Math.max(1, (ahead?.count ?? 0) + 1 - signup.referral_count),

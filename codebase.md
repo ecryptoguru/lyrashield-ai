@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current baseline — 2026-07-11:** 4 apps, 9 shared packages, 20 web page files, 34 API route files, 30 Prisma models, 12 enums, 9 migrations, 18 RLS-protected workspace tables, **625 passing Vitest tests in 56 files**, and **2 passing Playwright tests**. Lint, typecheck, test, E2E, and production build pass locally. Sections 17–31 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current baseline — 2026-07-12:** 4 apps, 10 shared packages (now including `packages/score`), 22 web page files, 39 API route files, 34 Prisma models, 14 enums, 10 migrations, 18 RLS-protected workspace tables, and passing lint, typecheck, test, E2E, and production build locally (current Vitest/Playwright counts: see §33 and `PRD.md` C0). Sections 17–33 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -1817,3 +1817,46 @@ Focused remediation after a fresh full-repository review.
 - `pnpm test:e2e`: **2 Chromium tests**
 - `pnpm typecheck`: pass
 - Full lint, formatting, build, dependency-audit, Docker, and diff checks must be rerun after documentation formatting before merge.
+
+---
+
+## §33 — LyraShield Score, Public Scorecards & Referrals (2026-07-12, PR #43 + review fixes)
+
+Implements the "LyraShield Score, Shareable Scorecard & Referral System — Engineering Spec v1" (Phases 0–2; Phases 3–4 deliberately deferred). All 7 founder decisions from the spec are resolved and reflected here: fully public methodology, "LyraShield Score" naming, agent-minute rewards, capped OSS tier deferred to Phase 3, supersession notices, ACCEPTED_RISK at 50% weight, and split SEO indexing.
+
+### Score engine — `packages/score` (new package)
+
+- `computeScore(findings, scan)` is a **pure, deterministic, versioned** function (`SCORE_MODEL_VERSION = "lyrashield-score/1.0.0"`); the db layer owns persistence, never score math.
+- Deductions from base 100 (floor 0): verified CRITICAL −25 / HIGH −10 / MEDIUM −4 / LOW −1 / INFO 0; unverified ×0.25; `ACCEPTED_RISK` ×0.5. Round half-up.
+- Grade bands A+ ≥98 (and zero open findings ≥ MEDIUM), A ≥90, B ≥80, C ≥65, D ≥50, else F. Hard caps (only ever lower): open verified CRITICAL → C, open verified HIGH → B, active verified secret → D.
+- `shareEligible` requires mode STANDARD/DEEP on the canonical branch. v1 note: the worker always scans the target's canonical checkout (no per-ref scans exist), so the canonical-branch input is structurally true; the scanned branch is recorded in `breakdown.scannedBranch` for the day ref-scoped scans land.
+- Table-driven tests cover every deduction weight, every band boundary, the A+ rule, cap stacking, the zero floor, open-vs-accepted cap semantics, and the share-eligibility matrix.
+
+### Persistence — `packages/db/src/score-service.ts` + migration `20260712130000`
+
+- New models: `ScoreSnapshot` (immutable, `@@unique(scanId)`), `ReferralCode` (side table keyed by Better Auth `userId` — the `User` model is untouched), `ReferralAttribution` (`referredUserId @unique`), `ScorecardShare` (frozen `publicPayload`, unguessable 16-char slug). New enums: `ScoreGrade`, `ReferralStatus`. Purely additive migration.
+- `completeScanWithScore()` atomically completes a VERIFYING scan, creates its snapshot (idempotent via the scanId unique), and wires the previously dormant fields: `Scan.riskScoreBefore/After` and `Project.riskScore` (min live snapshot score across targets).
+- `buildScorecardPayload()` is the **only** constructor of public payloads — the §5 disclosure allowlist (grade, scope, scannedAt, modelVersion, resolvedFindings; never open counts/titles/CWEs/target URLs). A regression test asserts the exact key set.
+- Share-eligibility is additionally gated server-side on triage ratio (accepted-risk + false-positive ≤ 25% of findings).
+- `attributeReferral()` enforces: no self-referral, and **no retroactive attribution** — the referred account must be newer than `NEW_ACCOUNT_WINDOW_MS` (7 days). `qualifyReferralForWorkspace()` rewards both sides exactly once (`UsageRecord` upserts keyed on the attribution id; `REFERRAL_BONUS_MINUTES = 30` agent minutes each) when the referred owner's first real scan completes.
+- Audit events: `scorecard.share.created`, `scorecard.share.revoked`, `referral.rewarded`.
+
+### Web surfaces — `apps/web`
+
+- Public (no auth, no session reads; rendered exclusively from the frozen payload): `/(public)/score/[slug]` page with the supersession notice ("a newer scan of this target exists" — boolean only, never the newer score), `/(public)/score/methodology` (public methodology, founder decision #1), `/(public)/api/og/score/[slug]` OG image (dark terminal register, 1200×630, CDN-cacheable). Unknown/revoked/expired slugs 404. `/score/*` responses add `Referrer-Policy: no-referrer` via `proxy.ts`; all `/api/*` routes remain behind the shared 30 req/min/IP proxy limiter.
+- Authed: `POST /api/targets/[id]/scorecard` and `DELETE /api/scorecards/[id]` — RBAC-restricted to OWNER/ADMIN/SECURITY_ADMIN/APPSEC_MANAGER, tenant-scoped via `requireWorkspaceAccess` + workspace-scoped queries, audit-logged. Target detail page shows the grade card with a below-B publish warning.
+- Referral loop: `/api/referrals/capture` validates the code and sets a 30-day `ls_ref` cookie; `/api/referrals/claim` (fired from onboarding) attributes via the gated service function using the `TRUSTED_PROXY_IP_HEADER`-derived IP hash.
+
+### Marketing waitlist referrals (Phase 0) — `apps/marketing`
+
+- D1 migration `0003_waitlist_referrals.sql` adds `referral_code` / `referred_by` / `referral_count`; signups mint an 8-char base32 code, `?ref=` attribution bumps the referrer's count, and `GET /api/waitlist/position` reports a ladder position (created-at order minus referrals).
+- **Non-leaking responses preserved:** fresh, duplicate-email, and honeypot submissions all return the identical `{ success, referralCode }` shape — duplicates return the existing row's code (backfilled if the row predates referrals), honeypots return a never-persisted decoy. The endpoint remains an email-enumeration dead end.
+
+### Review fixes applied on top of the original PR #43 commit
+
+1. Waitlist enumeration leak (duplicate/honeypot responses lacked `referralCode`) — fixed as above.
+2. `isDefaultBranch` was derived from `target.branch !== null` (meaningless) — replaced with documented v1 canonical-checkout semantics + `breakdown.scannedBranch`.
+3. Referral claim could attribute pre-existing accounts retroactively — now rejected in the service (7-day new-account window).
+4. Supersession notice (founder decision #5) implemented end to end.
+5. Reward quantity extracted to `REFERRAL_BONUS_MINUTES`; payload construction centralized in exported `buildScorecardPayload`; stray comment removed.
+6. Test coverage brought up to the spec's verification plan (engine boundary table, allowlist regression, self-referral/old-account rejection, snapshot idempotency).

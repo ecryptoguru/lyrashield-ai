@@ -1,6 +1,6 @@
 > **CURRENT SOURCE OF TRUTH — 2026-07-12:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
-> The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, **625 Vitest tests in 56 files**, and **2 Playwright tests**. Core auth (with email verification), tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, and the GitHub diff gate are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, and marketing gates.
+> The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, the Vitest suite, and the Playwright suite (current counts: see C0). Core auth (with email verification), tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, the GitHub diff gate, and the LyraShield Score / public scorecard / referral layer (spec Phases 0–2) are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, and marketing gates.
 
 ---
 
@@ -5226,10 +5226,11 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
-- Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 9 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `security`, `types`, `ui`).
-- Current automated gate: lint, typecheck, production build, **625 passing Vitest tests in 56 files**, and **2 passing Playwright tests**.
-- Current product surface: **20 page route files** and **34 API route files** in `apps/web`.
-- Current data surface: **30 Prisma models**, **12 enums**, and **9 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
+- Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
+- Current automated gate: lint, typecheck, production build, **656 Vitest tests in 60 files** (652 pass in a services-free sandbox; the Postgres-backed account-deletion/audit-concurrency suites and one live-DNS url-scanner case require the CI service containers), and **2 passing Playwright tests**.
+- Current product surface: **22 page route files** and **39 API route files** in `apps/web`.
+- Current data surface: **34 Prisma models**, **14 enums**, and **10 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
+- Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
 - Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
 - Current Docker proof: the web/worker stack and engine-bearing worker image build; the CLI reports `1.0.4.post1`; configuration failure occurs before sandbox pull when model credentials are missing.
 - Current engine proof: 155 engine tests plus Ruff, formatting, headless mypy, and Bandit passed on the thin fork.
@@ -5280,6 +5281,17 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - Liveness/readiness endpoints, structured Next.js request-error instrumentation, and maintained Playwright coverage for auth, onboarding, target/scan creation, and tenant denial boundaries.
 - Astro 7 marketing site with landing page, blog, authoring rules, RSS, sitemap, robots, JSON-LD, canonical/social metadata, and a Cloudflare D1 waitlist. The marketing header links to the app via `PUBLIC_APP_URL`; the app root redirects unauthenticated users to `NEXT_PUBLIC_MARKETING_URL` (or `/sign-in` as a fallback).
 - Marketing previews are deliberately non-indexable. Indexable builds require a public HTTPS origin and founder approval.
+
+### C1.6 Growth layer: LyraShield Score, public scorecards, and referrals (2026-07-12)
+
+Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Referral System — Engineering Spec v1" (all 7 founder decisions resolved; Phases 3–4 deferred). See `codebase.md` §33 for the full implementation map.
+
+- Deterministic, versioned score (`packages/score`, model `lyrashield-score/1.0.0`): deduction-only weights, grade bands with hard caps (open verified critical → max C, open verified high → max B, active verified secret → max D), ACCEPTED_RISK at 50% weight, 30-day snapshot expiry.
+- Immutable `ScoreSnapshot` per completed scan (idempotent), wiring the previously dormant `Scan.riskScoreBefore/After` and `Project.riskScore` fields.
+- Public scorecards: frozen allowlisted payload (grade, scope, scan date, model version, resolved-findings count — never open findings/CWEs/target URLs), unguessable slug, instant revocation, supersession notice, public methodology page, OG image endpoint. Share creation is RBAC-gated (OWNER/ADMIN/SECURITY_ADMIN/APPSEC_MANAGER), share-eligibility requires a STANDARD/DEEP scan and ≤25% triage ratio, and create/revoke are audit-logged.
+- Referrals: per-user codes, cookie capture on public scorecards, attribution restricted to newly created accounts (no retroactive rewards), activation-gated dual-sided rewards of 30 agent minutes via idempotent `UsageRecord` entries (redeemable at billing GA), all transitions audit-logged.
+- Phase 0 waitlist referral ladder on the marketing site (D1 migration `0003`), preserving the non-leaking identical-response contract for duplicate and honeypot submissions.
+- Positioning guardrails hold: scorecard copy is scope-qualified, links the public methodology, and states the score "is not a security guarantee."
 
 ## C2. Phase 1 gaps and release gates
 

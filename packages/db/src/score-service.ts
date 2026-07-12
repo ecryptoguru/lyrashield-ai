@@ -6,6 +6,10 @@ import { logger } from "@lyrashield/logger"
 const SCORE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const SHARE_SCOPE = "agentic pentest + SCA + secrets"
 const BASE32 = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+/** Both-sided referral reward, denominated in agent minutes (spec §4, founder decision #3). */
+const REFERRAL_BONUS_MINUTES = 30
+/** Attribution applies to newly created accounts only — never retroactively (spec §4). */
+const NEW_ACCOUNT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
 export interface ScorecardPayload {
   grade: ScoreGrade
@@ -18,6 +22,25 @@ export interface ScorecardPayload {
 function randomBase32(length: number): string {
   const bytes = randomBytes(length)
   return Array.from(bytes, (byte) => BASE32[byte % BASE32.length]).join("")
+}
+
+/**
+ * The ONLY constructor of a public scorecard payload. This is the disclosure allowlist
+ * (spec §5): grade, scope, scan date, model version, resolved-findings count — nothing else.
+ * Adding a field here MUST be a deliberate, reviewed decision; the allowlist regression
+ * test asserts the exact key set.
+ */
+export function buildScorecardPayload(
+  snapshot: { grade: ScoreGrade; computedAt: Date; modelVersion: string },
+  resolvedFindings: number
+): ScorecardPayload {
+  return {
+    grade: snapshot.grade,
+    scope: SHARE_SCOPE,
+    scannedAt: snapshot.computedAt.toISOString(),
+    modelVersion: snapshot.modelVersion,
+    resolvedFindings,
+  }
 }
 
 function scoreInput(
@@ -62,9 +85,12 @@ export async function completeScanWithScore(scanId: string, summary: string | nu
     const triaged = findings.filter(
       (finding) => finding.status === "ACCEPTED_RISK" || finding.status === "FALSE_POSITIVE"
     ).length
+    // v1: the worker always scans the target's canonical checkout — per-ref scans do not
+    // exist yet, so every scan is by definition against the canonical branch. Gate this on
+    // a real ref comparison when ref-scoped scans land (recorded in breakdown.scannedBranch).
     const result = computeScore(scoreInput(findings), {
       mode: scan.mode,
-      isDefaultBranch: scan.target.branch !== null,
+      isDefaultBranch: true,
     })
     const shareEligible =
       result.shareEligible && (findings.length === 0 || triaged / findings.length <= 0.25)
@@ -85,6 +111,7 @@ export async function completeScanWithScore(scanId: string, summary: string | nu
         breakdown: {
           ...result.breakdown,
           triagedRatio: findings.length ? triaged / findings.length : 0,
+          scannedBranch: scan.target.branch,
         },
         scanMode: scan.mode,
         shareEligible,
@@ -163,13 +190,7 @@ export async function createScorecardShare(targetId: string, workspaceId: string
     },
   })
   const referralCode = await getOrCreateReferralCode(userId)
-  const publicPayload: ScorecardPayload = {
-    grade: snapshot.grade,
-    scope: SHARE_SCOPE,
-    scannedAt: snapshot.computedAt.toISOString(),
-    modelVersion: snapshot.modelVersion,
-    resolvedFindings,
-  }
+  const publicPayload = buildScorecardPayload(snapshot, resolvedFindings)
   const share = await prisma.scorecardShare.create({
     data: {
       snapshotId: snapshot.id,
@@ -213,9 +234,25 @@ export async function revokeScorecardShare(id: string, workspaceId: string, user
 export async function getPublicScorecard(slug: string) {
   const share = await prisma.scorecardShare.findFirst({
     where: { slug, revokedAt: null, snapshot: { expiresAt: { gt: new Date() } } },
-    select: { id: true, publicPayload: true, referralCode: { select: { code: true } } },
+    select: {
+      id: true,
+      publicPayload: true,
+      referralCode: { select: { code: true } },
+      snapshot: { select: { targetId: true, computedAt: true } },
+    },
   })
   if (!share) return null
+  // Supersession notice (founder decision #5): a frozen card must disclose when a newer
+  // qualifying scan of the same target exists, so an old flattering snapshot can't be
+  // pinned silently. Boolean only — never the newer score itself.
+  const newer = await prisma.scoreSnapshot.findFirst({
+    where: {
+      targetId: share.snapshot.targetId,
+      computedAt: { gt: share.snapshot.computedAt },
+      shareEligible: true,
+    },
+    select: { id: true },
+  })
   await prisma.scorecardShare.update({
     where: { id: share.id },
     data: { viewCount: { increment: 1 } },
@@ -223,15 +260,28 @@ export async function getPublicScorecard(slug: string) {
   return {
     payload: share.publicPayload as unknown as ScorecardPayload,
     referralCode: share.referralCode?.code ?? null,
+    superseded: Boolean(newer),
   }
 }
 
-export async function attributeReferral(code: string, referredUserId: string, ipHash?: string) {
+export async function attributeReferral(
+  code: string,
+  referredUserId: string,
+  ipHash?: string,
+  source = "scorecard"
+) {
   const referral = await prisma.referralCode.findUnique({ where: { code } })
   if (!referral || referral.userId === referredUserId) return null
+  // Spec §4: attribution happens at signup completion — a pre-existing account carrying a
+  // referral cookie must never be attributed retroactively (reward-farming surface).
+  const user = await prisma.user.findUnique({
+    where: { id: referredUserId },
+    select: { createdAt: true },
+  })
+  if (!user || Date.now() - user.createdAt.getTime() > NEW_ACCOUNT_WINDOW_MS) return null
   return prisma.referralAttribution.upsert({
     where: { referredUserId },
-    create: { codeId: referral.id, referredUserId, source: "scorecard", ipHash },
+    create: { codeId: referral.id, referredUserId, source, ipHash },
     update: {},
   })
 }
@@ -261,7 +311,7 @@ export async function qualifyReferralForWorkspace(workspaceId: string) {
       create: {
         workspaceId,
         kind: "referral_bonus",
-        quantity: 30,
+        quantity: REFERRAL_BONUS_MINUTES,
         idempotencyKey: attribution.id,
         metadata: { denomination: "agent_minutes", side: "referred" },
       },
@@ -272,7 +322,7 @@ export async function qualifyReferralForWorkspace(workspaceId: string) {
       create: {
         workspaceId: referrerWorkspace.workspaceId,
         kind: "referral_bonus",
-        quantity: 30,
+        quantity: REFERRAL_BONUS_MINUTES,
         idempotencyKey: `${attribution.id}:referrer`,
         metadata: { denomination: "agent_minutes", side: "referrer" },
       },

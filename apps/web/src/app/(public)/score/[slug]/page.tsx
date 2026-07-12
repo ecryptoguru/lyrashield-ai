@@ -16,12 +16,17 @@ export default async function ScorecardPage({
   const { ref } = await searchParams
   const scorecard = await getPublicScorecard(slug)
   if (!scorecard) notFound()
-  const { payload, referralCode } = scorecard
+  const { payload, referralCode, superseded } = scorecard
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl items-center px-6 py-16">
       <ReferralCapture code={ref} />
       <section className="bg-card w-full rounded-2xl border p-8 shadow-sm sm:p-12">
         <p className="text-muted-foreground text-sm font-medium">Scanned by LyraShield AI</p>
+        {superseded && (
+          <p className="text-muted-foreground mt-3 rounded-md border px-3 py-2 text-xs">
+            A newer scan of this target exists — this card reflects the scan date below.
+          </p>
+        )}
         <p className="text-primary mt-4 font-mono text-8xl font-bold tracking-tighter">
           {payload.grade.replace("_PLUS", "+")}
         </p>
