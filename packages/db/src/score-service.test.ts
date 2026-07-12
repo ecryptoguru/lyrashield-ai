@@ -9,7 +9,12 @@ vi.mock("./client", () => ({
     finding: { findMany: vi.fn(), count: vi.fn() },
     project: { update: vi.fn() },
     referralCode: { findUnique: vi.fn(), create: vi.fn() },
-    referralAttribution: { upsert: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    referralAttribution: {
+      upsert: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
     scorecardShare: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     usageRecord: { upsert: vi.fn() },
     user: { findUnique: vi.fn() },
@@ -26,10 +31,9 @@ import {
   completeScanWithScore,
 } from "./score-service"
 
-const mockPrisma = prisma as unknown as Record<
-  string,
-  Record<string, ReturnType<typeof vi.fn>>
-> & { $transaction: ReturnType<typeof vi.fn> }
+const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>> & {
+  $transaction: ReturnType<typeof vi.fn>
+}
 
 describe("score-service", () => {
   beforeEach(() => {
@@ -39,7 +43,11 @@ describe("score-service", () => {
   describe("buildScorecardPayload (disclosure allowlist)", () => {
     it("emits EXACTLY the five allowlisted fields — nothing else may ever be added silently", () => {
       const payload = buildScorecardPayload(
-        { grade: "A", computedAt: new Date("2026-07-12T00:00:00Z"), modelVersion: "lyrashield-score/1.0.0" },
+        {
+          grade: "A",
+          computedAt: new Date("2026-07-12T00:00:00Z"),
+          modelVersion: "lyrashield-score/1.0.0",
+        },
         3
       )
       // Spec §5: this exact key set is load-bearing. If this test fails because a field
@@ -118,8 +126,20 @@ describe("score-service", () => {
   describe("completeScanWithScore", () => {
     it("is idempotent: an existing snapshot short-circuits without re-completing the scan", async () => {
       const tx = {
-        scan: { findUnique: vi.fn().mockResolvedValue({ id: "scan-1", status: "COMPLETED", target: { id: "t-1", projectId: null, branch: null } }), update: vi.fn() },
-        scoreSnapshot: { findUnique: vi.fn().mockResolvedValue({ id: "snap-1", score: 90, grade: "A" }), findFirst: vi.fn(), create: vi.fn(), aggregate: vi.fn() },
+        scan: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "scan-1",
+            status: "COMPLETED",
+            target: { id: "t-1", projectId: null, branch: null },
+          }),
+          update: vi.fn(),
+        },
+        scoreSnapshot: {
+          findUnique: vi.fn().mockResolvedValue({ id: "snap-1", score: 90, grade: "A" }),
+          findFirst: vi.fn(),
+          create: vi.fn(),
+          aggregate: vi.fn(),
+        },
         finding: { findMany: vi.fn() },
         project: { update: vi.fn() },
       }
