@@ -113,7 +113,8 @@ const SECRET_PATTERNS: SecretPattern[] = [
     severity: "high",
     cwe: "CWE-798",
     pattern: /(postgres|postgresql|mongodb|mysql|redis|amqp):\/\/[^:\s]+:[^@\s]+@[^\s/]+/gi,
-    description: "A database connection string containing embedded credentials was found in the source code.",
+    description:
+      "A database connection string containing embedded credentials was found in the source code.",
     falsePositiveHints: ["localhost", "127.0.0.1", "user:pass", "username:password"],
   },
   {
@@ -121,7 +122,8 @@ const SECRET_PATTERNS: SecretPattern[] = [
     name: "Generic API Key Assignment",
     severity: "medium",
     cwe: "CWE-798",
-    pattern: /(?:api[_-]?key|apikey|api[_-]?secret|secret[_-]?key)\s*[:=]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
+    pattern:
+      /(?:api[_-]?key|apikey|api[_-]?secret|secret[_-]?key)\s*[:=]\s*["']([A-Za-z0-9_\-]{20,})["']/gi,
     description: "A hardcoded API key or secret was found in an assignment statement.",
     falsePositiveHints: ["example", "test", "placeholder", "your_api_key", "xxx", "change_me"],
   },
@@ -132,7 +134,15 @@ const SECRET_PATTERNS: SecretPattern[] = [
     cwe: "CWE-798",
     pattern: /(?:password|passwd|pwd)\s*[:=]\s*["']([^"'\s]{6,})["']/gi,
     description: "A hardcoded password was found in an assignment statement.",
-    falsePositiveHints: ["example", "test", "placeholder", "your_password", "changeme", "xxx", "secret"],
+    falsePositiveHints: [
+      "example",
+      "test",
+      "placeholder",
+      "your_password",
+      "changeme",
+      "xxx",
+      "secret",
+    ],
   },
   {
     id: "bearer-token",
@@ -162,14 +172,38 @@ const SECRET_PATTERNS: SecretPattern[] = [
 ]
 
 const IGNORED_DIRS = new Set([
-  "node_modules", ".git", "dist", "build", ".next", "coverage",
-  ".cache", "vendor", "__pycache__", ".pytest_cache", ".turbo",
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  "coverage",
+  ".cache",
+  "vendor",
+  "__pycache__",
+  ".pytest_cache",
+  ".turbo",
 ])
 
 const IGNORED_EXTENSIONS = new Set([
-  ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg",
-  ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".webm",
-  ".zip", ".tar", ".gz", ".lock", ".sum",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".bmp",
+  ".ico",
+  ".svg",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".eot",
+  ".mp4",
+  ".webm",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".lock",
+  ".sum",
 ])
 
 const MAX_FILE_SIZE = 512 * 1024
@@ -216,11 +250,26 @@ function getFileExtension(filePath: string): string {
 
 function getLanguageFromExt(ext: string): string {
   const map: Record<string, string> = {
-    ".ts": "TypeScript", ".tsx": "TypeScript", ".js": "JavaScript", ".jsx": "JavaScript",
-    ".py": "Python", ".go": "Go", ".rs": "Rust", ".java": "Java",
-    ".rb": "Ruby", ".php": "PHP", ".sh": "Shell", ".yaml": "YAML", ".yml": "YAML",
-    ".json": "JSON", ".xml": "XML", ".env": "Environment", ".toml": "TOML",
-    ".cfg": "Config", ".ini": "Config", ".conf": "Config",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript",
+    ".js": "JavaScript",
+    ".jsx": "JavaScript",
+    ".py": "Python",
+    ".go": "Go",
+    ".rs": "Rust",
+    ".java": "Java",
+    ".rb": "Ruby",
+    ".php": "PHP",
+    ".sh": "Shell",
+    ".yaml": "YAML",
+    ".yml": "YAML",
+    ".json": "JSON",
+    ".xml": "XML",
+    ".env": "Environment",
+    ".toml": "TOML",
+    ".cfg": "Config",
+    ".ini": "Config",
+    ".conf": "Config",
   }
   return map[ext] ?? "Unknown"
 }
@@ -262,7 +311,8 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
         if (seenFindings.has(findingId)) continue
         seenFindings.add(findingId)
 
-        const redactedMatch = matchedText.substring(0, 8) + "..." + matchedText.substring(matchedText.length - 4)
+        const redactedMatch =
+          matchedText.substring(0, 8) + "..." + matchedText.substring(matchedText.length - 4)
 
         findings.push({
           id: findingId,
@@ -276,17 +326,23 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
           impact: `Hardcoded secrets can be extracted from source code, git history, or built artifacts. An attacker with access to this code can use the secret to access the associated service (AWS, GitHub, database, etc.) and potentially escalate to full system compromise.`,
           remediation_steps: `Remove the hardcoded secret from ${relPath}. Move it to an environment variable or a secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault). Rotate the exposed secret immediately — it should be considered compromised.`,
           poc_description: `Read line ${lineNum} of ${relPath} to find the hardcoded ${pattern.name}. The matched value has been redacted for security.`,
-          code_locations: [{
-            file: relPath,
-            start_line: lineNum,
-            label: pattern.name,
-            snippet: `[REDACTED: ${pattern.name} detected on this line]`,
-          }]
+          code_locations: [
+            {
+              file: relPath,
+              start_line: lineNum,
+              label: pattern.name,
+              snippet: `[REDACTED: ${pattern.name} detected on this line]`,
+            },
+          ],
         })
       }
     }
   }
 
-  logger.info("Secrets scan complete", { repoPath, findingCount: findings.length, filesScanned: files.length })
+  logger.info("Secrets scan complete", {
+    repoPath,
+    findingCount: findings.length,
+    filesScanned: files.length,
+  })
   return findings
 }

@@ -1,0 +1,25 @@
+---
+const currentYear = new Date().getFullYear()
+const xUrl = __MARKETING_X_URL__
+---
+
+<footer class="border-t border-border bg-bg py-8 text-text-muted">
+  <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6 lg:px-8">
+    <p class="text-sm">
+      &copy; {currentYear} LyraSec AI &middot; Building in public
+    </p>
+    <nav aria-label="Footer" class="flex items-center gap-6">
+      <a href="/blog" class="text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        Blog
+      </a>
+      <a href="/rss.xml" class="text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        RSS
+      </a>
+      {xUrl && (
+        <a href={xUrl} rel="me noreferrer" target="_blank" class="text-sm hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          X
+        </a>
+      )}
+    </nav>
+  </div>
+</footer>

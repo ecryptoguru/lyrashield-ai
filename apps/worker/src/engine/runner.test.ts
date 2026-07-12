@@ -22,13 +22,13 @@ vi.mock("@lyrashield/logger", () => ({
   },
 }))
 
-import { findRunOutputDir, interpretExitCode } from "./runner"
+import { createKillEscalation, findRunOutputDir, interpretExitCode } from "./runner"
 
 const cleanupPaths: string[] = []
 
 afterEach(async () => {
   await Promise.all(
-    cleanupPaths.splice(0).map((path) => rm(path, { recursive: true, force: true })),
+    cleanupPaths.splice(0).map((path) => rm(path, { recursive: true, force: true }))
   )
 })
 
@@ -37,7 +37,7 @@ async function createRun(
   layout: "strix_runs" | "lyrashield_runs",
   name: string,
   artifact: "run.json" | "vulnerabilities.json",
-  mtime: Date,
+  mtime: Date
 ): Promise<string> {
   const runDir = join(workDir, layout, name)
   // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -52,9 +52,7 @@ async function createRun(
 it("finds an upstream Strix output directory", async () => {
   const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
   cleanupPaths.push(workDir)
-  const expected = await createRun(
-    workDir, "strix_runs", "upstream", "run.json", new Date(1_000),
-  )
+  const expected = await createRun(workDir, "strix_runs", "upstream", "run.json", new Date(1_000))
   await expect(findRunOutputDir(workDir)).resolves.toBe(expected)
 })
 
@@ -63,7 +61,11 @@ it("selects the newest valid output across both layouts", async () => {
   cleanupPaths.push(workDir)
   await createRun(workDir, "lyrashield_runs", "legacy", "run.json", new Date(1_000))
   const expected = await createRun(
-    workDir, "strix_runs", "current", "vulnerabilities.json", new Date(2_000),
+    workDir,
+    "strix_runs",
+    "current",
+    "vulnerabilities.json",
+    new Date(2_000)
   )
   await expect(findRunOutputDir(workDir)).resolves.toBe(expected)
 })
@@ -71,9 +73,7 @@ it("selects the newest valid output across both layouts", async () => {
 it("ignores newer runs whose expected artifact is a directory", async () => {
   const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
   cleanupPaths.push(workDir)
-  const expected = await createRun(
-    workDir, "lyrashield_runs", "valid", "run.json", new Date(1_000),
-  )
+  const expected = await createRun(workDir, "lyrashield_runs", "valid", "run.json", new Date(1_000))
   const invalidRunDir = join(workDir, "strix_runs", "invalid")
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(join(invalidRunDir, "run.json"), { recursive: true })
@@ -127,5 +127,31 @@ describe("interpretExitCode", () => {
     const result = interpretExitCode(-1)
     expect(result.status).toBe("FAILED")
     expect(result.message).toContain("code -1")
+  })
+})
+
+describe("createKillEscalation (S5)", () => {
+  it("sends SIGKILL after the grace window when the process has NOT exited", () => {
+    vi.useFakeTimers()
+    const kills: string[] = []
+    const child = { kill: (sig?: NodeJS.Signals) => (kills.push(String(sig)), true) }
+    const esc = createKillEscalation(child, 5000)
+    esc.onTimeout()
+    expect(kills).toEqual(["SIGTERM"])
+    vi.advanceTimersByTime(5000)
+    expect(kills).toEqual(["SIGTERM", "SIGKILL"])
+    vi.useRealTimers()
+  })
+
+  it("does NOT send SIGKILL if the process exits within the grace window", () => {
+    vi.useFakeTimers()
+    const kills: string[] = []
+    const child = { kill: (sig?: NodeJS.Signals) => (kills.push(String(sig)), true) }
+    const esc = createKillEscalation(child, 5000)
+    esc.onTimeout()
+    esc.markExited() // process closed before the grace window elapsed
+    vi.advanceTimersByTime(5000)
+    expect(kills).toEqual(["SIGTERM"])
+    vi.useRealTimers()
   })
 })

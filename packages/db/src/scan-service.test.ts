@@ -81,8 +81,25 @@ describe("Scan Lifecycle — State Machine Transitions", () => {
   })
 
   describe("all terminal states have no valid outgoing transitions", () => {
-    const terminalStates = ["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"] as const
-    const allStates = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "COMPLETED", "FAILED", "CANCELLED", "REQUIRES_APPROVAL", "STOPPED_BUDGET", "TIMED_OUT"] as const
+    const terminalStates = [
+      "COMPLETED",
+      "FAILED",
+      "CANCELLED",
+      "STOPPED_BUDGET",
+      "TIMED_OUT",
+    ] as const
+    const allStates = [
+      "QUEUED",
+      "PREFLIGHT",
+      "RUNNING",
+      "VERIFYING",
+      "COMPLETED",
+      "FAILED",
+      "CANCELLED",
+      "REQUIRES_APPROVAL",
+      "STOPPED_BUDGET",
+      "TIMED_OUT",
+    ] as const
 
     for (const terminal of terminalStates) {
       it(`${terminal} has no valid transitions to any state`, () => {

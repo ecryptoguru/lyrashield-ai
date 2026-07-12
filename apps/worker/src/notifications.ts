@@ -81,6 +81,9 @@ export async function notifyCriticalFinding(
       sendFn: (channel, payload) => sendNotification(channel as NotificationChannel, payload),
     })
   } catch (error) {
-    logger.error("Failed to send critical finding notification", { error: String(error), findingId })
+    logger.error("Failed to send critical finding notification", {
+      error: String(error),
+      findingId,
+    })
   }
 }

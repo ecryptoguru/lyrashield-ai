@@ -1,6 +1,7 @@
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { createHmac, createSign, timingSafeEqual as cryptoTimingSafeEqual } from "crypto"
+import { getRedis } from "./redis"
 
 const GITHUB_API_BASE = "https://api.github.com"
 
@@ -14,7 +15,9 @@ function getAppCredentials() {
   const privateKey = env.GITHUB_APP_PRIVATE_KEY
 
   if (!appId || !privateKey) {
-    throw new Error("GitHub App credentials not configured (GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY)")
+    throw new Error(
+      "GitHub App credentials not configured (GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY)"
+    )
   }
 
   return { appId, privateKey }
@@ -63,9 +66,7 @@ async function githubFetch(url: string, init: RequestInit, retries = 3): Promise
     const retryable = res.status >= 500 || res.status === 429 || isSecondaryRateLimit
     if (!retryable) return res
 
-    const delayMs = retryAfter
-      ? Number(retryAfter) * 1000
-      : Math.min(1000 * 2 ** attempt, 8000)
+    const delayMs = retryAfter ? Number(retryAfter) * 1000 : Math.min(1000 * 2 ** attempt, 8000)
     await new Promise((r) => setTimeout(r, delayMs))
     attempt++
   }
@@ -76,24 +77,82 @@ async function githubFetch(url: string, init: RequestInit, retries = 3): Promise
 // + network round-trip) burns the tight installation-token rate limit once the
 // worker/webhooks fetch per-event. Cache per installationId and re-mint only
 // within TOKEN_SKEW_MS of expiry.
-// NOTE: this is a per-process Map (single-instance). For multi-instance
-// deployments, move this cache to Redis keyed by installationId.
+// The cache is stored in Redis when available so multiple instances/workers
+// share tokens; otherwise it falls back to a local Map.
 type CachedToken = { token: string; expiresAt: number }
-const tokenCache = new Map<number, CachedToken>()
+const localTokenCache = new Map<number, CachedToken>()
 const TOKEN_SKEW_MS = 5 * 60 * 1000
+const TOKEN_TTL_MS = 55 * 60 * 1000
+const TOKEN_CACHE_KEY = (installationId: number) => `github:token:${installationId}`
+
+async function getCachedToken(installationId: number): Promise<CachedToken | null> {
+  const redis = getRedis()
+  if (redis) {
+    try {
+      const raw = await redis.get(TOKEN_CACHE_KEY(installationId))
+      if (raw) {
+        const parsed = JSON.parse(raw) as CachedToken
+        if (parsed.expiresAt - Date.now() > TOKEN_SKEW_MS) {
+          return parsed
+        }
+      }
+    } catch (err) {
+      logger.warn("Failed to read GitHub token from Redis cache", {
+        installationId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  const local = localTokenCache.get(installationId)
+  if (local && local.expiresAt - Date.now() > TOKEN_SKEW_MS) {
+    return local
+  }
+  return null
+}
+
+async function setCachedToken(
+  installationId: number,
+  token: string,
+  expiresAt: number
+): Promise<void> {
+  const redis = getRedis()
+  if (redis) {
+    try {
+      const ttl = Math.max(0, expiresAt - Date.now() - TOKEN_SKEW_MS)
+      await redis.set(
+        TOKEN_CACHE_KEY(installationId),
+        JSON.stringify({ token, expiresAt }),
+        "PX",
+        ttl
+      )
+      return
+    } catch (err) {
+      logger.warn("Failed to write GitHub token to Redis cache", {
+        installationId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  localTokenCache.set(installationId, { token, expiresAt })
+}
 
 export async function getInstallationToken(installationId: number): Promise<string> {
-  const cached = tokenCache.get(installationId)
-  if (cached && cached.expiresAt - Date.now() > TOKEN_SKEW_MS) {
+  const cached = await getCachedToken(installationId)
+  if (cached) {
     return cached.token
   }
 
   const jwt = createAppJWT()
 
-  const res = await githubFetch(`${GITHUB_API_BASE}/app/installations/${installationId}/access_tokens`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${jwt}`, ...GITHUB_HEADERS },
-  })
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/app/installations/${installationId}/access_tokens`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${jwt}`, ...GITHUB_HEADERS },
+    }
+  )
 
   if (!res.ok) {
     const body = await res.text()
@@ -102,8 +161,8 @@ export async function getInstallationToken(installationId: number): Promise<stri
   }
 
   const data = (await res.json()) as { token: string; expires_at?: string }
-  const expiresAt = data.expires_at ? Date.parse(data.expires_at) : Date.now() + 55 * 60 * 1000
-  tokenCache.set(installationId, { token: data.token, expiresAt })
+  const expiresAt = data.expires_at ? Date.parse(data.expires_at) : Date.now() + TOKEN_TTL_MS
+  await setCachedToken(installationId, data.token, expiresAt)
   return data.token
 }
 
@@ -159,9 +218,12 @@ export async function getAppInstallations(): Promise<InstallationInfo[]> {
   let hasMore = true
 
   while (hasMore) {
-    const res = await githubFetch(`${GITHUB_API_BASE}/app/installations?per_page=100&page=${page}`, {
-      headers: { Authorization: `Bearer ${jwt}`, ...GITHUB_HEADERS },
-    })
+    const res = await githubFetch(
+      `${GITHUB_API_BASE}/app/installations?per_page=100&page=${page}`,
+      {
+        headers: { Authorization: `Bearer ${jwt}`, ...GITHUB_HEADERS },
+      }
+    )
 
     if (!res.ok) {
       throw new Error(`Failed to list installations: ${res.status}`)
@@ -217,10 +279,9 @@ export async function getDefaultBranch(
   repo: string
 ): Promise<string> {
   const token = await getInstallationToken(installationId)
-  const res = await githubFetch(
-    `${GITHUB_API_BASE}/repos/${owner}/${repo}`,
-    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS } }
-  )
+  const res = await githubFetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}`, {
+    headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
+  })
   if (!res.ok) {
     throw new Error(`Failed to get repo info: ${res.status}`)
   }
@@ -254,17 +315,14 @@ export async function createBranch(
   fromSha: string
 ): Promise<void> {
   const token = await getInstallationToken(installationId)
-  const res = await githubFetch(
-    `${GITHUB_API_BASE}/repos/${owner}/${repo}/git/refs`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
-      body: JSON.stringify({
-        ref: `refs/heads/${branchName}`,
-        sha: fromSha,
-      }),
-    }
-  )
+  const res = await githubFetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}/git/refs`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
+    body: JSON.stringify({
+      ref: `refs/heads/${branchName}`,
+      sha: fromSha,
+    }),
+  })
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`Failed to create branch: ${res.status} ${body}`)
@@ -282,18 +340,15 @@ export async function createOrUpdateFile(
 ): Promise<void> {
   const token = await getInstallationToken(installationId)
   const encodedContent = Buffer.from(content).toString("base64")
-  const res = await githubFetch(
-    `${GITHUB_API_BASE}/repos/${owner}/${repo}/contents/${path}`,
-    {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
-      body: JSON.stringify({
-        message,
-        content: encodedContent,
-        branch,
-      }),
-    }
-  )
+  const res = await githubFetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}/contents/${path}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
+    body: JSON.stringify({
+      message,
+      content: encodedContent,
+      branch,
+    }),
+  })
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`Failed to update file: ${res.status} ${body}`)
@@ -310,19 +365,16 @@ export async function createPullRequest(
   baseBranch: string
 ): Promise<{ number: number; url: string }> {
   const token = await getInstallationToken(installationId)
-  const res = await githubFetch(
-    `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
-      body: JSON.stringify({
-        title,
-        body,
-        head: headBranch,
-        base: baseBranch,
-      }),
-    }
-  )
+  const res = await githubFetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
+    body: JSON.stringify({
+      title,
+      body,
+      head: headBranch,
+      base: baseBranch,
+    }),
+  })
   if (!res.ok) {
     const respBody = await res.text()
     throw new Error(`Failed to create PR: ${res.status} ${respBody}`)

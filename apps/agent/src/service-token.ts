@@ -7,7 +7,9 @@ const TOKEN_TTL_SECONDS = 5 * 60
 function getSecret(): string {
   const secret = process.env.BETTER_AUTH_SECRET
   if (!secret || secret.length < 32) {
-    throw new Error("BETTER_AUTH_SECRET must be set and at least 32 characters for service token signing")
+    throw new Error(
+      "BETTER_AUTH_SECRET must be set and at least 32 characters for service token signing"
+    )
   }
   return secret
 }
@@ -20,7 +22,9 @@ function base64UrlDecode(data: string): Buffer {
   return Buffer.from(data, "base64url")
 }
 
-export function signServiceToken(payload: Omit<ServiceTokenPayload, "issuedAt" | "expiresAt">): string {
+export function signServiceToken(
+  payload: Omit<ServiceTokenPayload, "issuedAt" | "expiresAt">
+): string {
   const secret = getSecret()
   const issuedAt = Math.floor(Date.now() / 1000)
   const expiresAt = issuedAt + TOKEN_TTL_SECONDS

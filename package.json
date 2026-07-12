@@ -15,16 +15,18 @@
     "db:seed": "pnpm --filter @lyrashield/db seed",
     "db:studio": "pnpm --filter @lyrashield/db studio",
     "test": "vitest run --exclude '**/dist/**'",
+    "test:e2e": "playwright test",
     "test:watch": "vitest --exclude '**/dist/**'"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.10",
     "eslint-plugin-security": "^3.0.1",
     "prettier": "^3.9.5",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "turbo": "^2.10.4",
-    "vitest": "^3.2.7"
+    "vitest": "^4.1.9"
   },
   "packageManager": "pnpm@11.6.0",
   "engines": {

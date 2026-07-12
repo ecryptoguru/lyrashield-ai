@@ -35,13 +35,14 @@ const SEVERITY_TO_LEVEL: Record<FindingSeverity, "error" | "warning" | "note" | 
 
 export function generateSarifReport(
   findings: FindingForSarif[],
-  toolInfo: { name: string; version?: string; informationUri?: string },
+  toolInfo: { name: string; version?: string; informationUri?: string }
 ): SarifReport {
   const rules: Map<string, SarifRule> = new Map()
   const results: SarifResult[] = []
 
   for (const finding of findings) {
-    const ruleId = finding.sarifRuleId || finding.cve || finding.cwe || `lyrasec-${finding.id.slice(0, 8)}`
+    const ruleId =
+      finding.sarifRuleId || finding.cve || finding.cwe || `lyrasec-${finding.id.slice(0, 8)}`
 
     if (!rules.has(ruleId)) {
       const rule: SarifRule = {

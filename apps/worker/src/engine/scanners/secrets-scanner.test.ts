@@ -79,7 +79,8 @@ describe("scanSecrets", () => {
 
   it("detects private keys (PEM)", async () => {
     const dir = await setupRepo({
-      "private.key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----",
+      "private.key":
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----",
     })
     const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
     const pemKey = findings.find((f) => f.id.startsWith("private-key-pem"))

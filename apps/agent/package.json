@@ -13,6 +13,7 @@
     "@lyrashield/auth": "workspace:*",
     "@lyrashield/config": "workspace:*",
     "@lyrashield/db": "workspace:*",
+    "@lyrashield/integrations": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "bullmq": "^5.78.0"

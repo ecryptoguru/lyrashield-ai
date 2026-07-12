@@ -63,18 +63,20 @@ describe("scanSca", () => {
     const dir = await setupRepo({
       "package.json": JSON.stringify({
         name: "test-pkg",
-        dependencies: { "lodash": "4.17.20", "express": "4.18.0" },
-        devDependencies: { "jest": "29.0.0" },
+        dependencies: { lodash: "4.17.20", express: "4.18.0" },
+        devDependencies: { jest: "29.0.0" },
       }),
     })
 
     const fetchFn = makeMockFetch({
-      "lodash@4.17.20": [{
-        id: "GHSA-1234",
-        summary: "Prototype pollution in lodash",
-        database_specific: { severity: "high" },
-        affected: [{ ranges: [{ events: [{ introduced: "0" }, { fixed: "4.17.21" }] }] }],
-      }],
+      "lodash@4.17.20": [
+        {
+          id: "GHSA-1234",
+          summary: "Prototype pollution in lodash",
+          database_specific: { severity: "high" },
+          affected: [{ ranges: [{ events: [{ introduced: "0" }, { fixed: "4.17.21" }] }] }],
+        },
+      ],
     })
 
     try {
@@ -112,11 +114,13 @@ describe("scanSca", () => {
     })
 
     const fetchFn = makeMockFetch({
-      "requests@2.25.0": [{
-        id: "PYSEC-1234",
-        summary: "SSRF in requests library",
-        database_specific: { severity: "high" },
-      }],
+      "requests@2.25.0": [
+        {
+          id: "PYSEC-1234",
+          summary: "SSRF in requests library",
+          database_specific: { severity: "high" },
+        },
+      ],
     })
 
     try {
@@ -131,7 +135,7 @@ describe("scanSca", () => {
 
   it("handles OSV API failures gracefully", async () => {
     const dir = await setupRepo({
-      "package.json": JSON.stringify({ dependencies: { "lodash": "4.17.20" } }),
+      "package.json": JSON.stringify({ dependencies: { lodash: "4.17.20" } }),
     })
 
     const fetchFn = (async () => {
@@ -152,16 +156,20 @@ describe("scanSca", () => {
     })
 
     const fetchFn = makeMockFetch({
-      "pkg-a@1.0.0": [{
-        id: "SHARED-VULN-001",
-        summary: "Shared vulnerability",
-        database_specific: { severity: "medium" },
-      }],
-      "pkg-b@2.0.0": [{
-        id: "SHARED-VULN-001",
-        summary: "Shared vulnerability",
-        database_specific: { severity: "medium" },
-      }],
+      "pkg-a@1.0.0": [
+        {
+          id: "SHARED-VULN-001",
+          summary: "Shared vulnerability",
+          database_specific: { severity: "medium" },
+        },
+      ],
+      "pkg-b@2.0.0": [
+        {
+          id: "SHARED-VULN-001",
+          summary: "Shared vulnerability",
+          database_specific: { severity: "medium" },
+        },
+      ],
     })
 
     try {

@@ -1,7 +1,7 @@
 # BLOG_AUTHORING.md — Writing for the LyraSec AI Blog
 
 **Audience of this guide:** whoever writes or edits posts (the LyraSec Marketing Agent, the founder, future contributors).
-**Companion to:** `landingpage.md` (the site build plan — §8 blog architecture, §10 SEO/GEO/AEO). This guide covers *content*; the build plan covers *infrastructure*.
+**Companion to:** `README.md` (local/deploy operations) and the implemented Astro site. This guide covers _content_; code and `codebase.md` cover infrastructure.
 
 The blog has one job pre-launch: earn trust with developers, CTOs, and security engineers, and feed the waitlist. Every post ends at the waitlist CTA. Write like an engineering blog, not a content farm.
 
@@ -11,12 +11,12 @@ The blog has one job pre-launch: earn trust with developers, CTOs, and security 
 
 1. **Never mention "Strix"** or the scan engine's upstream, in any form.
 2. **No pricing numbers, no free-tier promise.** If a post must reference cost, the only sanctioned line is: pricing lands with early access.
-3. **No overclaims.** Findings are *verified/exploit-validated*, but every individual differentiator has some competitor doing it. Banned phrasings: "only we verify," "only we auto-fix," "the only tool with MCP/IDE integration," "first ever." The moat is the **combination**, and even that is stated as design philosophy, not supremacy.
-4. **No benchmark or accuracy numbers about LyraSec AI, ever.** No "catches 94% of…," no detection-rate claims, no false-positive-rate claims. Third-party industry research may be cited *with a source link* and exact figures — never rounded up, never paraphrased into a stronger claim.
+3. **No overclaims.** Findings are _verified/exploit-validated_, but every individual differentiator has some competitor doing it. Banned phrasings: "only we verify," "only we auto-fix," "the only tool with MCP/IDE integration," "first ever." The moat is the **combination**, and even that is stated as design philosophy, not supremacy.
+4. **No benchmark or accuracy numbers about LyraSec AI, ever.** No "catches 94% of…," no detection-rate claims, no false-positive-rate claims. Third-party industry research may be cited _with a source link_ and exact figures — never rounded up, never paraphrased into a stronger claim.
 5. **No fake anything:** no invented customers, quotes, incidents, or "we scanned X and found Y" stories unless the scan actually happened and the founder approved publishing it. No stock photos.
 6. **Honest status.** Pre-launch means pre-launch. Posts may say "building in public," describe design decisions, and share real progress. They may not imply the product is live, has users, or has results it doesn't have.
 7. **Product name:** exact string **LyraSec AI** on first mention (title or first paragraph) and in all headings/metadata; **LyraSec** is fine for subsequent prose mentions. Never LyraShield in new content. Never mention Lyrafin AI — separate product; no cross-references on this site.
-8. **Security content responsibility:** when a post explains a vulnerability class, show the *pattern* (minimal snippet, clearly labeled vulnerable vs. fixed). Never publish a working exploit against a real, named, unpatched target.
+8. **Security content responsibility:** when a post explains a vulnerability class, show the _pattern_ (minimal snippet, clearly labeled vulnerable vs. fixed). Never publish a working exploit against a real, named, unpatched target.
 
 Anything that violates these does not get published, no matter how good the SEO story is.
 
@@ -38,24 +38,26 @@ Every post is an `.mdx` file in `src/content/blog/`. Schema (zod-enforced at bui
 
 ```yaml
 ---
-title: "Why AI-generated SSRF checks fail"        # ≤70 chars; becomes the SEO title
-description: "AI assistants often generate SSRF protection that string-matches URLs instead of resolving DNS. Here's the failure pattern and the fix."
-                                                   # 70–160 chars — this is the meta description; write it as the answer snippet
+title: "Why AI-generated SSRF checks fail" # ≤70 chars; becomes the SEO title
+description:
+  "AI assistants often generate SSRF protection that string-matches URLs instead of resolving DNS. Here's the failure pattern and the fix."
+  # 70–160 chars — this is the meta description; write it as the answer snippet
 pubDate: 2026-07-20
-updatedDate: 2026-07-22                            # only when materially updated
-author: lyrasec-team                               # reference into the authors collection
-tags: ["ai-code", "ssrf", "verification"]          # max 5, lowercase-kebab
-draft: true                                        # ALWAYS true until founder approves publish
-heroImage: ./images/ssrf-pattern.png               # optional; never stock photos
-faq:                                               # optional but HIGH VALUE (→ FAQPage JSON-LD)
+updatedDate: 2026-07-22 # only when materially updated
+author: lyrasec-team # reference into the authors collection
+tags: ["ai-code", "ssrf", "verification"] # max 5, lowercase-kebab
+draft: true # ALWAYS true until founder approves publish
+heroImage: ./images/ssrf-pattern.png # optional; never stock photos
+faq: # optional but HIGH VALUE (→ FAQPage JSON-LD)
   - q: "Why does string-matching fail for SSRF protection?"
     a: "Because the check runs against the URL text, not the resolved address — DNS rebinding and redirects bypass it."
 ---
 ```
 
 Rules of thumb:
+
 - **title:** front-load the topic; no clickbait, no colons-with-puns. It should read like a Stack Overflow question someone actually has.
-- **description:** it's doing triple duty — meta description, index-card blurb, and the AI-extractable answer. Write it as a complete, standalone answer to the title.
+- **description:** it's doing triple duty — meta description, index-card blurb, the AI-extractable answer, and the RSS feed summary. Write it as a complete, standalone answer to the title.
 - **tags:** reuse existing tags before inventing new ones (each tag spawns an archive page; five posts across five orphan tags helps nobody).
 
 ---
@@ -69,7 +71,7 @@ AI search engines (Google AI Overviews, Perplexity, ChatGPT Search) extract and 
 3. **Then the depth:** evidence, code, edge cases, the "why," the disagreements.
 4. **H2s as sub-questions** where natural ("How does DNS rebinding bypass the check?"), descriptive statements otherwise. Never decorative headings ("Diving deeper").
 5. **One idea per section.** Sections should be independently extractable — an AI engine quoting any single section should not produce a misleading claim.
-6. **FAQ block** (frontmatter `faq:`) for 2–4 genuinely-asked questions that didn't fit the main flow. This renders as a visible FAQ section *and* FAQPage JSON-LD — the highest-yield AEO surface we have. Don't restate the H1 answer as FAQ #1.
+6. **FAQ block** (frontmatter `faq:`) for 2–4 genuinely-asked questions that didn't fit the main flow. This renders as a visible FAQ section _and_ FAQPage JSON-LD — the highest-yield AEO surface we have. Don't restate the H1 answer as FAQ #1.
 7. **Anchors are stable:** heading slugs are auto-generated from heading text. After publish, treat heading text as an API — editing a heading breaks inbound deep links and AI citations. If a heading must change, note it in the PR/update.
 
 ---

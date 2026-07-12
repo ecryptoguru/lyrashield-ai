@@ -48,7 +48,9 @@ export async function createReport(params: CreateReportParams): Promise<Report> 
   return report
 }
 
-export async function generateShareToken(reportId: string): Promise<{ token: string; tokenHash: string }> {
+export async function generateShareToken(
+  reportId: string
+): Promise<{ token: string; tokenHash: string }> {
   const token = randomBytes(32).toString("hex")
   const tokenHash = createHash("sha256").update(token).digest("hex")
 
@@ -90,7 +92,10 @@ export async function getReportByShareToken(token: string): Promise<Report | nul
   return report
 }
 
-export async function getShareableReport(reportId: string, workspaceId: string): Promise<ShareableReport | null> {
+export async function getShareableReport(
+  reportId: string,
+  workspaceId: string
+): Promise<ShareableReport | null> {
   const report = await prisma.report.findFirst({
     where: { id: reportId, workspaceId, deletedAt: null },
   })
@@ -100,6 +105,9 @@ export async function getShareableReport(reportId: string, workspaceId: string):
   let scanSummary: ShareableReport["scanSummary"] = null
 
   if (report.scanId) {
+    // Scope the scan lookup to the report's workspace. This is the public share
+    // path (no request-scoped workspace context is set), so we must NOT rely on
+    // the Prisma extension's implicit read-scoping — filter explicitly. (S4)
     const scan = await prisma.scan.findFirst({
       where: { id: report.scanId, workspaceId, deletedAt: null },
       include: {
@@ -144,7 +152,11 @@ export async function getShareableReport(reportId: string, workspaceId: string):
   }
 }
 
-export async function listReports(workspaceId: string, cursor?: string, limit?: number): Promise<{
+export async function listReports(
+  workspaceId: string,
+  cursor?: string,
+  limit?: number
+): Promise<{
   items: Report[]
   nextCursor: string | null
 }> {

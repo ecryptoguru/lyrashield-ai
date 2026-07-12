@@ -270,7 +270,14 @@ const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     PERMISSIONS.schedule.view,
     PERMISSIONS.agent.view,
   ],
-  VIEWER: [PERMISSIONS.scan.view, PERMISSIONS.finding.view, PERMISSIONS.retest.view, PERMISSIONS.report.download, PERMISSIONS.notification.view, PERMISSIONS.agent.view],
+  VIEWER: [
+    PERMISSIONS.scan.view,
+    PERMISSIONS.finding.view,
+    PERMISSIONS.retest.view,
+    PERMISSIONS.report.download,
+    PERMISSIONS.notification.view,
+    PERMISSIONS.agent.view,
+  ],
 }
 
 export function hasPermission(role: MemberRole, permission: Permission): boolean {
@@ -288,6 +295,17 @@ export function getRolePermissions(role: MemberRole): Permission[] {
 
 export function isWorkspaceAdmin(role: MemberRole): boolean {
   return hasMinimumRole(role, "ADMIN")
+}
+
+/**
+ * Whether `inviterRole` is allowed to grant `targetRole` to someone else.
+ * OWNER can grant any role; everyone else may only grant roles STRICTLY below
+ * their own rank. This prevents privilege escalation and peer-cloning — e.g. an
+ * ADMIN can no longer mint another ADMIN (or any equal/higher role). (S6)
+ */
+export function canGrantRole(inviterRole: MemberRole, targetRole: MemberRole): boolean {
+  if (inviterRole === "OWNER") return true
+  return (ROLE_HIERARCHY[inviterRole] ?? 0) > (ROLE_HIERARCHY[targetRole] ?? 0)
 }
 
 export function isWorkspaceOwner(role: MemberRole): boolean {

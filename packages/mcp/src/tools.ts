@@ -6,6 +6,12 @@ export type McpToolResult = {
 export interface McpTool {
   name: string
   description: string
+  /**
+   * Whether this tool mutates state (triggers a scan, creates a report, opens a
+   * PR, …). Mutating tools are gated behind a human-approval check in the server
+   * before their handler runs — read-only tools are not. (S8)
+   */
+  mutating: boolean
   inputSchema: {
     type: "object"
     properties: Record<string, unknown>
@@ -24,7 +30,7 @@ async function apiCall(
   context: ToolHandlerContext,
   method: string,
   path: string,
-  body?: Record<string, unknown>,
+  body?: Record<string, unknown>
 ): Promise<unknown> {
   const fetchImpl = context.fetchFn ?? globalThis.fetch
   const url = `${context.apiBaseUrl}${path}`
@@ -57,7 +63,11 @@ async function apiCall(
       throw new Error(errorMsg)
     }
 
-    const json = (await res.json()) as { success: boolean; data?: unknown; error?: { message?: string } }
+    const json = (await res.json()) as {
+      success: boolean
+      data?: unknown
+      error?: { message?: string }
+    }
     if (!json.success) {
       throw new Error(json.error?.message ?? "API call failed")
     }
@@ -70,10 +80,12 @@ async function apiCall(
 
 function makeToolResult(data: unknown): McpToolResult {
   return {
-    content: [{
-      type: "text",
-      text: JSON.stringify(data, null, 2),
-    }],
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(data, null, 2),
+      },
+    ],
   }
 }
 
@@ -87,7 +99,9 @@ function makeErrorResult(message: string): McpToolResult {
 export function createScanTargetTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_scan_target",
-    description: "Trigger a security scan on a registered target. Requires workspaceId and targetId.",
+    mutating: true,
+    description:
+      "Trigger a security scan on a registered target. Requires workspaceId and targetId.",
     inputSchema: {
       type: "object",
       properties: {
@@ -117,13 +131,18 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
 export function createGetFindingsTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_get_findings",
-    description: "Retrieve security findings for a workspace, optionally filtered by severity or target.",
+    mutating: false,
+    description:
+      "Retrieve security findings for a workspace, optionally filtered by severity or target.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: { type: "string", description: "Optional target ID filter" },
-        severity: { type: "string", description: "Optional severity filter: CRITICAL, HIGH, MEDIUM, LOW, INFO" },
+        severity: {
+          type: "string",
+          description: "Optional severity filter: CRITICAL, HIGH, MEDIUM, LOW, INFO",
+        },
         limit: { type: "number", description: "Max results (default 50, max 100)" },
       },
       required: ["workspaceId"],
@@ -147,7 +166,9 @@ export function createGetFindingsTool(context: ToolHandlerContext): McpTool {
 export function createGetLaunchReadinessTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_get_launch_readiness",
-    description: "Get a launch-readiness verdict (GO / GO_WITH_CONDITIONS / NO_GO) based on open findings.",
+    mutating: false,
+    description:
+      "Get a launch-readiness verdict (GO / GO_WITH_CONDITIONS / NO_GO) based on open findings.",
     inputSchema: {
       type: "object",
       properties: {
@@ -173,6 +194,7 @@ export function createGetLaunchReadinessTool(context: ToolHandlerContext): McpTo
 export function createCreateReportTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_create_report",
+    mutating: true,
     description: "Generate a shareable security report from scan findings.",
     inputSchema: {
       type: "object",

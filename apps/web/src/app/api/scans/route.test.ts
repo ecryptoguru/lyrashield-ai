@@ -88,12 +88,14 @@ describe("POST /api/scans", () => {
   it("returns 404 when target not found in workspace", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(null as never)
 
-    const res = await POST(makeRequest({
-      workspaceId: "ws-1",
-      targetId: "missing-target",
-      goal: "TEST_APP",
-      mode: "SAFE",
-    }))
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "missing-target",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
 
     expect(res.status).toBe(404)
     const json = await res.json()
@@ -104,13 +106,15 @@ describe("POST /api/scans", () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
     vi.mocked(prisma.policy.findFirst).mockResolvedValue(null as never)
 
-    const res = await POST(makeRequest({
-      workspaceId: "ws-1",
-      targetId: "t1",
-      goal: "TEST_APP",
-      mode: "SAFE",
-      policyId: "missing-policy",
-    }))
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+        policyId: "missing-policy",
+      })
+    )
 
     expect(res.status).toBe(404)
     const json = await res.json()
@@ -121,12 +125,14 @@ describe("POST /api/scans", () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
     vi.mocked(prisma.scan.count).mockResolvedValue(1 as never)
 
-    const res = await POST(makeRequest({
-      workspaceId: "ws-1",
-      targetId: "t1",
-      goal: "TEST_APP",
-      mode: "SAFE",
-    }))
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
 
     expect(res.status).toBe(409)
     const json = await res.json()
@@ -138,12 +144,14 @@ describe("POST /api/scans", () => {
     vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
     vi.mocked(createScan).mockRejectedValue(new Error("Target already has an active scan") as never)
 
-    const res = await POST(makeRequest({
-      workspaceId: "ws-1",
-      targetId: "t1",
-      goal: "TEST_APP",
-      mode: "SAFE",
-    }))
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
 
     expect(res.status).toBe(409)
     expect((await res.json()).error.code).toBe("SCAN_IN_PROGRESS")
@@ -161,22 +169,26 @@ describe("POST /api/scans", () => {
       createdAt: new Date(),
     } as never)
 
-    const res = await POST(makeRequest({
-      workspaceId: "ws-1",
-      targetId: "t1",
-      goal: "TEST_APP",
-      mode: "SAFE",
-    }))
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
 
     expect(res.status).toBe(201)
     const json = await res.json()
     expect(json.success).toBe(true)
     expect(json.data.id).toBe("scan-1")
-    expect(enqueueScanJob).toHaveBeenCalledWith(expect.objectContaining({
-      scanId: "scan-1",
-      workspaceId: "ws-1",
-      targetId: "t1",
-    }))
+    expect(enqueueScanJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "t1",
+      })
+    )
     expect(prisma.auditLog.create).toHaveBeenCalled()
   })
 
@@ -193,31 +205,37 @@ describe("POST /api/scans", () => {
     } as never)
     vi.mocked(enqueueScanJob).mockRejectedValue(new Error("Redis down") as never)
 
-    const res = await POST(makeRequest({
-      workspaceId: "ws-1",
-      targetId: "t1",
-      goal: "TEST_APP",
-      mode: "SAFE",
-    }))
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
 
     expect(res.status).toBe(503)
     const json = await res.json()
     expect(json.error.code).toBe("QUEUE_ERROR")
-    expect(prisma.scan.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "scan-2" },
-      data: expect.objectContaining({ status: "FAILED" }),
-    }))
+    expect(prisma.scan.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "scan-2" },
+        data: expect.objectContaining({ status: "FAILED" }),
+      })
+    )
   })
 
   it("returns 403 when user lacks scan.create permission", async () => {
     vi.mocked(requirePermission).mockRejectedValue(new Error("FORBIDDEN") as never)
 
-    const res = await POST(makeRequest({
-      workspaceId: "ws-1",
-      targetId: "t1",
-      goal: "TEST_APP",
-      mode: "SAFE",
-    }))
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
 
     expect(res.status).toBe(403)
   })
@@ -255,11 +273,13 @@ describe("GET /api/scans", () => {
 
     await GET(makeGetRequest({ workspaceId: "ws-1", targetId: "t1", status: "COMPLETED" }))
 
-    expect(listScans).toHaveBeenCalledWith(expect.objectContaining({
-      workspaceId: "ws-1",
-      targetId: "t1",
-      status: "COMPLETED",
-    }))
+    expect(listScans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        status: "COMPLETED",
+      })
+    )
   })
 
   it("returns 403 when user lacks scan.view permission", async () => {

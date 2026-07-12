@@ -29,15 +29,17 @@ describe("POST /api/reports", () => {
   it("rejects a scan that does not belong to the requested workspace", async () => {
     vi.mocked(prisma.scan.findFirst).mockResolvedValue(null as never)
 
-    const response = await POST(new Request("http://localhost/api/reports", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        workspaceId: "ws-1",
-        scanId: "scan-other-workspace",
-        title: "Report",
-      }),
-    }))
+    const response = await POST(
+      new Request("http://localhost/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          scanId: "scan-other-workspace",
+          title: "Report",
+        }),
+      })
+    )
 
     expect(await response.json()).toMatchObject({ error: { code: "SCAN_NOT_FOUND" } })
     expect(response.status).toBe(404)

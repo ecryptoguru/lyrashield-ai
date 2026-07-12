@@ -1,0 +1,111 @@
+---
+import "../styles/global.css"
+import SeoHead from "@components/SeoHead.astro"
+import JsonLd from "@components/JsonLd.astro"
+import Header from "@components/Header.astro"
+import Footer from "@components/Footer.astro"
+
+interface Props {
+  title: string
+  description: string
+  canonical?: string
+  ogImage?: string
+  ogType?: "website" | "article"
+  article?: {
+    publishedTime?: string
+    modifiedTime?: string
+    tags?: string[]
+  }
+  jsonLd?: unknown[]
+}
+
+const { title, description, canonical, ogImage, ogType, article, jsonLd } = Astro.props
+---
+
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <SeoHead
+      title={title}
+      description={description}
+      canonical={canonical}
+      ogImage={ogImage}
+      ogType={ogType}
+      article={article}
+    />
+    {jsonLd && jsonLd.length > 0 && <JsonLd data={jsonLd} />}
+    <meta name="theme-color" content="#0a0c0e" />
+  </head>
+  <body class="bg-bg text-text font-ui antialiased">
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-bg-raised focus:px-4 focus:py-2 focus:text-text focus:outline-none focus:ring-2 focus:ring-accent"
+    >
+      Skip to content
+    </a>
+    <Header />
+    <main id="main" tabindex="-1">
+      <slot />
+    </main>
+    <Footer />
+    <script>
+      const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY
+      const posthogHost = import.meta.env.PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com"
+
+      function shouldOptOut(): boolean {
+        const dnt = navigator.doNotTrack
+        const gpc = (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl
+        return gpc === true || dnt === "1" || dnt === "yes"
+      }
+
+      if (posthogKey) {
+        import("posthog-js")
+          .then(({ default: posthog }) => {
+            posthog.init(posthogKey, {
+              api_host: posthogHost,
+              autocapture: false,
+              persistence: "localStorage",
+              loaded: (ph) => {
+                if (shouldOptOut()) {
+                  ph.opt_out_capturing()
+                }
+              },
+            })
+
+            window.posthog = posthog
+
+            const pageUrl = new URL(location.href)
+            const props = {
+              utm_source: pageUrl.searchParams.get("utm_source") || undefined,
+              utm_medium: pageUrl.searchParams.get("utm_medium") || undefined,
+              utm_campaign: pageUrl.searchParams.get("utm_campaign") || undefined,
+              referrer: document.referrer || undefined,
+            }
+
+            if (location.pathname === "/") {
+              posthog.capture("landing_view", props)
+            }
+
+            document.querySelectorAll("[data-cta-id]").forEach((el) => {
+              el.addEventListener("click", () => {
+                const ctaId = el.getAttribute("data-cta-id")
+                if (ctaId) posthog.capture("cta_click", { cta_id: ctaId })
+              })
+            })
+
+            document.querySelectorAll("details[data-question-id]").forEach((el) => {
+              el.addEventListener("toggle", () => {
+                const questionId = el.getAttribute("data-question-id")
+                if (questionId && (el as HTMLDetailsElement).open) {
+                  posthog.capture("faq_open", { question_id: questionId })
+                }
+              })
+            })
+          })
+          .catch(() => {
+            // Silently skip analytics if posthog-js fails to load.
+          })
+      }
+    </script>
+  </body>
+</html>

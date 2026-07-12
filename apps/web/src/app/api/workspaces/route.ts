@@ -4,6 +4,15 @@ import { getSession } from "@lyrashield/auth/server"
 import { CreateWorkspaceSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
 
+function isPrismaUniqueError(error: unknown): error is { code: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: unknown }).code === "P2002"
+  )
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getSession()
@@ -19,7 +28,10 @@ export async function POST(request: Request) {
       body = await request.json()
     } catch {
       return NextResponse.json(
-        { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
+        {
+          success: false,
+          error: { code: "INVALID_JSON", message: "Request body must be valid JSON" },
+        },
         { status: 400 }
       )
     }
@@ -41,7 +53,13 @@ export async function POST(request: Request) {
 
     if (!slug) {
       return NextResponse.json(
-        { success: false, error: { code: "INVALID_NAME", message: "Workspace name must contain at least one alphanumeric character" } },
+        {
+          success: false,
+          error: {
+            code: "INVALID_NAME",
+            message: "Workspace name must contain at least one alphanumeric character",
+          },
+        },
         { status: 400 }
       )
     }
@@ -87,17 +105,17 @@ export async function POST(request: Request) {
         },
       })
 
-      await tx.auditLog.create({
-        data: {
-          workspaceId: workspace.id,
-          actorUserId: session.userId,
-          action: "workspace.created",
-          resourceType: "workspace",
-          resourceId: workspace.id,
-        },
-      })
-
       return workspace
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: result.id,
+        actorUserId: session.userId,
+        action: "workspace.created",
+        resourceType: "workspace",
+        resourceId: result.id,
+      },
     })
 
     logger.info("Workspace created", { workspaceId: result.id, userId: session.userId })
@@ -113,6 +131,12 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
+    if (isPrismaUniqueError(error)) {
+      return NextResponse.json(
+        { success: false, error: { code: "SLUG_TAKEN", message: "Workspace slug already exists" } },
+        { status: 409 }
+      )
+    }
     logger.error("Failed to create workspace", { error: String(error) })
     return NextResponse.json(
       { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to create workspace" } },

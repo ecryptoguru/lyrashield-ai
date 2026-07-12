@@ -41,8 +41,10 @@ describe("getShareableReport", () => {
     const report = await getShareableReport("report-1", "ws-1")
 
     expect(report?.scanSummary).toBeNull()
-    expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "scan-other-workspace", workspaceId: "ws-1", deletedAt: null },
-    }))
+    expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "scan-other-workspace", workspaceId: "ws-1", deletedAt: null },
+      })
+    )
   })
 })

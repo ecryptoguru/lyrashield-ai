@@ -16,9 +16,7 @@ export interface FixProposalWithDetails extends FixProposal {
   pullRequests: PullRequest[]
 }
 
-export async function createFixProposal(
-  params: CreateFixProposalParams
-): Promise<FixProposal> {
+export async function createFixProposal(params: CreateFixProposalParams): Promise<FixProposal> {
   const proposal = await prisma.fixProposal.create({
     data: {
       findingId: params.findingId,
@@ -96,7 +94,14 @@ export async function listFixProposals(params: {
   return { items, nextCursor }
 }
 
-const VALID_PROPOSAL_STATUSES = ["draft", "approved", "rejected", "pr_opened", "pr_merged", "pr_closed"] as const
+const VALID_PROPOSAL_STATUSES = [
+  "draft",
+  "approved",
+  "rejected",
+  "pr_opened",
+  "pr_merged",
+  "pr_closed",
+] as const
 
 export async function updateFixProposalStatus(
   proposalId: string,

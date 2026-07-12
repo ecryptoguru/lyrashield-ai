@@ -2,7 +2,17 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Calendar, Plus, AlertCircle, Trash2, Power } from "lucide-react"
-import { Button, Badge, Card, EmptyState, Spinner, LoadMore, Input, Select, FormField } from "@lyrashield/ui"
+import {
+  Button,
+  Badge,
+  Card,
+  EmptyState,
+  Spinner,
+  LoadMore,
+  Input,
+  Select,
+  FormField,
+} from "@lyrashield/ui"
 import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 
 interface ScheduleItem {
@@ -79,7 +89,9 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
         // targets optional
       })
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [workspaceId])
 
   const handleCreate = async () => {
@@ -134,7 +146,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
         <Spinner className="h-6 w-6" />
-        <p className="text-sm text-muted-foreground">Loading schedules...</p>
+        <p className="text-muted-foreground text-sm">Loading schedules...</p>
       </div>
     )
   }
@@ -144,10 +156,12 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Schedules</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Set up recurring scans to monitor your targets</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Set up recurring scans to monitor your targets
+          </p>
         </div>
         <Button size="sm" onClick={() => setShowCreateForm(!showCreateForm)}>
-          <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
+          <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
           New Schedule
         </Button>
       </div>
@@ -165,12 +179,16 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                 >
                   <option value="">Select a target</option>
                   {targets.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.type})
+                    </option>
                   ))}
                 </Select>
               </FormField>
             ) : (
-              <p className="text-sm text-muted-foreground">No targets available. Create a target first.</p>
+              <p className="text-muted-foreground text-sm">
+                No targets available. Create a target first.
+              </p>
             )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label="Cron Expression" htmlFor="cron-expr">
@@ -182,14 +200,12 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                   value={cron}
                   onChange={(e) => setCron(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground mt-1">UTC. Use weekly like 0 0 * * 0 or daily like 30 8 * * *</p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  UTC. Use weekly like 0 0 * * 0 or daily like 30 8 * * *
+                </p>
               </FormField>
               <FormField label="Scan Goal" htmlFor="scan-goal">
-                <Select
-                  id="scan-goal"
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
-                >
+                <Select id="scan-goal" value={goal} onChange={(e) => setGoal(e.target.value)}>
                   <option value="WEEKLY_MONITOR">Weekly Monitor</option>
                   <option value="TEST_APP">Test App</option>
                   <option value="LAUNCH_REVIEW">Launch Review</option>
@@ -200,11 +216,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
               </FormField>
             </div>
             <FormField label="Mode" htmlFor="scan-mode">
-              <Select
-                id="scan-mode"
-                value={mode}
-                onChange={(e) => setMode(e.target.value)}
-              >
+              <Select id="scan-mode" value={mode} onChange={(e) => setMode(e.target.value)}>
                 <option value="SAFE">Safe</option>
                 <option value="QUICK">Quick</option>
                 <option value="STANDARD">Standard</option>
@@ -212,7 +224,11 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
               </Select>
             </FormField>
             <div className="flex gap-2">
-              <Button size="sm" disabled={creating || !selectedTargetId} onClick={() => void handleCreate()}>
+              <Button
+                size="sm"
+                disabled={creating || !selectedTargetId}
+                onClick={() => void handleCreate()}
+              >
                 {creating ? <Spinner /> : "Create"}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setShowCreateForm(false)}>
@@ -224,11 +240,19 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       )}
 
       {error && (
-        <Card className="mb-4 p-4 border-destructive/50">
-          <div className="flex items-center gap-2 text-sm text-destructive">
+        <Card className="border-destructive/50 mb-4 p-4">
+          <div className="text-destructive flex items-center gap-2 text-sm" role="alert">
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { setError(null); void loadSchedules() }}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => {
+                setError(null)
+                void loadSchedules()
+              }}
+            >
               Retry
             </Button>
           </div>
@@ -244,19 +268,22 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       ) : (
         <div className="space-y-3">
           {schedules.map((schedule) => (
-            <Card key={schedule.id} className="p-4 transition-shadow duration-200 hover:shadow-card-hover">
+            <Card
+              key={schedule.id}
+              className="hover:shadow-card-hover p-4 transition-shadow duration-200"
+            >
               <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-medium truncate">{schedule.target.name}</h3>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center gap-2">
+                    <h3 className="truncate font-medium">{schedule.target.name}</h3>
                     <Badge variant="info">{schedule.goal}</Badge>
                     <Badge variant="muted">{schedule.mode}</Badge>
                     <Badge variant={schedule.enabled ? "success" : "muted"}>
                       {schedule.enabled ? "active" : "disabled"}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground font-mono">{schedule.cron}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-muted-foreground font-mono text-sm">{schedule.cron}</p>
+                  <p className="text-muted-foreground mt-1 text-xs">
                     Created {new Date(schedule.createdAt).toLocaleDateString()}
                     {schedule.lastRunAt && (
                       <> · Last run {new Date(schedule.lastRunAt).toLocaleString()}</>
@@ -291,9 +318,10 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated<ScheduleItem>(
-                `/api/schedules`, { workspaceId, cursor }
-              )
+              const res = await apiGetPaginated<ScheduleItem>(`/api/schedules`, {
+                workspaceId,
+                cursor,
+              })
               return { items: res.items as unknown[], nextCursor: res.nextCursor }
             }}
             onItems={(items) => setSchedules((prev) => [...prev, ...(items as ScheduleItem[])])}

@@ -5,3 +5,9 @@ dist
 coverage
 pnpm-lock.yaml
 prisma/migrations
+.devin
+.windsurf
+apps/marketing/.astro
+apps/marketing/.wrangler
+apps/marketing/worker-configuration.d.ts
+apps/web/next-env.d.ts

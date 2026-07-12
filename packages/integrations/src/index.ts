@@ -23,3 +23,6 @@ export {
   type NotificationPayload,
   type NotificationChannelSender,
 } from "./notifications"
+
+export { getRedis, closeRedis } from "./redis"
+export { getScanQueue, getScanQueueEvents, enqueueScan } from "./queue"

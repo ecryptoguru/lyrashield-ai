@@ -9,7 +9,13 @@ import {
 import { logger } from "@lyrashield/logger"
 import { enqueueScan } from "./queue"
 
-const ACTIVE_SCAN_STATUSES = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"] as const
+const ACTIVE_SCAN_STATUSES = [
+  "QUEUED",
+  "PREFLIGHT",
+  "RUNNING",
+  "VERIFYING",
+  "REQUIRES_APPROVAL",
+] as const
 
 export async function processDueSchedules(now = new Date()): Promise<number> {
   const schedules = await getDueSchedules(now)
@@ -31,7 +37,7 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
         continue
       }
 
-      if (!await claimDueSchedule(schedule.id, now, nextRunAt)) {
+      if (!(await claimDueSchedule(schedule.id, now, nextRunAt))) {
         continue
       }
 

@@ -1,0 +1,55 @@
+---
+import { getCollection, render } from "astro:content"
+import BlogPost from "@layouts/BlogPost.astro"
+
+export async function getStaticPaths() {
+  const posts = await getCollection("blog")
+  const includeDrafts = import.meta.env.DEV
+
+  return posts
+    .filter((post) => includeDrafts || !post.data.draft)
+    .map((post) => ({
+      params: { slug: post.id },
+      props: { post },
+    }))
+}
+
+const { post } = Astro.props
+const { Content, headings = [] } = await render(post)
+
+// Reading time: computed from the raw body word count (Astro 7 runs Markdown/MDX
+// through the native Sätteri pipeline, not remark — no remark-reading-time plugin
+// is installed.
+const wordCount = post.body ? post.body.trim().split(/\s+/).filter(Boolean).length : 0
+const readingMinutes = Math.max(1, Math.round(wordCount / 200))
+
+// Related posts: tag-overlap scoring, ties broken by recency, top 3.
+const allPosts = await getCollection("blog", (entry) => !entry.data.draft)
+const relatedPosts = allPosts
+  .filter((p) => p.id !== post.id)
+  .map((p) => ({
+    entry: p,
+    overlap: p.data.tags.filter((tag) => post.data.tags.includes(tag)).length,
+  }))
+  .filter((p) => p.overlap > 0)
+  .sort((a, b) => b.overlap - a.overlap || b.entry.data.pubDate.getTime() - a.entry.data.pubDate.getTime())
+  .slice(0, 3)
+  .map((p) => p.entry)
+---
+
+<BlogPost
+  title={post.data.title}
+  description={post.data.description}
+  pubDate={post.data.pubDate}
+  updatedDate={post.data.updatedDate}
+  authorId={post.data.author.id}
+  tags={post.data.tags}
+  draft={post.data.draft}
+  canonical={post.data.canonical}
+  faq={post.data.faq}
+  headings={headings}
+  readingMinutes={readingMinutes}
+  relatedPosts={relatedPosts}
+>
+  <Content />
+</BlogPost>

@@ -70,7 +70,9 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
         if (cancelled) return
         setLoading(false)
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [workspaceId])
 
   const handleMarkRead = async (notificationId: string) => {
@@ -106,7 +108,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
         <Spinner className="h-6 w-6" />
-        <p className="text-sm text-muted-foreground">Loading notifications...</p>
+        <p className="text-muted-foreground text-sm">Loading notifications...</p>
       </div>
     )
   }
@@ -116,22 +118,32 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Scan alerts, finding warnings, and fix PR updates</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Scan alerts, finding warnings, and fix PR updates
+          </p>
         </div>
         {notifications.some((n) => n.status !== "read") && (
           <Button size="sm" variant="ghost" onClick={() => void handleMarkAllRead()}>
-            <CheckCircle2 className="h-4 w-4 mr-1" aria-hidden="true" />
+            <CheckCircle2 className="mr-1 h-4 w-4" aria-hidden="true" />
             Mark all as read
           </Button>
         )}
       </div>
 
       {error && (
-        <Card className="mb-4 p-4 border-destructive/50">
-          <div className="flex items-center gap-2 text-sm text-destructive">
+        <Card className="border-destructive/50 mb-4 p-4">
+          <div className="text-destructive flex items-center gap-2 text-sm" role="alert">
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { setError(null); void loadNotifications() }}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => {
+                setError(null)
+                void loadNotifications()
+              }}
+            >
               Retry
             </Button>
           </div>
@@ -150,23 +162,24 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
             const Icon = CHANNEL_ICONS[notification.channel] ?? Bell
             const badgeVariant = TYPE_COLORS[notification.type] ?? "muted"
             return (
-              <Card key={notification.id} className="p-4 transition-shadow duration-200 hover:shadow-card-hover">
+              <Card
+                key={notification.id}
+                className="hover:shadow-card-hover p-4 transition-shadow duration-200"
+              >
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 shrink-0">
-                    <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+                    <Icon className="text-muted-foreground h-5 w-5" aria-hidden="true" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-medium truncate">{notification.title}</h3>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center gap-2">
+                      <h3 className="truncate font-medium">{notification.title}</h3>
                       <Badge variant={badgeVariant}>{notification.type}</Badge>
-                      {notification.status === "read" && (
-                        <Badge variant="muted">read</Badge>
-                      )}
+                      {notification.status === "read" && <Badge variant="muted">read</Badge>}
                     </div>
-                    <p className="text-sm text-muted-foreground whitespace-pre-line">
+                    <p className="text-muted-foreground text-sm whitespace-pre-line">
                       {notification.body}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-2">
+                    <p className="text-muted-foreground mt-2 text-xs">
                       {new Date(notification.createdAt).toLocaleString()}
                       {notification.sentAt && (
                         <> · Sent {new Date(notification.sentAt).toLocaleString()}</>
@@ -177,6 +190,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
                     <Button
                       size="sm"
                       variant="ghost"
+                      aria-label="Mark as read"
                       onClick={() => void handleMarkRead(notification.id)}
                     >
                       <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
@@ -190,12 +204,15 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated<NotificationItem>(
-                `/api/notifications`, { workspaceId, cursor }
-              )
+              const res = await apiGetPaginated<NotificationItem>(`/api/notifications`, {
+                workspaceId,
+                cursor,
+              })
               return { items: res.items as unknown[], nextCursor: res.nextCursor }
             }}
-            onItems={(items) => setNotifications((prev) => [...prev, ...(items as NotificationItem[])])}
+            onItems={(items) =>
+              setNotifications((prev) => [...prev, ...(items as NotificationItem[])])
+            }
             onNextCursor={setNextCursor}
           />
         </div>

@@ -62,7 +62,7 @@ async function handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> 
 
       case "tools/call": {
         const toolName = params?.name as string
-        const args = (params?.args as Record<string, unknown>) ?? {}
+        const args = (params?.arguments as Record<string, unknown>) ?? {}
         const result = await server.callTool(toolName, args)
         return {
           jsonrpc: "2.0",
@@ -86,7 +86,10 @@ async function handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> 
         }
     }
   } catch (err) {
-    logger.error("MCP stdio handler error", { method, error: err instanceof Error ? err.message : String(err) })
+    logger.error("MCP stdio handler error", {
+      method,
+      error: err instanceof Error ? err.message : String(err),
+    })
     return {
       jsonrpc: "2.0",
       id,

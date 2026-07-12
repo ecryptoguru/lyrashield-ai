@@ -8,7 +8,16 @@ import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { explainFinding } from "@/lib/plain-language"
 import { z } from "zod"
 
-const VALID_STATUSES = ["OPEN", "FIX_READY", "PR_OPENED", "FIXED", "FIXED_PENDING_RETEST", "ACCEPTED_RISK", "FALSE_POSITIVE", "DUPLICATE"] as const
+const VALID_STATUSES = [
+  "OPEN",
+  "FIX_READY",
+  "PR_OPENED",
+  "FIXED",
+  "FIXED_PENDING_RETEST",
+  "ACCEPTED_RISK",
+  "FALSE_POSITIVE",
+  "DUPLICATE",
+] as const
 
 const PatchFindingSchema = z.object({
   workspaceId: z.string().min(1),
@@ -16,10 +25,7 @@ const PatchFindingSchema = z.object({
   status: z.enum(VALID_STATUSES).optional(),
 })
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -55,10 +61,7 @@ export async function GET(
   }
 }
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {

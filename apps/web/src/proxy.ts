@@ -23,18 +23,15 @@ function buildCspHeader(nonce: string): string {
   return directives.join("; ")
 }
 
-// IMPORTANT: This function trusts the x-forwarded-for header. Deploy behind a
-// trusted reverse proxy (Vercel, Cloudflare, nginx) that strips client-provided
-// x-forwarded-for and sets it to the real client IP. Without a trusted proxy,
-// an attacker can spoof their IP to bypass rate limits.
-function getClientIP(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for")
-  if (forwarded) {
-    return forwarded.split(",")[0]!.trim()
-  }
-  const realIP = request.headers.get("x-real-ip")
-  if (realIP) return realIP
-  return "unknown"
+export function getClientIP(request: NextRequest): string {
+  const trustedHeader = process.env.TRUSTED_PROXY_IP_HEADER?.toLowerCase()
+  if (!trustedHeader) return "unknown"
+
+  const value = request.headers.get(trustedHeader)
+  if (!value) return "unknown"
+
+  const parts = value.split(",")
+  return parts[parts.length - 1]!.trim() || "unknown"
 }
 
 export async function proxy(request: NextRequest) {
@@ -59,7 +56,10 @@ export async function proxy(request: NextRequest) {
     const result = await checkAuthRateLimit(ip)
     if (result.limited) {
       const response = NextResponse.json(
-        { success: false, error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." } },
+        {
+          success: false,
+          error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." },
+        },
         {
           status: 429,
           headers: {
@@ -82,7 +82,10 @@ export async function proxy(request: NextRequest) {
   const result = await checkApiRateLimit(ip)
   if (result.limited) {
     const response = NextResponse.json(
-      { success: false, error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." } },
+      {
+        success: false,
+        error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." },
+      },
       {
         status: 429,
         headers: {

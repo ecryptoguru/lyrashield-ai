@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
-import { PERMISSIONS } from "@lyrashield/auth"
+import { PERMISSIONS, canGrantRole } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -11,7 +11,17 @@ const InviteMemberSchema = z.object({
   workspaceId: z.string().min(1),
   email: z.email(),
   role: z
-    .enum(["ADMIN", "MEMBER", "VIEWER", "SECURITY_ADMIN", "APPSEC_MANAGER", "DEVELOPER", "AUDITOR", "BILLING_ADMIN", "EXTERNAL_PENTESTER"])
+    .enum([
+      "ADMIN",
+      "MEMBER",
+      "VIEWER",
+      "SECURITY_ADMIN",
+      "APPSEC_MANAGER",
+      "DEVELOPER",
+      "AUDITOR",
+      "BILLING_ADMIN",
+      "EXTERNAL_PENTESTER",
+    ])
     .default("MEMBER"),
 })
 
@@ -21,7 +31,10 @@ export async function POST(request: Request) {
     body = await request.json()
   } catch {
     return NextResponse.json(
-      { success: false, error: { code: "INVALID_JSON", message: "Request body must be valid JSON" } },
+      {
+        success: false,
+        error: { code: "INVALID_JSON", message: "Request body must be valid JSON" },
+      },
       { status: 400 }
     )
   }
@@ -38,7 +51,23 @@ export async function POST(request: Request) {
 
   try {
     // Enforces membership + the `member:invite` permission (OWNER and ADMIN only).
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.member.invite)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.member.invite)
+
+    // Role-ceiling: the inviter may only grant roles below their own rank (OWNER
+    // may grant anything). Without this, an ADMIN could invite a peer ADMIN or
+    // otherwise escalate. (S6)
+    if (!canGrantRole(workspace.role, role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "You cannot grant a role equal to or higher than your own",
+          },
+        },
+        { status: 403 }
+      )
+    }
 
     const [existingMember, existingInvitation] = await Promise.all([
       prisma.workspaceMember.findFirst({
@@ -51,7 +80,10 @@ export async function POST(request: Request) {
 
     if (existingMember || existingInvitation) {
       return NextResponse.json(
-        { success: false, error: { code: "ALREADY_INVITED", message: "This email has already been invited" } },
+        {
+          success: false,
+          error: { code: "ALREADY_INVITED", message: "This email has already been invited" },
+        },
         { status: 409 }
       )
     }

@@ -52,7 +52,11 @@ function checkInMemory(
 type Duration = `${number} ${"ms" | "s" | "m" | "h" | "d"}`
 
 let ratelimit: {
-  slidingWindow: (limit: number, window: Duration, identifier: string) => Promise<{
+  slidingWindow: (
+    limit: number,
+    window: Duration,
+    identifier: string
+  ) => Promise<{
     success: boolean
     remaining: number
     reset: number

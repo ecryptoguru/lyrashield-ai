@@ -24,7 +24,9 @@ describe("Prisma Extension — Query Guards (soft-delete)", () => {
   })
 
   it("preserves existing where conditions", () => {
-    expect(applyQueryGuards("Finding", "findMany", { where: { severity: "HIGH" } }, null).where).toEqual({
+    expect(
+      applyQueryGuards("Finding", "findMany", { where: { severity: "HIGH" } }, null).where
+    ).toEqual({
       severity: "HIGH",
       deletedAt: null,
     })
@@ -69,12 +71,15 @@ describe("Prisma Extension — Query Guards (workspace scoping)", () => {
 
   it("does NOT override an existing workspaceId in where", () => {
     expect(
-      applyQueryGuards("Project", "findMany", { where: { workspaceId: "ws-other" } }, "ws-123").where
+      applyQueryGuards("Project", "findMany", { where: { workspaceId: "ws-other" } }, "ws-123")
+        .where
     ).toEqual({ workspaceId: "ws-other", deletedAt: null })
   })
 
   it("scopes AuditLog by workspaceId but does NOT inject deletedAt (no column)", () => {
-    expect(applyQueryGuards("AuditLog", "findMany", {}, "ws-456").where).toEqual({ workspaceId: "ws-456" })
+    expect(applyQueryGuards("AuditLog", "findMany", {}, "ws-456").where).toEqual({
+      workspaceId: "ws-456",
+    })
   })
 
   // Regression: these models have NO workspaceId column. Injecting workspaceId
@@ -82,17 +87,63 @@ describe("Prisma Extension — Query Guards (workspace scoping)", () => {
   it.each(["ScanEvent", "Evidence", "FixProposal", "PullRequest", "Ticket"])(
     "does NOT inject workspaceId for %s (no workspaceId column)",
     (model) => {
-      const where = (applyQueryGuards(model, "findMany", {}, "ws-123").where ?? {}) as Record<string, unknown>
+      const where = (applyQueryGuards(model, "findMany", {}, "ws-123").where ?? {}) as Record<
+        string,
+        unknown
+      >
       expect(where).not.toHaveProperty("workspaceId")
     }
   )
 
   it("does NOT auto-scope WorkspaceMember (queried cross-workspace)", () => {
-    const where = (applyQueryGuards("WorkspaceMember", "findMany", {}, "ws-123").where ?? {}) as Record<
+    const where = (applyQueryGuards("WorkspaceMember", "findMany", {}, "ws-123").where ??
+      {}) as Record<string, unknown>
+    expect(where).not.toHaveProperty("workspaceId")
+  })
+})
+
+describe("Prisma Extension — Query Guards (bulk-write scoping, S7)", () => {
+  it("injects workspaceId into updateMany on a workspace-scoped model", () => {
+    const where = applyQueryGuards(
+      "Finding",
+      "updateMany",
+      { where: { status: "OPEN" } },
+      "ws-123"
+    ).where
+    expect(where).toEqual({ status: "OPEN", workspaceId: "ws-123" })
+  })
+
+  it("injects workspaceId into deleteMany on a workspace-scoped model", () => {
+    const where = applyQueryGuards("Report", "deleteMany", {}, "ws-123").where
+    expect(where).toEqual({ workspaceId: "ws-123" })
+  })
+
+  it("does NOT inject deletedAt on bulk writes (writes are not soft-delete reads)", () => {
+    const where = applyQueryGuards("Finding", "updateMany", {}, "ws-123").where as Record<
       string,
       unknown
     >
-    expect(where).not.toHaveProperty("workspaceId")
+    expect(where).not.toHaveProperty("deletedAt")
+    expect(where).toEqual({ workspaceId: "ws-123" })
+  })
+
+  it("never overrides a caller-supplied workspaceId on bulk writes", () => {
+    const where = applyQueryGuards(
+      "Finding",
+      "deleteMany",
+      { where: { workspaceId: "ws-other" } },
+      "ws-123"
+    ).where
+    expect(where).toEqual({ workspaceId: "ws-other" })
+  })
+
+  it("leaves single update/delete unscoped (handled by route-level checks)", () => {
+    expect(applyQueryGuards("Finding", "update", { where: { id: "x" } }, "ws-123")).toEqual({
+      where: { id: "x" },
+    })
+    expect(applyQueryGuards("Finding", "delete", { where: { id: "x" } }, "ws-123")).toEqual({
+      where: { id: "x" },
+    })
   })
 })
 
@@ -127,7 +178,14 @@ describe("Prisma Extension — request-scoped context isolation", () => {
 describe("Prisma Extension — model set correctness (matches schema columns)", () => {
   it("soft-delete set contains only models with a deletedAt column (19)", () => {
     expect(SOFT_DELETE_MODELS.size).toBe(19)
-    for (const m of ["WorkspaceMember", "CredentialSet", "AuditLog", "Retest", "Evidence", "User"]) {
+    for (const m of [
+      "WorkspaceMember",
+      "CredentialSet",
+      "AuditLog",
+      "Retest",
+      "Evidence",
+      "User",
+    ]) {
       expect(SOFT_DELETE_MODELS.has(m)).toBe(false)
     }
     expect(SOFT_DELETE_MODELS.has("ScanEvent")).toBe(true)
@@ -135,7 +193,16 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
 
   it("workspace-scoped set contains only auto-scopable models with workspaceId (18)", () => {
     expect(WORKSPACE_SCOPED_MODELS.size).toBe(18)
-    for (const m of ["ScanEvent", "Evidence", "FixProposal", "PullRequest", "Ticket", "Workspace", "WorkspaceMember", "OnboardingState"]) {
+    for (const m of [
+      "ScanEvent",
+      "Evidence",
+      "FixProposal",
+      "PullRequest",
+      "Ticket",
+      "Workspace",
+      "WorkspaceMember",
+      "OnboardingState",
+    ]) {
       expect(WORKSPACE_SCOPED_MODELS.has(m)).toBe(false)
     }
     expect(WORKSPACE_SCOPED_MODELS.has("AuditLog")).toBe(true)

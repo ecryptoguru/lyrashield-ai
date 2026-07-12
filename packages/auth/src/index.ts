@@ -1,11 +1,14 @@
 // Client-safe exports only — no server-only deps (next/headers, prisma, etc.)
 export { authClient, signIn, signOut, signUp, useSession, getClientSession } from "./client"
 export type { AuthClient } from "./client"
+export { getAuthErrorMessage, getAuthErrorCode, isEmailNotVerifiedError } from "./client"
+export type { AuthClientError } from "./client"
 
 export {
   PERMISSIONS,
   hasPermission,
   hasMinimumRole,
+  canGrantRole,
   getRolePermissions,
   isWorkspaceAdmin,
   isWorkspaceOwner,

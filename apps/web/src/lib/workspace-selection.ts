@@ -1,8 +1,11 @@
 export function selectActiveWorkspaceId(
   memberships: ReadonlyArray<{ workspaceId: string }>,
-  requestedWorkspaceId?: string,
+  requestedWorkspaceId?: string
 ): string | null {
-  if (requestedWorkspaceId && memberships.some((membership) => membership.workspaceId === requestedWorkspaceId)) {
+  if (
+    requestedWorkspaceId &&
+    memberships.some((membership) => membership.workspaceId === requestedWorkspaceId)
+  ) {
     return requestedWorkspaceId
   }
 

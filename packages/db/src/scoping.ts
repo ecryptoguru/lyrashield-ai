@@ -77,6 +77,15 @@ export const READ_OPS = new Set<string>([
   "groupBy",
 ])
 
+// Bulk-write ops that accept an arbitrary `where`. A forgotten `workspaceId`
+// here is catastrophic (a cross-tenant mass update/delete), so — when a
+// workspace context is bound — we inject `workspaceId` as a defense-in-depth
+// backstop. Single-row `update`/`delete` are intentionally NOT in this set:
+// they target one row by unique id and routes already scope them via a prior
+// workspace-scoped read; leaving them out avoids surprising unique-where edge
+// cases. (S7)
+export const WRITE_SCOPE_OPS = new Set<string>(["updateMany", "deleteMany"])
+
 const workspaceStore = new AsyncLocalStorage<{ workspaceId: string | null }>()
 
 /**
@@ -109,9 +118,13 @@ export function getWorkspaceContext(): string | null {
 
 /**
  * Pure guard: given the current workspace context, returns the (possibly
- * augmented) query args. Injects `deletedAt: null` for soft-delete models and
- * `workspaceId` for workspace-scoped models on read operations only, never
- * overriding a `workspaceId` the caller already supplied.
+ * augmented) query args.
+ *  - On READ ops: injects `deletedAt: null` (soft-delete models) and
+ *    `workspaceId` (workspace-scoped models).
+ *  - On BULK-WRITE ops (updateMany/deleteMany): injects `workspaceId` only —
+ *    a defense-in-depth backstop against a forgotten tenant filter on a mass
+ *    mutation. (S7)
+ * Never overrides a `workspaceId` the caller already supplied.
  */
 export function applyQueryGuards(
   model: string | undefined,
@@ -120,12 +133,14 @@ export function applyQueryGuards(
   workspaceId: string | null
 ): Record<string, unknown> {
   if (!model) return args
-  if (!READ_OPS.has(operation)) return args
+  const isRead = READ_OPS.has(operation)
+  const isBulkWrite = WRITE_SCOPE_OPS.has(operation)
+  if (!isRead && !isBulkWrite) return args
 
   const where = (args.where as Record<string, unknown> | undefined) ?? {}
   const additions: Record<string, unknown> = {}
 
-  if (SOFT_DELETE_MODELS.has(model)) {
+  if (isRead && SOFT_DELETE_MODELS.has(model)) {
     additions.deletedAt = null
   }
 

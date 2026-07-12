@@ -76,8 +76,11 @@ services:
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-lyrashield}:${POSTGRES_PASSWORD:-lyrashield}@postgres:5432/${POSTGRES_DB:-lyrashield}?schema=public"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required — set it in .env or your environment}"
-      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3000}"
-      NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
+      # Docker Compose exposes the web app on host port 3000; keep these
+      # values aligned with the container port mapping below.
+      BETTER_AUTH_URL: "http://localhost:3000"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      PORT: "3000"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-lyrashield-dev-redis}@redis:6379"
       NODE_ENV: "production"
       # Next standalone otherwise inherits Docker's container-ID hostname and
@@ -98,6 +101,11 @@ services:
       GITHUB_WEBHOOK_SECRET: "${GITHUB_WEBHOOK_SECRET:-}"
     ports:
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   worker:
     build:
@@ -128,9 +136,20 @@ services:
       # Scan engine
       LYRASHIELD_LLM: "${LYRASHIELD_LLM:-}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_API_BASE: "${LLM_API_BASE:-}"
+      LLM_API_VERSION: "${LLM_API_VERSION:-}"
       LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-ghcr.io/usestrix/strix-sandbox:1.0.0}"
       LYRASHIELD_TELEMETRY: "${LYRASHIELD_TELEMETRY:-0}"
       LYRASHIELD_ENGINE_PATH: "${LYRASHIELD_ENGINE_PATH:-lyrashield}"
+      # Azure OpenAI (optional)
+      AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY:-}"
+      AZURE_OPENAI_ENDPOINT: "${AZURE_OPENAI_ENDPOINT:-}"
+      AZURE_OPENAI_API_BASE: "${AZURE_OPENAI_API_BASE:-}"
+      # Azure AI project / serverless (optional)
+      AZURE_AI_API_KEY: "${AZURE_AI_API_KEY:-}"
+      AZURE_AI_API_BASE: "${AZURE_AI_API_BASE:-}"
+      AZURE_API_VERSION: "${AZURE_API_VERSION:-}"
+      AZURE_OPENAI_API_VERSION: "${AZURE_OPENAI_API_VERSION:-}"
     volumes:
       # DEV ONLY: the engine launches its isolated sandbox through Docker.
       - /var/run/docker.sock:/var/run/docker.sock

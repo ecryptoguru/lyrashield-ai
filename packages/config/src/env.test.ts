@@ -94,7 +94,7 @@ describe("Env Validation Schema", () => {
       const result = envSchema.safeParse(rest)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.issues.some(i => i.path.includes("DATABASE_URL"))).toBe(true)
+        expect(result.error.issues.some((i) => i.path.includes("DATABASE_URL"))).toBe(true)
       }
     })
 
@@ -103,7 +103,7 @@ describe("Env Validation Schema", () => {
       const result = envSchema.safeParse(rest)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.issues.some(i => i.path.includes("BETTER_AUTH_SECRET"))).toBe(true)
+        expect(result.error.issues.some((i) => i.path.includes("BETTER_AUTH_SECRET"))).toBe(true)
       }
     })
 
@@ -130,7 +130,7 @@ describe("Env Validation Schema", () => {
       const result = envSchema.safeParse({ ...validEnv, BETTER_AUTH_SECRET: "short" })
       expect(result.success).toBe(false)
       if (!result.success) {
-        const issue = result.error.issues.find(i => i.path.includes("BETTER_AUTH_SECRET"))
+        const issue = result.error.issues.find((i) => i.path.includes("BETTER_AUTH_SECRET"))
         expect(issue?.message).toContain("32")
       }
     })

@@ -88,8 +88,8 @@ export function Sidebar({
   const sidebarContent = (
     <>
       <div className="flex h-16 items-center gap-2.5 border-b px-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
-          <ShieldCheck className="h-5 w-5 text-primary-foreground" aria-hidden="true" />
+        <div className="gradient-primary flex h-8 w-8 items-center justify-center rounded-lg">
+          <ShieldCheck className="text-primary-foreground h-5 w-5" aria-hidden="true" />
         </div>
         <span className="text-lg font-bold tracking-tight">LyraShield</span>
       </div>
@@ -119,7 +119,10 @@ export function Sidebar({
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               }`}
             >
-              <item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} aria-hidden="true" />
+              <item.icon
+                className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`}
+                aria-hidden="true"
+              />
               {item.label}
             </Link>
           )
@@ -128,19 +131,19 @@ export function Sidebar({
 
       <div className="border-t p-3">
         <div className="mb-2 flex items-center gap-3 rounded-lg px-3 py-2">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+          <div className="bg-primary/10 text-primary flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
             {userName.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{userName}</p>
-            <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
+            <p className="text-muted-foreground truncate text-xs">{userEmail}</p>
           </div>
         </div>
         <Button
           onClick={handleSignOut}
           aria-label="Sign out"
           variant="ghost"
-          className="w-full justify-start gap-3 px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
+          className="text-sidebar-foreground hover:bg-sidebar-accent w-full justify-start gap-3 px-3 py-2 text-sm font-medium"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" />
           Sign out
@@ -155,7 +158,7 @@ export function Sidebar({
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Open menu"
-          className="fixed left-4 top-4 z-30 rounded-lg border bg-card p-2 shadow-md md:hidden"
+          className="bg-card fixed top-4 left-4 z-30 rounded-lg border p-2 shadow-md md:hidden"
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
@@ -170,14 +173,14 @@ export function Sidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-sidebar transition-transform duration-300 md:relative md:translate-x-0 ${
+        className={`bg-sidebar fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r transition-transform duration-300 md:relative md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <button
           onClick={() => setMobileOpen(false)}
           aria-label="Close menu"
-          className="absolute right-3 top-5 rounded-lg p-1 hover:bg-sidebar-accent md:hidden"
+          className="hover:bg-sidebar-accent absolute top-5 right-3 rounded-lg p-1 md:hidden"
         >
           <X className="h-5 w-5" aria-hidden="true" />
         </button>

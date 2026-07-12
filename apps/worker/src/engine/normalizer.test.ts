@@ -74,7 +74,6 @@ describe("assessFalsePositiveRisk", () => {
   it("returns low risk for findings with PoC evidence on real targets", () => {
     expect(assessFalsePositiveRisk(makeVuln({ poc_description: "Steps to exploit" }))).toBe("low")
   })
-
 })
 
 describe("enrichCwe", () => {
@@ -103,22 +102,36 @@ describe("calculateCvssFromSeverity", () => {
 
 describe("calculateConfidenceScore", () => {
   it("returns 95 for PoC script + description", () => {
-    expect(calculateConfidenceScore(makeVuln({
-      poc_script_code: "curl http://example.com",
-      poc_description: "Run the curl command",
-    }))).toBe(95)
+    expect(
+      calculateConfidenceScore(
+        makeVuln({
+          poc_script_code: "curl http://example.com",
+          poc_description: "Run the curl command",
+        })
+      )
+    ).toBe(95)
   })
 
   it("returns 85 for PoC description only", () => {
-    expect(calculateConfidenceScore(makeVuln({
-      poc_description: "Steps to exploit",
-    }))).toBe(85)
+    expect(
+      calculateConfidenceScore(
+        makeVuln({
+          poc_description: "Steps to exploit",
+        })
+      )
+    ).toBe(85)
   })
 
   it("returns 90 for code location with fix diff", () => {
-    expect(calculateConfidenceScore(makeVuln({
-      code_locations: [{ file: "src/app.ts", start_line: 10, fix_before: "bad", fix_after: "good" }],
-    }))).toBe(90)
+    expect(
+      calculateConfidenceScore(
+        makeVuln({
+          code_locations: [
+            { file: "src/app.ts", start_line: 10, fix_before: "bad", fix_after: "good" },
+          ],
+        })
+      )
+    ).toBe(90)
   })
 
   it("returns 40 for CVE/CWE only", () => {
@@ -178,8 +191,20 @@ describe("normalizeFindings", () => {
 describe("filterFalsePositives", () => {
   it("filters out high false-positive risk findings", () => {
     const vulns = [
-      makeVuln({ id: "v1", title: "XSS", target: "http://localhost:3000", endpoint: "/search", cwe: "CWE-79" }),
-      makeVuln({ id: "v2", title: "SQLi in production", poc_description: "Steps", endpoint: "/login", cwe: "CWE-89" }),
+      makeVuln({
+        id: "v1",
+        title: "XSS",
+        target: "http://localhost:3000",
+        endpoint: "/search",
+        cwe: "CWE-79",
+      }),
+      makeVuln({
+        id: "v2",
+        title: "SQLi in production",
+        poc_description: "Steps",
+        endpoint: "/login",
+        cwe: "CWE-89",
+      }),
     ]
     const normalized = normalizeFindings(vulns, "target-1", generateDedupeKey)
     const filtered = filterFalsePositives(normalized)
@@ -191,7 +216,13 @@ describe("filterFalsePositives", () => {
 describe("getFindingStats", () => {
   it("calculates stats correctly", () => {
     const vulns = [
-      makeVuln({ id: "v1", severity: "critical", poc_description: "PoC", endpoint: "/admin", cwe: "CWE-89" }),
+      makeVuln({
+        id: "v1",
+        severity: "critical",
+        poc_description: "PoC",
+        endpoint: "/admin",
+        cwe: "CWE-89",
+      }),
       makeVuln({ id: "v2", severity: "high", cwe: "CWE-79", endpoint: "/search" }),
       makeVuln({ id: "v3", severity: "low", endpoint: "/page" }),
     ]
@@ -210,15 +241,55 @@ describe("golden-file: full normalization pipeline", () => {
   it("normalizes, filters, and stats a realistic set of engine findings", () => {
     const input: EngineVulnerability[] = [
       // Critical with PoC — should survive filtering, high confidence
-      { id: "v1", title: "SQL Injection in login", severity: "critical", timestamp: "now", cwe: "CWE-89", endpoint: "/login", poc_description: "Inject ' OR 1=1 --", description: "SQLi via login form" },
+      {
+        id: "v1",
+        title: "SQL Injection in login",
+        severity: "critical",
+        timestamp: "now",
+        cwe: "CWE-89",
+        endpoint: "/login",
+        poc_description: "Inject ' OR 1=1 --",
+        description: "SQLi via login form",
+      },
       // High without PoC — should survive, medium confidence
-      { id: "v2", title: "XSS in search", severity: "high", timestamp: "now", cwe: "CWE-79", endpoint: "/search", description: "Reflected XSS" },
+      {
+        id: "v2",
+        title: "XSS in search",
+        severity: "high",
+        timestamp: "now",
+        cwe: "CWE-79",
+        endpoint: "/search",
+        description: "Reflected XSS",
+      },
       // Duplicate of v1 (same dedupe key) with lower severity — should be deduped
-      { id: "v3", title: "SQL Injection in login", severity: "medium", timestamp: "now", cwe: "CWE-89", endpoint: "/login", description: "SQLi via login form" },
+      {
+        id: "v3",
+        title: "SQL Injection in login",
+        severity: "medium",
+        timestamp: "now",
+        cwe: "CWE-89",
+        endpoint: "/login",
+        description: "SQLi via login form",
+      },
       // False positive — localhost target
-      { id: "v4", title: "Open redirect", severity: "medium", timestamp: "now", target: "http://localhost:3000", cwe: "CWE-601", endpoint: "/redirect" },
+      {
+        id: "v4",
+        title: "Open redirect",
+        severity: "medium",
+        timestamp: "now",
+        target: "http://localhost:3000",
+        cwe: "CWE-601",
+        endpoint: "/redirect",
+      },
       // Info severity
-      { id: "v5", title: "Missing HSTS header", severity: "info", timestamp: "now", cwe: "CWE-319", endpoint: "/" },
+      {
+        id: "v5",
+        title: "Missing HSTS header",
+        severity: "info",
+        timestamp: "now",
+        cwe: "CWE-319",
+        endpoint: "/",
+      },
     ]
 
     const normalized = normalizeFindings(input, "target-1", generateDedupeKey)

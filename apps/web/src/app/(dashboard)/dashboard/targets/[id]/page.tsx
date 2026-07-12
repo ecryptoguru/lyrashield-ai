@@ -5,11 +5,7 @@ import Link from "next/link"
 import { ArrowLeft, GitBranch, Globe, Bug, Crosshair } from "lucide-react"
 import { Card, Badge } from "@lyrashield/ui"
 
-export default async function TargetDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session) redirect("/sign-in")
 
@@ -54,7 +50,7 @@ export default async function TargetDetailPage({
     <div>
       <Link
         href="/dashboard/targets"
-        className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground mb-4 flex items-center gap-1 text-sm"
       >
         <ArrowLeft className="h-3 w-3" aria-hidden="true" />
         Back to targets
@@ -64,14 +60,16 @@ export default async function TargetDetailPage({
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight">{target.name}</h1>
           <Badge>
-            {target.type === "REPO" ? <GitBranch className="h-3 w-3" aria-hidden="true" /> : <Globe className="h-3 w-3" aria-hidden="true" />}
+            {target.type === "REPO" ? (
+              <GitBranch className="h-3 w-3" aria-hidden="true" />
+            ) : (
+              <Globe className="h-3 w-3" aria-hidden="true" />
+            )}
             {target.type}
           </Badge>
-          <Badge variant={target.status === "active" ? "success" : "muted"}>
-            {target.status}
-          </Badge>
+          <Badge variant={target.status === "active" ? "success" : "muted"}>{target.status}</Badge>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-1 text-sm">
           Environment: {target.environment}
           {target.project && ` · Project: ${target.project.name}`}
         </p>
@@ -79,21 +77,21 @@ export default async function TargetDetailPage({
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="group p-5 transition-all duration-200 hover:shadow-md">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Crosshair className="h-4 w-4 text-primary" aria-hidden="true" />
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
+            <Crosshair className="text-primary h-4 w-4" aria-hidden="true" />
             Total Scans
           </div>
           <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.scans}</p>
         </Card>
         <Card className="group p-5 transition-all duration-200 hover:shadow-md">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Bug className="h-4 w-4 text-primary" aria-hidden="true" />
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
+            <Bug className="text-primary h-4 w-4" aria-hidden="true" />
             Total Findings
           </div>
           <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.findings}</p>
         </Card>
         <Card className="group p-5 transition-all duration-200 hover:shadow-md">
-          <div className="text-sm text-muted-foreground">Last Scan</div>
+          <div className="text-muted-foreground text-sm">Last Scan</div>
           <p className="mt-2 text-2xl font-bold tracking-tight">
             {target.lastScanAt ? new Date(target.lastScanAt).toLocaleDateString() : "Never"}
           </p>
@@ -101,7 +99,7 @@ export default async function TargetDetailPage({
       </div>
 
       {target.type === "REPO" && (
-        <div className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
           <h2 className="mb-4 text-lg font-semibold">Repository Details</h2>
           <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
             <div>
@@ -121,13 +119,18 @@ export default async function TargetDetailPage({
       )}
 
       {target.type !== "REPO" && target.url && (
-        <div className="mb-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
           <h2 className="mb-4 text-lg font-semibold">URL Details</h2>
           <dl className="grid grid-cols-1 gap-4 text-sm">
             <div>
               <dt className="text-muted-foreground">URL</dt>
               <dd className="font-medium">
-                <a href={target.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                <a
+                  href={target.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
                   {target.url}
                 </a>
               </dd>
@@ -141,12 +144,12 @@ export default async function TargetDetailPage({
           <h2 className="text-lg font-semibold">Recent Scans</h2>
         </div>
         {target.scans.length === 0 ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">
+          <div className="text-muted-foreground p-8 text-center text-sm">
             No scans yet for this target.
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="border-b bg-muted/30">
+            <thead className="bg-muted/30 border-b">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Goal</th>
                 <th className="px-4 py-3 text-left font-semibold">Mode</th>
@@ -160,16 +163,21 @@ export default async function TargetDetailPage({
                   <td className="px-4 py-3 font-medium">{scan.goal}</td>
                   <td className="px-4 py-3">{scan.mode}</td>
                   <td className="px-4 py-3">
-                    <Badge variant={
-                      scan.status === "COMPLETED" ? "success" :
-                      scan.status === "FAILED" ? "danger" :
-                      scan.status === "RUNNING" ? "info" :
-                      "muted"
-                    }>
+                    <Badge
+                      variant={
+                        scan.status === "COMPLETED"
+                          ? "success"
+                          : scan.status === "FAILED"
+                            ? "danger"
+                            : scan.status === "RUNNING"
+                              ? "info"
+                              : "muted"
+                      }
+                    >
                       {scan.status}
                     </Badge>
                   </td>
-                  <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
+                  <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
                     {new Date(scan.createdAt).toLocaleString()}
                   </td>
                 </tr>

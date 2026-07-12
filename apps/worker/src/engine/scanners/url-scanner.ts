@@ -2,15 +2,15 @@
 import { logger } from "@lyrashield/logger"
 import { readFile } from "fs/promises"
 import { join } from "path"
-import { lookup } from "node:dns/promises"
-import net from "node:net"
+import { safeFetch, type HostResolver } from "@lyrashield/security"
 import type { EngineVulnerability } from "../output-parser"
 
 export interface UrlScanConfig {
   targetUrl: string
   repoPath?: string
   fetchFn?: typeof fetch
-  resolveHost?: (hostname: string) => Promise<string[]>
+  /** Injectable DNS resolver — only for tests. */
+  resolver?: HostResolver
 }
 
 const AI_BUILDER_PLATFORMS = [
@@ -31,7 +31,7 @@ function makeFinding(
   cwe: string,
   description: string,
   remediation: string,
-  extra?: Partial<EngineVulnerability>,
+  extra?: Partial<EngineVulnerability>
 ): EngineVulnerability {
   return {
     id,
@@ -45,84 +45,23 @@ function makeFinding(
   }
 }
 
-function isPrivateIp(hostname: string): boolean {
-  const lower = hostname.toLowerCase()
-  if (lower === "localhost" || lower.endsWith(".localhost") || lower === "0.0.0.0") return true
-  // IPv4 private ranges: 10.x, 172.16-31.x, 192.168.x, 127.x, 169.254.x
-  const ipv4Match = lower.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/)
-  if (ipv4Match) {
-    const a = Number(ipv4Match[1])
-    const b = Number(ipv4Match[2])
-    if (a === 0 || a >= 224) return true
-    if (a === 10) return true
-    if (a === 100 && b >= 64 && b <= 127) return true
-    if (a === 172 && b >= 16 && b <= 31) return true
-    if (a === 192 && b === 0) return true
-    if (a === 192 && b === 168) return true
-    if (a === 127) return true
-    if (a === 198 && (b === 18 || b === 19)) return true
-    if (a === 169 && b === 254) return true
-  }
-  // IPv6 loopback and link-local
-  if (lower === "::1" || lower.startsWith("fe80:") || lower.startsWith("fc") || lower.startsWith("fd") || lower.startsWith("ff")) return true
-  return false
-}
-
-async function isSsrfSafe(
-  rawUrl: string,
-  resolveHost: (hostname: string) => Promise<string[]>,
-): Promise<boolean> {
-  try {
-    const parsed = new URL(rawUrl)
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false
-    if (isPrivateIp(parsed.hostname)) return false
-    if (net.isIP(parsed.hostname)) return true
-    const addresses = await resolveHost(parsed.hostname)
-    return addresses.length > 0 && addresses.every((address) => !isPrivateIp(address))
-  } catch {
-    return false
-  }
-}
-
+/**
+ * Fetch the target URL through the shared, hardened, fetch-time SSRF guard
+ * (`@lyrashield/security` → `safeFetch`): the host is DNS-resolved and
+ * range-checked on every hop, redirects are re-validated manually, alternate IP
+ * encodings are canonicalized, and the body is size-bounded. This replaces the
+ * previous weak inline `isPrivateIp` string check, which did no DNS resolution,
+ * missed decimal/hex/octal IPv4 and many reserved ranges, and auto-followed
+ * redirects.
+ */
 async function fetchUrl(
   url: string,
   fetchFn?: typeof fetch,
-  resolveHost: (hostname: string) => Promise<string[]> = async (hostname) => {
-    const records = await lookup(hostname, { all: true, verbatim: true })
-    return records.map((record) => record.address)
-  },
-  redirects = 0,
+  resolver?: HostResolver
 ): Promise<{ html: string; status: number; headers: Record<string, string> } | null> {
-  if (!await isSsrfSafe(url, resolveHost)) {
-    logger.warn("URL fetch skipped — SSRF protection", { url })
-    return null
-  }
-  const fetchImpl = fetchFn ?? globalThis.fetch
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
-    const res = await fetchImpl(url, {
-      signal: controller.signal,
-      redirect: "manual",
-      headers: { "User-Agent": "LyraSec-Scanner/1.0", "Accept-Encoding": "identity" },
-    })
-    clearTimeout(timeout)
-    const location = res.headers.get?.("location")
-    if (res.status >= 300 && res.status < 400 && location) {
-      if (redirects >= 3) return null
-      return fetchUrl(new URL(location, url).toString(), fetchFn, resolveHost, redirects + 1)
-    }
-    if (!res.ok) return null
-    const html = await res.text()
-    const headers: Record<string, string> = {}
-    res.headers.forEach((value, key) => {
-      headers[key.toLowerCase()] = value
-    })
-    return { html, status: res.status, headers }
-  } catch (err) {
-    logger.warn("URL fetch failed", { url, error: err instanceof Error ? err.message : String(err) })
-    return null
-  }
+  const result = await safeFetch(url, { fetchFn, resolver })
+  if (!result) return null
+  return { html: result.html, status: result.status, headers: result.headers }
 }
 
 function detectSupabaseAnonKey(html: string): EngineVulnerability[] {
@@ -145,8 +84,8 @@ function detectSupabaseAnonKey(html: string): EngineVulnerability[] {
             poc_description: `Extract the anon key from page source and use it with the Supabase client to query tables directly. If RLS is not enabled, all data is accessible without authentication.`,
             technical_analysis:
               "AI builders like Lovable and Bolt commonly embed Supabase anon keys in client bundles. The anon key alone is not a vulnerability, but combined with missing RLS policies it enables full data exfiltration. This is the root cause of the Lovable CVE-2025-48757 incident.",
-          },
-        ),
+          }
+        )
       )
     }
   }
@@ -169,8 +108,8 @@ function detectFirebaseConfig(html: string): EngineVulnerability[] {
         {
           technical_analysis:
             "AI builders like Bolt and v0 often generate Firebase configurations with permissive default rules. The API key is identifiable by the 'AIza' prefix and is safe to expose only if Security Rules are properly configured.",
-        },
-      ),
+        }
+      )
     )
   }
   return findings
@@ -180,12 +119,18 @@ function detectExposedApiKeys(html: string): EngineVulnerability[] {
   const findings: EngineVulnerability[] = []
   const hasFirebaseConfig = /firebaseConfig\s*=/i.test(html)
   const patterns = [
-    { regex: /(?:api[_-]?key|apikey)\s*[=:]\s*["']([A-Za-z0-9_-]{20,})["']/gi, name: "generic-api-key", cwe: "CWE-200" },
+    {
+      regex: /(?:api[_-]?key|apikey)\s*[=:]\s*["']([A-Za-z0-9_-]{20,})["']/gi,
+      name: "generic-api-key",
+      cwe: "CWE-200",
+    },
     { regex: /sk_live_[A-Za-z0-9]{20,}/g, name: "stripe-secret-key", cwe: "CWE-200" },
     { regex: /AKIA[0-9A-Z]{16}/g, name: "aws-access-key", cwe: "CWE-200" },
     { regex: /gh[pousr]_[A-Za-z0-9]{36}/g, name: "github-token", cwe: "CWE-200" },
     // Skip Google API key pattern if Firebase config is present — it's already reported by detectFirebaseConfig
-    ...(hasFirebaseConfig ? [] : [{ regex: /AIza[0-9A-Za-z_-]{35}/g, name: "google-api-key", cwe: "CWE-200" }]),
+    ...(hasFirebaseConfig
+      ? []
+      : [{ regex: /AIza[0-9A-Za-z_-]{35}/g, name: "google-api-key", cwe: "CWE-200" }]),
   ]
   for (const { regex, name, cwe } of patterns) {
     const matches = html.match(regex)
@@ -201,8 +146,8 @@ function detectExposedApiKeys(html: string): EngineVulnerability[] {
             "1. Move the key to a server-side environment variable.\n2. Rotate the exposed key immediately.\n3. Use a backend proxy for API calls requiring the key.\n4. Implement rate limiting on the API to reduce impact if keys are leaked.",
             {
               poc_description: `Extract the key from the page source and use it directly against the corresponding service API.`,
-            },
-          ),
+            }
+          )
         )
       }
     }
@@ -213,10 +158,30 @@ function detectExposedApiKeys(html: string): EngineVulnerability[] {
 function detectMissingSecurityHeaders(headers: Record<string, string>): EngineVulnerability[] {
   const findings: EngineVulnerability[] = []
   const securityHeaders = [
-    { header: "content-security-policy", title: "Missing Content-Security-Policy header", severity: "MEDIUM", cwe: "CWE-693" },
-    { header: "strict-transport-security", title: "Missing Strict-Transport-Security header", severity: "MEDIUM", cwe: "CWE-319" },
-    { header: "x-frame-options", title: "Missing X-Frame-Options header", severity: "LOW", cwe: "CWE-693" },
-    { header: "x-content-type-options", title: "Missing X-Content-Type-Options header", severity: "LOW", cwe: "CWE-693" },
+    {
+      header: "content-security-policy",
+      title: "Missing Content-Security-Policy header",
+      severity: "MEDIUM",
+      cwe: "CWE-693",
+    },
+    {
+      header: "strict-transport-security",
+      title: "Missing Strict-Transport-Security header",
+      severity: "MEDIUM",
+      cwe: "CWE-319",
+    },
+    {
+      header: "x-frame-options",
+      title: "Missing X-Frame-Options header",
+      severity: "LOW",
+      cwe: "CWE-693",
+    },
+    {
+      header: "x-content-type-options",
+      title: "Missing X-Content-Type-Options header",
+      severity: "LOW",
+      cwe: "CWE-693",
+    },
   ]
   for (const { header, title, severity, cwe } of securityHeaders) {
     if (!headers[header]) {
@@ -227,8 +192,8 @@ function detectMissingSecurityHeaders(headers: Record<string, string>): EngineVu
           severity,
           cwe,
           `The response is missing the ${header} security header. This leaves the application vulnerable to clickjacking, MIME-type sniffing attacks, and other browser-based exploits.`,
-          `Add the ${header} header to your web server or framework configuration.\nFor Next.js, add it to next.config.ts headers() function.\nFor Express, use the helmet middleware.`,
-        ),
+          `Add the ${header} header to your web server or framework configuration.\nFor Next.js, add it to next.config.ts headers() function.\nFor Express, use the helmet middleware.`
+        )
       )
     }
   }
@@ -252,8 +217,8 @@ function detectCorsMisconfiguration(headers: Record<string, string>): EngineVuln
           {
             poc_description:
               "From any malicious website, use fetch() with credentials: 'include' to read responses from this server, stealing user data or session tokens.",
-          },
-        ),
+          }
+        )
       )
     } else {
       findings.push(
@@ -263,8 +228,8 @@ function detectCorsMisconfiguration(headers: Record<string, string>): EngineVuln
           "LOW",
           "CWE-942",
           "The server responds with Access-Control-Allow-Origin: *. While this is common for public APIs, it should be restricted for applications handling user data.",
-          "Restrict Access-Control-Allow-Origin to specific trusted domains rather than using a wildcard.",
-        ),
+          "Restrict Access-Control-Allow-Origin to specific trusted domains rather than using a wildcard."
+        )
       )
     }
   }
@@ -294,8 +259,8 @@ function detectIdorPatterns(html: string): EngineVulnerability[] {
               "Increment or decrement the ID parameter in the API URL and observe whether other users' data is returned without authorization errors.",
             technical_analysis:
               "AI builders often generate CRUD APIs with sequential IDs and forget to add per-resource authorization checks. This is a common pattern in Lovable and Bolt-generated applications.",
-          },
-        ),
+          }
+        )
       )
       break
     }
@@ -303,7 +268,10 @@ function detectIdorPatterns(html: string): EngineVulnerability[] {
   return findings
 }
 
-async function detectMissingWebhookVerification(html: string, repoPath?: string): Promise<EngineVulnerability[]> {
+async function detectMissingWebhookVerification(
+  html: string,
+  repoPath?: string
+): Promise<EngineVulnerability[]> {
   const findings: EngineVulnerability[] = []
   const webhookPatterns = [
     { regex: /webhook/i, context: /stripe|payment|checkout/i, name: "stripe-webhook" },
@@ -311,7 +279,10 @@ async function detectMissingWebhookVerification(html: string, repoPath?: string)
   ]
   for (const { regex, context, name } of webhookPatterns) {
     if (regex.test(html) && context.test(html)) {
-      const hasVerification = /stripe-signature|x-hub-signature|constructEvent|verifySignature|webhooks\.construct/i.test(html)
+      const hasVerification =
+        /stripe-signature|x-hub-signature|constructEvent|verifySignature|webhooks\.construct/i.test(
+          html
+        )
       if (!hasVerification) {
         findings.push(
           makeFinding(
@@ -324,8 +295,8 @@ async function detectMissingWebhookVerification(html: string, repoPath?: string)
             {
               technical_analysis:
                 "AI builders frequently generate webhook handlers without adding signature verification, as it requires platform-specific secrets that aren't available during code generation.",
-            },
-          ),
+            }
+          )
         )
       }
     }
@@ -339,11 +310,19 @@ async function detectMissingWebhookVerification(html: string, repoPath?: string)
 
 async function detectWebhookInRepo(repoPath: string): Promise<EngineVulnerability[]> {
   const findings: EngineVulnerability[] = []
-  const webhookFiles = ["src/app/api/webhooks/stripe/route.ts", "src/app/api/webhooks/github/route.ts", "api/webhook.ts", "src/routes/webhook.ts"]
+  const webhookFiles = [
+    "src/app/api/webhooks/stripe/route.ts",
+    "src/app/api/webhooks/github/route.ts",
+    "api/webhook.ts",
+    "src/routes/webhook.ts",
+  ]
   for (const file of webhookFiles) {
     try {
       const content = await readFile(join(repoPath, file), "utf-8")
-      const hasVerification = /stripe-signature|x-hub-signature|constructEvent|verifySignature|webhooks\.construct|timingSafeEqual/i.test(content)
+      const hasVerification =
+        /stripe-signature|x-hub-signature|constructEvent|verifySignature|webhooks\.construct|timingSafeEqual/i.test(
+          content
+        )
       if (!hasVerification) {
         findings.push(
           makeFinding(
@@ -352,8 +331,8 @@ async function detectWebhookInRepo(repoPath: string): Promise<EngineVulnerabilit
             "HIGH",
             "CWE-345",
             `A webhook handler at ${file} does not verify the incoming request signature. This allows attackers to send forged webhook events.`,
-            "Add signature verification using the platform's SDK (e.g., stripe.webhooks.constructEvent for Stripe, crypto.timingSafeEqual for GitHub).",
-          ),
+            "Add signature verification using the platform's SDK (e.g., stripe.webhooks.constructEvent for Stripe, crypto.timingSafeEqual for GitHub)."
+          )
         )
       }
     } catch {
@@ -378,8 +357,8 @@ function detectAiBuilderDefaults(html: string): EngineVulnerability[] {
           `1. Review all database access policies (RLS for Supabase, Security Rules for Firebase).\n2. Ensure no service-role keys are in client code.\n3. Verify all API endpoints have proper authorization.\n4. Check webhook signature verification.\n5. Run a full LyraSec scan for comprehensive coverage.`,
           {
             technical_analysis: `AI builder platforms like ${platform} generate functional code quickly but often skip security hardening. Common issues: default permissive database rules, exposed credentials in client bundles, missing input validation, and no webhook verification.`,
-          },
-        ),
+          }
+        )
       )
       break
     }
@@ -390,7 +369,10 @@ function detectAiBuilderDefaults(html: string): EngineVulnerability[] {
 function detectOpenRedirects(html: string): EngineVulnerability[] {
   const findings: EngineVulnerability[] = []
   const redirectPatterns = [
-    { regex: /(?:redirect|next|return_?url|callback)\s*[=:]\s*["']?\s*(?:https?:)?\/\//gi, name: "redirect-param" },
+    {
+      regex: /(?:redirect|next|return_?url|callback)\s*[=:]\s*["']?\s*(?:https?:)?\/\//gi,
+      name: "redirect-param",
+    },
     { regex: /window\.location(?:\.href)?\s*=\s*[a-zA-Z_$]/gi, name: "dynamic-redirect" },
   ]
   for (const { regex, name } of redirectPatterns) {
@@ -403,8 +385,8 @@ function detectOpenRedirects(html: string): EngineVulnerability[] {
           "MEDIUM",
           "CWE-601",
           "The application contains redirect logic that may use user-controlled input without validation. Open redirects can be used for phishing attacks and OAuth token theft.",
-          "1. Validate redirect URLs against a whitelist of allowed domains.\n2. Use relative paths for internal redirects.\n3. Never redirect to URLs from query parameters without validation.",
-        ),
+          "1. Validate redirect URLs against a whitelist of allowed domains.\n2. Use relative paths for internal redirects.\n3. Never redirect to URLs from query parameters without validation."
+        )
       )
       break
     }
@@ -413,10 +395,10 @@ function detectOpenRedirects(html: string): EngineVulnerability[] {
 }
 
 export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerability[]> {
-  const { targetUrl, repoPath, fetchFn, resolveHost } = config
+  const { targetUrl, repoPath, fetchFn, resolver } = config
   logger.info("Starting AI-builder-aware URL scan", { targetUrl })
 
-  const result = await fetchUrl(targetUrl, fetchFn, resolveHost)
+  const result = await fetchUrl(targetUrl, fetchFn, resolver)
   if (!result) {
     logger.warn("URL scan skipped — could not fetch target", { targetUrl })
     return []
@@ -431,7 +413,7 @@ export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerabilit
   allFindings.push(...detectMissingSecurityHeaders(headers))
   allFindings.push(...detectCorsMisconfiguration(headers))
   allFindings.push(...detectIdorPatterns(html))
-  allFindings.push(...await detectMissingWebhookVerification(html, repoPath))
+  allFindings.push(...(await detectMissingWebhookVerification(html, repoPath)))
   allFindings.push(...detectAiBuilderDefaults(html))
   allFindings.push(...detectOpenRedirects(html))
 
@@ -442,7 +424,7 @@ export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerabilit
 export async function scanUrlFromRepo(
   repoPath: string,
   targetUrl: string,
-  fetchFn?: typeof fetch,
+  fetchFn?: typeof fetch
 ): Promise<EngineVulnerability[]> {
   return scanUrl({ targetUrl, repoPath, fetchFn })
 }

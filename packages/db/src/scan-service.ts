@@ -17,7 +17,13 @@ export interface ScanWithEvents extends Scan {
   events: ScanEvent[]
 }
 
-const ACTIVE_SCAN_STATUSES: ScanStatus[] = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"]
+const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
+  "QUEUED",
+  "PREFLIGHT",
+  "RUNNING",
+  "VERIFYING",
+  "REQUIRES_APPROVAL",
+]
 
 export async function createScan(params: CreateScanParams): Promise<Scan> {
   const scan = await prisma.$transaction(async (tx) => {
@@ -54,7 +60,11 @@ export async function createScan(params: CreateScanParams): Promise<Scan> {
     mode: params.mode ?? "SAFE",
   })
 
-  logger.info("Scan created", { scanId: scan.id, workspaceId: params.workspaceId, targetId: params.targetId })
+  logger.info("Scan created", {
+    scanId: scan.id,
+    workspaceId: params.workspaceId,
+    targetId: params.targetId,
+  })
   return scan
 }
 
@@ -84,7 +94,9 @@ export async function updateScanStatus(
     ...(metadata?.errorMessage ? { errorMessage: metadata.errorMessage } : {}),
     ...(metadata?.summary ? { summary: metadata.summary } : {}),
     ...(metadata?.riskScoreAfter !== undefined ? { riskScoreAfter: metadata.riskScoreAfter } : {}),
-    ...(metadata?.actualCostCents !== undefined ? { actualCostCents: metadata.actualCostCents } : {}),
+    ...(metadata?.actualCostCents !== undefined
+      ? { actualCostCents: metadata.actualCostCents }
+      : {}),
   }
 
   if (newStatus === "PREFLIGHT" || newStatus === "RUNNING") {
@@ -112,7 +124,13 @@ export async function updateScanStatus(
   const updated = await prisma.scan.findUnique({ where: { id: scanId } })
   if (!updated) throw new Error(`Scan not found after status update: ${scanId}`)
 
-  await addScanEvent(scanId, newStatus.toLowerCase(), "info", `Scan status: ${newStatus}`, metadata ?? {})
+  await addScanEvent(
+    scanId,
+    newStatus.toLowerCase(),
+    "info",
+    `Scan status: ${newStatus}`,
+    metadata ?? {}
+  )
 
   logger.info("Scan status updated", { scanId, from: currentStatus, to: newStatus })
   return updated
@@ -145,6 +163,21 @@ export async function getScanWithEvents(scanId: string): Promise<ScanWithEvents 
         take: 200,
       },
     },
+  })
+}
+
+/**
+ * Fetch a scan by id, explicitly scoped to a workspace. Use this whenever a
+ * caller-supplied scanId must be proven to belong to the caller's workspace
+ * before it is trusted (e.g. attaching a scan to a report) — do NOT rely on the
+ * Prisma extension's implicit read-scoping for a security boundary.
+ */
+export async function getScanForWorkspace(
+  scanId: string,
+  workspaceId: string
+): Promise<Scan | null> {
+  return prisma.scan.findFirst({
+    where: { id: scanId, workspaceId, deletedAt: null },
   })
 }
 
@@ -191,7 +224,13 @@ export async function cancelScan(scanId: string): Promise<Scan> {
   if (!scan) throw new Error(`Scan not found: ${scanId}`)
 
   const status = scan.status as ScanStatus
-  if (status === "COMPLETED" || status === "FAILED" || status === "CANCELLED" || status === "STOPPED_BUDGET" || status === "TIMED_OUT") {
+  if (
+    status === "COMPLETED" ||
+    status === "FAILED" ||
+    status === "CANCELLED" ||
+    status === "STOPPED_BUDGET" ||
+    status === "TIMED_OUT"
+  ) {
     throw new Error(`Cannot cancel scan in terminal state: ${status}`)
   }
 

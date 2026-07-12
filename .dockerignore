@@ -1,5 +1,9 @@
 node_modules
-.next
+**/node_modules
+**/.next
+**/.astro
+**/dist
+**/*.tsbuildinfo
 .git
 .gitignore
 *.md
@@ -7,7 +11,6 @@ node_modules
 .env.local
 coverage
 .turbo
-dist
 postgres_data
 redis_data
 *.pem

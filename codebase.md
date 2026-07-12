@@ -1,86 +1,86 @@
-# LyraShield — Codebase Guide for AI Agents
+# LyraSec AI — Codebase Guide
 
-> **Purpose**: This document gives AI agents (Claude, GPT, Copilot, etc.) a complete mental model of the codebase so they can navigate, modify, and extend it effectively.
+> **Purpose:** Maintained implementation map for the canonical `lyrashieldai` repository. `AGENTS.md` owns the current handoff/rules; `PRD.md` Part C owns product status and release gates. Running code and schema override documentation.
 >
-> **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the next tasks, and the landmines — then use this file as the deep code map and `PRD.md` PART B §B13 as the backlog source of truth.
+> **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **⚠️ 2026-07-05:** The GitHub repo is now **`ecryptoguru/lyrasec-ai`** (renamed from `lyrashieldai`). The product name is migrating LyraShield → **LyraSec AI**, but the in-code package scopes (`@lyrashield/*`) and engine env vars (`LYRASHIELD_*`) are intentionally **not** renamed yet (trademark clearance open) — keep using them in code. See **§17 (2026-07-04 Audit — Batch 1)**, **§18 (2026-07-05 UI/UX Premium Upgrade + Deep Code Review)**, **§19 (2026-07-05 Batch 2 Remainder + Batch 3 Design Contracts + RLS + Deep Code Review)**, **§20 (2026-07-05 Round-2 Remaining Items — ALL COMPLETED)**, **§21 (2026-07-05 Sprint 4 — Scan Orchestrator + Queue + Review Fixes)**, **§22 (2026-07-06 Batch 4 — Fix Proposals, Retests, Reports, Notifications, Schedules, Plain-Language Findings + Code Review Fixes)**, and **§23 (2026-07-06 Sprint 6/6.5 — Findings Normalization + SCA + Secrets Scanning + Scanner Orchestrator)**, and **§24 (2026-07-06 Sprint 7 — Tier 2: AI-Builder-Aware URL Scan + Launch-Readiness UI + Shareable Report/Badge + MCP Server + Prompt-Injection Defense + GitHub Action Diff-Gate)** and **§25 (2026-07-06 UI/UX Refinement Sweep + Docker Deployment Verification)** and **§26 (2026-07-06 AI Pipeline Audit Fixes + Fresh Docker Verification)** at the end for the latest merged changes; where they conflict with older sections below, §17/§18/§19/§20/§21/§22/§23/§24/§25/§26 win.
+> **Current baseline — 2026-07-11:** 4 apps, 9 shared packages, 20 web page files, 34 API route files, 30 Prisma models, 12 enums, 9 migrations, 18 RLS-protected workspace tables, **625 passing Vitest tests in 56 files**, and **2 passing Playwright tests**. Lint, typecheck, test, E2E, and production build pass locally. Sections 17–31 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
-## 1. What Is LyraShield
+## 1. System Overview
 
-LyraShield is an **AI AppSec Agent Platform** — a multi-tenant SaaS that lets users connect GitHub repos or paste app URLs, run safe AI-driven security scans, get verified findings, and generate fix PRs.
+LyraSec AI is a multi-tenant, agent-native application-security platform for GitHub repositories and deployed URLs.
 
 **Core product loop**: `Target → Scan → Verified Finding → Fix → Retest → Report`
 
 **Architecture boundary**:
-- **This monorepo** (TypeScript): Web platform, worker orchestration, multi-tenant workspaces, finding management, fix proposals, billing, policy, reports
-- **lyrashield-engine** (separate repo, Python): AI pentesting agents, vulnerability scanning, exploit validation, CLI interface. Worker calls it as a subprocess. Clean language boundary — no engine internals are imported.
+
+- **This monorepo** (TypeScript/Astro): product UI and APIs, auth/tenancy, scan orchestration, deterministic scanners, findings, remediation, reports, schedules/notifications, agent actions, MCP, and marketing.
+- **`lyrashield-engine`** (separate Python repo): thin compatibility fork over upstream Strix. The worker calls the `lyrashield` adapter as a subprocess; no engine internals are imported.
+- **Not yet implemented:** billing/usage enforcement and the user-facing API-key lifecycle. Controlled-scan and production-infrastructure proof remain release gates. See `PRD.md` Part C.
 
 ### Engine Repo Status
 
-The engine repo has been forked from [usestrix/strix](https://github.com/usestrix/strix), rebranded, and is ready for upgrades:
+The canonical engine repo is `ecryptoguru/lyrashield-engine`. It is a thin adapter fork, not a repository-wide rebrand:
 
-- **Repo**: `lyraShield/lyrashield-engine` (separate GitHub repo)
+- **Repo:** `ecryptoguru/lyrashield-engine`
 - **Upstream remote**: `https://github.com/usestrix/strix.git`
-- **Commits**: 2 (rebrand + telemetry disable + upgrade roadmap)
-- **Zero "Strix" references remaining** — all renamed to LyraShield
-- **CLI binary renamed**: `strix` → `lyrashield`
-- **Telemetry disabled**: PostHog and Scarf telemetry off by default (`LYRASHIELD_TELEMETRY=false`)
-- **Upgrade roadmap**: Documented in `UPGRADES.md` in the engine repo
+- **Recorded upstream baseline:** `7b639505fecf20a2d9e356f96bd91470aa828182`
+- **Adapter version:** `1.0.4.post1`
+- **Compatibility:** maps `LYRASHIELD_*` only when the corresponding `STRIX_*` value is unset; explicit upstream values win; telemetry defaults to `0`
+- **Model config:** `strix/config/settings.py` accepts `LYRASHIELD_LLM`/`STRIX_LLM`, `LLM_API_KEY`/`LLM_API_BASE`/`LLM_API_VERSION`, and Azure-specific aliases (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, `AZURE_API_VERSION`). `strix/config/models.py` mirrors these into the LiteLLM env vars that `azure/`, `azure_ai/`, and `litellm/` providers expect.
+- **Artifacts:** worker accepts `strix_runs` and legacy `lyrashield_runs`, with `run.json` or `vulnerabilities.json`
+- **Sync model:** ancestry-checked, review-only PRs; no auto-merge, force-push, or conflict resolution
+- **Verification:** 155 tests, Ruff, formatting, headless mypy, and Bandit
 
-### Engine Upgrade Roadmap (UPGRADES.md)
+### Engine Boundary
 
-**Priority 1 — Sprint 5 (Scan Engine MVP)**:
-- Structured JSON findings output (matching LyraShield's Finding schema)
-- Exit code mapping (0-9 for different outcomes)
-- Event streaming via stdout JSON lines
-- Policy enforcement hooks (`--policy-file`)
+The engine-bearing worker image builds from the sibling canonical repo through a named Docker build context. `lyrashield --version` is a build gate. Missing model configuration exits before sandbox image setup.
 
-**Priority 2 — Sprint 6 (Findings Normalization)**:
-- Deterministic dedupe key generation
-- Evidence packaging (HTTP req/res, screenshots)
-- CVSS auto-scoring
+Exit-code contract:
 
-**Priority 3 — Sprint 7 (Fix Proposals)**:
-- Structured patch output with safety score
+- `0`: completed without findings
+- `2`: completed with findings
+- other nonzero exits: runtime/configuration failure
 
-**Priority 4 — Platform Enhancements**:
-- Webhook callback support
-- Multi-target parallel orchestration
-- Custom skill loading from platform
-- Sandbox security hardening (seccomp, network isolation)
+No authorized sandbox scan has been completed. Production still requires authorized model credentials, an approved target, a pinned sandbox digest, and transport-level egress enforcement.
 
-### Engine Next Steps
+### Naming Boundary
 
-1. Push to GitHub: Create `lyraShield/lyrashield-engine` repo and push
-2. Start upgrading: Begin with Priority 1 items (structured JSON output, exit codes)
-3. Continue LyraShield platform: Build Sprint 3+ in the monorepo
+Public copy uses **LyraSec AI**. Internal package scopes (`@lyrashield/*`), environment variables (`LYRASHIELD_*`), database/container names, and the engine CLI remain unchanged pending founder-approved migration. Do not mechanically rename them.
 
 ---
 
 ## 2. Tech Stack
 
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| Web framework | Next.js (App Router, Turbopack) | 16.2.x |
-| Language | TypeScript | 6.0.x |
-| Runtime | React | 19.x |
-| ORM | Prisma (with @prisma/adapter-pg) | 7.8.x |
-| Database | PostgreSQL | 16 (Docker) |
-| Cache/Queue | Redis | 7 (Docker) |
-| Auth | Better Auth | 1.6.x |
-| Validation | Zod | 4.x |
-| Styling | TailwindCSS (CSS-first config) | 4.3.x |
-| Component variants | class-variance-authority (cva) | 0.7.x |
-| Icons | lucide-react | 1.23.x |
-| Monorepo | Turborepo + pnpm workspaces | 2.10.x / 11.6.x |
-| Testing | Vitest | 4.1.x (176 tests, 10 files) |
-| Worker | tsx watch (stub mode) | — |
-| Job queue | BullMQ (planned Sprint 4) | 5.78.x |
+| Layer                   | Technology                       | Version                                              |
+| ----------------------- | -------------------------------- | ---------------------------------------------------- |
+| Web framework           | Next.js (App Router, Turbopack)  | 16.2.x                                               |
+| Language                | TypeScript                       | 6.0.x                                                |
+| Runtime                 | React                            | 19.x                                                 |
+| ORM                     | Prisma (with @prisma/adapter-pg) | 7.8.x                                                |
+| Database                | PostgreSQL                       | 16 (Docker)                                          |
+| Cache/Queue             | Redis                            | 7 (Docker)                                           |
+| Auth                    | Better Auth                      | 1.6.x                                                |
+| Validation              | Zod                              | 4.x                                                  |
+| Styling                 | TailwindCSS (CSS-first config)   | 4.3.x                                                |
+| Component variants      | class-variance-authority (cva)   | 0.7.x                                                |
+| Icons                   | lucide-react                     | 1.23.x                                               |
+| Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                      |
+| Testing                 | Vitest + Playwright              | 625 unit/integration tests + 2 Chromium E2E tests    |
+| Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration |
+| Job queue               | BullMQ                           | 5.78.x                                               |
+| Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate      |
+| MCP                     | JSON-RPC over stdio              | API-backed tools + prompt-injection guard            |
+| Scan engine             | Python thin fork                 | Adapter 1.0.4.post1 over recorded upstream baseline  |
+| Marketing site          | Astro 7 + @astrojs/cloudflare    | Server output on Cloudflare Workers                  |
+| Marketing storage       | Cloudflare D1                    | Waitlist + fallback-rate-limit migrations            |
+| Marketing rate limiting | Cloudflare Rate Limits           | WAITLIST_RL binding for waitlist API                 |
+| Marketing analytics     | PostHog                          | posthog-js client-side capture                       |
 
 **Key version notes**:
+
 - TypeScript 6: `types: ["node"]` required in tsconfig, `baseUrl` is deprecated
 - Prisma 7: uses `prisma.config.ts` with dotenv, requires `PrismaPg` driver adapter in client constructor (no datasource URL in schema)
 - Zod 4: use `z.url()` instead of `z.string().url()`, `z.email()` instead of `z.string().email()`
@@ -94,136 +94,81 @@ The engine repo has been forked from [usestrix/strix](https://github.com/usestri
 
 ## 3. Monorepo Structure
 
-```
+```txt
 lyrashield/
 ├── apps/
-│   ├── web/                    # Next.js web application
-│   │   ├── src/
-│   │   │   ├── app/            # App Router pages and API routes
-│   │   │   │   ├── (dashboard)/        # Dashboard route group (auth-protected)
-│   │   │   │   │   ├── dashboard/
-│   │   │   │   │   │   ├── page.tsx              # Main dashboard with stats
-│   │   │   │   │   │   ├── projects/             # Project list + create
-│   │   │   │   │   │   │   ├── page.tsx          # Server component (cursor pagination, initialData)
-│   │   │   │   │   │   │   └── projects-client.tsx  # Client (LoadMore, apiGetPaginated)
-│   │   │   │   │   │   ├── targets/              # Target list + create + detail
-│   │   │   │   │   │   │   ├── page.tsx          # Server component (cursor pagination, initialData)
-│   │   │   │   │   │   │   ├── targets-client.tsx  # Client (LoadMore, apiGetPaginated)
-│   │   │   │   │   │   │   └── [id]/page.tsx     # Target detail page
-│   │   │   │   │   │   ├── integrations/         # Integrations page (GitHub App)
-│   │   │   │   │   │   │   ├── page.tsx          # Server component
-│   │   │   │   │   │   │   └── github-integration.tsx  # Client: connect + repo picker (apiGet/apiPost)
-│   │   │   │   │   │   ├── findings/             # Stub page (not yet built)
-│   │   │   │   │   │   ├── fixes/                # Stub page (not yet built)
-│   │   │   │   │   │   ├── scans/                # Stub page (not yet built)
-│   │   │   │   │   │   ├── reports/              # Stub page (not yet built)
-│   │   │   │   │   │   ├── settings/             # Stub page (not yet built)
-│   │   │   │   │   │   └── team/                 # Team members + invites
-│   │   │   │   │   │       ├── page.tsx          # Server component
-│   │   │   │   │   │       └── team-client.tsx
-│   │   │   │   │   ├── layout.tsx                # Dashboard layout (auth guard + onboarding redirect + sidebar)
-│   │   │   │   │   └── loading.tsx
-│   │   │   │   ├── onboarding/                   # Onboarding wizard (Sprint 2.5, premium UI)
-│   │   │   │   │   ├── page.tsx                  # Server component (auth guard, gradient hero bg, logo badge)
-│   │   │   │   │   └── onboarding-wizard.tsx     # 7-step client component (apiPost/apiPatch, premium buttons)
-│   │   │   │   ├── api/                          # REST API routes
-│   │   │   │   │   ├── auth/[...all]/route.ts    # Better Auth handler
-│   │   │   │   │   ├── onboarding/route.ts       # GET + PATCH onboarding state
-│   │   │   │   │   ├── projects/route.ts         # POST + GET projects (cursor pagination)
-│   │   │   │   │   ├── targets/route.ts          # POST + GET targets (cursor pagination, SSRF)
-│   │   │   │   │   ├── team/route.ts             # POST invite + GET members
-│   │   │   │   │   ├── workspaces/route.ts       # POST create + GET list workspaces
-│   │   │   │   │   ├── integrations/github/      # GitHub App integration routes
-│   │   │   │   │   │   ├── install/route.ts      # GET callback + POST install URL
-│   │   │   │   │   │   └── repos/route.ts        # GET list installation repos
-│   │   │   │   │   └── webhooks/github/route.ts  # POST GitHub webhook handler
-│   │   │   │   ├── sign-in/page.tsx              # Sign-in page (email + GitHub OAuth, gradient bg, premium card)
-│   │   │   │   ├── sign-up/page.tsx              # Sign-up page (redirects to /onboarding, gradient bg, premium card)
-│   │   │   │   ├── page.tsx                      # Marketing landing page (gradient hero, glassmorphic nav, feature cards)
-│   │   │   │   ├── layout.tsx                    # Root layout (Inter font)
-│   │   │   │   ├── globals.css                   # Tailwind theme + premium design tokens (OKLCH, shadows, gradients, glass)
-│   │   │   │   ├── not-found.tsx
-│   │   │   │   └── icon.svg
-│   │   │   └── components/
-│   │   │       ├── sidebar.tsx                   # Dashboard sidebar nav (gradient logo, mobile drawer, active state)
-│   │   │       └── workspace-switcher.tsx        # Workspace dropdown switcher (rounded-lg, aria attrs)
-│   │   ├── src/lib/                                  # Shared utilities
-│   │   │   ├── api-client.ts          # Typed API fetch helpers (apiGet/apiPost/apiPatch/apiDelete/apiGetPaginated + ApiError)
-│   │   │   ├── api-client.test.ts     # Tests for API helpers (13 tests: success, error, network, parse, pagination)
-│   │   │   ├── api-response.ts        # Server-side API helpers (apiSuccess/apiError/apiPaginated/parsePaginationParams)
-│   │   │   ├── api-auth.ts            # Auth error response mapper
-│   │   │   ├── cache.ts               # React cache() wrappers (getCachedSession/getCachedWorkspaceId/getCachedWorkspaces/getCachedProjects/getCachedDashboardStats/getCachedOnboardingState)
-│   │   │   ├── ssrf.ts                # SSRF protection (DNS-resolution-aware URL validation)
-│   │   │   ├── ssrf.test.ts           # SSRF tests (35 tests)
-│   │   │   ├── rate-limit.ts          # Rate limiting logic (Upstash Redis + in-memory fallback)
-│   │   │   ├── rate-limit.test.ts     # Rate limit tests (8 tests)
-│   │   │   └── csp.test.ts            # CSP nonce proxy tests (14 tests)
-│   │   ├── proxy.ts                       # Next.js proxy: rate limiting + nonce-based CSP (renamed from middleware.ts)
-│   │   ├── next.config.ts                        # output: standalone + transpilePackages + serverExternalPackages
-│   │   └── package.json
-│   └── worker/                                   # Worker service (stub for Sprint 4)
-│       └── src/index.ts
+│   ├── web/                    # Next.js dashboard, public shared reports, REST routes
+│   │   └── src/
+│   │       ├── app/
+│   │       │   ├── (dashboard)/dashboard/
+│   │       │   │   ├── projects/ targets/ scans/ findings/ fixes/
+│   │       │   │   ├── reports/ notifications/ schedules/
+│   │       │   │   ├── launch-readiness/ integrations/ team/ settings/
+│   │       │   │   └── page.tsx
+│   │       │   ├── api/       # 31 route files; see §9
+│   │       │   ├── onboarding/
+│   │       │   ├── reports/shared/[id]/
+│   │       │   ├── sign-in/ and sign-up/
+│   │       │   ├── globals.css
+│   │       │   └── layout.tsx
+│   │       ├── components/    # Sidebar, workspace switcher
+│   │       ├── lib/           # API helpers, caches, rate limits, GitHub state
+│   │       └── proxy.ts       # Nonce CSP + rate limiting
+│   ├── worker/
+│   │   └── src/
+│   │       ├── engine/
+│   │       │   ├── runner.ts, command-builder.ts, output-parser.ts
+│   │       │   ├── normalizer.ts, verifier.ts, finding-persister.ts, evidence-storage.ts
+│   │       │   ├── scanner-orchestrator.ts, sarif-generator.ts
+│   │       │   └── scanners/  # SCA, secrets, URL
+│   │       ├── jobs/           # Preflight and run-scan jobs
+│   │       ├── queue.ts
+│   │       ├── schedules.ts
+│   │       ├── notifications.ts
+│   │       └── index.ts
+│   ├── agent/
+│   │   └── src/               # Registry, six actions, queue (shared wrapper), service tokens
+│   └── marketing/
+│       ├── src/
+│       │   ├── pages/         # Landing, blog, SEO routes, waitlist API
+│       │   ├── components/
+│       │   ├── layouts/
+│       │   ├── content/
+│       │   └── styles/
+│       ├── migrations/        # Cloudflare D1 waitlist migrations
+│       ├── astro.config.mjs
+│       └── wrangler.jsonc
 ├── packages/
-│   ├── auth/                                     # Better Auth package
-│   │   └── src/
-│   │       ├── auth.ts           # betterAuth() config (server-only)
-│   │       ├── client.ts         # createAuthClient() (client-safe)
-│   │       ├── server.ts         # Server-only re-exports (getSession, requireAuth, etc.)
-│   │       ├── session.ts        # Session helpers + workspace access checks
-│   │       ├── permissions.ts    # RBAC: role hierarchy + permission matrix
-│   │       └── index.ts          # Client-safe exports only (no next/headers)
-│   ├── db/                                       # Prisma package
+│   ├── auth/                  # Better Auth, sessions, permissions, role ceilings
+│   ├── config/                # Zod environment contract
+│   ├── db/
 │   │   ├── prisma/
-│   │   │   ├── schema.prisma     # Full database schema (669 lines)
-│   │   │   ├── seed.ts           # Demo user/workspace/project/policy seed
-│   │   │   └── migrations/       # Prisma migrations
-│   │   ├── prisma.config.ts      # Prisma 7 config (dotenv + datasource URL)
-│   │   └── src/
-│   │       ├── client.ts         # PrismaClient with PrismaPg adapter
-│   │       ├── scoping.ts        # Workspace scoping + soft-delete model sets (AsyncLocalStorage)
-│   │       ├── extension.ts      # Prisma client extension (thin wrapper over scoping.ts)
-│   │       ├── extension.test.ts # Scoping + soft-delete regression tests (24 tests)
-│   │       ├── audit-hash.ts     # AuditLog hash-chain (computeAuditHash + verifyAuditChain, SHA-256)
-│   │       ├── audit-hash.test.ts # Hash-chain tests (21 tests: determinism, chaining, tamper, evidence encryption)
-│   │       ├── evidence.ts       # Evidence encryption enforcement (assertEvidenceEncrypted, isValidKeyRefFormat)
-│   │       ├── rls.ts            # Postgres RLS helper (withWorkspaceRLS, withoutWorkspaceRLS — SET LOCAL in transaction)
-│   │       ├── rls.test.ts       # RLS helper tests (9 tests: context, error propagation, table coverage)
-│   │       ├── index.ts          # Re-exports models + prisma client + audit-hash + evidence + RLS utils
-│   │       └── generated/prisma/ # Prisma generated client (gitignored)
-│   ├── types/                                    # Shared Zod schemas + TS types
-│   │   └── src/index.ts          # All schema definitions + ApiResponse types
-│   ├── ui/                                       # Shared UI component library (premium design system)
-│   │   └── src/
-│   │       ├── button.tsx       # Button with cva variants (default/secondary/ghost/destructive/outline × sm/md/lg/icon, transition-[background,box-shadow,transform])
-│   │       ├── components.test.ts # Unit tests for buttonVariants, badgeVariants, cn (20 tests)
-│   │       ├── card.tsx         # Card, CardHeader, CardTitle, CardContent, CardFooter (rounded-xl, shadow-sm)
-│   │       ├── badge.tsx        # Badge with cva variants (default/success/danger/warning/info/muted)
-│   │       ├── form-field.tsx   # Input, Textarea, Select, FormField wrapper (rounded-lg, focus ring, transition-[border-color,box-shadow])
-│   │       ├── empty-state.tsx  # EmptyState with icon, title, description, action
-│   │       ├── spinner.tsx      # Spinner (Loader2 with animate-spin)
-│   │       ├── load-more.tsx    # LoadMore pagination button (error handling, aria-busy)
-│   │       ├── github-icon.tsx  # GitHub SVG icon (lucide v1 removed brand icons)
-│   │       ├── utils.ts         # cn() class merge utility
-│   │       └── index.ts         # Re-exports all components
-│   ├── config/                                   # Shared tsconfig presets + env validation
-│   ├── logger/                                   # Structured JSON logger
-│   │   └── src/index.ts
-│   └── integrations/                             # External integrations (GitHub App)
-│       └── src/
-│           ├── github.ts          # JWT, installation tokens, repo listing, webhook verification
-│           ├── github.test.ts     # Tests for webhook signature + install URL
-│           └── index.ts           # Re-exports
-├── docker-compose.yml                            # PostgreSQL 16 + Redis 7 (env-interpolated secrets, Redis password)
-├── Dockerfile                                   # Multi-stage build (standalone output, slim runner, ARG-based build secrets)
-├── .dockerignore                                # Excludes node_modules, .next, .git, secrets, IDE dirs, docs
-├── turbo.json                                    # Turborepo task config
-├── pnpm-workspace.yaml                           # Workspace + build allowlist
-├── tsconfig.json                                 # Root tsconfig (composite, ES2022)
-├── eslint.config.mjs
-├── .env / .env.example                           # Environment variables
-├── PRD.md                                        # Full PRD + sprint backlog (4000+ lines)
-└── package.json                                  # Root scripts (dev, build, db:*)
+│   │   │   ├── schema.prisma # 30 models, 12 enums
+│   │   │   └── migrations/   # 9 committed PostgreSQL migrations
+│   │   └── src/              # Prisma client (with audit-hash extension), RLS/scoping, domain services
+│   ├── integrations/          # GitHub, notification delivery, Redis, and shared queue helpers
+│   ├── logger/                # Structured redacting logger
+│   ├── mcp/                   # Tools, server, stdio transport, injection guard
+│   ├── security/              # Shared SSRF validation and safeFetch
+│   ├── types/                 # Shared Zod schemas, DTOs, action/scan types
+│   └── ui/                    # Shared accessible components and variants
+├── .github/
+│   ├── workflows/             # CI and LyraShield diff gate
+│   └── dependabot.yml
+├── docs/deployment/           # Local and production runbooks
+├── AGENTS.md                  # Current handoff, queue, rules, landmines
+├── PRD.md                     # Product specification; Part C is current status
+├── codebase.md                # This implementation map
+├── product.md                 # Positioning and founder decisions
+├── engine-NOTICE.md           # Engine notices and modification record
+├── Dockerfile                 # Web and engine-bearing worker targets
+├── docker-compose.yml         # Local Postgres, Redis, migrate, web, worker
+├── turbo.json
+├── pnpm-workspace.yaml
+└── package.json
 ```
+
+Generated directories such as `node_modules/`, `.next/`, `dist/`, `.astro/`, `.wrangler/`, Prisma generated client output, and `*.tsbuildinfo` are not source-of-truth surfaces.
 
 ---
 
@@ -233,14 +178,17 @@ lyrashield/
 
 The auth package has a **client-safe / server-only split** to avoid importing `next/headers` or Prisma into client bundles:
 
-- **`@lyrashield/auth`** (client-safe): `authClient`, `signIn`, `signOut`, `signUp`, `useSession`, `PERMISSIONS`, `hasPermission`, `hasMinimumRole`
+- **`@lyrashield/auth`** (client-safe): `authClient`, `signIn`, `signOut`, `signUp`, `getClientSession`, `useSession`, `PERMISSIONS`, `hasPermission`, `hasMinimumRole`
 - **`@lyrashield/auth/server`** (server-only): `auth`, `getSession`, `requireAuth`, `getWorkspaceMembership`, `requireWorkspaceAccess`, `requirePermission`
 
 **Import rule**: Client components import from `@lyrashield/auth`. Server components and API routes import from `@lyrashield/auth/server`.
 
+**Session access in client components**: prefer `getClientSession()` (a Promise-based `authClient.getSession()` wrapper) for one-off session checks. The `useSession()` hook is a nanostore atom that can produce a non-callable type error in the current `better-auth` client; avoid calling it as a function in React components.
+
 ### 4.2 Session Interface
 
 `getSession()` returns `AuthSession | null`:
+
 ```typescript
 interface AuthSession {
   userId: string
@@ -261,6 +209,7 @@ Defined in `packages/auth/src/permissions.ts`:
 **Permission groups**: workspace, member, project, target, scan, finding, fix, report, policy, audit, billing, integration
 
 **Helper functions**:
+
 - `hasPermission(role, permission)` — check if role has specific permission
 - `hasMinimumRole(role, minimumRole)` — check if role meets minimum hierarchy
 - `isWorkspaceAdmin(role)` — true for ADMIN+
@@ -269,21 +218,24 @@ Defined in `packages/auth/src/permissions.ts`:
 ### 4.4 API Route Pattern
 
 All API routes follow this pattern:
+
 1. Call `getSession()` — return 401 if null
 2. Parse and validate body with Zod schema — return 400 on validation error
 3. Check permissions via `await requirePermission(workspaceId, permission)` — throws `UNAUTHORIZED` or `FORBIDDEN` on failure
 4. Wrap in try/catch — use `authErrorResponse(error)` from `@/lib/api-auth` to map thrown auth errors to 401/403 responses, then fall through to generic 500
 5. Perform the operation
-6. Write audit log via `prisma.auditLog.create()`
+6. Write audit log via `prisma.auditLog.create()` — the Prisma client extension computes `prevHash` and `hash` automatically
 7. Return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`
 
 **`requirePermission(workspaceId, permission)`** (async, throws):
+
 - Returns `{ session, membership }` on success
 - Throws `Error("UNAUTHORIZED")` if no session
 - Throws `Error("FORBIDDEN")` if not workspace member or lacks permission
 - Callers catch with `authErrorResponse(error)` → returns NextResponse with 401/403
 
 **`authErrorResponse(error)`** (`apps/web/src/lib/api-auth.ts`):
+
 ```typescript
 // In catch block:
 const authErr = authErrorResponse(error)
@@ -304,12 +256,12 @@ return NextResponse.json({ success: false, error: { code: "INTERNAL_ERROR", ... 
 
 - **Config file**: `packages/db/prisma.config.ts` uses `defineConfig()` with dotenv to load `.env` from repo root
 - **Schema**: `packages/db/prisma/schema.prisma` — generator outputs to `../src/generated/prisma` (gitignored)
-- **Client**: `packages/db/src/client.ts` — singleton with `PrismaPg` adapter, cached on `globalThis` for dev hot reload
+- **Client**: `packages/db/src/client.ts` — singleton with `PrismaPg` adapter and an audit-hash extension, cached on `globalThis` for dev hot reload
 - **No datasource URL in schema** — only `provider = "postgresql"`. URL comes from `prisma.config.ts`
 
 ### 4.7 SSRF Protection
 
-The SSRF logic lives in a shared helper **`apps/web/src/lib/ssrf.ts`** (`checkScanUrlSafe`), wired into the URL-target path of `apps/web/src/app/api/targets/route.ts`. It does **DNS-resolution-aware** validation, not string-prefix matching:
+The SSRF logic lives in **`packages/security`**. `apps/web/src/lib/ssrf.ts` re-exports `checkScanUrlSafe` for compatibility, and the URL-target API plus worker URL scanner share the same implementation. It does **DNS-resolution-aware** validation, not string-prefix matching:
 
 - Only `http(s)` schemes; rejects empty host and trailing-dot hostnames; blocks `localhost`/`*.localhost`/metadata hostnames.
 - **Resolves the hostname and validates every resolved A/AAAA address** against the blocklist (so a public domain that resolves to an internal IP is rejected).
@@ -317,85 +269,95 @@ The SSRF logic lives in a shared helper **`apps/web/src/lib/ssrf.ts`** (`checkSc
 - IPv6: strips brackets + zone id; handles IPv4-mapped (`::ffff:`), IPv4-compat, NAT64 (`64:ff9b::/96`), ULA (`fc00::/7`), link-local (`fe80::/10`), multicast; fail-closed on unparseable v6.
 - Injectable resolver for tests (`ssrf.test.ts`).
 
-**Remaining (deferred to the worker, unbuilt):** this is *create-time* validation. The durable defense against DNS rebinding is *fetch-time* enforcement — resolve→pin IP→connect→re-validate each redirect hop, via an allow-listed egress proxy (PRD PART B §B2.2). Move the helper to `packages/security` when that package lands.
+The worker uses `safeFetch` to re-resolve and validate every redirect hop before fetching. **Remaining deployment control:** application validation does not pin the transport connection to the validated address, so untrusted multi-tenant scans still require a transport-level egress proxy or equivalent DNS-pinned enforcement. See `PRD.md` Part C.
 
 ---
 
-## 5. Database Schema Overview
+## 5. Database and Persistence
 
-The Prisma schema (`packages/db/prisma/schema.prisma`) defines these models:
+The Prisma schema is `packages/db/prisma/schema.prisma` (30 models, 12 enums). Prisma 7 reads connection configuration from `packages/db/prisma.config.ts`; generated client output lives under `packages/db/src/generated/prisma` and is gitignored.
 
-### Better Auth Tables (managed by Better Auth, do not manually modify)
-- **User** — id, name, email (unique), emailVerified, image
-- **Session** — id, expiresAt, token (unique), userId
-- **Account** — OAuth/email accounts linked to users
-- **Verification** — email verification tokens
+### Model Groups
 
-### Application Models
-- **Workspace** — id, name, slug (unique), mode (VIBE/TEAM/ENTERPRISE), plan (FREE/PRO/TEAM/AGENCY/BUSINESS/ENTERPRISE)
-- **WorkspaceMember** — workspaceId, userId, role, status, invitedEmail, invitedById. Unique on `[workspaceId, userId]`
-- **Project** — workspaceId, name, description, ownerUserId, riskScore. Has targets, scans, findings
-- **Target** — workspaceId, projectId (optional), type (REPO/WEB_APP/API/CLOUD_ACCOUNT/CONTAINER/IAC), name, url, repoProvider/Owner/Name/FullName, branch, environment (LOCAL/PREVIEW/STAGING/PRODUCTION), status, lastScanAt, deletedAt (soft delete)
-- **CredentialSet** — encrypted credentials for targets
-- **Policy** — workspaceId, scan policy settings (networkEgressPolicy, destructiveTestsAllowed, approvalRequired, maxDurationMinutes, piiRedactionEnabled, evidenceRetentionDays)
-- **Scan** — workspaceId, targetId, projectId, goal, mode, status, policyId, startedAt, completedAt, findingsCount
-- **ScanEvent** — scanId, type, message, timestamp (streamed scan progress events)
-- **Finding** — workspaceId, targetId, scanId, projectId, severity, status, title, description, evidence, cwe, cvss
-- **Evidence** — findingId, type, content, redactedContent
-- **FixProposal** — findingId, codeDiff, description, status
-- **PullRequest** — fixProposalId, url, status
-- **Ticket** — findingId, url, provider
-- **Integration** — workspaceId, type (GITHUB/SLACK/JIRA/etc), name, configRef, status, capabilities (JSON), externalId (GitHub installation ID), metadata (JSON: accountLogin, accountId, accountType, setupAction), deletedAt. Unique on `[workspaceId, type, externalId]`
-- **WebhookEvent** — workspaceId (nullable), provider, eventType, externalId, payload (JSON), processed, processedAt, error. Unique on `[provider, externalId]`
-- **OnboardingState** — userId (unique), currentStep (0-6), completed, skipped, workspaceId, targetId, selectedGoal, createdAt, updatedAt
-- **UsageRecord** — workspaceId, kind, quantity, idempotencyKey (unique), metadata (JSON), deletedAt
-- **AuditLog** — workspaceId, actorUserId, action, resourceType, resourceId, metadata (JSON)
-- **Invitation** — workspaceId, email, token (unique), role, status (pending/accepted/expired), expiresAt, invitedById
+**Better Auth managed:** `User`, `Session`, `Account`, `Verification`.
+
+**Workspace/access:** `Workspace`, `WorkspaceMember`, `Invitation`, `ApiKey`, `AgentApproval`, `OnboardingState`.
+
+**Projects, targets, policy, integrations:** `Project`, `Target`, `CredentialSet`, `Policy`, `Integration`, `WebhookEvent`.
+
+**Scan/remediation/output:** `Scan`, `ScanEvent`, `Finding`, `Evidence`, `FixProposal`, `PullRequest`, `Ticket`, `Retest`, `Report`, `Notification`, `Schedule`, `UsageRecord`, `AuditLog`, `BillingAccount`.
+
+`ApiKey` and `BillingAccount` are schema foundations; user-facing API-key management and billing/usage enforcement are not implemented.
+
+### Isolation and Deletion
+
+- `packages/db/src/scoping.ts` owns the AsyncLocalStorage workspace context and the exact model allowlists for automatic workspace and soft-delete filters.
+- `WorkspaceMember` is excluded from automatic workspace scoping so the workspace switcher can query memberships. `OnboardingState` is user-scoped. Never add models to an allowlist unless the matching schema column exists.
+- `withWorkspaceRLS(workspaceId, fn)` in `packages/db/src/rls.ts` uses transaction-scoped `SET LOCAL`; 18 workspace tables have Postgres RLS policies.
+- The policies allow legacy/no-context access for compatibility and restrict rows when a workspace context is set. Application-level workspace filtering remains mandatory.
+- Evidence writes require a valid `encryptionKeyRef`; artifacts are uploaded via `apps/worker/src/engine/evidence-storage.ts` to S3-compatible storage with `AES256` SSE and a SHA-256 checksum. Missing storage or upload failure stops persistence; no placeholder URI is accepted. Shared report tokens are hashed and revocable. Audit writes are serialized per workspace with a PostgreSQL advisory lock, and privacy anonymization rebuilds affected chains.
+
+### Migrations
+
+Nine PostgreSQL migrations are committed, in order:
+
+1. `20260630214756_init`
+2. `20260630223105_add_new_models_and_indexes`
+3. `20260705090000_batch3_cvss_sarif_cost_hashchain`
+4. `20260705095000_batch3_missing_tables_columns`
+5. `20260705100000_batch3_rls`
+6. `20260706010000_schedule_target_fk`
+7. `20260706020000_agent_approval_layer`
+8. `20260707000100_drop_workspace_slug_idx`
+9. `20260707120000_report_fk_composite_indexes_workspace_guard`
+
+CI applies migrations to PostgreSQL 16 and runs a Prisma migration-diff gate. Production uses `migrate:deploy`; never use `db push` as a deployment mechanism.
 
 ---
 
-## 6. Environment Variables
+## 6. Environment Contracts
 
-Required for local development (see `.env.example`):
+### Product App and Worker
 
-```bash
-# Database
-DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
+The root `.env.example` is the canonical template. `@lyrashield/config` validates the product runtime at import time.
 
-# Redis (redis:// — reserved for the BullMQ job queue, Sprint 4+)
-REDIS_URL="redis://localhost:6379"
+| Area                    | Variables                                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| Database                | `DATABASE_URL`, optional `DATABASE_DIRECT_URL`                                                       |
+| Queue                   | `REDIS_URL`                                                                                          |
+| Distributed API limits  | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`                                                 |
+| Better Auth             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_COOKIE_DOMAIN`, `ADDITIONAL_TRUSTED_ORIGINS`   |
+| OAuth                   | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, optional Google and Azure AD values                      |
+| GitHub App              | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`                |
+| Public app              | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MARKETING_URL`, `PORT`                                           |
+| Engine                  | LYRASHIELD_LLM, LLM_API_KEY, LLM_API_BASE, LLM_API_VERSION, LYRASHIELD_IMAGE, Azure aliases          |
+| Evidence storage        | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`                            |
+| Email/notifications     | `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL`, `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL` |
+| Billing placeholders    | Polar and Razorpay variables; no billing runtime exists yet                                          |
+| Monitoring placeholders | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`                                                               |
 
-# Upstash Redis REST — distributed rate limiting in production (HTTP endpoint +
-# token; NOT the redis:// URL above). If the URL is set, the token is required.
-UPSTASH_REDIS_REST_URL=""
-UPSTASH_REDIS_REST_TOKEN=""
+Required boot values are `DATABASE_URL`, a 32+ character `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `NEXT_PUBLIC_APP_URL`. If the Upstash URL is configured, its token is required. GitHub private keys must be PEM-formatted.
 
-# Better Auth
-BETTER_AUTH_SECRET="replace-with-a-strong-secret-key-min-32-chars"
-BETTER_AUTH_URL="http://localhost:3000"
-# Comma-separated extra origins trusted for auth/CSRF (staging, apex+www, preview).
-# BETTER_AUTH_URL is always trusted; these are appended.
-ADDITIONAL_TRUSTED_ORIGINS=""
+The engine runner forwards only an explicit environment allowlist plus recognized provider API-key names. Never pass the full parent process environment to the Python subprocess. Production must pin `LYRASHIELD_IMAGE` by digest.
 
-# GitHub OAuth (sign-in)
-GITHUB_CLIENT_ID=""
-GITHUB_CLIENT_SECRET=""
+Next.js page-data collection does not reliably load the root `.env`; export required values or provide `apps/web/.env` for local production builds.
 
-# GitHub App (integration — Sprint 3)
-GITHUB_APP_ID=""
-GITHUB_APP_SLUG=""          # slug from github.com/apps/<slug> — used to build the install URL (NOT the numeric id)
-GITHUB_APP_PRIVATE_KEY=""
-GITHUB_WEBHOOK_SECRET=""
+### MCP
 
-# Google OAuth (optional)
-GOOGLE_CLIENT_ID=""
-GOOGLE_CLIENT_SECRET=""
+`LYRASHIELD_API_URL` selects the product API (default `http://localhost:3000`); `LYRASHIELD_API_KEY` supplies MCP authentication when configured. A complete user-facing API-key issuance lifecycle is still pending.
 
-# App
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-```
+### Marketing Worker
 
-Additional env vars for later sprints: S3/R2 evidence storage, Brevo email, Polar/Razorpay billing, Sentry monitoring, LyraShield engine (`LYRASHIELD_LLM`, `LLM_API_KEY`, `LYRASHIELD_IMAGE`, `LYRASHIELD_ENGINE_PATH`, `LYRASHIELD_TELEMETRY=false`).
+`apps/marketing/.env.example` documents public build inputs:
+
+- `PUBLIC_SITE_URL` — canonical marketing origin
+- `PUBLIC_APP_URL` — app origin used for "Sign in" / "Go to app" links (strip trailing slash before build)
+- `PUBLIC_X_URL`
+- `PUBLIC_INDEXABLE`
+- `PUBLIC_POSTHOG_KEY`
+- `PUBLIC_POSTHOG_HOST`
+
+`WAITLIST_IP_SALT` is a Worker secret and belongs in local `.dev.vars` or Cloudflare secrets, never in committed public vars. `wrangler.jsonc` supplies the `DB` and `WAITLIST_RL` bindings. Indexable builds require a public HTTPS `PUBLIC_SITE_URL`.
 
 ---
 
@@ -422,279 +384,121 @@ pnpm format:check
 
 # Database
 pnpm db:generate          # Generate Prisma client
-pnpm db:migrate           # Run migrations
-pnpm db:push              # Push schema without migration
+pnpm db:migrate           # Create/apply a development migration
+pnpm --filter @lyrashield/db migrate:deploy  # Apply committed migrations
+pnpm db:push              # Local prototyping only; never production
 pnpm db:seed              # Seed demo data
 pnpm db:studio            # Open Prisma Studio
 
-# Docker (Postgres + Redis)
-docker compose up -d      # Start services
+# Docker (Postgres, Redis, migrate, web, worker)
+docker compose up --build # Build and start the local stack
+docker compose build worker  # Build engine-bearing worker using sibling context
 docker compose down       # Stop services
+
+# Marketing Worker preview
+pnpm --filter @lyrashield/marketing preview  # Worker-backed preview on port 8787
 ```
 
 **First-time setup**:
-1. `docker compose up -d` — start Postgres + Redis
+
+1. `docker compose up -d postgres redis` — start dependencies
 2. `pnpm install` — install dependencies
 3. `pnpm db:generate` — generate Prisma client
 4. `pnpm db:migrate` — run migrations
 5. `pnpm db:seed` — seed demo data
-6. `pnpm dev` — start dev server at http://localhost:3000
+6. `pnpm dev` — start dev server at `http://localhost:3001` (set `PORT` in `apps/web/.env` if you need a different port)
 
 ---
 
-## 8. Sprint Progress
+## 8. Implementation Status
 
-### Sprint 0: Repo and Foundation — ✅ Complete
-- Turborepo + pnpm workspaces
-- All packages created (db, auth, ui, types, integrations, config, logger)
-- Docker Compose for Postgres + Redis
-- ESLint, Prettier, TypeScript config
-- CI setup
+This is the code-facing status summary. Product cutlines and release gates live in `PRD.md` Part C; dated implementation detail lives in §§17–31 below.
 
-### Sprint 1: Prisma Schema and Better Auth — ✅ Complete
-- Better Auth with email/password + GitHub OAuth + Google OAuth (optional)
-- Full Prisma schema with all models
-- Session management (7-day expiry, 1-day refresh)
-- Auth middleware in dashboard layout
-- Workspace creation flow (creates workspace + owner membership + default policy + audit log in transaction)
-- Team invite flow (Invitation model with 7-day expiry)
-- Account deletion endpoint
-- Seed script with demo user/workspace/project/policy
+| Workstream                          | Status                       | Code truth                                                                                                                                                                                                                                                 |
+| ----------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation/auth/tenancy (0–3 + 2.5) | Core complete                | Better Auth, workspaces, RBAC, onboarding, projects, targets, team, GitHub App, RLS, account deletion/anonymization, scoping, pagination, shared UI.                                                                                                       |
+| Agent actions/approvals (3.5/7.5)   | Complete                     | Six actions, signed service tokens, registry permissions, queueing, exact input-hash approval checks, approval APIs, RLS model.                                                                                                                            |
+| Scan orchestration (4)              | Complete                     | BullMQ producer/consumer, preflight, guarded lifecycle, cancellation/retry, engine runner, artifact parsing, findings persistence, polling UI.                                                                                                             |
+| Engine adapter (5)                  | Code complete, release-gated | Thin adapter and Docker integration pass offline gates. Authorized sandbox/controlled scan remains unproven.                                                                                                                                               |
+| Normalization/SCA/secrets (6/6.5)   | Complete                     | Normalizer, verifier, SCA, secrets, scanner orchestrator, SARIF, nested manifest discovery.                                                                                                                                                                |
+| Remediation/output (7–9)            | Complete                     | Finding APIs/UI, fix proposals, GitHub PR creation, retests, reports/sharing, launch readiness, notifications, schedules, URL checks, diff gate. Evidence artifacts upload to S3-compatible storage with checksums.                                        |
+| MCP (9.5)                           | Core complete                | API-backed tools, approval checks, hardened prompt-injection guard (input normalization + expanded pattern set), stdio transport. API-key lifecycle and broader client docs remain.                                                                        |
+| Billing/usage (10)                  | Not implemented              | `BillingAccount`, `UsageRecord`, permissions, and env values are schema/config foundations only.                                                                                                                                                           |
+| Launch polish (11)                  | Partial                      | UX, accessibility, security hardening, privacy lifecycle, browser E2E, health/readiness, instrumentation, docs, and Docker proof are implemented; controlled scan, production infrastructure, egress, operational monitoring, and marketing launch remain. |
+| Phase 2                             | Not implemented              | Enterprise identity, SCIM, advanced policy, private worker, VPC/self-hosting, BYOK/BYOM, and enterprise integrations remain roadmap items.                                                                                                                 |
 
-### Sprint 2: Dashboard, Projects, Targets — ✅ Complete
-- Dashboard layout with sidebar navigation
-- Workspace switcher dropdown (with Escape key, aria attrs)
-- Project list page with create form
-- Target list page with repo + URL target creation forms
-- Target detail page with recent scans
-- Team members page with invite form
-- SSRF validation for URL targets
-- Audit logs for all create operations
-- Empty states for all list pages
-- Loading states for all pages
+### Current Verification
 
-**Code review and hardening (post-implementation)**:
-- SSRF blocklist hardened: full 127.0.0.0/8, IPv6-mapped IPv4 (::ffff:), fd00::/8, trailing-dot bypass prevention
-- Team invite duplicate check: queries both WorkspaceMember and pending Invitation records
-- Error states with retry UI on all client components
-- Accessibility: htmlFor/id label associations, autoFocus on first form field, Escape key on dropdowns, aria-expanded/aria-haspopup/role=listbox on workspace switcher, aria-label on sign-out
-- Stale error clearing on form cancel
-- Redirect instead of notFound for authorization failures (prevents info leakage)
-- Removed unused imports (Trash2, Plus)
-- Radar icon for Scans nav item (was duplicate Crosshair)
-- Empty description sent as undefined instead of empty string
+- `pnpm lint`: pass
+- `pnpm typecheck`: pass across the workspace package graph
+- `pnpm test`: **625 tests in 56 files**, pass
+- `pnpm test:e2e`: **2 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
+- `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
+- `git diff --check`: pass
+- Engine offline gate: 155 tests + Ruff + formatting + headless mypy + Bandit
 
-### Sprint 2.5: Onboarding Flow — ✅ Complete
-- **OnboardingState model**: `OnboardingState` in Prisma schema — tracks `currentStep`, `completed`, `skipped`, `workspaceId`, `targetId`, `selectedGoal` per user
-- **Onboarding API**: `GET/PATCH /api/onboarding` — auto-creates state on first GET, upsert on PATCH, Zod-validated via `UpdateOnboardingSchema`
-- **Onboarding wizard**: `/onboarding` page with 7-step guided flow (Workspace → Target → Goal → Preflight → Scan → Results → Fix)
-- **Progress indicator**: Visual step tracker with checkmarks for completed steps
-- **Skip option**: Users can skip onboarding at any step; sets `skipped: true` and redirects to dashboard
-- **Completion tracking**: `completed: true` on finish; dashboard layout redirects incomplete/non-skipped users to `/onboarding`
-- **Sign-up redirect**: Both email and GitHub sign-up now redirect to `/onboarding` instead of `/dashboard`
-- **Steps 4-6 (Scan/Results/Fix)**: Placeholder UI with clear messaging that engine integration comes in Sprint 5
-- **Zod schemas**: `OnboardingStepSchema`, `UpdateOnboardingSchema` added to `@lyrashield/types`
+### Runtime Truth
 
-### Pre-Sprint-3 Hardening (PRD §B1.4 + §B4) — ✅ Complete
-- **Env validation**: Zod schema in `@lyrashield/config` — fails fast on missing/invalid `BETTER_AUTH_SECRET`, `DATABASE_URL`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`
-- **Email verification**: `requireEmailVerification: true` in `auth.ts`; Brevo integration for production, console.log in dev; `sendOnSignUp: true`
-- **Rate limiting**: `proxy.ts` (renamed from `middleware.ts` per Next.js 16) — auth endpoints 5/min per IP, general API 30/min per IP; Upstash Redis in prod, in-memory fallback in dev
-- **Schema retrofits (§B4)**:
-  - Finding dedupe key: `@@unique([targetId, dedupeKey])` (was `[workspaceId, dedupeKey]`)
-  - ApiKey model: hashedKey, prefix, scopes, expiresAt, revokedAt, lastUsedAt
-  - Evidence.encryptionKeyRef added
-  - AuditLog.prevHash added (hash-chain ready)
-  - Soft-delete (`deletedAt`) standardized across all models
-  - Duplicate-target guards: `@@unique([workspaceId, repoFullName])` + `@@unique([workspaceId, url])`
-  - Report.shareToken → shareTokenHash (hashed at rest) + revokedAt
-  - UsageRecord.idempotencyKey added
-  - Composite indexes: `Finding(workspaceId, status, severity)`, `AuditLog(workspaceId, createdAt)`
-  - Redundant `@@index([slug])` on Workspace removed (already @unique)
-  - Retest model added (P2)
-- **Prisma Client Extension**: auto-injects `deletedAt: null` on reads, `workspaceId` scoping, redirects `delete` → soft-delete
-- **License hygiene**: `engine-NOTICE.md` and `engine-CHANGES.md` templates created for Apache-2.0 §4b compliance
-
-### Sprint 3: GitHub App Integration — ✅ Complete
-- **Integration module** (`@lyrashield/integrations`): GitHub App JWT minting (RS256), installation token fetching, repo listing, webhook signature verification (HMAC-SHA256 with timing-safe comparison)
-- **Schema updates**: `Integration` model — added `externalId` (installation ID), `metadata` (JSON for account info), `@@unique([workspaceId, type, externalId])`
-- **Installation callback**: `GET /api/integrations/github/install` — receives GitHub OAuth redirect, stores installation metadata, creates audit log
-- **Install URL generation**: `POST /api/integrations/github/install` — returns GitHub App install URL with workspace state
-- **Repo listing**: `GET /api/integrations/github/repos` — lists accessible repos via installation token
-- **Webhook handler**: `POST /api/webhooks/github` — verifies signature, handles `installation.deleted` (disables targets, soft-deletes integration) and `pull_request` events (stores in WebhookEvent)
-- **Integrations UI**: `/dashboard/integrations` page with GitHub connect button, repo picker, and target creation from selected repo
-- **Sidebar**: Added Integrations nav item with Plug icon
-- **Security**: GitHub secrets stored only as installation metadata (configRef pattern), no raw tokens in DB; webhook signature verification required
-- **Tests**: `packages/integrations/src/github.test.ts` (9 tests: webhook signature valid/invalid/null/empty/wrong-secret/tampered/wrong-length, install URL format), `packages/types/src/index.test.ts` (21 tests: OnboardingStepSchema + UpdateOnboardingSchema validation). Total: 133 tests passing (113 original + 20 UI component tests added in Batch 2).
-
-### Sprint 4: Scan Orchestrator and Queue — ✅ Complete
-- BullMQ scan queue with Redis
-- Preflight checks (URL reachability, DNS, SSRF validation)
-- Engine runner (child process subprocess invocation)
-- Output parser (structured JSON findings)
-- Finding persister (encrypted evidence storage)
-- Scan lifecycle state machine (QUEUED → PREFLIGHT → RUNNING → COMPLETED/FAILED/CANCELLED)
-- Scan API routes (POST create, GET list, GET by ID, POST cancel)
-- Scan detail UI with client-side polling
-- See §21 for full details
-
-### Sprint 5: Engine MVP — ✅ Complete
-- External `lyrashield-engine` binary wired via `runner.ts` + `command-builder.ts`
-- See §21 for full details
-
-### Sprint 6: Findings Normalization — ✅ Complete
-- `normalizer.ts` with severity normalization, CWE enrichment (40+ mappings), CVSS v3.1 estimation, confidence scoring, false-positive risk assessment, cross-source deduplication, finding statistics
-- 14 tests. See §23 for full details
-
-### Sprint 6.5: SCA + Secrets Scanning — ✅ Complete
-- `sca-scanner.ts` (7 dep file formats, OSV API), `secrets-scanner.ts` (12 secret patterns), `scanner-orchestrator.ts` (parallel scan, normalize, merge)
-- 24 new tests. See §23 for full details
-
-### Sprint 7: Tier 2 — ✅ Complete
-- AI-builder-aware URL scanner (10 detectors), launch-readiness UI, shareable report/badge, MCP server with real API calls + stdio transport, prompt-injection defense (27 patterns), GitHub Action diff-gate
-- 16 new tests. See §24 for full details
-
-### UI/UX Refinement Sweep — ✅ Complete
-- Raw `<label>` → `FormField` component, raw color classes → design tokens, `aria-hidden` on all decorative icons, `tracking-tight` on all headings, `Spinner` in all loading states
-- See §25 for full details
-
-### Docker Deployment — ✅ Verified
-- All 5 containers build and run, 18 pages return correct HTTP codes (200/307/404), 13 API endpoints respond correctly, 7 migrations applied, 18 RLS tables confirmed, 781 tests pass inside container
-
-### UI/UX Premium Upgrade (2026-07-05) — ✅ Complete
-
-A full visual audit and upgrade of the entire app UI for a modern, premium look with richer colors, shadows, gradients, glassmorphism, and larger radii. All pages are fully responsive and mobile-optimized.
-
-**Design system (`globals.css`)**:
-- OKLCH color space for all tokens (light + dark mode)
-- Custom shadow scale: `--shadow-xs` through `--shadow-lg`, `--shadow-primary`
-- Enlarged radii: `--radius-sm` (0.375rem) through `--radius-2xl` (1.25rem)
-- Premium utility classes: `.glass` (glassmorphism), `.gradient-primary`, `.gradient-hero`, `.text-gradient`, `.shadow-premium`, `.shadow-card-hover`, `.shadow-primary-glow` — all with dark mode variants
-- Antialiased font rendering (`-webkit-font-smoothing: antialiased`)
-
-**Shared UI components (`packages/ui`)**:
-- `Button`: cva-based variants (default with `gradient-primary` + `shadow-sm` + `hover:shadow-primary-glow`, secondary, ghost, destructive, outline) × sizes (sm, md, lg, icon). `active:scale-[0.98]` press feedback.
-- `Card`: `rounded-xl`, `shadow-sm`, `transition-shadow` on hover
-- `Badge`: cva variants — default, success (emerald), danger (destructive), warning (amber), info (sky), muted
-- `Input`/`Textarea`/`Select`: `rounded-lg`, `shadow-xs`, `focus:ring-2 focus:ring-ring focus:border-primary/50`, `transition-all`
-- `EmptyState`: `rounded-xl border-dashed`, primary-tinted icon background (`bg-primary/5`), `aria-hidden` on icon
-- `Spinner`: `Loader2` with `animate-spin`, `aria-hidden`
-
-**Landing page**: Gradient hero background, glassmorphic floating navbar (`.glass` + `backdrop-blur`), gradient CTA buttons, feature cards with hover-lift (`hover:-translate-y-1 hover:shadow-lg`), `aria-label` on nav
-
-**Auth pages (sign-in/sign-up)**: Gradient background (`.gradient-hero`), premium card with `shadow-primary-glow` logo badge, gradient CTA buttons, `setLoading(false)` in `finally` block for GitHub OAuth error handling
-
-**Sidebar**: Gradient logo badge (`.gradient-primary`), mobile drawer with overlay backdrop, active route with `bg-primary/8 text-primary`, user avatar with initial, `aria-label` on close button, open-menu button hidden when sidebar is open
-
-**Dashboard**: Gradient stat cards with icon backgrounds (`bg-primary/5 group-hover:bg-primary/10`), hover shadow, premium workspace cards with role badges, `title` attribute on New Scan button
-
-**Targets page**: Mobile-responsive table (`hidden sm:table-cell` on non-essential columns), `overflow-x-auto`, clickable rows with `role="link"` + `aria-label`, premium form card with `rounded-xl shadow-sm`
-
-**Projects page**: Responsive header (`flex-col sm:flex-row`), hover-lift project cards (`hover:-translate-y-0.5 hover:shadow-md`), risk badges
-
-**Team page**: Responsive table with hidden columns on mobile, OWNER badge distinguished from ADMIN (default vs info variant), premium invite form card
-
-**Target detail**: Responsive header with `flex-wrap`, hover-lift stat cards, premium table with hidden date column on mobile, card sections with `shadow-sm`
-
-**Integrations page**: Card with `shadow-sm`, responsive flex layout (`flex-col sm:flex-row`), repo list buttons with `rounded-lg`
-
-**Onboarding wizard**: Gradient step indicators (completed = `.gradient-primary`, current = `border-primary shadow-primary-glow`), step labels hidden on mobile (`hidden sm:block`), all action buttons use `gradient-primary rounded-lg`, `PreflightItem` with `rounded-lg` + gradient checkmark + `Clock` icon for pending items, `grid-cols-2` for mode selector buttons
-
-**Onboarding page**: Gradient hero background, gradient logo badge with `shadow-primary-glow`, `aria-hidden` on icon
-
-**Workspace switcher**: `rounded-lg` items, `transition-colors` on hover
-
-**Deep code review fixes (2026-07-05)**:
-- Dark mode variants added for `.gradient-primary`, `.text-gradient`, `.shadow-card-hover` (were invisible/too dark in dark mode)
-- Dead `--shadow-card-hover` CSS vars removed from theme blocks; moved to proper utility class
-- Sidebar: open-menu button hidden when sidebar is open (was both visible simultaneously)
-- Auth pages: `setLoading(false)` moved to `finally` block (button stayed disabled on OAuth redirect failure)
-- Onboarding wizard: mode selector changed from `flex` to `grid-cols-2` (overflow on narrow screens), all buttons upgraded to `gradient-primary rounded-lg`, `PreflightItem` icon changed from `Plus` to `Clock` (was confusing)
-- Team page: OWNER badge distinguished from ADMIN (`default` vs `info` variant)
-- Targets table: `role="link"` + `aria-label` added to clickable rows for screen readers
-- Dashboard: `title` attribute on New Scan button (links to placeholder page)
-- GitHub integration: repo buttons upgraded from `rounded-md` to `rounded-lg`
-- Landing page: `aria-label="Main navigation"` on nav, `container` replaced with `max-w-5xl mx-auto` in footer
-- Onboarding page: `aria-hidden="true"` on ShieldCheck icon
-
-**Verification**: lint ✅ (0 errors), typecheck ✅, tests ✅ (727/727, 56 files), build ✅
-
-### Engine Repo (lyrashield-engine) — Forked & Rebranded
-
-The engine repo has been forked from usestrix/strix, fully rebranded to LyraShield, and is ready for upgrades. See [Engine Repo Status](#engine-repo-status) in Section 1 for full details.
-
-**Completed**:
-- Fork from usestrix/strix with upstream remote configured
-- Full rebrand: zero "Strix" references remaining, CLI binary renamed to `lyrashield`
-- Telemetry disabled (PostHog + Scarf off by default, `LYRASHIELD_TELEMETRY=false`)
-- Upgrade roadmap documented in `UPGRADES.md`
-
-**Pending** (mapped to sprints):
-- Sprint 5: ✅ Done — Structured JSON findings, exit codes, event streaming, policy hooks
-- Sprint 6: ✅ Done — Dedupe keys, evidence packaging, CVSS auto-scoring
-- Sprint 7: ✅ Done — Structured patch output with safety score
-- Post-Sprint 7: Webhooks, parallel orchestration, custom skills, sandbox hardening
+- The local Compose architecture includes PostgreSQL, Redis, a migration job, web, and worker.
+- The engine-bearing worker image builds and exposes `lyrashield 1.0.4.post1`.
+- Missing engine model configuration fails before sandbox pull.
+- Historical Docker smoke in §§24–30 proves prior container health, routes, migrations, queue startup, and engine packaging. It does **not** prove a current authorized scan.
+- Marketing is implemented and locally Worker-previewed, but Cloudflare production provisioning, domain attachment, indexing, and real-domain QA are not complete.
 
 ---
 
 ## 9. API Reference
 
-### Authentication
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/auth/[...all]` | Better Auth handler (sign-in, sign-up, sign-out, OAuth callbacks) |
+All routes live under `apps/web/src/app/api`. Protected routes use Better Auth plus workspace permission checks. Inputs are Zod-validated at trust boundaries. List endpoints use cursor pagination where applicable.
 
-### Onboarding
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| GET | `/api/onboarding` | Get current user's onboarding state (auto-creates if missing) | Authenticated |
-| PATCH | `/api/onboarding` | Update onboarding state (step, completed, skipped, workspaceId, targetId, selectedGoal) | Authenticated |
+| Methods            | Path                                | Purpose                                             |
+| ------------------ | ----------------------------------- | --------------------------------------------------- |
+| GET                | `/api/health`                       | Process liveness                                    |
+| GET                | `/api/ready`                        | PostgreSQL and Redis readiness                      |
+| DELETE             | `/api/account`                      | Confirmed account deletion and anonymization        |
+| GET, POST          | `/api/auth/[...all]`                | Better Auth handler                                 |
+| GET, POST          | `/api/workspaces`                   | List memberships / create workspace                 |
+| POST               | `/api/workspaces/active`            | Persist active workspace in HttpOnly cookie         |
+| GET, PATCH         | `/api/onboarding`                   | Read/update per-user onboarding state               |
+| GET, POST          | `/api/projects`                     | Paginated project list / create                     |
+| GET, POST          | `/api/targets`                      | Paginated target list / create with SSRF validation |
+| GET, POST          | `/api/team`                         | Paginated team list / invite member                 |
+| GET, POST          | `/api/integrations/github/install`  | Installation callback / signed install URL          |
+| GET                | `/api/integrations/github/repos`    | List installation repositories                      |
+| POST               | `/api/webhooks/github`              | Verify and process GitHub deliveries                |
+| GET, POST          | `/api/scans`                        | Paginated scan list / create and enqueue            |
+| GET, POST          | `/api/scans/[id]`                   | Scan with events / cancel scan                      |
+| GET                | `/api/findings`                     | Paginated finding list                              |
+| GET, PATCH         | `/api/findings/[id]`                | Finding detail / update status                      |
+| POST               | `/api/findings/[id]/fix-proposals`  | Create fix proposal                                 |
+| POST               | `/api/findings/[id]/retests`        | Queue retest                                        |
+| GET                | `/api/fix-proposals`                | List proposals                                      |
+| POST               | `/api/fix-proposals/[id]/create-pr` | Approval-aware GitHub PR creation                   |
+| GET                | `/api/retests`                      | List retests                                        |
+| GET                | `/api/launch-readiness`             | Compute launch-readiness verdict                    |
+| GET, POST          | `/api/reports`                      | List / generate report                              |
+| GET, POST          | `/api/reports/[id]`                 | Read report / share or revoke token                 |
+| GET                | `/api/reports/[id]/download`        | Download rendered HTML report                       |
+| GET                | `/api/reports/shared/[id]`          | Token-gated public report data                      |
+| GET, POST          | `/api/notifications`                | Paginated list / create notification                |
+| PATCH              | `/api/notifications/[id]`           | Update notification read state                      |
+| GET, POST          | `/api/schedules`                    | Paginated list / create schedule                    |
+| GET, PATCH, DELETE | `/api/schedules/[id]`               | Read/update/delete schedule                         |
+| GET                | `/api/agent-approvals`              | List approvals                                      |
+| POST               | `/api/agent-approvals/[id]/approve` | Approve exact action input                          |
+| POST               | `/api/agent-approvals/[id]/deny`    | Deny pending approval                               |
 
-### Workspaces
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| POST | `/api/workspaces` | Create workspace (creates owner membership + default policy + audit log) | Authenticated |
-| GET | `/api/workspaces` | List user's workspaces | Authenticated |
+### Response and Client Contracts
 
-### Projects
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| POST | `/api/projects` | Create project | Active workspace member |
-| GET | `/api/projects?workspaceId=<id>` | List projects with target/scan/finding counts | Active workspace member |
+Server routes use helpers from `apps/web/src/lib/api-response.ts`:
 
-### Targets
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| POST | `/api/targets` | Create repo or URL target (SSRF validation on URL targets) | Active workspace member |
-| GET | `/api/targets?workspaceId=<id>&projectId=<optional>` | List targets with project name, scan/finding counts | Active workspace member |
+- success: `{ success: true, data }`
+- error: `{ success: false, error: { code, message } }`
+- paginated: data plus `nextCursor`
 
-### Team
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| POST | `/api/team` | Invite team member (creates Invitation with 7-day expiry) | OWNER or ADMIN |
-| GET | `/api/team?workspaceId=<id>` | List active members + pending invitations | Active workspace member |
+Client components use `apiGet`, `apiPost`, `apiPatch`, `apiDelete`, and `apiGetPaginated` from `apps/web/src/lib/api-client.ts`; do not add raw `fetch` to client components without a concrete need.
 
-### Integrations — GitHub App
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| GET | `/api/integrations/github/install` | GitHub OAuth callback — stores installation metadata, redirects to dashboard | Authenticated + `integration.manage` |
-| POST | `/api/integrations/github/install` | Returns GitHub App install URL with workspace state | Authenticated + `integration.manage` |
-| GET | `/api/integrations/github/repos?workspaceId=<id>` | List accessible repos via installation token | Authenticated + `integration.manage` |
-
-### Webhooks
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| POST | `/api/webhooks/github` | GitHub webhook handler — verifies HMAC-SHA256 signature, handles `installation.deleted` + `pull_request` | Webhook signature (no session) |
-
-**API response format**:
-```json
-// Success
-{ "success": true, "data": ... }
-
-// Error
-{ "success": false, "error": { "code": "ERROR_CODE", "message": "Human-readable message" } }
-```
-
-**Common error codes**: `UNAUTHORIZED` (401), `FORBIDDEN` (403), `VALIDATION_ERROR` (400), `INVALID_JSON` (400), `MISSING_PARAM` (400), `SSRF_BLOCKED` (400), `ALREADY_INVITED` (409), `SLUG_TAKEN` (409), `PROJECT_NOT_FOUND` (404), `NOT_CONNECTED` (404), `NOT_FOUND` (404), `INVALID_SIGNATURE` (401), `MISSING_HEADERS` (400), `CONFIG_ERROR` (500), `INTERNAL_ERROR` (500)
+Worker-created notifications are workspace-level and may have no `userId`; notification listing must not add a default user filter.
 
 ---
 
@@ -705,6 +509,7 @@ The engine repo has been forked from usestrix/strix, fully rebranded to LyraShie
 All components use `forwardRef` and `cn()` (clsx + tailwind-merge) for class merging. Variants are managed via `class-variance-authority` (cva).
 
 **Button** (`button.tsx`):
+
 - Variants: `default` (gradient-primary + shadow + hover glow), `secondary` (border + bg-card), `ghost`, `destructive`, `outline`
 - Sizes: `sm` (h-8), `md` (h-10), `lg` (h-11), `icon` (h-10 w-10)
 - Press feedback: `active:scale-[0.98]`
@@ -715,6 +520,7 @@ All components use `forwardRef` and `cn()` (clsx + tailwind-merge) for class mer
 **Card** (`card.tsx`): `Card` (rounded-xl, shadow-sm, transition-shadow), `CardHeader`, `CardTitle`, `CardContent`, `CardFooter`
 
 **Badge** (`badge.tsx`):
+
 - Variants: `default` (bg-secondary), `success` (emerald), `danger` (destructive), `warning` (amber), `info` (sky), `muted`
 - Rounded-full, gap-1 for icon + text
 - Exported: `Badge`, `badgeVariants`, `BadgeProps`
@@ -730,7 +536,8 @@ All components use `forwardRef` and `cn()` (clsx + tailwind-merge) for class mer
 **GithubIcon** (`github-icon.tsx`): Custom GitHub SVG icon (lucide v1 removed brand icons). Accepts `className` prop.
 
 ### Sidebar (`apps/web/src/components/sidebar.tsx`)
-- Navigation with icons: Dashboard, Projects, Targets, Scans (Radar icon), Findings, Fixes, Reports, Team, Integrations (Plug icon), Settings
+
+- Navigation with icons: Dashboard, Projects, Targets, Scans, Findings, Fixes, Reports, Launch Readiness, Notifications, Schedules, Team, Integrations, Settings
 - Gradient logo badge (`.gradient-primary`) at top
 - Workspace switcher embedded at top
 - Active route highlighting via `usePathname` with `bg-primary/8 text-primary font-semibold`
@@ -740,6 +547,7 @@ All components use `forwardRef` and `cn()` (clsx + tailwind-merge) for class mer
 - `aria-label` on open/close buttons, `aria-current="page"` on active nav item, `aria-hidden` on all icons
 
 ### Onboarding Wizard (`apps/web/src/app/onboarding/onboarding-wizard.tsx`)
+
 - 7-step guided flow: Workspace → Target → Goal → Preflight → Scan → Results → Fix
 - Gradient step indicators (completed = `.gradient-primary`, current = `border-primary shadow-primary-glow`)
 - Current step label always visible on mobile (`block`); non-current steps hidden on mobile (`hidden sm:block`)
@@ -751,10 +559,12 @@ All components use `forwardRef` and `cn()` (clsx + tailwind-merge) for class mer
 - Error banner uses `role="alert"` for accessibility
 - Skip option at every step (sets `skipped: true`, redirects to `/dashboard`)
 - Fetches and updates state via `GET/PATCH /api/onboarding`
-- Steps 4-6 (Scan/Results/Fix) show placeholder UI with `rounded-xl border-dashed bg-card/50` (engine integration in Sprint 5)
+- Scan step calls `POST /api/scans`, retains the created scan ID/status, and routes results to the real scan detail page
+- Results/Fix steps link into the implemented scan, findings, and remediation surfaces
 - Completion sets `completed: true` and redirects to `/dashboard`
 
 ### GitHub Integration (`apps/web/src/app/(dashboard)/dashboard/integrations/github-integration.tsx`)
+
 - Connect button: calls `POST /api/integrations/github/install` → redirects to GitHub App install page
 - Repo picker: calls `GET /api/integrations/github/repos` → displays selectable list with private badges, `rounded-lg` buttons
 - Target creation: calls `POST /api/targets` with selected repo data (type: REPO, provider: github)
@@ -763,16 +573,19 @@ All components use `forwardRef` and `cn()` (clsx + tailwind-merge) for class mer
 - Uses `Spinner` from `@lyrashield/ui` for loading states
 
 ### Workspace Switcher (`apps/web/src/components/workspace-switcher.tsx`)
+
 - Dropdown with click-outside and Escape key to close
 - ARIA attributes: `aria-expanded`, `aria-haspopup`, `role="listbox"`, `role="option"`, `aria-selected`
 - `rounded-lg` items with `transition-colors` on hover
 - Calls `onSelect(workspaceId)` — parent handles workspace switching
 
 ### Client Components Pattern
+
 All client components (`*-client.tsx`) follow this pattern:
+
 - `useState` for form fields, loading, error, fetchError
 - `useEffect` to fetch data on mount
-- Loading state: centered "Loading..." text
+- Loading state: shared `Spinner` with stable layout dimensions
 - Error state: error message + retry button
 - Empty state: dashed border card with icon and CTA
 - Form: error banner, labeled inputs (htmlFor/id), autoFocus on first field, clear error on cancel
@@ -786,6 +599,7 @@ All Zod schemas and TypeScript types are defined here:
 **Enum schemas**: WorkspaceMode, WorkspacePlan, MemberRole, TargetType, TargetEnvironment, ScanGoal, ScanMode, ScanStatus, FindingSeverity, FindingStatus, IntegrationType
 
 **Input schemas**:
+
 - `CreateWorkspaceSchema` — name (1-100), mode (default VIBE)
 - `CreateProjectSchema` — workspaceId, name (1-100), description (optional, max 500)
 - `CreateRepoTargetSchema` — workspaceId, projectId (optional), type: REPO, name, repoProvider (default github), repoOwner, repoName, branch (optional), environment (default STAGING)
@@ -794,13 +608,22 @@ All Zod schemas and TypeScript types are defined here:
 - `OnboardingStepSchema` — enum: WORKSPACE, TARGET, GOAL, PREFLIGHT, SCAN, RESULTS, FIX
 - `UpdateOnboardingSchema` — currentStep (0-6, optional), completed (bool, optional), skipped (bool, optional), workspaceId (string|null, optional), targetId (string|null, optional), selectedGoal (ScanGoal|null, optional)
 
-**Response types**: `ApiResponse<T>`, `PaginatedResponse<T>`
+**Contracts beyond CRUD inputs**:
+
+- `ApiResponse<T>`, `PaginatedResponse<T>`
+- SARIF 2.1.0 report/run/rule/result/location types
+- CVSS and scan cost/determinism contracts
+- `SCAN_QUEUE_NAME`, `ScanJobData`, `ScanJobResult`
+- Agent action definitions/context/results and signed service-token payload
+- Approval status and create/approve/deny schemas
+- Input schemas for all six agent actions
 
 ---
 
 ## 12. Logger (`packages/logger/src/index.ts`)
 
-Structured JSON logger with level filtering:
+Structured JSON logger with level filtering, recursive secret/PII redaction, circular-safe serialization, `Error` handling, and payload truncation:
+
 ```typescript
 logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 // Output: {"level":"info","message":"Project created","timestamp":"2026-07-01T...","projectId":"abc","workspaceId":"xyz"}
@@ -809,16 +632,19 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 - Levels: debug, info, warn, error
 - `LOG_LEVEL` env var controls minimum level (default: info)
 - `createLogger(scope)` returns scoped logger
+- Sensitive key names and credential-looking values are masked before serialization; still never log raw secrets deliberately
 
 ---
 
 ## 13. Next.js Configuration
 
 `apps/web/next.config.ts`:
+
 - `transpilePackages`: All `@lyrashield/*` packages
 - `serverExternalPackages`: `@prisma/client`, `@prisma/adapter-pg`, `@prisma/client-runtime-utils`
 
 **Proxy** (`apps/web/src/proxy.ts`) — Rate limiting + nonce-based CSP on every request:
+
 - Auth endpoints (`/api/auth/*`): 5 requests/min per IP
 - General API (`/api/*`): 30 requests/min per IP
 - Uses Upstash Redis in production, in-memory Map fallback in dev
@@ -834,7 +660,7 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 - **API routes**: Always validate input with Zod, check auth + workspace membership, write audit logs
 - **Error handling**: API routes return `{ success: false, error: { code, message } }` with appropriate HTTP status
 - **Database queries**: Always scope by `workspaceId` to prevent cross-tenant data access
-- **Soft deletes**: Targets use `deletedAt` field (filter with `deletedAt: null`)
+- **Soft deletes**: Use the Prisma extension and the exact model sets in `packages/db/src/scoping.ts`; never assume every model has `deletedAt`
 - **Icons**: Use `lucide-react` icons. Each nav item should have a unique icon. Brand icons (e.g. GitHub) are not in lucide v1 — use `GithubIcon` from `@lyrashield/ui`. All decorative icons must have `aria-hidden="true"`
 - **UI components**: Use shared components from `@lyrashield/ui` (Button, Card, Badge, Input, Textarea, Select, FormField, EmptyState, Spinner, GithubIcon). Use `buttonVariants`/`badgeVariants` for consistent variant styling. All components use `forwardRef` and `cn()` for class merging
 - **Premium design tokens**: Use OKLCH colors, custom shadows, and utility classes from `globals.css` (`.glass`, `.gradient-primary`, `.gradient-hero`, `.text-gradient`, `.shadow-premium`, `.shadow-card-hover`, `.shadow-primary-glow`). All have dark mode variants. Use `rounded-lg` or `rounded-xl` for cards/buttons, not `rounded-md`
@@ -842,7 +668,10 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 - **Forms**: Labels must have `htmlFor`/`id` associations. First field should have `autoFocus`. Cancel button should clear errors
 - **Error states**: Client components should show error message + retry button on fetch failure
 - **Accessibility**: Add `aria-*` attributes to interactive elements (dropdowns, buttons with icons)
-- **Audit logs**: Write to `prisma.auditLog` for all sensitive operations (create, update, delete, invite)
+- **Audit logs**: Write audit events for sensitive operations and preserve hash-chain semantics; never log raw secrets or tokens
+- **Scan lifecycle**: Use guarded transitions from `packages/db/src/scan-transitions.ts`; do not update scan status ad hoc
+- **Notifications**: Use `createAndSendNotification`; do not duplicate create/send loops
+- **Engine boundary**: Keep product compatibility in the adapter/worker; do not mechanically rename upstream internals
 
 ---
 
@@ -861,84 +690,76 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 11. **lucide-react v1.x** — Brand icons (`Github`, `Twitter`, etc.) were removed. Use `GithubIcon` from `@lyrashield/ui` for GitHub icon
 12. **Test files excluded from typecheck** — `*.test.ts` files are excluded from `tsc --noEmit` via tsconfig `exclude` patterns. Tests are run separately via `vitest`
 13. **`*.tsbuildinfo` gitignored** — TypeScript incremental build info files are not tracked in git
+14. **Workspace model sets are schema-sensitive** — `SOFT_DELETE_MODELS` may include only models with `deletedAt`; `WORKSPACE_SCOPED_MODELS` may include only models with `workspaceId`
+15. **RLS context must be transaction-local** — use `withWorkspaceRLS`; never replace AsyncLocalStorage with a module-level mutable workspace ID
+16. **Worker notifications are workspace-level** — do not filter notification lists by `userId` unless the caller explicitly requests it
+17. **Schedule target FK is intentional** — preserve migration `20260706010000_schedule_target_fk`
+18. **Engine source is the sibling canonical repo** — local Docker builds resolve `../lyrashield-engine` as the named build context; do not create integration clones/worktrees as competing sources of truth
+19. **The engine fork is thin** — explicit `STRIX_*` values win over compatibility variables; upstream sync is review-only
+20. **Compose Docker socket access is local/dev only** — production sandbox isolation and egress controls require a separate deployment design
+21. **Marketing deploy config is generated** — deploy or preview with `apps/marketing/dist/server/wrangler.json`, not the source `wrangler.jsonc`
+22. **Marketing indexability is build-time** — `PUBLIC_INDEXABLE=true` requires the final public HTTPS origin and founder approval
+23. **Billing/API keys are not shipped features** — schema models and env placeholders do not imply checkout, quota enforcement, or key-management APIs
+24. **GitHub uninstall matching has known debt** — store numeric installation ID on `Target` before replacing the current owner-prefix fallback
 
 ---
 
 ## 16. File Quick Reference
 
-| File | Purpose |
-|------|---------|
-| `apps/web/src/app/(dashboard)/layout.tsx` | Auth guard + onboarding redirect + sidebar shell |
-| `apps/web/src/app/(dashboard)/dashboard/page.tsx` | Main dashboard with aggregate stats |
-| `apps/web/src/app/(dashboard)/dashboard/projects/projects-client.tsx` | Project list + create form |
-| `apps/web/src/app/(dashboard)/dashboard/targets/targets-client.tsx` | Target list + repo/URL create forms |
-| `apps/web/src/app/(dashboard)/dashboard/targets/[id]/page.tsx` | Target detail with scans |
-| `apps/web/src/app/(dashboard)/dashboard/integrations/page.tsx` | Integrations page (server component) |
-| `apps/web/src/app/(dashboard)/dashboard/integrations/github-integration.tsx` | GitHub connect + repo picker + target creation |
-| `apps/web/src/app/(dashboard)/dashboard/team/team-client.tsx` | Team members + invite form |
-| `apps/web/src/app/onboarding/page.tsx` | Onboarding wizard server component (auth guard) |
-| `apps/web/src/app/onboarding/onboarding-wizard.tsx` | 7-step onboarding wizard (client component) |
-| `apps/web/src/app/api/onboarding/route.ts` | GET + PATCH onboarding state API |
-| `apps/web/src/app/api/projects/route.ts` | POST + GET projects API |
-| `apps/web/src/app/api/targets/route.ts` | POST + GET targets API (with SSRF) |
-| `apps/web/src/app/api/team/route.ts` | POST invite + GET members API |
-| `apps/web/src/app/api/workspaces/route.ts` | POST create + GET list workspaces API |
-| `apps/web/src/app/api/integrations/github/install/route.ts` | GET callback + POST install URL for GitHub App |
-| `apps/web/src/app/api/integrations/github/repos/route.ts` | GET list installation repos |
-| `apps/web/src/app/api/webhooks/github/route.ts` | POST GitHub webhook handler (signature verification) |
-| `apps/web/src/lib/api-auth.ts` | authErrorResponse helper for API routes |
-| `apps/web/src/proxy.ts` | Rate limiting + nonce-based CSP proxy (auth 5/min, API 30/min, per-request nonce) |
-| `apps/web/src/components/sidebar.tsx` | Dashboard sidebar navigation (with Integrations) |
-| `apps/web/src/components/workspace-switcher.tsx` | Workspace dropdown switcher |
-| `packages/auth/src/auth.ts` | Better Auth config |
-| `packages/auth/src/session.ts` | Session + workspace access helpers (requirePermission) |
-| `packages/auth/src/permissions.ts` | RBAC role/permission matrix |
-| `packages/auth/src/client.ts` | Better Auth client (client-safe) |
-| `packages/auth/src/index.ts` | Client-safe exports |
-| `packages/auth/src/server.ts` | Server-only exports |
-| `packages/db/prisma/schema.prisma` | Full database schema |
-| `packages/db/prisma.config.ts` | Prisma 7 config |
-| `packages/db/src/client.ts` | PrismaClient singleton with PrismaPg |
-| `packages/db/src/index.ts` | DB package exports |
-| `packages/integrations/src/github.ts` | GitHub App: JWT, tokens, repo listing, webhook verification |
-| `packages/integrations/src/github.test.ts` | Tests for webhook signature + install URL |
-| `packages/integrations/src/index.ts` | Integrations package re-exports |
-| `packages/types/src/index.ts` | All Zod schemas + TS types |
-| `packages/types/src/index.test.ts` | Tests for OnboardingStep + UpdateOnboarding schemas |
-| `packages/ui/src/button.tsx` | Button component with cva variants (default/secondary/ghost/destructive/outline × sm/md/lg/icon) |
-| `packages/ui/src/card.tsx` | Card, CardHeader, CardTitle, CardContent, CardFooter components |
-| `packages/ui/src/badge.tsx` | Badge component with cva variants (default/success/danger/warning/info/muted) |
-| `packages/ui/src/form-field.tsx` | Input, Textarea, Select, FormField wrapper components |
-| `packages/ui/src/empty-state.tsx` | EmptyState component (icon, title, description, action) |
-| `packages/ui/src/spinner.tsx` | Spinner component (Loader2 with animate-spin) |
-| `packages/ui/src/github-icon.tsx` | GitHub SVG icon (lucide v1 removed brand icons) |
-| `packages/ui/src/utils.ts` | cn() class merge utility (clsx + tailwind-merge) |
-| `packages/ui/src/index.ts` | UI package exports (cn, GithubIcon, Button, Card, Badge, EmptyState, Spinner, FormField, Input, Select, Textarea) |
-| `packages/config/src/env.ts` | Zod env validation schema (fails fast on boot) |
-| `packages/config/src/env.test.ts` | Tests for env validation |
-| `packages/config/src/index.ts` | Config package exports |
-| `packages/db/src/extension.ts` | Prisma client extension (soft-delete, workspace scoping) |
-| `packages/db/src/extension.test.ts` | Tests for Prisma extension |
-| `packages/db/src/rls.ts` | Postgres RLS helper (`withWorkspaceRLS`, `withoutWorkspaceRLS`) |
-| `packages/db/src/rls.test.ts` | RLS helper tests (9 tests) |
-| `apps/web/src/lib/rate-limit.ts` | Rate limiting logic (Upstash Redis + in-memory fallback) |
-| `apps/web/src/lib/rate-limit.test.ts` | Tests for rate limiting |
-| `apps/web/src/lib/csp.test.ts` | CSP nonce proxy tests (14 tests: nonce uniqueness, directives, 429 responses) |
-| `packages/logger/src/index.ts` | Structured JSON logger |
-| `apps/web/next.config.ts` | Next.js config (output: standalone, transpile + external packages) |
-| `docker-compose.yml` | Postgres 16 + Redis 7 (env-interpolated secrets, Redis password) |
-| `Dockerfile` | Multi-stage Docker build (standalone output, slim runner, ARG-based build secrets) |
-| `.dockerignore` | Docker build exclusions (node_modules, .next, .git, secrets, IDE dirs, docs) |
-| `packages/ui/src/components.test.ts` | Unit tests for buttonVariants, badgeVariants, cn (20 tests) |
-| `turbo.json` | Turborepo task definitions |
-| `pnpm-workspace.yaml` | Workspace + build allowlist |
-| `.env.example` | All environment variables |
-| `PRD.md` | Full PRD + sprint backlog (single source of truth) |
-| `NEXT-STEPS.md` | Action plan + 19 founder decisions |
-| `product.md` | GTM/marketing layer |
-| `engine-CHANGES.md` | Apache-2.0 §4b modification log |
-| `engine-NOTICE.md` | Apache-2.0 NOTICE file |
-| `packages/db/src/scoping.ts` | **(new, 2026-07-04)** pure workspace-scoping/soft-delete policy: model sets, `applyQueryGuards`, AsyncLocalStorage request context. No Prisma import (unit-testable). |
+| File                                                 | Purpose                                                                        |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `AGENTS.md`                                          | Current handoff, execution queue, rules, and landmines                         |
+| `PRD.md`                                             | Product specification; Part C owns current status/release gates                |
+| `apps/web/src/proxy.ts`                              | Nonce CSP, API rate limiting, and provider-first client-IP extraction          |
+| `apps/web/src/app/(dashboard)/layout.tsx`            | Auth, onboarding, workspace shell                                              |
+| `apps/web/src/components/sidebar.tsx`                | Responsive dashboard navigation                                                |
+| `apps/web/src/components/workspace-switcher.tsx`     | Server-persisted active workspace                                              |
+| `apps/web/src/lib/api-client.ts`                     | Typed client request helpers                                                   |
+| `apps/web/src/lib/api-response.ts`                   | Standard server response/pagination helpers                                    |
+| `apps/web/src/lib/cache.ts`                          | Request-level React `cache()` wrappers                                         |
+| `apps/web/src/lib/github-install-state.ts`           | Signed GitHub installation state                                               |
+| `apps/worker/src/jobs/run-scan.job.ts`               | End-to-end scan job orchestration                                              |
+| `apps/worker/src/engine/runner.ts`                   | Bounded/cancellable engine subprocess + artifact discovery                     |
+| `apps/worker/src/engine/output-parser.ts`            | Engine artifact validation/parsing                                             |
+| `apps/worker/src/engine/normalizer.ts`               | Finding normalization and deduplication                                        |
+| `apps/worker/src/engine/verifier.ts`                 | Finding verification checks                                                    |
+| `apps/worker/src/engine/scanner-orchestrator.ts`     | Engine + deterministic scanner merge                                           |
+| `apps/worker/src/engine/scanners/sca-scanner.ts`     | Dependency manifests + OSV                                                     |
+| `apps/worker/src/engine/scanners/secrets-scanner.ts` | Secret detection/redaction                                                     |
+| `apps/worker/src/engine/scanners/url-scanner.ts`     | AI-builder-aware URL checks using `safeFetch`                                  |
+| `apps/worker/src/queue.ts`                           | BullMQ worker (re-exports shared enqueueScan)                                  |
+| `apps/web/src/lib/queue.ts`                          | Web scan-enqueue wrapper (re-exports shared enqueueScan)                       |
+| `apps/agent/src/queue.ts`                            | Agent scan-enqueue wrapper (re-exports shared enqueueScan)                     |
+| `packages/integrations/src/queue.ts`                 | Shared getScanQueue/enqueueScan for web, worker, and agent                     |
+| `packages/integrations/src/redis.ts`                 | Redis connection helper (GitHub token cache, queue)                            |
+| `apps/worker/src/schedules.ts`                       | Atomic schedule claims and enqueueing                                          |
+| `apps/agent/src/registry.ts`                         | Action permissions, approval gate, audit logging                               |
+| `apps/agent/src/actions.ts`                          | Six registered agent actions                                                   |
+| `apps/agent/src/service-token.ts`                    | Signed short-lived service tokens                                              |
+| `packages/auth/src/auth.ts`                          | Better Auth server configuration                                               |
+| `packages/auth/src/session.ts`                       | Session/workspace/permission guards                                            |
+| `packages/auth/src/permissions.ts`                   | Role hierarchy and permission matrix                                           |
+| `packages/db/prisma/schema.prisma`                   | PostgreSQL schema                                                              |
+| `packages/db/src/scoping.ts`                         | AsyncLocalStorage workspace/soft-delete policy                                 |
+| `packages/db/src/rls.ts`                             | Transaction-local Postgres RLS context                                         |
+| `packages/db/src/scan-transitions.ts`                | Guarded lifecycle state machine                                                |
+| `packages/db/src/scan-service.ts`                    | Serialized scan creation/cancellation                                          |
+| `packages/db/src/report-service.ts`                  | Workspace-bound reports and share tokens                                       |
+| `packages/db/src/agent-approval-service.ts`          | Approval input hashing and persistence                                         |
+| `packages/db/src/notification-service.ts`            | Shared create/send helper                                                      |
+| `packages/security/src/ssrf.ts`                      | Shared DNS/IP validation                                                       |
+| `packages/security/src/safe-fetch.ts`                | Redirect-hop revalidation                                                      |
+| `packages/mcp/src/server.ts`                         | API-backed MCP server                                                          |
+| `packages/mcp/src/stdio-transport.ts`                | JSON-RPC stdio transport                                                       |
+| `packages/mcp/src/prompt-injection-guard.ts`         | Injection detection/sanitization with normalization and critical-pattern logic |
+| `packages/logger/src/index.ts`                       | Circular-safe, truncating, redacting logger                                    |
+| `packages/ui/src/index.ts`                           | Shared accessible UI exports                                                   |
+| `apps/marketing/astro.config.mjs`                    | Site origin/indexability contract                                              |
+| `apps/marketing/src/pages/api/waitlist.ts`           | CSRF-guarded D1 waitlist endpoint with provider-first client-IP extraction     |
+| `apps/marketing/wrangler.jsonc`                      | Source bindings/build configuration                                            |
+| `Dockerfile`                                         | Standalone web and engine-bearing worker targets                               |
+| `docker-compose.yml`                                 | Local dev stack and sibling engine build context                               |
+| `engine-NOTICE.md`                                   | Apache-2.0 notices and engine divergence record                                |
 
 ---
 
@@ -954,6 +775,7 @@ A code-grounded deep audit produced these fixes, all now merged to `main`. Where
 - **CI (`.github/workflows/ci.yml`)** — adds a `pnpm test` step, reads pnpm from `packageManager`, adds `NEXT_PUBLIC_APP_URL` (landed via Codex, PR #14).
 
 **Round-2 hardening (merged; findings in PRD §B13.7):**
+
 - **Web security headers (`apps/web/next.config.ts`)** — `headers()` adds HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy; `poweredByHeader:false`, `reactStrictMode:true`, `images.remotePatterns` (GitHub/Google avatars). **Nonce-based CSP implemented in `proxy.ts`** (per-request nonce, `'strict-dynamic'`, `connect-src 'self'`, `blob:` in `img-src`).
 - **Logger (`packages/logger`)** — now **redacts** sensitive keys (password/secret/token/authorization/apikey/privatekey/cookie/credential/vaultref/verificationurl/otp), captures `Error`, breaks circular refs, truncates oversized output. Use it freely; still never log raw secrets deliberately.
 - **GitHub integration (`packages/integrations/src/github.ts`)** — installation-token **caching** (per `installationId`, using `expires_at`), retry/backoff (`githubFetch`, honors `Retry-After`), paginated `getAppInstallations`, `crypto.timingSafeEqual`.
@@ -962,7 +784,25 @@ A code-grounded deep audit produced these fixes, all now merged to `main`. Where
 
 **✅ RESOLVED — Prisma migration drift reconciled (2026-07-05):** A reconciling migration (`20260705095000_batch3_missing_tables_columns`) now creates all missing tables (`ApiKey`, `Retest`, `OnboardingState`) and adds all missing columns/indexes/constraints. CI runs `prisma migrate diff --exit-code` to catch future drift. See §20 for details.
 
-Remaining audit backlog (Batches 2–4) is in **PRD PART B §B13.5 / §B13.6 / §B13.7** — the PRD is the single source of truth. Round-2 handoff items (migration drift, CI hardening, supply-chain, CSP) are all **DONE** — see §20.
+The historical audit backlog and resolutions remain in `PRD.md` Part B. **Part C is the current backlog and release-readiness source of truth.** Round-2 handoff items (migration drift, CI hardening, supply chain, CSP) are all **DONE** — see §20.
+
+---
+
+## 18. UI/DX Foundation (2026-07-05)
+
+- `packages/ui` became the shared component source for Button, Card, Badge, form controls, FormField, EmptyState, Spinner, LoadMore, and brand icons.
+- Dashboard/auth/onboarding surfaces adopted shared tokens, responsive layouts, mobile navigation, accessible labels/states, and stable loading/error/empty states.
+- Navigation destinations that were originally stubs are now implemented product pages; current route truth is in §§3 and 9.
+- Use the conventions in §§10 and 14 for new frontend work rather than copying dated one-off markup from this checkpoint.
+
+---
+
+## 19. Data Fetching and Design Contracts (2026-07-05)
+
+- Server pages pass initial data to client components; request-local React `cache()` wrappers deduplicate session/workspace/data queries.
+- Projects, targets, team, scans, findings, reports, notifications, and schedules use bounded/cursor pagination where applicable; client code uses typed API helpers.
+- Evidence encryption references, audit hash chaining, SARIF/CVSS/cost contracts, and Postgres RLS were added before scan data became established.
+- RLS now covers 18 workspace tables after the AgentApproval migration. Current database truth is in §5.
 
 ---
 
@@ -1011,6 +851,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 ### 20.6 R-G / R-I / R-E Quick Wins (2026-07-05)
 
 **R-I: Config / correctness / a11y:**
+
 - **`turbo.json` `globalEnv`** expanded from 8 → 35 env vars (added `NODE_ENV`, `DATABASE_DIRECT_URL`, `UPSTASH_*`, `ADDITIONAL_TRUSTED_ORIGINS`, `GITHUB_APP_*`, `GITHUB_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_URL`, `LYRASHIELD_*`, `LLM_API_KEY`, `S3_*`, `BREVO_*`, `EMAIL_FROM`, `POLAR_*`, `RAZORPAY_*`, `SENTRY_*`).
 - **`seed.ts`** production guard — throws if `NODE_ENV=production` (prevents creating predictable demo OWNER account on prod DB).
 - **`.gitignore`** — added `*.pem`, `*.key`, `*.crt`, `*.p12` (secrets/keys), `.vercel` (build artifacts).
@@ -1021,9 +862,11 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 - **`(dashboard)/layout.tsx`** — parallelized onboarding + workspaces queries with `Promise.all` (was sequential waterfall).
 
 **R-E: Auth hardening:**
+
 - **`auth.ts`** — added `cookieCache` (5min maxAge, reduces DB hits), `useSecureCookies: isProd`, explicit `sameSite: "lax"` + `secure: isProd` on `session_token` cookie `attributes`.
 
 **R-G: Deployment doc security (`docs/deployment/PRODUCTION_DEPLOYMENT.md`):**
+
 - **Non-root worker** — `useradd lyrashield`, `usermod -aG docker`, systemd `User=lyrashield`, `WorkingDirectory=/home/lyrashield/...`, CI deploy `username: lyrashield`.
 - **SSH hardening** — `PasswordAuthentication no`, optional source-IP restriction via `ufw allow from <ip> to any port 22`.
 - **TLS in connection strings** — all Postgres examples include `?sslmode=require`, Redis shows `rediss://` format with explicit URL example.
@@ -1033,6 +876,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 ### 20.7 Deferred R-I Items (2026-07-05)
 
 **Types validation (`packages/types/src/index.ts`):**
+
 - `.trim()` + control-char strip (`/[\u0000-\u001F\u007F]/`) on all name fields (CreateWorkspace, CreateProject, CreateRepoTarget, CreateUrlTarget).
 - Regex bounds on `repoOwner`/`repoName` (`^[A-Za-z0-9_.-]+$`), `.max(255)` on `branch`.
 - 11 enum-parity tests (Zod schemas vs Prisma enums) — catches migration drift at test time.
@@ -1040,11 +884,13 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 - 28 new tests total (239 overall, up from 211).
 
 **Worker hardening (`apps/worker/src/index.ts`):**
+
 - Now imports validated `env` from `@lyrashield/config` (added as dep) instead of raw `process.env`.
 - `SIGTERM`/`SIGINT` graceful shutdown handlers with idempotent guard.
 - `runWithWorkspaceContext` wrapping implemented in Sprint 4 — `processScanJob` wraps all DB queries in `runWithWorkspaceContext(workspaceId, ...)` (see §21.7).
 
 **tsconfig evaluation:**
+
 - `verbatimModuleSyntax` evaluated — requires `"type": "module"` in all package.json files (breaking change, deferred to pre-launch).
 - Root `tsconfig.json` is not orphaned (extended by `packages/config/tsconfig.json` → `library.json` chain); left as-is.
 
@@ -1171,6 +1017,7 @@ This section covers the Batch 4 differentiated-build features that build on top 
 ### 22.1 Fix Proposals + GitHub PR Creation
 
 **DB Service** (`packages/db/src/fix-proposal-service.ts`):
+
 - `createFixProposal()` — creates a fix proposal linked to a finding (kind, summary, diff refs, safety score, generatedByModel).
 - `getFixProposal()` — fetches proposal with associated finding and pull requests.
 - `listFixProposals()` — cursor-based pagination with filters (workspaceId, findingId, status).
@@ -1180,17 +1027,20 @@ This section covers the Batch 4 differentiated-build features that build on top 
 - **11 tests** in `fix-proposal-service.test.ts`.
 
 **API Routes**:
+
 - `POST /api/findings/[id]/fix-proposals` — creates a fix proposal for a finding. Zod-validated, permission-checked (`fix.create`), audit-logged.
 - `GET /api/fix-proposals` — lists proposals with pagination + filters.
 - `POST /api/fix-proposals/[id]/create-pr` — creates a GitHub PR from a fix proposal. Fetches target/integration details, calls GitHub API (create branch, update file, create PR), updates proposal/finding status in a transaction, sends notifications. Uses `PERMISSIONS.fix.create_pr`.
 
 **UI** (`apps/web/src/app/(dashboard)/dashboard/fixes/fixes-client.tsx`):
+
 - Paginated list of fix proposals with status badges, severity, safety scores, PR links.
 - Empty state handling.
 
 ### 22.2 Retests
 
 **DB Service** (`packages/db/src/retest-service.ts`):
+
 - `createRetest()` — creates a retest request for a finding (linked to the scan that found it).
 - `getRetest()` — fetches retest with finding + scan details.
 - `listRetests()` — cursor-based pagination with filters.
@@ -1199,29 +1049,34 @@ This section covers the Batch 4 differentiated-build features that build on top 
 - **10 tests** in `retest-service.test.ts`.
 
 **API Routes**:
+
 - `POST /api/findings/[id]/retests` — creates a retest. Validates no existing pending retest. Transactional with audit logging. Uses `PERMISSIONS.retest.create`.
 - `GET /api/retests` — lists retests with pagination + filters.
 
 ### 22.3 Reports
 
 **Report Generator** (`packages/db/src/report-generator.ts`):
+
 - `ReportData` interface — structured report data (scan info, findings, severity counts, retest summary, truncation flag).
 - `gatherReportData(workspaceId, scanId?)` — queries workspace, scan (optional), and findings. Findings are limited to 500 most recent (`FINDINGS_LIMIT = 500`), with a `findingsTruncated` flag set when the limit is exceeded. Severity counts, verified/fixed counts, and retest summary computed from the fetched findings.
 - `generateReportHTML(data)` — renders a full HTML report with styled severity bars, findings table, scan details, and a truncation notice when applicable. All user content is HTML-escaped.
 - **4 tests** in `report-generator.test.ts` (with/without scan, empty, XSS escaping).
 
 **Report Service** (`packages/db/src/report-service.ts`):
+
 - `createReport()` — creates a report record.
 - `generateShareToken()` / `revokeShareToken()` — share token management.
 - `getReportByShareToken()` / `getShareableReport()` — public report access.
 - `listReports()` — cursor-based pagination.
 
 **API Route**:
+
 - `GET /api/reports/[id]/download` — generates and downloads the HTML report. Permission-checked (`report.download`), updates report status to "downloaded".
 
 ### 22.4 Notifications
 
 **Integration Channels** (`packages/integrations/src/notifications.ts`):
+
 - `NotificationChannel` type: `"email" | "slack" | "discord" | "in_app"`.
 - `NotificationPayload` interface: type, title, body, workspaceName, metadata.
 - `EmailChannel` — sends via Brevo API (`api.brevo.com/v3/smtp/email`). 10s timeout via `AbortSignal.timeout(10_000)`.
@@ -1232,6 +1087,7 @@ This section covers the Batch 4 differentiated-build features that build on top 
 - `channels` map — channel registry.
 
 **DB Service** (`packages/db/src/notification-service.ts`):
+
 - `createNotification()` — persists a notification record (workspaceId, optional userId, channel, type, title, body, status).
 - `getNotification()` / `listNotifications()` — fetch with workspace scoping + pagination.
 - `markNotificationSent()` / `markNotificationRead()` / `updateNotificationStatus()` — status management with validation.
@@ -1239,17 +1095,20 @@ This section covers the Batch 4 differentiated-build features that build on top 
 - **8 tests** in `notification-service.test.ts` (3 new tests for `createAndSendNotification`: success, failed send, custom channels).
 
 **Worker Notifications** (`apps/worker/src/notifications.ts`):
+
 - `notifyScanCompleted()` — sends "scan.completed" notification on successful scan.
 - `notifyScanFailed()` — sends "scan.failed" notification on scan failure.
 - `notifyCriticalFinding()` — sends "finding.critical" notification for critical-severity findings.
 - All use `createAndSendNotification` from `@lyrashield/db` with `sendNotification` as the `sendFn`.
 
 **API Routes**:
+
 - `GET /api/notifications` — lists notifications with optional `userId` filter (worker-created notifications have no userId — they're workspace-level). Permission: `notification.view`.
 - `POST /api/notifications` — creates a notification. Permission: `notification.manage`.
 - `PATCH /api/notifications/[id]` — updates notification status (mark read, mark sent, general status update). Permission: `notification.manage` for status changes, `notification.view` for marking read.
 
 **UI** (`apps/web/src/app/(dashboard)/dashboard/notifications/notifications-client.tsx`):
+
 - Paginated notification list with channel icons, type badges (color-coded by notification type), read status.
 - Mark individual notifications as read or mark all as read.
 - Filter by status and type.
@@ -1258,6 +1117,7 @@ This section covers the Batch 4 differentiated-build features that build on top 
 ### 22.5 Schedules
 
 **DB Service** (`packages/db/src/schedule-service.ts`):
+
 - `createSchedule()` — creates a CRON-based scan schedule (targetId, cron, goal, mode). Uses `ScanGoal` and `ScanMode` enum types (no `as never` casts).
 - `getSchedule()` — fetches schedule with target details.
 - `listSchedules()` — cursor-based pagination with filters.
@@ -1269,9 +1129,11 @@ This section covers the Batch 4 differentiated-build features that build on top 
 - **7 tests** in `schedule-service.test.ts`.
 
 **Migration** (`packages/db/prisma/migrations/20260706010000_schedule_target_fk/migration.sql`):
+
 - Adds the missing `Schedule_targetId_fkey` foreign key constraint (`Schedule.targetId` → `Target.id`, `ON DELETE CASCADE`).
 
 **API Routes**:
+
 - `GET /api/schedules` — lists schedules with pagination. Permission: `schedule.view`.
 - `POST /api/schedules` — creates a schedule. Validates target existence, uniqueness of active schedules per target. Permission: `schedule.create`.
 - `GET /api/schedules/[id]` — fetches a single schedule. Permission: `schedule.view`.
@@ -1279,6 +1141,7 @@ This section covers the Batch 4 differentiated-build features that build on top 
 - `DELETE /api/schedules/[id]` — soft-deletes a schedule. Permission: `schedule.delete` (ADMIN+ only, not MEMBER).
 
 **UI** (`apps/web/src/app/(dashboard)/dashboard/schedules/schedules-client.tsx`):
+
 - Full CRUD UI for schedules with form (cron expression, goal selector, mode selector, target selector).
 - Enable/disable toggle, delete with confirmation.
 - Paginated list with badges and timestamps.
@@ -1286,6 +1149,7 @@ This section covers the Batch 4 differentiated-build features that build on top 
 ### 22.6 Plain-Language Findings
 
 **Plain-Language Explainer** (`apps/web/src/lib/plain-language.ts`):
+
 - `PlainLanguageFinding` interface — title, whatItIs, whyItMatters, howToFix, difficulty, estimatedTimeToFix.
 - `CWE_EXPLANATIONS` — maps 8 common CWE IDs (CWE-79, 89, 352, 287, 22, 798, 200, 918) to plain-language explanations.
 - `GENERIC_EXPLANATIONS` — maps severity levels (CRITICAL, HIGH, MEDIUM, LOW, INFO) to generic explanations.
@@ -1296,6 +1160,7 @@ This section covers the Batch 4 differentiated-build features that build on top 
 ### 22.7 Permissions Update
 
 **Permissions** (`packages/auth/src/permissions.ts`):
+
 - Added permissions for new features: `fix.create`, `fix.view`, `fix.create_pr`, `fix.update`, `retest.create`, `retest.view`, `retest.update`, `report.create`, `report.view`, `report.download`, `notification.view`, `notification.manage`, `schedule.view`, `schedule.create`, `schedule.update`, `schedule.delete`.
 - **MEMBER role** restricted: `notification.manage` and `schedule.delete` removed. Members retain view/create/update for schedules and view for notifications. ADMIN/SECURITY_ADMIN/BILLING_ADMIN retain all permissions.
 
@@ -1304,20 +1169,13 @@ This section covers the Batch 4 differentiated-build features that build on top 
 A comprehensive code review identified 10 issues across the new features. All fixed:
 
 **P1 — Critical:**
+
 1. **Missing migration for `Schedule.target` FK** — Created `20260706010000_schedule_target_fk/migration.sql` adding the `Schedule_targetId_fkey` foreign key constraint. CI's `migrate diff` drift check will now pass.
 2. **In-app notifications invisible** — Worker-created notifications (scan completed, critical finding, fix PR) have no `userId` (they're workspace-level). The notifications list API was filtering by `session.userId` by default, making them invisible. Fixed by removing the default `userId` filter and adding an optional `userId` query parameter.
 
-**P2 — High Priority:**
-3. **`createPullRequestRecord` bypassed transaction** — In `create-pr/route.ts`, the PR record was created via `createPullRequestRecord()` outside the `$transaction`, risking orphaned records if subsequent steps failed. Fixed by inlining `tx.pullRequest.create()` inside the transaction.
-4. **Permissive MEMBER permissions** — `notification.manage` and `schedule.delete` were granted to MEMBER role, allowing members to manage notification settings and delete schedules. Removed from MEMBER; ADMIN+ only.
-5. **No timeout on external HTTP calls** — Brevo, Slack, and Discord `fetch` calls had no timeout, risking indefinite hangs. Added `AbortSignal.timeout(10_000)` (10s) to all notification channel calls and `AbortSignal.timeout(30_000)` (30s) to `githubFetch` (GitHub API wrapper).
-6. **Unbounded `findMany` in report generator** — `gatherReportData` fetched all findings with no limit, risking OOM for large workspaces. Added `take: FINDINGS_LIMIT + 1` (500) with a `findingsTruncated` boolean in `ReportData` and a user-visible truncation notice in the HTML report.
+**P2 — High Priority:** 3. **`createPullRequestRecord` bypassed transaction** — In `create-pr/route.ts`, the PR record was created via `createPullRequestRecord()` outside the `$transaction`, risking orphaned records if subsequent steps failed. Fixed by inlining `tx.pullRequest.create()` inside the transaction. 4. **Permissive MEMBER permissions** — `notification.manage` and `schedule.delete` were granted to MEMBER role, allowing members to manage notification settings and delete schedules. Removed from MEMBER; ADMIN+ only. 5. **No timeout on external HTTP calls** — Brevo, Slack, and Discord `fetch` calls had no timeout, risking indefinite hangs. Added `AbortSignal.timeout(10_000)` (10s) to all notification channel calls and `AbortSignal.timeout(30_000)` (30s) to `githubFetch` (GitHub API wrapper). 6. **Unbounded `findMany` in report generator** — `gatherReportData` fetched all findings with no limit, risking OOM for large workspaces. Added `take: FINDINGS_LIMIT + 1` (500) with a `findingsTruncated` boolean in `ReportData` and a user-visible truncation notice in the HTML report.
 
-**P3 — Quality:**
-7. **`explainFinding` ignored params** — `category` and `technicalDetail` parameters were accepted but unused. Fixed: `category` maps to human-readable labels via `CATEGORY_LABELS` for better fallback titles; `technicalDetail` is appended to `whatItIs` as "Technical detail: ...".
-8. **`as never` casts** — Replaced with proper type casts: `as ScanGoal`/`as ScanMode` in `schedule-service.ts` (importing the enum types from generated Prisma), and `NonNullable<BadgeProps["variant"]>` in `notifications-client.tsx` (importing `BadgeProps` from `@lyrashield/ui`).
-9. **Duplicate notification logic** — `createAndSendNotification` logic was duplicated between `apps/worker/src/notifications.ts` and the `create-pr` API route. Extracted into `packages/db/src/notification-service.ts` as a shared function with a `sendFn` callback (avoids cross-package dependency). Both consumers now use it. 3 new tests added.
-10. **Dead cleanup effect in findings-client** — `FindingDetailModal` had a `useEffect` that reset state on unmount — unnecessary since React handles this automatically. Removed.
+**P3 — Quality:** 7. **`explainFinding` ignored params** — `category` and `technicalDetail` parameters were accepted but unused. Fixed: `category` maps to human-readable labels via `CATEGORY_LABELS` for better fallback titles; `technicalDetail` is appended to `whatItIs` as "Technical detail: ...". 8. **`as never` casts** — Replaced with proper type casts: `as ScanGoal`/`as ScanMode` in `schedule-service.ts` (importing the enum types from generated Prisma), and `NonNullable<BadgeProps["variant"]>` in `notifications-client.tsx` (importing `BadgeProps` from `@lyrashield/ui`). 9. **Duplicate notification logic** — `createAndSendNotification` logic was duplicated between `apps/worker/src/notifications.ts` and the `create-pr` API route. Extracted into `packages/db/src/notification-service.ts` as a shared function with a `sendFn` callback (avoids cross-package dependency). Both consumers now use it. 3 new tests added. 10. **Dead cleanup effect in findings-client** — `FindingDetailModal` had a `useEffect` that reset state on unmount — unnecessary since React handles this automatically. Removed.
 
 ### 22.9 Test Summary
 
@@ -1358,6 +1216,7 @@ A normalization pipeline that processes raw `EngineVulnerability` objects into a
 Software Composition Analysis scanner that parses dependency files and queries the OSV (Open Source Vulnerabilities) API for known vulnerabilities.
 
 **Supported dependency file formats:**
+
 - `package.json` (npm) — dependencies + devDependencies
 - `package-lock.json` (npm) — packages array
 - `requirements.txt` (PyPI) — `name==version`, `name>=version`, `name~=version`
@@ -1374,6 +1233,7 @@ Software Composition Analysis scanner that parses dependency files and queries t
 **Internal functions:** `findDependencyFiles`, `parseDependencyFile`, `parsePackageJson`, `parsePackageLockJson`, `parseRequirementsTxt`, `parseGoMod`, `parseCargoToml`, `parseGemfile`, `parseComposerJson`, `mapOsvSeverity`, `extractCveId`, `extractFixedVersion`.
 
 **Design decisions:**
+
 - Injectable `fetchFn` on both `ScaScanConfig` and `queryOsv` — avoids `vi.stubGlobal` issues in tests; production code passes `undefined` and uses global `fetch`.
 - Severity mapping: checks `database_specific.severity` first (GHSA convention), then parses CVSS vector string score, then falls back to severity array, defaults to "medium".
 - Deduplication by vulnerability ID across all dependencies (same CVE affecting multiple packages = one finding).
@@ -1385,6 +1245,7 @@ Software Composition Analysis scanner that parses dependency files and queries t
 Regex-based hardcoded secrets detector that walks repository files and matches against 12 secret patterns.
 
 **Secret patterns detected:**
+
 1. AWS Access Key IDs (`AKIA[0-9A-Z]{16}`)
 2. AWS Secret Access Keys (40-char base64 after `aws_secret_access_key`)
 3. GitHub tokens (`gh[pousr]_[A-Za-z0-9]{36}`)
@@ -1494,10 +1355,12 @@ A new scanner that fetches the target URL and analyzes the HTML + response heade
 ### 24.2 Launch-Readiness UI
 
 **Files:**
+
 - `apps/web/src/app/(dashboard)/dashboard/launch-readiness/page.tsx` — Server component, fetches session + workspaceId
 - `apps/web/src/app/(dashboard)/dashboard/launch-readiness/launch-readiness-client.tsx` — Client component with score gauge, verdict card, severity breakdown
 
 **Features:**
+
 - **Score gauge** — SVG circle gauge (0-100) with color-coded score (green ≥80, amber ≥40, red <40)
 - **Verdict card** — GO (green, ShieldCheck icon), GO_WITH_CONDITIONS (amber, ShieldAlert), NO_GO (red, ShieldX) with summary, score, total/blocking/verified finding badges
 - **Conditions & recommendations** — Two-column card layout with bullet lists
@@ -1510,10 +1373,12 @@ A new scanner that fetches the target URL and analyzes the HTML + response heade
 ### 24.3 Shareable Report Public Page + Badge
 
 **Files:**
+
 - `apps/web/src/app/reports/shared/[id]/page.tsx` — Public server component, validates share token via `getReportByShareToken`, fetches `getShareableReport`
 - `apps/web/src/app/reports/shared/[id]/shared-report-view.tsx` — Public report view with security badge
 
 **Features:**
+
 - **Security badge** — PASS (green, ShieldCheck), PASS_WITH_WARNINGS (amber, ShieldAlert), FAIL (red, ShieldAlert) based on findings count and critical findings
 - **Report header** — Title, type, generated date, target name
 - **Scan summary** — Status, findings count, summary text
@@ -1525,6 +1390,7 @@ A new scanner that fetches the target URL and analyzes the HTML + response heade
 ### 24.4 MCP Server — Real API Calls + Stdio Transport
 
 **Files:**
+
 - `packages/mcp/src/tools.ts` — Rewritten: tools now use `ToolHandlerContext` (apiBaseUrl, apiKey, fetchFn) to make real API calls
 - `packages/mcp/src/server.ts` — Updated to use `createAllTools(context)` factory, accepts `toolContext` in options
 - `packages/mcp/src/stdio-transport.ts` — New: JSON-RPC 2.0 over stdin/stdout transport entry point
@@ -1532,12 +1398,14 @@ A new scanner that fetches the target URL and analyzes the HTML + response heade
 - `packages/mcp/package.json` — Added `bin` entry for `lyrashield-mcp` CLI
 
 **Tool factory pattern:** Each tool is now created via `createScanTargetTool(context)`, `createGetFindingsTool(context)`, etc. The `createAllTools(context)` factory returns all 4 tools. This enables:
+
 - Injectable `fetchFn` for testing
 - Configurable API base URL via `LYRASHIELD_API_URL` env var
 - Optional API key via `LYRASHIELD_API_KEY` env var
 - 30s timeout on all API calls via `AbortController`
 
 **Stdio transport:** Implements MCP protocol over stdin/stdout with JSON-RPC 2.0:
+
 - `initialize` — Returns server info + protocol version + capabilities
 - `tools/list` — Returns available tools
 - `tools/call` — Calls a tool by name with args (goes through prompt injection guard)
@@ -1545,19 +1413,20 @@ A new scanner that fetches the target URL and analyzes the HTML + response heade
 
 **Tests:** `tools.test.ts` — 5 tests covering scan trigger, API failure handling, findings query with params, launch readiness fetch, report creation. All use mock `fetchFn`.
 
-### 24.5 Prompt-Injection Defense (already built)
+### 24.5 Prompt-Injection Defense
 
-**File:** `packages/mcp/src/prompt-injection-guard.ts` (unchanged from prior sprint)
+**File:** `packages/mcp/src/prompt-injection-guard.ts`
 
-27 injection patterns including instruction override, role hijack, code execution, SQL injection, env extraction, XSS vectors, destructive commands, prompt extraction. `checkToolCall()` serializes and checks tool args. Strict mode sanitizes suspicious but non-critical patterns with `[REDACTED]` replacement.
+Hardened detection with input normalization (zero-width characters, NFKC normalization, HTML entity decoding) and an expanded pattern set covering instruction override, role hijack, code execution, SQL injection, env extraction, XSS vectors, destructive commands, and prompt extraction. `checkToolCall()` serializes and checks tool args. `sanitize()` uses `normalizeInput()` before applying critical-pattern checks. Strict mode sanitizes suspicious but non-critical patterns with `[REDACTED]` replacement.
 
-**Tests:** `prompt-injection-guard.test.ts` — 9 tests (unchanged).
+**Tests:** `prompt-injection-guard.test.ts` — 9 tests.
 
 ### 24.6 GitHub Action Diff-Gate (already built)
 
 **File:** `.github/workflows/lyrashield-scan.yml` (unchanged from prior sprint)
 
 Workflow runs on PRs, checks diffs for:
+
 - Secrets in changed files (regex patterns)
 - Vulnerable dependencies (`npm audit`, `safety check`)
 - Common code security issues (hardcoded secrets, SQL injection, disabled security controls, eval/exec usage)
@@ -1573,6 +1442,7 @@ Workflow runs on PRs, checks diffs for:
 ### 24.8 Docker Deployment Verified
 
 Full-stack Docker deployment tested and verified:
+
 - **5 containers** build and run: `lyrashield-postgres` (healthy), `lyrashield-redis` (healthy), `lyrashield-migrate` (exited 0), `lyrashield-web` (running), `lyrashield-worker` (running)
 - **7 Prisma migrations** applied successfully (including `agent_approval_layer`), 30 tables created, 18 RLS-enabled
 - **All 12 dashboard pages** return 200 (authenticated): dashboard, projects, targets, scans, findings, reports, notifications, schedules, team, settings, integrations, launch-readiness, fixes
@@ -1591,6 +1461,7 @@ Full-stack Docker deployment tested and verified:
 ### 25.1 FormField Component Migration
 
 Raw `<label>` elements replaced with shared `FormField` component from `@lyrashield/ui` across:
+
 - `apps/web/src/app/sign-in/page.tsx`
 - `apps/web/src/app/sign-up/page.tsx`
 - `apps/web/src/app/onboarding/onboarding-wizard.tsx`
@@ -1600,6 +1471,7 @@ Raw `<label>` elements replaced with shared `FormField` component from `@lyrashi
 ### 25.2 Design Token Migration
 
 Raw color classes replaced with design tokens across all dashboard pages:
+
 - `text-gray-*` → `text-muted-foreground`
 - `text-red-*` / `bg-red-*` → `destructive` token
 - `text-blue-*` → `text-primary` or `text-sky-*` (semantic)
@@ -1631,9 +1503,11 @@ Files updated: `shared-report-view.tsx`, `scan-detail-client.tsx`, `launch-readi
 A comprehensive code review was performed across all working changes spanning the worker engine, MCP server, frontend, and docs. 11 issues identified and fixed:
 
 **P1 (Critical):**
+
 - `secrets-scanner.ts` — Secret leaks in `poc_description` and `code_locations.snippet` fixed by redacting secret prefixes and replacing code snippets with `[REDACTED]` message.
 
 **P2 (Important):**
+
 - `url-scanner.ts` — HTTP header case-insensitivity fixed by normalizing headers to lowercase before security header detection.
 - `url-scanner.ts` — SSRF protection added: blocks private IPs (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16) and non-HTTP protocols (file://, ftp://).
 - `scanner-orchestrator.ts` — Cross-source deduplication: when the same finding is found by multiple scanners, the higher-severity one is kept.
@@ -1642,6 +1516,7 @@ A comprehensive code review was performed across all working changes spanning th
 - `finding-persister.ts` — Normalizer `confidenceScore` and `normalizedCwe` used for persistence instead of verifier overwrite.
 
 **P3 (Minor):**
+
 - `launch-readiness-client.tsx` — Deduplicated fetch logic by using `loadReport` callback in `useEffect`; removed synchronous `setLoading(true)` in effect.
 - `mcp/tools.ts` — Added `res.ok` check before parsing JSON in `apiCall` to handle non-OK HTTP responses gracefully.
 - `run-scan.job.ts` — Fixed duplicate comment numbering and indentation of try/catch block.
@@ -1666,17 +1541,13 @@ A comprehensive code review was performed across all working changes spanning th
 Full AI pipeline audit covering LLM API calls, AI model integration, prompt construction, structured output parsing, AI engine invocation, and cost/latency controls. 7 issues identified and fixed:
 
 **HIGH:**
+
 1. **Engine env var prefix allowlist** (`runner.ts`) — Added allowlist for `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` env vars passed to the engine subprocess. Previously, all env vars with matching prefixes were passed; now only explicitly allowlisted vars are forwarded, preventing accidental secret leakage to the engine process.
 2. **Schema validation for engine output** (`output-parser.ts`) — Added validation for severity (must be CRITICAL/HIGH/MEDIUM/LOW/INFO), CVSS (0.0–10.0 range), and CWE format (CWE-NNN or bare number). Invalid entries are removed with warnings. CWE format is normalized including bare numbers.
 
-**MEDIUM:**
-3. **Narrowed false-positive patterns** (`normalizer.ts`) — False-positive pattern matching narrowed to only `target` and `endpoint` fields instead of all string fields. Prevents legitimate findings from being flagged as false positives due to keywords in description or title.
-4. **LLM usage tracking** (`run-scan.job.ts`) — Parses `llm_usage` from engine output and persists it as a `ScanEvent` with `llm_usage` metadata. Enables cost monitoring and budget enforcement.
-5. **MCP tool call audit logging** (`server.ts`) — Added structured audit logging for MCP tool calls. Both allowed and blocked calls are logged with redacted args (tool name, args summary, timestamp, result status). Blocked calls from prompt injection guard are logged at warn level.
+**MEDIUM:** 3. **Narrowed false-positive patterns** (`normalizer.ts`) — False-positive pattern matching narrowed to only `target` and `endpoint` fields instead of all string fields. Prevents legitimate findings from being flagged as false positives due to keywords in description or title. 4. **LLM usage tracking** (`run-scan.job.ts`) — Parses `llm_usage` from engine output and persists it as a `ScanEvent` with `llm_usage` metadata. Enables cost monitoring and budget enforcement. 5. **MCP tool call audit logging** (`server.ts`) — Added structured audit logging for MCP tool calls. Both allowed and blocked calls are logged with redacted args (tool name, args summary, timestamp, result status). Blocked calls from prompt injection guard are logged at warn level.
 
-**LOW:**
-6. **`technicalDetail` in CWE-specific path** (`plain-language.ts`) — Appended `technicalDetail` in the CWE-specific explanation path for consistency with the generic path. Previously, `technicalDetail` was only appended in the generic fallback path.
-7. **Golden-file regression test** (`normalizer.test.ts`) — Added a comprehensive golden-file regression test that runs the full normalization pipeline (severity → CWE → CVSS → confidence → false-positive risk → dedup) on a representative set of findings and verifies the output matches expected golden values.
+**LOW:** 6. **`technicalDetail` in CWE-specific path** (`plain-language.ts`) — Appended `technicalDetail` in the CWE-specific explanation path for consistency with the generic path. Previously, `technicalDetail` was only appended in the generic fallback path. 7. **Golden-file regression test** (`normalizer.test.ts`) — Added a comprehensive golden-file regression test that runs the full normalization pipeline (severity → CWE → CVSS → confidence → false-positive risk → dedup) on a representative set of findings and verifies the output matches expected golden values.
 
 ### 26.4 Test Summary
 
@@ -1710,12 +1581,14 @@ Implemented the Agent Action Layer that exposes core LyraShield operations as ty
 ### Files created / modified
 
 **Prisma schema + migration:**
+
 - `packages/db/prisma/schema.prisma` — Added `ApprovalStatus` enum (PENDING/APPROVED/DENIED/EXPIRED) + `AgentApproval` model (id, workspaceId, actionName, inputHash, status, input JSON, requestedById, approvedById, approvedAt, deniedAt, expiresAt, result JSON, timestamps). Added `agentApprovals` relation on `Workspace`.
 - `packages/db/prisma/migrations/20260706020000_agent_approval_layer/migration.sql` — Creates table, indexes (workspaceId, status, requestedById), FK to Workspace, + RLS policies (permissive + strict).
 - `packages/db/src/scoping.ts` — Added `AgentApproval` to `WORKSPACE_SCOPED_MODELS` (now 18).
 - `packages/db/src/extension.test.ts` — Updated workspace-scoped model count from 17 to 18.
 
 **Types (`packages/types/src/index.ts`):**
+
 - `ApprovalStatusSchema` — Zod enum for approval statuses.
 - `ServiceTokenPayload` — userId, workspaceId, role, issuedAt, expiresAt.
 - `AgentActionContext` — userId, workspaceId, role (passed to every action handler).
@@ -1725,6 +1598,7 @@ Implemented the Agent Action Layer that exposes core LyraShield operations as ty
 - `CreateApprovalInputSchema` — for creating approval requests.
 
 **DB service (`packages/db/src/agent-approval-service.ts`):**
+
 - `createApproval` — Creates a PENDING approval with 24h expiry, hashes input for dedup.
 - `getApproval` — Fetches single approval by ID + workspaceId.
 - `listApprovals` — Cursor-paginated list with optional status filter.
@@ -1736,10 +1610,12 @@ Implemented the Agent Action Layer that exposes core LyraShield operations as ty
 - `verifyInputHash` — Compares hash against expected.
 
 **Auth permissions (`packages/auth/src/permissions.ts`):**
+
 - Added `agent.view`, `agent.act`, `agent.approve` to PERMISSIONS.
 - Role assignments: ADMIN/SECURITY_ADMIN get all 3; APPSEC_MANAGER/DEVELOPER get view+act; MEMBER/AUDITOR/VIEWER/EXTERNAL_PENTESTER get view only; BILLING_ADMIN gets none.
 
 **Agent package (`apps/agent/`):**
+
 - `package.json` — `@lyrashield/agent` workspace package, depends on auth/config/db/logger/types + bullmq + zod + vitest.
 - `tsconfig.json` — Extends shared library config, `rootDir: ./src`, Node types.
 - `src/service-token.ts` — `signServiceToken` (HMAC-SHA256, base64url, `lst.` prefix, 5-min TTL) + `verifyServiceToken` (validates prefix, signature, payload field types, expiry). Uses `BETTER_AUTH_SECRET` env var (min 32 chars). Payload validation checks `userId`, `workspaceId`, `role`, `issuedAt`, `expiresAt` are present and correctly typed.
@@ -1756,17 +1632,20 @@ Implemented the Agent Action Layer that exposes core LyraShield operations as ty
 - `src/index.ts` — Exports + `createAgentRegistry()` factory. Exports `enqueueScanJob` from `./queue`.
 
 **API routes (`apps/web/src/app/api/agent-approvals/`):**
+
 - `route.ts` — GET: list approvals (paginated, status filter, `agent:view` permission).
 - `[id]/approve/route.ts` — POST: approve a pending approval (`agent:approve` permission).
 - `[id]/deny/route.ts` — POST: deny a pending approval (`agent:approve` permission).
 
 **Tests (35 new):**
+
 - `apps/agent/src/service-token.test.ts` — 8 tests: sign/verify roundtrip, wrong prefix, tampered token, expired token, malformed payload, missing/short secret, **valid signature but missing payload fields**.
 - `apps/agent/src/registry.test.ts` — 11 tests: register/list, duplicate detection, unknown action, input validation, permission denial, successful execution, approval gate, handler errors, **audit log failure doesn't lose handler success**, **approval actionName mismatch**, **approval inputHash mismatch**.
 - `packages/db/src/agent-approval-service.test.ts` — 5 tests: deterministic hash, different actions hash differently, different inputs hash differently, verify matching, verify mismatched.
 - `packages/auth/src/agent-permissions.test.ts` — 11 tests: permission definitions, all role checks (ADMIN, SECURITY_ADMIN, APPSEC_MANAGER, DEVELOPER, MEMBER, VIEWER, AUDITOR, EXTERNAL_PENTESTER, BILLING_ADMIN), universal view check.
 
 **Other updates:**
+
 - `turbo.json` — Added `LYRASHIELD_AGENT_SERVICE_TOKEN` to globalEnv.
 - `packages/db/src/rls.test.ts` — Added `AgentApproval` to RLS_TABLES (now 18).
 
@@ -1809,7 +1688,7 @@ Focused remediation after a fresh full-repository review.
 - Terminal scan polling refreshes findings so scan-detail results do not remain stale.
 - Settings labels now accurately describe request-scoped filtering and audit logging rather than implying unavailable runtime controls.
 
-### Verification
+### Verification (app)
 
 - Regression coverage covers workspace mismatch rejection, report ownership, workspace selection, schedule claims, scan lifecycle concurrency/retries, subprocess cancellation, notification failure isolation, DNS/redirect validation, and nested manifests.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` pass: **597 source tests in 47 test files**. Generated `dist` artifacts are excluded so test results are not double-counted in Docker.
@@ -1825,7 +1704,7 @@ Focused remediation after a fresh full-repository review.
 - Added a dedicated `worker` Docker target. Compose supplies the sibling engine as a named build context, installs its frozen production environment, exposes the CLI on `PATH`, and mounts the Docker socket in the explicitly local/dev stack for sandbox launches.
 - Aligned the worker exit-code contract with the real CLI: engine exit `1` is a runtime/configuration failure, while exit `2` means a completed scan with findings. This prevents missing engine configuration from being recorded as a successful scan.
 
-### Verification
+### Verification (engine)
 
 - Engine: **62 tests pass** with Pydantic deprecations treated as errors; Ruff lint and formatting pass; headless mypy passes across 58 source files; Bandit reports zero findings.
 - Worker image build runs `lyrashield --version` as a build-time smoke gate and reports **1.0.4**.
@@ -1847,12 +1726,94 @@ Focused remediation after a fresh full-repository review.
 
 - `.github/workflows/upstream-sync.yml` runs weekly on Monday at 03:23 UTC and on manual dispatch. It runs `scripts/check-upstream.sh`, rebases only after the recorded base is proven ancestral, verifies the fork, and opens `automation/upstream-<short-sha>` for review.
 - It contains no auto-merge, merge queue, force-push, or conflict resolver. The normal no-change check returned `needs_sync=false`; an isolated divergent-upstream test returned exit `20` before rebase.
-- Engine `origin` is now the private `ecryptoguru/lyrashield-engine` repository. The reviewed thin-fork branch and its PR-only sync workflow are in [PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1); no workflow was dispatched before merge.
+- The canonical engine checkout now has both writable `origin` (`ecryptoguru/lyrashield-engine`) and read-only upstream remotes. Engine PR #1 merged the thin-fork adapter and review-gated sync workflow. No automated sync PR or merge is claimed beyond that reviewed publication.
 
 ### Verification evidence and remaining release blockers
 
 - Engine verification passed: frozen sync, Ruff, formatting, **155 pytest tests**, headless mypy across **61 source files**, and Bandit.
-- Application verification passed: `pnpm lint`, `pnpm typecheck`, `pnpm test` (**601 tests / 47 files**), `pnpm build`, and `git diff --check`.
+- That checkpoint passed 607 tests in 48 files. The current gate is recorded at the top of this document and in §32.
 - `docker compose build worker` now completes after the builder scopes its Next.js compilation to `pnpm --filter @lyrashield/web build`, avoiding the unrelated uncommitted `apps/marketing` Cloudflare `workerd` failure. The resulting local worker image ID is `sha256:71d6c104f5d11e30d8f8ee63cef8aacb1819b5ec8a4c3d1987d7fd3dcaddc4e6`; `docker compose run --rm --no-deps worker lyrashield --version` returned `lyrashield 1.0.4.post1`.
-- With `LYRASHIELD_LLM` and `LLM_API_KEY` explicitly empty, `lyrashield --non-interactive --target https://example.invalid` exited `1` with `STRIX_LLM` configuration guidance and no `Pulling Docker image` or `Downloading` output. No sandbox launch occurred. The local/dev Compose socket mount remains a development-only sandbox mechanism; the inspected production image is pinned at `ghcr.io/usestrix/strix-sandbox@sha256:478e0b37ec83b2ba8c6e159593cb46d5dc9b624a45d6a9bb606851b83058d284`.
+- With `LYRASHIELD_LLM` and `LLM_API_KEY` explicitly empty, `lyrashield --non-interactive --target https://example.invalid` exited `1` with `STRIX_LLM` configuration guidance and no `Pulling Docker image` or `Downloading` output. No sandbox launch occurred. The local/dev Compose socket mount remains a development-only sandbox mechanism, and production still requires a separately pinned sandbox image digest.
 - Neither `LYRASHIELD_LLM` nor `LLM_API_KEY` is configured for an authorized scan. No external, public, paid, or substitute target was used. The controlled authorized scan, persisted findings, and rendered scan-detail proof remain blocked only by authorized LLM configuration.
+
+---
+
+## §31 — Marketing App Review Fixes (2026-07-11)
+
+### Marketing app overview
+
+`apps/marketing` is the Astro 7 public site for LyraSec AI. It is built with the `@astrojs/cloudflare` adapter and deployed to Cloudflare Workers. It is separate from the Next.js platform (`apps/web`) and includes its own D1 waitlist database, Cloudflare Rate Limits binding, and PostHog analytics.
+
+### Stack
+
+- **Framework:** Astro 7 + `@astrojs/cloudflare` (output: `server` / adapter: `cloudflare`)
+- **Runtime:** Cloudflare Workers with `workerd` (nodejs_compat enabled)
+- **Database:** Cloudflare D1 (`DB` binding), with `0001_waitlist.sql` and `0002_rate_limit_fallback.sql`
+- **Rate limiting:** Cloudflare Rate Limits (`WAITLIST_RL` binding) for the waitlist API
+- **Styling:** TailwindCSS v4 CSS-first configuration in `src/styles/global.css`
+- **Analytics:** `posthog-js` client-side capture
+- **Validation:** Zod v4 for waitlist input; `astro:env/server` for `getSecret("WAITLIST_IP_SALT")`
+- **Type generation:** `wrangler types` runs in `predev`/`prebuild`/`prepreview`/`pretypecheck` scripts
+
+### Waitlist API (`src/pages/api/waitlist.ts`)
+
+- `POST /api/waitlist` accepts `application/json`, `multipart/form-data`, and `application/x-www-form-urlencoded`.
+- `isTrustedOrigin()` checks `Origin`/`Referer` against the site origin.
+- `WAITLIST_IP_SALT` is required; missing salt returns a 500.
+- `getClientIp()` uses `cf-connecting-ip` first, then the last `x-forwarded-for` address (not the spoofable first).
+- Zod validates email and optional fields.
+- `env.DB` inserts into `waitlist_signups` with rate-limiting via `WAITLIST_RL`.
+- Returns JSON or HTML depending on `Accept` header.
+
+### SEO / static assets
+
+- `src/components/JsonLd.astro` serializes JSON-LD with `<` escaped to `\u003c` to prevent `</script>` injection.
+- `astro.config.mjs` is the build-time source for the site origin, indexability, and optional X URL. It rejects indexable builds without a public HTTPS `PUBLIC_SITE_URL`.
+- `SeoHead.astro`, homepage JSON-LD, blog JSON-LD, `robots.txt`, RSS, and the sitemap derive their origin from Astro's configured `site`; canonical, Open Graph, and sitemap URLs therefore cannot diverge during a configured build.
+- `src/pages/robots.txt.ts` emits `Sitemap: <site>/sitemap-index.xml` when indexable and `Disallow: /` otherwise.
+- `src/pages/rss.xml.ts` uses `description` for the RSS summary; raw `post.body` markdown is no longer exposed as `content`.
+- `src/pages/llms.txt.ts` is a dynamic Worker route: it returns 404 before launch and generates an LLM-readable summary only for an approved indexable build.
+
+### Generated-file hygiene
+
+- `apps/marketing/.gitignore` ignores `dist/`, `.astro/`, `.wrangler/`, `.dev.vars`, and `worker-configuration.d.ts`.
+- `wrangler types` generates `worker-configuration.d.ts` before build/dev/preview/typecheck.
+- `astro.config.mjs` deliberately does not validate secrets at static build time; the waitlist endpoint validates the required Worker secret at request time.
+
+### Configuration placeholders
+
+- `wrangler.jsonc` has `database_id` and `ratelimits.namespace_id` placeholders with `// Replace before deploying` comments.
+- `.dev.vars.example` provides a local `WAITLIST_IP_SALT` template.
+- `.env.example` documents the public build values; `.dev.vars` carries local Worker secrets.
+- `preview`, `deploy`, and `deploy:preview` use Astro's generated `dist/server/wrangler.json`, which points assets at `dist/client`.
+
+### Marketing verification
+
+- `pnpm install` passes; lockfile updated.
+- `pnpm --filter @lyrashield/marketing typecheck` passes.
+- `pnpm --filter @lyrashield/marketing build` passes.
+- `pnpm --filter @lyrashield/marketing lint` passes (`eslint src --max-warnings 0`).
+- A local Worker smoke passes at `http://localhost:8787`: `/`, `/robots.txt`, and `/sitemap-index.xml` return 200; pre-launch `/llms.txt` returns 404.
+
+### Caveats
+
+- `pnpm peers check` still reports an unmet `tailwindcss` peer warning for `@tailwindcss/typography@0.5.20`. `tailwindcss@4.3.2` is installed and satisfies the published range (`>=3.0.0 || >=4.0.0 || insiders`), the lockfile resolves the peer, and build/typecheck/lint pass, so this is a `pnpm peers check` false positive.
+
+---
+
+## §32 — Release-Hardening Closure (2026-07-11)
+
+- Evidence storage now fails closed when S3-compatible storage is absent or an upload fails; placeholder evidence URIs are no longer produced.
+- Audit creation uses a transaction-scoped PostgreSQL advisory lock per workspace. Concurrent writes remain one linear chain. Account deletion blocks sole owners, anonymizes loose user references, deletes auth/membership state, and rebuilds affected audit chains before appending `account.deleted`.
+- MCP stdio reads standard `tools/call.params.arguments`. The API client propagates already-aborted signals and distinguishes cancellation from timeout.
+- Web rate limiting trusts only `TRUSTED_PROXY_IP_HEADER`; ingress must strip incoming copies. The marketing D1 fallback limiter uses one conditional insert statement instead of a count/insert race.
+- `/api/health` reports liveness, `/api/ready` checks PostgreSQL and Redis, and `instrumentation.ts` sends unhandled Next.js request errors through the shared structured logger.
+- Playwright runs an isolated production preview on port 3100 and verifies anonymous denial, email signup/signin, workspace onboarding, target creation, scan queue creation, and cross-tenant scan/finding/report denial.
+- CI now runs `format:check` and Chromium E2E. Docker contexts exclude nested build output and the engine virtualenv; the measured contexts fell from 565/379 MB to 1.09 MB/22.8 KB. The worker image remains intentionally larger than a compiled-only runtime because shared workspace packages still execute TypeScript source.
+
+### Current verification
+
+- `pnpm test`: **625 tests in 56 files**
+- `pnpm test:e2e`: **2 Chromium tests**
+- `pnpm typecheck`: pass
+- Full lint, formatting, build, dependency-audit, Docker, and diff checks must be rerun after documentation formatting before merge.

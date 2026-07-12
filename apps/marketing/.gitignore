@@ -1,0 +1,13 @@
+# Build
+/dist
+/.astro
+/.wrangler
+
+# Generated types
+/worker-configuration.d.ts
+
+# Env
+.env
+.env.local
+.env.*.local
+.dev.vars

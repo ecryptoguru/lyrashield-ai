@@ -12,10 +12,7 @@ const PatchNotificationSchema = z.object({
   status: z.enum(["pending", "sent", "read", "failed"]).optional(),
 })
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   try {
@@ -29,9 +26,7 @@ export async function PATCH(
     const { workspaceId, action } = parsed.data
 
     const perm =
-      action === "mark_read"
-        ? PERMISSIONS.notification.view
-        : PERMISSIONS.notification.manage
+      action === "mark_read" ? PERMISSIONS.notification.view : PERMISSIONS.notification.manage
 
     const { session } = await requirePermission(workspaceId, perm)
 

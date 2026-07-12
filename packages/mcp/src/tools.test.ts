@@ -48,7 +48,7 @@ describe("createScanTargetTool", () => {
     expect(data.scan.id).toBe("scan-1")
     expect(mockFetch).toHaveBeenCalledWith(
       "http://localhost:3000/api/scans",
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({ method: "POST" })
     )
   })
 
@@ -70,11 +70,11 @@ describe("createGetFindingsTool", () => {
     expect(result.isError).toBeUndefined()
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining("workspaceId=ws-1"),
-      expect.objectContaining({ method: "GET" }),
+      expect.objectContaining({ method: "GET" })
     )
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining("severity=HIGH"),
-      expect.anything(),
+      expect.anything()
     )
   })
 })
@@ -82,7 +82,7 @@ describe("createGetFindingsTool", () => {
 describe("createGetLaunchReadinessTool", () => {
   it("fetches launch readiness verdict", async () => {
     mockFetch.mockResolvedValueOnce(
-      makeApiResponse({ verdict: "GO", score: 100, blockingFindings: 0 }),
+      makeApiResponse({ verdict: "GO", score: 100, blockingFindings: 0 })
     )
     const tool = createGetLaunchReadinessTool(context)
     const result = await tool.handler({ workspaceId: "ws-1" })
@@ -111,7 +111,9 @@ describe("apiCall error handling", () => {
       status: 500,
       statusText: "Internal Server Error",
       headers: { forEach: () => {} },
-      json: async () => { throw new Error("not JSON") },
+      json: async () => {
+        throw new Error("not JSON")
+      },
     })
     const tool = createScanTargetTool(context)
     const result = await tool.handler({ workspaceId: "ws-1", targetId: "t-1" })

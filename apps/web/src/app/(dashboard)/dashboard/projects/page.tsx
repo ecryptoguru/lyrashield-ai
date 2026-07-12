@@ -13,7 +13,7 @@ export default async function ProjectsPage() {
     return (
       <div className="rounded-lg border border-dashed p-12 text-center">
         <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Create a workspace first to start managing projects.
         </p>
       </div>
@@ -45,5 +45,11 @@ export default async function ProjectsPage() {
     findingCount: p._count.findings,
   }))
 
-  return <ProjectsClient workspaceId={workspaceId} initialData={initialData} initialNextCursor={nextCursor} />
+  return (
+    <ProjectsClient
+      workspaceId={workspaceId}
+      initialData={initialData}
+      initialNextCursor={nextCursor}
+    />
+  )
 }
