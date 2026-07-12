@@ -162,9 +162,23 @@ describe("runScannerOrchestrator", () => {
     expect(result.allFindings.length).toBe(2)
   })
 
-  it("handles SCA scanner failure gracefully", async () => {
+  it("fails closed when the SCA scanner cannot run", async () => {
     vi.mocked(scanSca).mockRejectedValueOnce(new Error("OSV API down") as never)
 
+    await expect(
+      runScannerOrchestrator({
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        target: { id: "target-1", type: "REPO", name: "Test" },
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        engineFindings,
+      })
+    ).rejects.toThrow("OSV API down")
+  })
+
+  it("tags detector provenance so secret findings receive the score cap", async () => {
     const result = await runScannerOrchestrator({
       scanId: "scan-1",
       workspaceId: "ws-1",
@@ -175,9 +189,7 @@ describe("runScannerOrchestrator", () => {
       engineFindings,
     })
 
-    expect(result.scaFindings).toEqual([])
-    expect(result.engineFindings.length).toBe(1)
-    expect(result.secretsFindings.length).toBe(1)
+    expect(result.secretsFindings[0]?.scannerSource).toBe("secrets")
   })
 
   it("keeps higher severity finding on cross-source dedupeKey collision", async () => {

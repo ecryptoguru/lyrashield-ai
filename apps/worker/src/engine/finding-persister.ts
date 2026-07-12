@@ -67,6 +67,10 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
     const verified = isNormalized
       ? (vuln as NormalizedFinding).confidenceScore >= 50
       : verification.verified
+    const normalized = isNormalized ? (vuln as NormalizedFinding) : null
+    const category =
+      normalized?.scannerSource === "secrets" ? "Secrets" : normalized?.enrichment.cweCategory
+    const owaspCategory = normalized?.enrichment.owaspCategory
 
     const existing = existingMap.get(dedupeKey)
 
@@ -95,6 +99,8 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
           severity,
           confidence,
           ...(cwe ? { cwe } : {}),
+          ...(category ? { category } : {}),
+          ...(owaspCategory ? { owaspCategory } : {}),
           ...(cvss != null ? { cvssScore: cvss } : {}),
           ...(vuln.technical_analysis ? { technicalDetail: vuln.technical_analysis } : {}),
           ...(vuln.remediation_steps ? { recommendedFix: vuln.remediation_steps } : {}),
@@ -126,6 +132,8 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
         verified,
         dedupeKey,
         ...(cwe ? { cwe } : {}),
+        ...(category ? { category } : {}),
+        ...(owaspCategory ? { owaspCategory } : {}),
         ...(vuln.cve ? { sarifRuleId: vuln.cve } : {}),
         ...(cvss != null ? { cvssScore: cvss } : {}),
         ...(vuln.technical_analysis ? { technicalDetail: vuln.technical_analysis } : {}),

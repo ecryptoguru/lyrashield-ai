@@ -12,9 +12,22 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
 
   const { id } = await params
 
-  const target = await prisma.target.findUnique({
-    where: { id },
+  const target = await prisma.target.findFirst({
+    where: {
+      id,
+      deletedAt: null,
+      workspace: { members: { some: { userId: session.userId, status: "active" } } },
+    },
     include: {
+      workspace: {
+        select: {
+          members: {
+            where: { userId: session.userId, status: "active" },
+            take: 1,
+            select: { role: true },
+          },
+        },
+      },
       project: { select: { id: true, name: true } },
       scans: {
         orderBy: { createdAt: "desc" },
@@ -41,7 +54,11 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
             where: { revokedAt: null },
             orderBy: { createdAt: "desc" },
             take: 1,
-            select: { id: true, slug: true },
+            select: {
+              id: true,
+              slug: true,
+              referralCode: { select: { code: true } },
+            },
           },
         },
       },
@@ -49,19 +66,13 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
     },
   })
 
-  if (!target || target.deletedAt) {
+  if (!target) {
     notFound()
   }
 
-  const membership = await prisma.workspaceMember.findUnique({
-    where: {
-      workspaceId_userId: { workspaceId: target.workspaceId, userId: session.userId },
-    },
-  })
-
-  if (!membership || membership.status !== "active") {
-    redirect("/dashboard")
-  }
+  const membership = target.workspace.members[0]!
+  const latestScore = target.scoreSnapshots[0]
+  const scoreExpired = latestScore ? latestScore.expiresAt <= new Date() : false
 
   return (
     <div>
@@ -115,27 +126,38 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         </Card>
       </div>
 
-      {target.scoreSnapshots[0] && (
+      {latestScore && (
         <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
           <h2 className="text-lg font-semibold">LyraShield Score</h2>
           <p className="text-primary mt-2 font-mono text-4xl font-bold">
-            {target.scoreSnapshots[0].grade.replace("_PLUS", "+")} ·{" "}
-            {target.scoreSnapshots[0].score}
+            {latestScore.grade.replace("_PLUS", "+")} · {latestScore.score}
           </p>
           <p className="text-muted-foreground mt-2 text-sm">
-            {target.scoreSnapshots[0].shareEligible
-              ? "Eligible for a public scorecard."
-              : "Provisional score — run a Standard or Deep scan on the configured default branch to share."}
+            {scoreExpired
+              ? "This score is stale — run a new scan to refresh it before sharing."
+              : latestScore.shareEligible
+                ? "Eligible for a public scorecard."
+                : "Provisional score — run a Standard or Deep scan on the configured default branch to share."}
           </p>
-          {target.scoreSnapshots[0].shareEligible && (
+          {latestScore.shareEligible && !scoreExpired && (
             <ScorecardControls
               targetId={target.id}
               workspaceId={target.workspaceId}
-              grade={target.scoreSnapshots[0].grade}
+              grade={latestScore.grade}
               canPublish={["OWNER", "ADMIN", "SECURITY_ADMIN", "APPSEC_MANAGER"].includes(
                 membership.role
               )}
-              existingShare={target.scoreSnapshots[0].shares[0]}
+              existingShare={
+                latestScore.shares[0]
+                  ? {
+                      id: latestScore.shares[0].id,
+                      slug: latestScore.shares[0].slug,
+                      url: latestScore.shares[0].referralCode?.code
+                        ? `/score/${latestScore.shares[0].slug}?ref=${latestScore.shares[0].referralCode.code}`
+                        : `/score/${latestScore.shares[0].slug}`,
+                    }
+                  : undefined
+              }
             />
           )}
         </div>
