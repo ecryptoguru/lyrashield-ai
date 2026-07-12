@@ -71,6 +71,20 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
     const existing = existingMap.get(dedupeKey)
 
     if (existing) {
+      // Regression handling: if a previously resolved finding is re-detected, it
+      // has reappeared and must be reopened — otherwise the dashboard shows a
+      // "fixed" state for an actively-present vulnerability. Only auto-reopen
+      // engine-resolved states (FIXED, FIXED_PENDING_RETEST); permanent human
+      // dispositions (ACCEPTED_RISK, FALSE_POSITIVE, DUPLICATE) are intentional
+      // and must NOT be silently overridden by a re-detection.
+      const reopen = existing.status === "FIXED" || existing.status === "FIXED_PENDING_RETEST"
+      if (reopen) {
+        logger.info("Reopening regressed finding", {
+          findingId: existing.id,
+          scanId,
+          previousStatus: existing.status,
+        })
+      }
       await prisma.finding.update({
         where: { id: existing.id },
         data: {
@@ -85,6 +99,7 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
           ...(vuln.technical_analysis ? { technicalDetail: vuln.technical_analysis } : {}),
           ...(vuln.remediation_steps ? { recommendedFix: vuln.remediation_steps } : {}),
           ...(vuln.impact ? { businessImpact: vuln.impact } : {}),
+          ...(reopen ? { status: "OPEN" as const, fixedAt: null } : {}),
           verified,
         },
       })

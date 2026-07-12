@@ -55,7 +55,7 @@ async function sendVerificationEmail({
         "api-key": env.BREVO_API_KEY,
       },
       body: JSON.stringify({
-        sender: { email: env.EMAIL_FROM || "noreply@lyrashield.ai" },
+        sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
         to: [{ email: user.email, name: user.name }],
         subject: "Verify your email — LyraShield",
         htmlContent: `<p>Hi ${user.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")},</p><p>Click the link below to verify your email address:</p><p><a href="${url}">Verify Email</a></p><p>If you didn't create an account, you can safely ignore this email.</p>`,

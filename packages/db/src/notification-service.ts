@@ -113,14 +113,24 @@ const VALID_STATUSES = ["pending", "sent", "read", "failed"] as const
 export async function updateNotificationStatus(
   notificationId: string,
   workspaceId: string,
-  status: string
+  status: string,
+  // When set, restrict the update to notifications addressed to this user (or
+  // workspace-wide notifications with no recipient). Prevents a member from
+  // mutating another member's personal notification via a shared workspace
+  // permission (IDOR). Omit only for admin/system-level status changes.
+  recipientUserId?: string
 ): Promise<Notification> {
   if (!VALID_STATUSES.includes(status as (typeof VALID_STATUSES)[number])) {
     throw new Error(`Invalid notification status: ${status}`)
   }
 
   const notification = await prisma.notification.findFirst({
-    where: { id: notificationId, workspaceId, deletedAt: null },
+    where: {
+      id: notificationId,
+      workspaceId,
+      deletedAt: null,
+      ...(recipientUserId ? { OR: [{ userId: recipientUserId }, { userId: null }] } : {}),
+    },
   })
 
   if (!notification) {

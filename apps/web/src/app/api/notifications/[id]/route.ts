@@ -43,7 +43,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         break
     }
 
-    const updated = await updateNotificationStatus(id, workspaceId, status)
+    // For self-service reads, scope to the caller so a member can't flip another
+    // member's notification via workspace-wide notification.view (IDOR). The
+    // manage-gated actions (mark_sent / update_status) remain workspace-scoped.
+    const updated =
+      action === "mark_read"
+        ? await updateNotificationStatus(id, workspaceId, status, session.userId)
+        : await updateNotificationStatus(id, workspaceId, status)
 
     await prisma.auditLog.create({
       data: {

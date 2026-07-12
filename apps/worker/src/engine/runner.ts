@@ -9,6 +9,7 @@ import { parseEngineOutput, type ParsedScanOutput } from "./output-parser"
 export interface EngineRunResult {
   exitCode: number
   cancelled: boolean
+  timedOut: boolean
   output: ParsedScanOutput
   stdout: string
   stderr: string
@@ -405,7 +406,7 @@ export async function runEngine(
     }
   )
 
-  return { exitCode, cancelled, output, stdout, stderr }
+  return { exitCode, cancelled, timedOut, output, stdout, stderr }
 }
 
 export async function cleanupEngineWorkspace(workDir: string): Promise<void> {

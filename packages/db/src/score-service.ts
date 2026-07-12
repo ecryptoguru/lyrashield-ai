@@ -95,7 +95,7 @@ export async function completeScanWithScore(scanId: string, summary: string | nu
     const shareEligible =
       result.shareEligible && (findings.length === 0 || triaged / findings.length <= 0.25)
     const previous = await tx.scoreSnapshot.findFirst({
-      where: { targetId: scan.target.id },
+      where: { workspaceId: scan.workspaceId, targetId: scan.target.id },
       orderBy: { computedAt: "desc" },
       select: { score: true },
     })
@@ -131,7 +131,11 @@ export async function completeScanWithScore(scanId: string, summary: string | nu
     })
     if (scan.target.projectId) {
       const minimum = await tx.scoreSnapshot.aggregate({
-        where: { target: { projectId: scan.target.projectId }, expiresAt: { gt: now } },
+        where: {
+          workspaceId: scan.workspaceId,
+          target: { projectId: scan.target.projectId },
+          expiresAt: { gt: now },
+        },
         _min: { score: true },
       })
       await tx.project.update({

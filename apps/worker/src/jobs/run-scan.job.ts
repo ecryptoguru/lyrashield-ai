@@ -95,6 +95,26 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       }
 
+      if (engineResult.timedOut) {
+        const timeoutMessage = "Scan engine timed out before completing"
+        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+          errorCategory: "TIMEOUT",
+          errorMessage: timeoutMessage,
+        })
+        try {
+          await notifyScanFailed(workspaceId, scanId, timeoutMessage)
+        } catch (notificationError) {
+          log.warn("Failed to send scan timeout notification", {
+            scanId,
+            error:
+              notificationError instanceof Error
+                ? notificationError.message
+                : String(notificationError),
+          })
+        }
+        return { status: "failed", errorCategory: "TIMEOUT", errorMessage: timeoutMessage }
+      }
+
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
       await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
 
