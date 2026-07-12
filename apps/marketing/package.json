@@ -33,7 +33,7 @@
     "@astrojs/check": "^0.9.9",
     "@cloudflare/workers-types": "^5.20260708.1",
     "@tailwindcss/typography": "^0.5.20",
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.20.1",
     "lighthouse": "^13.4.0",
     "puppeteer": "^25.3.0",
     "typescript": "^6.0.0",

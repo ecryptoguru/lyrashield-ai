@@ -20,9 +20,9 @@
   },
   "devDependencies": {
     "typescript": "^6.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.20.1",
     "tsx": "^4.23.0",
-    "vitest": "^3.0.0",
+    "vitest": "^3.2.7",
     "zod": "^4.0.0"
   }
 }

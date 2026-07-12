@@ -20,12 +20,12 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
-    "eslint": "^9.39.4",
+    "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.10",
     "eslint-plugin-security": "^3.0.1",
-    "prettier": "^3.9.4",
+    "prettier": "^3.9.5",
     "prettier-plugin-tailwindcss": "^0.8.0",
-    "turbo": "^2.10.3",
+    "turbo": "^2.10.4",
     "vitest": "^4.1.9"
   },
   "packageManager": "pnpm@11.6.0",
