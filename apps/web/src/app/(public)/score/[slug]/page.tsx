@@ -3,7 +3,12 @@ import { notFound } from "next/navigation"
 import { getPublicScorecard } from "@lyrashield/db"
 import { ReferralCapture } from "./referral-capture"
 
-export const revalidate = 3600
+// Short revalidation window so a revoked or superseded scorecard stops serving
+// stale content quickly. Revocation guarantees are enforced server-side in
+// getPublicScorecard (revokedAt / expiresAt); this bounds CDN/ISR staleness to
+// ~1 min. A fully-immediate kill on revoke (cache-tag invalidation) is tracked
+// as a follow-up.
+export const revalidate = 60
 
 export default async function ScorecardPage({
   params,

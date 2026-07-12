@@ -1,6 +1,7 @@
 import { prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
+import { checkScanUrlSafe } from "@lyrashield/security"
 
 export interface PreflightResult {
   passed: boolean
@@ -64,6 +65,27 @@ export async function runPreflight(scanId: string, targetId: string): Promise<Pr
       }
     }
     checks.push({ name: "url_configured", passed: true, message: `URL: ${target.url}` })
+
+    // Re-validate the target URL for SSRF safety at scan time, not just at
+    // target-creation time. Guards against a URL that was created before a
+    // hardening change, or whose DNS now resolves to a private/metadata/reserved
+    // address (rebinding). The worker's fetch layer pins the resolved IP; this
+    // check fails fast before the engine ever runs.
+    const ssrf = await checkScanUrlSafe(target.url)
+    if (!ssrf.safe) {
+      checks.push({
+        name: "url_ssrf_safe",
+        passed: false,
+        message: `URL failed SSRF safety check: ${ssrf.reason}`,
+      })
+      return {
+        passed: false,
+        checks,
+        errorCategory: "PREFLIGHT",
+        errorMessage: `Target URL is not safe to scan (${ssrf.reason})`,
+      }
+    }
+    checks.push({ name: "url_ssrf_safe", passed: true, message: "URL passed SSRF safety check" })
   }
 
   const activeScans = await prisma.scan.count({

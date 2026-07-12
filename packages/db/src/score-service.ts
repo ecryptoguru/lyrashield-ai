@@ -308,6 +308,12 @@ export async function qualifyReferralForWorkspace(workspaceId: string) {
   if (!referrerWorkspace) return null
 
   const [recipient] = await prisma.$transaction(async (tx) => {
+    // Lock the attribution row so two concurrent scan-completion callbacks for
+    // the same referred workspace serialize here rather than both reading
+    // status=PENDING and racing. The usageRecord idempotencyKey upserts below
+    // are the ultimate double-credit guard; this lock makes the status re-check
+    // authoritative instead of advisory.
+    await tx.$queryRaw`SELECT id FROM "ReferralAttribution" WHERE id = ${attribution.id} FOR UPDATE`
     const current = await tx.referralAttribution.findUnique({ where: { id: attribution.id } })
     if (!current || current.status !== "PENDING") return [null]
     const recipientReward = await tx.usageRecord.upsert({
