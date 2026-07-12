@@ -28,7 +28,8 @@
     "zod": "^4.0.0",
     "@tanstack/react-query": "^5.62.0",
     "bullmq": "^5.80.1",
-    "@lyrashield/security": "workspace:*"
+    "@lyrashield/security": "workspace:*",
+    "@lyrashield/score": "workspace:*"
   },
   "optionalDependencies": {
     "@upstash/ratelimit": "^2.0.0",

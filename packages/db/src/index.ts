@@ -10,6 +10,8 @@ export {
   FindingSeverity,
   FindingStatus,
   IntegrationType,
+  ScoreGrade,
+  ReferralStatus,
 } from "./generated/prisma"
 
 export type {
@@ -73,6 +75,16 @@ export {
   type ListScansParams,
 } from "./scan-service"
 export { isValidTransition, VALID_TRANSITIONS } from "./scan-transitions"
+export {
+  completeScanWithScore,
+  createScorecardShare,
+  revokeScorecardShare,
+  getPublicScorecard,
+  getOrCreateReferralCode,
+  attributeReferral,
+  qualifyReferralForWorkspace,
+  type ScorecardPayload,
+} from "./score-service"
 export {
   listFindings,
   getFinding,

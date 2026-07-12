@@ -176,6 +176,22 @@ enum FindingStatus {
   DUPLICATE
 }
 
+enum ScoreGrade {
+  A_PLUS
+  A
+  B
+  C
+  D
+  F
+}
+
+enum ReferralStatus {
+  PENDING
+  QUALIFIED
+  REWARDED
+  REJECTED
+}
+
 enum IntegrationType {
   GITHUB
   GITLAB
@@ -225,6 +241,7 @@ model Workspace {
   apiKeys           ApiKey[]
   retests           Retest[]
   agentApprovals    AgentApproval[]
+  scoreSnapshots    ScoreSnapshot[]
 }
 
 model WorkspaceMember {
@@ -292,6 +309,7 @@ model Target {
   findings        Finding[]
   credentials     CredentialSet[]
   schedules       Schedule[]
+  scoreSnapshots  ScoreSnapshot[]
 
   @@unique([workspaceId, repoFullName])
   @@unique([workspaceId, url])
@@ -378,6 +396,7 @@ model Scan {
   findings        Finding[]
   retests         Retest[]
   reports         Report[]
+  scoreSnapshot   ScoreSnapshot?
 
   @@index([workspaceId])
   @@index([projectId])
@@ -583,10 +602,79 @@ model UsageRecord {
   createdAt     DateTime @default(now())
 
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  referralReward ReferralAttribution? @relation("ReferralReward")
 
   @@index([workspaceId])
   @@index([kind])
   @@index([workspaceId, createdAt])
+}
+
+model ScoreSnapshot {
+  id            String     @id @default(cuid())
+  workspaceId   String
+  targetId      String
+  scanId        String     @unique
+  modelVersion  String
+  score         Int
+  grade         ScoreGrade
+  breakdown     Json
+  scanMode      ScanMode
+  shareEligible Boolean    @default(false)
+  computedAt    DateTime   @default(now())
+  expiresAt     DateTime
+
+  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target        Target     @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  scan          Scan       @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  shares        ScorecardShare[]
+
+  @@index([workspaceId])
+  @@index([targetId, computedAt])
+}
+
+model ReferralCode {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  code          String   @unique
+  createdAt     DateTime @default(now())
+
+  attributions  ReferralAttribution[]
+  scorecardShares ScorecardShare[]
+}
+
+model ReferralAttribution {
+  id              String         @id @default(cuid())
+  codeId          String
+  referredUserId  String         @unique
+  source          String
+  ipHash          String?
+  status          ReferralStatus @default(PENDING)
+  qualifiedAt     DateTime?
+  rewardRecordId  String?        @unique
+  createdAt       DateTime       @default(now())
+
+  code            ReferralCode   @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  rewardRecord    UsageRecord?   @relation("ReferralReward", fields: [rewardRecordId], references: [id], onDelete: SetNull)
+
+  @@index([codeId])
+  @@index([status])
+}
+
+model ScorecardShare {
+  id             String        @id @default(cuid())
+  snapshotId     String
+  slug           String        @unique
+  publicPayload  Json
+  referralCodeId String?
+  createdById    String
+  revokedAt      DateTime?
+  viewCount      Int           @default(0)
+  createdAt      DateTime      @default(now())
+
+  snapshot       ScoreSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  referralCode   ReferralCode? @relation(fields: [referralCodeId], references: [id], onDelete: SetNull)
+
+  @@index([snapshotId])
 }
 
 model AuditLog {
