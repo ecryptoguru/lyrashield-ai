@@ -54,6 +54,12 @@ const bodySchema = z.object({
     .max(100)
     .optional()
     .transform((v) => v || undefined),
+  referralCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/)
+    .optional(),
 })
 
 export const prerender = false
@@ -141,15 +147,23 @@ function htmlResponse(status: number, body: string): Response {
   )
 }
 
-function successResponse(request: Request): Response {
-  // Always identical regardless of insert/duplicate/honeypot — never leak signup state.
+function successResponse(request: Request, referralCode: string): Response {
+  // Always identical shape regardless of insert/duplicate/honeypot — never leak signup state.
+  // A referralCode is ALWAYS present: real for inserts, the existing row's code for
+  // duplicates, and a decoy for honeypots, so the response is indistinguishable.
   if (acceptsHtml(request)) {
     return htmlResponse(201, "<p>You're on the list. One email when your invite is ready.</p>")
   }
-  return new Response(JSON.stringify({ success: true }), {
+  return new Response(JSON.stringify({ success: true, referralCode }), {
     status: 201,
     headers: { "Content-Type": "application/json" },
   })
+}
+
+function makeReferralCode(): string {
+  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("")
 }
 
 /**
@@ -258,19 +272,21 @@ export const POST: APIRoute = async ({ request, site }) => {
     })
   }
 
-  const { website, ...data } = parsed.data
+  const { website, referralCode: referredBy, ...data } = parsed.data
   if (website) {
     // Honeypot tripped — return the exact same generic success as a real signup so a bot
     // (or a human probing the endpoint) can't distinguish "rejected" from "accepted".
-    return successResponse(request)
+    // The decoy code is never persisted, so it attributes nothing.
+    return successResponse(request, makeReferralCode())
   }
 
   try {
+    const referralCode = makeReferralCode()
     await db
       .prepare(
         `INSERT INTO waitlist_signups (
-        id, email, role, building, source, utm_source, utm_medium, utm_campaign, referrer, ip_hash
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        id, email, role, building, source, utm_source, utm_medium, utm_campaign, referrer, ip_hash, referral_code, referred_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         crypto.randomUUID(),
@@ -282,15 +298,45 @@ export const POST: APIRoute = async ({ request, site }) => {
         data.utmMedium || null,
         data.utmCampaign || null,
         data.referrer || null,
-        ipHash
+        ipHash,
+        referralCode,
+        referredBy || null
       )
       .run()
 
-    return successResponse(request)
+    if (referredBy) {
+      await db
+        .prepare(
+          `UPDATE waitlist_signups SET referral_count = referral_count + 1 WHERE referral_code = ?`
+        )
+        .bind(referredBy)
+        .run()
+    }
+
+    return successResponse(request, referralCode)
   } catch (error: unknown) {
     if ((error as Error).message?.includes("UNIQUE constraint failed")) {
-      // Duplicate email: identical success response, no distinguishing status/body — non-leaking per spec.
-      return successResponse(request)
+      // Duplicate email: identical success response, no distinguishing status/body — non-leaking
+      // per spec. Return the EXISTING row's referral code (backfilling one for pre-referral rows)
+      // so the payload shape matches a fresh signup exactly.
+      try {
+        const existing = await db
+          .prepare(`SELECT referral_code FROM waitlist_signups WHERE email = ?`)
+          .bind(data.email)
+          .first<{ referral_code: string | null }>()
+        if (existing?.referral_code) return successResponse(request, existing.referral_code)
+        const backfill = makeReferralCode()
+        await db
+          .prepare(
+            `UPDATE waitlist_signups SET referral_code = ? WHERE email = ? AND referral_code IS NULL`
+          )
+          .bind(backfill, data.email)
+          .run()
+        return successResponse(request, backfill)
+      } catch {
+        // Even if the lookup fails, keep the response shape identical.
+        return successResponse(request, makeReferralCode())
+      }
     }
 
     console.error("Waitlist signup failed", error)

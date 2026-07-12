@@ -87,6 +87,7 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
         <span> on X</span>
       )} in the meantime.
     </p>
+    <p id="waitlist-referral" class="mt-3 hidden text-sm text-text-muted"></p>
   </div>
 </form>
 
@@ -110,6 +111,7 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
     }
 
     const referrer = document.referrer || ""
+    const referralCode = url.searchParams.get("ref") || ""
     ;(form.querySelector("[name=utmSource]") as HTMLInputElement).value = utm.utmSource
     ;(form.querySelector("[name=utmMedium]") as HTMLInputElement).value = utm.utmMedium
     ;(form.querySelector("[name=utmCampaign]") as HTMLInputElement).value = utm.utmCampaign
@@ -145,6 +147,7 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
         utmMedium: String(formData.get("utmMedium") || "").trim(),
         utmCampaign: String(formData.get("utmCampaign") || "").trim(),
         referrer: String(formData.get("referrer") || "").trim(),
+        referralCode,
         website: String(formData.get("website") || "").trim(),
       }
 
@@ -186,6 +189,7 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
         if (!response.ok) {
           throw new Error(`Server error ${response.status}`)
         }
+        const result = (await response.json()) as { referralCode?: string }
 
         form.reset()
         formFields?.classList.add("hidden")
@@ -193,6 +197,12 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
         if (statusEl) {
           statusEl.classList.remove("hidden")
           statusEl.focus()
+        }
+        const referralEl = document.getElementById("waitlist-referral")
+        if (referralEl && result.referralCode) {
+          const link = `${window.location.origin}/?ref=${result.referralCode}`
+          referralEl.textContent = `Move up the waitlist: share ${link}`
+          referralEl.classList.remove("hidden")
         }
 
         if (window.posthog?.__loaded) {

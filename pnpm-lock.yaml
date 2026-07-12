@@ -162,6 +162,9 @@ importers:
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@lyrashield/score':
+        specifier: workspace:*
+        version: link:../../packages/score
       '@lyrashield/security':
         specifier: workspace:*
         version: link:../../packages/security
@@ -326,6 +329,9 @@ importers:
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../logger
+      '@lyrashield/score':
+        specifier: workspace:*
+        version: link:../score
       '@prisma/adapter-pg':
         specifier: 7.8.0
         version: 7.8.0
@@ -407,6 +413,15 @@ importers:
       vitest:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
+
+  packages/score:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
 
   packages/security:
     dependencies:

@@ -10,6 +10,8 @@ vi.mock("@lyrashield/db", () => ({
     },
   },
   updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
+  completeScanWithScore: vi.fn().mockResolvedValue({}),
+  qualifyReferralForWorkspace: vi.fn().mockResolvedValue(null),
   addScanEvent: vi.fn().mockResolvedValue(undefined),
   runWithWorkspaceContext: <T>(_wsId: string | null, fn: () => T): T => fn(),
 }))
@@ -78,7 +80,7 @@ import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/
 import { persistFindings } from "../engine/finding-persister"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { notifyScanCompleted } from "../notifications"
-import { updateScanStatus, prisma } from "@lyrashield/db"
+import { completeScanWithScore, updateScanStatus, prisma } from "@lyrashield/db"
 
 const mockJob = {
   id: "job-1",
@@ -126,6 +128,7 @@ describe("processScanJob", () => {
     })
     vi.mocked(persistFindings).mockResolvedValue([])
     vi.mocked(updateScanStatus).mockResolvedValue({ id: "scan-1" } as never)
+    vi.mocked(completeScanWithScore).mockResolvedValue({} as never)
     vi.mocked(cleanupEngineWorkspace).mockResolvedValue(undefined)
     vi.mocked(prisma.target.findFirst).mockResolvedValue(mockTarget as never)
     vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
@@ -154,13 +157,7 @@ describe("processScanJob", () => {
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "PREFLIGHT")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "RUNNING")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
-    expect(updateScanStatus).toHaveBeenCalledWith(
-      "scan-1",
-      "COMPLETED",
-      expect.objectContaining({
-        summary: "Scan completed with 0 findings",
-      })
-    )
+    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Scan completed with 0 findings")
   })
 
   it("keeps a completed scan completed when a completion notification fails", async () => {
@@ -171,7 +168,7 @@ describe("processScanJob", () => {
     const result = await processScanJob(mockJob)
 
     expect(result.status).toBe("completed")
-    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "COMPLETED", expect.anything())
+    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Scan completed with 0 findings")
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 

@@ -94,9 +94,10 @@ Then, in the target environment:
 Before deploying the Cloudflare marketing Worker:
 
 1. Replace the D1 database ID and Rate Limit namespace placeholder in `apps/marketing/wrangler.jsonc`.
-2. Set `WAITLIST_IP_SALT` with `wrangler secret put`; do not retain the example value.
-3. Build with the intended public origins. `PUBLIC_INDEXABLE=true` is rejected unless `PUBLIC_SITE_URL` is public HTTPS.
-4. Deploy using Astro's generated configuration:
+2. Apply all D1 migrations in `apps/marketing/migrations/` (including `0003_waitlist_referrals.sql`, which adds the waitlist referral columns) with `wrangler d1 migrations apply` before serving traffic.
+3. Set `WAITLIST_IP_SALT` with `wrangler secret put`; do not retain the example value.
+4. Build with the intended public origins. `PUBLIC_INDEXABLE=true` is rejected unless `PUBLIC_SITE_URL` is public HTTPS.
+5. Deploy using Astro's generated configuration:
 
    ```bash
    PUBLIC_SITE_URL="https://www.example.com" \
@@ -106,7 +107,7 @@ Before deploying the Cloudflare marketing Worker:
    pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
    ```
 
-5. On the live domain, verify the waitlist submission, canonical URL, Open Graph image, JSON-LD, `robots.txt`, sitemap, app-header links, and HTTPS redirect. Do not enable indexing until visual QA and founder approval are complete.
+6. On the live domain, verify the waitlist submission, canonical URL, Open Graph image, JSON-LD, `robots.txt`, sitemap, app-header links, and HTTPS redirect. Do not enable indexing until visual QA and founder approval are complete.
 
 ## Do not claim as verified
 

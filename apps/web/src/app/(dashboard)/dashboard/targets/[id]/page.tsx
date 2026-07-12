@@ -4,6 +4,7 @@ import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, GitBranch, Globe, Bug, Crosshair } from "lucide-react"
 import { Card, Badge } from "@lyrashield/ui"
+import { ScorecardControls } from "./scorecard-controls"
 
 export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -26,6 +27,22 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
           createdAt: true,
           startedAt: true,
           endedAt: true,
+        },
+      },
+      scoreSnapshots: {
+        orderBy: { computedAt: "desc" },
+        take: 1,
+        select: {
+          score: true,
+          grade: true,
+          shareEligible: true,
+          expiresAt: true,
+          shares: {
+            where: { revokedAt: null },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { id: true, slug: true },
+          },
         },
       },
       _count: { select: { scans: true, findings: true } },
@@ -97,6 +114,32 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
           </p>
         </Card>
       </div>
+
+      {target.scoreSnapshots[0] && (
+        <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
+          <h2 className="text-lg font-semibold">LyraShield Score</h2>
+          <p className="text-primary mt-2 font-mono text-4xl font-bold">
+            {target.scoreSnapshots[0].grade.replace("_PLUS", "+")} ·{" "}
+            {target.scoreSnapshots[0].score}
+          </p>
+          <p className="text-muted-foreground mt-2 text-sm">
+            {target.scoreSnapshots[0].shareEligible
+              ? "Eligible for a public scorecard."
+              : "Provisional score — run a Standard or Deep scan on the configured default branch to share."}
+          </p>
+          {target.scoreSnapshots[0].shareEligible && (
+            <ScorecardControls
+              targetId={target.id}
+              workspaceId={target.workspaceId}
+              grade={target.scoreSnapshots[0].grade}
+              canPublish={["OWNER", "ADMIN", "SECURITY_ADMIN", "APPSEC_MANAGER"].includes(
+                membership.role
+              )}
+              existingShare={target.scoreSnapshots[0].shares[0]}
+            />
+          )}
+        </div>
+      )}
 
       {target.type === "REPO" && (
         <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">

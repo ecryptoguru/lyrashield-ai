@@ -10,13 +10,14 @@ LyraShield AI is an agent-native application-security platform for AI-built soft
 - `apps/worker` — BullMQ scan worker
 - `apps/agent` — approval-gated agent actions
 - `apps/marketing` — Astro 7 / Cloudflare Workers waitlist site
-- `packages/*` — auth, config, db, integrations, logger, MCP, security, types, UI
+- `packages/*` — auth, config, db, integrations, logger, MCP, score, security, types, UI
 
 Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables without founder approval. Public copy uses **LyraShield AI**; the public domain remains undecided.
 
 ## Current verified state — 2026-07-12
 
 - Sprints 0–7, the agent action layer, SCA/secrets scanning, URL scanning, reports, schedules, notifications, MCP, the GitHub diff gate, and reliability/tenant-safety hardening are implemented. The latest hardening is on `codex/docs-update`; do not call it merged until its PR lands.
+- **LyraShield Score + public scorecards + referrals (spec Phases 0–2)** are implemented on `codex/lyrashield-scorecards-referrals` (PR #43, plus post-review fixes): pure versioned score engine in `packages/score`, immutable `ScoreSnapshot` per completed scan, frozen-allowlist public scorecards with supersession notices and OG images, RBAC- and audit-gated share create/revoke, new-account-gated referral attribution with idempotent dual-sided agent-minute rewards, and the Phase 0 waitlist referral ladder. Landmines: `buildScorecardPayload` in `packages/db/src/score-service.ts` is the ONLY place a public payload may be constructed (its allowlist regression test is load-bearing); never add fields to it casually, and never derive share-eligibility client-side. See `codebase.md` §33.
 - Auth and routing review completed: sign-up/sign-in now handle email verification, redirect via `callbackURL`, and avoid `useSession` atom issues in `apps/web/src/app/sign-in/page.tsx` and `apps/web/src/app/sign-up/page.tsx`.
 - `pnpm test` passes **625 tests in 56 files** and `pnpm test:e2e` passes **2 Chromium tests**. Lint, typecheck, build, formatting, dependency audit, and Docker worker builds pass locally; the branch still requires PR CI.
 - The engine thin fork is merged in [engine PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1). It keeps the Strix upstream contract, defaults telemetry off, and syncs only through reviewable PRs. The engine gate passed 155 tests plus Ruff, formatting, headless mypy, and Bandit.

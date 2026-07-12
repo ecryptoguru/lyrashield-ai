@@ -1,7 +1,13 @@
 import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { updateScanStatus, addScanEvent, type ScanStatus } from "@lyrashield/db"
+import {
+  updateScanStatus,
+  addScanEvent,
+  completeScanWithScore,
+  qualifyReferralForWorkspace,
+  type ScanStatus,
+} from "@lyrashield/db"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import type { TargetType } from "../engine/command-builder"
@@ -205,9 +211,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       }
 
-      await updateScanStatus(scanId, "COMPLETED" as ScanStatus, {
-        summary: engineResult.output.summary,
-      })
+      await completeScanWithScore(scanId, engineResult.output.summary)
+      await qualifyReferralForWorkspace(workspaceId)
 
       log.info("Scan job completed", {
         scanId,
