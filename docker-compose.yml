@@ -47,6 +47,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: builder
+      additional_contexts:
+        engine: "${LYRASHIELD_ENGINE_SOURCE:-../lyrashield-engine}"
     container_name: lyrashield-migrate
     depends_on:
       postgres:
@@ -64,6 +66,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runner
+      additional_contexts:
+        engine: "${LYRASHIELD_ENGINE_SOURCE:-../lyrashield-engine}"
     container_name: lyrashield-web
     restart: unless-stopped
     depends_on:
