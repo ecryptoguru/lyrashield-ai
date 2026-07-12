@@ -36,7 +36,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
     {
       width: 1200,
       height: 630,
-      headers: { "Cache-Control": "public, max-age=3600, s-maxage=86400" },
+      // Bounded cache so a revoked/superseded scorecard's OG card stops serving
+      // quickly (was 24h s-maxage — a revoked card could persist on CDNs for a
+      // day). Matches the page's 60s revalidation window.
+      headers: { "Cache-Control": "public, max-age=60, s-maxage=60" },
     }
   )
 }
