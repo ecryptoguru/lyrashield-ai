@@ -354,7 +354,7 @@ function detectAiBuilderDefaults(html: string): EngineVulnerability[] {
           "INFO",
           "CWE-693",
           `This application appears to have been built with ${platform}. AI-generated applications commonly have security gaps including missing RLS policies, exposed API keys, permissive CORS, and missing webhook verification. A thorough security review is recommended.`,
-          `1. Review all database access policies (RLS for Supabase, Security Rules for Firebase).\n2. Ensure no service-role keys are in client code.\n3. Verify all API endpoints have proper authorization.\n4. Check webhook signature verification.\n5. Run a full LyraSec scan for comprehensive coverage.`,
+          `1. Review all database access policies (RLS for Supabase, Security Rules for Firebase).\n2. Ensure no service-role keys are in client code.\n3. Verify all API endpoints have proper authorization.\n4. Check webhook signature verification.\n5. Run a full LyraShield scan for comprehensive coverage.`,
           {
             technical_analysis: `AI builder platforms like ${platform} generate functional code quickly but often skip security hardening. Common issues: default permissive database rules, exposed credentials in client bundles, missing input validation, and no webhook verification.`,
           }

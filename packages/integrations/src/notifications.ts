@@ -46,7 +46,7 @@ class EmailChannel implements NotificationChannelSender {
           "api-key": env.BREVO_API_KEY!,
         },
         body: JSON.stringify({
-          sender: { email: fromEmail, name: "LyraSec AI" },
+          sender: { email: fromEmail, name: "LyraShield AI" },
           to: recipients.map((email) => ({ email })),
           subject: payload.title,
           htmlContent: `<html><body style="font-family:sans-serif;color:#111827;">
@@ -54,7 +54,7 @@ class EmailChannel implements NotificationChannelSender {
 <p style="color:#4b5563;line-height:1.6;">${escapeHtml(payload.body)}</p>
 ${payload.workspaceName ? `<p style="font-size:12px;color:#6b7280;margin-top:24px;">Workspace: ${escapeHtml(payload.workspaceName)}</p>` : ""}
 <hr style="border:none;border-top:1px solid #e5e7eb;margin-top:24px;" />
-<p style="font-size:11px;color:#9ca3af;">Sent by LyraSec AI</p>
+<p style="font-size:11px;color:#9ca3af;">Sent by LyraShield AI</p>
 </body></html>`,
         }),
       })
@@ -100,8 +100,8 @@ class SlackChannel implements NotificationChannelSender {
               title: payload.title,
               text: payload.body,
               footer: payload.workspaceName
-                ? `LyraSec AI · ${payload.workspaceName}`
-                : "LyraSec AI",
+                ? `LyraShield AI · ${payload.workspaceName}`
+                : "LyraShield AI",
               ts: Math.floor(Date.now() / 1000),
             },
           ],
@@ -150,8 +150,8 @@ class DiscordChannel implements NotificationChannelSender {
               color,
               footer: {
                 text: payload.workspaceName
-                  ? `LyraSec AI · ${payload.workspaceName}`
-                  : "LyraSec AI",
+                  ? `LyraShield AI · ${payload.workspaceName}`
+                  : "LyraShield AI",
               },
               timestamp: new Date().toISOString(),
             },

@@ -220,7 +220,7 @@ jobs:
                 "driver": {
                   "name": "LyraShield GitHub Action",
                   "version": "0.1.0",
-                  "informationUri": "https://github.com/ecryptoguru/lyrasec-ai"
+                  "informationUri": "https://github.com/ecryptoguru/lyrashield-ai"
                 }
               },
               "results": $RESULTS

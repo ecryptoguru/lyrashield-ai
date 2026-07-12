@@ -25,9 +25,9 @@ export const GET: APIRoute = async (context) => {
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 
   const sections = [
-    "# LyraSec AI — llms.txt",
+    "# LyraShield AI — llms.txt",
     "",
-    "LyraSec AI is an AI security agent for AI-built apps.",
+    "LyraShield AI is an AI security agent for AI-built apps.",
     "Core loop: scan a target, verify findings, open a fix PR, retest, and share a report.",
     "",
     "## Public URLs",

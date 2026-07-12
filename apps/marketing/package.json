@@ -8,7 +8,7 @@
     "prebuild": "wrangler types",
     "build": "astro build",
     "prepreview": "wrangler types",
-    "preview": "astro build && wrangler dev --local --config dist/server/wrangler.json",
+    "preview": "astro build && CI=1 wrangler d1 migrations apply lyrashield-marketing-waitlist --local --config dist/server/wrangler.json && wrangler dev --local --config dist/server/wrangler.json",
     "pretypecheck": "wrangler types",
     "typecheck": "astro check",
     "lint": "eslint src --max-warnings 0",

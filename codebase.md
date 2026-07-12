@@ -1,4 +1,4 @@
-# LyraSec AI — Codebase Guide
+# LyraShield AI — Codebase Guide
 
 > **Purpose:** Maintained implementation map for the canonical `lyrashieldai` repository. `AGENTS.md` owns the current handoff/rules; `PRD.md` Part C owns product status and release gates. Running code and schema override documentation.
 >
@@ -10,7 +10,7 @@
 
 ## 1. System Overview
 
-LyraSec AI is a multi-tenant, agent-native application-security platform for GitHub repositories and deployed URLs.
+LyraShield AI is a multi-tenant, agent-native application-security platform for GitHub repositories and deployed URLs.
 
 **Core product loop**: `Target → Scan → Verified Finding → Fix → Retest → Report`
 
@@ -48,7 +48,7 @@ No authorized sandbox scan has been completed. Production still requires authori
 
 ### Naming Boundary
 
-Public copy uses **LyraSec AI**. Internal package scopes (`@lyrashield/*`), environment variables (`LYRASHIELD_*`), database/container names, and the engine CLI remain unchanged pending founder-approved migration. Do not mechanically rename them.
+Public copy uses **LyraShield AI**. Internal package scopes (`@lyrashield/*`), environment variables (`LYRASHIELD_*`), database/container names, and the engine CLI remain unchanged pending founder-approved migration. Do not mechanically rename them.
 
 ---
 
@@ -1383,7 +1383,7 @@ A new scanner that fetches the target URL and analyzes the HTML + response heade
 - **Report header** — Title, type, generated date, target name
 - **Scan summary** — Status, findings count, summary text
 - **Findings by severity** — Color-coded severity badges with counts
-- **Footer** — Report ID, "Powered by LyraSec AI" branding
+- **Footer** — Report ID, "Powered by LyraShield AI" branding
 - **Expiry notice** — Shows share link expiration date if set
 - **No auth required** — Public route accessible via `/reports/shared/{id}?token={token}`
 
@@ -1742,7 +1742,7 @@ Focused remediation after a fresh full-repository review.
 
 ### Marketing app overview
 
-`apps/marketing` is the Astro 7 public site for LyraSec AI. It is built with the `@astrojs/cloudflare` adapter and deployed to Cloudflare Workers. It is separate from the Next.js platform (`apps/web`) and includes its own D1 waitlist database, Cloudflare Rate Limits binding, and PostHog analytics.
+`apps/marketing` is the Astro 7 public site for LyraShield AI. It is built with the `@astrojs/cloudflare` adapter and deployed to Cloudflare Workers. It is separate from the Next.js platform (`apps/web`) and includes its own D1 waitlist database, Cloudflare Rate Limits binding, and PostHog analytics.
 
 ### Stack
 

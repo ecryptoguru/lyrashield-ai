@@ -1,12 +1,12 @@
 > **CURRENT SOURCE OF TRUTH — 2026-07-12:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
-> The canonical repositories are `github.com/ecryptoguru/lyrasec-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, **625 Vitest tests in 56 files**, and **2 Playwright tests**. Core auth (with email verification), tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, and the GitHub diff gate are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, and marketing gates.
+> The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, **625 Vitest tests in 56 files**, and **2 Playwright tests**. Core auth (with email verification), tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, and the GitHub diff gate are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, and marketing gates.
 
 ---
 
 # Developer-Ready PRD, Architecture Doc, and Sprint Backlog
 
-## Product: LyraSec AI — Agent-Native Application Security Platform
+## Product: LyraShield AI — Agent-Native Application Security Platform
 
 Version: 1.0
 Primary stack: Next.js, TypeScript, Better Auth, Prisma, PostgreSQL, Redis, LyraShield Worker Runtime
@@ -21,14 +21,13 @@ Product phases:
 
 ## 1.1 Product Name
 
-Current public working name: **LyraSec AI**
+Current public working name: **LyraShield AI**
 
 Alternative names:
 
-- LyraSec
+- LyraShield
 - Lyra AppSec Agent
 - LyraShield AI
-- Lyra Security Agent
 
 Internal compatibility name: **LyraShield** (`@lyrashield/*`, `LYRASHIELD_*`, and the engine CLI). Do not rename these surfaces until trademark and migration decisions are approved.
 
@@ -36,7 +35,7 @@ Internal compatibility name: **LyraShield** (`@lyrashield/*`, `LYRASHIELD_*`, an
 
 For small teams:
 
-> Connect a GitHub repo or paste an app URL. LyraSec AI safely scans it, explains evidence-backed risks, and helps create fix PRs and retest them.
+> Connect a GitHub repo or paste an app URL. LyraShield AI safely scans it, explains evidence-backed risks, and helps create fix PRs and retest them.
 
 For enterprises:
 
@@ -5060,7 +5059,7 @@ Better-Auth-owns-identity / Prisma-owns-app boundary; webhook idempotency model 
 
 ## B13. 2026-07-04 Deep-Audit Findings & Batch 1 (authoritative status)
 
-> A code-grounded deep audit of the repo at `396ca63` (now `ecryptoguru/lyrasec-ai`). This section superseded §B0 at the time; **Part C now supersedes it for current build status**. Retain this section as the audit and remediation history.
+> A code-grounded deep audit of the repo at `396ca63` (now `ecryptoguru/lyrashield-ai`). This section superseded §B0 at the time; **Part C now supersedes it for current build status**. Retain this section as the audit and remediation history.
 
 ### B13.1 Corrected status — what is actually DONE
 
@@ -5106,7 +5105,7 @@ The complete prioritized backlog from the 2026-07-04 deep audit. Severity **P0/P
 - **B4 · P2 · API-response & fetch helpers.** Factor repeated `{success:false,error:{code,message}}` blocks (mirror `authErrorResponse`); add a `useApiResource<T>` hook with `AbortController` (fixes unmount/rapid-filter races).
 - **B5 · P1 (design-only) · Cost & determinism controls.** In-loop budget guard (`STOPPED_BUDGET` enum exists), **diff-only scan default**, model cascade + provider prompt caching, deterministic **fingerprint** dedupe (hash of vuln-class + normalized location + root cause), independent verification layer (verify file/line existence before surfacing a finding).
 - **B6 · P1 (design-only) · Fork strategy & standards.** Thin-wrapper engine (consume unmodified upstream output, brand in the TS worker); CVE-triggered fast-path merge; Apache-2.0 §4b file-marking + NOTICE; commit to **SARIF 2.1.0** output + **dual CVSS v3.1 + v4.0** fields on `Finding` before findings data exists.
-- **B7 · P2 · Dogfood in CI.** Run the eventual LyraSec Action against this monorepo — real dogfooding alongside the internal Lyrafin-codebase POC.
+- **B7 · P2 · Dogfood in CI.** Run the eventual LyraShield Action against this monorepo — real dogfooding alongside the internal Lyrafin-codebase POC.
 
 ### Part C — feature additions (differentiated for the ICP)
 
@@ -5186,7 +5185,7 @@ A second code-grounded pass over current `main` (post-merge), covering the never
 ### R-F · CI/CD hardening (`.github/workflows/ci.yml`) — ✅ DONE
 
 - **`[P1·S]` ✅ DONE** No least-privilege `permissions:` block** → workflow inherits broad default `GITHUB_TOKEN`. Add `permissions: { contents: read }` top-level; elevate per-job only where needed.
-- **`[P1·M]` ✅ DONE** No SCA / secret-scan on our own repo** (ironic for AppSec). Add a `security` job: `pnpm audit`/OSV-Scanner + gitleaks, SARIF-uploaded to the Security tab. (Overlaps the "dogfood" B7 goal; do this now with off-the-shelf tools, swap in LyraSec later.)
+- **`[P1·M]` ✅ DONE** No SCA / secret-scan on our own repo** (ironic for AppSec). Add a `security` job: `pnpm audit`/OSV-Scanner + gitleaks, SARIF-uploaded to the Security tab. (Overlaps the "dogfood" B7 goal; do this now with off-the-shelf tools, swap in LyraShield later.)
 - `[P1·S]` ✅ DONE **No migration-drift check** (`prisma migrate status`/`diff --exit-code`) → schema.prisma edits without a migration pass CI silently. **No Turbo/Next build cache** in CI (add `actions/cache` for `.turbo` + `.next/cache` or Vercel Remote Cache). `[P2]` add `paths-ignore` for docs; consider a Node 20+24 matrix (engines says >=20, CI only runs 24).
 
 ### R-G · Deployment-doc security (`docs/deployment/PRODUCTION_DEPLOYMENT.md`) — ✅ DONE (2026-07-05)
@@ -5225,7 +5224,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 
 ## C0. Verified repository baseline
 
-- Canonical application repository: `ecryptoguru/lyrasec-ai`, local source at `lyrashieldai`.
+- Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 9 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `security`, `types`, `ui`).
 - Current automated gate: lint, typecheck, production build, **625 passing Vitest tests in 56 files**, and **2 passing Playwright tests**.

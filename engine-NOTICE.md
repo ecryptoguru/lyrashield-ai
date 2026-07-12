@@ -54,7 +54,7 @@ This product includes software developed by the following projects:
 - `pyproject.toml` and `uv.lock`
 - Existing tests under `tests/`
 
-These changes support the LyraShield adapter contract, telemetry defaults, output compatibility, sandbox hardening, and regression coverage. They do not grant a right to use upstream or LyraSec trademarks.
+These changes support the LyraShield adapter contract, telemetry defaults, output compatibility, sandbox hardening, and regression coverage. They do not grant a right to use upstream trademarks.
 
 ### Added fork files
 
@@ -72,5 +72,4 @@ Update this file whenever a new engine divergence or third-party notice is merge
 
 ---
 
-LyraShield is a trademark of LyraSec. Apache-2.0 §6 does not grant trademark rights.
-All product names, logos, and brands are property of their respective owners.
+Apache-2.0 §6 does not grant trademark rights. All product names, logos, and brands are property of their respective owners.

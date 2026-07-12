@@ -60,7 +60,7 @@ export async function safeFetch(
     timeoutMs = DEFAULT_TIMEOUT_MS,
     maxRedirects = DEFAULT_MAX_REDIRECTS,
     maxBytes = DEFAULT_MAX_BYTES,
-    userAgent = "LyraSec-Scanner/1.0",
+    userAgent = "LyraShield-Scanner/1.0",
     fetchFn = globalThis.fetch,
     resolver,
   } = options

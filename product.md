@@ -1,20 +1,20 @@
-# LyraSec AI — Product, Positioning & GTM
+# LyraShield AI — Product, Positioning & GTM
 
 > Internal, pre-launch guidance. Product name and public domain remain founder decisions; do not treat this document as approved public copy, pricing, or evidence of customer traction.
 
 ## Positioning
 
-LyraSec AI is an agent-native application-security platform for AI-built software. It turns a security request into a loop: **Target → Scan → Verified Finding → Fix PR → Retest → Report**.
+LyraShield AI is an agent-native application-security platform for AI-built software. It turns a security request into a loop: **Target → Scan → Verified Finding → Fix PR → Retest → Report**.
 
 The position is the combination, not a claim of unique capability: a solo builder and a security team can use the same loop at different depths, across UI, API, MCP, CLI, and GitHub workflows.
 
 ## Guardrails
 
-- Never claim LyraSec AI is the only tool that verifies findings, creates fixes, or supports MCP.
+- Never claim LyraShield AI is the only tool that verifies findings, creates fixes, or supports MCP.
 - Do not publish benchmark, accuracy, pricing, customer, or social-proof claims.
 - Do not present the forked engine as a public differentiator.
 - Treat exploit validation as a product hygiene goal, not a quantified assurance claim.
-- Name the product **LyraSec AI** in public copy; do not rename internal `@lyrashield/*` scopes or environment variables.
+- Name the product **LyraShield AI** in public copy; do not rename internal `@lyrashield/*` scopes or environment variables.
 
 ## Audience and message
 

@@ -1,6 +1,6 @@
-# LyraSec AI Marketing Site
+# LyraShield AI Marketing Site
 
-Astro 7 marketing site for `lyrasecai.com` (not yet attached). Lives at `apps/marketing` in the monorepo.
+Astro 7 marketing site for the future LyraShield AI domain. Lives at `apps/marketing` in the monorepo.
 
 ## Environment
 
@@ -12,7 +12,7 @@ cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
 ```
 
 - Set `PUBLIC_SITE_URL` in `.env`.
-- Set `PUBLIC_APP_URL` in `.env` to the app origin (e.g. `http://localhost:3001` for local dev, `https://app.lyrasecai.com` for production). The build strips a trailing slash if present.
+- Set `PUBLIC_APP_URL` in `.env` to the app origin (e.g. `http://localhost:3001` for local dev, `https://app.example.com` for production). The build strips a trailing slash if present.
 - Replace `WAITLIST_IP_SALT` in `.dev.vars` with a random 32+ character string (wrangler reads secrets from `.dev.vars` in local dev, not `.env`).
 
 ## Local dev
@@ -36,12 +36,14 @@ pnpm --filter @lyrashield/marketing build
 pnpm --filter @lyrashield/marketing preview
 ```
 
+The preview command applies local D1 migrations to Astro's generated Worker configuration before starting, so waitlist submissions work in the Worker-backed preview.
+
 ## Manual deploy (Cloudflare Workers)
 
 1. Run migrations to create the D1 database:
 
 ```bash
-pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrasec-marketing-waitlist --local
+pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrashield-marketing-waitlist --local
 ```
 
 For production, create the D1 database and Rate Limit namespace in your Cloudflare account, then update `wrangler.jsonc` with the `database_id` and `ratelimits.namespace_id`. Set `WAITLIST_IP_SALT` via:
@@ -54,14 +56,14 @@ pnpm --filter @lyrashield/marketing exec wrangler secret put WAITLIST_IP_SALT
 
 ```bash
 # Preview / staging
-PUBLIC_SITE_URL=https://lyrasec-marketing.YOUR_SUBDOMAIN.workers.dev \
+PUBLIC_SITE_URL=https://lyrashield-marketing.YOUR_SUBDOMAIN.workers.dev \
 PUBLIC_APP_URL=https://app.YOUR_SUBDOMAIN.workers.dev \
 PUBLIC_INDEXABLE=false pnpm --filter @lyrashield/marketing build
 pnpm --filter @lyrashield/marketing exec wrangler versions upload --config dist/server/wrangler.json
 
 # Production (only after founder approval and domain attach)
-PUBLIC_SITE_URL=https://lyrasecai.com \
-PUBLIC_APP_URL=https://app.lyrasecai.com \
+PUBLIC_SITE_URL=https://example.com \
+PUBLIC_APP_URL=https://app.example.com \
 PUBLIC_INDEXABLE=true pnpm --filter @lyrashield/marketing build
 pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
 ```

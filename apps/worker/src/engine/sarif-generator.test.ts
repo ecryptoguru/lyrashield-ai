@@ -74,4 +74,21 @@ describe("generateSarifReport", () => {
     expect(cweRule!.helpUri).toContain("cwe.mitre.org")
     expect(cweRule!.helpUri).toContain("79")
   })
+
+  it("uses the LyraShield prefix for generated rule IDs", () => {
+    const report = generateSarifReport(
+      [
+        {
+          id: "abc12345",
+          title: "Unclassified finding",
+          summary: "No external identifier is available",
+          severity: "LOW" as const,
+          verified: false,
+        },
+      ],
+      { name: "LyraShield" }
+    )
+
+    expect(report.runs[0]!.results[0]!.ruleId).toBe("lyrashield-abc12345")
+  })
 })

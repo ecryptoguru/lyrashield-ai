@@ -14,7 +14,7 @@ const pageUrl = new URL("/", siteOrigin).toString()
 const xUrl = __MARKETING_X_URL__ || undefined
 
 const description =
-  "LyraSec AI scans AI-built apps like an attacker, verifies every finding, opens the fix PR, and retests until it's gone. Join the early-access waitlist."
+  "LyraShield AI scans AI-built apps like an attacker, verifies every finding, opens the fix PR, and retests until it's gone. Join the early-access waitlist."
 
 const faqItems = [
   {
@@ -27,7 +27,7 @@ const faqItems = [
   },
   {
     q: "Does it replace my existing tools?",
-    a: "No. LyraSec AI is one loop for AI-built code, from scan to verified fix. Many teams will run it alongside their existing SAST and SCA.",
+    a: "No. LyraShield AI is one loop for AI-built code, from scan to verified fix. Many teams will run it alongside their existing SAST and SCA.",
   },
   {
     q: "What does it cost?",
@@ -39,20 +39,20 @@ const jsonLd = [
   {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "LyraSec AI",
+    name: "LyraShield AI",
     url: siteUrl,
     ...(xUrl ? { sameAs: [xUrl] } : {}),
   },
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "LyraSec AI",
+    name: "LyraShield AI",
     url: siteUrl,
   },
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "LyraSec AI",
+    name: "LyraShield AI",
     applicationCategory: "SecurityApplication",
     operatingSystem: "Web",
     description,
@@ -74,7 +74,7 @@ const jsonLd = [
 ---
 
 <Base
-  title="LyraSec AI — Secure AI-built apps before they ship"
+  title="LyraShield AI — Secure AI-built apps before they ship"
   description={description}
   canonical={pageUrl}
   jsonLd={jsonLd}

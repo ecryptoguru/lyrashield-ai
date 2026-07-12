@@ -70,11 +70,11 @@ const jsonLd: unknown[] = [
     dateModified: updatedDate?.toISOString() || pubDate.toISOString(),
     author: {
       "@type": "Person",
-      name: author?.data.name || "LyraSec Team",
+      name: author?.data.name || "LyraShield Team",
     },
     publisher: {
       "@type": "Organization",
-      name: "LyraSec AI",
+      name: "LyraShield AI",
     },
     mainEntityOfPage: pageUrl,
     keywords: tags.join(", "),
@@ -104,7 +104,7 @@ if (faq && faq.length > 0) {
 ---
 
 <Base
-  title={`${title} | LyraSec AI Blog`}
+  title={`${title} | LyraShield AI Blog`}
   description={description}
   ogType="article"
   article={article}
