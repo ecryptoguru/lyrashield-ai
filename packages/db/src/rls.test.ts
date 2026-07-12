@@ -105,6 +105,8 @@ describe("RLS helpers", () => {
       "WebhookEvent",
       "Retest",
       "AgentApproval",
+      // Added by 20260713010000_scoresnapshot_rls (missed by the batch-3 pass).
+      "ScoreSnapshot",
     ]
 
     it("WORKSPACE_SCOPED_MODELS matches the RLS-protected table set exactly", () => {

@@ -191,8 +191,8 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
     expect(SOFT_DELETE_MODELS.has("ScanEvent")).toBe(true)
   })
 
-  it("workspace-scoped set contains only auto-scopable models with workspaceId (18)", () => {
-    expect(WORKSPACE_SCOPED_MODELS.size).toBe(18)
+  it("workspace-scoped set contains only auto-scopable models with workspaceId (19)", () => {
+    expect(WORKSPACE_SCOPED_MODELS.size).toBe(19)
     for (const m of [
       "ScanEvent",
       "Evidence",

@@ -20,8 +20,15 @@ vi.mock("@lyrashield/logger", () => ({
   },
 }))
 
+// Keep tests hermetic: the real checkScanUrlSafe does live DNS resolution.
+// Default to safe; individual tests override to exercise the unsafe path.
+vi.mock("@lyrashield/security", () => ({
+  checkScanUrlSafe: vi.fn().mockResolvedValue({ safe: true }),
+}))
+
 import { runPreflight } from "./preflight.job"
 import { prisma } from "@lyrashield/db"
+import { checkScanUrlSafe } from "@lyrashield/security"
 
 const mockTarget = (overrides: Record<string, unknown> = {}) => ({
   id: "target-1",
@@ -36,6 +43,23 @@ const mockTarget = (overrides: Record<string, unknown> = {}) => ({
 describe("runPreflight", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Restore the default after clearAllMocks wipes mock implementations.
+    vi.mocked(checkScanUrlSafe).mockResolvedValue({ safe: true })
+  })
+
+  it("fails preflight when the target URL is not SSRF-safe", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(mockTarget() as never)
+    vi.mocked(checkScanUrlSafe).mockResolvedValue({
+      safe: false,
+      reason: "resolves_to_blocked_ip",
+    })
+
+    const result = await runPreflight("scan-1", "target-1")
+
+    expect(result.passed).toBe(false)
+    expect(result.errorCategory).toBe("PREFLIGHT")
+    expect(result.errorMessage).toContain("resolves_to_blocked_ip")
+    expect(result.checks.find((c) => c.name === "url_ssrf_safe")?.passed).toBe(false)
   })
 
   it("passes all checks for a valid WEB_APP target with no concurrent scans", async () => {
@@ -45,13 +69,15 @@ describe("runPreflight", () => {
     const result = await runPreflight("scan-1", "target-1")
 
     expect(result.passed).toBe(true)
-    expect(result.checks).toHaveLength(3)
+    expect(result.checks).toHaveLength(4)
     expect(result.checks[0]?.name).toBe("target_exists")
     expect(result.checks[0]?.passed).toBe(true)
     expect(result.checks[1]?.name).toBe("url_configured")
     expect(result.checks[1]?.passed).toBe(true)
-    expect(result.checks[2]?.name).toBe("no_concurrent_scan")
+    expect(result.checks[2]?.name).toBe("url_ssrf_safe")
     expect(result.checks[2]?.passed).toBe(true)
+    expect(result.checks[3]?.name).toBe("no_concurrent_scan")
+    expect(result.checks[3]?.passed).toBe(true)
   })
 
   it("passes for a REPO target with repoFullName", async () => {

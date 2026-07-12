@@ -65,6 +65,7 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "WebhookEvent",
   "Retest",
   "AgentApproval",
+  "ScoreSnapshot",
 ])
 
 export const READ_OPS = new Set<string>([
