@@ -428,6 +428,9 @@ importers:
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../logger
+      undici:
+        specifier: 7.28.0
+        version: 7.28.0
     devDependencies:
       '@types/node':
         specifier: ^22.20.1

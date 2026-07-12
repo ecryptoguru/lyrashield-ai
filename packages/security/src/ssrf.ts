@@ -28,6 +28,8 @@ export type SsrfReason =
   | "dns_resolution_failed"
 
 export type SsrfCheckResult = { safe: true } | { safe: false; reason: SsrfReason }
+export type SafeResolutionResult =
+  { safe: true; addresses: string[] } | { safe: false; reason: SsrfReason }
 
 /** Injectable resolver so tests don't hit the network. Returns resolved IP strings. */
 export type HostResolver = (hostname: string) => Promise<string[]>
@@ -233,6 +235,15 @@ export async function checkScanUrlSafe(
   rawUrl: string,
   resolver: HostResolver = defaultResolver
 ): Promise<SsrfCheckResult> {
+  const result = await resolveScanUrlSafe(rawUrl, resolver)
+  return result.safe ? { safe: true } : result
+}
+
+/** Resolve and validate a URL, retaining the approved addresses for connection pinning. */
+export async function resolveScanUrlSafe(
+  rawUrl: string,
+  resolver: HostResolver = defaultResolver
+): Promise<SafeResolutionResult> {
   let url: URL
   try {
     url = new URL(rawUrl)
@@ -255,7 +266,9 @@ export async function checkScanUrlSafe(
 
   const literal = parseIpLiteral(host)
   if (literal !== null) {
-    return isBlockedIp(literal) ? { safe: false, reason: "blocked_ip" } : { safe: true }
+    return isBlockedIp(literal)
+      ? { safe: false, reason: "blocked_ip" }
+      : { safe: true, addresses: [literal] }
   }
 
   let addresses: string[]
@@ -267,9 +280,12 @@ export async function checkScanUrlSafe(
   if (!addresses || addresses.length === 0) {
     return { safe: false, reason: "dns_resolution_failed" }
   }
+  const canonicalAddresses: string[] = []
   for (const addr of addresses) {
-    const canon = parseIpLiteral(addr) ?? addr
+    const canon = parseIpLiteral(addr)
+    if (canon === null) return { safe: false, reason: "dns_resolution_failed" }
     if (isBlockedIp(canon)) return { safe: false, reason: "resolves_to_blocked_ip" }
+    canonicalAddresses.push(canon)
   }
-  return { safe: true }
+  return { safe: true, addresses: canonicalAddresses }
 }

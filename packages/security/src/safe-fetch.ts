@@ -1,5 +1,7 @@
 import { logger } from "@lyrashield/logger"
-import { checkScanUrlSafe, type HostResolver } from "./ssrf"
+import { isIP, type LookupFunction } from "node:net"
+import { Agent, fetch as undiciFetch } from "undici"
+import { resolveScanUrlSafe, type HostResolver } from "./ssrf"
 
 /**
  * Fetch-time SSRF-safe HTTP client for the scan worker.
@@ -12,18 +14,13 @@ import { checkScanUrlSafe, type HostResolver } from "./ssrf"
  * host that resolves into a blocked range.
  *
  * Defense applied here:
- *  - resolve + range-check the host on every hop (via `checkScanUrlSafe`, which
- *    canonicalizes alternate IP encodings and checks all resolved addresses)
+ *  - resolve + range-check the host on every hop, then pin the connection to
+ *    only those approved addresses
  *  - `redirect: "manual"` so redirects are re-validated instead of auto-followed
  *  - a bounded hop count
  *
- * Residual (documented): there is still a small resolve→connect TOCTOU window
- * because Node's global fetch re-resolves DNS on connect. Closing it fully needs
- * an undici dispatcher with a pinning `lookup`; that is a deliberate follow-up
- * (avoids adding an undici dependency and TLS/SNI breakage from IP-host rewrites).
- * Even so, this is a large improvement over an unvalidated fetch: the rebinding
- * attacker must now win a millisecond-scale race rather than simply pointing DNS
- * at the metadata IP.
+ * The original hostname remains in the URL, so HTTP Host and TLS SNI behavior is
+ * preserved while DNS rebinding cannot change the connection destination.
  */
 
 export interface SafeFetchResult {
@@ -38,6 +35,7 @@ export interface SafeFetchOptions {
   maxRedirects?: number
   maxBytes?: number
   userAgent?: string
+  /** Test-only request implementation. Production requests use a DNS-pinned dispatcher. */
   fetchFn?: typeof fetch
   /** Injectable DNS resolver — only for tests. */
   resolver?: HostResolver
@@ -61,14 +59,14 @@ export async function safeFetch(
     maxRedirects = DEFAULT_MAX_REDIRECTS,
     maxBytes = DEFAULT_MAX_BYTES,
     userAgent = "LyraShield-Scanner/1.0",
-    fetchFn = globalThis.fetch,
+    fetchFn,
     resolver,
   } = options
 
   let currentUrl = rawUrl
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
-    const check = await checkScanUrlSafe(currentUrl, resolver)
+    const check = await resolveScanUrlSafe(currentUrl, resolver)
     if (!check.safe) {
       logger.warn("safeFetch blocked URL (SSRF guard)", {
         url: currentUrl,
@@ -80,16 +78,21 @@ export async function safeFetch(
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const dispatcher = fetchFn ? undefined : createPinnedDispatcher(check.addresses)
     let res: Response
     try {
-      res = await fetchFn(currentUrl, {
+      const init = {
         method: "GET",
-        redirect: "manual",
+        redirect: "manual" as const,
         signal: controller.signal,
         headers: { "User-Agent": userAgent },
-      })
+      }
+      res = fetchFn
+        ? await fetchFn(currentUrl, init)
+        : ((await undiciFetch(currentUrl, { ...init, dispatcher })) as unknown as Response)
     } catch (err) {
       clearTimeout(timer)
+      await dispatcher?.destroy()
       logger.warn("safeFetch request failed", {
         url: currentUrl,
         error: err instanceof Error ? err.message : String(err),
@@ -99,6 +102,7 @@ export async function safeFetch(
     clearTimeout(timer)
 
     if (!res || typeof res.status !== "number") {
+      await dispatcher?.destroy()
       logger.warn("safeFetch received an invalid response", { url: currentUrl })
       return null
     }
@@ -107,6 +111,7 @@ export async function safeFetch(
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get("location")
       if (!location) {
+        await dispatcher?.destroy()
         logger.warn("safeFetch redirect without Location header", {
           url: currentUrl,
           status: res.status,
@@ -117,13 +122,17 @@ export async function safeFetch(
       try {
         nextUrl = new URL(location, currentUrl).toString()
       } catch {
+        await dispatcher?.destroy()
         logger.warn("safeFetch redirect to invalid URL", { url: currentUrl, location })
         return null
       }
       if (hop === maxRedirects) {
+        await dispatcher?.destroy()
         logger.warn("safeFetch exceeded max redirects", { url: rawUrl, maxRedirects })
         return null
       }
+      await res.body?.cancel().catch(() => {})
+      await dispatcher?.destroy()
       currentUrl = nextUrl
       continue
     }
@@ -134,11 +143,24 @@ export async function safeFetch(
     })
 
     // Bound the body size so a hostile target can't exhaust worker memory.
-    const html = await readBounded(res, maxBytes)
-    return { html, status: res.status, headers, finalUrl: currentUrl }
+    try {
+      const html = await readBounded(res, maxBytes)
+      return { html, status: res.status, headers, finalUrl: currentUrl }
+    } finally {
+      await dispatcher?.destroy()
+    }
   }
 
   return null
+}
+
+function createPinnedDispatcher(addresses: string[]): Agent {
+  const records = addresses.map((address) => ({ address, family: isIP(address) }))
+  const lookup: LookupFunction = (_hostname, options, callback) => {
+    if (options.all) callback(null, records)
+    else callback(null, records[0]?.address ?? "", records[0]?.family)
+  }
+  return new Agent({ connect: { lookup } })
 }
 
 async function readBounded(res: Response, maxBytes: number): Promise<string> {
