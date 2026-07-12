@@ -1,6 +1,6 @@
-# BLOG_AUTHORING.md — Writing for the LyraSec AI Blog
+# BLOG_AUTHORING.md — Writing for the LyraShield AI Blog
 
-**Audience of this guide:** whoever writes or edits posts (the LyraSec Marketing Agent, the founder, future contributors).
+**Audience of this guide:** whoever writes or edits posts (the LyraShield Marketing Agent, the founder, future contributors).
 **Companion to:** `README.md` (local/deploy operations) and the implemented Astro site. This guide covers _content_; code and `codebase.md` cover infrastructure.
 
 The blog has one job pre-launch: earn trust with developers, CTOs, and security engineers, and feed the waitlist. Every post ends at the waitlist CTA. Write like an engineering blog, not a content farm.
@@ -12,10 +12,10 @@ The blog has one job pre-launch: earn trust with developers, CTOs, and security 
 1. **Never mention "Strix"** or the scan engine's upstream, in any form.
 2. **No pricing numbers, no free-tier promise.** If a post must reference cost, the only sanctioned line is: pricing lands with early access.
 3. **No overclaims.** Findings are _verified/exploit-validated_, but every individual differentiator has some competitor doing it. Banned phrasings: "only we verify," "only we auto-fix," "the only tool with MCP/IDE integration," "first ever." The moat is the **combination**, and even that is stated as design philosophy, not supremacy.
-4. **No benchmark or accuracy numbers about LyraSec AI, ever.** No "catches 94% of…," no detection-rate claims, no false-positive-rate claims. Third-party industry research may be cited _with a source link_ and exact figures — never rounded up, never paraphrased into a stronger claim.
+4. **No benchmark or accuracy numbers about LyraShield AI, ever.** No "catches 94% of…," no detection-rate claims, no false-positive-rate claims. Third-party industry research may be cited _with a source link_ and exact figures — never rounded up, never paraphrased into a stronger claim.
 5. **No fake anything:** no invented customers, quotes, incidents, or "we scanned X and found Y" stories unless the scan actually happened and the founder approved publishing it. No stock photos.
 6. **Honest status.** Pre-launch means pre-launch. Posts may say "building in public," describe design decisions, and share real progress. They may not imply the product is live, has users, or has results it doesn't have.
-7. **Product name:** exact string **LyraSec AI** on first mention (title or first paragraph) and in all headings/metadata; **LyraSec** is fine for subsequent prose mentions. Never LyraShield in new content. Never mention Lyrafin AI — separate product; no cross-references on this site.
+7. **Product name:** exact string **LyraShield AI** on first mention (title or first paragraph) and in all headings/metadata; **LyraShield** is fine for subsequent prose mentions. Never LyraShield in new content. Never mention Lyrafin AI — separate product; no cross-references on this site.
 8. **Security content responsibility:** when a post explains a vulnerability class, show the _pattern_ (minimal snippet, clearly labeled vulnerable vs. fixed). Never publish a working exploit against a real, named, unpatched target.
 
 Anything that violates these does not get published, no matter how good the SEO story is.
@@ -44,7 +44,7 @@ description:
   # 70–160 chars — this is the meta description; write it as the answer snippet
 pubDate: 2026-07-20
 updatedDate: 2026-07-22 # only when materially updated
-author: lyrasec-team # reference into the authors collection
+author: lyrashield-team # reference into the authors collection
 tags: ["ai-code", "ssrf", "verification"] # max 5, lowercase-kebab
 draft: true # ALWAYS true until founder approves publish
 heroImage: ./images/ssrf-pattern.png # optional; never stock photos
@@ -93,7 +93,7 @@ AI search engines (Google AI Overviews, Perplexity, ChatGPT Search) extract and 
 Stay in lanes where we have standing and evidence:
 
 1. **Vulnerability patterns in AI-generated code** — the classic mistakes copilots ship (SSRF string-matching, unenforced role matrices, committed secrets). Concrete, reproducible patterns with fixes.
-2. **Building in public** — real engineering decisions from building LyraSec AI (sandbox isolation, why verified-findings-only, MCP integration design). Honest about tradeoffs and unfinished work.
+2. **Building in public** — real engineering decisions from building LyraShield AI (sandbox isolation, why verified-findings-only, MCP integration design). Honest about tradeoffs and unfinished work.
 3. **Explainers** — CWE/OWASP concepts translated for developers who ship AI-built apps without a security background.
 4. **Workflow content** — securing code inside Cursor/Claude Code/Windsurf-style loops; MCP as an integration surface.
 
@@ -117,7 +117,7 @@ Out of bounds: competitor teardowns (punching at competitors invites scrutiny we
 - [ ] Description 70–160 chars, standalone answer
 - [ ] First paragraph answers the H1 directly
 - [ ] No "Strix", no pricing, no benchmark/accuracy claims, no overclaim phrasings (§1)
-- [ ] Product named exactly "LyraSec AI" on first mention; no Lyrafin references
+- [ ] Product named exactly "LyraShield AI" on first mention; no Lyrafin references
 - [ ] Headings: one H1, no level skips, no decorative headings
 - [ ] ≥1 internal link with descriptive anchor text
 - [ ] External claims linked to primary sources

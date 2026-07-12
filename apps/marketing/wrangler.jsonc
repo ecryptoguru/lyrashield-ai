@@ -1,5 +1,5 @@
 {
-  "name": "lyrasec-marketing",
+  "name": "lyrashield-marketing",
   "compatibility_date": "2026-07-08",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@astrojs/cloudflare/entrypoints/server",
@@ -21,7 +21,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "lyrasec-marketing-waitlist",
+      "database_name": "lyrashield-marketing-waitlist",
       // Replace with your D1 database ID before deploying.
       "database_id": "00000000-0000-0000-0000-000000000000"
     }

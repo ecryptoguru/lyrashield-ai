@@ -1,4 +1,4 @@
-# LyraSec AI — Local Setup
+# LyraShield AI — Local Setup
 
 This guide covers local development only. `docker-compose.yml` binds services to localhost and mounts Docker for sandbox work; it is not a production deployment file.
 
@@ -12,14 +12,14 @@ This guide covers local development only. `docker-compose.yml` binds services to
 Keep the platform and engine repositories next to each other:
 
 ```text
-~/Desktop/lyrasec-ai
+~/Desktop/lyrashield-ai
 ~/Desktop/lyrashield-engine
 ```
 
 ## 1. Configure the platform
 
 ```bash
-cd ~/Desktop/lyrasec-ai
+cd ~/Desktop/lyrashield-ai
 cp .env.example .env
 pnpm install --frozen-lockfile
 ```
@@ -73,10 +73,10 @@ The current source suite is 625 Vitest tests in 56 files plus 2 Chromium E2E tes
 ## 4. Run the marketing site
 
 ```bash
-cd ~/Desktop/lyrasec-ai
+cd ~/Desktop/lyrashield-ai
 cp apps/marketing/.env.example apps/marketing/.env
 cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
-pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrasec-marketing-waitlist --local
+pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrashield-marketing-waitlist --local
 pnpm --filter @lyrashield/marketing dev
 ```
 
@@ -91,7 +91,7 @@ That preview is intentionally noindex. It should return 200 for `/`, `/robots.tx
 ## 5. Build the worker image and engine
 
 ```bash
-cd ~/Desktop/lyrasec-ai
+cd ~/Desktop/lyrashield-ai
 docker compose build worker
 docker compose up -d worker
 docker compose exec worker lyrashield --version
@@ -143,7 +143,7 @@ Do not merge Strix upstream or run mechanical rebranding commands locally. Use t
 ## 6. Full Docker smoke
 
 ```bash
-cd ~/Desktop/lyrasec-ai
+cd ~/Desktop/lyrashield-ai
 docker compose up --build -d
 docker compose ps
 curl -fsS http://localhost:3000/ >/dev/null

@@ -15,7 +15,7 @@ export async function getStaticPaths() {
 const { tag, posts } = Astro.props
 const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 
-const title = `Tag: ${tag} — LyraSec AI Blog`
+const title = `Tag: ${tag} — LyraShield AI Blog`
 const description = `Blog posts tagged ${tag}.`
 ---
 

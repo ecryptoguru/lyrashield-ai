@@ -42,7 +42,7 @@ export function generateSarifReport(
 
   for (const finding of findings) {
     const ruleId =
-      finding.sarifRuleId || finding.cve || finding.cwe || `lyrasec-${finding.id.slice(0, 8)}`
+      finding.sarifRuleId || finding.cve || finding.cwe || `lyrashield-${finding.id.slice(0, 8)}`
 
     if (!rules.has(ruleId)) {
       const rule: SarifRule = {

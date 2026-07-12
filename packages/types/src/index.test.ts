@@ -304,7 +304,7 @@ describe("CreateRepoTargetSchema", () => {
         type: "REPO",
         name: "My Repo",
         repoOwner: "ecryptoguru",
-        repoName: "lyrasec-ai",
+        repoName: "lyrashield-ai",
       }).success
     ).toBe(true)
   })
@@ -316,7 +316,7 @@ describe("CreateRepoTargetSchema", () => {
         type: "REPO",
         name: "My Repo",
         repoOwner: "invalid owner!",
-        repoName: "lyrasec-ai",
+        repoName: "lyrashield-ai",
       }).success
     ).toBe(false)
   })
@@ -340,7 +340,7 @@ describe("CreateRepoTargetSchema", () => {
         type: "REPO",
         name: "My Repo",
         repoOwner: "ecryptoguru",
-        repoName: "lyrasec-ai",
+        repoName: "lyrashield-ai",
         branch: "a".repeat(255),
       }).success
     ).toBe(true)
@@ -353,7 +353,7 @@ describe("CreateRepoTargetSchema", () => {
         type: "REPO",
         name: "My Repo",
         repoOwner: "ecryptoguru",
-        repoName: "lyrasec-ai",
+        repoName: "lyrashield-ai",
         branch: "a".repeat(256),
       }).success
     ).toBe(false)

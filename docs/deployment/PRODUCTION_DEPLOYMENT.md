@@ -1,4 +1,4 @@
-# LyraSec AI — Production Deployment Gate
+# LyraShield AI — Production Deployment Gate
 
 > No production deployment is approved by this document. It records the minimum gates that must be satisfied before a release. Choose vendors and infrastructure only after founder approval; do not copy local Docker Compose into production.
 
@@ -60,7 +60,7 @@ LYRASHIELD_TELEMETRY="0"
 
 # S3-compatible evidence storage (required before controlled scans)
 S3_ENDPOINT="https://..."
-S3_BUCKET="lyrasec-evidence"
+S3_BUCKET="lyrashield-evidence"
 S3_ACCESS_KEY="..."
 S3_SECRET_KEY="..."
 S3_REGION="auto"

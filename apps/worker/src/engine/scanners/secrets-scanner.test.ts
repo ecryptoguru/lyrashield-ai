@@ -11,7 +11,7 @@ vi.mock("@lyrashield/logger", () => ({
 
 import { scanSecrets } from "./secrets-scanner"
 
-const TEST_DIR = join(tmpdir(), "lyrasec-secrets-test-" + Date.now())
+const TEST_DIR = join(tmpdir(), "lyrashield-secrets-test-" + Date.now())
 
 async function setupRepo(files: Record<string, string>): Promise<string> {
   await mkdir(TEST_DIR, { recursive: true })

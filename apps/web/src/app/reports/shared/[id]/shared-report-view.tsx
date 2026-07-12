@@ -62,7 +62,7 @@ function SecurityBadge({
       <Icon className={`h-5 w-5 ${c.color}`} aria-hidden="true" />
       <div className="flex flex-col">
         <span className={`text-sm font-semibold ${c.color}`}>{c.label}</span>
-        <span className="text-muted-foreground text-xs">LyraSec Security Report</span>
+        <span className="text-muted-foreground text-xs">LyraShield Security Report</span>
       </div>
     </div>
   )
@@ -148,7 +148,7 @@ export function SharedReportView({ report }: { report: ShareableReport }) {
               <p className="text-muted-foreground/70 text-xs">Report ID: {report.id}</p>
               <div className="text-muted-foreground/70 flex items-center gap-1.5 text-xs">
                 <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Powered by LyraSec AI</span>
+                <span>Powered by LyraShield AI</span>
               </div>
             </div>
           </div>

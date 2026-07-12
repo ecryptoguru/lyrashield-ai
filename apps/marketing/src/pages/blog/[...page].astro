@@ -11,8 +11,8 @@ export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
 
 const { page } = Astro.props
 
-const title = page.currentPage === 1 ? "Blog — LyraSec AI" : `Blog — Page ${page.currentPage} — LyraSec AI`
-const description = "Posts on AI-built app security, verification, and the LyraSec AI approach."
+const title = page.currentPage === 1 ? "Blog — LyraShield AI" : `Blog — Page ${page.currentPage} — LyraShield AI`
+const description = "Posts on AI-built app security, verification, and the LyraShield AI approach."
 ---
 
 <Base title={title} description={description}>

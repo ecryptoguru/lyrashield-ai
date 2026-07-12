@@ -1,10 +1,10 @@
-# AGENTS.md — LyraSec AI orientation
+# AGENTS.md — LyraShield AI orientation
 
 Start here. This file is the current handoff and execution queue; `codebase.md` is the implementation map and `PRD.md` Part C is the product/backlog and release-readiness source of truth. Code and schema always beat documentation.
 
 ## Repository
 
-LyraSec AI is an agent-native application-security platform for AI-built software. Its loop is **Target → Scan → Verified Finding → Fix PR → Retest → Report**.
+LyraShield AI is an agent-native application-security platform for AI-built software. Its loop is **Target → Scan → Verified Finding → Fix PR → Retest → Report**.
 
 - `apps/web` — Next.js 16 dashboard
 - `apps/worker` — BullMQ scan worker
@@ -12,7 +12,7 @@ LyraSec AI is an agent-native application-security platform for AI-built softwar
 - `apps/marketing` — Astro 7 / Cloudflare Workers waitlist site
 - `packages/*` — auth, config, db, integrations, logger, MCP, security, types, UI
 
-Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables without founder approval. Public copy uses **LyraSec AI**; the public domain remains undecided.
+Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables without founder approval. Public copy uses **LyraShield AI**; the public domain remains undecided.
 
 ## Current verified state — 2026-07-12
 

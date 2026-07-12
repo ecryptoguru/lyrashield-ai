@@ -133,7 +133,7 @@ function isTrustedOrigin(request: Request, siteOrigin: string): boolean {
 
 function htmlResponse(status: number, body: string): Response {
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LyraSec AI — Waitlist</title></head><body style="background:#0a0c0e;color:#e6e9ec;font-family:system-ui,sans-serif;max-width:600px;margin:3rem auto;padding:0 1rem;line-height:1.6">${body}<p style="margin-top:2rem"><a href="/" style="color:#2dd4a7">Back to home</a></p></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LyraShield AI — Waitlist</title></head><body style="background:#0a0c0e;color:#e6e9ec;font-family:system-ui,sans-serif;max-width:600px;margin:3rem auto;padding:0 1rem;line-height:1.6">${body}<p style="margin-top:2rem"><a href="/" style="color:#2dd4a7">Back to home</a></p></body></html>`,
     {
       status,
       headers: { "Content-Type": "text/html; charset=utf-8" },
@@ -292,6 +292,8 @@ export const POST: APIRoute = async ({ request, site }) => {
       // Duplicate email: identical success response, no distinguishing status/body — non-leaking per spec.
       return successResponse(request)
     }
+
+    console.error("Waitlist signup failed", error)
 
     if (acceptsHtml(request)) {
       return htmlResponse(500, "<p>Something went wrong. Please try again.</p>")
