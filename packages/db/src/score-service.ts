@@ -130,19 +130,28 @@ export async function completeScanWithScore(scanId: string, summary: string | nu
       },
     })
     if (scan.target.projectId) {
-      const minimum = await tx.scoreSnapshot.aggregate({
+      const latestScores = await tx.scoreSnapshot.findMany({
         where: {
           workspaceId: scan.workspaceId,
-          target: { projectId: scan.target.projectId },
+          target: { projectId: scan.target.projectId, deletedAt: null },
           expiresAt: { gt: now },
         },
-        _min: { score: true },
+        orderBy: [{ targetId: "asc" }, { computedAt: "desc" }],
+        distinct: ["targetId"],
+        select: { score: true },
       })
       await tx.project.update({
         where: { id: scan.target.projectId },
-        data: { riskScore: minimum._min.score ?? 100 },
+        data: {
+          riskScore:
+            latestScores.length > 0 ? Math.min(...latestScores.map(({ score }) => score)) : 100,
+        },
       })
     }
+    await tx.target.update({
+      where: { id: scan.target.id },
+      data: { lastScanAt: now },
+    })
     return { scan: updated, snapshot, created: true }
   })
 
@@ -184,6 +193,11 @@ export async function createScorecardShare(targetId: string, workspaceId: string
     orderBy: { computedAt: "desc" },
   })
   if (!snapshot) throw new Error("No current shareable score for this target")
+  const referralCode = await getOrCreateReferralCode(userId)
+  const existingShare = await prisma.scorecardShare.findFirst({
+    where: { snapshotId: snapshot.id, createdById: userId, revokedAt: null },
+  })
+  if (existingShare) return { share: existingShare, referralCode: referralCode.code }
   const resolvedFindings = await prisma.finding.count({
     where: {
       targetId,
@@ -193,7 +207,6 @@ export async function createScorecardShare(targetId: string, workspaceId: string
       deletedAt: null,
     },
   })
-  const referralCode = await getOrCreateReferralCode(userId)
   const publicPayload = buildScorecardPayload(snapshot, resolvedFindings)
   const share = await prisma.scorecardShare.create({
     data: {
@@ -217,7 +230,9 @@ export async function createScorecardShare(targetId: string, workspaceId: string
 }
 
 export async function revokeScorecardShare(id: string, workspaceId: string, userId: string) {
-  const share = await prisma.scorecardShare.findFirst({ where: { id, snapshot: { workspaceId } } })
+  const share = await prisma.scorecardShare.findFirst({
+    where: { id, revokedAt: null, snapshot: { workspaceId } },
+  })
   if (!share) return null
   const updated = await prisma.scorecardShare.update({
     where: { id },

@@ -30,6 +30,8 @@ export interface EngineVulnerability {
   }>
   agent_id?: string
   agent_name?: string
+  /** Internal detector provenance, attached by the orchestrator after parsing. */
+  scannerSource?: "engine" | "sca" | "secrets" | "url"
 }
 
 export interface EngineRunRecord {

@@ -232,7 +232,16 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
 
       await completeScanWithScore(scanId, engineResult.output.summary)
-      await qualifyReferralForWorkspace(workspaceId)
+      try {
+        await qualifyReferralForWorkspace(workspaceId)
+      } catch (referralError) {
+        // Referral accounting is downstream of scan completion. An outage here
+        // must not retry or reverse a scan that has already completed atomically.
+        log.warn("Failed to qualify referral after scan completion", {
+          scanId,
+          error: referralError instanceof Error ? referralError.message : String(referralError),
+        })
+      }
 
       log.info("Scan job completed", {
         scanId,

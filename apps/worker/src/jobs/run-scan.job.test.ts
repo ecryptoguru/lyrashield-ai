@@ -80,7 +80,12 @@ import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/
 import { persistFindings } from "../engine/finding-persister"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { notifyScanCompleted } from "../notifications"
-import { completeScanWithScore, updateScanStatus, prisma } from "@lyrashield/db"
+import {
+  completeScanWithScore,
+  qualifyReferralForWorkspace,
+  updateScanStatus,
+  prisma,
+} from "@lyrashield/db"
 
 const mockJob = {
   id: "job-1",
@@ -129,6 +134,7 @@ describe("processScanJob", () => {
     vi.mocked(persistFindings).mockResolvedValue([])
     vi.mocked(updateScanStatus).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(completeScanWithScore).mockResolvedValue({} as never)
+    vi.mocked(qualifyReferralForWorkspace).mockResolvedValue(null)
     vi.mocked(cleanupEngineWorkspace).mockResolvedValue(undefined)
     vi.mocked(prisma.target.findFirst).mockResolvedValue(mockTarget as never)
     vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
@@ -163,6 +169,18 @@ describe("processScanJob", () => {
   it("keeps a completed scan completed when a completion notification fails", async () => {
     vi.mocked(notifyScanCompleted).mockRejectedValueOnce(
       new Error("notification provider unavailable")
+    )
+
+    const result = await processScanJob(mockJob)
+
+    expect(result.status).toBe("completed")
+    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Scan completed with 0 findings")
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+  })
+
+  it("keeps a completed scan completed when referral accounting fails", async () => {
+    vi.mocked(qualifyReferralForWorkspace).mockRejectedValueOnce(
+      new Error("referral database unavailable")
     )
 
     const result = await processScanJob(mockJob)

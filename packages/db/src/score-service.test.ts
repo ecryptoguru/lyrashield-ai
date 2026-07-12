@@ -4,10 +4,16 @@ vi.mock("./client", () => ({
   prisma: {
     $transaction: vi.fn(),
     scan: { findUnique: vi.fn(), update: vi.fn() },
-    scoreSnapshot: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), aggregate: vi.fn() },
+    scoreSnapshot: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+    },
     scanEvent: { create: vi.fn() },
     finding: { findMany: vi.fn(), count: vi.fn() },
     project: { update: vi.fn() },
+    target: { update: vi.fn() },
     referralCode: { findUnique: vi.fn(), create: vi.fn() },
     referralAttribution: {
       upsert: vi.fn(),
@@ -138,10 +144,11 @@ describe("score-service", () => {
           findUnique: vi.fn().mockResolvedValue({ id: "snap-1", score: 90, grade: "A" }),
           findFirst: vi.fn(),
           create: vi.fn(),
-          aggregate: vi.fn(),
+          findMany: vi.fn(),
         },
         finding: { findMany: vi.fn() },
         project: { update: vi.fn() },
+        target: { update: vi.fn() },
       }
       mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
       const outcome = await completeScanWithScore("scan-1", "summary")
@@ -149,6 +156,47 @@ describe("score-service", () => {
       expect(tx.scoreSnapshot.create).not.toHaveBeenCalled()
       expect(tx.scan.update).not.toHaveBeenCalled()
       expect(mockPrisma.scanEvent.create).not.toHaveBeenCalled()
+    })
+
+    it("uses only each target's latest live score for project risk and records last scan time", async () => {
+      const tx = {
+        scan: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "scan-1",
+            workspaceId: "ws-1",
+            targetId: "t-1",
+            status: "VERIFYING",
+            mode: "STANDARD",
+            target: { id: "t-1", projectId: "p-1", branch: "main" },
+          }),
+          update: vi.fn().mockResolvedValue({ id: "scan-1", status: "COMPLETED" }),
+        },
+        scoreSnapshot: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          findFirst: vi.fn().mockResolvedValue({ score: 55 }),
+          findMany: vi.fn().mockResolvedValue([{ score: 92 }, { score: 78 }]),
+          create: vi.fn().mockResolvedValue({ id: "snap-1", score: 96, grade: "A" }),
+        },
+        finding: { findMany: vi.fn().mockResolvedValue([]) },
+        project: { update: vi.fn().mockResolvedValue({}) },
+        target: { update: vi.fn().mockResolvedValue({}) },
+      }
+      mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
+      mockPrisma.scanEvent.create.mockResolvedValue({})
+
+      await completeScanWithScore("scan-1", "done")
+
+      expect(tx.scoreSnapshot.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ distinct: ["targetId"] })
+      )
+      expect(tx.project.update).toHaveBeenCalledWith({
+        where: { id: "p-1" },
+        data: { riskScore: 78 },
+      })
+      expect(tx.target.update).toHaveBeenCalledWith({
+        where: { id: "t-1" },
+        data: { lastScanAt: expect.any(Date) },
+      })
     })
   })
 })

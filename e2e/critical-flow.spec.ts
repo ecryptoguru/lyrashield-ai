@@ -72,5 +72,11 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
   for (const path of ["/api/scans", "/api/findings", "/api/reports"]) {
     expect((await otherPage.request.get(`${path}?workspaceId=${workspaceId}`)).status()).toBe(403)
   }
+  const skipOtherOnboarding = await otherPage.request.patch("/api/onboarding", {
+    data: { skipped: true },
+  })
+  expect(skipOtherOnboarding.ok()).toBe(true)
+  await otherPage.goto(`/dashboard/targets/${targetId}`)
+  await expect(otherPage.getByRole("heading", { name: "404" })).toBeVisible()
   await other.close()
 })

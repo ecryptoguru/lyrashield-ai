@@ -52,7 +52,7 @@ async function runScaScan(scanId: string, workspaceDir: string): Promise<EngineV
       scanId,
       error: err instanceof Error ? err.message : String(err),
     })
-    return []
+    throw err
   }
 }
 
@@ -70,7 +70,7 @@ async function runSecretsScan(
       scanId,
       error: err instanceof Error ? err.message : String(err),
     })
-    return []
+    throw err
   }
 }
 
@@ -89,7 +89,7 @@ async function runUrlScan(
       scanId,
       error: err instanceof Error ? err.message : String(err),
     })
-    return []
+    throw err
   }
 }
 
@@ -120,10 +120,26 @@ export async function runScannerOrchestrator(
   ])
 
   // Normalize each category separately with the dedupe key function
-  const engineNormalized = normalizeFindings(engineFindings, targetId, generateDedupeKey)
-  const scaNormalized = normalizeFindings(scaRaw, targetId, generateDedupeKey)
-  const secretsNormalized = normalizeFindings(secretsRaw, targetId, generateDedupeKey)
-  const urlNormalized = normalizeFindings(urlRaw, targetId, generateDedupeKey)
+  const engineNormalized = normalizeFindings(
+    engineFindings.map((finding) => ({ ...finding, scannerSource: "engine" as const })),
+    targetId,
+    generateDedupeKey
+  )
+  const scaNormalized = normalizeFindings(
+    scaRaw.map((finding) => ({ ...finding, scannerSource: "sca" as const })),
+    targetId,
+    generateDedupeKey
+  )
+  const secretsNormalized = normalizeFindings(
+    secretsRaw.map((finding) => ({ ...finding, scannerSource: "secrets" as const })),
+    targetId,
+    generateDedupeKey
+  )
+  const urlNormalized = normalizeFindings(
+    urlRaw.map((finding) => ({ ...finding, scannerSource: "url" as const })),
+    targetId,
+    generateDedupeKey
+  )
 
   // Filter false positives
   const engineFiltered = filterFalsePositives(engineNormalized)

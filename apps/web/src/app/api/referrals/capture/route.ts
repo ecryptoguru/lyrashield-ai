@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   response.cookies.set("ls_ref", parsed.data.code, {
     maxAge: 30 * 24 * 60 * 60,
     sameSite: "lax",
-    httpOnly: false,
+    httpOnly: true,
     path: "/",
     secure: process.env.NODE_ENV === "production",
   })
