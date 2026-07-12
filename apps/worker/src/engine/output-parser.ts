@@ -149,8 +149,10 @@ const SEVERITY_MAP: Record<string, "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INF
   critical: "CRITICAL",
   high: "HIGH",
   medium: "MEDIUM",
+  moderate: "MEDIUM",
   low: "LOW",
   info: "INFO",
+  informational: "INFO",
 }
 
 export function mapSeverity(

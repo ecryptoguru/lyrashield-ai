@@ -1,7 +1,7 @@
 async function main() {
   if (process.env.NODE_ENV === "production") {
     throw new Error(
-      "Seed script must NOT run in production — it creates a predictable demo@lyrashield.ai OWNER account."
+      "Seed script must NOT run in production — it creates a predictable demo@lyrashieldai.com OWNER account."
     )
   }
 
@@ -15,12 +15,12 @@ async function main() {
 
   // Create a demo user (references Better Auth user table)
   const demoUser = await prisma.user.upsert({
-    where: { email: "demo@lyrashield.ai" },
+    where: { email: "demo@lyrashieldai.com" },
     update: {},
     create: {
       id: "demo-user-id",
       name: "Demo User",
-      email: "demo@lyrashield.ai",
+      email: "demo@lyrashieldai.com",
       emailVerified: true,
     },
   })

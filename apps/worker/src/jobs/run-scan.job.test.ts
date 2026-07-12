@@ -237,6 +237,30 @@ describe("processScanJob", () => {
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
+  it("reports a distinct TIMEOUT category when the engine times out", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: -1,
+      timedOut: true,
+      output: {
+        vulnerabilities: [],
+        runRecord: null,
+        summary: "Timed out",
+        findingCount: 0,
+      },
+    } as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result).toMatchObject({ status: "failed", errorCategory: "TIMEOUT" })
+    // Timeout is terminal — it must not fall through to the scanner/verify phase.
+    expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "VERIFYING")
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({ errorCategory: "TIMEOUT" })
+    )
+  })
+
   it("catches unexpected errors and marks scan as FAILED", async () => {
     vi.mocked(runPreflight).mockRejectedValue(new Error("Unexpected DB error") as never)
 

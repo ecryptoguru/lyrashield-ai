@@ -15,7 +15,7 @@ The blog has one job pre-launch: earn trust with developers, CTOs, and security 
 4. **No benchmark or accuracy numbers about LyraShield AI, ever.** No "catches 94% of…," no detection-rate claims, no false-positive-rate claims. Third-party industry research may be cited _with a source link_ and exact figures — never rounded up, never paraphrased into a stronger claim.
 5. **No fake anything:** no invented customers, quotes, incidents, or "we scanned X and found Y" stories unless the scan actually happened and the founder approved publishing it. No stock photos.
 6. **Honest status.** Pre-launch means pre-launch. Posts may say "building in public," describe design decisions, and share real progress. They may not imply the product is live, has users, or has results it doesn't have.
-7. **Product name:** exact string **LyraShield AI** on first mention (title or first paragraph) and in all headings/metadata; **LyraShield** is fine for subsequent prose mentions. Never LyraShield in new content. Never mention Lyrafin AI — separate product; no cross-references on this site.
+7. **Product name:** exact string **LyraShield AI** on first mention (title or first paragraph) and in all headings/metadata; **LyraShield** is fine for subsequent prose mentions. Never LyraSec in new content. Never mention Lyrafin AI — separate product; no cross-references on this site.
 8. **Security content responsibility:** when a post explains a vulnerability class, show the _pattern_ (minimal snippet, clearly labeled vulnerable vs. fixed). Never publish a working exploit against a real, named, unpatched target.
 
 Anything that violates these does not get published, no matter how good the SEO story is.
