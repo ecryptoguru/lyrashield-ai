@@ -15,8 +15,8 @@ import { Card, Badge, Button, Spinner, EmptyState } from "@lyrashield/ui"
 import { apiGet } from "@/lib/api-client"
 
 interface LaunchReadinessReport {
-  verdict: "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
-  score: number
+  verdict: "NOT_EVALUATED" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
+  score: number | null
   summary: string
   blockingFindings: number
   totalFindings: number
@@ -27,6 +27,14 @@ interface LaunchReadinessReport {
 }
 
 const VERDICT_CONFIG = {
+  NOT_EVALUATED: {
+    icon: ShieldAlert,
+    label: "Not Evaluated",
+    color: "text-muted-foreground",
+    bg: "bg-muted/30",
+    border: "border-border",
+    badgeVariant: "muted" as const,
+  },
   GO: {
     icon: ShieldCheck,
     label: "Ready to Launch",
@@ -53,10 +61,11 @@ const VERDICT_CONFIG = {
   },
 }
 
-function ScoreGauge({ score }: { score: number }) {
+function ScoreGauge({ score }: { score: number | null }) {
   const circumference = 2 * Math.PI * 45
-  const offset = circumference - (score / 100) * circumference
-  const color = score >= 80 ? "#10b981" : score >= 40 ? "#f59e0b" : "#ef4444"
+  const offset = score === null ? circumference : circumference - (score / 100) * circumference
+  const color =
+    score === null ? "#71717a" : score >= 80 ? "#10b981" : score >= 40 ? "#f59e0b" : "#ef4444"
 
   return (
     <div className="relative flex h-32 w-32 items-center justify-center">
@@ -85,7 +94,7 @@ function ScoreGauge({ score }: { score: number }) {
       </svg>
       <div className="absolute flex flex-col items-center">
         <span className="text-3xl font-bold" style={{ color }}>
-          {score}
+          {score ?? "—"}
         </span>
         <span className="text-muted-foreground text-xs">/ 100</span>
       </div>
@@ -219,7 +228,9 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
             </div>
             <p className="text-muted-foreground mb-4 text-sm">{report.summary}</p>
             <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
-              <Badge variant={config.badgeVariant}>Score: {report.score}/100</Badge>
+              <Badge variant={config.badgeVariant}>
+                {report.score === null ? "Score pending" : `Score: ${report.score}/100`}
+              </Badge>
               <Badge variant="muted">{report.totalFindings} total findings</Badge>
               <Badge variant="muted">{report.blockingFindings} blocking</Badge>
               <Badge variant="muted">{report.verifiedFindings} verified</Badge>
@@ -281,7 +292,7 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
       )}
 
       {/* All Clear */}
-      {report.totalFindings === 0 && (
+      {report.verdict === "GO" && report.totalFindings === 0 && (
         <Card className="p-6 text-center">
           <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-emerald-500" aria-hidden="true" />
           <h3 className="mb-1 text-lg font-semibold">No Security Issues Found</h3>

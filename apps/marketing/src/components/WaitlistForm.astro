@@ -147,7 +147,7 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
         utmMedium: String(formData.get("utmMedium") || "").trim(),
         utmCampaign: String(formData.get("utmCampaign") || "").trim(),
         referrer: String(formData.get("referrer") || "").trim(),
-        referralCode,
+        referralCode: referralCode || undefined,
         website: String(formData.get("website") || "").trim(),
       }
 

@@ -9,12 +9,7 @@ export function apiError(code: string, message: string, status: number) {
 }
 
 export function apiPaginated<T>(items: T[], nextCursor: string | null, total?: number) {
-  return NextResponse.json({
-    success: true,
-    data: items,
-    nextCursor,
-    ...(total !== undefined ? { total } : {}),
-  })
+  return apiSuccess({ items, nextCursor, ...(total !== undefined ? { total } : {}) })
 }
 
 export function parsePaginationParams(searchParams: URLSearchParams) {

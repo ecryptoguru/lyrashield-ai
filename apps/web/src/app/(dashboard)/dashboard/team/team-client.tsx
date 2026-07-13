@@ -206,7 +206,7 @@ export function TeamClient({
                   </Badge>
                 </td>
                 <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
-                  {new Date(m.createdAt).toLocaleDateString()}
+                  {new Date(m.createdAt).toLocaleDateString("en-US", { timeZone: "UTC" })}
                 </td>
               </tr>
             ))}
@@ -240,7 +240,7 @@ export function TeamClient({
                   <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" aria-hidden="true" />
-                      {new Date(inv.expiresAt).toLocaleDateString()}
+                      {new Date(inv.expiresAt).toLocaleDateString("en-US", { timeZone: "UTC" })}
                     </span>
                   </td>
                 </tr>

@@ -78,7 +78,7 @@ export default function SignUpPage() {
 
   if (emailSent) {
     return (
-      <div className="relative flex min-h-screen items-center justify-center px-4">
+      <main className="relative flex min-h-screen items-center justify-center px-4">
         <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
         <div className="relative w-full max-w-md">
           <div className="bg-card rounded-xl border p-6 text-center shadow-lg sm:p-8">
@@ -94,12 +94,12 @@ export default function SignUpPage() {
             </p>
           </div>
         </div>
-      </div>
+      </main>
     )
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-4">
+    <main className="relative flex min-h-screen items-center justify-center px-4">
       <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
       <div className="relative w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
@@ -196,6 +196,6 @@ export default function SignUpPage() {
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   )
 }

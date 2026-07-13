@@ -12,11 +12,11 @@ export interface FindingForReadiness {
   summary: string
 }
 
-export type ReadinessVerdict = "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
+export type ReadinessVerdict = "NOT_EVALUATED" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
 
 export interface LaunchReadinessReport {
   verdict: ReadinessVerdict
-  score: number
+  score: number | null
   summary: string
   blockingFindings: number
   totalFindings: number
@@ -37,10 +37,26 @@ const SEVERITY_WEIGHTS: Record<string, number> = {
 const BLOCKING_STATUSES = new Set<string>(["OPEN", "FIX_READY"])
 
 export function generateLaunchReadinessReport(
-  findings: FindingForReadiness[]
+  findings: FindingForReadiness[],
+  hasCompletedScan: boolean
 ): LaunchReadinessReport {
   const total = findings.length
   const verified = findings.filter((f) => f.verified).length
+
+  if (!hasCompletedScan) {
+    return {
+      verdict: "NOT_EVALUATED",
+      score: null,
+      summary:
+        "No completed scan evidence is available. Run a scan before making a launch decision.",
+      blockingFindings: 0,
+      totalFindings: total,
+      verifiedFindings: verified,
+      bySeverity: {},
+      conditions: ["Complete at least one security scan before launch"],
+      recommendations: [],
+    }
+  }
 
   const bySeverity: Record<string, number> = {}
   let blockingFindings = 0
