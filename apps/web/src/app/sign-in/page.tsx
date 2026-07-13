@@ -72,7 +72,7 @@ export default function SignInPage() {
 
   if (emailSent) {
     return (
-      <div className="relative flex min-h-screen items-center justify-center px-4">
+      <main className="relative flex min-h-screen items-center justify-center px-4">
         <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
         <div className="relative w-full max-w-md">
           <div className="mb-8 flex flex-col items-center">
@@ -95,12 +95,12 @@ export default function SignInPage() {
             </button>
           </div>
         </div>
-      </div>
+      </main>
     )
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-4">
+    <main className="relative flex min-h-screen items-center justify-center px-4">
       <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
       <div className="relative w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
@@ -185,6 +185,6 @@ export default function SignInPage() {
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   )
 }

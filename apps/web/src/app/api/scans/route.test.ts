@@ -264,8 +264,8 @@ describe("GET /api/scans", () => {
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.success).toBe(true)
-    expect(json.data).toHaveLength(2)
-    expect(json.nextCursor).toBe("scan-2")
+    expect(json.data.items).toHaveLength(2)
+    expect(json.data.nextCursor).toBe("scan-2")
   })
 
   it("passes targetId and status filters to listScans", async () => {

@@ -14,12 +14,12 @@ LyraShield AI is an agent-native application-security platform for AI-built soft
 
 Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables without founder approval. Public copy uses **LyraShield AI**; the public domain remains undecided.
 
-## Current verified state — 2026-07-12
+## Current verified state — 2026-07-13
 
 - Sprints 0–7, the agent action layer, SCA/secrets scanning, URL scanning, reports, schedules, notifications, MCP, the GitHub diff gate, and reliability/tenant-safety hardening are implemented. The latest hardening is on `codex/docs-update`; do not call it merged until its PR lands.
 - **LyraShield Score + public scorecards + referrals (spec Phases 0–2)** are implemented on `codex/lyrashield-scorecards-referrals` (PR #43, plus post-review fixes): pure versioned score engine in `packages/score`, immutable `ScoreSnapshot` per completed scan, frozen-allowlist public scorecards with supersession notices and OG images, RBAC- and audit-gated share create/revoke, new-account-gated referral attribution with idempotent dual-sided agent-minute rewards, and the Phase 0 waitlist referral ladder. Landmines: `buildScorecardPayload` in `packages/db/src/score-service.ts` is the ONLY place a public payload may be constructed (its allowlist regression test is load-bearing); never add fields to it casually, and never derive share-eligibility client-side. See `codebase.md` §33.
 - Auth and routing review completed: sign-up/sign-in now handle email verification, redirect via `callbackURL`, and avoid `useSession` atom issues in `apps/web/src/app/sign-in/page.tsx` and `apps/web/src/app/sign-up/page.tsx`.
-- `pnpm test` passes **625 tests in 56 files** and `pnpm test:e2e` passes **2 Chromium tests**. Lint, typecheck, build, formatting, dependency audit, and Docker worker builds pass locally; the branch still requires PR CI.
+- `pnpm test` passes **668 tests in 62 files** and `pnpm test:e2e` passes **2 Chromium tests**. Uncached lint, typecheck, build, formatting, and the high-severity dependency audit pass locally; one moderate dev-only transitive advisory remains in Lighthouse's OpenTelemetry chain. The branch still requires PR CI.
 - The engine thin fork is merged in [engine PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1). It keeps the Strix upstream contract, defaults telemetry off, and syncs only through reviewable PRs. The engine gate passed 155 tests plus Ruff, formatting, headless mypy, and Bandit.
 - The worker image builds the sibling engine source, exposes the CLI on `PATH`, and fails before sandbox setup when model configuration is missing. A controlled scan still requires authorized `LYRASHIELD_LLM` and `LLM_API_KEY`; do not claim one was run.
 - **Azure AI / GPT 5.6 Terra integration complete**: `strix/config/settings.py` and `strix/config/models.py` accept and mirror `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, `LLM_API_VERSION`, and `AZURE_API_VERSION`; the `lyrashield-engine` `.env` and `.vscode/settings.json` are wired; the worker allowlist, `packages/config/src/env.ts`, `docker-compose.yml`, and `.env.example` propagate the variables.
@@ -27,6 +27,7 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 
 ### Recent hardening and infrastructure merge
 
+- **Full-flow UI QA**: Astro waitlist submission now omits absent referral codes; paginated APIs return the client-contract envelope; empty-workspace reports, notifications, and schedules render without crashing; team dates hydrate deterministically; launch readiness stays `NOT_EVALUATED` until a scan completes; and auth pages expose a main landmark.
 - **Audit hash chaining**: `packages/db/src/client.ts` serializes each workspace chain with a transaction-scoped PostgreSQL advisory lock. Account deletion anonymizes user attribution and rehashes affected chains under the same lock.
 - **Evidence storage**: `apps/worker/src/engine/evidence-storage.ts` uploads PoC and code-location artifacts to S3-compatible storage with `AES256` SSE and SHA-256 checksums. It fails closed when storage is missing or an upload fails; placeholder evidence is forbidden.
 - **Prompt-injection guard**: `packages/mcp/src/prompt-injection-guard.ts` now normalizes input (zero-width chars, NFKC, HTML entities) and uses a tightened, expanded pattern set with explicit critical-pattern logic.

@@ -1,4 +1,4 @@
-import { listFindings } from "@lyrashield/db"
+import { listFindings, prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -18,11 +18,21 @@ export async function GET(request: Request) {
 
     await requirePermission(workspaceId, PERMISSIONS.finding.view)
 
-    const { items } = await listFindings({
-      workspaceId,
-      ...(targetId ? { targetId } : {}),
-      limit: 100,
-    })
+    const [{ items }, completedScanCount] = await Promise.all([
+      listFindings({
+        workspaceId,
+        ...(targetId ? { targetId } : {}),
+        limit: 100,
+      }),
+      prisma.scan.count({
+        where: {
+          workspaceId,
+          status: "COMPLETED",
+          deletedAt: null,
+          ...(targetId ? { targetId } : {}),
+        },
+      }),
+    ])
 
     const findings: FindingForReadiness[] = items.map((f) => ({
       id: f.id,
@@ -36,7 +46,7 @@ export async function GET(request: Request) {
       summary: f.summary ?? "",
     }))
 
-    const report = generateLaunchReadinessReport(findings)
+    const report = generateLaunchReadinessReport(findings, completedScanCount > 0)
 
     return apiSuccess(report)
   } catch (error) {
