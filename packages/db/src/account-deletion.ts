@@ -83,9 +83,16 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
         where: { createdById: userId },
         data: { createdById: DELETED_USER },
       }),
+      // Anonymize the deleted user's referral attributions. Only reject rewards
+      // still in flight (PENDING/QUALIFIED); already-REWARDED/REJECTED rows keep
+      // their terminal status so referral metrics and reward history stay truthful.
       tx.referralAttribution.updateMany({
-        where: { referredUserId: userId },
+        where: { referredUserId: userId, status: { in: ["PENDING", "QUALIFIED"] } },
         data: { referredUserId: DELETED_USER, status: "REJECTED" },
+      }),
+      tx.referralAttribution.updateMany({
+        where: { referredUserId: userId, status: { in: ["REWARDED", "REJECTED"] } },
+        data: { referredUserId: DELETED_USER },
       }),
       // ScorecardEvent contains only a privacy-safe visitor hash, never a user identifier.
       tx.workspaceMember.updateMany({

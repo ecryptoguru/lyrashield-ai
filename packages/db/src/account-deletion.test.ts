@@ -70,6 +70,16 @@ describe("account deletion", () => {
     await prisma.referralAttribution.create({
       data: { codeId: code.id, referredUserId: userId, source: "test" },
     })
+    // An already-rewarded attribution must keep its terminal status on deletion
+    // (only the user identifier is anonymized) so reward history stays truthful.
+    const rewardedAttribution = await prisma.referralAttribution.create({
+      data: {
+        codeId: code.id,
+        referredUserId: userId,
+        source: "test",
+        status: "REWARDED",
+      },
+    })
     await prisma.scorecardShare.create({
       data: {
         snapshotId: snapshot.id,
@@ -95,10 +105,19 @@ describe("account deletion", () => {
       userId: "deleted-user",
     })
     expect(
-      await prisma.referralAttribution.findFirst({ where: { codeId: code.id } })
+      await prisma.referralAttribution.findFirst({
+        where: { codeId: code.id, status: "REJECTED" },
+      })
     ).toMatchObject({
       referredUserId: "deleted-user",
       status: "REJECTED",
+    })
+    // The rewarded attribution keeps status REWARDED but is still anonymized.
+    expect(
+      await prisma.referralAttribution.findUnique({ where: { id: rewardedAttribution.id } })
+    ).toMatchObject({
+      referredUserId: "deleted-user",
+      status: "REWARDED",
     })
     expect(
       await prisma.scorecardShare.findUnique({ where: { slug: `share-${suffix}` } })
