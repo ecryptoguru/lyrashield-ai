@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current baseline — 2026-07-13:** 4 apps, 10 shared packages (including `packages/score`), 22 web page files, 40 API route files, 35 Prisma models, 14 enums, 12 migrations, 18 RLS-protected workspace tables, and passing lint, typecheck, test, E2E, and production build locally (674 Vitest tests in 65 files; 2 Playwright Chromium tests). Sections 17–34 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current baseline — 2026-07-13:** 4 apps, 10 shared packages (including `packages/score`), 22 web page files, 41 API route files, 35 Prisma models, 14 enums, 12 migrations, 18 RLS-protected workspace tables, and passing lint, typecheck, test, E2E, and production build locally (689 Vitest tests in 65 files; 2 Playwright Chromium tests). Sections 17–35 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -29,7 +29,7 @@ The canonical engine repo is `ecryptoguru/lyrashield-engine`. It is a thin adapt
 - **Recorded upstream baseline:** `7b639505fecf20a2d9e356f96bd91470aa828182`
 - **Adapter version:** `1.0.4.post1`
 - **Compatibility:** maps `LYRASHIELD_*` only when the corresponding `STRIX_*` value is unset; explicit upstream values win; telemetry defaults to `0`
-- **Model config:** `strix/config/settings.py` accepts `LYRASHIELD_LLM`/`STRIX_LLM`, `LLM_API_KEY`/`LLM_API_BASE`/`LLM_API_VERSION`, and Azure-specific aliases (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, `AZURE_API_VERSION`). `strix/config/models.py` mirrors these into the LiteLLM env vars that `azure/`, `azure_ai/`, and `litellm/` providers expect.
+- **Model config:** the engine accepts one resolved `LYRASHIELD_LLM`/`STRIX_LLM` per subprocess plus `LLM_API_KEY`/`LLM_API_BASE`/`LLM_API_VERSION` and Azure aliases. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for Deep/Custom, falling back to `LYRASHIELD_LLM`. `strix/config/models.py` mirrors credentials/endpoints into the LiteLLM variables expected by `azure/`, `azure_ai/`, and `litellm/` providers.
 - **Artifacts:** worker accepts `strix_runs` and legacy `lyrashield_runs`, with `run.json` or `vulnerabilities.json`
 - **Sync model:** ancestry-checked, review-only PRs; no auto-merge, force-push, or conflict resolution
 - **Verification:** 155 tests, Ruff, formatting, headless mypy, and Bandit
@@ -68,7 +68,7 @@ Public copy uses **LyraShield AI**. Internal package scopes (`@lyrashield/*`), e
 | Component variants      | class-variance-authority (cva)   | 0.7.x                                                |
 | Icons                   | lucide-react                     | 1.23.x                                               |
 | Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                      |
-| Testing                 | Vitest + Playwright              | 625 unit/integration tests + 2 Chromium E2E tests    |
+| Testing                 | Vitest + Playwright              | 689 unit/integration tests + 2 Chromium E2E tests    |
 | Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration |
 | Job queue               | BullMQ                           | 5.78.x                                               |
 | Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate      |
@@ -105,7 +105,8 @@ lyrashield/
 │   │       │   │   ├── reports/ notifications/ schedules/
 │   │       │   │   ├── launch-readiness/ integrations/ team/ settings/
 │   │       │   │   └── page.tsx
-│   │       │   ├── api/       # 31 route files; see §9
+│   │       │   ├── api/       # 39 protected/public-data route files; see §9
+│   │       │   ├── (public)/  # Scorecard pages plus OG image and SVG badge routes
 │   │       │   ├── onboarding/
 │   │       │   ├── reports/shared/[id]/
 │   │       │   ├── sign-in/ and sign-up/
@@ -143,8 +144,8 @@ lyrashield/
 │   ├── config/                # Zod environment contract
 │   ├── db/
 │   │   ├── prisma/
-│   │   │   ├── schema.prisma # 30 models, 12 enums
-│   │   │   └── migrations/   # 9 committed PostgreSQL migrations
+│   │   │   ├── schema.prisma # 35 models, 14 enums
+│   │   │   └── migrations/   # 12 committed PostgreSQL migrations
 │   │   └── src/              # Prisma client (with audit-hash extension), RLS/scoping, domain services
 │   ├── integrations/          # GitHub, notification delivery, Redis, and shared queue helpers
 │   ├── logger/                # Structured redacting logger
@@ -275,7 +276,7 @@ The worker uses `safeFetch` to re-resolve and validate every redirect hop before
 
 ## 5. Database and Persistence
 
-The Prisma schema is `packages/db/prisma/schema.prisma` (30 models, 12 enums). Prisma 7 reads connection configuration from `packages/db/prisma.config.ts`; generated client output lives under `packages/db/src/generated/prisma` and is gitignored.
+The Prisma schema is `packages/db/prisma/schema.prisma` (35 models, 14 enums). Prisma 7 reads connection configuration from `packages/db/prisma.config.ts`; generated client output lives under `packages/db/src/generated/prisma` and is gitignored.
 
 ### Model Groups
 
@@ -286,6 +287,8 @@ The Prisma schema is `packages/db/prisma/schema.prisma` (30 models, 12 enums). P
 **Projects, targets, policy, integrations:** `Project`, `Target`, `CredentialSet`, `Policy`, `Integration`, `WebhookEvent`.
 
 **Scan/remediation/output:** `Scan`, `ScanEvent`, `Finding`, `Evidence`, `FixProposal`, `PullRequest`, `Ticket`, `Retest`, `Report`, `Notification`, `Schedule`, `UsageRecord`, `AuditLog`, `BillingAccount`.
+
+**Score/growth:** `ScoreSnapshot`, `ReferralCode`, `ReferralAttribution`, `ScorecardShare`, `ScorecardEvent`.
 
 `ApiKey` and `BillingAccount` are schema foundations; user-facing API-key management and billing/usage enforcement are not implemented.
 
@@ -299,7 +302,7 @@ The Prisma schema is `packages/db/prisma/schema.prisma` (30 models, 12 enums). P
 
 ### Migrations
 
-Nine PostgreSQL migrations are committed, in order:
+Twelve PostgreSQL migrations are committed, in order:
 
 1. `20260630214756_init`
 2. `20260630223105_add_new_models_and_indexes`
@@ -310,8 +313,11 @@ Nine PostgreSQL migrations are committed, in order:
 7. `20260706020000_agent_approval_layer`
 8. `20260707000100_drop_workspace_slug_idx`
 9. `20260707120000_report_fk_composite_indexes_workspace_guard`
+10. `20260712130000_lyrashield_scorecards_referrals`
+11. `20260713010000_scoresnapshot_rls`
+12. `20260713170000_scorecard_events`
 
-CI applies migrations to PostgreSQL 16 and runs a Prisma migration-diff gate. Production uses `migrate:deploy`; never use `db push` as a deployment mechanism.
+CI applies migrations to PostgreSQL 16 and runs a Prisma migration-diff gate. The scorecard-events migration uses Prisma's PostgreSQL-truncated unique-index name (`...dayBuc_key`); changing it recreates rename-only drift. Production uses `migrate:deploy`; never use `db push` as a deployment mechanism.
 
 ---
 
@@ -321,20 +327,20 @@ CI applies migrations to PostgreSQL 16 and runs a Prisma migration-diff gate. Pr
 
 The root `.env.example` is the canonical template. `@lyrashield/config` validates the product runtime at import time.
 
-| Area                    | Variables                                                                                            |
-| ----------------------- | ---------------------------------------------------------------------------------------------------- |
-| Database                | `DATABASE_URL`, optional `DATABASE_DIRECT_URL`                                                       |
-| Queue                   | `REDIS_URL`                                                                                          |
-| Distributed API limits  | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`                                                 |
-| Better Auth             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_COOKIE_DOMAIN`, `ADDITIONAL_TRUSTED_ORIGINS`   |
-| OAuth                   | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, optional Google and Azure AD values                      |
-| GitHub App              | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`                |
-| Public app              | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MARKETING_URL`, `PORT`                                           |
-| Engine                  | LYRASHIELD_LLM, LLM_API_KEY, LLM_API_BASE, LLM_API_VERSION, LYRASHIELD_IMAGE, Azure aliases          |
-| Evidence storage        | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`                            |
-| Email/notifications     | `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL`, `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL` |
-| Billing placeholders    | Polar and Razorpay variables; no billing runtime exists yet                                          |
-| Monitoring placeholders | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`                                                               |
+| Area                    | Variables                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Database                | `DATABASE_URL`, optional `DATABASE_DIRECT_URL`                                                                           |
+| Queue                   | `REDIS_URL`                                                                                                              |
+| Distributed API limits  | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`                                                                     |
+| Better Auth             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_COOKIE_DOMAIN`, `ADDITIONAL_TRUSTED_ORIGINS`                       |
+| OAuth                   | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, optional Google and Azure AD values                                          |
+| GitHub App              | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`                                    |
+| Public app              | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MARKETING_URL`, `PORT`                                                               |
+| Engine                  | `LYRASHIELD_LLM` fallback, `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `LLM_API_*`, `LYRASHIELD_IMAGE`, Azure aliases |
+| Evidence storage        | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`                                                |
+| Email/notifications     | `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL`, `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`                     |
+| Billing placeholders    | Polar and Razorpay variables; no billing runtime exists yet                                                              |
+| Monitoring placeholders | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`                                                                                   |
 
 Required boot values are `DATABASE_URL`, a 32+ character `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `NEXT_PUBLIC_APP_URL`. If the Upstash URL is configured, its token is required. GitHub private keys must be PEM-formatted.
 
@@ -412,7 +418,7 @@ pnpm --filter @lyrashield/marketing preview  # Worker-backed preview on port 878
 
 ## 8. Implementation Status
 
-This is the code-facing status summary. Product cutlines and release gates live in `PRD.md` Part C; dated implementation detail lives in §§17–31 below.
+This is the code-facing status summary. Product cutlines and release gates live in `PRD.md` Part C; dated implementation detail lives in §§17–35 below.
 
 | Workstream                          | Status                       | Code truth                                                                                                                                                                                                                                                 |
 | ----------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -422,6 +428,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 | Engine adapter (5)                  | Code complete, release-gated | Thin adapter and Docker integration pass offline gates. Authorized sandbox/controlled scan remains unproven.                                                                                                                                               |
 | Normalization/SCA/secrets (6/6.5)   | Complete                     | Normalizer, verifier, SCA, secrets, scanner orchestrator, SARIF, nested manifest discovery.                                                                                                                                                                |
 | Remediation/output (7–9)            | Complete                     | Finding APIs/UI, fix proposals, GitHub PR creation, retests, reports/sharing, launch readiness, notifications, schedules, URL checks, diff gate. Evidence artifacts upload to S3-compatible storage with checksums.                                        |
+| Scorecards/referrals/distribution   | Complete                     | Versioned scores and immutable snapshots, frozen public scorecards, revocation/supersession, referrals/rewards, premium cards/badges, channel sharing, privacy-safe funnel events, dashboard metrics, waitlist sharing, and report handoff copy.           |
 | MCP (9.5)                           | Core complete                | API-backed tools, approval checks, hardened prompt-injection guard (input normalization + expanded pattern set), stdio transport. API-key lifecycle and broader client docs remain.                                                                        |
 | Billing/usage (10)                  | Not implemented              | `BillingAccount`, `UsageRecord`, permissions, and env values are schema/config foundations only.                                                                                                                                                           |
 | Launch polish (11)                  | Partial                      | UX, accessibility, security hardening, privacy lifecycle, browser E2E, health/readiness, instrumentation, docs, and Docker proof are implemented; controlled scan, production infrastructure, egress, operational monitoring, and marketing launch remain. |
@@ -431,7 +438,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **625 tests in 56 files**, pass
+- `pnpm test`: **689 tests in 65 files**, pass
 - `pnpm test:e2e`: **2 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `git diff --check`: pass
@@ -444,12 +451,13 @@ This is the code-facing status summary. Product cutlines and release gates live 
 - Missing engine model configuration fails before sandbox pull.
 - Historical Docker smoke in §§24–30 proves prior container health, routes, migrations, queue startup, and engine packaging. It does **not** prove a current authorized scan.
 - Marketing is implemented and locally Worker-previewed, but Cloudflare production provisioning, domain attachment, indexing, and real-domain QA are not complete.
+- PR #52 merged the social distribution loop after CI lint/typecheck/test/build, SCA/secret scan, LyraShield diff gate, CodeRabbit, and migration-drift checks passed. External social-network cache/unfurl behavior remains a real-domain release check.
 
 ---
 
 ## 9. API Reference
 
-All routes live under `apps/web/src/app/api`. Protected routes use Better Auth plus workspace permission checks. Inputs are Zod-validated at trust boundaries. List endpoints use cursor pagination where applicable.
+Most routes live under `apps/web/src/app/api`; public scorecard OG and badge routes live under `apps/web/src/app/(public)/api`. Protected routes use Better Auth plus workspace permission checks. Inputs are Zod-validated at trust boundaries. List endpoints use cursor pagination where applicable.
 
 | Methods            | Path                                | Purpose                                             |
 | ------------------ | ----------------------------------- | --------------------------------------------------- |
@@ -462,6 +470,7 @@ All routes live under `apps/web/src/app/api`. Protected routes use Better Auth p
 | GET, PATCH         | `/api/onboarding`                   | Read/update per-user onboarding state               |
 | GET, POST          | `/api/projects`                     | Paginated project list / create                     |
 | GET, POST          | `/api/targets`                      | Paginated target list / create with SSRF validation |
+| POST               | `/api/targets/[id]/scorecard`       | Publish the current eligible score snapshot         |
 | GET, POST          | `/api/team`                         | Paginated team list / invite member                 |
 | GET, POST          | `/api/integrations/github/install`  | Installation callback / signed install URL          |
 | GET                | `/api/integrations/github/repos`    | List installation repositories                      |
@@ -480,6 +489,12 @@ All routes live under `apps/web/src/app/api`. Protected routes use Better Auth p
 | GET, POST          | `/api/reports/[id]`                 | Read report / share or revoke token                 |
 | GET                | `/api/reports/[id]/download`        | Download rendered HTML report                       |
 | GET                | `/api/reports/shared/[id]`          | Token-gated public report data                      |
+| DELETE             | `/api/scorecards/[id]`              | Revoke a scorecard share                            |
+| POST               | `/api/scorecards/events`            | Record allowlisted deduplicated view/share events   |
+| POST               | `/api/referrals/capture`            | Validate referral/source and set HttpOnly cookies   |
+| POST               | `/api/referrals/claim`              | Claim a new-account referral during onboarding      |
+| GET                | `/api/og/score/[slug]`              | Render grade/fixes PNG in wide/square/portrait      |
+| GET                | `/api/badge/score/[slug]`           | Render a script-free revocable SVG badge            |
 | GET, POST          | `/api/notifications`                | Paginated list / create notification                |
 | PATCH              | `/api/notifications/[id]`           | Update notification read state                      |
 | GET, POST          | `/api/schedules`                    | Paginated list / create schedule                    |
@@ -917,20 +932,22 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 - **`runEngine(scanId, target, config)`** — orchestrates engine execution:
   1. Creates temp workspace dir (`lyrashield_runs/{scanId}`)
   2. Builds engine command via `buildEngineCommand()`
-  3. Spawns child process with filtered env vars (`buildEngineEnv()`)
+  3. Resolves the per-mode engine profile, then spawns the child process with filtered env vars (`buildEngineEnv()`)
   4. Captures stdout/stderr with 10MB buffer truncation
   5. 30-minute timeout with SIGTERM → SIGKILL escalation
   6. Emits scan events for RUNNING, output capture, completion
   7. Reads `vulnerabilities.json` + `run.json` from output dir
   8. Returns `{ exitCode, output: ParsedScanOutput }`
-- **`interpretExitCode(code)`** — maps engine exit codes: 0/1 → COMPLETED (SUCCESS), 2 → COMPLETED (VULNERABILITIES_FOUND), 3+ → FAILED (ENGINE_ERROR/CONFIG_ERROR/LLM_ERROR).
+- **`resolveEngineProfile(mode)`** — routes Safe/Quick/Standard to the configured Luna deployment at medium reasoning and Deep/Custom to Terra at high reasoning; a missing routed deployment falls back to `LYRASHIELD_LLM`.
+- **`interpretExitCode(code)`** — maps engine exit codes: 0 → COMPLETED (SUCCESS), 2 → COMPLETED (VULNERABILITIES_FOUND), all other codes → FAILED.
 - **`cleanupEngineWorkspace(dir)`** — removes temp workspace (best-effort, non-fatal).
-- **6 tests** in `runner.test.ts` (exit code mapping).
+- Focused runner tests cover exit mapping, termination escalation, output discovery, every routing mode, and fallback selection.
 
 ### 21.4 Command Builder (`apps/worker/src/engine/command-builder.ts`)
 
-- **`buildEngineCommand(config)`** — constructs CLI args for the scan engine. Maps `TargetType` (REPO → `--repo`, WEB_APP/API → `--url`, IAC → `--url`) and `ScanMode` (SAFE → `quick`, STANDARD → `standard`, DEEP → `deep`, CUSTOM → `custom`). Adds optional `--instruction` and `--max-budget-usd` flags.
-- **14 tests** in `command-builder.test.ts`.
+- **`buildEngineCommand(config)`** — constructs CLI args for the scan engine. Maps repository/URL targets to `--target`, maps Safe/Quick to engine `quick`, Standard to `standard`, and Deep/Custom to `deep`, then adds optional `--instruction` and the enforced `--max-budget-usd` value.
+- **`resolveScanBudgetUsd(mode, policyMaxBudgetUsd)`** — accepts a finite positive workspace-policy override; otherwise applies $1.20 Safe/Quick, $3.20 Standard, and $15 Deep/Custom. Unknown modes fail safely to the $15 cap.
+- Focused command-builder tests cover target/mode mapping, CLI cap propagation, every default cap, policy override, and invalid-budget fallback.
 
 ### 21.5 Output Parser (`apps/worker/src/engine/output-parser.ts`)
 
@@ -1709,7 +1726,7 @@ Focused remediation after a fresh full-repository review.
 - Engine: **62 tests pass** with Pydantic deprecations treated as errors; Ruff lint and formatting pass; headless mypy passes across 58 source files; Bandit reports zero findings.
 - Worker image build runs `lyrashield --version` as a build-time smoke gate and reports **1.0.4**.
 - Running worker reports ready, reaches the Docker daemon, and passes the app's **597 tests across 47 files**.
-- Missing `LYRASHIELD_LLM` exits cleanly before sandbox setup. A paid/full scan was not started because no LLM configuration is present.
+- At this engine-integration checkpoint, missing `LYRASHIELD_LLM` exited cleanly before sandbox setup and no paid/full scan was started. Current routing configuration is documented in §35; controlled-scan proof remains pending.
 - Known engine debt: full TUI mypy currently reports 69 Textual/Pygments typing errors, and repository-wide Pyright reports broad pre-existing unknown-type debt. These do not block the non-interactive worker path but should be handled as a separate typing-hardening batch.
 
 ---
@@ -1734,7 +1751,7 @@ Focused remediation after a fresh full-repository review.
 - That checkpoint passed 607 tests in 48 files. The current gate is recorded at the top of this document and in §32.
 - `docker compose build worker` now completes after the builder scopes its Next.js compilation to `pnpm --filter @lyrashield/web build`, avoiding the unrelated uncommitted `apps/marketing` Cloudflare `workerd` failure. The resulting local worker image ID is `sha256:71d6c104f5d11e30d8f8ee63cef8aacb1819b5ec8a4c3d1987d7fd3dcaddc4e6`; `docker compose run --rm --no-deps worker lyrashield --version` returned `lyrashield 1.0.4.post1`.
 - With `LYRASHIELD_LLM` and `LLM_API_KEY` explicitly empty, `lyrashield --non-interactive --target https://example.invalid` exited `1` with `STRIX_LLM` configuration guidance and no `Pulling Docker image` or `Downloading` output. No sandbox launch occurred. The local/dev Compose socket mount remains a development-only sandbox mechanism, and production still requires a separately pinned sandbox image digest.
-- Neither `LYRASHIELD_LLM` nor `LLM_API_KEY` is configured for an authorized scan. No external, public, paid, or substitute target was used. The controlled authorized scan, persisted findings, and rendered scan-detail proof remain blocked only by authorized LLM configuration.
+- At this 2026-07-11 checkpoint, neither `LYRASHIELD_LLM` nor `LLM_API_KEY` was configured for an authorized scan. No external, public, paid, or substitute target was used. Later configuration/routing work is recorded in §35; it does not constitute controlled-scan proof.
 
 ---
 
@@ -1811,7 +1828,7 @@ Focused remediation after a fresh full-repository review.
 - Playwright runs an isolated production preview on port 3100 and verifies anonymous denial, email signup/signin, workspace onboarding, target creation, scan queue creation, and cross-tenant scan/finding/report denial.
 - CI now runs `format:check` and Chromium E2E. Docker contexts exclude nested build output and the engine virtualenv; the measured contexts fell from 565/379 MB to 1.09 MB/22.8 KB. The worker image remains intentionally larger than a compiled-only runtime because shared workspace packages still execute TypeScript source.
 
-### Current verification
+### Verification at this 2026-07-11 checkpoint
 
 - `pnpm test`: **625 tests in 56 files**
 - `pnpm test:e2e`: **2 Chromium tests**
@@ -1861,11 +1878,24 @@ Implements the "LyraShield Score, Shareable Scorecard & Referral System — Engi
 5. Reward quantity extracted to `REFERRAL_BONUS_MINUTES`; payload construction centralized in exported `buildScorecardPayload`; stray comment removed.
 6. Test coverage brought up to the spec's verification plan (engine boundary table, allowlist regression, self-referral/old-account rejection, snapshot idempotency).
 
-## §34 — Social sharing and activation loop (2026-07-13)
+## §34 — Social sharing and activation loop (2026-07-13, PR #52)
 
 - `/(public)/score/[slug]` now emits scorecard-specific canonical, Open Graph, and Twitter metadata, keeps individual cards `noindex`, preserves the methodology as the indexable authority, and uses a prominent “Check my app before launch” referral CTA.
 - `/api/og/score/[slug]` renders grade or verified-fix cards as 1200×630 link previews, 1080×1080 squares, or 1080×1350 feed images from the existing frozen `ScorecardPayload` only. `/api/badge/score/[slug]` returns a short-cache, script-free SVG README badge; revoked/expired shares 404 on every surface.
 - `ScorecardShareComposer` provides native sharing with file feature detection plus LinkedIn, X, Bluesky, WhatsApp, Reddit, email, copy, download, README badge, and browser clipboard fallback. Shared links carry allowlisted source/UTM tags while retaining the referral code; target pages select the current publisher's share so another admin cannot receive that publisher's referral attribution.
-- New `ScorecardEvent` rows record only `shareId`, event/channel/variant/source allowlists, a one-way hash of a random session identifier, and a UTC day bucket. `getPublicScorecard()` is read-only so page renders and crawler/card fetches no longer inflate `viewCount`; human views are deduplicated by share/event/channel/session/day.
+- Migration `20260713170000_scorecard_events` adds `ScorecardEvent` with a share FK, time-series indexes, and a database unique constraint over share/event/channel/session-hash/day. Rows record only `shareId`, event/channel/variant/source allowlists, a one-way hash of a random session identifier, and a UTC day bucket. `getPublicScorecard()` is read-only so page renders and crawler/card fetches no longer inflate `viewCount`; human views are deduplicated by share/event/channel/session/day.
+- `/api/scorecards/events` rejects unknown keys and requires a channel for `SHARE`. Browser privacy signals (`DNT`/Global Privacy Control) suppress client event emission. `VIEW`/`SHARE` are product-funnel diagnostics, not external impressions or verified conversions.
+- `/api/referrals/capture` stores the validated referral code and allowlisted source separately in 30-day HttpOnly cookies. `/api/referrals/claim` passes both into the new-account-only attribution service and deletes both cookies. The target page resolves the current publisher's share so a different workspace admin cannot inherit the publisher's referral credit.
 - The target scorecard panel shows human views, share handoffs, and referred signup counts. The marketing waitlist success state shows ladder position and direct channel buttons; report sharing provides copyable/email client-handoff text.
-- Regression coverage locks the event boundary, referral source cookie, public-payload allowlist, URL/caption encoding, and human-view counting. Local PostgreSQL migration `20260713170000_scorecard_events` applied successfully; desktop and 390×844 browser QA covered metadata, both card variants, all image formats, badge output, clipboard fallback, and responsive layout.
+- Regression coverage locks the event boundary, referral source cookie, public-payload allowlist, URL/caption encoding, and human-view counting. Local PostgreSQL migration `20260713170000_scorecard_events` applied successfully; desktop and 390×844 browser QA covered metadata, both card variants, all image formats, badge output, clipboard fallback/error recovery, zero horizontal overflow, and clean console output.
+- PR CI initially caught PostgreSQL identifier truncation in the manually named unique index. The migration now uses Prisma's exact `ScorecardEvent_shareId_eventType_channel_visitorHash_dayBuc_key` name; the rerun passed migration diff plus all required GitHub checks before merge.
+- Production validation still requires the approved public HTTPS app origin: test canonical/OG/Twitter tags, 1200×630/1080×1080/1080×1350 assets, the SVG badge, revoked/expired 404 behavior, source/referral continuity, event deduplication, and external-platform cache refreshers. Local rendering is not proof of a live social unfurl.
+
+## §35 — GPT-5.6 mode routing and enforced scan budgets (2026-07-13)
+
+- `apps/worker/src/engine/runner.ts` resolves one engine profile per scan. Safe, Quick, and Standard use `LYRASHIELD_LUNA_LLM` with medium reasoning; Deep and Custom use `LYRASHIELD_TERRA_LLM` with high reasoning. If the selected variable is empty, `LYRASHIELD_LLM` remains the backward-compatible fallback.
+- The resolved model and reasoning effort override only the spawned engine process. Azure credentials, endpoint, and API version continue through the existing generic/Azure allowlist; routing does not duplicate secrets or create separate queues.
+- `apps/worker/src/engine/command-builder.ts` applies positive default caps of $1.20 for Safe/Quick, $3.20 for Standard, and $15 for Deep/Custom. Unknown modes receive the conservative $15 fallback. A finite positive `Policy.maxBudgetUsd`, fetched with `workspaceId` and soft-delete scope, overrides the mode cap.
+- `run-scan.job.ts` passes the cap to the engine's `--max-budget-usd` guard and records a `budget_cap` event with the amount and source. The `engine_start` event records model and reasoning selection; provider-reported `llm_usage` remains separately persisted after execution.
+- This is mode-level routing, not a within-scan cascade: one engine invocation uses one model. Luna discovery followed by Terra validation inside the same scan, provider prompt-cache orchestration, billing-plan quotas, and cross-workspace cost policy remain roadmap work.
+- Configuration is propagated through `packages/config`, `turbo.json`, `docker-compose.yml`, `.env.example`, and the deployment runbooks. Regression tests cover every mode, fallback routing, policy overrides, invalid policy budgets, and CLI cap propagation. The full local gate passes 689 Vitest tests in 65 files, lint, typecheck, and production build.

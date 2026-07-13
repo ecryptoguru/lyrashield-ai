@@ -36,6 +36,10 @@ Scorecard guardrails (non-negotiable, enforced in code):
 - Sharing is opt-in, role-restricted, audit-logged, revocable, and carries a supersession notice once a newer scan exists.
 - Distribution supports premium grade and verified-fix cards, native/channel sharing, image downloads, and README badges. Growth measurement is limited to coarse allowlisted events; social renders never count as human views and analytics never receive target, repository, finding, IP, user-agent, or caption data.
 
+The intended loop is **verified progress → useful public artifact → qualified visitor → new account → first completed real scan**. Views and share-button handoffs are diagnostic funnel signals, not vanity impressions or rewarded conversions. Referral rewards remain locked until the referred workspace completes its first real scan.
+
+Channel copy should lead with the earned outcome (current scoped grade or retest-confirmed fixes), preserve the referral link, and send readers to the public methodology. Never manufacture urgency, customer proof, benchmark claims, or a higher grade than the frozen scorecard contains.
+
 ## Differentiation
 
 Lead with a complete review package:
@@ -50,9 +54,9 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 
 ## Product status
 
-Implemented: core workspaces/targets/scans, GitHub integration, scan orchestration, findings normalization, SCA and secret scanning, URL scanning, fix proposals, retests, reports, notifications, schedules, MCP, agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksums, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, and Azure AI / GPT 5.6 Terra model support.
+Implemented: core workspaces/targets/scans, GitHub integration, scan orchestration, findings normalization, SCA and secret scanning, URL scanning, fix proposals, retests, reports, notifications, schedules, MCP, agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksums, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, LyraShield Score, public scorecards, referrals, premium social sharing, and Azure AI / GPT 5.6 mode routing. Safe/Quick/Standard scans use Luna with medium reasoning; Deep/Custom use Terra with high reasoning. Every engine run receives a positive dollar cap, with workspace policy overrides supported.
 
-Not implemented: billing/usage limits, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities. See `PRD.md` for the authoritative roadmap.
+Not implemented: billing/plan quotas, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities. See `PRD.md` for the authoritative roadmap.
 
 ## Pre-launch GTM
 

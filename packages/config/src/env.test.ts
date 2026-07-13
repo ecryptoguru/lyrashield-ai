@@ -18,6 +18,8 @@ const envSchema = z.object({
   GITHUB_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
   NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
   LYRASHIELD_LLM: z.string().optional().or(z.literal("")),
+  LYRASHIELD_LUNA_LLM: z.string().optional().or(z.literal("")),
+  LYRASHIELD_TERRA_LLM: z.string().optional().or(z.literal("")),
   LLM_API_KEY: z.string().optional().or(z.literal("")),
   LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
   LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),

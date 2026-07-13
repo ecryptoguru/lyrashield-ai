@@ -16,14 +16,14 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 
 ## Current verified state — 2026-07-13
 
-- Sprints 0–7, the agent action layer, SCA/secrets scanning, URL scanning, reports, schedules, notifications, MCP, the GitHub diff gate, and reliability/tenant-safety hardening are implemented. The latest hardening is on `codex/docs-update`; do not call it merged until its PR lands.
-- **LyraShield Score + public scorecards + referrals (spec Phases 0–2)** are implemented on `codex/lyrashield-scorecards-referrals` (PR #43, plus post-review fixes): pure versioned score engine in `packages/score`, immutable `ScoreSnapshot` per completed scan, frozen-allowlist public scorecards with supersession notices and OG images, RBAC- and audit-gated share create/revoke, new-account-gated referral attribution with idempotent dual-sided agent-minute rewards, and the Phase 0 waitlist referral ladder. Landmines: `buildScorecardPayload` in `packages/db/src/score-service.ts` is the ONLY place a public payload may be constructed (its allowlist regression test is load-bearing); never add fields to it casually, and never derive share-eligibility client-side. See `codebase.md` §33.
-- **Social distribution loop** is implemented on `codex/social-sharing-growth-loop`: dynamic per-scorecard Open Graph/Twitter metadata; deterministic grade/fix cards in 1200×630, 1080×1080, and 1080×1350 formats; native/LinkedIn/X/Bluesky/WhatsApp/Reddit/email/copy/download sharing; revocable README badges; public conversion CTA; channel-preserving referral attribution; deduplicated privacy-safe view/share events; dashboard funnel counts; waitlist sharing/position; and client-handoff report copy. Public scorecard analytics never store target, repository, finding, IP, user-agent, or caption data. See `codebase.md` §34.
+- Sprints 0–7, the agent action layer, SCA/secrets scanning, URL scanning, reports, schedules, notifications, MCP, the GitHub diff gate, reliability/tenant-safety hardening, and the social distribution loop are merged on `main`; PR #52 is the latest merged product-growth change. The current workspace also contains Luna/Terra routing and spend-cap work that still requires its own PR CI before it may be called merged.
+- **LyraShield Score + public scorecards + referrals (spec Phases 0–2)** are implemented (PR #43 plus post-review fixes): pure versioned score engine in `packages/score`, immutable `ScoreSnapshot` per completed scan, frozen-allowlist public scorecards with supersession notices and OG images, RBAC- and audit-gated share create/revoke, new-account-gated referral attribution with idempotent dual-sided agent-minute rewards, and the Phase 0 waitlist referral ladder. Landmines: `buildScorecardPayload` in `packages/db/src/score-service.ts` is the ONLY place a public payload may be constructed (its allowlist regression test is load-bearing); never add fields to it casually, and never derive share-eligibility client-side. See `codebase.md` §33.
+- **Social distribution loop** is merged in PR #52: dynamic per-scorecard Open Graph/Twitter metadata; deterministic grade/fix cards in 1200×630, 1080×1080, and 1080×1350 formats; native/LinkedIn/X/Bluesky/WhatsApp/Reddit/email/copy/download sharing; revocable README badges; public conversion CTA; channel-preserving referral attribution; deduplicated privacy-safe view/share events; dashboard funnel counts; waitlist sharing/position; and client-handoff report copy. Public scorecard analytics never store target, repository, finding, IP, user-agent, or caption data. See `codebase.md` §34.
 - Auth and routing review completed: sign-up/sign-in now handle email verification, redirect via `callbackURL`, and avoid `useSession` atom issues in `apps/web/src/app/sign-in/page.tsx` and `apps/web/src/app/sign-up/page.tsx`.
-- `pnpm test` passes **674 tests in 65 files** and `pnpm test:e2e` passes **2 Chromium tests**. Uncached lint, typecheck, build, formatting, and the high-severity dependency audit pass locally; one moderate dev-only transitive advisory remains in Lighthouse's OpenTelemetry chain. The branch still requires PR CI.
+- `pnpm test` passes **689 tests in 65 files** and `pnpm test:e2e` passes **2 Chromium tests**. Uncached lint, typecheck, build, formatting, and the high-severity dependency audit pass locally; one moderate dev-only transitive advisory remains in Lighthouse's OpenTelemetry chain. The unmerged Luna/Terra routing work still requires PR CI.
 - The engine thin fork is merged in [engine PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1). It keeps the Strix upstream contract, defaults telemetry off, and syncs only through reviewable PRs. The engine gate passed 155 tests plus Ruff, formatting, headless mypy, and Bandit.
-- The worker image builds the sibling engine source, exposes the CLI on `PATH`, and fails before sandbox setup when model configuration is missing. A controlled scan still requires authorized `LYRASHIELD_LLM` and `LLM_API_KEY`; do not claim one was run.
-- **Azure AI / GPT 5.6 Terra integration complete**: `strix/config/settings.py` and `strix/config/models.py` accept and mirror `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, `LLM_API_VERSION`, and `AZURE_API_VERSION`; the `lyrashield-engine` `.env` and `.vscode/settings.json` are wired; the worker allowlist, `packages/config/src/env.ts`, `docker-compose.yml`, and `.env.example` propagate the variables.
+- The worker image builds the sibling engine source, exposes the CLI on `PATH`, and fails before sandbox setup when model configuration is missing. A controlled scan still requires authorized model credentials and an approved target; do not claim one was run.
+- **Azure AI / GPT 5.6 mode routing and spend caps are implemented**: Safe/Quick/Standard scans select `LYRASHIELD_LUNA_LLM` at `medium` reasoning; Deep/Custom select `LYRASHIELD_TERRA_LLM` at `high`. `LYRASHIELD_LLM` remains the backward-compatible fallback. Default engine caps are $1.20, $1.20, $3.20, $15, and $15 respectively; a positive workspace `Policy.maxBudgetUsd` overrides the mode default. The chosen model/reasoning and budget cap are retained as scan events. Azure credentials and endpoints remain shared through `AZURE_AI_*`, `AZURE_OPENAI_*`, or generic `LLM_*` variables.
 - The marketing site is implemented. Its metadata, sitemap, robots, JSON-LD, and social URLs share one build-time origin; indexable builds require public HTTPS. Pre-launch previews are noindex and return 404 for `llms.txt`. See `apps/marketing/README.md`.
 
 ### Recent hardening and infrastructure merge
@@ -46,7 +46,7 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 
 Owner: engineering + founder authorization.
 
-1. Provide authorized `LYRASHIELD_LLM` and `LLM_API_KEY` values and approve the first target.
+1. Provision the authorized Luna and Terra deployments, set `LYRASHIELD_LUNA_LLM`/`LYRASHIELD_TERRA_LLM` plus the matching Azure credentials, and approve the first target. Keep `LYRASHIELD_LLM` as a tested fallback.
 2. Pin and inspect the production sandbox image by digest; do not use a mutable tag.
 3. Run the target through the full worker lifecycle and retain its scan events, findings, and audit evidence.
 4. Keep Docker health, engine CLI availability, sandbox execution, and controlled-scan proof as separate claims.
@@ -77,7 +77,7 @@ Owner: founder + marketing + engineering.
 2. Replace Cloudflare D1 and Rate Limit placeholders and set `WAITLIST_IP_SALT` as a Worker secret.
 3. Apply D1 migrations and build with the production `PUBLIC_SITE_URL`.
 4. Deploy with Astro's generated `dist/server/wrangler.json`.
-5. Verify canonical URLs, sitemap, robots, waitlist submission, analytics, and visual QA on the real domain before setting `PUBLIC_INDEXABLE=true`.
+5. Verify canonical URLs, sitemap, robots, waitlist submission/referral sharing, analytics, and visual QA on the real domain. On the app origin, also verify scorecard metadata, all card formats, badge output, revocation/expiry 404s, referral attribution, and human-event deduplication before setting `PUBLIC_INDEXABLE=true`.
 6. Publish only founder-approved posts; sample posts remain drafts by design.
 
 ## Deferred roadmap
@@ -114,6 +114,7 @@ Owner: founder + marketing + engineering.
 - **Proxy trust**: set `TRUSTED_PROXY_IP_HEADER` only when ingress strips incoming copies and writes the authoritative client IP.
 - **Prompt-injection guard**: use `PromptInjectionGuard` and `normalizeInput()` for any new model-facing input checks; do not reintroduce ad-hoc regex bypasses.
 - **Queue and scan job**: use `enqueueScan` and `getScanQueue` from `packages/integrations/src/queue.ts`; do not create one-off `Queue` instances or duplicate scan-enqueue logic in web/agent/worker.
+- **Model cost routing**: keep model selection in `resolveEngineProfile()` and spend defaults in `resolveScanBudgetUsd()`. Do not bypass the positive policy-budget validation, remove the fallback model, or claim that mode routing is a within-scan Luna→Terra cascade.
 - **Public sharing analytics**: use the strict `/api/scorecards/events` allowlist and `recordScorecardEvent()`. Do not put target/repository/finding data, raw IPs, user agents, or user-authored captions into `ScorecardEvent`; social image/page renders are not human views.
 
 ## Documentation ownership
@@ -124,3 +125,5 @@ Owner: founder + marketing + engineering.
 - `product.md` — current positioning and founder decisions
 - `apps/marketing/README.md` / `BLOG_AUTHORING.md` — marketing operations and publishing rules
 - `docs/deployment/*` — local and production runbooks
+
+After a PR merges, remove branch-only wording and record the PR/merge truth here, in `PRD.md` Part C, and in the relevant dated `codebase.md` section. Do not update historical checkpoint counts except when explicitly labeling them as current.

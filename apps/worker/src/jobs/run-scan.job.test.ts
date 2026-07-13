@@ -5,6 +5,9 @@ vi.mock("@lyrashield/db", () => ({
     target: {
       findFirst: vi.fn(),
     },
+    policy: {
+      findFirst: vi.fn(),
+    },
     scan: {
       findUnique: vi.fn(),
     },
@@ -137,6 +140,7 @@ describe("processScanJob", () => {
     vi.mocked(qualifyReferralForWorkspace).mockResolvedValue(null)
     vi.mocked(cleanupEngineWorkspace).mockResolvedValue(undefined)
     vi.mocked(prisma.target.findFirst).mockResolvedValue(mockTarget as never)
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
     vi.mocked(runScannerOrchestrator).mockResolvedValue({
       allFindings: [],
@@ -164,6 +168,42 @@ describe("processScanJob", () => {
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "RUNNING")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
     expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Scan completed with 0 findings")
+    expect(runEngine).toHaveBeenCalledWith(
+      expect.objectContaining({ maxBudgetUsd: 1.2 }),
+      "scan-1",
+      undefined,
+      expect.any(Function)
+    )
+  })
+
+  it("uses the selected workspace policy budget for the engine cap", async () => {
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue({
+      maxBudgetUsd: { toNumber: () => 6.5 },
+    } as never)
+    const policyJob = {
+      id: "job-policy-1",
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+        policyId: "policy-1",
+      },
+    } as never
+
+    await processScanJob(policyJob)
+
+    expect(prisma.policy.findFirst).toHaveBeenCalledWith({
+      where: { id: "policy-1", workspaceId: "ws-1", deletedAt: null },
+      select: { maxBudgetUsd: true },
+    })
+    expect(runEngine).toHaveBeenCalledWith(
+      expect.objectContaining({ maxBudgetUsd: 6.5 }),
+      "scan-1",
+      undefined,
+      expect.any(Function)
+    )
   })
 
   it("keeps a completed scan completed when a completion notification fails", async () => {

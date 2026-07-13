@@ -34,6 +34,33 @@ const SCAN_MODE_MAP: Record<string, "quick" | "standard" | "deep"> = {
   CUSTOM: "deep",
 }
 
+const FALLBACK_SCAN_BUDGET_USD = 15
+
+const DEFAULT_SCAN_BUDGET_USD: Record<string, number> = {
+  SAFE: 1.2,
+  QUICK: 1.2,
+  STANDARD: 3.2,
+  DEEP: FALLBACK_SCAN_BUDGET_USD,
+  CUSTOM: FALLBACK_SCAN_BUDGET_USD,
+}
+
+/**
+ * Every engine run must have a positive spend cap. A policy can reduce or
+ * increase the default for its workspace; invalid or absent policy values
+ * safely fall back to the cap for the selected scan mode.
+ */
+export function resolveScanBudgetUsd(mode: string, policyMaxBudgetUsd?: number | null): number {
+  if (
+    typeof policyMaxBudgetUsd === "number" &&
+    Number.isFinite(policyMaxBudgetUsd) &&
+    policyMaxBudgetUsd > 0
+  ) {
+    return policyMaxBudgetUsd
+  }
+
+  return DEFAULT_SCAN_BUDGET_USD[mode] ?? FALLBACK_SCAN_BUDGET_USD
+}
+
 function resolveTargetArg(target: TargetInfo): string {
   switch (target.type) {
     case "REPO":

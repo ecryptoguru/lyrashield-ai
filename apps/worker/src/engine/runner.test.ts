@@ -22,7 +22,12 @@ vi.mock("@lyrashield/logger", () => ({
   },
 }))
 
-import { createKillEscalation, findRunOutputDir, interpretExitCode } from "./runner"
+import {
+  createKillEscalation,
+  findRunOutputDir,
+  interpretExitCode,
+  resolveEngineProfile,
+} from "./runner"
 
 const cleanupPaths: string[] = []
 
@@ -127,6 +132,35 @@ describe("interpretExitCode", () => {
     const result = interpretExitCode(-1)
     expect(result.status).toBe("FAILED")
     expect(result.message).toContain("code -1")
+  })
+})
+
+describe("resolveEngineProfile", () => {
+  const routingEnv = {
+    LYRASHIELD_LLM: "azure/fallback",
+    LYRASHIELD_LUNA_LLM: "azure/gpt-5.6-luna",
+    LYRASHIELD_TERRA_LLM: "azure/gpt-5.6-terra",
+  }
+
+  it.each(["SAFE", "QUICK", "STANDARD"])("routes %s to Luna at medium reasoning", (mode) => {
+    expect(resolveEngineProfile(mode, routingEnv)).toEqual({
+      model: "azure/gpt-5.6-luna",
+      reasoningEffort: "medium",
+    })
+  })
+
+  it.each(["DEEP", "CUSTOM"])("routes %s to Terra at high reasoning", (mode) => {
+    expect(resolveEngineProfile(mode, routingEnv)).toEqual({
+      model: "azure/gpt-5.6-terra",
+      reasoningEffort: "high",
+    })
+  })
+
+  it("falls back to the existing model when a routed deployment is absent", () => {
+    expect(resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/fallback" })).toEqual({
+      model: "azure/fallback",
+      reasoningEffort: "medium",
+    })
   })
 })
 
