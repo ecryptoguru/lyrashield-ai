@@ -58,10 +58,20 @@ async function fetchUrl(
   url: string,
   fetchFn?: typeof fetch,
   resolver?: HostResolver
-): Promise<{ html: string; status: number; headers: Record<string, string> } | null> {
+): Promise<{
+  html: string
+  status: number
+  headers: Record<string, string>
+  finalUrl: string
+} | null> {
   const result = await safeFetch(url, { fetchFn, resolver })
   if (!result) return null
-  return { html: result.html, status: result.status, headers: result.headers }
+  return {
+    html: result.html,
+    status: result.status,
+    headers: result.headers,
+    finalUrl: result.finalUrl,
+  }
 }
 
 function detectSupabaseAnonKey(html: string): EngineVulnerability[] {
@@ -394,6 +404,97 @@ function detectOpenRedirects(html: string): EngineVulnerability[] {
   return findings
 }
 
+function detectInsecureTransport(targetUrl: string): EngineVulnerability[] {
+  try {
+    if (new URL(targetUrl).protocol !== "http:") return []
+  } catch {
+    return []
+  }
+  return [
+    makeFinding(
+      "url-insecure-http",
+      "Application is served over insecure HTTP",
+      "HIGH",
+      "CWE-319",
+      "The target is reachable over cleartext HTTP, allowing network attackers to read or modify requests and responses.",
+      "Redirect all HTTP traffic to HTTPS and enable HSTS after confirming every supported subdomain is HTTPS-ready."
+    ),
+  ]
+}
+
+function detectInsecureCookies(headers: Record<string, string>): EngineVulnerability[] {
+  const rawCookies = headers["set-cookie"]
+  if (!rawCookies) return []
+
+  const cookies = rawCookies.split(/\n|,(?=[^;,=\s]+=[^;,]+)/)
+  const findings: EngineVulnerability[] = []
+  for (const [index, cookie] of cookies.entries()) {
+    const name = cookie.split("=", 1)[0]?.trim() ?? `cookie-${index + 1}`
+    const looksSensitive = /session|auth|token|jwt|sid/i.test(name)
+    if (!looksSensitive) continue
+
+    const missing = [
+      !/;\s*secure(?:;|$)/i.test(cookie) ? "Secure" : null,
+      !/;\s*httponly(?:;|$)/i.test(cookie) ? "HttpOnly" : null,
+      !/;\s*samesite=(?:strict|lax|none)(?:;|$)/i.test(cookie) ? "SameSite" : null,
+    ].filter(Boolean) as string[]
+    if (missing.length === 0) continue
+
+    findings.push(
+      makeFinding(
+        `url-insecure-cookie-${index}`,
+        `Sensitive cookie ${name} is missing ${missing.join(", ")}`,
+        missing.includes("Secure") || missing.includes("HttpOnly") ? "HIGH" : "MEDIUM",
+        missing.includes("Secure")
+          ? "CWE-614"
+          : missing.includes("HttpOnly")
+            ? "CWE-1004"
+            : "CWE-1275",
+        `The ${name} cookie appears to carry authentication or session state but is missing required browser protections: ${missing.join(", ")}.`,
+        "Set Secure, HttpOnly, and an explicit SameSite policy on every authentication and session cookie."
+      )
+    )
+  }
+  return findings
+}
+
+function detectVerboseErrors(html: string): EngineVulnerability[] {
+  const patterns = [
+    /Traceback \(most recent call last\)/i,
+    /\bat\s+[\w.$<>]+\s+\([^\n()]+:\d+:\d+\)/,
+    /SQLSTATE\[[A-Z0-9]+\]/i,
+    /Whoops, looks like something went wrong/i,
+  ]
+  if (!patterns.some((pattern) => pattern.test(html))) return []
+  return [
+    makeFinding(
+      "url-verbose-error",
+      "Verbose error or stack trace exposed",
+      "MEDIUM",
+      "CWE-209",
+      "The response exposes a framework, database, or application stack trace that can reveal internal paths and implementation details.",
+      "Return a generic error response to users, disable production debug mode, and send detailed errors only to access-controlled monitoring."
+    ),
+  ]
+}
+
+function detectSourceMapExposure(html: string): EngineVulnerability[] {
+  const hasSourceMap =
+    /sourceMappingURL\s*=\s*[^\s"'<>]+\.map(?:\?[^\s"'<>]*)?/i.test(html) ||
+    /(?:src|href)=["'][^"']+\.map(?:\?[^"']*)?["']/i.test(html)
+  if (!hasSourceMap) return []
+  return [
+    makeFinding(
+      "url-source-map-exposed",
+      "Source map referenced by production page",
+      "LOW",
+      "CWE-540",
+      "The production response references a JavaScript or CSS source map that may expose original source, internal routes, comments, or embedded configuration.",
+      "Do not publish production source maps publicly. Upload them privately to the error-monitoring provider or require authenticated access."
+    ),
+  ]
+}
+
 export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerability[]> {
   const { targetUrl, repoPath, fetchFn, resolver } = config
   logger.info("Starting AI-builder-aware URL scan", { targetUrl })
@@ -404,7 +505,7 @@ export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerabilit
     return []
   }
 
-  const { html, headers } = result
+  const { html, headers, finalUrl } = result
   const allFindings: EngineVulnerability[] = []
 
   allFindings.push(...detectSupabaseAnonKey(html))
@@ -416,6 +517,10 @@ export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerabilit
   allFindings.push(...(await detectMissingWebhookVerification(html, repoPath)))
   allFindings.push(...detectAiBuilderDefaults(html))
   allFindings.push(...detectOpenRedirects(html))
+  allFindings.push(...detectInsecureTransport(finalUrl))
+  allFindings.push(...detectInsecureCookies(headers))
+  allFindings.push(...detectVerboseErrors(html))
+  allFindings.push(...detectSourceMapExposure(html))
 
   logger.info("URL scan complete", { targetUrl, findings: allFindings.length })
   return allFindings

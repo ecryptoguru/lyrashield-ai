@@ -55,6 +55,10 @@ vi.mock("./scanners/url-scanner", () => ({
   ]),
 }))
 
+vi.mock("./scanners/agent-config-scanner", () => ({
+  scanAgentConfig: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock("fs/promises", () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
 }))
@@ -63,6 +67,7 @@ import { runScannerOrchestrator } from "./scanner-orchestrator"
 import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
+import { scanAgentConfig } from "./scanners/agent-config-scanner"
 import { addScanEvent } from "@lyrashield/db"
 import type { EngineVulnerability } from "./output-parser"
 
@@ -107,11 +112,13 @@ describe("runScannerOrchestrator", () => {
     expect(scanSca).toHaveBeenCalled()
     expect(scanSecrets).toHaveBeenCalled()
     expect(scanUrl).toHaveBeenCalled()
+    expect(scanAgentConfig).toHaveBeenCalled()
 
     expect(result.engineFindings.length).toBe(1)
     expect(result.scaFindings.length).toBe(1)
     expect(result.secretsFindings.length).toBe(1)
     expect(result.urlFindings.length).toBe(1)
+    expect(result.agentConfigFindings).toEqual([])
     expect(result.allFindings.length).toBe(4)
   })
 
@@ -178,6 +185,7 @@ describe("runScannerOrchestrator", () => {
     })
     expect(scanSca).not.toHaveBeenCalled()
     expect(scanSecrets).not.toHaveBeenCalled()
+    expect(scanAgentConfig).not.toHaveBeenCalled()
     expect(result.scaFindings).toEqual([])
     expect(result.secretsFindings).toEqual([])
     expect(addScanEvent).toHaveBeenCalledWith(

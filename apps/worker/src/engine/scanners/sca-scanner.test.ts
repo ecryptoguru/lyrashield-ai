@@ -139,6 +139,45 @@ describe("scanSca", () => {
     }
   })
 
+  it("parses Maven pom.xml dependencies", async () => {
+    const dir = await setupRepo({
+      "pom.xml": `
+        <project><dependencies><dependency>
+          <groupId>org.example</groupId><artifactId>unsafe-lib</artifactId><version>1.2.3</version>
+        </dependency></dependencies></project>`,
+    })
+    const fetchFn = makeMockFetch({
+      "org.example:unsafe-lib@1.2.3": [{ id: "GHSA-maven", summary: "Maven issue" }],
+    })
+
+    try {
+      const findings = await scanSca({ repoPath: dir, workspaceDir: dir, fetchFn })
+      expect(findings.some((finding) => finding.title.includes("org.example:unsafe-lib"))).toBe(
+        true
+      )
+    } finally {
+      cleanupRepo()
+    }
+  })
+
+  it("parses Gradle dependencies", async () => {
+    const dir = await setupRepo({
+      "build.gradle": `dependencies {\n  implementation 'org.example:unsafe-lib:2.0.0'\n}`,
+    })
+    const fetchFn = makeMockFetch({
+      "org.example:unsafe-lib@2.0.0": [{ id: "GHSA-gradle", summary: "Gradle issue" }],
+    })
+
+    try {
+      const findings = await scanSca({ repoPath: dir, workspaceDir: dir, fetchFn })
+      expect(findings.some((finding) => finding.title.includes("org.example:unsafe-lib"))).toBe(
+        true
+      )
+    } finally {
+      cleanupRepo()
+    }
+  })
+
   it("handles OSV API failures gracefully", async () => {
     const dir = await setupRepo({
       "package.json": JSON.stringify({ dependencies: { lodash: "4.17.20" } }),

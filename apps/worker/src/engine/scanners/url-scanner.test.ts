@@ -170,6 +170,66 @@ describe("scanUrl", () => {
     expect(stripeFinding!.severity).toBe("HIGH")
   })
 
+  it("detects cleartext HTTP transport", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse("<html></html>"))
+    const findings = await scanUrl({
+      targetUrl: "http://example.com",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
+    expect(findings.find((finding) => finding.id === "url-insecure-http")?.cwe).toBe("CWE-319")
+  })
+
+  it("detects missing protections on sensitive cookies without storing the value", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse("<html></html>", { "set-cookie": "sessionToken=super-secret-value; Path=/" })
+    )
+    const findings = await scanUrl({
+      targetUrl: "https://example.com",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
+    const cookieFinding = findings.find((finding) => finding.id === "url-insecure-cookie-0")
+    expect(cookieFinding?.title).toContain("Secure, HttpOnly, SameSite")
+    expect(JSON.stringify(cookieFinding)).not.toContain("super-secret-value")
+  })
+
+  it("does not report a fully protected sensitive cookie", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse("<html></html>", {
+        "set-cookie": "sessionToken=value; Path=/; Secure; HttpOnly; SameSite=Lax",
+      })
+    )
+    const findings = await scanUrl({
+      targetUrl: "https://example.com",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
+    expect(findings.some((finding) => finding.id.startsWith("url-insecure-cookie"))).toBe(false)
+  })
+
+  it("detects exposed stack traces", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse("<pre>Error: failed\n at handler (/srv/app/routes/users.js:42:7)</pre>")
+    )
+    const findings = await scanUrl({
+      targetUrl: "https://example.com",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
+    expect(findings.find((finding) => finding.id === "url-verbose-error")?.cwe).toBe("CWE-209")
+  })
+
+  it("detects production source-map references", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse('<script src="/assets/app.js.map"></script>'))
+    const findings = await scanUrl({
+      targetUrl: "https://example.com",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
+    expect(findings.find((finding) => finding.id === "url-source-map-exposed")?.cwe).toBe("CWE-540")
+  })
+
   it("returns empty array when fetch fails", async () => {
     mockFetch.mockRejectedValueOnce(new Error("Network error"))
     const findings = await scanUrl({

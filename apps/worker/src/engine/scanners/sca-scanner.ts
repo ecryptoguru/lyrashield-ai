@@ -222,6 +222,41 @@ function parseComposerJson(content: string, filePath: string): Dependency[] {
   }
 }
 
+function parsePomXml(content: string, filePath: string): Dependency[] {
+  const dependencies: Dependency[] = []
+  for (const match of content.matchAll(/<dependency>\s*([\s\S]*?)\s*<\/dependency>/g)) {
+    const block = match[1] ?? ""
+    const groupId = /<groupId>\s*([^<\s]+)\s*<\/groupId>/.exec(block)?.[1]
+    const artifactId = /<artifactId>\s*([^<\s]+)\s*<\/artifactId>/.exec(block)?.[1]
+    const version = /<version>\s*([^<\s]+)\s*<\/version>/.exec(block)?.[1]
+    if (!groupId || !artifactId || !version || version.includes("${")) continue
+    dependencies.push({
+      name: `${groupId}:${artifactId}`,
+      version,
+      ecosystem: "Maven",
+      filePath,
+    })
+  }
+  return dependencies
+}
+
+function parseGradle(content: string, filePath: string): Dependency[] {
+  const dependencies: Dependency[] = []
+  const pattern =
+    /^\s*(?:api|implementation|compileOnly|runtimeOnly|testImplementation|testRuntimeOnly)\s*(?:\(\s*)?["']([^:"']+):([^:"']+):([^"']+)["']/gm
+  for (const match of content.matchAll(pattern)) {
+    const [, groupId, artifactId, version] = match
+    if (!groupId || !artifactId || !version || version.includes("$")) continue
+    dependencies.push({
+      name: `${groupId}:${artifactId}`,
+      version,
+      ecosystem: "Maven",
+      filePath,
+    })
+  }
+  return dependencies
+}
+
 async function parseDependencyFile(filePath: string, repoPath: string): Promise<Dependency[]> {
   const fullPath = join(repoPath, filePath)
   try {
@@ -239,6 +274,10 @@ async function parseDependencyFile(filePath: string, repoPath: string): Promise<
         return parseGemfile(content, filePath)
       case "composer.json":
         return parseComposerJson(content, filePath)
+      case "pom.xml":
+        return parsePomXml(content, filePath)
+      case "build.gradle":
+        return parseGradle(content, filePath)
       default:
         return []
     }

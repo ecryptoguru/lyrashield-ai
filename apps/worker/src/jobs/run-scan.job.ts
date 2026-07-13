@@ -1,6 +1,7 @@
 import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
+import { buildVibeSecurityInstruction, summarizeVibeSecurityCoverage } from "@lyrashield/security"
 import {
   updateScanStatus,
   addScanEvent,
@@ -114,6 +115,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             repoFullName: target.repoFullName,
             name: target.name,
           },
+          instruction: buildVibeSecurityInstruction(goal),
           maxBudgetUsd,
         },
         scanId,
@@ -180,17 +182,35 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           scanId,
           "scanners_complete",
           "info",
-          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
+          `Scan phases complete: engine=${orchestratorResult.engineFindings.length}, sca=${orchestratorResult.scaFindings.length}, secrets=${orchestratorResult.secretsFindings.length}, url=${orchestratorResult.urlFindings.length}, agent_config=${orchestratorResult.agentConfigFindings.length}, false_positives_filtered=${orchestratorResult.filteredFalsePositives}`,
           {
             engine: orchestratorResult.engineFindings.length,
             sca: orchestratorResult.scaFindings.length,
             secrets: orchestratorResult.secretsFindings.length,
+            url: orchestratorResult.urlFindings.length,
+            agentConfig: orchestratorResult.agentConfigFindings.length,
             falsePositivesFiltered: orchestratorResult.filteredFalsePositives,
             stats: orchestratorResult.stats,
           }
         )
       } catch (eventErr) {
         log.warn("Failed to persist scanners_complete event", {
+          scanId,
+          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+        })
+      }
+
+      const coverage = summarizeVibeSecurityCoverage(orchestratorResult.allFindings)
+      try {
+        await addScanEvent(
+          scanId,
+          "coverage_contract",
+          "info",
+          `Vibe Security 50: ${coverage.machineControlsRequested} machine-testable controls requested where applicable; ${coverage.matchedControlRanks.length} produced findings; ${coverage.evidenceControlsRequired} require deployment or human evidence`,
+          coverage
+        )
+      } catch (eventErr) {
+        log.warn("Failed to persist coverage_contract event", {
           scanId,
           error: eventErr instanceof Error ? eventErr.message : String(eventErr),
         })
