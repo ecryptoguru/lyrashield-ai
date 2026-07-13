@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
+vi.mock("@lyrashield/config", () => ({ env: { SCANNER_PHASE_TIMEOUT_MS: 600_000 } }))
 
 vi.mock("@lyrashield/db", () => ({ addScanEvent: vi.fn().mockResolvedValue(undefined) }))
 
@@ -202,6 +203,29 @@ describe("runScannerOrchestrator", () => {
         engineFindings,
       })
     ).rejects.toThrow("OSV API down")
+  })
+
+  it("fails the scanner phase and records an event when the phase times out", async () => {
+    vi.mocked(scanSca).mockImplementationOnce(() => new Promise(() => {}))
+    await expect(
+      runScannerOrchestrator({
+        scanId: "scan-timeout",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        target: { id: "target-1", type: "REPO", name: "Test" },
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        engineFindings: [],
+        scannerPhaseTimeoutMs: 1,
+      })
+    ).rejects.toThrow("Scanner phase timed out")
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-timeout",
+      "scanner",
+      "error",
+      "Scanner phase timed out",
+      { timeoutMs: 1 }
+    )
   })
 
   it("tags detector provenance so secret findings receive the score cap", async () => {

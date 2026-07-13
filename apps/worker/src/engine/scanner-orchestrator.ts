@@ -1,6 +1,7 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
+import { env } from "@lyrashield/config"
 import type { EngineVulnerability } from "./output-parser"
 import { generateDedupeKey } from "./output-parser"
 import {
@@ -30,6 +31,7 @@ export interface ScannerOrchestratorConfig {
   mode: string
   engineFindings: EngineVulnerability[]
   workspaceDir?: string
+  scannerPhaseTimeoutMs?: number
 }
 
 export interface ScannerOrchestratorResult {
@@ -42,16 +44,11 @@ export interface ScannerOrchestratorResult {
   filteredFalsePositives: number
 }
 
-const SCANNER_PHASE_TIMEOUT_MS = Number.parseInt(
-  process.env.SCANNER_PHASE_TIMEOUT_MS ?? "600000",
-  10
-)
-
-async function withScannerPhaseTimeout<T>(scanId: string, phase: Promise<T>): Promise<T> {
-  const timeoutMs =
-    Number.isFinite(SCANNER_PHASE_TIMEOUT_MS) && SCANNER_PHASE_TIMEOUT_MS > 0
-      ? SCANNER_PHASE_TIMEOUT_MS
-      : 600_000
+async function withScannerPhaseTimeout<T>(
+  scanId: string,
+  phase: Promise<T>,
+  timeoutMs: number
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
@@ -124,6 +121,7 @@ export async function runScannerOrchestrator(
   config: ScannerOrchestratorConfig
 ): Promise<ScannerOrchestratorResult> {
   const { scanId, targetId, target, engineFindings, workspaceDir } = config
+  const scannerPhaseTimeoutMs = config.scannerPhaseTimeoutMs ?? env.SCANNER_PHASE_TIMEOUT_MS
 
   const scanWorkspace = workspaceDir ?? join(process.cwd(), "lyrashield_runs", scanId)
   const absWorkspace = resolve(scanWorkspace)
@@ -160,7 +158,8 @@ export async function runScannerOrchestrator(
       targetUrl
         ? runUrlScan(scanId, targetUrl, absWorkspace)
         : Promise.resolve([] as EngineVulnerability[]),
-    ])
+    ]),
+    scannerPhaseTimeoutMs
   )
 
   // Normalize each category separately with the dedupe key function

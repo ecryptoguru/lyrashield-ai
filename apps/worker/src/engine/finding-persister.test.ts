@@ -18,6 +18,8 @@ vi.mock("./evidence-storage", () => ({
 import { prisma } from "@lyrashield/db"
 import { persistFindings } from "./finding-persister"
 import type { NormalizedFinding } from "./normalizer"
+import { uploadEvidence } from "./evidence-storage"
+import { generateDedupeKey } from "./output-parser"
 
 describe("persistFindings", () => {
   beforeEach(() => vi.clearAllMocks())
@@ -49,6 +51,41 @@ describe("persistFindings", () => {
 
     expect(prisma.finding.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ category: "Secrets", severity: "CRITICAL", verified: true }),
+    })
+  })
+
+  it("backfills evidence on retry/reopen and uses the checksum uniqueness guard", async () => {
+    const vulnerability = {
+      id: "vuln-1",
+      title: "Reflected XSS",
+      severity: "high",
+      timestamp: "2026-07-14T00:00:00Z",
+      cwe: "CWE-79",
+      poc_description: "safe proof",
+    }
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([
+      { id: "finding-1", dedupeKey: generateDedupeKey(vulnerability, "target-1"), status: "FIXED" },
+    ] as never)
+    vi.mocked(prisma.finding.update).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(uploadEvidence).mockResolvedValue({
+      storageUri: "s3://bucket/evidence",
+      checksum: "sha256-checksum",
+      encryptionKeyRef: "vault://test",
+    })
+
+    await persistFindings({
+      scanId: "scan-2",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: [vulnerability],
+    })
+
+    expect(prisma.finding.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "OPEN", fixedAt: null }) })
+    )
+    expect(prisma.evidence.createMany).toHaveBeenCalledWith({
+      data: expect.objectContaining({ findingId: "finding-1", checksum: "sha256-checksum" }),
+      skipDuplicates: true,
     })
   })
 })
