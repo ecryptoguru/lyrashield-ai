@@ -34,6 +34,7 @@ Scorecard guardrails (non-negotiable, enforced in code):
 - The public card shows only: grade, scope line, scan date, methodology version, resolved-findings count. Never open findings, severities, CWEs, or target URLs.
 - Copy is scope-qualified and states the score "is not a security guarantee." The scoring methodology is fully public (founder decision #1).
 - Sharing is opt-in, role-restricted, audit-logged, revocable, and carries a supersession notice once a newer scan exists.
+- Distribution supports premium grade and verified-fix cards, native/channel sharing, image downloads, and README badges. Growth measurement is limited to coarse allowlisted events; social renders never count as human views and analytics never receive target, repository, finding, IP, user-agent, or caption data.
 
 ## Differentiation
 

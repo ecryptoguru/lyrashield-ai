@@ -22,6 +22,7 @@ vi.mock("./client", () => ({
       update: vi.fn(),
     },
     scorecardShare: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    scorecardEvent: { createMany: vi.fn() },
     usageRecord: { upsert: vi.fn() },
     user: { findUnique: vi.fn() },
     auditLog: { create: vi.fn() },
@@ -35,6 +36,7 @@ import {
   attributeReferral,
   getPublicScorecard,
   completeScanWithScore,
+  recordScorecardEvent,
 } from "./score-service"
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>> & {
@@ -118,14 +120,38 @@ describe("score-service", () => {
         snapshot: { targetId: "target-1", computedAt: new Date("2026-07-01") },
       })
       mockPrisma.scoreSnapshot.findFirst.mockResolvedValue({ id: "newer" })
-      mockPrisma.scorecardShare.update.mockResolvedValue({})
       const result = await getPublicScorecard("slug")
       expect(result).toMatchObject({ referralCode: "CODE2345", superseded: true })
+      expect(mockPrisma.scorecardShare.update).not.toHaveBeenCalled()
     })
 
     it("returns null for unknown, revoked, or expired shares", async () => {
       mockPrisma.scorecardShare.findFirst.mockResolvedValue(null)
       expect(await getPublicScorecard("nope")).toBeNull()
+    })
+  })
+
+  describe("recordScorecardEvent", () => {
+    it("deduplicates human views and increments the legacy counter only once", async () => {
+      mockPrisma.scorecardShare.findFirst.mockResolvedValue({ id: "share-1" })
+      mockPrisma.scorecardEvent.createMany.mockResolvedValue({ count: 1 })
+      mockPrisma.scorecardShare.update.mockResolvedValue({})
+      mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+
+      const result = await recordScorecardEvent("slug", {
+        eventType: "VIEW",
+        visitorId: "visitor-1",
+        source: "public",
+      })
+
+      expect(result).toEqual({ recorded: true })
+      expect(mockPrisma.scorecardEvent.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skipDuplicates: true })
+      )
+      expect(mockPrisma.scorecardShare.update).toHaveBeenCalledWith({
+        where: { id: "share-1" },
+        data: { viewCount: { increment: 1 } },
+      })
     })
   })
 

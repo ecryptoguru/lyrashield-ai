@@ -5292,6 +5292,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - Referrals: per-user codes, cookie capture on public scorecards, attribution restricted to newly created accounts (no retroactive rewards), activation-gated dual-sided rewards of 30 agent minutes via idempotent `UsageRecord` entries (redeemable at billing GA), all transitions audit-logged.
 - Phase 0 waitlist referral ladder on the marketing site (D1 migration `0003`), preserving the non-leaking identical-response contract for duplicate and honeypot submissions.
 - Positioning guardrails hold: scorecard copy is scope-qualified, links the public methodology, and states the score "is not a security guarantee."
+- Social distribution is implemented: dynamic scorecard metadata; grade/fix card variants in link-preview, square, and feed formats; native and channel-specific sharing; downloadable images; revocable README badges; privacy-safe deduplicated funnel events; channel-preserving referral attribution; public conversion CTA; dashboard share/referral counts; waitlist share actions; and client-handoff report copy. Individual cards remain `noindex`; the public methodology is the SEO authority.
 
 ## C2. Phase 1 gaps and release gates
 

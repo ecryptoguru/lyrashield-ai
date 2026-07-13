@@ -673,8 +673,27 @@ model ScorecardShare {
 
   snapshot       ScoreSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   referralCode   ReferralCode? @relation(fields: [referralCodeId], references: [id], onDelete: SetNull)
+  events         ScorecardEvent[]
 
   @@index([snapshotId])
+}
+
+model ScorecardEvent {
+  id          String   @id @default(cuid())
+  shareId     String
+  eventType   String
+  channel     String   @default("")
+  variant     String   @default("grade")
+  source      String   @default("unknown")
+  visitorHash String
+  dayBucket   DateTime
+  createdAt   DateTime @default(now())
+
+  share       ScorecardShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  @@unique([shareId, eventType, channel, visitorHash, dayBucket])
+  @@index([shareId, createdAt])
+  @@index([eventType, createdAt])
 }
 
 model AuditLog {

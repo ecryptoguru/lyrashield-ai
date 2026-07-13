@@ -87,7 +87,16 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
         <span> on X</span>
       )} in the meantime.
     </p>
-    <p id="waitlist-referral" class="mt-3 hidden text-sm text-text-muted"></p>
+    <p id="waitlist-position" class="mt-3 hidden text-sm font-medium text-text"></p>
+    <p id="waitlist-referral" class="mt-2 hidden text-sm text-text-muted">
+      Move up when a friend joins from your link.
+    </p>
+    <div id="waitlist-share-actions" class="mt-4 hidden flex-wrap justify-center gap-2" aria-label="Share your referral link">
+      <button type="button" data-waitlist-share="copy" class="rounded-lg border border-border px-3 py-2 text-xs font-medium text-text hover:border-accent">Copy link</button>
+      <button type="button" data-waitlist-share="linkedin" class="rounded-lg border border-border px-3 py-2 text-xs font-medium text-text hover:border-accent">LinkedIn</button>
+      <button type="button" data-waitlist-share="x" class="rounded-lg border border-border px-3 py-2 text-xs font-medium text-text hover:border-accent">X</button>
+      <button type="button" data-waitlist-share="whatsapp" class="rounded-lg border border-border px-3 py-2 text-xs font-medium text-text hover:border-accent">WhatsApp</button>
+    </div>
   </div>
 </form>
 
@@ -124,6 +133,33 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
     const formFields = document.getElementById("form-fields")
     const originalButtonText = submitButton?.textContent?.trim() || "Join the waitlist"
     let formStarted = false
+    let waitlistShareLink = ""
+
+    document.querySelectorAll<HTMLButtonElement>("[data-waitlist-share]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (!waitlistShareLink) return
+        const channel = button.dataset.waitlistShare || "copy"
+        const text = `I'm joining LyraShield AI early access to check AI-built apps before launch. ${waitlistShareLink}`
+        if (channel === "copy") {
+          try {
+            await navigator.clipboard.writeText(waitlistShareLink)
+            button.textContent = "Copied"
+          } catch {
+            button.textContent = "Copy unavailable"
+          }
+        } else {
+          const destinations = {
+            linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(waitlistShareLink)}`,
+            x: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`,
+            whatsapp: `https://wa.me/?text=${encodeURIComponent(text)}`,
+          }
+          window.open(destinations[channel as keyof typeof destinations], "_blank", "noopener,noreferrer")
+        }
+        if (window.posthog?.__loaded) {
+          window.posthog.capture("waitlist_referral_share", { channel })
+        }
+      })
+    })
 
     emailInput?.addEventListener("focus", () => {
       if (!formStarted) {
@@ -200,9 +236,24 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
         }
         const referralEl = document.getElementById("waitlist-referral")
         if (referralEl && result.referralCode) {
-          const link = `${window.location.origin}/?ref=${result.referralCode}`
-          referralEl.textContent = `Move up the waitlist: share ${link}`
+          waitlistShareLink = `${window.location.origin}/?ref=${result.referralCode}`
           referralEl.classList.remove("hidden")
+          document.getElementById("waitlist-share-actions")?.classList.remove("hidden")
+          document.getElementById("waitlist-share-actions")?.classList.add("flex")
+          const positionResponse = await fetch(
+            `/api/waitlist/position?code=${encodeURIComponent(result.referralCode)}`
+          )
+          if (positionResponse.ok) {
+            const position = (await positionResponse.json()) as {
+              position: number
+              referrals: number
+            }
+            const positionEl = document.getElementById("waitlist-position")
+            if (positionEl) {
+              positionEl.textContent = `You're #${position.position} on the waitlist${position.referrals ? ` · ${position.referrals} referral${position.referrals === 1 ? "" : "s"}` : ""}.`
+              positionEl.classList.remove("hidden")
+            }
+          }
         }
 
         if (window.posthog?.__loaded) {

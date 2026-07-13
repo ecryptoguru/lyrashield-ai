@@ -51,13 +51,18 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
           shareEligible: true,
           expiresAt: true,
           shares: {
-            where: { revokedAt: null },
+            where: { revokedAt: null, createdById: session.userId },
             orderBy: { createdAt: "desc" },
             take: 1,
             select: {
               id: true,
               slug: true,
-              referralCode: { select: { code: true } },
+              publicPayload: true,
+              viewCount: true,
+              _count: { select: { events: { where: { eventType: "SHARE" } } } },
+              referralCode: {
+                select: { code: true, _count: { select: { attributions: true } } },
+              },
             },
           },
         },
@@ -152,6 +157,14 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
                   ? {
                       id: latestScore.shares[0].id,
                       slug: latestScore.shares[0].slug,
+                      resolvedFindings: (
+                        latestScore.shares[0].publicPayload as unknown as {
+                          resolvedFindings: number
+                        }
+                      ).resolvedFindings,
+                      views: latestScore.shares[0].viewCount,
+                      shareHandoffs: latestScore.shares[0]._count.events,
+                      referredSignups: latestScore.shares[0].referralCode?._count.attributions ?? 0,
                       url: latestScore.shares[0].referralCode?.code
                         ? `/score/${latestScore.shares[0].slug}?ref=${latestScore.shares[0].referralCode.code}`
                         : `/score/${latestScore.shares[0].slug}`,

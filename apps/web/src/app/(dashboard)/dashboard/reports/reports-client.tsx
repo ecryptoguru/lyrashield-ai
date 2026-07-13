@@ -169,6 +169,10 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
     }
   }
 
+  const handoffMessage = shareUrl
+    ? `Security review ready for your review. This private link expires in 30 days: ${shareUrl}`
+    : ""
+
   if (loading && reports.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
@@ -264,19 +268,37 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
 
       {shareUrl && (
         <Card className="mb-4 p-4">
-          <div className="flex items-center justify-between gap-4" role="status">
+          <div className="flex flex-wrap items-center justify-between gap-4" role="status">
             <div className="min-w-0 flex-1">
               <p className="mb-1 text-sm font-medium">Share link generated (valid 30 days):</p>
               <p className="text-muted-foreground truncate font-mono text-sm">{shareUrl}</p>
             </div>
-            <Button size="sm" variant="secondary" onClick={copyToClipboard}>
-              {copied ? (
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <Copy className="h-4 w-4" aria-hidden="true" />
-              )}
-              {copied ? "Copied" : "Copy"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" onClick={copyToClipboard}>
+                {copied ? (
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Copy className="h-4 w-4" aria-hidden="true" />
+                )}
+                {copied ? "Copied" : "Copy link"}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  void navigator.clipboard.writeText(handoffMessage)
+                  setCopied(true)
+                }}
+              >
+                Copy client handoff
+              </Button>
+              <a
+                className="hover:bg-accent bg-card inline-flex h-8 items-center rounded-lg border px-3 text-xs font-medium"
+                href={`mailto:?subject=${encodeURIComponent("Security review ready")}&body=${encodeURIComponent(handoffMessage)}`}
+              >
+                Email client
+              </a>
+            </div>
           </div>
         </Card>
       )}

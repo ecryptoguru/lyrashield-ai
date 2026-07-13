@@ -2,14 +2,20 @@
 
 import { useEffect } from "react"
 
-export function ReferralCapture({ code }: { code: string | undefined }) {
+export function ReferralCapture({
+  code,
+  source,
+}: {
+  code: string | undefined
+  source: string | undefined
+}) {
   useEffect(() => {
     if (!code) return
     void fetch("/api/referrals/capture", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, source }),
     })
-  }, [code])
+  }, [code, source])
   return null
 }
