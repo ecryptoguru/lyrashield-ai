@@ -1,4 +1,4 @@
-> **CURRENT SOURCE OF TRUTH — 2026-07-13:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
+> **CURRENT SOURCE OF TRUTH — 2026-07-14:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
 > The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, the Vitest suite, and the Playwright suite (current counts: see C0). Core auth (with email verification), tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, the GitHub diff gate, and the LyraShield Score / public scorecard / referral / social-distribution layer are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, real-domain sharing validation, and marketing gates.
 
@@ -5222,16 +5222,16 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 
 # PART C — Current Implementation and Release Readiness
 
-> **Status date:** 2026-07-13. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
+> **Status date:** 2026-07-14. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
 
 ## C0. Verified repository baseline
 
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
-- Current automated gate: lint, typecheck, production build, **689 passing Vitest tests in 65 files**, and **2 passing Playwright Chromium tests**.
-- Current product surface: **22 page route files** and **41 API route files** in `apps/web`.
-- Current data surface: **35 Prisma models**, **14 enums**, and **12 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
+- Current automated gate: lint, typecheck, production build, **709 passing Vitest tests in 68 files**, and **2 passing Playwright Chromium tests**.
+- Current product surface: **22 page route files** and **40 API route files** in `apps/web`.
+- Current data surface: **35 Prisma models**, **14 enums**, and **16 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
 - Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
 - Current Docker proof: the web/worker stack and engine-bearing worker image build; the CLI reports `1.0.4.post1`; configuration failure occurs before sandbox pull when model credentials are missing.
@@ -5254,26 +5254,26 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - GitHub App installation, repository discovery, signed webhook handling, delivery idempotency, installation token caching, pagination, and retry/backoff.
 - Scan creation, target-level serialization, preflight, queueing, lifecycle transitions, cancellation, retry guards, scan events, and scan-detail polling.
 - Finding normalization, CWE/OWASP enrichment, CVSS estimation, confidence and false-positive-risk scoring, deduplication, persistence, filtering, and plain-language explanations.
-- Evidence upload: PoC and code-location artifacts are uploaded to configured S3-compatible storage with `AES256` SSE and a SHA-256 checksum. Missing storage or upload failure fails closed; `Evidence.encryptionKeyRef` and `checksum` are validated before persistence.
-- Fix proposals, approval-aware GitHub PR creation, retests, HTML/downloadable reports, revocable shared reports, and launch-readiness verdicts.
-- Email, Slack, Discord, and in-app notification plumbing plus recurring scan schedules with atomic claims.
+- Evidence upload: PoC and code-location artifacts are uploaded to configured S3-compatible storage with `AES256` SSE and a SHA-256 checksum. Missing storage or upload failure fails closed; `Evidence.encryptionKeyRef` and `checksum` are validated before persistence. Retries are idempotent on finding/checksum.
+- Fix proposals, approval-aware GitHub PR creation, retests, immutable creation-time report snapshots, revocable shared reports, and launch-readiness verdicts computed from unpaginated database aggregates.
+- Email, Slack, Discord, and in-app notification plumbing plus recurring scan schedules with atomic claims. Bulk notification reads are scoped to both workspace and user.
 
 ### C1.3 Detection and engine coverage
 
 - Thin-fork engine adapter with explicit environment precedence, telemetry off by default, bounded subprocess execution, SIGTERM-to-SIGKILL cancellation, and current/legacy artifact discovery.
-- SCA for supported dependency manifests, including nested workspaces, with OSV lookup and result normalization.
-- Secret scanning with redaction and false-positive filtering.
+- SCA for supported dependency manifests, including nested workspaces, with bounded symlink-safe discovery, deduplicated/batched OSV lookup, and result normalization.
+- Secret scanning with bounded symlink-safe discovery, redaction, and false-positive filtering. Repository-only phases emit explicit skips for non-repository targets.
 - AI-builder-aware URL checks, security-header/CORS checks, redirect and DNS revalidation, and shared SSRF-safe fetch utilities.
 - GitHub Action diff gate with secret, dependency, and code checks plus SARIF output.
 - Hardened prompt-injection detection and sanitization for agent-controlled inputs, with `normalizeInput()` (zero-width characters, NFKC normalization, HTML entity decoding) and an expanded/tightened pattern set.
-- Azure AI / GPT 5.6 routing is wired through `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, and the fallback `LYRASHIELD_LLM`, sharing `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION`/`LLM_API_VERSION`. Safe/Quick/Standard select Luna at medium reasoning; Deep/Custom select Terra at high. Default dollar caps are $1.20/$1.20/$3.20/$15/$15, with positive workspace-policy overrides.
+- Azure AI / GPT 5.6 routing is wired through `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, and the fallback `LYRASHIELD_LLM`, sharing `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION`/`LLM_API_VERSION`. Safe/Quick/Standard select Luna at medium reasoning; Deep/Custom select Terra at high. Default dollar caps are $1.20/$1.20/$3.20/$15/$15, with positive workspace-policy overrides clamped to `PLATFORM_MAX_SCAN_BUDGET_USD` (default $50). Provider-reported overages are persisted and warned after execution.
 
 ### C1.4 Agent-native surfaces
 
 - Headless Agent Action Layer with six registered actions: list targets, run scan, get scan status, list findings, get finding, and explain finding.
 - Permission enforcement, workspace matching, signed service tokens, audit logging, queue error handling, and exact `actionName` plus input-hash approval verification.
-- Approval list/approve/deny APIs and an `AgentApproval` persistence model protected by RLS.
-- MCP package with real API-backed tools and stdio JSON-RPC transport.
+- Approval list/approve/deny APIs and an `AgentApproval` persistence model protected by RLS. Execution uses an atomic single-use transition and retains execution time/result without reopening the approval on result-recording failure.
+- MCP package with real API-backed tools and stdio JSON-RPC transport. Mutating tools require approval on the controlling terminal; headless/no-TTY invocation fails closed while stdout remains reserved for JSON-RPC.
 
 ### C1.5 User experience and marketing
 
@@ -5298,13 +5298,20 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - Growth measurement is deliberately narrow: `ScorecardEvent` accepts only `VIEW`/`SHARE` plus allowlisted channel, variant, and source values. It stores a one-way session hash and UTC day bucket, never target/repository/finding data, raw IP, user agent, or user-authored caption. Card/image crawlers are not human views; human events deduplicate by share/event/channel/session/day.
 - Referral source survives the public scorecard → sign-up → onboarding claim path in a separate HttpOnly cookie. Attribution remains new-account-only, publisher-specific, no-self-referral, and activation-gated; sharing a scorecard is not itself a rewarded conversion.
 
+### C1.7 Deep Review v3 remediation (2026-07-14, PRs #54–#57)
+
+- **Approval/account/proxy boundaries (PR #54):** approvals are consumed through an atomic single-use transition; account deletion anonymizes referral and scorecard attribution; production requires an explicitly configured trusted proxy header; growth-loop persistence is statically kept behind the owning score service.
+- **Pipeline/MCP reliability (PR #55):** repository scanners skip non-repository targets explicitly; dependency calls, filesystem walks, scanner phases, and worker shutdown are bounded; infrastructure exits are categorized; evidence persistence is retry-safe. MCP mutations require controlling-terminal approval and fail closed without one.
+- **Persisted product truth (PR #56):** report output is immutable after creation, launch readiness is not pagination-dependent, scorecard publish responses use persisted funnel counters, and engine budget policies have a configurable platform ceiling with retained post-run usage truth.
+- **Sharing/workflow edges (PR #57):** visitor deduplication uses an HMAC-signed HttpOnly cookie rather than trusting a browser UUID; scorecard supersession is workspace-scoped; referral/share channel values are centralized; bulk notification reads remain workspace/user scoped; destructive share dialogs, clipboard feedback, score lookups, and gitleaks commit ranges are hardened.
+
 ## C2. Phase 1 gaps and release gates
 
 ### C2.1 Required before a controlled product pilot
 
 1. **Controlled scan proof:** provide an approved target and authorized Luna/Terra deployments. Mode routing and caps are wired (`LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, fallback `LYRASHIELD_LLM`, shared Azure credentials/version), but a live sandbox scan with a pinned image digest and retained model/reasoning/budget/usage events is still required.
 2. **Transport-level egress control:** application SSRF checks are present, but untrusted multi-tenant scanning still requires a deployment-level proxy or equivalent DNS-pinned network enforcement.
-3. **Production infrastructure:** provision production PostgreSQL, Redis, mandatory S3-compatible evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all migrations on a fresh database, including `20260713170000_scorecard_events`. Evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
+3. **Production infrastructure:** provision production PostgreSQL, Redis, mandatory S3-compatible evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all 16 migrations on a fresh database, including scorecard events, single-use approvals, evidence idempotency, report snapshots, and the public-score lookup index. Evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
 
 ### C2.2 Required before self-serve paid launch
 
@@ -5336,11 +5343,11 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 | Workstream         | Status           | Current truth                                                                                                                                                                                                                                                                                                 |
 | ------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Sprints 0–3 + 2.5  | Complete         | Foundation, auth, tenancy, dashboard, onboarding, targets, team, GitHub App, account deletion/anonymization, and browser E2E are implemented.                                                                                                                                                                 |
-| Sprint 3.5 / 7.5   | Complete         | Agent actions, service tokens, approval persistence, approval APIs, and verification controls are implemented.                                                                                                                                                                                                |
-| Sprints 4–6.5      | Complete in code | Queue, worker lifecycle, engine adapter, normalization, SCA, and secrets scanning are implemented; controlled sandbox proof remains.                                                                                                                                                                          |
-| Model cost routing | Complete in code | Safe/Quick/Standard route to Luna/medium; Deep/Custom route to Terra/high; positive mode/policy dollar caps reach the engine. Azure deployment and controlled-scan proof remain.                                                                                                                              |
-| Growth layer       | Complete         | Score snapshots, public scorecards, referral attribution/rewards, premium social cards, badges, channel sharing, privacy-safe funnel events, waitlist referrals, and report handoff copy are implemented. Real-domain unfurl and production attribution QA remain release gates.                              |
-| Sprints 7–9        | Complete         | Fix PRs, retests, reports, notifications, schedules, URL scanning, launch readiness, sharing, and diff gate are implemented.                                                                                                                                                                                  |
+| Sprint 3.5 / 7.5   | Complete         | Agent actions, service tokens, single-use approval persistence, approval APIs, verification controls, and controlling-terminal MCP approval are implemented.                                                                                                                                                  |
+| Sprints 4–6.5      | Complete in code | Queue, bounded worker/scanner lifecycle, engine adapter, normalization, batched SCA, secrets scanning, and idempotent evidence persistence are implemented; controlled sandbox proof remains.                                                                                                                 |
+| Model cost routing | Complete in code | Safe/Quick/Standard route to Luna/medium; Deep/Custom route to Terra/high; positive mode/policy dollar caps reach the engine and are platform-clamped. Azure deployment and controlled-scan proof remain.                                                                                                     |
+| Growth layer       | Complete         | Score snapshots, public scorecards, referral attribution/rewards, premium social cards, badges, channel sharing, privacy-safe signed-cookie funnel events, waitlist referrals, and report handoff copy are implemented. Real-domain unfurl and production attribution QA remain release gates.                |
+| Sprints 7–9        | Complete         | Fix PRs, retests, immutable report snapshots, notifications, schedules, URL scanning, aggregate launch readiness, sharing, and the exact-range diff gate are implemented.                                                                                                                                     |
 | Sprint 5.5         | Not started      | Security Copilot sidebar remains deferred.                                                                                                                                                                                                                                                                    |
 | Sprint 8.5         | Not started      | Visual Security Plan and recap remain deferred.                                                                                                                                                                                                                                                               |
 | Sprint 9.5         | Core complete    | MCP tools and stdio transport exist; broader client onboarding and tool coverage remain roadmap work.                                                                                                                                                                                                         |
