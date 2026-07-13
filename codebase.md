@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current baseline — 2026-07-13:** 4 apps, 10 shared packages (including `packages/score`), 22 web page files, 41 API route files, 35 Prisma models, 14 enums, 12 migrations, 18 RLS-protected workspace tables, and passing lint, typecheck, test, E2E, and production build locally (689 Vitest tests in 65 files; 2 Playwright Chromium tests). Sections 17–35 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current baseline — 2026-07-14:** 4 apps, 10 shared packages (including `packages/score`), 22 web page files, 40 API route files, 35 Prisma models, 14 enums, 16 migrations, 18 RLS-protected workspace tables, and passing lint, typecheck, test, E2E, production build, formatting, migration status, production dependency audit, and diff checks locally (709 Vitest tests in 68 files; 2 Playwright Chromium tests). Sections 17–36 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -423,11 +423,11 @@ This is the code-facing status summary. Product cutlines and release gates live 
 | Workstream                          | Status                       | Code truth                                                                                                                                                                                                                                                 |
 | ----------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Foundation/auth/tenancy (0–3 + 2.5) | Core complete                | Better Auth, workspaces, RBAC, onboarding, projects, targets, team, GitHub App, RLS, account deletion/anonymization, scoping, pagination, shared UI.                                                                                                       |
-| Agent actions/approvals (3.5/7.5)   | Complete                     | Six actions, signed service tokens, registry permissions, queueing, exact input-hash approval checks, approval APIs, RLS model.                                                                                                                            |
-| Scan orchestration (4)              | Complete                     | BullMQ producer/consumer, preflight, guarded lifecycle, cancellation/retry, engine runner, artifact parsing, findings persistence, polling UI.                                                                                                             |
+| Agent actions/approvals (3.5/7.5)   | Complete                     | Six actions, signed service tokens, registry permissions, queueing, exact input-hash checks, atomic single-use approvals, approval APIs, RLS model, and controlling-terminal MCP mutation approval.                                                        |
+| Scan orchestration (4)              | Complete                     | BullMQ producer/consumer, preflight, guarded lifecycle, bounded phases/shutdown, cancellation/retry, infrastructure exit categories, engine runner, artifact parsing, retry-safe findings/evidence persistence, polling UI.                                |
 | Engine adapter (5)                  | Code complete, release-gated | Thin adapter and Docker integration pass offline gates. Authorized sandbox/controlled scan remains unproven.                                                                                                                                               |
-| Normalization/SCA/secrets (6/6.5)   | Complete                     | Normalizer, verifier, SCA, secrets, scanner orchestrator, SARIF, nested manifest discovery.                                                                                                                                                                |
-| Remediation/output (7–9)            | Complete                     | Finding APIs/UI, fix proposals, GitHub PR creation, retests, reports/sharing, launch readiness, notifications, schedules, URL checks, diff gate. Evidence artifacts upload to S3-compatible storage with checksums.                                        |
+| Normalization/SCA/secrets (6/6.5)   | Complete                     | Normalizer, verifier, bounded/symlink-safe SCA and secrets discovery, batched/deduplicated OSV requests, explicit non-repository skips, scanner orchestrator, SARIF.                                                                                       |
+| Remediation/output (7–9)            | Complete                     | Finding APIs/UI, fix proposals, GitHub PR creation, retests, immutable report snapshots/sharing, aggregate launch readiness, scoped notifications, schedules, URL checks, exact-range diff gate. Evidence uploads are checksum-idempotent.                 |
 | Scorecards/referrals/distribution   | Complete                     | Versioned scores and immutable snapshots, frozen public scorecards, revocation/supersession, referrals/rewards, premium cards/badges, channel sharing, privacy-safe funnel events, dashboard metrics, waitlist sharing, and report handoff copy.           |
 | MCP (9.5)                           | Core complete                | API-backed tools, approval checks, hardened prompt-injection guard (input normalization + expanded pattern set), stdio transport. API-key lifecycle and broader client docs remain.                                                                        |
 | Billing/usage (10)                  | Not implemented              | `BillingAccount`, `UsageRecord`, permissions, and env values are schema/config foundations only.                                                                                                                                                           |
@@ -438,9 +438,12 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **689 tests in 65 files**, pass
+- `pnpm test`: **709 tests in 68 files**, pass
 - `pnpm test:e2e`: **2 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
+- `pnpm format:check`: pass
+- `pnpm audit --prod --audit-level high`: pass, no known production vulnerabilities
+- Prisma validation, deployment, and status: pass; all 16 migrations applied locally
 - `git diff --check`: pass
 - Engine offline gate: 155 tests + Ruff + formatting + headless mypy + Bandit
 
@@ -451,7 +454,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 - Missing engine model configuration fails before sandbox pull.
 - Historical Docker smoke in §§24–30 proves prior container health, routes, migrations, queue startup, and engine packaging. It does **not** prove a current authorized scan.
 - Marketing is implemented and locally Worker-previewed, but Cloudflare production provisioning, domain attachment, indexing, and real-domain QA are not complete.
-- PR #52 merged the social distribution loop after CI lint/typecheck/test/build, SCA/secret scan, LyraShield diff gate, CodeRabbit, and migration-drift checks passed. External social-network cache/unfurl behavior remains a real-domain release check.
+- PR #52 merged the social distribution loop; PR #53 merged GPT-5.6 routing/caps and its documentation reconciliation; PRs #54–#57 merged the Deep Review v3 remediation. Each implementation PR passed the applicable CI migration, lint, format, typecheck, test, build, Chromium E2E, SCA/secret, and security-diff gates. External social-network cache/unfurl behavior remains a real-domain release check.
 
 ---
 
@@ -1899,3 +1902,42 @@ Implements the "LyraShield Score, Shareable Scorecard & Referral System — Engi
 - `run-scan.job.ts` passes the cap to the engine's `--max-budget-usd` guard and records a `budget_cap` event with the amount and source. The `engine_start` event records model and reasoning selection; provider-reported `llm_usage` remains separately persisted after execution.
 - This is mode-level routing, not a within-scan cascade: one engine invocation uses one model. Luna discovery followed by Terra validation inside the same scan, provider prompt-cache orchestration, billing-plan quotas, and cross-workspace cost policy remain roadmap work.
 - Configuration is propagated through `packages/config`, `turbo.json`, `docker-compose.yml`, `.env.example`, and the deployment runbooks. Regression tests cover every mode, fallback routing, policy overrides, invalid policy budgets, and CLI cap propagation. The full local gate passes 689 Vitest tests in 65 files, lint, typecheck, and production build.
+
+## §36 — Deep Review v3 remediation (2026-07-14, PRs #54–#57)
+
+This pass closed the review queue in four focused, CI-gated merges while preserving the existing package and service boundaries.
+
+### PR #54 — approval, deletion, proxy, and RLS boundaries
+
+- `AgentApproval` now retains execution time/result, and execution claims the approval with an atomic compare-and-set so concurrent or repeated mutation attempts cannot replay it. Result-recording failure remains non-fatal and never reopens the consumed approval.
+- Account deletion anonymizes referral attribution and scorecard publisher ownership in addition to the existing auth, membership, notification, and audit-chain handling.
+- Production configuration requires `TRUSTED_PROXY_IP_HEADER`; ingress must strip client-supplied copies and set the authoritative value. Degraded local limiting warns once instead of silently pretending to identify clients.
+- RLS documentation now matches the actual table coverage, and a source-level regression test keeps referral/scorecard writes behind `score-service.ts`.
+
+### PR #55 — scan pipeline and MCP mutation approval
+
+- The scanner orchestrator records explicit skips for non-repository targets. SCA batches OSV `querybatch` requests at 100 entries, deduplicates/cache-hits within a run, bounds manifest/dependency work, and skips symlinks; secret discovery follows the same bounded/symlink-safe policy.
+- Each scanner phase has a validated timeout (`SCANNER_PHASE_TIMEOUT_MS`, default 600000 ms). Worker shutdown is bounded to 25 seconds, and engine launch/exit handling distinguishes missing/forbidden executables and OOM/SIGKILL infrastructure failures from product findings.
+- Evidence has a `(findingId, checksum)` uniqueness boundary; new, reopened, and retried findings use conflict-safe persistence so a retry cannot duplicate uploaded evidence metadata.
+- MCP mutating calls prompt on `/dev/tty`; stdout stays JSON-RPC-only. A missing controlling terminal denies the mutation. This is the approved interactive decision, not a bypass or implicit approval.
+- The GitHub workflow warns for DEEP scans, runtime backends are enum-validated, and upstream GitHub error bodies are truncated before logging/return.
+
+### PR #56 — report, readiness, scorecard, and budget truth
+
+- Reports persist `contentJson` when created, and download/share paths render that immutable snapshot rather than rebuilding from mutable findings.
+- Launch readiness uses database aggregates by severity/status/verification rather than a paginated finding list, preserving correctness beyond 100 findings.
+- Scorecard publishing returns persisted human-view/share/referral counts from the owning service.
+- `PLATFORM_MAX_SCAN_BUDGET_USD` defaults to $50 and clamps policy overrides. Engine-reported cost is retained after execution; over-cap results emit a scan event and structured warning. This complements the engine's pre-run cap but does not claim an application-side mid-process kill signal that the engine contract does not expose.
+
+### PR #57 — sharing, notification, accessibility, and workflow edges
+
+- Scorecard event deduplication uses the server-issued HMAC-signed `ls_scorecard_visitor` HttpOnly cookie; client-supplied visitor UUIDs are not trusted. Event data retains the strict privacy allowlist.
+- Supersession checks include `workspaceId`; referral/share source enums are centralized in `apps/web/src/lib/scorecard-sharing.ts`; the public-score lookup has a matching composite index.
+- Bulk notification reads require both workspace and user scope. Clipboard success UI updates only after a successful write. Scorecard revocation uses an Escape-cancellable, focus-managed `alertdialog`.
+- The gitleaks workflow scans `base..head`, with regression coverage locking the commit range.
+
+### Verification and remaining release truth
+
+- Current local gate: 709 Vitest tests in 68 files, 2 Playwright Chromium tests, lint, typecheck, production build, formatting, Prisma validate/deploy/status, production dependency audit with no known vulnerabilities, and `git diff --check`.
+- PRs #54–#57 passed GitHub CI, including migration drift/application, SCA/secrets, and the LyraShield security diff gate. CodeRabbit was rate-limited on the final PR and produced no line review; required checks and the repository's full local/CI gates passed.
+- No authorized sandbox scan or production deployment was performed. Model credentials, an approved target, pinned sandbox digest, production infrastructure/egress, public domain, and real-platform social unfurl validation remain explicit release gates in `PRD.md` Part C and `AGENTS.md`.
