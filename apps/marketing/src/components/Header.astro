@@ -2,29 +2,51 @@
 const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:3001"
 ---
 
-<header class="border-b border-border bg-bg/80 backdrop-blur">
-  <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-    <a href="/" class="text-lg font-semibold tracking-tight text-text hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-      LyraShield AI
+<header class="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur-xl">
+  <div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+    <a href="/" class="flex min-h-11 shrink-0 items-center gap-2 rounded-lg text-sm font-semibold tracking-tight whitespace-nowrap text-text hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:gap-2.5 sm:text-base">
+      <span class="flex size-8 items-center justify-center rounded-lg bg-accent text-bg" aria-hidden="true">
+        <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 4.5 6v5.5c0 4.6 3.1 7.6 7.5 9.5 4.4-1.9 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-5"/></svg>
+      </span>
+      <span>LyraShield AI</span>
     </a>
     <nav aria-label="Main">
-      <ul class="flex items-center gap-6">
-        <li>
-          <a href="/" class="text-sm text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+      <ul class="flex items-center gap-1 sm:gap-2">
+        <li class="hidden sm:block">
+          <a href="/" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             Home
           </a>
         </li>
-        <li>
-          <a href="/blog" class="text-sm text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <li class="hidden sm:block">
+          <a href="/blog" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             Blog
           </a>
         </li>
         <li>
-          <a href={`${appUrl}/sign-in`} class="text-sm text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          <a href={`${appUrl}/sign-in`} class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             Sign in
           </a>
+        </li>
+        <li>
+          <button id="theme-toggle" type="button" class="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Change color theme">
+            <svg viewBox="0 0 24 24" class="size-[18px]" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v2m0 14v2M3 12h2m14 0h2m-3.64-6.36-1.42 1.42M8.06 15.94l-1.42 1.42m0-11.72 1.42 1.42m7.88 8.88 1.42 1.42"/><circle cx="12" cy="12" r="4"/></svg>
+          </button>
         </li>
       </ul>
     </nav>
   </div>
 </header>
+
+<script>
+  const button = document.querySelector<HTMLButtonElement>("#theme-toggle")
+  const preferences = ["system", "light", "dark"] as const
+  button?.addEventListener("click", () => {
+    const current = document.documentElement.dataset.themePreference || "system"
+    const next = preferences[(preferences.indexOf(current as (typeof preferences)[number]) + 1) % preferences.length] ?? "system"
+    localStorage.setItem("lyrashield-theme", next)
+    const dark = next === "dark" || (next === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
+    document.documentElement.dataset.theme = dark ? "dark" : "light"
+    document.documentElement.dataset.themePreference = next
+    button.setAttribute("aria-label", `${next} theme active. Change color theme`)
+  })
+</script>

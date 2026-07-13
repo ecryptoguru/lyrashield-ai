@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Radar, Play, X, RefreshCw, ChevronRight } from "lucide-react"
 import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@lyrashield/ui"
 import { apiPost, apiGetPaginated } from "@/lib/api-client"
+import { formatDateTime } from "@/lib/date-format"
 
 interface ScanItem {
   id: string
@@ -166,7 +167,7 @@ export function ScansClient({
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Scans</h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -314,8 +315,8 @@ export function ScansClient({
                     <p className="text-destructive text-sm">{scan.errorMessage}</p>
                   )}
                   <div className="text-muted-foreground mt-1 flex items-center gap-3 text-xs">
-                    <span>{new Date(scan.createdAt).toLocaleString()}</span>
-                    {scan.endedAt && <span>· ended {new Date(scan.endedAt).toLocaleString()}</span>}
+                    <span>{formatDateTime(scan.createdAt)}</span>
+                    {scan.endedAt && <span>· ended {formatDateTime(scan.endedAt)}</span>}
                     {scan.findingCount !== undefined && scan.findingCount > 0 && (
                       <span className="text-foreground font-medium">
                         {scan.findingCount} finding{scan.findingCount !== 1 ? "s" : ""}

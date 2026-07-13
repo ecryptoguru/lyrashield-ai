@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Bell, AlertCircle, CheckCircle2, Mail, MessageSquare } from "lucide-react"
 import { Button, Badge, type BadgeProps, Card, EmptyState, Spinner, LoadMore } from "@lyrashield/ui"
 import { apiGetPaginated, apiPatch } from "@/lib/api-client"
+import { formatDateTime } from "@/lib/date-format"
 
 interface NotificationItem {
   id: string
@@ -110,7 +111,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -175,10 +176,8 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
                       {notification.body}
                     </p>
                     <p className="text-muted-foreground mt-2 text-xs">
-                      {new Date(notification.createdAt).toLocaleString()}
-                      {notification.sentAt && (
-                        <> · Sent {new Date(notification.sentAt).toLocaleString()}</>
-                      )}
+                      {formatDateTime(notification.createdAt)}
+                      {notification.sentAt && <> · Sent {formatDateTime(notification.sentAt)}</>}
                     </p>
                   </div>
                   {notification.status !== "read" && (

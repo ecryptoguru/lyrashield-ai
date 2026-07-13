@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from "lucide-react"
 import { Card, Badge, Button, EmptyState } from "@lyrashield/ui"
+import { formatTime } from "@/lib/date-format"
 
 interface ScanEvent {
   id: string
@@ -427,7 +428,7 @@ export function ScanDetailClient({
                   className="flex items-start gap-3 border-b pb-2 text-sm last:border-0 last:pb-0"
                 >
                   <span className="text-muted-foreground shrink-0 text-xs">
-                    {new Date(event.createdAt).toLocaleTimeString()}
+                    {formatTime(event.createdAt)}
                   </span>
                   <div className="min-w-0 flex-1">
                     <span

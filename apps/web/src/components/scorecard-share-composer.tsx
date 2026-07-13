@@ -203,7 +203,7 @@ export function ScorecardShareComposer({
                 <button
                   key={value}
                   type="button"
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium ${variant === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`min-h-11 rounded-md px-3 text-xs font-medium ${variant === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
                   aria-pressed={variant === value}
                   onClick={() => setVariant(value)}
                 >
@@ -229,7 +229,7 @@ export function ScorecardShareComposer({
               <button
                 key={item.value}
                 type="button"
-                className={`rounded-full border px-3 py-1.5 text-xs ${format === item.value ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                className={`min-h-11 rounded-full border px-3 text-xs ${format === item.value ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
                 aria-pressed={format === item.value}
                 onClick={() => setFormat(item.value)}
               >
@@ -301,7 +301,7 @@ export function ScorecardShareComposer({
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="hover:bg-accent inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium"
+              className="hover:bg-accent inline-flex h-11 items-center rounded-lg px-3 text-xs font-medium"
             >
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Open
             </a>

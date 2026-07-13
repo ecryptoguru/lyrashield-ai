@@ -68,7 +68,7 @@ export default async function SettingsPage() {
   if (!workspace) return null
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
@@ -83,11 +83,11 @@ export default async function SettingsPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className="min-w-0 lg:col-span-2">
           <CardHeader>
             <CardTitle>Workspace</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-w-0">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Metric label="Name" value={workspace.name} />
               <Metric label="Mode" value={workspace.mode} />
@@ -113,7 +113,7 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Security Controls</CardTitle>
           </CardHeader>
@@ -165,7 +165,7 @@ export default async function SettingsPage() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-card/50 rounded-xl border p-4">
+    <div className="bg-card/50 min-w-0 rounded-xl border p-4">
       <p className="text-muted-foreground text-xs font-medium uppercase">{label}</p>
       <p className="mt-1 truncate text-lg font-semibold">{value}</p>
     </div>

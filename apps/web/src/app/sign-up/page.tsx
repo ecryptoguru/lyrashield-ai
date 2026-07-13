@@ -6,6 +6,7 @@ import Link from "next/link"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import { ShieldCheck } from "lucide-react"
 import { Button, Input, Spinner, GithubIcon, MicrosoftIcon, FormField } from "@lyrashield/ui"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -79,6 +80,7 @@ export default function SignUpPage() {
   if (emailSent) {
     return (
       <main className="relative flex min-h-screen items-center justify-center px-4">
+        <ThemeToggle className="fixed top-4 right-4 z-10" />
         <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
         <div className="relative w-full max-w-md">
           <div className="bg-card rounded-xl border p-6 text-center shadow-lg sm:p-8">
@@ -100,6 +102,7 @@ export default function SignUpPage() {
 
   return (
     <main className="relative flex min-h-screen items-center justify-center px-4">
+      <ThemeToggle className="fixed top-4 right-4 z-10" />
       <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
       <div className="relative w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">

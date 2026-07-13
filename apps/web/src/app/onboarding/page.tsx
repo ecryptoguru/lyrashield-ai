@@ -4,6 +4,7 @@ import { prisma } from "@lyrashield/db"
 import { ShieldCheck } from "lucide-react"
 import { OnboardingWizard } from "./onboarding-wizard"
 import { ReferralClaim } from "./referral-claim"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default async function OnboardingPage() {
   const session = await getSession()
@@ -28,6 +29,7 @@ export default async function OnboardingPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center px-4 py-8">
+      <ThemeToggle className="fixed top-4 right-4 z-10" />
       <ReferralClaim />
       <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
       <div className="relative mb-8 flex flex-col items-center">

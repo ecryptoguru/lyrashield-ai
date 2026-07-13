@@ -1,6 +1,8 @@
 import { prisma } from "./client"
 
 export interface ReportData {
+  version?: 2
+  audience?: "developer" | "executive" | "compliance"
   title: string
   type: string
   workspaceName: string
@@ -31,21 +33,38 @@ export interface ReportData {
     retestStatus: string | null
   }>
   findingsBySeverity: Record<string, number>
+  findingsByStatus?: Record<string, number>
+  findingsByCategory?: Record<string, number>
   totalFindings: number
   verifiedCount: number
   fixedCount: number
   retestSummary: { passed: number; failed: number; pending: number }
   findingsTruncated: boolean
   generatedAt: Date
+  assurance?: {
+    verdict: "NOT_EVALUATED" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
+    score: number | null
+    grade: string | null
+    narrative: string
+    scoreTrend: Array<{ score: number; grade: string; computedAt: Date }>
+    ageBuckets: Record<string, number>
+    priorityActions: Array<{ label: string; detail: string; severity: string }>
+    methodology: string[]
+  }
 }
 
-export async function gatherReportData(workspaceId: string, scanId?: string): Promise<ReportData> {
+export async function gatherReportData(
+  workspaceId: string,
+  scanId?: string,
+  audience: "developer" | "executive" | "compliance" = "developer"
+): Promise<ReportData> {
   const workspace = await prisma.workspace.findFirst({
     where: { id: workspaceId },
     select: { name: true },
   })
 
   let scanInfo: ReportData["scanInfo"] = null
+  let targetId: string | null = null
   let scanWhere: { workspaceId: string; deletedAt: null; scanId?: string }
 
   if (scanId) {
@@ -57,6 +76,7 @@ export async function gatherReportData(workspaceId: string, scanId?: string): Pr
     })
 
     if (scan) {
+      targetId = scan.targetId
       scanInfo = {
         scanId: scan.id,
         status: scan.status,
@@ -91,6 +111,7 @@ export async function gatherReportData(workspaceId: string, scanId?: string): Pr
       summary: true,
       exploitability: true,
       recommendedFix: true,
+      firstSeenAt: true,
       fixProposals: { select: { id: true, status: true } },
       retests: { select: { id: true, status: true }, orderBy: { createdAt: "desc" }, take: 1 },
     },
@@ -115,12 +136,30 @@ export async function gatherReportData(workspaceId: string, scanId?: string): Pr
   })
 
   const bySeverity: Record<string, number> = {}
+  const byStatus: Record<string, number> = {}
+  const byCategory: Record<string, number> = {}
+  const ageBuckets: Record<string, number> = {
+    "0–7 days": 0,
+    "8–30 days": 0,
+    "31–90 days": 0,
+    "90+ days": 0,
+  }
   let verifiedCount = 0
   let fixedCount = 0
   const retestCounts = { passed: 0, failed: 0, pending: 0 }
 
   for (const f of sortedFindings) {
     bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1
+    byStatus[f.status] = (byStatus[f.status] ?? 0) + 1
+    const category = f.category?.trim() || "Uncategorized"
+    byCategory[category] = (byCategory[category] ?? 0) + 1
+    const ageDays = f.firstSeenAt
+      ? Math.max(0, Math.floor((Date.now() - f.firstSeenAt.getTime()) / 86_400_000))
+      : 0
+    if (ageDays <= 7) ageBuckets["0–7 days"]!++
+    else if (ageDays <= 30) ageBuckets["8–30 days"]!++
+    else if (ageDays <= 90) ageBuckets["31–90 days"]!++
+    else ageBuckets["90+ days"]!++
     if (f.verified) verifiedCount++
     if (f.status === "FIXED") fixedCount++
 
@@ -133,9 +172,66 @@ export async function gatherReportData(workspaceId: string, scanId?: string): Pr
     }
   }
 
+  const scoreTrend = await prisma.scoreSnapshot.findMany({
+    where: { workspaceId, ...(targetId ? { targetId } : {}) },
+    orderBy: { computedAt: "desc" },
+    take: 10,
+    select: { score: true, grade: true, computedAt: true },
+  })
+  const currentScore = scoreTrend[0] ?? null
+  const criticalCount = bySeverity.CRITICAL ?? 0
+  const highCount = bySeverity.HIGH ?? 0
+  const verdict = !scanInfo
+    ? "NOT_EVALUATED"
+    : criticalCount > 0
+      ? "NO_GO"
+      : highCount > 0
+        ? "GO_WITH_CONDITIONS"
+        : "GO"
+  const narrative =
+    verdict === "NOT_EVALUATED"
+      ? "No completed scan is attached, so release posture has not been evaluated."
+      : verdict === "NO_GO"
+        ? `${criticalCount} critical finding${criticalCount === 1 ? " requires" : "s require"} remediation and verification before release.`
+        : verdict === "GO_WITH_CONDITIONS"
+          ? `${highCount} high-severity finding${highCount === 1 ? " remains" : "s remain"}; release should proceed only with documented owners and conditions.`
+          : totalFindingsLabel(sortedFindings.length)
+  const priorityActions: ReportData["assurance"] extends infer A
+    ? A extends { priorityActions: infer P }
+      ? P
+      : never
+    : never = []
+
+  if (criticalCount > 0)
+    priorityActions.push({
+      label: "Resolve critical exposure",
+      detail: `${criticalCount} critical finding${criticalCount === 1 ? "" : "s"} must be fixed and retested.`,
+      severity: "CRITICAL",
+    })
+  if (highCount > 0)
+    priorityActions.push({
+      label: "Assign high-risk remediation",
+      detail: `${highCount} high-severity finding${highCount === 1 ? " needs" : "s need"} an owner and due date.`,
+      severity: "HIGH",
+    })
+  if (retestCounts.failed > 0)
+    priorityActions.push({
+      label: "Rework failed retests",
+      detail: `${retestCounts.failed} remediation retest${retestCounts.failed === 1 ? " has" : "s have"} not passed.`,
+      severity: "MEDIUM",
+    })
+  if (priorityActions.length === 0)
+    priorityActions.push({
+      label: "Maintain verification cadence",
+      detail: "Continue scheduled scanning and preserve evidence for material releases.",
+      severity: "INFO",
+    })
+
   return {
+    version: 2,
+    audience,
     title: scanInfo ? `Security Report — ${scanInfo.targetName}` : "Security Report",
-    type: "developer",
+    type: audience,
     workspaceName: workspace?.name ?? "Unknown Workspace",
     scanInfo,
     findings: sortedFindings.map((f) => ({
@@ -155,13 +251,35 @@ export async function gatherReportData(workspaceId: string, scanId?: string): Pr
       retestStatus: f.retests[0]?.status ?? null,
     })),
     findingsBySeverity: bySeverity,
+    findingsByStatus: byStatus,
+    findingsByCategory: byCategory,
     totalFindings: findingsTruncated ? FINDINGS_LIMIT : findings.length,
     findingsTruncated,
     verifiedCount,
     fixedCount,
     retestSummary: retestCounts,
     generatedAt: new Date(),
+    assurance: {
+      verdict,
+      score: currentScore?.score ?? null,
+      grade: currentScore?.grade ?? null,
+      narrative,
+      scoreTrend: [...scoreTrend].reverse(),
+      ageBuckets,
+      priorityActions,
+      methodology: [
+        "Counts are frozen at report creation time and do not change with live scan state.",
+        "Findings are ordered by severity and limited to the 500 most recent records.",
+        "Public shares exclude evidence, repository coordinates, and technical finding details.",
+      ],
+    },
   }
+}
+
+function totalFindingsLabel(total: number): string {
+  return total === 0
+    ? "No retained findings were recorded in this report snapshot."
+    : `${total} finding${total === 1 ? " is" : "s are"} recorded with no critical or high-severity release blocker.`
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -213,15 +331,65 @@ export function generateReportHTML(data: ReportData): string {
     })
     .join("")
 
+  const severityMax = Math.max(1, ...Object.values(data.findingsBySeverity))
   const severityBars = Object.entries(data.findingsBySeverity)
     .map(([sev, count]) => {
       const color = SEVERITY_COLORS[sev] ?? "#6b7280"
-      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-        <span style="display:inline-block;width:80px;font-size:12px;font-weight:600;color:${color};">${sev}</span>
-        <span style="font-size:13px;">${count}</span>
+      return `<div class="bar-row">
+        <span class="bar-label" style="color:${color};">${sev}</span>
+        <span class="bar-track"><span class="bar-fill" style="width:${Math.max(4, (count / severityMax) * 100)}%;background:${color};"></span></span>
+        <span class="bar-value">${count}</span>
       </div>`
     })
     .join("")
+
+  const renderMetricBars = (values: Record<string, number> | undefined) => {
+    if (!values || Object.keys(values).length === 0)
+      return "<p class='muted'>No data available.</p>"
+    const max = Math.max(1, ...Object.values(values))
+    return Object.entries(values)
+      .sort((a, b) => b[1] - a[1])
+      .map(
+        ([label, count]) => `<div class="bar-row">
+          <span class="bar-label">${escapeHtml(label.replaceAll("_", " "))}</span>
+          <span class="bar-track"><span class="bar-fill accent" style="width:${Math.max(4, (count / max) * 100)}%;"></span></span>
+          <span class="bar-value">${count}</span>
+        </div>`
+      )
+      .join("")
+  }
+
+  const assuranceSection = data.assurance
+    ? `<div class="assurance-hero">
+        <div>
+          <div class="eyebrow">Assurance verdict</div>
+          <h2>${escapeHtml(data.assurance.verdict.replaceAll("_", " "))}</h2>
+          <p>${escapeHtml(data.assurance.narrative)}</p>
+        </div>
+        <div class="score-ring" style="--score:${data.assurance.score ?? 0};">
+          <div><strong>${data.assurance.score ?? "—"}</strong><span>${escapeHtml(data.assurance.grade ?? "Pending")}</span></div>
+        </div>
+      </div>
+      <div class="visual-grid">
+        <div class="section"><h2>Remediation Status</h2>${renderMetricBars(data.findingsByStatus)}</div>
+        <div class="section"><h2>Risk Categories</h2>${renderMetricBars(data.findingsByCategory)}</div>
+      </div>
+      <div class="section">
+        <h2>Priority Actions</h2>
+        <ol class="actions">${data.assurance.priorityActions
+          .map(
+            (action) =>
+              `<li><strong>${escapeHtml(action.label)}</strong><span>${escapeHtml(action.detail)}</span></li>`
+          )
+          .join("")}</ol>
+      </div>`
+    : ""
+
+  const methodologySection = data.assurance
+    ? `<div class="section"><h2>Methodology and Limits</h2><ul class="methodology">${data.assurance.methodology
+        .map((item) => `<li>${escapeHtml(item)}</li>`)
+        .join("")}</ul></div>`
+    : ""
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -231,20 +399,35 @@ export function generateReportHTML(data: ReportData): string {
   <title>${escapeHtml(data.title)}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f9fafb; color: #111827; line-height: 1.6; }
-    .container { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
-    .header { border-bottom: 2px solid #e5e7eb; padding-bottom: 20px; margin-bottom: 24px; }
-    .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
-    .header .meta { font-size: 13px; color: #6b7280; }
+    :root { color-scheme: light dark; --bg:#f4f8fb; --surface:#fff; --text:#102033; --muted:#617083; --border:#dce5ed; --accent:#176b87; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+    .container { max-width: 1040px; margin: 0 auto; padding: 40px 24px; }
+    .header { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 24px; }
+    .header h1 { font-size: 32px; line-height:1.15; letter-spacing:-.035em; font-weight: 750; margin-bottom: 8px; }
+    .header .meta, .muted { font-size: 13px; color: var(--muted); }
     .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-    .stat-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
-    .stat-card .label { font-size: 11px; text-transform: uppercase; color: #6b7280; font-weight: 600; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+    .stat-card .label { font-size: 10px; letter-spacing:.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
     .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
-    .section { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    .section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 20px; break-inside:avoid; }
     .section h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #e5e7eb; font-size: 11px; text-transform: uppercase; color: #6b7280; font-weight: 600; }
     .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; text-align: center; }
+    .assurance-hero { display:grid;grid-template-columns:1fr auto;gap:28px;align-items:center;background:linear-gradient(135deg,#102b43,#12394a);color:#f5fbff;border-radius:18px;padding:28px;margin-bottom:20px; }
+    .assurance-hero h2 { font-size:26px;letter-spacing:-.025em;margin:4px 0 8px; }
+    .assurance-hero p { color:#c8dce8;max-width:680px; }
+    .eyebrow { color:#75d8ee;font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase; }
+    .score-ring { --size:112px;width:var(--size);height:var(--size);border-radius:50%;display:grid;place-items:center;background:conic-gradient(#75d8ee calc(var(--score) * 1%),#294c5d 0);position:relative; }
+    .score-ring:after { content:"";position:absolute;inset:9px;border-radius:50%;background:#102b43; }
+    .score-ring div { z-index:1;text-align:center; }.score-ring strong { display:block;font-size:30px;line-height:1; }.score-ring span { display:block;color:#a9c5d2;font-size:10px;margin-top:5px;text-transform:uppercase; }
+    .visual-grid { display:grid;grid-template-columns:1fr 1fr;gap:20px; }
+    .bar-row { display:grid;grid-template-columns:112px 1fr 34px;align-items:center;gap:10px;margin:10px 0; }
+    .bar-label { font-size:11px;font-weight:650;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .bar-track { height:9px;background:#e7edf2;border-radius:999px;overflow:hidden; }.bar-fill { display:block;height:100%;border-radius:999px; }.bar-fill.accent { background:var(--accent); }.bar-value { text-align:right;font-size:12px;font-weight:700; }
+    .actions { list-style:none;display:grid;gap:10px; }.actions li { display:grid;gap:2px;padding:12px 14px;border:1px solid var(--border);border-radius:10px; }.actions span,.methodology { color:var(--muted);font-size:12px; }.methodology { padding-left:18px;display:grid;gap:7px; }
+    @media (max-width:700px) { .container{padding:22px 14px}.summary-grid,.visual-grid{grid-template-columns:1fr 1fr}.assurance-hero{grid-template-columns:1fr}.score-ring{--size:96px}.table-wrap{overflow-x:auto}.header h1{font-size:27px} }
+    @media print { :root{--bg:#fff}.container{max-width:none;padding:0}.section,.stat-card{box-shadow:none}.assurance-hero{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
   </style>
 </head>
 <body>
@@ -252,10 +435,12 @@ export function generateReportHTML(data: ReportData): string {
     <div class="header">
       <h1>${escapeHtml(data.title)}</h1>
       <div class="meta">
-        ${escapeHtml(data.workspaceName)} · Generated ${data.generatedAt.toISOString().split("T")[0]}
+        ${escapeHtml(data.workspaceName)} · Generated ${toIso(data.generatedAt).split("T")[0]}
         ${data.scanInfo ? ` · Target: ${escapeHtml(data.scanInfo.targetName)}` : ""}
       </div>
     </div>
+
+    ${assuranceSection}
 
     <div class="summary-grid">
       <div class="stat-card">
@@ -286,14 +471,17 @@ export function generateReportHTML(data: ReportData): string {
         <tr><td style="font-weight:600;padding:4px 0;">Status</td><td style="padding:4px 0;">${escapeHtml(data.scanInfo.status)}</td></tr>
         <tr><td style="font-weight:600;padding:4px 0;">Target</td><td style="padding:4px 0;">${escapeHtml(data.scanInfo.targetName)} (${escapeHtml(data.scanInfo.targetType)})</td></tr>
         ${data.scanInfo.targetUrl ? `<tr><td style="font-weight:600;padding:4px 0;">URL</td><td style="padding:4px 0;font-family:monospace;font-size:12px;">${escapeHtml(data.scanInfo.targetUrl)}</td></tr>` : ""}
-        ${data.scanInfo.startedAt ? `<tr><td style="font-weight:600;padding:4px 0;">Started</td><td style="padding:4px 0;">${data.scanInfo.startedAt.toISOString()}</td></tr>` : ""}
-        ${data.scanInfo.endedAt ? `<tr><td style="font-weight:600;padding:4px 0;">Ended</td><td style="padding:4px 0;">${data.scanInfo.endedAt.toISOString()}</td></tr>` : ""}
+        ${data.scanInfo.startedAt ? `<tr><td style="font-weight:600;padding:4px 0;">Started</td><td style="padding:4px 0;">${toIso(data.scanInfo.startedAt)}</td></tr>` : ""}
+        ${data.scanInfo.endedAt ? `<tr><td style="font-weight:600;padding:4px 0;">Ended</td><td style="padding:4px 0;">${toIso(data.scanInfo.endedAt)}</td></tr>` : ""}
         ${data.scanInfo.summary ? `<tr><td style="font-weight:600;padding:4px 0;">Summary</td><td style="padding:4px 0;">${escapeHtml(data.scanInfo.summary)}</td></tr>` : ""}
       </table>
     </div>
+
     `
         : ""
     }
+
+    ${methodologySection}
 
     <div class="section">
       <h2>Findings by Severity</h2>
@@ -327,11 +515,15 @@ export function generateReportHTML(data: ReportData): string {
     </div>
 
     <div class="footer">
-      Generated by LyraShield AI · ${data.generatedAt.toISOString()}
+      Generated by LyraShield AI · ${toIso(data.generatedAt)}
     </div>
   </div>
 </body>
 </html>`
+}
+
+function toIso(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
 }
 
 function escapeHtml(text: string): string {

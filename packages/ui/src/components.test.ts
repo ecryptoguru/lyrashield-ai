@@ -39,28 +39,27 @@ describe("buttonVariants", () => {
 
   it("applies size sm classes", () => {
     const cls = buttonVariants({ size: "sm" })
-    expect(cls).toContain("h-8")
+    expect(cls).toContain("h-11")
     expect(cls).toContain("px-3")
     expect(cls).toContain("text-xs")
   })
 
   it("applies size md classes", () => {
     const cls = buttonVariants({ size: "md" })
-    expect(cls).toContain("h-10")
+    expect(cls).toContain("h-11")
     expect(cls).toContain("px-4")
   })
 
   it("applies size lg classes", () => {
     const cls = buttonVariants({ size: "lg" })
-    expect(cls).toContain("h-11")
+    expect(cls).toContain("h-12")
     expect(cls).toContain("px-6")
     expect(cls).toContain("text-base")
   })
 
   it("applies size icon classes", () => {
     const cls = buttonVariants({ size: "icon" })
-    expect(cls).toContain("h-10")
-    expect(cls).toContain("w-10")
+    expect(cls).toContain("size-11")
   })
 
   it("includes active press feedback", () => {

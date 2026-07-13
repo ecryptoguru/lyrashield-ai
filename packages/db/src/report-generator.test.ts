@@ -11,6 +11,9 @@ vi.mock("./client", () => ({
     finding: {
       findMany: vi.fn(),
     },
+    scoreSnapshot: {
+      findMany: vi.fn(),
+    },
   },
 }))
 
@@ -21,11 +24,13 @@ const mockPrisma = prisma as unknown as {
   workspace: { findFirst: ReturnType<typeof vi.fn> }
   scan: { findFirst: ReturnType<typeof vi.fn> }
   finding: { findMany: ReturnType<typeof vi.fn> }
+  scoreSnapshot: { findMany: ReturnType<typeof vi.fn> }
 }
 
 describe("report-generator", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPrisma.scoreSnapshot.findMany.mockResolvedValue([])
   })
 
   describe("gatherReportData", () => {
@@ -39,6 +44,8 @@ describe("report-generator", () => {
       expect(data.scanInfo).toBeNull()
       expect(data.totalFindings).toBe(0)
       expect(data.findings).toHaveLength(0)
+      expect(data.version).toBe(2)
+      expect(data.assurance?.verdict).toBe("NOT_EVALUATED")
     })
 
     it("gathers report data with scanId", async () => {
@@ -50,6 +57,7 @@ describe("report-generator", () => {
         target: { name: "example.com", type: "url", url: "https://example.com" },
         startedAt: new Date("2026-01-01"),
         endedAt: new Date("2026-01-02"),
+        targetId: "target-1",
       })
       mockPrisma.finding.findMany.mockResolvedValue([
         {
@@ -65,6 +73,7 @@ describe("report-generator", () => {
           summary: "Reflected XSS found",
           exploitability: "high",
           recommendedFix: "Sanitize input",
+          firstSeenAt: new Date("2025-12-01"),
           fixProposals: [{ id: "fp-1", status: "draft" }],
           retests: [{ id: "rt-1", status: "failed" }],
         },
@@ -81,9 +90,13 @@ describe("report-generator", () => {
           summary: "SQL injection",
           exploitability: "high",
           recommendedFix: "Use prepared statements",
+          firstSeenAt: new Date("2025-11-01"),
           fixProposals: [{ id: "fp-2", status: "pr_merged" }],
           retests: [{ id: "rt-2", status: "passed" }],
         },
+      ])
+      mockPrisma.scoreSnapshot.findMany.mockResolvedValue([
+        { score: 62, grade: "C", computedAt: new Date("2026-01-02") },
       ])
 
       const data = await gatherReportData("ws-1", "scan-1")
@@ -99,6 +112,10 @@ describe("report-generator", () => {
       expect(data.findingsBySeverity["CRITICAL"]).toBe(1)
       expect(data.findings[0]!.severity).toBe("CRITICAL")
       expect(data.findings[1]!.severity).toBe("HIGH")
+      expect(data.assurance?.score).toBe(62)
+      expect(data.assurance?.verdict).toBe("NO_GO")
+      expect(data.findingsByStatus).toEqual({ FIXED: 1, OPEN: 1 })
+      expect(data.findingsByCategory).toEqual({ injection: 2 })
     })
   })
 
@@ -134,6 +151,20 @@ describe("report-generator", () => {
         retestSummary: { passed: 0, failed: 1, pending: 0 },
         findingsTruncated: false,
         generatedAt: new Date("2026-07-06"),
+        findingsByStatus: { OPEN: 1 },
+        findingsByCategory: { injection: 1 },
+        assurance: {
+          verdict: "GO_WITH_CONDITIONS",
+          score: 72,
+          grade: "B",
+          narrative: "One high-severity finding remains.",
+          scoreTrend: [],
+          ageBuckets: { "0–7 days": 1 },
+          priorityActions: [
+            { label: "Assign remediation", detail: "Set an owner and due date.", severity: "HIGH" },
+          ],
+          methodology: ["Frozen at report creation time."],
+        },
       })
 
       expect(html).toContain("<!DOCTYPE html>")
@@ -142,6 +173,9 @@ describe("report-generator", () => {
       expect(html).toContain("CWE-79")
       expect(html).toContain("Total Findings")
       expect(html).toContain(">1<")
+      expect(html).toContain("Assurance verdict")
+      expect(html).toContain("Priority Actions")
+      expect(html).toContain("Methodology and Limits")
     })
 
     it("generates HTML with no findings", () => {

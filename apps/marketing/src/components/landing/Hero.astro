@@ -1,8 +1,8 @@
-<section aria-labelledby="hero-heading" class="relative overflow-hidden px-4 pt-16 pb-24 sm:px-6 lg:px-8">
+<section aria-labelledby="hero-heading" class="relative overflow-hidden px-4 pt-14 pb-20 sm:px-6 sm:pt-20 sm:pb-28 lg:px-8">
   <div class="mx-auto max-w-6xl">
     <div class="grid gap-12 lg:grid-cols-2 lg:items-center">
       <div class="max-w-2xl">
-        <span class="mb-4 inline-flex items-center rounded-full border border-accent-dim bg-accent-dim/30 px-3 py-1 text-xs font-medium text-accent">
+        <span class="mb-5 inline-flex min-h-8 items-center rounded-full border border-accent-dim bg-accent-dim/40 px-3 text-xs font-medium text-accent">
           Early access — pre-launch
         </span>
         <h1 id="hero-heading" class="text-4xl font-semibold tracking-tight text-text sm:text-5xl lg:text-6xl">
@@ -14,14 +14,14 @@
         <div class="mt-8 flex flex-wrap items-center gap-4">
           <a
             href="#waitlist"
-            class="rounded-lg bg-accent px-5 py-3 text-sm font-medium text-bg hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+            class="inline-flex min-h-12 items-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
             data-cta-id="hero_primary"
           >
             Join the waitlist
           </a>
           <a
             href="#how-it-works"
-            class="rounded-lg border border-border px-5 py-3 text-sm font-medium text-text hover:bg-bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            class="inline-flex min-h-12 items-center rounded-lg border border-border bg-bg/70 px-5 text-sm font-medium text-text hover:bg-bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             data-cta-id="hero_secondary"
           >
             See how the loop works ↓
@@ -31,20 +31,27 @@
       </div>
 
       <div class="relative">
-        <div class="rounded-lg border border-border bg-bg-raised p-1 shadow-lg">
-          <div class="flex items-center gap-2 rounded-t-md bg-border px-3 py-2">
+        <div class="overflow-hidden rounded-2xl border border-border bg-bg-raised shadow-2xl shadow-accent/10">
+          <div class="flex min-h-11 items-center gap-2 border-b border-border px-4">
             <div class="h-3 w-3 rounded-full bg-danger/80" aria-hidden="true"></div>
             <div class="h-3 w-3 rounded-full bg-text-muted/80" aria-hidden="true"></div>
             <div class="h-3 w-3 rounded-full bg-accent/80" aria-hidden="true"></div>
-            <span class="ml-auto text-xs text-text-muted">product illustration</span>
+            <span class="ml-auto font-mono text-[10px] font-semibold tracking-wider text-text-muted uppercase">Illustrative scan flow</span>
           </div>
-          <div class="rounded-b-md bg-bg p-4 font-mono text-sm text-text-muted">
-            <p class="text-accent">$ lyra</p>
-            <p class="mt-2">target: https://api.example.com/v1</p>
-            <p class="mt-1">probing endpoints...</p>
-            <p class="mt-1">verified finding: ssrf in /webhook</p>
-            <p class="mt-1">opening fix PR... done</p>
-            <p class="mt-1 text-accent">retest passed. vulnerability gone.</p>
+          <div class="p-4 sm:p-5">
+            <div class="mb-5 flex items-center justify-between gap-4">
+              <div>
+                <p class="text-xs font-semibold tracking-wider text-text-muted uppercase">Release security loop</p>
+                <p class="mt-1 text-sm font-semibold text-text">API preview environment</p>
+              </div>
+              <span class="rounded-full border border-accent-dim bg-accent-dim/40 px-2.5 py-1 text-[10px] font-semibold text-accent">Retest passed</span>
+            </div>
+            <ol class="grid gap-2.5">
+              <li class="flex items-center gap-3 rounded-xl border border-border bg-bg/55 p-3"><span class="flex size-7 items-center justify-center rounded-lg bg-accent-dim font-mono text-[11px] font-bold text-accent">01</span><span class="min-w-0 flex-1 text-sm font-medium text-text">Target validated</span><span class="font-mono text-[10px] text-text-muted">scope locked</span></li>
+              <li class="flex items-center gap-3 rounded-xl border border-border bg-bg/55 p-3"><span class="flex size-7 items-center justify-center rounded-lg bg-accent-dim font-mono text-[11px] font-bold text-accent">02</span><span class="min-w-0 flex-1 text-sm font-medium text-text">Finding verified</span><span class="font-mono text-[10px] text-text-muted">evidence held</span></li>
+              <li class="flex items-center gap-3 rounded-xl border border-border bg-bg/55 p-3"><span class="flex size-7 items-center justify-center rounded-lg bg-accent-dim font-mono text-[11px] font-bold text-accent">03</span><span class="min-w-0 flex-1 text-sm font-medium text-text">Fix PR prepared</span><span class="font-mono text-[10px] text-text-muted">approval gated</span></li>
+              <li class="flex items-center gap-3 rounded-xl border border-accent-dim bg-accent-dim/25 p-3"><span class="flex size-7 items-center justify-center rounded-lg bg-accent font-mono text-[11px] font-bold text-bg">04</span><span class="min-w-0 flex-1 text-sm font-semibold text-text">Retest confirms closure</span><span class="font-mono text-[10px] text-accent">verified</span></li>
+            </ol>
           </div>
         </div>
       </div>

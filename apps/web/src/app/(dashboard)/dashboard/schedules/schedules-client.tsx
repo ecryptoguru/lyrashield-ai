@@ -14,6 +14,7 @@ import {
   FormField,
 } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
+import { formatDate, formatDateTime } from "@/lib/date-format"
 
 interface ScheduleItem {
   id: string
@@ -153,7 +154,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Schedules</h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -284,13 +285,9 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                   </div>
                   <p className="text-muted-foreground font-mono text-sm">{schedule.cron}</p>
                   <p className="text-muted-foreground mt-1 text-xs">
-                    Created {new Date(schedule.createdAt).toLocaleDateString()}
-                    {schedule.lastRunAt && (
-                      <> · Last run {new Date(schedule.lastRunAt).toLocaleString()}</>
-                    )}
-                    {schedule.nextRunAt && (
-                      <> · Next run {new Date(schedule.nextRunAt).toLocaleString()}</>
-                    )}
+                    Created {formatDate(schedule.createdAt)}
+                    {schedule.lastRunAt && <> · Last run {formatDateTime(schedule.lastRunAt)}</>}
+                    {schedule.nextRunAt && <> · Next run {formatDateTime(schedule.nextRunAt)}</>}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

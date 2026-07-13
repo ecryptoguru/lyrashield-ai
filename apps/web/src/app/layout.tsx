@@ -1,6 +1,8 @@
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { headers } from "next/headers"
+import { ThemeProvider } from "@/components/theme-provider"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import "./globals.css"
 
 const inter = Inter({
@@ -21,11 +23,26 @@ export default async function RootLayout({
 }>) {
   // Reading headers() forces dynamic rendering so the per-request nonce
   // from proxy.ts is available to Next.js internal script tags.
-  await headers()
+  const requestHeaders = await headers()
+  const nonce = requestHeaders.get("x-nonce") ?? undefined
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>{children}</body>
+      <head>
+        <script
+          nonce={nonce}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{
+            __html:
+              "(()=>{try{const t=localStorage.getItem('lyrashield-theme')||'system';const d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=d?'dark':'light'}catch{}})()",
+          }}
+        />
+      </head>
+      <body className={`${inter.variable} font-sans antialiased`}>
+        <ThemeProvider>
+          <TooltipProvider>{children}</TooltipProvider>
+        </ThemeProvider>
+      </body>
     </html>
   )
 }
