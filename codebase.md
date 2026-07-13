@@ -454,7 +454,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 - Missing engine model configuration fails before sandbox pull.
 - Historical Docker smoke in §§24–30 proves prior container health, routes, migrations, queue startup, and engine packaging. It does **not** prove a current authorized scan.
 - Marketing is implemented and locally Worker-previewed, but Cloudflare production provisioning, domain attachment, indexing, and real-domain QA are not complete.
-- PR #52 merged the social distribution loop; PR #53 merged GPT-5.6 routing/caps and its documentation reconciliation; PRs #54–#57 merged the Deep Review v3 remediation. Each implementation PR passed the applicable CI migration, lint, format, typecheck, test, build, Chromium E2E, SCA/secret, and security-diff gates. External social-network cache/unfurl behavior remains a real-domain release check.
+- PR #52 merged the social distribution loop; PR #53 merged GPT-5.6 routing/caps and its documentation reconciliation; PRs #54–#57 merged the Deep Review v3 remediation; PR #59 preserved deletion attribution and legacy report fallback; PR #60 adds the premium UI and Assurance Story release. Each merged implementation PR passes the applicable CI migration, lint, format, typecheck, test, build, Chromium E2E, SCA/secret, and security-diff gates. External social-network cache/unfurl behavior remains a real-domain release check.
 
 ---
 
@@ -1941,3 +1941,12 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - Current local gate: 709 Vitest tests in 68 files, 2 Playwright Chromium tests, lint, typecheck, production build, formatting, Prisma validate/deploy/status, production dependency audit with no known vulnerabilities, and `git diff --check`.
 - PRs #54–#57 passed GitHub CI, including migration drift/application, SCA/secrets, and the LyraShield security diff gate. CodeRabbit was rate-limited on the final PR and produced no line review; required checks and the repository's full local/CI gates passed.
 - No authorized sandbox scan or production deployment was performed. Model credentials, an approved target, pinned sandbox digest, production infrastructure/egress, public domain, and real-platform social unfurl validation remain explicit release gates in `PRD.md` Part C and `AGENTS.md`.
+
+## §37 — Premium UI and Assurance Story reports (2026-07-14, PR #60)
+
+- `apps/web/src/app/globals.css`, `ThemeProvider`, and the Astro theme bootstrap provide shared semantic light/dark tokens, no-flash preference restoration, reduced-motion support, 44px controls, and a 320px minimum responsive boundary.
+- The authenticated shell uses the Shadcn Sheet primitive for focus-trapped mobile navigation. Tabs, Tooltip, and Skeleton are the only other added primitives; `@lyrashield/ui` remains the canonical component layer and report/dashboard charts use native SVG/CSS.
+- `/dashboard` is a workspace-scoped security command center with score, severity, trend, remediation, and recent-activity visuals. Date rendering uses a deterministic `en-US`/UTC formatter to prevent server/client hydration drift.
+- Report generation stores a versioned immutable Assurance Story snapshot for executive, developer, or compliance audiences. The shared report renderer exposes only the sanitized snapshot, generic target/title copy, and explicit methodology/limitations; public pages are `noindex` and `no-referrer`.
+- Regression coverage locks immutable report behavior, V2 assurance aggregation/HTML output, UI control sizing, and deterministic date formatting. The verified local gate is 711 Vitest tests in 69 files, 2 Chromium E2E tests, lint, typecheck, production build, formatting, production dependency audit, `git diff --check`, and browser QA across both themes and every dashboard route at 320px.
+- Production-domain visual/unfurl validation, external email delivery, authorized model scans, and Cloudflare production bindings remain release gates; this work does not claim them.

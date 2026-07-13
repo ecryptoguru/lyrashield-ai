@@ -5229,7 +5229,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
-- Current automated gate: lint, typecheck, production build, **709 passing Vitest tests in 68 files**, and **2 passing Playwright Chromium tests**.
+- Current automated gate: lint, typecheck, production build, **711 passing Vitest tests in 69 files**, and **2 passing Playwright Chromium tests**.
 - Current product surface: **22 page route files** and **40 API route files** in `apps/web`.
 - Current data surface: **35 Prisma models**, **14 enums**, and **16 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
@@ -5277,7 +5277,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 
 ### C1.5 User experience and marketing
 
-- Responsive dashboard, mobile navigation, shared UI components, dark mode, accessible form fields, loading/error/empty states, pagination, and server-fetched initial data.
+- Responsive dashboard, accessible Sheet-based mobile navigation, shared UI components, persisted system/light/dark themes, 44px touch targets, accessible form fields, loading/error/empty states, pagination, and server-fetched initial data.
 - Dashboard pages for projects, targets, scans, findings, fixes, reports, notifications, schedules, launch readiness, integrations, team, and settings.
 - Account deletion blocks sole owners, anonymizes loose user attribution, removes auth/membership data, and rebuilds affected audit chains.
 - Liveness/readiness endpoints, structured Next.js request-error instrumentation, and maintained Playwright coverage for auth, onboarding, target/scan creation, and tenant denial boundaries.
@@ -5304,6 +5304,14 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - **Pipeline/MCP reliability (PR #55):** repository scanners skip non-repository targets explicitly; dependency calls, filesystem walks, scanner phases, and worker shutdown are bounded; infrastructure exits are categorized; evidence persistence is retry-safe. MCP mutations require controlling-terminal approval and fail closed without one.
 - **Persisted product truth (PR #56):** report output is immutable after creation, launch readiness is not pagination-dependent, scorecard publish responses use persisted funnel counters, and engine budget policies have a configurable platform ceiling with retained post-run usage truth.
 - **Sharing/workflow edges (PR #57):** visitor deduplication uses an HMAC-signed HttpOnly cookie rather than trusting a browser UUID; scorecard supersession is workspace-scoped; referral/share channel values are centralized; bulk notification reads remain workspace/user scoped; destructive share dialogs, clipboard feedback, score lookups, and gitleaks commit ranges are hardened.
+
+### C1.8 Premium command center and Assurance Story reports (2026-07-14, PR #60)
+
+- One tokenized visual system now covers the Next.js application and Astro marketing site: cool executive light mode, deep-navy command-center dark mode, persisted system preference, responsive grids, and mobile-safe controls from 320px upward.
+- The dashboard command center summarizes the latest score, open risk, scan/report volume, score trajectory, severity composition, remediation state, and recent scan activity using native SVG/CSS visuals rather than a new charting runtime.
+- Report creation supports executive, developer, and compliance audiences. New reports persist a versioned immutable Assurance Story snapshot containing severity/status/category distributions, score history, age buckets, retest state, priority actions, methodology, and explicit limitations.
+- Public report rendering reads the immutable snapshot, uses generic target/title disclosure, emits `noindex, nofollow, noarchive, noimageindex`, and applies `Referrer-Policy: no-referrer`. Legacy reports retain the safe fallback restored in PR #59.
+- Rendered QA covered both themes, marketing, auth, every dashboard route, mobile Sheet open/close behavior, report audience switching, report create/share, and shared-report privacy at desktop and 320px with clean application console output.
 
 ## C2. Phase 1 gaps and release gates
 
