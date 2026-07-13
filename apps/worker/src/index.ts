@@ -28,7 +28,13 @@ async function shutdown(signal: string): Promise<void> {
     if (!closed) {
       logger.warn("Worker.close() returned null, forcing shutdown")
     } else {
-      await closed
+      const timeout = new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), 25_000)
+      )
+      if ((await Promise.race([closed.then(() => "closed" as const), timeout])) === "timeout") {
+        logger.warn("BullMQ worker close timed out; forcing shutdown")
+        process.exit(1)
+      }
     }
     logger.info("BullMQ worker closed")
   }

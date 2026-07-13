@@ -68,6 +68,8 @@ const envSchema = z
     LLM_API_VERSION: z.string().optional().or(z.literal("")),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
+    LYRASHIELD_RUNTIME_BACKEND: z.enum(["docker"]).optional().or(z.literal("")),
+    SCANNER_PHASE_TIMEOUT_MS: z.coerce.number().int().positive().max(3_600_000).default(600_000),
     PLATFORM_MAX_SCAN_BUDGET_USD: z.coerce.number().positive().max(1000).default(50),
 
     // Azure OpenAI (optional — use these OR the generic LLM_API_KEY/LLM_API_BASE)

@@ -512,6 +512,7 @@ model Evidence {
   finding            Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
 
   @@index([findingId])
+  @@unique([findingId, checksum])
 }
 
 model FixProposal {

@@ -3,6 +3,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
+vi.mock("@lyrashield/config", () => ({ env: { SCANNER_PHASE_TIMEOUT_MS: 600_000 } }))
+
+vi.mock("@lyrashield/db", () => ({ addScanEvent: vi.fn().mockResolvedValue(undefined) }))
 
 vi.mock("./scanners/sca-scanner", () => ({
   scanSca: vi.fn().mockResolvedValue([
@@ -60,6 +63,7 @@ import { runScannerOrchestrator } from "./scanner-orchestrator"
 import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
+import { addScanEvent } from "@lyrashield/db"
 import type { EngineVulnerability } from "./output-parser"
 
 const engineFindings: EngineVulnerability[] = [
@@ -162,6 +166,29 @@ describe("runScannerOrchestrator", () => {
     expect(result.allFindings.length).toBe(2)
   })
 
+  it("skips source scanners for non-repository targets instead of reporting empty passes", async () => {
+    const result = await runScannerOrchestrator({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "WEB_APP", name: "Web app", url: "https://example.test" },
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      engineFindings: [],
+    })
+    expect(scanSca).not.toHaveBeenCalled()
+    expect(scanSecrets).not.toHaveBeenCalled()
+    expect(result.scaFindings).toEqual([])
+    expect(result.secretsFindings).toEqual([])
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "scanner",
+      "info",
+      "SCA/secrets skipped — no source checkout for this target type",
+      expect.any(Object)
+    )
+  })
+
   it("fails closed when the SCA scanner cannot run", async () => {
     vi.mocked(scanSca).mockRejectedValueOnce(new Error("OSV API down") as never)
 
@@ -176,6 +203,29 @@ describe("runScannerOrchestrator", () => {
         engineFindings,
       })
     ).rejects.toThrow("OSV API down")
+  })
+
+  it("fails the scanner phase and records an event when the phase times out", async () => {
+    vi.mocked(scanSca).mockImplementationOnce(() => new Promise(() => {}))
+    await expect(
+      runScannerOrchestrator({
+        scanId: "scan-timeout",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        target: { id: "target-1", type: "REPO", name: "Test" },
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        engineFindings: [],
+        scannerPhaseTimeoutMs: 1,
+      })
+    ).rejects.toThrow("Scanner phase timed out")
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-timeout",
+      "scanner",
+      "error",
+      "Scanner phase timed out",
+      { timeoutMs: 1 }
+    )
   })
 
   it("tags detector provenance so secret findings receive the score cap", async () => {

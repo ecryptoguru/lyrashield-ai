@@ -93,6 +93,9 @@ jobs:
             SAFE|DEEP|AGGRESSIVE) ;;
             *) echo "::error::Invalid scan mode"; exit 1 ;;
           esac
+          if [ "$SCAN_MODE" = "DEEP" ]; then
+            echo "::warning::scan_mode DEEP is not yet implemented; running SAFE-equivalent coverage"
+          fi
           SEVERITY="${FAIL_ON_SEVERITY_INPUT:-HIGH}"
           case "$SEVERITY" in
             CRITICAL|HIGH|MEDIUM|LOW|INFO) ;;

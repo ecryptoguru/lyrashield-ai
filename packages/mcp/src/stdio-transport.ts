@@ -1,4 +1,6 @@
 import { createInterface } from "readline"
+import { createInterface as createPrompt } from "readline/promises"
+import { createReadStream } from "fs"
 import { McpServer } from "./server"
 import { logger } from "@lyrashield/logger"
 
@@ -16,7 +18,27 @@ interface JsonRpcResponse {
   error?: { code: number; message: string }
 }
 
-const server = new McpServer()
+async function requestTerminalApproval(toolName: string, args: Record<string, unknown>) {
+  try {
+    // Stdio is reserved for JSON-RPC; a controlling TTY is the only safe place
+    // to ask a human without corrupting the protocol. No TTY remains fail-closed.
+    const input = createReadStream("/dev/tty")
+    const prompt = createPrompt({ input, output: process.stderr })
+    const answer = await prompt.question(
+      `Approve LyraShield MCP mutation ${toolName} with ${JSON.stringify(args)}? [y/N] `
+    )
+    prompt.close()
+    input.close()
+    return {
+      approved: answer.trim().toLowerCase() === "y",
+      reason: "interactive terminal approval",
+    }
+  } catch {
+    return { approved: false, reason: "No interactive terminal available for approval" }
+  }
+}
+
+const server = new McpServer({ approvalGate: requestTerminalApproval })
 
 const rl = createInterface({ input: process.stdin, output: process.stdout })
 

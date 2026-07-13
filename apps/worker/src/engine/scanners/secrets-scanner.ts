@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex, security/detect-non-literal-regexp */
-import { readFile, readdir, stat } from "fs/promises"
+import { lstat, readFile, readdir } from "fs/promises"
 import { join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
@@ -207,8 +207,17 @@ const IGNORED_EXTENSIONS = new Set([
 ])
 
 const MAX_FILE_SIZE = 512 * 1024
+const MAX_WALK_ENTRIES = 50_000
+const MAX_WALK_DEPTH = 40
 
-async function walkDir(dir: string, basePath: string, files: string[]): Promise<void> {
+async function walkDir(
+  dir: string,
+  basePath: string,
+  files: string[],
+  state = { entries: 0 },
+  depth = 0
+): Promise<void> {
+  if (depth > MAX_WALK_DEPTH || state.entries >= MAX_WALK_ENTRIES) return
   let entries
   try {
     entries = await readdir(dir)
@@ -217,17 +226,20 @@ async function walkDir(dir: string, basePath: string, files: string[]): Promise<
   }
 
   for (const entry of entries) {
+    if (++state.entries > MAX_WALK_ENTRIES) break
     const fullPath = join(dir, entry)
     let s
     try {
-      s = await stat(fullPath)
+      s = await lstat(fullPath)
     } catch {
       continue
     }
 
+    if (s.isSymbolicLink()) continue
+
     if (s.isDirectory()) {
       if (!IGNORED_DIRS.has(entry)) {
-        await walkDir(fullPath, basePath, files)
+        await walkDir(fullPath, basePath, files, state, depth + 1)
       }
     } else if (s.isFile() && s.size <= MAX_FILE_SIZE) {
       const ext = entry.substring(entry.lastIndexOf("."))
