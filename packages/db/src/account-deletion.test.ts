@@ -33,7 +33,9 @@ describe("account deletion", () => {
     await prisma.referralCode.deleteMany({ where: { code: referralCode } })
     await prisma.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspaceId}`
     await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspaceId}`
-    await prisma.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } })
+    await prisma.user.deleteMany({
+      where: { id: { in: [userId, otherUserId, `delete-rewarded-${suffix}`] } },
+    })
     await prisma.$disconnect()
   })
 
@@ -70,12 +72,18 @@ describe("account deletion", () => {
     await prisma.referralAttribution.create({
       data: { codeId: code.id, referredUserId: userId, source: "test" },
     })
-    // An already-rewarded attribution must keep its terminal status on deletion
-    // (only the user identifier is anonymized) so reward history stays truthful.
+    // A user can only ever be referred once (referredUserId is UNIQUE), so the
+    // already-rewarded case needs its own user: on deletion the attribution must
+    // keep its terminal REWARDED status (only the user identifier is anonymized)
+    // so reward history stays truthful.
+    const rewardedUserId = `delete-rewarded-${suffix}`
+    await prisma.user.create({
+      data: { id: rewardedUserId, name: "Rewarded", email: `${rewardedUserId}@example.com` },
+    })
     const rewardedAttribution = await prisma.referralAttribution.create({
       data: {
         codeId: code.id,
-        referredUserId: userId,
+        referredUserId: rewardedUserId,
         source: "test",
         status: "REWARDED",
       },
@@ -104,19 +112,20 @@ describe("account deletion", () => {
     expect(await prisma.referralCode.findUnique({ where: { code: referralCode } })).toMatchObject({
       userId: "deleted-user",
     })
-    expect(
-      await prisma.referralAttribution.findFirst({
-        where: { codeId: code.id, status: "REJECTED" },
-      })
-    ).toMatchObject({
-      referredUserId: "deleted-user",
-      status: "REJECTED",
+    const rejected = await prisma.referralAttribution.findFirst({
+      where: { codeId: code.id, status: "REJECTED" },
     })
-    // The rewarded attribution keeps status REWARDED but is still anonymized.
+    // The anonymized value is per-row unique (referredUserId is UNIQUE): a
+    // shared sentinel would make every deletion after the first one fail.
+    expect(rejected?.referredUserId).toBe(`deleted-user:${rejected?.id}`)
+    // Deleting the rewarded user's account keeps the attribution's terminal
+    // REWARDED status while anonymizing the user reference.
+    const { deleteUserAccount: deleteRewardedUser } = await import("./account-deletion")
+    await deleteRewardedUser(rewardedUserId)
     expect(
       await prisma.referralAttribution.findUnique({ where: { id: rewardedAttribution.id } })
     ).toMatchObject({
-      referredUserId: "deleted-user",
+      referredUserId: `deleted-user:${rewardedAttribution.id}`,
       status: "REWARDED",
     })
     expect(
