@@ -1,10 +1,10 @@
-import { listFindings, prisma } from "@lyrashield/db"
+import { prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../lib/api-response"
 import { logger } from "@lyrashield/logger"
-import { generateLaunchReadinessReport, type FindingForReadiness } from "@/lib/launch-readiness"
+import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
 
 export async function GET(request: Request) {
   try {
@@ -18,11 +18,15 @@ export async function GET(request: Request) {
 
     await requirePermission(workspaceId, PERMISSIONS.finding.view)
 
-    const [{ items }, completedScanCount] = await Promise.all([
-      listFindings({
-        workspaceId,
-        ...(targetId ? { targetId } : {}),
-        limit: 100,
+    const [groups, completedScanCount] = await Promise.all([
+      prisma.finding.groupBy({
+        by: ["severity", "status", "verified"],
+        where: {
+          workspaceId,
+          deletedAt: null,
+          ...(targetId ? { targetId } : {}),
+        },
+        _count: { _all: true },
       }),
       prisma.scan.count({
         where: {
@@ -34,19 +38,10 @@ export async function GET(request: Request) {
       }),
     ])
 
-    const findings: FindingForReadiness[] = items.map((f) => ({
-      id: f.id,
-      severity: f.severity,
-      status: f.status,
-      verified: f.verified,
-      confidence: f.confidence,
-      category: f.category,
-      cwe: f.cwe,
-      title: f.title,
-      summary: f.summary ?? "",
-    }))
-
-    const report = generateLaunchReadinessReport(findings, completedScanCount > 0)
+    const report = generateLaunchReadinessReportFromAggregate(
+      groups.map((group) => ({ ...group, count: group._count._all })),
+      completedScanCount > 0
+    )
 
     return apiSuccess(report)
   } catch (error) {

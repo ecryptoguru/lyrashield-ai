@@ -35,6 +35,7 @@ const SCAN_MODE_MAP: Record<string, "quick" | "standard" | "deep"> = {
 }
 
 const FALLBACK_SCAN_BUDGET_USD = 15
+export const PLATFORM_MAX_SCAN_BUDGET_USD = env.PLATFORM_MAX_SCAN_BUDGET_USD
 
 const DEFAULT_SCAN_BUDGET_USD: Record<string, number> = {
   SAFE: 1.2,
@@ -55,10 +56,13 @@ export function resolveScanBudgetUsd(mode: string, policyMaxBudgetUsd?: number |
     Number.isFinite(policyMaxBudgetUsd) &&
     policyMaxBudgetUsd > 0
   ) {
-    return policyMaxBudgetUsd
+    return Math.min(policyMaxBudgetUsd, PLATFORM_MAX_SCAN_BUDGET_USD)
   }
 
-  return DEFAULT_SCAN_BUDGET_USD[mode] ?? FALLBACK_SCAN_BUDGET_USD
+  return Math.min(
+    DEFAULT_SCAN_BUDGET_USD[mode] ?? FALLBACK_SCAN_BUDGET_USD,
+    PLATFORM_MAX_SCAN_BUDGET_USD
+  )
 }
 
 function resolveTargetArg(target: TargetInfo): string {
