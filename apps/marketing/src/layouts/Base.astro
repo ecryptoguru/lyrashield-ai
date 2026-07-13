@@ -34,7 +34,20 @@ const { title, description, canonical, ogImage, ogType, article, jsonLd } = Astr
       article={article}
     />
     {jsonLd && jsonLd.length > 0 && <JsonLd data={jsonLd} />}
-    <meta name="theme-color" content="#0a0c0e" />
+    <meta name="theme-color" content="#08111c" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f9fc" media="(prefers-color-scheme: light)" />
+    <script is:inline>
+      (() => {
+        try {
+          const preference = localStorage.getItem("lyrashield-theme") || "system"
+          const dark =
+            preference === "dark" ||
+            (preference === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
+          document.documentElement.dataset.theme = dark ? "dark" : "light"
+          document.documentElement.dataset.themePreference = preference
+        } catch {}
+      })()
+    </script>
   </head>
   <body class="bg-bg text-text font-ui antialiased">
     <a

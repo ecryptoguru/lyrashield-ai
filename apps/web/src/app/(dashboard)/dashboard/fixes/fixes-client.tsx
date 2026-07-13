@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Wrench, GitPullRequest, ShieldCheck, ExternalLink } from "lucide-react"
 import { Badge, Card, EmptyState, LoadMore } from "@lyrashield/ui"
 import { apiGetPaginated } from "@/lib/api-client"
+import { formatDate } from "@/lib/date-format"
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
 
@@ -66,7 +67,7 @@ export function FixesClient({
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Fixes</h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -117,7 +118,7 @@ export function FixesClient({
                   )}
                   {proposal.finding.target && <span>{proposal.finding.target.name}</span>}
                   {proposal.generatedByModel && <span>AI: {proposal.generatedByModel}</span>}
-                  <span>{new Date(proposal.createdAt).toLocaleDateString()}</span>
+                  <span>{formatDate(proposal.createdAt)}</span>
                 </div>
 
                 {proposal.pullRequests.length > 0 && (

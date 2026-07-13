@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ArrowLeft, GitBranch, Globe, Bug, Crosshair } from "lucide-react"
 import { Card, Badge } from "@lyrashield/ui"
 import { ScorecardControls } from "./scorecard-controls"
+import { formatDate, formatDateTime } from "@/lib/date-format"
 
 export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -126,7 +127,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         <Card className="group p-5 transition-all duration-200 hover:shadow-md">
           <div className="text-muted-foreground text-sm">Last Scan</div>
           <p className="mt-2 text-2xl font-bold tracking-tight">
-            {target.lastScanAt ? new Date(target.lastScanAt).toLocaleDateString() : "Never"}
+            {target.lastScanAt ? formatDate(target.lastScanAt) : "Never"}
           </p>
         </Card>
       </div>
@@ -256,7 +257,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
                     </Badge>
                   </td>
                   <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
-                    {new Date(scan.createdAt).toLocaleString()}
+                    {formatDateTime(scan.createdAt)}
                   </td>
                 </tr>
               ))}

@@ -4,14 +4,14 @@
 @import "@fontsource-variable/jetbrains-mono";
 
 @theme {
-  --color-bg: #0a0c0e;
-  --color-bg-raised: #101418;
-  --color-border: #1d232a;
-  --color-text: #e6e9ec;
-  --color-text-muted: #8a949e;
-  --color-accent: #2dd4a7;
-  --color-accent-dim: #17453a;
-  --color-danger: #e5534b;
+  --color-bg: var(--bg);
+  --color-bg-raised: var(--bg-raised);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-danger: var(--danger);
 
   --font-sans: "Inter Variable", system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
@@ -19,21 +19,34 @@
 }
 
 :root {
-  --bg: #0a0c0e;
-  --bg-raised: #101418;
-  --border: #1d232a;
-  --text: #e6e9ec;
-  --text-muted: #8a949e;
-  --accent: #2dd4a7;
-  --accent-dim: #17453a;
+  --bg: #f5f9fc;
+  --bg-raised: #ffffff;
+  --border: #d9e4ec;
+  --text: #102235;
+  --text-muted: #5f7081;
+  --accent: #087f78;
+  --accent-dim: #ccebe7;
   --danger: #e5534b;
   --font-ui: "Inter Variable", system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #08111c;
+  --bg-raised: #0e1a28;
+  --border: #203246;
+  --text: #edf6fb;
+  --text-muted: #91a7b8;
+  --accent: #54d6df;
+  --accent-dim: #153d48;
+  --danger: #ff7168;
+  color-scheme: dark;
 }
 
 html {
   scroll-behavior: smooth;
-  color-scheme: dark;
+  min-width: 320px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -54,6 +67,18 @@ body {
   background-color: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--border) 22%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 22%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Custom focus ring for accessibility */
@@ -79,7 +104,9 @@ body {
 .reveal {
   opacity: 0;
   transform: translateY(1.5rem);
-  transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+  transition:
+    opacity 0.5s ease-out,
+    transform 0.5s ease-out;
 }
 
 .reveal.is-visible {

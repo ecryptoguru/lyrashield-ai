@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { UserPlus, Mail, Clock, Users } from "lucide-react"
 import { Button, Badge, FormField, Input, Select, Spinner } from "@lyrashield/ui"
 import { apiGet, apiPost } from "@/lib/api-client"
+import { formatDate } from "@/lib/date-format"
 
 interface Member {
   id: string
@@ -206,7 +207,7 @@ export function TeamClient({
                   </Badge>
                 </td>
                 <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
-                  {new Date(m.createdAt).toLocaleDateString("en-US", { timeZone: "UTC" })}
+                  {formatDate(m.createdAt)}
                 </td>
               </tr>
             ))}
@@ -240,7 +241,7 @@ export function TeamClient({
                   <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" aria-hidden="true" />
-                      {new Date(inv.expiresAt).toLocaleDateString("en-US", { timeZone: "UTC" })}
+                      {formatDate(inv.expiresAt)}
                     </span>
                   </td>
                 </tr>

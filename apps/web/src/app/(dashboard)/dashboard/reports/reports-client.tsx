@@ -24,6 +24,8 @@ import {
 } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
 import { writeClipboard } from "@/components/scorecard-share-composer"
+import { formatDate } from "@/lib/date-format"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface ReportItem {
   id: string
@@ -89,6 +91,9 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
   const [creatingReport, setCreatingReport] = useState(false)
   const [scans, setScans] = useState<Array<{ id: string; targetName: string; status: string }>>([])
   const [selectedScanId, setSelectedScanId] = useState<string>("")
+  const [reportType, setReportType] = useState<"executive" | "developer" | "compliance">(
+    "executive"
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -114,11 +119,13 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
       await apiPost(`/api/reports`, {
         workspaceId,
         title: reportTitle || "Security Report",
+        type: reportType,
         ...(selectedScanId ? { scanId: selectedScanId } : {}),
       })
       setShowCreateForm(false)
       setReportTitle("")
       setSelectedScanId("")
+      setReportType("executive")
       await loadReports()
     } catch {
       setError("Failed to create report.")
@@ -189,23 +196,58 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
           <p className="text-muted-foreground mt-1 text-sm">
             Generate and share security reports with stakeholders
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowCreateForm(!showCreateForm)}>
+        <Button
+          className="self-start sm:self-auto"
+          onClick={() => setShowCreateForm(!showCreateForm)}
+        >
           <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
           Generate Report
         </Button>
       </div>
 
       {showCreateForm && (
-        <Card className="mb-4 p-4">
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium">Generate New Report</h3>
+        <Card className="mb-5 p-5 sm:p-6">
+          <div className="flex flex-col gap-5">
+            <div>
+              <h3 className="font-semibold">Generate an Assurance Story</h3>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Create an immutable, visual snapshot tailored to its reader.
+              </p>
+            </div>
+            <Tabs
+              value={reportType}
+              onValueChange={(value) =>
+                setReportType(value as "executive" | "developer" | "compliance")
+              }
+            >
+              <TabsList className="h-12 w-full sm:w-fit">
+                <TabsTrigger className="min-h-11 px-3" value="executive">
+                  Executive
+                </TabsTrigger>
+                <TabsTrigger className="min-h-11 px-3" value="developer">
+                  Developer
+                </TabsTrigger>
+                <TabsTrigger className="min-h-11 px-3" value="compliance">
+                  Compliance
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="executive" className="text-muted-foreground text-xs">
+                Decision-first posture, score trajectory, release conditions, and priority actions.
+              </TabsContent>
+              <TabsContent value="developer" className="text-muted-foreground text-xs">
+                Technical findings, remediation state, retest outcomes, and fix guidance.
+              </TabsContent>
+              <TabsContent value="compliance" className="text-muted-foreground text-xs">
+                Evidence-oriented summary and methodology for lightweight assurance reviews.
+              </TabsContent>
+            </Tabs>
             <FormField label="Report title" htmlFor="report-title">
               <Input
                 id="report-title"
@@ -242,6 +284,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                   setShowCreateForm(false)
                   setReportTitle("")
                   setSelectedScanId("")
+                  setReportType("executive")
                 }}
               >
                 Cancel
@@ -299,7 +342,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                 Copy client handoff
               </Button>
               <a
-                className="hover:bg-accent bg-card inline-flex h-8 items-center rounded-lg border px-3 text-xs font-medium"
+                className="hover:bg-accent bg-card inline-flex h-11 items-center rounded-lg border px-3 text-xs font-medium"
                 href={`mailto:?subject=${encodeURIComponent("Security review ready")}&body=${encodeURIComponent(handoffMessage)}`}
               >
                 Email client
@@ -339,9 +382,9 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                     {report.revokedAt && <Badge variant="muted">revoked</Badge>}
                   </div>
                   <p className="text-muted-foreground text-sm">
-                    Created {new Date(report.createdAt).toLocaleDateString()}
+                    Created {formatDate(report.createdAt)}
                     {report.shareExpiresAt && !report.revokedAt && (
-                      <> · Expires {new Date(report.shareExpiresAt).toLocaleDateString()}</>
+                      <> · Expires {formatDate(report.shareExpiresAt)}</>
                     )}
                   </p>
                 </div>

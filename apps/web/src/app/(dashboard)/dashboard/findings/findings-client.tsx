@@ -23,6 +23,7 @@ import {
   Textarea,
 } from "@lyrashield/ui"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
+import { formatDate } from "@/lib/date-format"
 
 export interface FindingListItem {
   id: string
@@ -121,7 +122,7 @@ export function FindingsClient({
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Findings</h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -517,9 +518,7 @@ function FindingDetailDrawer({
                       >
                         {rt.status}
                       </Badge>
-                      <span className="text-muted-foreground">
-                        {new Date(rt.createdAt).toLocaleDateString()}
-                      </span>
+                      <span className="text-muted-foreground">{formatDate(rt.createdAt)}</span>
                     </div>
                   ))}
                 </div>

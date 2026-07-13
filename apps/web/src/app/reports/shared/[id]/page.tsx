@@ -1,6 +1,13 @@
 import { getReportByShareToken, getShareableReport } from "@lyrashield/db"
 import { notFound } from "next/navigation"
 import { SharedReportView } from "./shared-report-view"
+import type { Metadata } from "next"
+
+export const metadata: Metadata = {
+  title: "Security Assurance Report — LyraShield AI",
+  robots: { index: false, follow: false, noarchive: true, noimageindex: true },
+  referrer: "no-referrer",
+}
 
 export default async function SharedReportPage({
   params,

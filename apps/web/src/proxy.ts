@@ -60,7 +60,8 @@ export async function proxy(request: NextRequest) {
       request: { headers: requestHeaders },
     })
     response.headers.set("Content-Security-Policy", csp)
-    if (pathname.startsWith("/score/")) response.headers.set("Referrer-Policy", "no-referrer")
+    if (pathname.startsWith("/score/") || pathname.startsWith("/reports/shared/"))
+      response.headers.set("Referrer-Policy", "no-referrer")
     return response
   }
 

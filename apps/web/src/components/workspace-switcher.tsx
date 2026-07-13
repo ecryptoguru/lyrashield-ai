@@ -51,7 +51,7 @@ export function WorkspaceSwitcher({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="hover:bg-sidebar-accent/50 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+        className="hover:bg-sidebar-accent/50 flex min-h-11 w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
       >
         <span className="truncate">{active?.name ?? "Select workspace"}</span>
         <ChevronDown className="text-muted-foreground h-4 w-4 shrink-0" aria-hidden="true" />
@@ -69,7 +69,7 @@ export function WorkspaceSwitcher({
                 onSelect(w.id)
                 setOpen(false)
               }}
-              className="hover:bg-accent flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors"
+              className="hover:bg-accent flex min-h-11 w-full items-center justify-between rounded-lg px-2 text-sm transition-colors"
               role="option"
               aria-selected={w.id === activeId}
             >
