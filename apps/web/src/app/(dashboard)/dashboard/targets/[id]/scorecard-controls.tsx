@@ -2,6 +2,17 @@
 
 import { useState } from "react"
 import { Button } from "@lyrashield/ui"
+import { ScorecardShareComposer } from "../../../../../components/scorecard-share-composer"
+
+type PublishedShare = {
+  id: string
+  slug: string
+  url: string
+  resolvedFindings: number
+  views: number
+  shareHandoffs: number
+  referredSignups: number
+}
 
 export function ScorecardControls({
   targetId,
@@ -14,7 +25,7 @@ export function ScorecardControls({
   workspaceId: string
   grade: string
   canPublish: boolean
-  existingShare?: { id: string; slug: string; url: string }
+  existingShare?: PublishedShare
 }) {
   const [share, setShare] = useState(existingShare)
   const [error, setError] = useState<string | null>(null)
@@ -39,17 +50,9 @@ export function ScorecardControls({
       })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error?.message ?? "Could not create scorecard")
-      const nextShare = { id: body.data.id, slug: body.data.slug, url: body.data.url }
-      setShare(nextShare)
+      setShare(body.data as PublishedShare)
       setConfirmation(null)
-      try {
-        await navigator.clipboard.writeText(
-          new URL(nextShare.url, window.location.origin).toString()
-        )
-        setNotice("Scorecard ready — share link copied.")
-      } catch {
-        setNotice("Scorecard ready. Open it below to copy the link.")
-      }
+      setNotice("Scorecard published. Choose a card and share it below.")
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not create scorecard")
     } finally {
@@ -83,25 +86,14 @@ export function ScorecardControls({
     }
   }
 
-  const copy = async () => {
-    if (!share) return
-    try {
-      await navigator.clipboard.writeText(new URL(share.url, window.location.origin).toString())
-      setNotice("Share link copied.")
-      setError(null)
-    } catch {
-      setError("Copy is unavailable in this browser. Open the scorecard and copy its URL.")
-    }
-  }
-
   return (
-    <div className="mt-4 space-y-3">
-      {confirmation && (
+    <div className="mt-4 space-y-4">
+      {confirmation ? (
         <div className="bg-muted/50 rounded-lg border p-3 text-sm" role="status">
           <p>
             {confirmation === "publish"
-              ? `This publishes your ${grade.replace("_PLUS", "+")} grade publicly. No vulnerability details are included.`
-              : "Revoke this public scorecard? Its link and social preview will stop working."}
+              ? `This publishes your ${grade.replace("_PLUS", "+")} grade. No target or vulnerability details are included.`
+              : "Revoke this scorecard? Its public page, social cards, and badge will stop working."}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button
@@ -109,11 +101,7 @@ export function ScorecardControls({
               onClick={() => void (confirmation === "publish" ? create(true) : revoke(true))}
               disabled={busy}
             >
-              {busy
-                ? "Working…"
-                : confirmation === "publish"
-                  ? "Publish scorecard"
-                  : "Revoke scorecard"}
+              {busy ? "Working…" : confirmation === "publish" ? "Publish" : "Revoke"}
             </Button>
             <Button
               size="sm"
@@ -125,28 +113,35 @@ export function ScorecardControls({
             </Button>
           </div>
         </div>
-      )}
-      {!confirmation && (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button size="sm" onClick={() => void (share ? revoke() : create())} disabled={busy}>
-            {busy ? "Working…" : share ? "Revoke public scorecard" : "Create public scorecard"}
+      ) : share ? (
+        <>
+          <div className="grid grid-cols-3 gap-2 text-center sm:max-w-md">
+            {[
+              ["Human views", share.views],
+              ["Share handoffs", share.shareHandoffs],
+              ["Referred signups", share.referredSignups],
+            ].map(([label, value]) => (
+              <div key={label} className="bg-muted/40 rounded-lg border p-3">
+                <p className="text-lg font-semibold">{value}</p>
+                <p className="text-muted-foreground text-xs">{label}</p>
+              </div>
+            ))}
+          </div>
+          <ScorecardShareComposer
+            slug={share.slug}
+            url={share.url}
+            grade={grade.replace("_PLUS", "+")}
+            resolvedFindings={share.resolvedFindings}
+            source="dashboard"
+          />
+          <Button size="sm" variant="ghost" onClick={() => void revoke()} disabled={busy}>
+            Revoke public scorecard
           </Button>
-          {share && (
-            <>
-              <Button size="sm" variant="secondary" onClick={() => void copy()} disabled={busy}>
-                Copy share link
-              </Button>
-              <a
-                className="text-primary text-sm hover:underline"
-                href={share.url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open scorecard
-              </a>
-            </>
-          )}
-        </div>
+        </>
+      ) : (
+        <Button size="sm" onClick={() => void create()} disabled={busy}>
+          {busy ? "Publishing…" : "Create public scorecard"}
+        </Button>
       )}
       {notice && (
         <p className="text-muted-foreground text-sm" role="status">

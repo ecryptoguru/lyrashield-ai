@@ -20,8 +20,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       parsed.data.workspaceId,
       session.userId
     )
+    const publicPayload = share.publicPayload as unknown as { resolvedFindings: number }
     return apiSuccess(
-      { id: share.id, slug: share.slug, url: `/score/${share.slug}?ref=${referralCode}` },
+      {
+        id: share.id,
+        slug: share.slug,
+        url: `/score/${share.slug}?ref=${referralCode}`,
+        resolvedFindings: publicPayload.resolvedFindings,
+        views: share.viewCount,
+        shareHandoffs: 0,
+        referredSignups: 0,
+      },
       201
     )
   } catch (error) {

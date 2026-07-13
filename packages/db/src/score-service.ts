@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import { computeScore, SCORE_MODEL_VERSION, type ScoreGrade } from "@lyrashield/score"
 import { prisma } from "./client"
 import { logger } from "@lyrashield/logger"
@@ -272,15 +272,62 @@ export async function getPublicScorecard(slug: string) {
     },
     select: { id: true },
   })
-  await prisma.scorecardShare.update({
-    where: { id: share.id },
-    data: { viewCount: { increment: 1 } },
-  })
   return {
     payload: share.publicPayload as unknown as ScorecardPayload,
     referralCode: share.referralCode?.code ?? null,
     superseded: Boolean(newer),
   }
+}
+
+export type ScorecardEventInput = {
+  eventType: "VIEW" | "SHARE"
+  channel?:
+    | "native"
+    | "linkedin"
+    | "x"
+    | "bluesky"
+    | "whatsapp"
+    | "reddit"
+    | "email"
+    | "copy"
+    | "download"
+    | "embed"
+  variant?: "grade" | "fixes"
+  source?: "dashboard" | "public"
+  visitorId: string
+}
+
+export async function recordScorecardEvent(slug: string, event: ScorecardEventInput) {
+  const share = await prisma.scorecardShare.findFirst({
+    where: { slug, revokedAt: null, snapshot: { expiresAt: { gt: new Date() } } },
+    select: { id: true },
+  })
+  if (!share) return null
+
+  const now = new Date()
+  const dayBucket = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const visitorHash = createHash("sha256").update(event.visitorId).digest("hex")
+  return prisma.$transaction(async (tx) => {
+    const inserted = await tx.scorecardEvent.createMany({
+      data: {
+        shareId: share.id,
+        eventType: event.eventType,
+        channel: event.channel ?? "",
+        variant: event.variant ?? "grade",
+        source: event.source ?? "public",
+        visitorHash,
+        dayBucket,
+      },
+      skipDuplicates: true,
+    })
+    if (inserted.count === 1 && event.eventType === "VIEW") {
+      await tx.scorecardShare.update({
+        where: { id: share.id },
+        data: { viewCount: { increment: 1 } },
+      })
+    }
+    return { recorded: inserted.count === 1 }
+  })
 }
 
 export async function attributeReferral(

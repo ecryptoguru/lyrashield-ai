@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current baseline — 2026-07-12:** 4 apps, 10 shared packages (now including `packages/score`), 22 web page files, 39 API route files, 34 Prisma models, 14 enums, 10 migrations, 18 RLS-protected workspace tables, and passing lint, typecheck, test, E2E, and production build locally (current Vitest/Playwright counts: see §33 and `PRD.md` C0). Sections 17–33 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current baseline — 2026-07-13:** 4 apps, 10 shared packages (including `packages/score`), 22 web page files, 40 API route files, 35 Prisma models, 14 enums, 12 migrations, 18 RLS-protected workspace tables, and passing lint, typecheck, test, E2E, and production build locally (674 Vitest tests in 65 files; 2 Playwright Chromium tests). Sections 17–34 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -1860,3 +1860,12 @@ Implements the "LyraShield Score, Shareable Scorecard & Referral System — Engi
 4. Supersession notice (founder decision #5) implemented end to end.
 5. Reward quantity extracted to `REFERRAL_BONUS_MINUTES`; payload construction centralized in exported `buildScorecardPayload`; stray comment removed.
 6. Test coverage brought up to the spec's verification plan (engine boundary table, allowlist regression, self-referral/old-account rejection, snapshot idempotency).
+
+## §34 — Social sharing and activation loop (2026-07-13)
+
+- `/(public)/score/[slug]` now emits scorecard-specific canonical, Open Graph, and Twitter metadata, keeps individual cards `noindex`, preserves the methodology as the indexable authority, and uses a prominent “Check my app before launch” referral CTA.
+- `/api/og/score/[slug]` renders grade or verified-fix cards as 1200×630 link previews, 1080×1080 squares, or 1080×1350 feed images from the existing frozen `ScorecardPayload` only. `/api/badge/score/[slug]` returns a short-cache, script-free SVG README badge; revoked/expired shares 404 on every surface.
+- `ScorecardShareComposer` provides native sharing with file feature detection plus LinkedIn, X, Bluesky, WhatsApp, Reddit, email, copy, download, README badge, and browser clipboard fallback. Shared links carry allowlisted source/UTM tags while retaining the referral code; target pages select the current publisher's share so another admin cannot receive that publisher's referral attribution.
+- New `ScorecardEvent` rows record only `shareId`, event/channel/variant/source allowlists, a one-way hash of a random session identifier, and a UTC day bucket. `getPublicScorecard()` is read-only so page renders and crawler/card fetches no longer inflate `viewCount`; human views are deduplicated by share/event/channel/session/day.
+- The target scorecard panel shows human views, share handoffs, and referred signup counts. The marketing waitlist success state shows ladder position and direct channel buttons; report sharing provides copyable/email client-handoff text.
+- Regression coverage locks the event boundary, referral source cookie, public-payload allowlist, URL/caption encoding, and human-view counting. Local PostgreSQL migration `20260713170000_scorecard_events` applied successfully; desktop and 390×844 browser QA covered metadata, both card variants, all image formats, badge output, clipboard fallback, and responsive layout.

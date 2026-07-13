@@ -80,11 +80,13 @@ export {
   createScorecardShare,
   revokeScorecardShare,
   getPublicScorecard,
+  recordScorecardEvent,
   getOrCreateReferralCode,
   attributeReferral,
   qualifyReferralForWorkspace,
   buildScorecardPayload,
   type ScorecardPayload,
+  type ScorecardEventInput,
 } from "./score-service"
 export {
   listFindings,
