@@ -68,7 +68,25 @@ pnpm build
 git diff --check
 ```
 
-The current source suite is 625 Vitest tests in 56 files plus 2 Chromium E2E tests; treat command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+The current source suite is 689 Vitest tests in 65 files plus 2 Chromium E2E tests; treat command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+
+### Verify scorecards and social sharing
+
+Apply all PostgreSQL migrations first; `20260713170000_scorecard_events` is required for view/share recording. In the dashboard, complete or use an eligible Standard/Deep scan, publish its scorecard from the target page, and copy the generated slug.
+
+For `SLUG=<generated-slug>`:
+
+```bash
+curl -fsS "http://localhost:3001/score/$SLUG" >/dev/null
+curl -fsS "http://localhost:3001/api/og/score/$SLUG?variant=grade&format=wide" -o /tmp/score-wide.png
+curl -fsS "http://localhost:3001/api/og/score/$SLUG?variant=fixes&format=square" -o /tmp/score-square.png
+curl -fsS "http://localhost:3001/api/og/score/$SLUG?variant=fixes&format=portrait" -o /tmp/score-portrait.png
+curl -fsSI "http://localhost:3001/api/badge/score/$SLUG"
+```
+
+Expected image dimensions are 1200×630, 1080×1080, and 1080×1350. In a browser, verify Grade/Verified fixes switching, responsive layout at 390px, the public conversion CTA, channel buttons, copy/download/badge controls, and a clear fallback when clipboard permission is denied. Revoking the share must make the page, all images, and the badge return 404.
+
+Event checks must use the UI-generated random session identifier; do not invent a production analytics client. Reloading the same share in the same browser/day must not increment a second human `VIEW`. Enabling Do Not Track or Global Privacy Control should suppress client event emission.
 
 ## 4. Run the marketing site
 
@@ -88,6 +106,8 @@ pnpm --filter @lyrashield/marketing preview -- --port 8787
 
 That preview is intentionally noindex. It should return 200 for `/`, `/robots.txt`, and `/sitemap-index.xml`, and 404 for `/llms.txt` before launch.
 
+Submit a disposable local waitlist address and verify the success state shows queue position plus Copy/LinkedIn/X/WhatsApp referral actions. Reopening `/?ref=<returned-code>` and submitting a second disposable address should increment the first code's referral count without changing the API's non-leaking success shape.
+
 ## 5. Build the worker image and engine
 
 ```bash
@@ -97,12 +117,16 @@ docker compose up -d worker
 docker compose exec worker lyrashield --version
 ```
 
-The worker image consumes the sibling engine source through its named Docker build context. It exits before sandbox setup if `LYRASHIELD_LLM` or `LLM_API_KEY` is missing.
+The worker image consumes the sibling engine source through its named Docker build context. It exits before sandbox setup if the resolved model or selected provider credential is missing.
+
+The base `LYRASHIELD_LLM` is the fallback. During worker scans, Safe/Quick/Standard use `LYRASHIELD_LUNA_LLM` at medium reasoning; Deep/Custom use `LYRASHIELD_TERRA_LLM` at high. The values after `azure/` or `azure_ai/` must be the real Azure deployment names.
 
 For Azure OpenAI, use the `azure/` prefix and endpoint or the Azure-specific variables:
 
 ```bash
 LYRASHIELD_LLM="azure/gpt-5.6-terra"
+LYRASHIELD_LUNA_LLM="azure/gpt-5.6-luna"
+LYRASHIELD_TERRA_LLM="azure/gpt-5.6-terra"
 LLM_API_KEY="<azure-key>"
 LLM_API_BASE="https://<resource>.openai.azure.com"
 # Optional:
@@ -113,6 +137,8 @@ Or:
 
 ```bash
 LYRASHIELD_LLM="azure/gpt-5.6-terra"
+LYRASHIELD_LUNA_LLM="azure/gpt-5.6-luna"
+LYRASHIELD_TERRA_LLM="azure/gpt-5.6-terra"
 AZURE_OPENAI_API_KEY="<azure-key>"
 AZURE_OPENAI_ENDPOINT="https://<resource>.openai.azure.com"
 AZURE_API_VERSION="v1"
@@ -122,11 +148,30 @@ For Azure AI project / serverless endpoints, use the `azure_ai/` prefix with the
 
 ```bash
 LYRASHIELD_LLM="azure_ai/gpt-5.6-terra"
+LYRASHIELD_LUNA_LLM="azure_ai/gpt-5.6-luna"
+LYRASHIELD_TERRA_LLM="azure_ai/gpt-5.6-terra"
 AZURE_AI_API_KEY="<azure-key>"
 AZURE_AI_API_BASE="https://<resource>.services.ai.azure.com"
 # Optional:
 AZURE_API_VERSION="v1"
 ```
+
+Default spend limits are $1.20 for Safe/Quick, $3.20 for Standard, and $15 for Deep/Custom. A finite positive workspace `Policy.maxBudgetUsd` overrides the mode amount. The worker passes the resolved amount through `--max-budget-usd`; invalid or missing policy values fall back to the mode limit.
+
+Routing verification without printing credentials:
+
+```bash
+docker compose exec worker sh -lc \
+  'test -n "$LYRASHIELD_LLM" && test -n "$LYRASHIELD_LUNA_LLM" && test -n "$LYRASHIELD_TERRA_LLM"'
+```
+
+After an authorized scan, inspect its timeline and confirm:
+
+- Safe/Quick/Standard: `engine_start` reports Luna and `medium`; `budget_cap` reports $1.20/$3.20 unless policy-overridden.
+- Deep/Custom: `engine_start` reports Terra and `high`; `budget_cap` reports $15 unless policy-overridden.
+- `llm_usage` is present when the provider returned usage data.
+
+One scan uses one selected model. A Luna-to-Terra cascade inside one scan is not implemented.
 
 For engine work on the host:
 
@@ -156,5 +201,6 @@ docker compose down
 
 - If a local port is occupied, stop the existing process rather than changing application configuration.
 - If Prisma reports drift, run the migration checks; do not use `db:push` as a production repair.
+- If a database applied the first local draft of `20260713170000_scorecard_events`, its unique index may end in `dayBucket_`; current schema truth ends in `dayBuc_key`. Fresh databases are correct. For an old disposable local database, reset/redeploy migrations or rename only that index after confirming the exact drift—never edit an already-deployed production migration ad hoc.
 - If the worker cannot find `lyrashield`, confirm the sibling repository path or `LYRASHIELD_ENGINE_SOURCE` before rebuilding.
 - If the waitlist returns 500 locally, set a non-placeholder `WAITLIST_IP_SALT` in `apps/marketing/.dev.vars`.

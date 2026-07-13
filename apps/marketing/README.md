@@ -13,6 +13,7 @@ cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
 
 - Set `PUBLIC_SITE_URL` in `.env`.
 - Set `PUBLIC_APP_URL` in `.env` to the app origin (e.g. `http://localhost:3001` for local dev, `https://app.example.com` for production). The build strips a trailing slash if present.
+- Set `PUBLIC_POSTHOG_KEY`/`PUBLIC_POSTHOG_HOST` only for an approved analytics project. Waitlist referral shares emit the coarse `waitlist_referral_share` event with an allowlisted channel; never add email or referral-code properties.
 - Replace `WAITLIST_IP_SALT` in `.dev.vars` with a random 32+ character string (wrangler reads secrets from `.dev.vars` in local dev, not `.env`).
 
 ## Local dev
@@ -38,6 +39,8 @@ pnpm --filter @lyrashield/marketing preview
 
 The preview command applies local D1 migrations to Astro's generated Worker configuration before starting, so waitlist submissions work in the Worker-backed preview.
 
+Use the URL Wrangler prints (normally `http://localhost:8787`) for Worker-backed API checks. Astro dev at `http://localhost:4321` is useful for UI iteration but does not prove generated Worker bindings or D1 migrations.
+
 ## Manual deploy (Cloudflare Workers)
 
 1. Run migrations to create the D1 database:
@@ -52,7 +55,7 @@ For production, create the D1 database and Rate Limit namespace in your Cloudfla
 pnpm --filter @lyrashield/marketing exec wrangler secret put WAITLIST_IP_SALT
 ```
 
-1. Build and deploy:
+2. Build and deploy:
 
 ```bash
 # Preview / staging
@@ -68,18 +71,39 @@ PUBLIC_INDEXABLE=true pnpm --filter @lyrashield/marketing build
 pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
 ```
 
-1. `PUBLIC_INDEXABLE` is `false` by default. Set it to `true` only on the real production domain after Vision QA and founder approval.
+3. `PUBLIC_INDEXABLE` is `false` by default. Set it to `true` only on the real production domain after visual QA, referral/share verification, and founder approval.
+
+## Waitlist referral and sharing loop
+
+- `POST /api/waitlist` always returns the same success shape for a new address, an existing address, and the honeypot path. JSON responses include a referral code in every case; do not change this contract in a way that reveals whether an email exists.
+- `?ref=<8-character-code>` attributes a valid new signup and increments the referrer's count. Invalid codes do not break signup.
+- `GET /api/waitlist/position?code=<code>` returns `{ position, referrals }` with `Cache-Control: no-store`.
+- After JavaScript submission, the success state shows position/referral progress and Copy, LinkedIn, X, and WhatsApp actions. The shared URL is the canonical marketing origin with only `?ref=` added.
+- Clipboard denial must leave a readable “Copy unavailable” state. External channel buttons open a new tab with `noopener,noreferrer`.
+- This ladder is pre-launch prioritization, not a guaranteed invitation or monetary reward. Do not describe it as one.
+
+Worker-preview smoke:
+
+```bash
+curl -fsS -H 'Content-Type: application/json' \
+  -d '{"email":"qa@example.com","source":"manual"}' \
+  http://localhost:8787/api/waitlist
+curl -fsS 'http://localhost:8787/api/waitlist/position?code=<returned-code>'
+```
+
+Use a disposable local address. Do not run this against production with a real person's email unless they asked to join.
 
 ## No-JS waitlist fallback
 
 The `POST /api/waitlist` endpoint accepts `application/x-www-form-urlencoded` as well as JSON. To test without JavaScript, run a build with `pnpm --filter @lyrashield/marketing build` and `pnpm --filter @lyrashield/marketing preview`, then use `curl`:
 
 ```bash
-curl -X POST -d "email=you@example.com" -d "source=landing" http://localhost:4323/api/waitlist
+curl -X POST -d "email=you@example.com" -d "source=landing" http://localhost:8787/api/waitlist
 ```
 
 ## Notes
 
 - No pricing, no fake metrics, no public mention of the forked engine.
 - Blog posts are `draft: true` by default. Only un-draft a post after founder sign-off.
+- Marketing share buttons promote the waitlist referral link. Product scorecards, grades, verified-fix cards, and README badges come from the app origin and must never be recreated or edited as marketing artwork.
 - See `BLOG_AUTHORING.md` for content rules.
