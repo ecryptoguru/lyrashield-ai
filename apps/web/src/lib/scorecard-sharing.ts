@@ -1,6 +1,20 @@
 export type ScorecardVariant = "grade" | "fixes"
 export type ScorecardFormat = "wide" | "square" | "portrait"
-export type ShareChannel = "linkedin" | "x" | "bluesky" | "whatsapp" | "reddit" | "email"
+export const SCORECARD_CHANNELS = [
+  "native",
+  "linkedin",
+  "x",
+  "bluesky",
+  "whatsapp",
+  "reddit",
+  "email",
+  "copy",
+  "download",
+  "embed",
+] as const
+export const REFERRAL_SOURCES = ["scorecard", ...SCORECARD_CHANNELS] as const
+export type ScorecardChannel = (typeof SCORECARD_CHANNELS)[number]
+export type ShareChannel = Exclude<ScorecardChannel, "native" | "copy" | "download" | "embed">
 
 export function scorecardUrlWithSource(url: string, source: string) {
   const tracked = new URL(url)

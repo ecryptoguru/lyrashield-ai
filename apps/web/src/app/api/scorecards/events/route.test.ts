@@ -25,13 +25,23 @@ const valid = {
 describe("POST /api/scorecards/events", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    process.env.BETTER_AUTH_SECRET = "test-secret-at-least-32-characters-long"
     recordScorecardEvent.mockResolvedValue({ recorded: true })
   })
 
   it("accepts only the privacy-safe event allowlist", async () => {
     const response = await POST(request(valid))
     expect(response.status).toBe(201)
-    expect(recordScorecardEvent).toHaveBeenCalledWith(valid.slug, valid)
+    expect(recordScorecardEvent).toHaveBeenCalledWith(
+      valid.slug,
+      expect.objectContaining({
+        eventType: "SHARE",
+        channel: "linkedin",
+        visitorId: expect.any(String),
+      })
+    )
+    expect(recordScorecardEvent.mock.calls[0]?.[1].visitorId).not.toBe(valid.visitorId)
+    expect(response.headers.getSetCookie().join(";")).toContain("ls_scorecard_visitor=")
   })
 
   it("requires a channel for share handoffs and rejects sensitive extra properties", async () => {

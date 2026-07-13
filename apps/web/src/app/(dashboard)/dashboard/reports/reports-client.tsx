@@ -23,6 +23,7 @@ import {
   FormField,
 } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
+import { writeClipboard } from "@/components/scorecard-share-composer"
 
 interface ReportItem {
   id: string
@@ -162,10 +163,14 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  const copyToClipboard = () => {
+  const copyToClipboard = async () => {
     if (shareUrl) {
-      void navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
+      try {
+        await writeClipboard(shareUrl)
+        setCopied(true)
+      } catch {
+        setError("Failed to copy share link.")
+      }
     }
   }
 
@@ -274,7 +279,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
               <p className="text-muted-foreground truncate font-mono text-sm">{shareUrl}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" onClick={copyToClipboard}>
+              <Button size="sm" variant="secondary" onClick={() => void copyToClipboard()}>
                 {copied ? (
                   <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                 ) : (
@@ -286,8 +291,9 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                 size="sm"
                 variant="secondary"
                 onClick={() => {
-                  void navigator.clipboard.writeText(handoffMessage)
-                  setCopied(true)
+                  void writeClipboard(handoffMessage)
+                    .then(() => setCopied(true))
+                    .catch(() => setError("Failed to copy client handoff."))
                 }}
               >
                 Copy client handoff

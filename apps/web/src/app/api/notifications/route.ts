@@ -1,4 +1,9 @@
-import { listNotifications, createNotification, prisma } from "@lyrashield/db"
+import {
+  listNotifications,
+  createNotification,
+  markAllNotificationsRead,
+  prisma,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -93,5 +98,37 @@ export async function POST(request: Request) {
     if (authErr) return authErr
     logger.error("Failed to create notification", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to create notification", 500)
+  }
+}
+
+const MarkAllReadSchema = z.object({
+  workspaceId: z.string().min(1),
+  action: z.literal("mark_all_read"),
+})
+
+export async function PATCH(request: Request) {
+  try {
+    const parsed = MarkAllReadSchema.safeParse(await request.json())
+    if (!parsed.success) return apiError("INVALID_PARAM", "Invalid mark-all-read request", 400)
+    const { session } = await requirePermission(
+      parsed.data.workspaceId,
+      PERMISSIONS.notification.view
+    )
+    const count = await markAllNotificationsRead(parsed.data.workspaceId, session.userId)
+    await prisma.auditLog.create({
+      data: {
+        workspaceId: parsed.data.workspaceId,
+        actorUserId: session.userId,
+        action: "notification.mark_all_read",
+        resourceType: "notification",
+        metadata: { count },
+      },
+    })
+    return apiSuccess({ count })
+  } catch (error) {
+    const authErr = authErrorResponse(error)
+    if (authErr) return authErr
+    logger.error("Failed to mark all notifications read", { error: String(error) })
+    return apiError("INTERNAL_ERROR", "Failed to mark all notifications read", 500)
   }
 }

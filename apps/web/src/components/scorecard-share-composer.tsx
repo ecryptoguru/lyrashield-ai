@@ -38,7 +38,7 @@ function visitorId() {
   }
 }
 
-async function writeClipboard(value: string) {
+export async function writeClipboard(value: string) {
   if (navigator.clipboard?.writeText) {
     try {
       await Promise.race([
