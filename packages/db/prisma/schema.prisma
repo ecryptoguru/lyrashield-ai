@@ -727,6 +727,7 @@ model Report {
   status         String   @default("generated")
   format         String   @default("html")
   storageUri     String?
+  contentJson    Json?
   shareTokenHash String?  @unique
   shareExpiresAt DateTime?
   revokedAt      DateTime?
