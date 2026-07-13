@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { hasReferralCode } from "@lyrashield/db"
 import { z } from "zod"
-import { REFERRAL_SOURCES } from "@/lib/scorecard-sharing"
+import { REFERRAL_SOURCES } from "../../../../lib/scorecard-sharing"
 
 const Source = z.enum(REFERRAL_SOURCES)
 const Body = z
