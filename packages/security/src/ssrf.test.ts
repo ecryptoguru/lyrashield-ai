@@ -62,6 +62,11 @@ describe("checkScanUrlSafe", () => {
     const result = await checkScanUrlSafe(url, stub)
     expect(result.safe).toBe(true)
   })
+
+  it("fails closed when a resolver returns a non-IP value", async () => {
+    const result = await checkScanUrlSafe("https://example.com", async () => ["localhost"])
+    expect(result).toEqual({ safe: false, reason: "dns_resolution_failed" })
+  })
 })
 
 describe("parseIpLiteral / isBlockedIp", () => {
