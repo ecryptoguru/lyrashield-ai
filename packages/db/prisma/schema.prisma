@@ -631,6 +631,7 @@ model ScoreSnapshot {
 
   @@index([workspaceId])
   @@index([targetId, computedAt])
+  @@index([targetId, shareEligible, computedAt])
 }
 
 model ReferralCode {

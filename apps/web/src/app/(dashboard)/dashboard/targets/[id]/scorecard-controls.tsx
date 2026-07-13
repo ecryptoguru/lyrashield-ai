@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@lyrashield/ui"
 import { ScorecardShareComposer } from "../../../../../components/scorecard-share-composer"
 
@@ -32,6 +32,10 @@ export function ScorecardControls({
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmation, setConfirmation] = useState<"publish" | "revoke" | null>(null)
+  const confirmationRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (confirmation) confirmationRef.current?.focus()
+  }, [confirmation])
   if (!canPublish) return null
 
   const create = async (confirmed = false) => {
@@ -89,7 +93,21 @@ export function ScorecardControls({
   return (
     <div className="mt-4 space-y-4">
       {confirmation ? (
-        <div className="bg-muted/50 rounded-lg border p-3 text-sm" role="status">
+        <div
+          ref={confirmationRef}
+          className="bg-muted/50 rounded-lg border p-3 text-sm"
+          role="alertdialog"
+          aria-modal="true"
+          aria-label={
+            confirmation === "publish"
+              ? "Confirm scorecard publication"
+              : "Confirm scorecard revocation"
+          }
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && !busy) setConfirmation(null)
+          }}
+        >
           <p>
             {confirmation === "publish"
               ? `This publishes your ${grade.replace("_PLUS", "+")} grade. No target or vulnerability details are included.`

@@ -120,11 +120,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
           GITLEAKS_ENABLE_SUMMARY: true
+          GITLEAKS_LOG_OPTS: ${{ steps.resolve.outputs.base_sha }}..${{ steps.resolve.outputs.head_sha }}
         continue-on-error: true
-        with:
-          # Scope the scan to the diff range so unrelated pre-existing
-          # findings in the base history don't fail this PR's gate.
-          config-path: ""
 
       - name: Normalize secrets result
         id: secrets_result

@@ -43,4 +43,10 @@ describe("reusable workflow input safety", () => {
   it("warns callers that DEEP currently has SAFE-equivalent coverage", () => {
     expect(workflow).toContain("scan_mode DEEP is not yet implemented")
   })
+
+  it("scopes gitleaks to the resolved base and head range", () => {
+    expect(workflow).toContain("GITLEAKS_LOG_OPTS:")
+    expect(workflow).toContain("steps.resolve.outputs.base_sha")
+    expect(workflow).toContain("steps.resolve.outputs.head_sha")
+  })
 })

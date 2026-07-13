@@ -7,22 +7,13 @@ import { buttonVariants } from "@lyrashield/ui"
 import { CheckCircle2, ShieldCheck } from "lucide-react"
 import { ScorecardShareComposer } from "../../../../components/scorecard-share-composer"
 import { ReferralCapture } from "./referral-capture"
+import { REFERRAL_SOURCES } from "../../../../lib/scorecard-sharing"
 
 export const revalidate = 60
 
 const getScorecard = cache(getPublicScorecard)
 const appOrigin = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001"
-const REFERRAL_SOURCES = new Set([
-  "native",
-  "linkedin",
-  "x",
-  "bluesky",
-  "whatsapp",
-  "reddit",
-  "email",
-  "copy",
-  "embed",
-])
+const REFERRAL_SOURCE_SET = new Set<string>(REFERRAL_SOURCES)
 
 export async function generateMetadata({
   params,
@@ -88,7 +79,7 @@ export default async function ScorecardPage({
   const { payload, referralCode, superseded } = scorecard
   const grade = payload.grade.replace("_PLUS", "+")
   const activeReferral = ref ?? referralCode
-  const referralSource = source && REFERRAL_SOURCES.has(source) ? source : undefined
+  const referralSource = source && REFERRAL_SOURCE_SET.has(source) ? source : undefined
   const shareUrl = `/score/${slug}${activeReferral ? `?ref=${activeReferral}` : ""}`
   const signupUrl = `/sign-up${activeReferral ? `?ref=${activeReferral}` : ""}`
 

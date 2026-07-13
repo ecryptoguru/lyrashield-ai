@@ -90,14 +90,9 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
   }
 
   const handleMarkAllRead = async () => {
-    const unread = notifications.filter((n) => n.status !== "read")
-    if (unread.length === 0) return
+    if (!notifications.some((n) => n.status !== "read")) return
     try {
-      await Promise.all(
-        unread.map((n) =>
-          apiPatch(`/api/notifications/${n.id}`, { workspaceId, action: "mark_read" })
-        )
-      )
+      await apiPatch(`/api/notifications`, { workspaceId, action: "mark_all_read" })
       setNotifications((prev) => prev.map((n) => ({ ...n, status: "read" })))
     } catch {
       setError("Failed to mark all notifications as read.")

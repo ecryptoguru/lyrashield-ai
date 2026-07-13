@@ -7,6 +7,7 @@ vi.mock("./client", () => ({
       findFirst: vi.fn(),
       findMany: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }))
@@ -18,6 +19,7 @@ import {
   listNotifications,
   markNotificationSent,
   markNotificationRead,
+  markAllNotificationsRead,
   updateNotificationStatus,
   createAndSendNotification,
 } from "./notification-service"
@@ -28,6 +30,7 @@ const mockPrisma = prisma as unknown as {
     findFirst: ReturnType<typeof vi.fn>
     findMany: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
+    updateMany: ReturnType<typeof vi.fn>
   }
 }
 
@@ -49,6 +52,20 @@ const baseNotification = {
 describe("notification-service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it("marks all notifications read with workspace and recipient scoping", async () => {
+    mockPrisma.notification.updateMany.mockResolvedValue({ count: 3 })
+    await expect(markAllNotificationsRead("ws-1", "user-1")).resolves.toBe(3)
+    expect(mockPrisma.notification.updateMany).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "ws-1",
+        userId: "user-1",
+        status: { not: "read" },
+        deletedAt: null,
+      },
+      data: { status: "read" },
+    })
   })
 
   describe("createNotification", () => {

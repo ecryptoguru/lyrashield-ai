@@ -257,7 +257,7 @@ export async function getPublicScorecard(slug: string) {
       id: true,
       publicPayload: true,
       referralCode: { select: { code: true } },
-      snapshot: { select: { targetId: true, computedAt: true } },
+      snapshot: { select: { targetId: true, workspaceId: true, computedAt: true } },
     },
   })
   if (!share) return null
@@ -267,6 +267,7 @@ export async function getPublicScorecard(slug: string) {
   const newer = await prisma.scoreSnapshot.findFirst({
     where: {
       targetId: share.snapshot.targetId,
+      workspaceId: share.snapshot.workspaceId,
       computedAt: { gt: share.snapshot.computedAt },
       shareEligible: true,
     },

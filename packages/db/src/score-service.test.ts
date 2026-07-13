@@ -117,11 +117,20 @@ describe("score-service", () => {
         id: "share-1",
         publicPayload: { grade: "A" },
         referralCode: { code: "CODE2345" },
-        snapshot: { targetId: "target-1", computedAt: new Date("2026-07-01") },
+        snapshot: {
+          targetId: "target-1",
+          workspaceId: "workspace-1",
+          computedAt: new Date("2026-07-01"),
+        },
       })
       mockPrisma.scoreSnapshot.findFirst.mockResolvedValue({ id: "newer" })
       const result = await getPublicScorecard("slug")
       expect(result).toMatchObject({ referralCode: "CODE2345", superseded: true })
+      expect(mockPrisma.scoreSnapshot.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ targetId: "target-1", workspaceId: "workspace-1" }),
+        })
+      )
       expect(mockPrisma.scorecardShare.update).not.toHaveBeenCalled()
     })
 

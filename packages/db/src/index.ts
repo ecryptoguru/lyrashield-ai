@@ -132,6 +132,7 @@ export {
   listNotifications,
   markNotificationSent,
   markNotificationRead,
+  markAllNotificationsRead,
   updateNotificationStatus,
   createAndSendNotification,
 } from "./notification-service"

@@ -1,19 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
 import { z } from "zod"
+import { REFERRAL_SOURCES } from "@/lib/scorecard-sharing"
 
-const Source = z.enum([
-  "scorecard",
-  "native",
-  "linkedin",
-  "x",
-  "bluesky",
-  "whatsapp",
-  "reddit",
-  "email",
-  "copy",
-  "embed",
-])
+const Source = z.enum(REFERRAL_SOURCES)
 const Body = z
   .object({
     code: z.string().regex(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/),

@@ -108,6 +108,17 @@ export async function markNotificationRead(
   })
 }
 
+export async function markAllNotificationsRead(
+  workspaceId: string,
+  userId: string
+): Promise<number> {
+  const result = await prisma.notification.updateMany({
+    where: { workspaceId, userId, status: { not: "read" }, deletedAt: null },
+    data: { status: "read" },
+  })
+  return result.count
+}
+
 const VALID_STATUSES = ["pending", "sent", "read", "failed"] as const
 
 export async function updateNotificationStatus(
