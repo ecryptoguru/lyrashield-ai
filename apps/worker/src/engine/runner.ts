@@ -80,7 +80,23 @@ export function createKillEscalation(
   }
 }
 
-function buildEngineEnv(): Record<string, string> {
+export interface EngineProfile {
+  model?: string
+  reasoningEffort: "medium" | "high"
+}
+
+export function resolveEngineProfile(
+  mode: string,
+  routingEnv: NodeJS.ProcessEnv = process.env
+): EngineProfile {
+  const deep = mode.toUpperCase() === "DEEP" || mode.toUpperCase() === "CUSTOM"
+  const selectedModel = deep ? routingEnv.LYRASHIELD_TERRA_LLM : routingEnv.LYRASHIELD_LUNA_LLM
+  const model = selectedModel?.trim() || routingEnv.LYRASHIELD_LLM?.trim() || undefined
+
+  return { model, reasoningEffort: deep ? "high" : "medium" }
+}
+
+function buildEngineEnv(profile: EngineProfile): Record<string, string> {
   const allow = new Set([
     "PATH",
     "HOME",
@@ -135,6 +151,8 @@ function buildEngineEnv(): Record<string, string> {
       filtered[key] = value
     }
   }
+  if (profile.model) filtered.LYRASHIELD_LLM = profile.model
+  filtered.LYRASHIELD_REASONING_EFFORT = profile.reasoningEffort
   return filtered
 }
 
@@ -161,6 +179,7 @@ async function runEngineProcess(
   absWorkDir: string,
   scanId: string,
   timeoutMs: number,
+  profile: EngineProfile,
   shouldCancel?: () => Promise<boolean>
 ): Promise<{
   exitCode: number
@@ -172,7 +191,7 @@ async function runEngineProcess(
   return new Promise((resolvePromise, reject) => {
     const child: ChildProcess = spawn(cmd.executable, cmd.args, {
       cwd: absWorkDir,
-      env: buildEngineEnv(),
+      env: buildEngineEnv(profile),
       stdio: ["ignore", "pipe", "pipe"],
     })
 
@@ -336,6 +355,7 @@ export async function runEngine(
   shouldCancel?: () => Promise<boolean>
 ): Promise<EngineRunResult> {
   const cmd = buildEngineCommand(config)
+  const profile = resolveEngineProfile(config.mode)
 
   const absWorkDir = resolve(cmd.workDir)
   // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -346,12 +366,16 @@ export async function runEngine(
     executable: cmd.executable,
     args: cmd.args,
     workDir: absWorkDir,
+    model: profile.model,
+    reasoningEffort: profile.reasoningEffort,
   })
 
   await emitScanEvent(scanId, "engine_start", "info", "Starting LyraShield scan engine", {
     executable: cmd.executable,
     args: cmd.args,
     target: config.target.name,
+    model: profile.model ?? "fallback",
+    reasoningEffort: profile.reasoningEffort,
   })
 
   const { exitCode, stdout, stderr, timedOut, cancelled } = await runEngineProcess(
@@ -359,6 +383,7 @@ export async function runEngine(
     absWorkDir,
     scanId,
     timeoutMs,
+    profile,
     shouldCancel
   )
 

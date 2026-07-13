@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { buildEngineCommand, type TargetInfo } from "./command-builder"
+import { buildEngineCommand, resolveScanBudgetUsd, type TargetInfo } from "./command-builder"
 
 vi.mock("@lyrashield/config", () => ({
   env: {
@@ -197,6 +197,28 @@ describe("command-builder", () => {
         target: WEB_TARGET,
       })
       expect(cmd.args).toContain("deep")
+    })
+  })
+
+  describe("resolveScanBudgetUsd", () => {
+    it.each([
+      ["SAFE", 1.2],
+      ["QUICK", 1.2],
+      ["STANDARD", 3.2],
+      ["DEEP", 15],
+      ["CUSTOM", 15],
+      ["UNKNOWN", 15],
+    ])("uses the expected default cap for %s", (mode, expectedBudget) => {
+      expect(resolveScanBudgetUsd(mode)).toBe(expectedBudget)
+    })
+
+    it("uses a valid workspace policy budget over the mode default", () => {
+      expect(resolveScanBudgetUsd("DEEP", 6.5)).toBe(6.5)
+    })
+
+    it("does not allow invalid policy budgets to remove the mode cap", () => {
+      expect(resolveScanBudgetUsd("STANDARD", 0)).toBe(3.2)
+      expect(resolveScanBudgetUsd("STANDARD", Number.NaN)).toBe(3.2)
     })
   })
 })

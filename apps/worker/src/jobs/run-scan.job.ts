@@ -10,14 +10,14 @@ import {
 } from "@lyrashield/db"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
-import type { TargetType } from "../engine/command-builder"
+import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
 import { persistFindings } from "../engine/finding-persister"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
 import type { ScanJobData, ScanJobResult } from "../types"
 
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
-  const { scanId, workspaceId, targetId, goal, mode } = job.data
+  const { scanId, workspaceId, targetId, goal, mode, policyId } = job.data
   const log = logger
 
   log.info("Processing scan job", { scanId, targetId, goal, mode, jobId: job.id })
@@ -63,6 +63,36 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // 3. Run the scan engine
       await updateScanStatus(scanId, "RUNNING" as ScanStatus)
 
+      const policy = policyId
+        ? await prisma.policy.findFirst({
+            where: { id: policyId, workspaceId, deletedAt: null },
+            select: { maxBudgetUsd: true },
+          })
+        : null
+      const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
+      const maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
+      const budgetSource =
+        typeof policyMaxBudgetUsd === "number" &&
+        Number.isFinite(policyMaxBudgetUsd) &&
+        policyMaxBudgetUsd > 0
+          ? "policy"
+          : "mode_default"
+
+      try {
+        await addScanEvent(
+          scanId,
+          "budget_cap",
+          "info",
+          `Engine spend capped at $${maxBudgetUsd.toFixed(2)}`,
+          { maxBudgetUsd, source: budgetSource }
+        )
+      } catch (eventErr) {
+        log.warn("Failed to persist budget_cap event", {
+          scanId,
+          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+        })
+      }
+
       const engineResult = await runEngine(
         {
           scanId,
@@ -75,6 +105,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             repoFullName: target.repoFullName,
             name: target.name,
           },
+          maxBudgetUsd,
         },
         scanId,
         undefined,

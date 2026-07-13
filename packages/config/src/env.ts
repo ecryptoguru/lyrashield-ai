@@ -61,6 +61,8 @@ const envSchema = z
 
     // Scan Engine (Sprint 5+)
     LYRASHIELD_LLM: z.string().optional().or(z.literal("")),
+    LYRASHIELD_LUNA_LLM: z.string().optional().or(z.literal("")),
+    LYRASHIELD_TERRA_LLM: z.string().optional().or(z.literal("")),
     LLM_API_KEY: z.string().optional().or(z.literal("")),
     LLM_API_BASE: z.string().optional().or(z.literal("")),
     LLM_API_VERSION: z.string().optional().or(z.literal("")),
