@@ -1,0 +1,3 @@
+ALTER TYPE "ApprovalStatus" ADD VALUE 'EXECUTED';
+
+ALTER TABLE "AgentApproval" ADD COLUMN "executedAt" TIMESTAMP(3);

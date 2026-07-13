@@ -187,6 +187,10 @@ export async function getOrCreateReferralCode(userId: string) {
   throw new Error("Unable to allocate referral code")
 }
 
+export async function hasReferralCode(code: string): Promise<boolean> {
+  return Boolean(await prisma.referralCode.findUnique({ where: { code }, select: { id: true } }))
+}
+
 export async function createScorecardShare(targetId: string, workspaceId: string, userId: string) {
   const snapshot = await prisma.scoreSnapshot.findFirst({
     where: { targetId, workspaceId, shareEligible: true, expiresAt: { gt: new Date() } },
@@ -197,7 +201,14 @@ export async function createScorecardShare(targetId: string, workspaceId: string
   const existingShare = await prisma.scorecardShare.findFirst({
     where: { snapshotId: snapshot.id, createdById: userId, revokedAt: null },
   })
-  if (existingShare) return { share: existingShare, referralCode: referralCode.code }
+  if (existingShare) {
+    const stats = await getScorecardShareStats(existingShare.id, existingShare.referralCodeId)
+    return {
+      share: existingShare,
+      referralCode: referralCode.code,
+      ...stats,
+    }
+  }
   const resolvedFindings = await prisma.finding.count({
     where: {
       targetId,
@@ -226,7 +237,21 @@ export async function createScorecardShare(targetId: string, workspaceId: string
       resourceId: share.id,
     },
   })
-  return { share, referralCode: referralCode.code }
+  return {
+    share,
+    referralCode: referralCode.code,
+    ...(await getScorecardShareStats(share.id, share.referralCodeId)),
+  }
+}
+
+async function getScorecardShareStats(shareId: string, referralCodeId: string | null) {
+  const [shareHandoffs, referredSignups] = await Promise.all([
+    prisma.scorecardEvent.count({ where: { shareId, eventType: "SHARE" } }),
+    referralCodeId
+      ? prisma.referralAttribution.count({ where: { codeId: referralCodeId } })
+      : Promise.resolve(0),
+  ])
+  return { shareHandoffs, referredSignups }
 }
 
 export async function revokeScorecardShare(id: string, workspaceId: string, userId: string) {

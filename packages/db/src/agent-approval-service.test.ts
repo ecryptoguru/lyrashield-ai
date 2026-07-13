@@ -16,7 +16,8 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }))
 
-import { hashInput, verifyInputHash } from "./agent-approval-service"
+import { consumeApproval, hashInput, verifyInputHash } from "./agent-approval-service"
+import { prisma } from "./client"
 
 describe("Agent Approval Service — hash functions", () => {
   it("produces a deterministic SHA-256 hash", () => {
@@ -46,5 +47,16 @@ describe("Agent Approval Service — hash functions", () => {
   it("rejects mismatched input hash", () => {
     const hash = hashInput("run-scan", { targetId: "t1" })
     expect(verifyInputHash("run-scan", { targetId: "t2" }, hash)).toBe(false)
+  })
+
+  it("consumes only currently approved approvals", async () => {
+    vi.mocked(prisma.agentApproval.updateMany).mockResolvedValue({ count: 1 })
+    await expect(consumeApproval("approval-1", "workspace-1")).resolves.toBe(true)
+    expect(prisma.agentApproval.updateMany).toHaveBeenCalledWith({
+      where: { id: "approval-1", workspaceId: "workspace-1", status: "APPROVED" },
+      data: { status: "EXECUTED", executedAt: expect.any(Date) },
+    })
+    vi.mocked(prisma.agentApproval.updateMany).mockResolvedValue({ count: 0 })
+    await expect(consumeApproval("approval-1", "workspace-1")).resolves.toBe(false)
   })
 })

@@ -2,6 +2,7 @@ import { prisma } from "./client"
 import { createHash, randomBytes } from "crypto"
 import { logger } from "@lyrashield/logger"
 import type { Report } from "./generated/prisma"
+import { gatherReportData } from "./report-generator"
 
 export interface CreateReportParams {
   workspaceId: string
@@ -32,6 +33,7 @@ export interface ShareableReport {
 }
 
 export async function createReport(params: CreateReportParams): Promise<Report> {
+  const contentJson = await gatherReportData(params.workspaceId, params.scanId)
   const report = await prisma.report.create({
     data: {
       workspaceId: params.workspaceId,
@@ -41,6 +43,7 @@ export async function createReport(params: CreateReportParams): Promise<Report> 
       status: "generated",
       format: "html",
       createdById: params.createdById,
+      contentJson,
     },
   })
 

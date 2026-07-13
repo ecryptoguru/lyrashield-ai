@@ -26,6 +26,13 @@ export interface LaunchReadinessReport {
   recommendations: string[]
 }
 
+export interface FindingReadinessAggregate {
+  severity: FindingSeverity
+  status: FindingStatus
+  verified: boolean
+  count: number
+}
+
 const SEVERITY_WEIGHTS: Record<string, number> = {
   CRITICAL: 100,
   HIGH: 50,
@@ -40,8 +47,28 @@ export function generateLaunchReadinessReport(
   findings: FindingForReadiness[],
   hasCompletedScan: boolean
 ): LaunchReadinessReport {
-  const total = findings.length
-  const verified = findings.filter((f) => f.verified).length
+  const grouped = new Map<string, FindingReadinessAggregate>()
+  for (const finding of findings) {
+    const key = `${finding.severity}:${finding.status}:${finding.verified}`
+    const current = grouped.get(key)
+    if (current) current.count++
+    else
+      grouped.set(key, {
+        severity: finding.severity,
+        status: finding.status,
+        verified: finding.verified,
+        count: 1,
+      })
+  }
+  return generateLaunchReadinessReportFromAggregate([...grouped.values()], hasCompletedScan)
+}
+
+export function generateLaunchReadinessReportFromAggregate(
+  groups: FindingReadinessAggregate[],
+  hasCompletedScan: boolean
+): LaunchReadinessReport {
+  const total = groups.reduce((sum, group) => sum + group.count, 0)
+  const verified = groups.reduce((sum, group) => sum + (group.verified ? group.count : 0), 0)
 
   if (!hasCompletedScan) {
     return {
@@ -62,14 +89,14 @@ export function generateLaunchReadinessReport(
   let blockingFindings = 0
   let score = 100
 
-  for (const f of findings) {
-    bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1
+  for (const group of groups) {
+    bySeverity[group.severity] = (bySeverity[group.severity] ?? 0) + group.count
 
-    if (BLOCKING_STATUSES.has(f.status)) {
-      const weight = SEVERITY_WEIGHTS[f.severity] ?? 0
-      score -= weight
-      if (f.severity === "CRITICAL" || f.severity === "HIGH") {
-        blockingFindings++
+    if (BLOCKING_STATUSES.has(group.status)) {
+      const weight = SEVERITY_WEIGHTS[group.severity] ?? 0
+      score -= weight * group.count
+      if (group.severity === "CRITICAL" || group.severity === "HIGH") {
+        blockingFindings += group.count
       }
     }
   }

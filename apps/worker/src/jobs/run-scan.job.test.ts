@@ -77,7 +77,7 @@ vi.mock("../engine/scanner-orchestrator", () => ({
   }),
 }))
 
-import { processScanJob } from "./run-scan.job"
+import { extractActualCostUsd, processScanJob } from "./run-scan.job"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
@@ -109,6 +109,12 @@ const mockTarget = {
   repoFullName: null,
   deletedAt: null,
 }
+
+it("extracts only finite non-negative engine cost signals", () => {
+  expect(extractActualCostUsd({ total_cost_usd: 3.25 })).toBe(3.25)
+  expect(extractActualCostUsd({ cost: -1 })).toBeNull()
+  expect(extractActualCostUsd({ tokens: 100 })).toBeNull()
+})
 
 describe("processScanJob", () => {
   beforeEach(() => {

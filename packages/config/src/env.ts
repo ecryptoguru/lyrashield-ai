@@ -70,6 +70,7 @@ const envSchema = z
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_RUNTIME_BACKEND: z.enum(["docker"]).optional().or(z.literal("")),
     SCANNER_PHASE_TIMEOUT_MS: z.coerce.number().int().positive().max(3_600_000).default(600_000),
+    PLATFORM_MAX_SCAN_BUDGET_USD: z.coerce.number().positive().max(1000).default(50),
 
     // Azure OpenAI (optional — use these OR the generic LLM_API_KEY/LLM_API_BASE)
     AZURE_OPENAI_API_KEY: z.string().optional().or(z.literal("")),
@@ -119,6 +120,11 @@ const envSchema = z
       message: "UPSTASH_REDIS_REST_TOKEN is required when UPSTASH_REDIS_REST_URL is set",
     }
   )
+  .refine((val) => val.NODE_ENV !== "production" || Boolean(val.TRUSTED_PROXY_IP_HEADER), {
+    path: ["TRUSTED_PROXY_IP_HEADER"],
+    message:
+      "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
+  })
 
 export type Env = z.infer<typeof envSchema>
 

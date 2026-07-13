@@ -7,7 +7,9 @@ import { hasPermission, type Permission } from "@lyrashield/auth"
 import {
   prisma,
   createApproval,
+  consumeApproval,
   getApproval,
+  saveApprovalResult,
   setWorkspaceContext,
   verifyInputHash,
 } from "@lyrashield/db"
@@ -124,6 +126,12 @@ export class ActionRegistry {
           error: { code: "APPROVAL_NOT_FOUND", message: "Approval record not found" },
         }
       }
+      if (approval.status === "EXECUTED") {
+        return {
+          success: false,
+          error: { code: "APPROVAL_ALREADY_USED", message: "Approval has already been used" },
+        }
+      }
       if (approval.status !== "APPROVED") {
         return {
           success: false,
@@ -157,12 +165,30 @@ export class ActionRegistry {
           },
         }
       }
+      if (!(await consumeApproval(approval.id, context.workspaceId))) {
+        return {
+          success: false,
+          error: { code: "APPROVAL_ALREADY_USED", message: "Approval has already been used" },
+        }
+      }
     }
 
     setWorkspaceContext(context.workspaceId)
 
     try {
       const data = await action.handler(input, context)
+
+      if (context.approvalId) {
+        try {
+          await saveApprovalResult(context.approvalId, { success: true })
+        } catch (resultErr) {
+          logger.warn("Failed to save agent approval result", {
+            action: actionName,
+            approvalId: context.approvalId,
+            error: resultErr instanceof Error ? resultErr.message : String(resultErr),
+          })
+        }
+      }
 
       try {
         await prisma.auditLog.create({
@@ -184,6 +210,7 @@ export class ActionRegistry {
 
       return { success: true, data }
     } catch (err) {
+      // An approval is deliberately not restored after a handler failure: the attempt spent it.
       logger.error("Agent action execution failed", {
         action: actionName,
         error: err instanceof Error ? err.message : String(err),

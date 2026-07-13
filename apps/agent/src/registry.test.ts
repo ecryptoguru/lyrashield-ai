@@ -7,7 +7,9 @@ vi.mock("@lyrashield/db", () => ({
     auditLog: { create: vi.fn() },
   },
   createApproval: vi.fn(),
+  consumeApproval: vi.fn(),
   getApproval: vi.fn(),
+  saveApprovalResult: vi.fn(),
   setWorkspaceContext: vi.fn(),
   verifyInputHash: vi.fn(() => true),
 }))
@@ -48,6 +50,7 @@ describe("ActionRegistry", () => {
   let registry: ActionRegistry
 
   beforeEach(() => {
+    vi.clearAllMocks()
     registry = new ActionRegistry()
   })
 
@@ -134,6 +137,7 @@ describe("ActionRegistry", () => {
       approvedById: null,
       approvedAt: null,
       deniedAt: null,
+      executedAt: null,
       expiresAt: new Date(Date.now() + 86400000),
       result: null,
       createdAt: new Date(),
@@ -189,6 +193,7 @@ describe("ActionRegistry", () => {
       approvedById: "user-2",
       approvedAt: new Date(),
       deniedAt: null,
+      executedAt: null,
       expiresAt: new Date(Date.now() + 86400000),
       result: null,
       createdAt: new Date(),
@@ -218,6 +223,7 @@ describe("ActionRegistry", () => {
       approvedById: "user-2",
       approvedAt: new Date(),
       deniedAt: null,
+      executedAt: null,
       expiresAt: new Date(Date.now() + 86400000),
       result: null,
       createdAt: new Date(),
@@ -233,5 +239,96 @@ describe("ActionRegistry", () => {
     )
     expect(result.success).toBe(false)
     expect(result.error?.code).toBe("APPROVAL_INPUT_MISMATCH")
+  })
+
+  it("spends approvals atomically so they cannot be replayed", async () => {
+    const { consumeApproval, getApproval, saveApprovalResult } = await import("@lyrashield/db")
+    vi.mocked(getApproval).mockResolvedValue({
+      id: "approval-1",
+      workspaceId: "ws-1",
+      actionName: "test-action",
+      inputHash: "hash",
+      status: "APPROVED",
+      input: {},
+      requestedById: "user-1",
+      approvedById: "user-2",
+      approvedAt: new Date(),
+      deniedAt: null,
+      executedAt: null,
+      expiresAt: new Date(Date.now() + 86400000),
+      result: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    vi.mocked(consumeApproval).mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    registry.register(makeTestAction())
+    const context = { ...createContext("ADMIN"), approvalId: "approval-1" }
+    expect((await registry.execute("test-action", { value: "ok" }, context)).success).toBe(true)
+    expect((await registry.execute("test-action", { value: "ok" }, context)).error?.code).toBe(
+      "APPROVAL_ALREADY_USED"
+    )
+    expect(saveApprovalResult).toHaveBeenCalledWith("approval-1", { success: true })
+  })
+
+  it("allows only one of two concurrent approval executions", async () => {
+    const { consumeApproval, getApproval } = await import("@lyrashield/db")
+    vi.mocked(getApproval).mockResolvedValue({
+      id: "approval-1",
+      workspaceId: "ws-1",
+      actionName: "test-action",
+      inputHash: "hash",
+      status: "APPROVED",
+      input: {},
+      requestedById: "user-1",
+      approvedById: "user-2",
+      approvedAt: new Date(),
+      deniedAt: null,
+      executedAt: null,
+      expiresAt: new Date(Date.now() + 86400000),
+      result: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    vi.mocked(consumeApproval).mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    registry.register(makeTestAction())
+    const context = { ...createContext("ADMIN"), approvalId: "approval-1" }
+    const results = await Promise.all([
+      registry.execute("test-action", { value: "ok" }, context),
+      registry.execute("test-action", { value: "ok" }, context),
+    ])
+    expect(results.filter((result) => result.success)).toHaveLength(1)
+    expect(results.find((result) => result.error?.code === "APPROVAL_ALREADY_USED")).toBeTruthy()
+  })
+
+  it("reports a previously executed approval as already used", async () => {
+    const { consumeApproval, getApproval } = await import("@lyrashield/db")
+    vi.mocked(getApproval).mockResolvedValue({
+      id: "approval-1",
+      workspaceId: "ws-1",
+      actionName: "test-action",
+      inputHash: "hash",
+      status: "EXECUTED",
+      input: {},
+      requestedById: "user-1",
+      approvedById: "user-2",
+      approvedAt: new Date(),
+      deniedAt: null,
+      executedAt: new Date(),
+      expiresAt: new Date(Date.now() + 86400000),
+      result: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    registry.register(makeTestAction())
+    const result = await registry.execute(
+      "test-action",
+      { value: "ok" },
+      {
+        ...createContext("ADMIN"),
+        approvalId: "approval-1",
+      }
+    )
+    expect(result.error?.code).toBe("APPROVAL_ALREADY_USED")
+    expect(consumeApproval).not.toHaveBeenCalled()
   })
 })
