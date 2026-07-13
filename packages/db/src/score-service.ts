@@ -187,6 +187,10 @@ export async function getOrCreateReferralCode(userId: string) {
   throw new Error("Unable to allocate referral code")
 }
 
+export async function hasReferralCode(code: string): Promise<boolean> {
+  return Boolean(await prisma.referralCode.findUnique({ where: { code }, select: { id: true } }))
+}
+
 export async function createScorecardShare(targetId: string, workspaceId: string, userId: string) {
   const snapshot = await prisma.scoreSnapshot.findFirst({
     where: { targetId, workspaceId, shareEligible: true, expiresAt: { gt: new Date() } },

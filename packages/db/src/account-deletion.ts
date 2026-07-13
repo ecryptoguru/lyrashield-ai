@@ -78,6 +78,16 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
         where: { approvedById: userId },
         data: { approvedById: null },
       }),
+      tx.referralCode.updateMany({ where: { userId }, data: { userId: DELETED_USER } }),
+      tx.scorecardShare.updateMany({
+        where: { createdById: userId },
+        data: { createdById: DELETED_USER },
+      }),
+      tx.referralAttribution.updateMany({
+        where: { referredUserId: userId },
+        data: { referredUserId: DELETED_USER, status: "REJECTED" },
+      }),
+      // ScorecardEvent contains only a privacy-safe visitor hash, never a user identifier.
       tx.workspaceMember.updateMany({
         where: { invitedById: userId },
         data: { invitedById: null },

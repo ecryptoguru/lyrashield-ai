@@ -149,6 +149,15 @@ export async function saveApprovalResult(
   })
 }
 
+/** Atomically spends an approved authorization; a consumed approval can never be replayed. */
+export async function consumeApproval(approvalId: string, workspaceId: string): Promise<boolean> {
+  const result = await prisma.agentApproval.updateMany({
+    where: { id: approvalId, workspaceId, status: "APPROVED" },
+    data: { status: "EXECUTED", executedAt: new Date() },
+  })
+  return result.count === 1
+}
+
 export async function expireStaleApprovals(workspaceId?: string): Promise<number> {
   const result = await prisma.agentApproval.updateMany({
     where: {
