@@ -13,7 +13,7 @@ CREATE TABLE "ScorecardEvent" (
   CONSTRAINT "ScorecardEvent_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "ScorecardEvent_shareId_eventType_channel_visitorHash_dayBucket_key"
+CREATE UNIQUE INDEX "ScorecardEvent_shareId_eventType_channel_visitorHash_dayBuc_key"
   ON "ScorecardEvent"("shareId", "eventType", "channel", "visitorHash", "dayBucket");
 CREATE INDEX "ScorecardEvent_shareId_createdAt_idx" ON "ScorecardEvent"("shareId", "createdAt");
 CREATE INDEX "ScorecardEvent_eventType_createdAt_idx" ON "ScorecardEvent"("eventType", "createdAt");
