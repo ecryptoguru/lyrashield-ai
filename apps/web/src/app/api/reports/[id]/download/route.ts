@@ -1,4 +1,10 @@
-import { getShareableReport, generateReportHTML, prisma, type ReportData } from "@lyrashield/db"
+import {
+  getShareableReport,
+  generateReportHTML,
+  gatherReportData,
+  prisma,
+  type ReportData,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -25,13 +31,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const reportRecord = await prisma.report.findFirst({
       where: { id, workspaceId, deletedAt: null },
-      select: { contentJson: true },
+      select: { contentJson: true, scanId: true },
     })
 
-    if (!reportRecord?.contentJson) {
+    let reportData: ReportData
+    if (reportRecord?.contentJson) {
+      // Preferred path: serve the immutable snapshot captured at report creation.
+      reportData = reportRecord.contentJson as unknown as ReportData
+    } else if (reportRecord?.scanId) {
+      // Legacy fallback: reports created before the snapshot migration have no
+      // contentJson. Regenerate live from the source scan so old reports remain
+      // downloadable. These predate snapshotting, so exact-as-reviewed fidelity
+      // is not guaranteed — new reports always take the snapshot path above.
+      logger.warn("Report has no snapshot; regenerating from source scan (legacy report)", {
+        reportId: id,
+      })
+      reportData = await gatherReportData(workspaceId, reportRecord.scanId)
+    } else {
       return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
     }
-    const reportData = reportRecord.contentJson as unknown as ReportData
 
     const html = generateReportHTML(reportData)
 

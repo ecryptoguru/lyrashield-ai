@@ -83,10 +83,24 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
         where: { createdById: userId },
         data: { createdById: DELETED_USER },
       }),
-      tx.referralAttribution.updateMany({
-        where: { referredUserId: userId },
-        data: { referredUserId: DELETED_USER, status: "REJECTED" },
-      }),
+      // Anonymize the deleted user's referral attribution. Only reject rewards
+      // still in flight (PENDING/QUALIFIED); already-REWARDED/REJECTED rows keep
+      // their terminal status so referral metrics and reward history stay truthful.
+      // referredUserId is UNIQUE, so the anonymized value must stay unique per
+      // row ("deleted-user:{rowId}") — a shared constant sentinel would make
+      // every account deletion after the first fail the unique constraint.
+      // The prefix can never collide with a real user id (cuids contain no ":").
+      tx.$executeRaw`
+        UPDATE "ReferralAttribution"
+        SET "referredUserId" = ${`${DELETED_USER}:`} || "id",
+            "status" = 'REJECTED'::"ReferralStatus"
+        WHERE "referredUserId" = ${userId}
+          AND "status" IN ('PENDING'::"ReferralStatus", 'QUALIFIED'::"ReferralStatus")`,
+      tx.$executeRaw`
+        UPDATE "ReferralAttribution"
+        SET "referredUserId" = ${`${DELETED_USER}:`} || "id"
+        WHERE "referredUserId" = ${userId}
+          AND "status" IN ('REWARDED'::"ReferralStatus", 'REJECTED'::"ReferralStatus")`,
       // ScorecardEvent contains only a privacy-safe visitor hash, never a user identifier.
       tx.workspaceMember.updateMany({
         where: { invitedById: userId },
