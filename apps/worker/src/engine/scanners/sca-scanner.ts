@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex */
-import { readFile, readdir } from "fs/promises"
+import { lstat, readFile, readdir } from "fs/promises"
 import { basename, join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
@@ -53,18 +53,34 @@ const IGNORED_DIRECTORIES = new Set([
   "coverage",
   "vendor",
 ])
+const MAX_WALK_ENTRIES = 50_000
+const MAX_WALK_DEPTH = 40
 
-async function findDependencyFiles(repoPath: string, directory = repoPath): Promise<string[]> {
+async function findDependencyFiles(
+  repoPath: string,
+  directory = repoPath,
+  state = { entries: 0 },
+  depth = 0
+): Promise<string[]> {
+  if (depth > MAX_WALK_DEPTH || state.entries >= MAX_WALK_ENTRIES) return []
   try {
     const entries = await readdir(directory, { withFileTypes: true, encoding: "utf8" })
     const found: string[] = []
     for (const entry of entries) {
+      if (++state.entries > MAX_WALK_ENTRIES) break
       const fullPath = join(directory, entry.name)
-      if (entry.isDirectory()) {
+      let entryStat
+      try {
+        entryStat = await lstat(fullPath)
+      } catch {
+        continue
+      }
+      if (entryStat.isSymbolicLink()) continue
+      if (entryStat.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) {
-          found.push(...(await findDependencyFiles(repoPath, fullPath)))
+          found.push(...(await findDependencyFiles(repoPath, fullPath, state, depth + 1)))
         }
-      } else if (entry.isFile() && DEP_FILE_PATTERNS.includes(entry.name)) {
+      } else if (entryStat.isFile() && DEP_FILE_PATTERNS.includes(entry.name)) {
         found.push(relative(repoPath, fullPath))
       }
     }
@@ -269,6 +285,49 @@ export async function queryOsv(
   }
 }
 
+export async function queryOsvBatch(
+  dependencies: Dependency[],
+  fetchFn?: typeof fetch
+): Promise<Map<string, OsvVulnerability[]>> {
+  const result = new Map<string, OsvVulnerability[]>()
+  const doFetch = fetchFn ?? fetch
+  for (let start = 0; start < dependencies.length; start += 100) {
+    const chunk = dependencies.slice(start, start + 100)
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 10_000)
+      const response = await doFetch("https://api.osv.dev/v1/querybatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          queries: chunk.map((dependency) => ({
+            package: { name: dependency.name, ecosystem: dependency.ecosystem },
+            version: dependency.version,
+          })),
+        }),
+        signal: controller.signal,
+      })
+      clearTimeout(timer)
+      if (!response.ok) throw new Error(`OSV API returned ${response.status}`)
+      const data = (await response.json()) as { results?: Array<{ vulns?: OsvVulnerability[] }> }
+      for (const [index, dependency] of chunk.entries()) {
+        result.set(dependencyKey(dependency), data.results?.[index]?.vulns ?? [])
+      }
+    } catch (error) {
+      logger.warn("OSV batch query failed", {
+        error: error instanceof Error ? error.message : String(error),
+        dependencyCount: chunk.length,
+      })
+      for (const dependency of chunk) result.set(dependencyKey(dependency), [])
+    }
+  }
+  return result
+}
+
+function dependencyKey(dependency: Pick<Dependency, "name" | "version" | "ecosystem">): string {
+  return `${dependency.ecosystem}:${dependency.name}@${dependency.version}`
+}
+
 function mapOsvSeverity(vuln: OsvVulnerability): string {
   const dbSeverity = vuln.database_specific?.severity?.toLowerCase()
   if (dbSeverity) {
@@ -327,13 +386,19 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
     allDeps.push(...deps)
   }
 
-  logger.info("Dependencies parsed", { total: allDeps.length, files: depFiles.length })
+  const uniqueDeps = Array.from(new Map(allDeps.map((dep) => [dependencyKey(dep), dep])).values())
+  logger.info("Dependencies parsed", {
+    total: allDeps.length,
+    unique: uniqueDeps.length,
+    files: depFiles.length,
+  })
+  const osvResults = await queryOsvBatch(uniqueDeps, fetchFn)
 
   const seenVulnIds = new Set<string>()
   const findings: EngineVulnerability[] = []
 
-  for (const dep of allDeps) {
-    const vulns = await queryOsv(dep, fetchFn)
+  for (const dep of uniqueDeps) {
+    const vulns = osvResults.get(dependencyKey(dep)) ?? []
     for (const vuln of vulns) {
       if (seenVulnIds.has(vuln.id)) continue
       seenVulnIds.add(vuln.id)
@@ -367,7 +432,7 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
   logger.info("SCA scan complete", {
     repoPath,
     findingCount: findings.length,
-    depsScanned: allDeps.length,
+    depsScanned: uniqueDeps.length,
   })
   return findings
 }

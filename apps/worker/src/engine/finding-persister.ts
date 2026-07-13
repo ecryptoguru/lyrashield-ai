@@ -26,6 +26,60 @@ export interface PersistedFinding {
   isNew: boolean
 }
 
+async function persistEvidence(
+  findingId: string,
+  workspaceId: string,
+  vuln: EngineVulnerability | NormalizedFinding
+): Promise<void> {
+  const artifacts: Array<{
+    type: "poc" | "code_location"
+    artifactId: string
+    content: string
+    contentType: string
+  }> = []
+  if (vuln.poc_script_code || vuln.poc_description) {
+    artifacts.push({
+      type: "poc",
+      artifactId: "poc",
+      content: vuln.poc_script_code ?? vuln.poc_description ?? "",
+      contentType: "text/plain; charset=utf-8",
+    })
+  }
+  for (const [index, location] of (vuln.code_locations ?? []).entries()) {
+    if (location.snippet || location.file) {
+      artifacts.push({
+        type: "code_location",
+        artifactId: `code-loc-${index}`,
+        content: JSON.stringify(location),
+        contentType: "application/json; charset=utf-8",
+      })
+    }
+  }
+  for (const artifact of artifacts) {
+    assertEvidenceEncrypted(EVIDENCE_KEY_REF)
+    const uploaded = await uploadEvidence({
+      workspaceId,
+      findingId,
+      type: artifact.type,
+      artifactId: artifact.artifactId,
+      content: artifact.content,
+      contentType: artifact.contentType,
+      encryptionKeyRef: EVIDENCE_KEY_REF,
+    })
+    await prisma.evidence.createMany({
+      data: {
+        findingId,
+        type: artifact.type,
+        redactionStatus: "pending",
+        encryptionKeyRef: uploaded.encryptionKeyRef,
+        storageUri: uploaded.storageUri,
+        checksum: uploaded.checksum,
+      },
+      skipDuplicates: true,
+    })
+  }
+}
+
 export async function persistFindings(params: PersistFindingsParams): Promise<PersistedFinding[]> {
   const { scanId, workspaceId, targetId, vulnerabilities } = params
   const results: PersistedFinding[] = []
@@ -109,6 +163,7 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
           verified,
         },
       })
+      await persistEvidence(existing.id, workspaceId, vuln)
 
       results.push({
         id: existing.id,
@@ -143,64 +198,7 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
       },
     })
 
-    // Store evidence as encrypted references — NOT raw PoC data in the DB.
-    // The actual PoC content is uploaded to encrypted S3-compatible storage and
-    // referenced by URI. The encryptionKeyRef points to the vault key used for
-    // envelope encryption.
-    if (vuln.poc_script_code || vuln.poc_description) {
-      assertEvidenceEncrypted(EVIDENCE_KEY_REF)
-      const evidence = await uploadEvidence({
-        workspaceId,
-        findingId: finding.id,
-        type: "poc",
-        artifactId: "poc",
-        content: vuln.poc_script_code ?? vuln.poc_description ?? "",
-        contentType: "text/plain; charset=utf-8",
-        encryptionKeyRef: EVIDENCE_KEY_REF,
-      })
-      await prisma.evidence.create({
-        data: {
-          findingId: finding.id,
-          type: "poc",
-          redactionStatus: "pending",
-          encryptionKeyRef: evidence.encryptionKeyRef,
-          storageUri: evidence.storageUri,
-          checksum: evidence.checksum,
-        },
-      })
-    }
-
-    if (vuln.code_locations && vuln.code_locations.length > 0) {
-      for (const [i, loc] of vuln.code_locations.entries()) {
-        if (loc.snippet || loc.file) {
-          assertEvidenceEncrypted(EVIDENCE_KEY_REF)
-          const evidence = await uploadEvidence({
-            workspaceId,
-            findingId: finding.id,
-            type: "code_location",
-            artifactId: `code-loc-${i}`,
-            content: JSON.stringify({
-              file: loc.file,
-              start_line: loc.start_line,
-              end_line: loc.end_line,
-              snippet: loc.snippet,
-            }),
-            contentType: "application/json; charset=utf-8",
-            encryptionKeyRef: EVIDENCE_KEY_REF,
-          })
-          await prisma.evidence.create({
-            data: {
-              findingId: finding.id,
-              type: "code_location",
-              redactionStatus: "pending",
-              encryptionKeyRef: evidence.encryptionKeyRef,
-              storageUri: evidence.storageUri,
-              checksum: evidence.checksum,
-            },
-          })
-        }
-      }
-    }
+    await persistEvidence(finding.id, workspaceId, vuln)
 
     results.push({
       id: finding.id,

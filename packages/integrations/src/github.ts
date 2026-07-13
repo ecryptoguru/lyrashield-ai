@@ -156,7 +156,11 @@ export async function getInstallationToken(installationId: number): Promise<stri
 
   if (!res.ok) {
     const body = await res.text()
-    logger.error("Failed to get installation token", { installationId, status: res.status, body })
+    logger.error("Failed to get installation token", {
+      installationId,
+      status: res.status,
+      body: body.slice(0, 200),
+    })
     throw new Error(`Failed to get installation token: ${res.status}`)
   }
 

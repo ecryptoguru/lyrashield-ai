@@ -34,12 +34,18 @@ function cleanupRepo(): void {
 
 type OsvResponse = { vulns?: Array<Record<string, unknown>> }
 
-function makeMockFetch(responses: Record<string, Array<Record<string, unknown>>>): typeof fetch {
+function makeMockFetch(
+  responses: Record<string, Array<Record<string, unknown>>>,
+  calls?: Array<{ count: number }>
+): typeof fetch {
   return (async (_url: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(init?.body as string)
-    const key = `${body.package?.name}@${body.version}`
-    const vulns = responses[key] ?? []
-    const data: OsvResponse = { vulns }
+    const queries = body.queries ?? [body]
+    calls?.push({ count: queries.length })
+    const results = queries.map((query: { package?: { name?: string }; version?: string }) => ({
+      vulns: responses[`${query.package?.name}@${query.version}`] ?? [],
+    }))
+    const data = body.queries ? { results } : (results[0] as OsvResponse)
     return new Response(JSON.stringify(data), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -176,6 +182,34 @@ describe("scanSca", () => {
       const findings = await scanSca({ repoPath: dir, workspaceDir: dir, fetchFn })
       expect(findings.length).toBe(1)
       expect(findings[0]!.id).toBe("SHARED-VULN-001")
+    } finally {
+      cleanupRepo()
+    }
+  })
+
+  it("deduplicates dependencies before a single OSV batch request", async () => {
+    const dir = await setupRepo({
+      "package.json": JSON.stringify({ dependencies: { lodash: "4.17.20" } }),
+      "nested/package.json": JSON.stringify({ dependencies: { lodash: "4.17.20" } }),
+    })
+    const calls: Array<{ count: number }> = []
+    try {
+      await scanSca({ repoPath: dir, workspaceDir: dir, fetchFn: makeMockFetch({}, calls) })
+      expect(calls).toEqual([{ count: 1 }])
+    } finally {
+      cleanupRepo()
+    }
+  })
+
+  it("splits OSV queries into batches of at most 100 dependencies", async () => {
+    const dependencies = Object.fromEntries(
+      Array.from({ length: 101 }, (_, index) => [`pkg-${index}`, "1.0.0"])
+    )
+    const dir = await setupRepo({ "package.json": JSON.stringify({ dependencies }) })
+    const calls: Array<{ count: number }> = []
+    try {
+      await scanSca({ repoPath: dir, workspaceDir: dir, fetchFn: makeMockFetch({}, calls) })
+      expect(calls.map((call) => call.count)).toEqual([100, 1])
     } finally {
       cleanupRepo()
     }

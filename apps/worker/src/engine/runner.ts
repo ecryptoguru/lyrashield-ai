@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "child_process"
-import { readFile, rm, mkdir, readdir, stat } from "fs/promises"
+import { readFile, rm, mkdir, readdir, stat, lstat } from "fs/promises"
 import { join, resolve } from "path"
 import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
@@ -26,13 +26,28 @@ const EXIT_CODE_MAP: Record<
     category: "VULNERABILITIES_FOUND",
     message: "Scan completed with vulnerabilities found",
   },
+  [-2]: {
+    status: "FAILED",
+    category: "INFRA_ERROR",
+    message: "Engine runtime could not be started",
+  },
 }
 
-export function interpretExitCode(code: number): {
+export function interpretExitCode(
+  code: number,
+  signal?: NodeJS.Signals | null
+): {
   status: "COMPLETED" | "FAILED"
   category: string
   message: string
 } {
+  if (code === 137 || signal === "SIGKILL") {
+    return {
+      status: "FAILED",
+      category: "INFRA_ERROR",
+      message: "Engine was killed by its runtime",
+    }
+  }
   return (
     EXIT_CODE_MAP[code] ?? {
       status: "FAILED",
@@ -282,6 +297,7 @@ async function runEngineProcess(
 
 const ENGINE_RUN_LAYOUTS = ["strix_runs", "lyrashield_runs"] as const
 const ENGINE_OUTPUT_ARTIFACTS = ["run.json", "vulnerabilities.json"] as const
+const MAX_RUN_OUTPUT_ENTRIES = 50_000
 
 async function hasEngineOutputArtifact(runDir: string): Promise<boolean> {
   for (const artifact of ENGINE_OUTPUT_ARTIFACTS) {
@@ -298,16 +314,25 @@ async function hasEngineOutputArtifact(runDir: string): Promise<boolean> {
 
 export async function findRunOutputDir(workDir: string): Promise<string | null> {
   let newest: { path: string; mtimeMs: number } | null = null
+  let entriesSeen = 0
 
   for (const layout of ENGINE_RUN_LAYOUTS) {
     const runsDir = join(workDir, layout)
     try {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       for (const entry of await readdir(runsDir)) {
+        if (++entriesSeen > MAX_RUN_OUTPUT_ENTRIES) {
+          logger.warn("Engine run output walk capped", {
+            workDir,
+            maxEntries: MAX_RUN_OUTPUT_ENTRIES,
+          })
+          break
+        }
         const entryPath = join(runsDir, entry)
         try {
           // eslint-disable-next-line security/detect-non-literal-fs-filename
-          const entryStat = await stat(entryPath)
+          const entryStat = await lstat(entryPath)
+          if (entryStat.isSymbolicLink()) continue
           if (!entryStat.isDirectory() || !(await hasEngineOutputArtifact(entryPath))) continue
           if (!newest || entryStat.mtimeMs > newest.mtimeMs) {
             newest = { path: entryPath, mtimeMs: entryStat.mtimeMs }
@@ -378,14 +403,31 @@ export async function runEngine(
     reasoningEffort: profile.reasoningEffort,
   })
 
-  const { exitCode, stdout, stderr, timedOut, cancelled } = await runEngineProcess(
-    cmd,
-    absWorkDir,
-    scanId,
-    timeoutMs,
-    profile,
-    shouldCancel
-  )
+  let processResult
+  try {
+    processResult = await runEngineProcess(
+      cmd,
+      absWorkDir,
+      scanId,
+      timeoutMs,
+      profile,
+      shouldCancel
+    )
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code !== "ENOENT" && code !== "EACCES") throw error
+    await emitScanEvent(scanId, "engine_infra", "error", "Engine runtime could not be started", {
+      code,
+    })
+    processResult = {
+      exitCode: -2,
+      stdout: "",
+      stderr: String(error),
+      timedOut: false,
+      cancelled: false,
+    }
+  }
+  const { exitCode, stdout, stderr, timedOut, cancelled } = processResult
 
   if (timedOut) {
     await emitScanEvent(

@@ -1,5 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { logger } from "@lyrashield/logger"
+import { addScanEvent } from "@lyrashield/db"
 import type { EngineVulnerability } from "./output-parser"
 import { generateDedupeKey } from "./output-parser"
 import {
@@ -39,6 +40,32 @@ export interface ScannerOrchestratorResult {
   urlFindings: NormalizedFinding[]
   stats: ReturnType<typeof getFindingStats>
   filteredFalsePositives: number
+}
+
+const SCANNER_PHASE_TIMEOUT_MS = Number.parseInt(
+  process.env.SCANNER_PHASE_TIMEOUT_MS ?? "600000",
+  10
+)
+
+async function withScannerPhaseTimeout<T>(scanId: string, phase: Promise<T>): Promise<T> {
+  const timeoutMs =
+    Number.isFinite(SCANNER_PHASE_TIMEOUT_MS) && SCANNER_PHASE_TIMEOUT_MS > 0
+      ? SCANNER_PHASE_TIMEOUT_MS
+      : 600_000
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      phase,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          void addScanEvent(scanId, "scanner", "error", "Scanner phase timed out", { timeoutMs })
+          reject(new Error(`Scanner phase timed out after ${timeoutMs}ms`))
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 async function runScaScan(scanId: string, workspaceDir: string): Promise<EngineVulnerability[]> {
@@ -109,15 +136,32 @@ export async function runScannerOrchestrator(
     engineFindings: engineFindings.length,
   })
 
-  // Run SCA, secrets, and URL scans in parallel
+  // Source scanners must never report an empty non-repository workspace as clean.
   const targetUrl = target.url ?? ""
-  const [scaRaw, secretsRaw, urlRaw] = await Promise.all([
-    runScaScan(scanId, absWorkspace),
-    runSecretsScan(scanId, absWorkspace),
-    targetUrl
-      ? runUrlScan(scanId, targetUrl, absWorkspace)
-      : Promise.resolve([] as EngineVulnerability[]),
-  ])
+  const hasSourceCheckout = target.type === "REPO"
+  if (!hasSourceCheckout) {
+    await addScanEvent(
+      scanId,
+      "scanner",
+      "info",
+      "SCA/secrets skipped — no source checkout for this target type",
+      { targetType: target.type, scanners: ["sca", "secrets"] }
+    )
+  }
+  const [scaRaw, secretsRaw, urlRaw] = await withScannerPhaseTimeout(
+    scanId,
+    Promise.all([
+      hasSourceCheckout
+        ? runScaScan(scanId, absWorkspace)
+        : Promise.resolve([] as EngineVulnerability[]),
+      hasSourceCheckout
+        ? runSecretsScan(scanId, absWorkspace)
+        : Promise.resolve([] as EngineVulnerability[]),
+      targetUrl
+        ? runUrlScan(scanId, targetUrl, absWorkspace)
+        : Promise.resolve([] as EngineVulnerability[]),
+    ])
+  )
 
   // Normalize each category separately with the dedupe key function
   const engineNormalized = normalizeFindings(

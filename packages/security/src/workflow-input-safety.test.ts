@@ -39,4 +39,8 @@ describe("reusable workflow input safety", () => {
     expect(workflow).toContain("SAFE|DEEP|AGGRESSIVE")
     expect(workflow).toContain("CRITICAL|HIGH|MEDIUM|LOW|INFO")
   })
+
+  it("warns callers that DEEP currently has SAFE-equivalent coverage", () => {
+    expect(workflow).toContain("scan_mode DEEP is not yet implemented")
+  })
 })

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     finding: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
-    evidence: { create: vi.fn() },
+    evidence: { createMany: vi.fn() },
   },
   assertEvidenceEncrypted: vi.fn(),
 }))

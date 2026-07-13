@@ -133,6 +133,11 @@ describe("interpretExitCode", () => {
     expect(result.status).toBe("FAILED")
     expect(result.message).toContain("code -1")
   })
+
+  it("maps runtime OOM and kill signals to infrastructure errors", () => {
+    expect(interpretExitCode(137).category).toBe("INFRA_ERROR")
+    expect(interpretExitCode(-1, "SIGKILL").category).toBe("INFRA_ERROR")
+  })
 })
 
 describe("resolveEngineProfile", () => {
