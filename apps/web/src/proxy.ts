@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { checkAuthRateLimit, checkApiRateLimit } from "@/lib/rate-limit"
 
+let warnedUnknownIp = false
+
 function generateNonce(): string {
   return Buffer.from(crypto.randomUUID()).toString("base64")
 }
@@ -25,13 +27,24 @@ function buildCspHeader(nonce: string): string {
 
 export function getClientIP(request: NextRequest): string {
   const trustedHeader = process.env.TRUSTED_PROXY_IP_HEADER?.toLowerCase()
-  if (!trustedHeader) return "unknown"
+  if (!trustedHeader) return warnUnknownIp()
 
   const value = request.headers.get(trustedHeader)
-  if (!value) return "unknown"
+  if (!value) return warnUnknownIp()
 
   const parts = value.split(",")
-  return parts[parts.length - 1]!.trim() || "unknown"
+  return parts[parts.length - 1]!.trim() || warnUnknownIp()
+}
+
+function warnUnknownIp(): "unknown" {
+  if (!warnedUnknownIp) {
+    // Middleware must remain edge-safe; use the platform logger rather than the Node logger package.
+    console.warn(
+      "client IP unavailable — TRUSTED_PROXY_IP_HEADER unset or header missing; rate limiting degraded to a shared bucket"
+    )
+    warnedUnknownIp = true
+  }
+  return "unknown"
 }
 
 export async function proxy(request: NextRequest) {

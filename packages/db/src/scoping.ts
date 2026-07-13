@@ -44,6 +44,8 @@ export const SOFT_DELETE_MODELS = new Set<string>([
 //  - WorkspaceMember: legitimately queried cross-workspace (e.g. listing every
 //    workspace a user belongs to for the switcher) — auto-scoping would break it.
 //  - OnboardingState: a per-user record keyed by userId, not tenant data.
+//  - ReferralCode, ReferralAttribution, ScorecardShare, and ScorecardEvent:
+//    no workspaceId column; score-service.ts owns their explicit isolation invariants.
 // Injecting `workspaceId` on a model without the column throws, so — as with
 // soft-delete — this set must match the schema exactly.
 export const WORKSPACE_SCOPED_MODELS = new Set<string>([
@@ -105,9 +107,10 @@ export function runWithWorkspaceContext<T>(workspaceId: string | null, fn: () =>
  *
  * Auto-scoping is ACTIVE: `requireWorkspaceAccess` calls this after resolving
  * the workspace. The Prisma client extension auto-injects `workspaceId` on all
- * workspace-scoped models. Postgres RLS is also enabled with strict policies
- * that enforce `workspaceId` at the database level — use `withWorkspaceRLS()`
- * for queries that need DB-level isolation.
+ * workspace-scoped models. RLS policies remain permissive when their context is
+ * unset, and no request/job path currently calls `withWorkspaceRLS()`. Active
+ * isolation is explicit query filters plus this AsyncLocalStorage guard; new
+ * services should use `withWorkspaceRLS()` for an incremental strict cutover.
  */
 export function setWorkspaceContext(workspaceId: string | null): void {
   workspaceStore.enterWith({ workspaceId })

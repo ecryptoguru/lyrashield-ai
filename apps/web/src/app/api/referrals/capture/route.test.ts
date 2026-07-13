@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const findUnique = vi.fn()
-vi.mock("@lyrashield/db", () => ({ prisma: { referralCode: { findUnique } } }))
+const hasReferralCode = vi.fn()
+vi.mock("@lyrashield/db", () => ({ hasReferralCode }))
 
 const { POST } = await import("./route")
 
@@ -16,7 +16,7 @@ function request(body: unknown) {
 describe("POST /api/referrals/capture", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    findUnique.mockResolvedValue({ id: "ref-1" })
+    hasReferralCode.mockResolvedValue(true)
   })
 
   it("stores an allowlisted attribution source in an HttpOnly cookie", async () => {
@@ -30,6 +30,6 @@ describe("POST /api/referrals/capture", () => {
 
   it("rejects unknown attribution sources", async () => {
     expect((await POST(request({ code: "23456789", source: "private-url" }))).status).toBe(400)
-    expect(findUnique).not.toHaveBeenCalled()
+    expect(hasReferralCode).not.toHaveBeenCalled()
   })
 })

@@ -117,6 +117,11 @@ const envSchema = z
       message: "UPSTASH_REDIS_REST_TOKEN is required when UPSTASH_REDIS_REST_URL is set",
     }
   )
+  .refine((val) => val.NODE_ENV !== "production" || Boolean(val.TRUSTED_PROXY_IP_HEADER), {
+    path: ["TRUSTED_PROXY_IP_HEADER"],
+    message:
+      "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
+  })
 
 export type Env = z.infer<typeof envSchema>
 
