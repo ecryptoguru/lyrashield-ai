@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@lyrashield/db"
+import { hasReferralCode } from "@lyrashield/db"
 import { z } from "zod"
 import { REFERRAL_SOURCES } from "@/lib/scorecard-sharing"
 
@@ -14,10 +14,7 @@ const Body = z
 export async function POST(request: Request) {
   const parsed = Body.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ success: false }, { status: 400 })
-  const valid = await prisma.referralCode.findUnique({
-    where: { code: parsed.data.code },
-    select: { id: true },
-  })
+  const valid = await hasReferralCode(parsed.data.code)
   if (!valid) return NextResponse.json({ success: false }, { status: 404 })
   const response = NextResponse.json({ success: true })
   response.cookies.set("ls_ref", parsed.data.code, {

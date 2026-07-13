@@ -729,6 +729,7 @@ model Report {
   status         String   @default("generated")
   format         String   @default("html")
   storageUri     String?
+  contentJson    Json?
   shareTokenHash String?  @unique
   shareExpiresAt DateTime?
   revokedAt      DateTime?
@@ -870,6 +871,7 @@ model Retest {
 enum ApprovalStatus {
   PENDING
   APPROVED
+  EXECUTED
   DENIED
   EXPIRED
 }
@@ -885,6 +887,7 @@ model AgentApproval {
   approvedById  String?
   approvedAt    DateTime?
   deniedAt      DateTime?
+  executedAt    DateTime?
   expiresAt     DateTime?
   result        Json?
   createdAt     DateTime       @default(now())

@@ -3,7 +3,11 @@ import { prisma } from "./client"
 /**
  * Run a callback inside a Prisma transaction with `SET LOCAL
  * app.current_workspace_id` so that Postgres Row Level Security (RLS)
- * policies enforce workspace isolation at the database level.
+ * policies can enforce workspace isolation at the database level.
+ *
+ * Status: scaffolding for the planned per-table RLS cutover. There are no
+ * production call sites today, and policies are permissive while unset; do not
+ * describe this as an active isolation control.
  *
  * This is the connection-safe way to activate RLS with Prisma's pooled
  * adapter: `SET LOCAL` scopes the setting to the current transaction,
@@ -18,8 +22,8 @@ import { prisma } from "./client"
  *
  * The `tx` client passed to the callback is a transactional Prisma client
  * that has the RLS context active. All workspace-scoped queries inside the
- * callback are enforced by both the application-level extension (AsyncLocalStorage)
- * and the database-level RLS policies.
+ * callback are eligible for both the application-level extension
+ * (AsyncLocalStorage) and database-level RLS policies.
  */
 export async function withWorkspaceRLS<T>(
   workspaceId: string,

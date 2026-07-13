@@ -16,6 +16,15 @@ import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
 import type { ScanJobData, ScanJobResult } from "../types"
 
+export function extractActualCostUsd(usage: Record<string, unknown> | undefined): number | null {
+  if (!usage) return null
+  for (const key of ["total_cost_usd", "cost_usd", "total_cost", "cost"]) {
+    const value = usage[key]
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value
+  }
+  return null
+}
+
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
   const { scanId, workspaceId, targetId, goal, mode, policyId } = job.data
   const log = logger
@@ -189,6 +198,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       // Persist LLM usage data from engine run record for cost observability
       if (engineResult.output.runRecord?.llm_usage) {
+        const actualCostUsd = extractActualCostUsd(engineResult.output.runRecord.llm_usage)
         try {
           await addScanEvent(
             scanId,
@@ -202,6 +212,26 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             scanId,
             error: eventErr instanceof Error ? eventErr.message : String(eventErr),
           })
+        }
+        if (actualCostUsd !== null) {
+          await prisma.scan.update({
+            where: { id: scanId },
+            data: { actualCostCents: Math.round(actualCostUsd * 100) },
+          })
+          if (actualCostUsd > maxBudgetUsd) {
+            log.warn("Engine reported spend above worker budget cap", {
+              scanId,
+              actualCostUsd,
+              maxBudgetUsd,
+            })
+            await addScanEvent(
+              scanId,
+              "budget_exceeded",
+              "error",
+              "Engine reported spend above the worker budget cap",
+              { actualCostUsd, maxBudgetUsd }
+            )
+          }
         }
       }
 

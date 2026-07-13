@@ -15,7 +15,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { session, workspace } = await requireWorkspaceAccess(parsed.data.workspaceId)
     if (!PUBLISHERS.has(workspace.role)) throw new Error("FORBIDDEN")
     const { id } = await params
-    const { share, referralCode } = await createScorecardShare(
+    const { share, referralCode, shareHandoffs, referredSignups } = await createScorecardShare(
       id,
       parsed.data.workspaceId,
       session.userId
@@ -28,8 +28,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         url: `/score/${share.slug}?ref=${referralCode}`,
         resolvedFindings: publicPayload.resolvedFindings,
         views: share.viewCount,
-        shareHandoffs: 0,
-        referredSignups: 0,
+        shareHandoffs,
+        referredSignups,
       },
       201
     )

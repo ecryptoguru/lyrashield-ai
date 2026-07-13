@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest"
-import { generateLaunchReadinessReport } from "./launch-readiness"
+import {
+  generateLaunchReadinessReport,
+  generateLaunchReadinessReportFromAggregate,
+} from "./launch-readiness"
 
 const makeFinding = (
   overrides: Partial<{
@@ -103,5 +106,15 @@ describe("generateLaunchReadinessReport", () => {
     expect(report.recommendations).toContain(
       "No findings have been verified — run a deeper scan to confirm vulnerabilities"
     )
+  })
+
+  it("aggregates more than 100 findings without pagination loss", () => {
+    const report = generateLaunchReadinessReportFromAggregate(
+      [{ severity: "HIGH" as never, status: "OPEN" as never, verified: true, count: 125 }],
+      true
+    )
+    expect(report.totalFindings).toBe(125)
+    expect(report.blockingFindings).toBe(125)
+    expect(report.verdict).toBe("NO_GO")
   })
 })

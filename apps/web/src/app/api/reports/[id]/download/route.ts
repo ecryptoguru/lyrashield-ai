@@ -1,4 +1,4 @@
-import { getShareableReport, gatherReportData, generateReportHTML, prisma } from "@lyrashield/db"
+import { getShareableReport, generateReportHTML, prisma, type ReportData } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -25,10 +25,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const reportRecord = await prisma.report.findFirst({
       where: { id, workspaceId, deletedAt: null },
-      select: { scanId: true },
+      select: { contentJson: true },
     })
 
-    const reportData = await gatherReportData(workspaceId, reportRecord?.scanId ?? undefined)
+    if (!reportRecord?.contentJson) {
+      return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
+    }
+    const reportData = reportRecord.contentJson as unknown as ReportData
 
     const html = generateReportHTML(reportData)
 

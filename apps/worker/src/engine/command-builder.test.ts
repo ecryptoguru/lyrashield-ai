@@ -5,6 +5,7 @@ vi.mock("@lyrashield/config", () => ({
   env: {
     LYRASHIELD_ENGINE_PATH: "",
     LYRASHIELD_IMAGE: "",
+    PLATFORM_MAX_SCAN_BUDGET_USD: 50,
   },
 }))
 
@@ -219,6 +220,10 @@ describe("command-builder", () => {
     it("does not allow invalid policy budgets to remove the mode cap", () => {
       expect(resolveScanBudgetUsd("STANDARD", 0)).toBe(3.2)
       expect(resolveScanBudgetUsd("STANDARD", Number.NaN)).toBe(3.2)
+    })
+
+    it("clamps policy budgets to the platform maximum", () => {
+      expect(resolveScanBudgetUsd("DEEP", 500)).toBe(50)
     })
   })
 })
