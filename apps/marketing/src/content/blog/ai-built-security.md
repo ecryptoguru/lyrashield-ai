@@ -9,4 +9,4 @@ draft: true
 
 This is a sample blog post that is intentionally marked `draft: true`. It will not be published in the public build or the RSS feed.
 
-AI-built apps move fast. The security loop must move at the same speed: scan, verify, fix, retest, in one continuous flow. LyraShield AI is building that loop.
+AI-built apps move fast. The security loop must keep detection, evidence, remediation, and retest state clear instead of compressing them into a single “secure” verdict. LyraShield AI is building that assurance record.

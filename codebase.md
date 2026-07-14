@@ -10,9 +10,9 @@
 
 ## 1. System Overview
 
-LyraShield AI is a multi-tenant, agent-native application-security platform for GitHub repositories and deployed URLs.
+LyraShield AI is a multi-tenant, evidence-backed release-assurance platform for GitHub repositories and deployed URLs.
 
-**Core product loop**: `Target → Scan → Verified Finding → Fix → Retest → Report`
+**Core product loop**: `Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report`
 
 **Architecture boundary**:
 

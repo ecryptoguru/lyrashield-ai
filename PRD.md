@@ -6,7 +6,7 @@
 
 # Developer-Ready PRD, Architecture Doc, and Sprint Backlog
 
-## Product: LyraShield AI — Agent-Native Application Security Platform
+## Product: LyraShield AI — Evidence-Backed Release Assurance for AI-Built Software
 
 Version: 1.0
 Primary stack: Next.js, TypeScript, Better Auth, Prisma, PostgreSQL, Redis, LyraShield Worker Runtime
@@ -35,7 +35,7 @@ Internal compatibility name: **LyraShield** (`@lyrashield/*`, `LYRASHIELD_*`, an
 
 For small teams:
 
-> Connect a GitHub repo or paste an app URL. LyraShield AI safely scans it, explains evidence-backed risks, and helps create a reviewed fix proposal and retest it. PR execution is available only after a server-generated patch is safely approval-bound.
+> Connect an authorized GitHub repo or app URL. LyraShield AI records what was tested, distinguishes detected risks from independently verified findings, and packages retest-confirmed progress in a shareable assurance report. PR execution is available only after a server-generated patch is safely approval-bound.
 
 For enterprises:
 
@@ -44,7 +44,7 @@ For enterprises:
 ## 1.3 Core Product Loop
 
 ```txt
-Target → Scan → Verified Finding → Fix → Retest → Report
+Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report
 ```
 
 This loop must remain the same for both phases.
@@ -59,28 +59,27 @@ Phase 2 adds governance, policy, deployment, and compliance controls without bre
 
 ## 2.1 Positioning
 
-LyraShield is not a generic vulnerability scanner.
+LyraShield AI is not a generic vulnerability scanner or a substitute for an authorized penetration test.
 
-It is a **validated AI AppSec agent platform**.
+It is the **evidence-backed release-assurance layer for AI-built software**.
 
 Market position:
 
 ```txt
-Simpler than enterprise AppSec suites.
-More actionable than static scanners.
-Faster than manual pentests.
-More developer-friendly than traditional DAST tools.
-More enterprise-ready than raw OSS agent tools.
+Clearer evidence states than alert-only scanners.
+More defensible handoffs than an unstructured scan export.
+More accessible to AI builders than traditional AppSec workflows.
+Governed through approvals, immutable records, and tenant-safe sharing.
 ```
 
 ## 2.2 Differentiation
 
 Main differentiators:
 
-1. **Verified findings, not noisy alerts**
+1. **Explicit evidence states, not inflated verification claims**
 2. **Plain-language explanations for vibe coders**
 3. **Technical evidence for security teams**
-4. **Fix PRs and retest workflow**
+4. **Fix proposals, server-owned retests, and assurance reports**
 5. **Safe sandboxed execution**
 6. **One-click onboarding**
 7. **Enterprise governance later, not upfront**

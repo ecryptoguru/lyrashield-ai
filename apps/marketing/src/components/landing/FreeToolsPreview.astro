@@ -1,0 +1,32 @@
+---
+import { tools, toolUrl } from "../../lib/tools"
+---
+
+<section aria-labelledby="tools-heading" class="border-y border-border bg-bg-raised/70 px-4 py-24 sm:px-6 lg:px-8">
+  <div class="mx-auto max-w-6xl">
+    <div class="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
+      <div class="max-w-2xl">
+        <h2 id="tools-heading" class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
+          Start with one private check.
+        </h2>
+        <p class="mt-5 text-lg leading-8 text-text-muted">
+          These focused tools run in your browser and explain their limits. No account and no upload required.
+        </p>
+      </div>
+      <a href="/tools" class="inline-flex min-h-11 items-center text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        View all free tools
+      </a>
+    </div>
+    <ul class="mt-12 divide-y divide-border border-y border-border">
+      {tools.map((tool, index) => (
+        <li>
+          <a href={toolUrl(tool.slug)} class="group grid min-h-16 gap-2 py-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:grid-cols-[3rem_1fr_auto] sm:items-center sm:gap-5">
+            <span class="font-mono text-xs text-text-muted" aria-hidden="true">0{index + 1}</span>
+            <span class="font-medium text-text group-hover:text-accent">{tool.title}</span>
+            <span class="text-sm text-text-muted">{tool.privacy}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>

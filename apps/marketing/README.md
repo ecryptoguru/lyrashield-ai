@@ -2,6 +2,13 @@
 
 Astro 7 marketing site for the future LyraShield AI domain. Lives at `apps/marketing` in the monorepo.
 
+## Public claim boundary
+
+- Position LyraShield AI as evidence-backed release assurance for AI-built software, not as a generic AI scanner.
+- Distinguish detected risks, independently verified findings, and retest-confirmed fixes.
+- Describe scanner coverage and limitations explicitly; do not imply every control ran or every finding was verified.
+- PR execution remains fail-closed until a server-generated patch can be bound to an exact approval.
+
 ## Environment
 
 Copy `.env.example` to `.env` and `.dev.vars.example` to `.dev.vars`, then edit both:

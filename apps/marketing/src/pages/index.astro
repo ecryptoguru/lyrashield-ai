@@ -2,9 +2,11 @@
 import Base from "@layouts/Base.astro"
 import Hero from "@components/landing/Hero.astro"
 import Problem from "@components/landing/Problem.astro"
+import AssuranceRecord from "@components/landing/AssuranceRecord.astro"
 import Loop from "@components/landing/Loop.astro"
 import WhereYouWork from "@components/landing/WhereYouWork.astro"
 import TwoDepths from "@components/landing/TwoDepths.astro"
+import FreeToolsPreview from "@components/landing/FreeToolsPreview.astro"
 import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
 
@@ -14,7 +16,7 @@ const pageUrl = new URL("/", siteOrigin).toString()
 const xUrl = __MARKETING_X_URL__ || undefined
 
 const description =
-  "LyraShield AI scans AI-built apps like an attacker, verifies every finding, opens the fix PR, and retests until it's gone. Join the early-access waitlist."
+  "LyraShield AI records what was tested, separates detected risks from retest-confirmed fixes, and creates an assurance report for AI-built apps."
 
 const faqItems = [
   {
@@ -22,12 +24,16 @@ const faqItems = [
     a: "We're pre-launch, building in the open. The waitlist gets first invites and early design-partner access.",
   },
   {
-    q: "Another scanner that cries wolf?",
-    a: "The core design rule: a finding must be verified before it reaches you. If it can't be demonstrated, it doesn't ping you.",
+    q: "What does a LyraShield result actually prove?",
+    a: "Only what the retained evidence supports. New scans distinguish detected candidates, independently verified findings, validated fixes, inconclusive retests, and checks that were limited or not applicable.",
+  },
+  {
+    q: "Does LyraShield open Fix PRs today?",
+    a: "Not yet. LyraShield creates approval-gated fix proposals, but PR execution stays blocked until the patch is generated server-side and bound to the exact approval.",
   },
   {
     q: "Does it replace my existing tools?",
-    a: "No. LyraShield AI is one loop for AI-built code, from scan to verified fix. Many teams will run it alongside their existing SAST and SCA.",
+    a: "No. SCA, secret scanning, URL checks, and repository review are coverage layers inside a wider assurance workflow. Specialist tools may still provide deeper coverage in their category.",
   },
   {
     q: "What does it cost?",
@@ -74,16 +80,18 @@ const jsonLd = [
 ---
 
 <Base
-  title="LyraShield AI — Secure AI-built apps before they ship"
+  title="LyraShield AI — Release assurance for AI-built apps"
   description={description}
   canonical={pageUrl}
   jsonLd={jsonLd}
 >
   <Hero />
   <Problem />
+  <AssuranceRecord />
   <Loop />
-  <WhereYouWork />
   <TwoDepths />
-  <Faq />
+  <FreeToolsPreview />
+  <WhereYouWork />
+  <Faq items={faqItems} />
   <FinalCta />
 </Base>

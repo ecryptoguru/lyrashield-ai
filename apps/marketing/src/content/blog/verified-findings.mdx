@@ -1,6 +1,6 @@
 ---
 title: "Verified findings, not noise"
-description: "The only finding that matters is one you can demonstrate. Here's why verification is the core design principle."
+description: "Why detection, validation, and independent verification must remain separate in a trustworthy security workflow."
 pubDate: 2026-07-11
 author: lyrashield-team
 tags: ["security", "process"]
@@ -9,8 +9,8 @@ draft: true
 
 This sample MDX post is kept `draft: true` and is not public-facing.
 
-In security, a noisy finding is worse than no finding. The team that handles it has to triage, reproduce, and then decide. LyraShield AI flips that: every finding reaches you with the evidence attached.
+In security, a noisy finding creates work, but hiding uncertain findings creates false confidence. LyraShield AI keeps detected candidates visible while preserving whether independent verification exists.
 
 ## What verification means
 
-A verified finding is reproducible. It has a trigger, a consequence, and a recommended fix. It is not a guess from a pattern.
+A verified finding requires an independent verification receipt. Detection confidence helps triage; it does not become proof. A deterministic clean retest can validate a fix only when that scanner had complete relevant coverage, while incomplete evidence remains inconclusive.

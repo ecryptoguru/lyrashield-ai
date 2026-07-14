@@ -4,7 +4,7 @@
 
 ## Positioning
 
-LyraShield AI is an agent-native application-security platform for AI-built software. It turns a security request into a loop: **Target → Scan → Verified Finding → Fix Proposal → Retest → Report**. A Fix PR is a future execution step only when a server-generated patch is safely approval-bound.
+LyraShield AI is the evidence-backed release-assurance layer for AI-built software. It records what was tested, separates detected risks from independently verified findings and retest-confirmed fixes, and packages that truth for builders, clients, and technical reviewers. The operating loop is **Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report**. A Fix PR is a future execution step only when a server-generated patch is safely approval-bound.
 
 The position is the combination, not a claim of unique capability: a solo builder and a security team can use the same loop at different depths, across UI, API, MCP, CLI, and GitHub workflows.
 
@@ -42,13 +42,14 @@ Channel copy should lead with the earned outcome (current scoped grade or retest
 
 ## Differentiation
 
-Lead with a complete review package:
+Lead with a defensible release-assurance record:
 
 1. Scan a repository or URL.
-2. Normalize and prioritize findings.
-3. Explain the issue in plain language.
-4. Create a fix proposal, then open a PR only when an immutable server-generated patch is approval-bound.
-5. Retest and share the resulting report.
+2. Record what completed, what was limited, and what remains evidence-required.
+3. Separate detected candidates from independently verified findings.
+4. Explain and prioritize the issue in plain language, then create an approval-gated fix proposal.
+5. Run a server-owned retest and retain a validated or inconclusive outcome.
+6. Share an immutable Assurance Story report or privacy-bounded scorecard.
 
 SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important coverage layers, but are table stakes individually. Do not overstate parity with dedicated point tools.
 
