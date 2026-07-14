@@ -13,7 +13,7 @@
 ## Release prerequisites
 
 1. Public HTTPS application and marketing origins plus all trusted auth origins are decided. Scorecard canonical/OG/Twitter URLs must resolve to the application origin.
-2. Production Postgres migrations and the CI migration-drift check pass.
+2. Production Postgres migrations and the CI migration-drift check pass. Before applying `20260714170000_integration_global_external_id_unique`, resolve any duplicate non-null `(type, externalId)` bindings explicitly; the migration intentionally fails rather than silently reassigning an installation.
 3. Redis is private/TLS-protected and reachable by both web and worker.
 4. All secrets are supplied through the platform's secret manager, never committed files.
 5. The worker runs as a dedicated non-root user with least-privilege filesystem and Docker access.
@@ -110,13 +110,15 @@ git diff --check
 
 Then, in the target environment:
 
-1. Deploy all 12 migrations before application processes serve traffic, including `20260713170000_scorecard_events`; run the migration-diff gate against a fresh shadow database.
+1. Deploy all 17 migrations before application processes serve traffic, including `20260713170000_scorecard_events` and `20260714170000_integration_global_external_id_unique`; run the migration-diff gate against a fresh shadow database.
 2. Verify `/api/health`, `/api/ready`, authentication, workspace isolation, Redis queue connectivity, and Worker readiness.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.
 5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with high reasoning and its cap is $15 or the selected positive policy override.
 6. Capture audit evidence, confirm the sandbox image digest used, reconcile provider billing with the retained `llm_usage` event, and verify evidence artifacts are retrievable from the configured S3-compatible endpoint. Any placeholder or failed upload blocks the gate.
 7. Exercise backup and restore on non-production data before claiming an RPO/RTO.
+8. Confirm URL targets use only the pinned deterministic URL scanner. Do not re-enable the external engine for URL targets until its transport is DNS-pinned and redirect-safe.
+9. Confirm GitHub callbacks can refresh only a pre-existing workspace binding. Fresh installation claims and client-authored Fix PR payloads must remain blocked until their provider-ownership and server-generated-patch gates are implemented.
 
 ## Public scorecard, referral, and sharing gate
 
@@ -159,3 +161,4 @@ Before deploying the Cloudflare marketing Worker:
 - A locally rendered scorecard image is not proof that external social caches have fetched the current canonical asset.
 - A scorecard share-button click is not a platform impression, signup, qualified referral, or customer claim.
 - A green application CI run is not evidence of configured production secrets, DNS, billing, or backups.
+- A database uniqueness migration passing on an empty environment is not evidence that legacy duplicate provider bindings were reconciled.

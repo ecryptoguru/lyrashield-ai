@@ -4,7 +4,7 @@
 
 ## Positioning
 
-LyraShield AI is an agent-native application-security platform for AI-built software. It turns a security request into a loop: **Target → Scan → Verified Finding → Fix PR → Retest → Report**.
+LyraShield AI is an agent-native application-security platform for AI-built software. It turns a security request into a loop: **Target → Scan → Verified Finding → Fix Proposal → Retest → Report**. A Fix PR is a future execution step only when a server-generated patch is safely approval-bound.
 
 The position is the combination, not a claim of unique capability: a solo builder and a security team can use the same loop at different depths, across UI, API, MCP, CLI, and GitHub workflows.
 
@@ -47,21 +47,21 @@ Lead with a complete review package:
 1. Scan a repository or URL.
 2. Normalize and prioritize findings.
 3. Explain the issue in plain language.
-4. Create a fix proposal or PR under the required approval rules.
+4. Create a fix proposal, then open a PR only when an immutable server-generated patch is approval-bound.
 5. Retest and share the resulting report.
 
 SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important coverage layers, but are table stakes individually. Do not overstate parity with dedicated point tools.
 
 ## Product status
 
-Implemented: core workspaces/targets/scans, GitHub integration, scan orchestration, findings normalization, SCA and secret scanning, URL scanning, fix proposals, retests, reports, notifications, schedules, MCP, agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksums, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, LyraShield Score, public scorecards, referrals, premium social sharing, and Azure AI / GPT 5.6 mode routing. Safe/Quick/Standard scans use Luna with medium reasoning; Deep/Custom use Terra with high reasoning. Every engine run receives a positive dollar cap, with workspace policy overrides supported.
+Implemented: core workspaces/targets/scans, existing GitHub integration refresh, scan orchestration, findings normalization, SCA and secret scanning, pinned deterministic URL scanning, fix proposals, retests, reports, notifications, schedules, MCP, agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksums, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, LyraShield Score, public scorecards, referrals, premium social sharing, and Azure AI / GPT 5.6 mode routing. Safe/Quick/Standard scans use Luna with medium reasoning; Deep/Custom use Terra with high reasoning. Every engine run receives a positive dollar cap, with workspace policy overrides supported. Engine findings are not self-verified.
 
-Not implemented: billing/plan quotas, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities. See `PRD.md` for the authoritative roadmap.
+Not implemented: billing/plan quotas, provider-backed proof for a fresh GitHub installation claim, server-generated approval-bound PR patches, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities. See `PRD.md` for the authoritative roadmap.
 
 ## Pre-launch GTM
 
 - Start with a small number of design partners, prioritizing teams that can provide structured feedback.
-- Use the report, fix PR, and MCP workflow as demonstrations; do not use unverified marketing claims.
+- Use reports, fix proposals, retests, and MCP read workflows as demonstrations; do not promise automatic PR creation or use unverified marketing claims.
 - Publish answer-first technical content for AI-built-app security only after founder approval.
 - Keep sample blog posts as drafts until their claims, sources, author, and launch timing are approved.
 

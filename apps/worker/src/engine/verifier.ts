@@ -15,21 +15,20 @@ export interface VerifiedVulnerability extends EngineVulnerability {
 export function verifyVulnerability(vuln: EngineVulnerability): VerificationResult {
   if (vuln.poc_script_code && vuln.poc_description) {
     return {
-      verified: true,
-      confidence: "high",
+      verified: false,
+      confidence: "medium",
       reason:
-        "PoC script and description provided — vulnerability confirmed via exploit reproduction",
-      verificationMethod: "poc_reproduction",
+        "Engine-provided PoC requires an independent verification job before it can be trusted",
+      verificationMethod: "engine_claim_pending_verification",
     }
   }
 
   if (vuln.poc_description) {
     return {
-      verified: true,
-      confidence: "high",
-      reason:
-        "PoC description provided — vulnerability confirmed via documented exploitation steps",
-      verificationMethod: "poc_description",
+      verified: false,
+      confidence: "medium",
+      reason: "Engine-provided PoC description requires independent verification",
+      verificationMethod: "engine_claim_pending_verification",
     }
   }
 
@@ -37,28 +36,26 @@ export function verifyVulnerability(vuln: EngineVulnerability): VerificationResu
     const hasFix = vuln.code_locations.some((loc) => loc.fix_before && loc.fix_after)
     if (hasFix) {
       return {
-        verified: true,
-        confidence: "high",
-        reason:
-          "Code location with before/after fix diff provided — vulnerability confirmed via code analysis",
-        verificationMethod: "code_diff_analysis",
+        verified: false,
+        confidence: "medium",
+        reason: "Engine-provided code diff requires trusted source checkout verification",
+        verificationMethod: "engine_claim_pending_verification",
       }
     }
     return {
-      verified: true,
+      verified: false,
       confidence: "medium",
-      reason: "Code location identified — vulnerability confirmed via static analysis",
-      verificationMethod: "static_analysis",
+      reason: "Engine-provided code location requires trusted source checkout verification",
+      verificationMethod: "engine_claim_pending_verification",
     }
   }
 
   if (vuln.technical_analysis && vuln.impact) {
     return {
-      verified: true,
+      verified: false,
       confidence: "medium",
-      reason:
-        "Technical analysis and business impact documented — vulnerability confirmed via analysis",
-      verificationMethod: "analysis_review",
+      reason: "Engine-provided analysis requires independent verification",
+      verificationMethod: "engine_claim_pending_verification",
     }
   }
 

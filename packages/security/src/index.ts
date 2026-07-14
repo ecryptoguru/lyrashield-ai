@@ -4,6 +4,7 @@ export {
   parseIpLiteral,
   canonicalizeIpv4,
   expandIpv6,
+  redactUrlForLogs,
   type SsrfReason,
   type SsrfCheckResult,
   type HostResolver,

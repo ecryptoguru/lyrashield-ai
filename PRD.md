@@ -1,6 +1,6 @@
 > **CURRENT SOURCE OF TRUTH — 2026-07-14:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
-> The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, the Vitest suite, and the Playwright suite (current counts: see C0). Core auth (with email verification), tenancy, targets, scanning, findings, fix PRs, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, the GitHub diff gate, and the LyraShield Score / public scorecard / referral / social-distribution layer are implemented. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, real-domain sharing validation, and marketing gates.
+> The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, the Vitest suite, and the Playwright suite (current counts: see C0). Core auth (with email verification), tenancy, targets, scanning, findings, fix proposals, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, the GitHub diff gate, and the LyraShield Score / public scorecard / referral / social-distribution layer are implemented. Fresh GitHub installation claims and Fix PR execution remain fail-closed until their provider-ownership and server-generated-patch security proofs exist. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, real-domain sharing validation, and marketing gates.
 
 ---
 
@@ -35,7 +35,7 @@ Internal compatibility name: **LyraShield** (`@lyrashield/*`, `LYRASHIELD_*`, an
 
 For small teams:
 
-> Connect a GitHub repo or paste an app URL. LyraShield AI safely scans it, explains evidence-backed risks, and helps create fix PRs and retest them.
+> Connect a GitHub repo or paste an app URL. LyraShield AI safely scans it, explains evidence-backed risks, and helps create a reviewed fix proposal and retest it. PR execution is available only after a server-generated patch is safely approval-bound.
 
 For enterprises:
 
@@ -2261,13 +2261,11 @@ POST /api/fix-proposals/:fixProposalId/create-pr
 Acceptance:
 
 ```txt
-User must approve proposal.
-GitHub App must have write permissions.
-New branch is created.
-PR is opened.
-Finding status changes to PR_OPENED.
-PR URL is stored.
-Audit log is written.
+Current behavior: fail closed with PROPOSAL_PATCH_REQUIRED.
+The endpoint accepts only workspaceId; it rejects client-provided patches,
+branches, titles, and PR bodies.
+Re-enable only after an immutable server-generated patch/evidence artifact is
+bound to the exact consumed approval and the verified GitHub installation.
 ```
 
 ---
@@ -5229,9 +5227,9 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
-- Current automated gate: lint, typecheck, production build, formatting, Docker Compose validation, **738 passing Vitest tests in 72 files**, and **2 passing Playwright Chromium tests**.
+- Current local security-remediation branch gate: lint, typecheck, production build, formatting, Prisma client generation, `git diff --check`, **760 passing Vitest tests in 74 files**, and **2 passing Playwright Chromium tests**. This is branch-local proof, not a production deployment or migration-application claim.
 - Current product surface: **22 page route files** and **40 API route files** in `apps/web`.
-- Current data surface: **35 Prisma models**, **14 enums**, and **16 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
+- Current data surface: **35 Prisma models**, **14 enums**, and **17 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
 - Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
 - Current Docker proof: the web/worker stack and engine-bearing worker image build; the CLI reports `1.0.4.post1`; configuration failure occurs before sandbox pull when model credentials are missing.
@@ -5251,16 +5249,16 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 ### C1.2 Core application loop
 
 - Project and target creation for GitHub repositories and URLs.
-- GitHub App installation, repository discovery, signed webhook handling, delivery idempotency, installation token caching, pagination, and retry/backoff.
+- Existing GitHub App binding refresh, repository discovery, signed webhook handling, delivery idempotency, installation token caching, pagination, and retry/backoff. A fresh callback may not claim an installation until the provider supplies ownership proof bound to the initiating user/workspace.
 - Scan creation, target-level serialization, preflight, queueing, lifecycle transitions, cancellation, retry guards, scan events, and scan-detail polling.
 - Finding normalization, CWE/OWASP enrichment, CVSS estimation, confidence and false-positive-risk scoring, deduplication, persistence, filtering, and plain-language explanations.
 - Evidence upload: PoC and code-location artifacts are uploaded to configured S3-compatible storage with `AES256` SSE and a SHA-256 checksum. Missing storage or upload failure fails closed; `Evidence.encryptionKeyRef` and `checksum` are validated before persistence. Retries are idempotent on finding/checksum.
-- Fix proposals, approval-aware GitHub PR creation, retests, immutable creation-time report snapshots, revocable shared reports, and launch-readiness verdicts computed from unpaginated database aggregates.
+- Fix proposals, retests, immutable creation-time report snapshots, revocable shared reports, and launch-readiness verdicts computed from unpaginated database aggregates. PR creation deliberately fails closed until an immutable server-generated patch is bound to a consumed approval; it accepts no client patch, branch, or PR metadata.
 - Email, Slack, Discord, and in-app notification plumbing plus recurring scan schedules with atomic claims. Bulk notification reads are scoped to both workspace and user.
 
 ### C1.3 Detection and engine coverage
 
-- Thin-fork engine adapter with explicit environment precedence, telemetry off by default, bounded subprocess execution, SIGTERM-to-SIGKILL cancellation, and current/legacy artifact discovery.
+- Thin-fork engine adapter with explicit environment precedence, telemetry off by default, bounded subprocess execution, SIGTERM-to-SIGKILL cancellation, bounded artifact reads/schema-filtering, and current/legacy artifact discovery. The external engine runs only for repository targets; URL targets use the pinned deterministic scanner.
 - SCA for supported dependency manifests, including nested workspaces, with bounded symlink-safe discovery, deduplicated/batched OSV lookup, and result normalization.
 - Secret scanning with bounded symlink-safe discovery, redaction, and false-positive filtering. Repository-only phases emit explicit skips for non-repository targets.
 - AI-builder-aware URL checks, security-header/CORS checks, redirect and DNS revalidation, and shared SSRF-safe fetch utilities.
@@ -5272,7 +5270,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 ### C1.4 Agent-native surfaces
 
 - Headless Agent Action Layer with six registered actions: list targets, run scan, get scan status, list findings, get finding, and explain finding.
-- Permission enforcement, workspace matching, signed service tokens, audit logging, queue error handling, and exact `actionName` plus input-hash approval verification.
+- Permission enforcement, workspace matching, signed service tokens, audit logging, queue error handling, and exact `actionName` plus input-hash approval verification. Both `DEEP` and `CUSTOM` agent scan modes require approval.
 - Approval list/approve/deny APIs and an `AgentApproval` persistence model protected by RLS. Execution uses an atomic single-use transition and retains execution time/result without reopening the approval on result-recording failure.
 - MCP package with real API-backed tools and stdio JSON-RPC transport. Mutating tools require approval on the controlling terminal; headless/no-TTY invocation fails closed while stdout remains reserved for JSON-RPC.
 
@@ -5315,13 +5313,20 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - Public report rendering reads the immutable snapshot, uses generic target/title disclosure, emits `noindex, nofollow, noarchive, noimageindex`, and applies `Referrer-Policy: no-referrer`. Legacy reports retain the safe fallback restored in PR #59.
 - Rendered QA covered both themes, marketing, auth, every dashboard route, mobile Sheet open/close behavior, report audience switching, report create/share, and shared-report privacy at desktop and 320px with clean application console output.
 
+### C1.9 Current security-remediation branch (unmerged)
+
+- All 14 findings from the full review are addressed with regression coverage: engine artifacts/fields are bounded; engine evidence never self-verifies a finding; scanner timeout aborts propagate through SCA, secrets, agent-config, URL, and OSV work; and `fec0::/10` is blocked.
+- URL credentials, query strings, and fragments are rejected for scan targets. Diagnostic URL logs contain only origin/path, never credentials, query parameters, or fragments. Response-body reads remain within the safe-fetch timeout.
+- Notification reads are limited to the caller's notifications plus workspace-wide notices. `(type, externalId)` is globally unique for integrations through `20260714170000_integration_global_external_id_unique`.
+- Fresh GitHub installation claims and client-authored Fix PR creation are intentionally unavailable until provider ownership verification and immutable server-generated patch binding are implemented. The dashboard/API report the blocked state rather than creating an unsafe resource.
+
 ## C2. Phase 1 gaps and release gates
 
 ### C2.1 Required before a controlled product pilot
 
 1. **Controlled scan proof:** one local Safe scan against an approved public repository completed with Luna/medium routing, Docker sandbox execution, retained scan events, zero findings, and a persisted post-run budget-overage warning. It is not a production proof and does not establish coverage of all controls. A production target, approved Terra/Deep run, production-pinned image provenance, retained artifacts when findings exist, and production egress enforcement are still required.
 2. **Transport-level egress control:** application SSRF checks are present, but untrusted multi-tenant scanning still requires a deployment-level proxy or equivalent DNS-pinned network enforcement.
-3. **Production infrastructure:** provision production PostgreSQL, Redis, mandatory S3-compatible evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all 16 migrations on a fresh database, including scorecard events, single-use approvals, evidence idempotency, report snapshots, and the public-score lookup index. Evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
+3. **Production infrastructure:** provision production PostgreSQL, Redis, mandatory S3-compatible evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all 17 migrations on a fresh database, including scorecard events, single-use approvals, evidence idempotency, report snapshots, the public-score lookup index, and global provider installation uniqueness. Reconcile legacy duplicate provider bindings before the final migration; evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
 
 ### C2.2 Required before self-serve paid launch
 
@@ -5345,6 +5350,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - Add a database constraint and input validation requiring `Policy.maxBudgetUsd >= 0` when policy CRUD is exposed.
 - Build the user-facing API-key create/list/revoke lifecycle before documenting API-key access as a product capability.
 - Complete MCP client setup documentation and expand the tool catalog only when the corresponding approval-aware actions exist.
+- Implement provider-backed GitHub installation ownership verification before re-enabling fresh callback binding, and a server-generated immutable patch/evidence pipeline before re-enabling Fix PR creation.
 - Replace the current SSE-S3 key reference with a real KMS/Vault key reference when the production storage provider is selected.
 - Add compliance-lite evidence packs and deeper IaC/container/reachability coverage after the pilot gates, based on customer demand.
 
@@ -5357,7 +5363,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 | Sprints 4–6.5      | Complete in code | Queue, bounded worker/scanner lifecycle, engine adapter, normalization, batched SCA, secrets scanning, and idempotent evidence persistence are implemented; controlled sandbox proof remains.                                                                                                                 |
 | Model cost routing | Complete in code | Safe/Quick/Standard route to Luna/medium; Deep/Custom route to Terra/high; positive mode/policy dollar caps reach the engine and are platform-clamped. Azure deployment and controlled-scan proof remain.                                                                                                     |
 | Growth layer       | Complete         | Score snapshots, public scorecards, referral attribution/rewards, premium social cards, badges, channel sharing, privacy-safe signed-cookie funnel events, waitlist referrals, and report handoff copy are implemented. Real-domain unfurl and production attribution QA remain release gates.                |
-| Sprints 7–9        | Complete         | Fix PRs, retests, immutable report snapshots, notifications, schedules, URL scanning, aggregate launch readiness, sharing, and the exact-range diff gate are implemented.                                                                                                                                     |
+| Sprints 7–9        | Complete in code | Fix proposals, retests, immutable report snapshots, notifications, schedules, pinned URL scanning, aggregate launch readiness, sharing, and the exact-range diff gate are implemented. Fresh GitHub claims and Fix PR creation remain intentionally blocked pending their security proofs.                    |
 | Sprint 5.5         | Not started      | Security Copilot sidebar remains deferred.                                                                                                                                                                                                                                                                    |
 | Sprint 8.5         | Not started      | Visual Security Plan and recap remain deferred.                                                                                                                                                                                                                                                               |
 | Sprint 9.5         | Core complete    | MCP tools and stdio transport exist; broader client onboarding and tool coverage remain roadmap work.                                                                                                                                                                                                         |

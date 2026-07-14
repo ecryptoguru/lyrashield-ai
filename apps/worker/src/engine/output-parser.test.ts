@@ -101,6 +101,19 @@ describe("output-parser", () => {
       const result = parseVulnerabilitiesJson(raw)
       expect(result).toHaveLength(0)
     })
+
+    it("rejects oversized finding collections and fields", () => {
+      const tooMany = Array.from({ length: 1_001 }, (_, index) => ({
+        ...SAMPLE_VULN,
+        id: `v-${index}`,
+      }))
+      expect(parseVulnerabilitiesJson(JSON.stringify(tooMany))).toEqual([])
+      expect(
+        parseVulnerabilitiesJson(
+          JSON.stringify([{ ...SAMPLE_VULN, description: "x".repeat(64 * 1024 + 1) }])
+        )[0]?.description
+      ).toBeUndefined()
+    })
   })
 
   describe("parseRunJson", () => {
@@ -128,6 +141,31 @@ describe("output-parser", () => {
 
     it("returns null for non-object JSON", () => {
       expect(parseRunJson('["array"]')).toBeNull()
+    })
+
+    it("rejects incomplete runs and retains only bounded data needed by the worker", () => {
+      expect(parseRunJson(JSON.stringify({ run_id: "run-1" }))).toBeNull()
+      expect(
+        parseRunJson(
+          JSON.stringify({
+            run_id: "run-1",
+            status: "completed",
+            targets_info: [
+              { details: { cloned_repo_path: "/tmp/strix_repos/run-1" }, ignored: "x" },
+            ],
+            llm_usage: { total_cost_usd: 1.25, prompt: "ok", ignored: { nested: true } },
+            scan_results: { untrusted: true },
+          })
+        )
+      ).toEqual({
+        run_id: "run-1",
+        run_name: null,
+        start_time: "",
+        end_time: null,
+        status: "completed",
+        targets_info: [{ details: { cloned_repo_path: "/tmp/strix_repos/run-1" } }],
+        llm_usage: { total_cost_usd: 1.25, prompt: "ok" },
+      })
     })
   })
 

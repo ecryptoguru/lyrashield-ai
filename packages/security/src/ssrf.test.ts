@@ -32,6 +32,10 @@ describe("checkScanUrlSafe", () => {
     ["http://0177.0.0.1/", "octal-encoded 127.0.0.1"],
     ["http://[fc00::1]/", "unique-local fc00::/7"],
     ["http://[fe80::1]/", "link-local fe80::/10"],
+    ["http://[fec0::1]/", "site-local fec0::/10"],
+    ["http://[64:ff9b:1::a00:1]/", "RFC 8215 local-use translation prefix"],
+    ["https://user:password@example.com/", "URL credentials"],
+    ["https://example.com/path?q=secret", "URL query parameters"],
     ["http://localhost/", "localhost name"],
     ["http://metadata.google.internal/", "gcp metadata name"],
     ["http://foo.localhost/", ".localhost suffix"],
@@ -54,7 +58,7 @@ describe("checkScanUrlSafe", () => {
     "https://1.1.1.1/",
     "http://[2606:4700:4700::1111]/",
     "https://good.example/",
-    "https://example.com/path?q=1",
+    "https://example.com/path",
     "http://93.184.216.34/",
   ]
 

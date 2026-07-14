@@ -72,7 +72,7 @@ The current source suite is 689 Vitest tests in 65 files plus 2 Chromium E2E tes
 
 ### Verify scorecards and social sharing
 
-Apply all PostgreSQL migrations first; `20260713170000_scorecard_events` is required for view/share recording. In the dashboard, complete or use an eligible Standard/Deep scan, publish its scorecard from the target page, and copy the generated slug.
+Apply all PostgreSQL migrations first; `20260713170000_scorecard_events` is required for view/share recording. `20260714170000_integration_global_external_id_unique` intentionally rejects duplicate non-null provider installation IDs, so resolve disposable local duplicates before applying it rather than editing the migration. In the dashboard, complete or use an eligible Standard/Deep scan, publish its scorecard from the target page, and copy the generated slug.
 
 For `SLUG=<generated-slug>`:
 

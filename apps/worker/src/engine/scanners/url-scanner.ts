@@ -2,7 +2,7 @@
 import { logger } from "@lyrashield/logger"
 import { readFile } from "fs/promises"
 import { join } from "path"
-import { safeFetch, type HostResolver } from "@lyrashield/security"
+import { redactUrlForLogs, safeFetch, type HostResolver } from "@lyrashield/security"
 import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 
@@ -12,6 +12,7 @@ export interface UrlScanConfig {
   fetchFn?: typeof fetch
   /** Injectable DNS resolver — only for tests. */
   resolver?: HostResolver
+  signal?: AbortSignal
   coverageIssues?: ScannerCoverageIssue[]
 }
 
@@ -59,7 +60,8 @@ function makeFinding(
 async function fetchUrl(
   url: string,
   fetchFn?: typeof fetch,
-  resolver?: HostResolver
+  resolver?: HostResolver,
+  signal?: AbortSignal
 ): Promise<{
   html: string
   status: number
@@ -67,7 +69,7 @@ async function fetchUrl(
   finalUrl: string
   urlHistory: string[]
 } | null> {
-  const result = await safeFetch(url, { fetchFn, resolver })
+  const result = await safeFetch(url, { fetchFn, resolver, signal })
   if (!result) return null
   return {
     html: result.html,
@@ -496,16 +498,18 @@ function detectSourceMapExposure(html: string): EngineVulnerability[] {
 }
 
 export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerability[]> {
-  const { targetUrl, repoPath, fetchFn, resolver, coverageIssues } = config
-  logger.info("Starting AI-builder-aware URL scan", { targetUrl })
+  const { targetUrl, repoPath, fetchFn, resolver, coverageIssues, signal } = config
+  logger.info("Starting AI-builder-aware URL scan", { targetUrl: redactUrlForLogs(targetUrl) })
 
-  const result = await fetchUrl(targetUrl, fetchFn, resolver)
+  const result = await fetchUrl(targetUrl, fetchFn, resolver, signal)
   if (!result) {
-    logger.warn("URL scan skipped — could not fetch target", { targetUrl })
+    logger.warn("URL scan skipped — could not fetch target", {
+      targetUrl: redactUrlForLogs(targetUrl),
+    })
     recordCoverageIssue(coverageIssues, {
       scanner: "url",
       status: "partial",
-      subject: targetUrl,
+      subject: redactUrlForLogs(targetUrl),
       reason: "URL content could not be fetched through the SSRF-safe transport",
     })
     return []
@@ -528,7 +532,10 @@ export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerabilit
   allFindings.push(...detectVerboseErrors(html))
   allFindings.push(...detectSourceMapExposure(html))
 
-  logger.info("URL scan complete", { targetUrl, findings: allFindings.length })
+  logger.info("URL scan complete", {
+    targetUrl: redactUrlForLogs(targetUrl),
+    findings: allFindings.length,
+  })
   return allFindings
 }
 

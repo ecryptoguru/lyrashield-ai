@@ -22,24 +22,28 @@ export async function GET(request: Request) {
     const workspaceId = searchParams.get("workspaceId")
     const status = searchParams.get("status")
     const type = searchParams.get("type")
-    const userId = searchParams.get("userId")
+    const requestedUserId = searchParams.get("userId")
 
     if (!workspaceId) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.notification.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.notification.view)
 
     const { cursor, limit } = parsePaginationParams(searchParams)
 
     const result = await listNotifications({
       workspaceId,
-      ...(userId ? { userId } : {}),
+      userId: session.userId,
       ...(status ? { status } : {}),
       ...(type ? { type } : {}),
       ...(cursor ? { cursor } : {}),
       limit,
     })
+
+    if (requestedUserId && requestedUserId !== session.userId) {
+      logger.warn("Notification recipient filter ignored", { workspaceId, requestedUserId })
+    }
 
     return apiPaginated(result.items, result.nextCursor)
   } catch (error) {

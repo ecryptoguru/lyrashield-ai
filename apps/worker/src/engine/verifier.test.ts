@@ -12,28 +12,28 @@ const baseVuln: EngineVulnerability = {
 }
 
 describe("verifyVulnerability", () => {
-  it("returns high confidence with PoC script + description", () => {
+  it("keeps engine-provided PoC claims unverified", () => {
     const result = verifyVulnerability({
       ...baseVuln,
       poc_script_code: "console.log('exploit')",
       poc_description: "Run the script to exploit",
     })
-    expect(result.verified).toBe(true)
-    expect(result.confidence).toBe("high")
-    expect(result.verificationMethod).toBe("poc_reproduction")
+    expect(result.verified).toBe(false)
+    expect(result.confidence).toBe("medium")
+    expect(result.verificationMethod).toBe("engine_claim_pending_verification")
   })
 
-  it("returns high confidence with PoC description only", () => {
+  it("keeps engine-provided PoC descriptions unverified", () => {
     const result = verifyVulnerability({
       ...baseVuln,
       poc_description: "Steps to exploit",
     })
-    expect(result.verified).toBe(true)
-    expect(result.confidence).toBe("high")
-    expect(result.verificationMethod).toBe("poc_description")
+    expect(result.verified).toBe(false)
+    expect(result.confidence).toBe("medium")
+    expect(result.verificationMethod).toBe("engine_claim_pending_verification")
   })
 
-  it("returns high confidence with code location + fix diff", () => {
+  it("keeps engine-provided code diffs unverified", () => {
     const result = verifyVulnerability({
       ...baseVuln,
       code_locations: [
@@ -45,30 +45,30 @@ describe("verifyVulnerability", () => {
         },
       ],
     })
-    expect(result.verified).toBe(true)
-    expect(result.confidence).toBe("high")
-    expect(result.verificationMethod).toBe("code_diff_analysis")
+    expect(result.verified).toBe(false)
+    expect(result.confidence).toBe("medium")
+    expect(result.verificationMethod).toBe("engine_claim_pending_verification")
   })
 
-  it("returns medium confidence with code location only", () => {
+  it("keeps engine-provided code locations unverified", () => {
     const result = verifyVulnerability({
       ...baseVuln,
       code_locations: [{ file: "src/app.ts", start_line: 10 }],
     })
-    expect(result.verified).toBe(true)
+    expect(result.verified).toBe(false)
     expect(result.confidence).toBe("medium")
-    expect(result.verificationMethod).toBe("static_analysis")
+    expect(result.verificationMethod).toBe("engine_claim_pending_verification")
   })
 
-  it("returns medium confidence with technical analysis + impact", () => {
+  it("keeps engine-provided analysis unverified", () => {
     const result = verifyVulnerability({
       ...baseVuln,
       technical_analysis: "Detailed analysis",
       impact: "Business impact",
     })
-    expect(result.verified).toBe(true)
+    expect(result.verified).toBe(false)
     expect(result.confidence).toBe("medium")
-    expect(result.verificationMethod).toBe("analysis_review")
+    expect(result.verificationMethod).toBe("engine_claim_pending_verification")
   })
 
   it("returns medium confidence with CVE/CWE but not verified", () => {
@@ -100,7 +100,7 @@ describe("verifyVulnerability", () => {
 })
 
 describe("verifyFindings", () => {
-  it("verifies a batch of vulnerabilities", () => {
+  it("does not self-verify a batch of engine vulnerabilities", () => {
     const vulns = [
       { ...baseVuln, id: "1", poc_description: "PoC" },
       { ...baseVuln, id: "2", cwe: "CWE-79" },
@@ -108,7 +108,7 @@ describe("verifyFindings", () => {
     ]
     const results = verifyFindings(vulns)
     expect(results).toHaveLength(3)
-    expect(results[0]!.verification.verified).toBe(true)
+    expect(results[0]!.verification.verified).toBe(false)
     expect(results[1]!.verification.verified).toBe(false)
     expect(results[2]!.verification.verified).toBe(false)
   })

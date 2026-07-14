@@ -15,6 +15,7 @@ import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
 import type { ScannerCoverageIssue } from "./scanner-coverage"
+import { redactUrlForLogs } from "@lyrashield/security"
 import { join, resolve } from "path"
 import { mkdir } from "fs/promises"
 
@@ -34,6 +35,7 @@ export interface ScannerOrchestratorConfig {
   engineFindings: EngineVulnerability[]
   workspaceDir?: string
   scannerPhaseTimeoutMs?: number
+  isCancelled?: () => Promise<boolean>
 }
 
 export interface ScannerOrchestratorResult {
@@ -50,33 +52,57 @@ export interface ScannerOrchestratorResult {
 
 async function withScannerPhaseTimeout<T>(
   scanId: string,
-  phase: Promise<T>,
-  timeoutMs: number
+  start: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  isCancelled?: () => Promise<boolean>
 ): Promise<T> {
+  const controller = new AbortController()
+  const phase = start(controller.signal)
   let timer: ReturnType<typeof setTimeout> | undefined
+  let cancellationTimer: ReturnType<typeof setInterval> | undefined
+  let settled = false
   try {
     return await Promise.race([
       phase,
       new Promise<T>((_resolve, reject) => {
         timer = setTimeout(() => {
+          controller.abort()
           void addScanEvent(scanId, "scanner", "error", "Scanner phase timed out", { timeoutMs })
           reject(new Error(`Scanner phase timed out after ${timeoutMs}ms`))
         }, timeoutMs)
+        if (isCancelled) {
+          const checkCancellation = () => {
+            void isCancelled()
+              .then((cancelled) => {
+                if (settled || !cancelled) return
+                controller.abort()
+                reject(new Error("Scanner phase cancelled"))
+              })
+              .catch(() => undefined)
+          }
+          checkCancellation()
+          cancellationTimer = setInterval(checkCancellation, 1000)
+        }
       }),
     ])
   } finally {
+    settled = true
     if (timer) clearTimeout(timer)
+    if (cancellationTimer) clearInterval(cancellationTimer)
+    // Do not await an uncooperative phase after timing out; that defeats the deadline.
+    void phase.catch(() => undefined)
   }
 }
 
 async function runScaScan(
   scanId: string,
   workspaceDir: string,
-  coverageIssues: ScannerCoverageIssue[]
+  coverageIssues: ScannerCoverageIssue[],
+  signal: AbortSignal
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting SCA scan phase", { scanId })
-    const findings = await scanSca({ repoPath: workspaceDir, workspaceDir, coverageIssues })
+    const findings = await scanSca({ repoPath: workspaceDir, workspaceDir, coverageIssues, signal })
     logger.info("SCA scan phase complete", { scanId, findingCount: findings.length })
     return findings
   } catch (err) {
@@ -90,11 +116,12 @@ async function runScaScan(
 
 async function runSecretsScan(
   scanId: string,
-  workspaceDir: string
+  workspaceDir: string,
+  signal: AbortSignal
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting secrets scan phase", { scanId })
-    const findings = await scanSecrets({ repoPath: workspaceDir, workspaceDir })
+    const findings = await scanSecrets({ repoPath: workspaceDir, workspaceDir, signal })
     logger.info("Secrets scan phase complete", { scanId, findingCount: findings.length })
     return findings
   } catch (err) {
@@ -110,11 +137,12 @@ async function runUrlScan(
   scanId: string,
   targetUrl: string,
   workspaceDir: string,
-  coverageIssues: ScannerCoverageIssue[]
+  coverageIssues: ScannerCoverageIssue[],
+  signal: AbortSignal
 ): Promise<EngineVulnerability[]> {
   try {
-    logger.info("Starting URL scan phase", { scanId, targetUrl })
-    const findings = await scanUrl({ targetUrl, repoPath: workspaceDir, coverageIssues })
+    logger.info("Starting URL scan phase", { scanId, targetUrl: redactUrlForLogs(targetUrl) })
+    const findings = await scanUrl({ targetUrl, repoPath: workspaceDir, coverageIssues, signal })
     logger.info("URL scan phase complete", { scanId, findingCount: findings.length })
     return findings
   } catch (err) {
@@ -129,11 +157,12 @@ async function runUrlScan(
 async function runAgentConfigScan(
   scanId: string,
   workspaceDir: string,
-  coverageIssues: ScannerCoverageIssue[]
+  coverageIssues: ScannerCoverageIssue[],
+  signal: AbortSignal
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting agent configuration scan phase", { scanId })
-    const findings = await scanAgentConfig({ repoPath: workspaceDir, coverageIssues })
+    const findings = await scanAgentConfig({ repoPath: workspaceDir, coverageIssues, signal })
     logger.info("Agent configuration scan phase complete", {
       scanId,
       findingCount: findings.length,
@@ -197,21 +226,23 @@ export async function runScannerOrchestrator(
   }
   const [scaRaw, secretsRaw, urlRaw, agentConfigRaw] = await withScannerPhaseTimeout(
     scanId,
-    Promise.all([
-      hasSourceCheckout
-        ? runScaScan(scanId, absWorkspace, coverageIssues)
-        : Promise.resolve([] as EngineVulnerability[]),
-      hasSourceCheckout
-        ? runSecretsScan(scanId, absWorkspace)
-        : Promise.resolve([] as EngineVulnerability[]),
-      targetUrl
-        ? runUrlScan(scanId, targetUrl, absWorkspace, coverageIssues)
-        : Promise.resolve([] as EngineVulnerability[]),
-      hasSourceCheckout
-        ? runAgentConfigScan(scanId, absWorkspace, coverageIssues)
-        : Promise.resolve([] as EngineVulnerability[]),
-    ]),
-    scannerPhaseTimeoutMs
+    (signal) =>
+      Promise.all([
+        hasSourceCheckout
+          ? runScaScan(scanId, absWorkspace, coverageIssues, signal)
+          : Promise.resolve([] as EngineVulnerability[]),
+        hasSourceCheckout
+          ? runSecretsScan(scanId, absWorkspace, signal)
+          : Promise.resolve([] as EngineVulnerability[]),
+        targetUrl
+          ? runUrlScan(scanId, targetUrl, absWorkspace, coverageIssues, signal)
+          : Promise.resolve([] as EngineVulnerability[]),
+        hasSourceCheckout
+          ? runAgentConfigScan(scanId, absWorkspace, coverageIssues, signal)
+          : Promise.resolve([] as EngineVulnerability[]),
+      ]),
+    scannerPhaseTimeoutMs,
+    config.isCancelled
   )
 
   for (const issue of coverageIssues) {

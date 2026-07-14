@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "child_process"
-import { readFile, rm, mkdir, readdir, stat, lstat, realpath } from "fs/promises"
+import { rm, mkdir, readdir, stat, lstat, realpath, open } from "fs/promises"
 import { join, relative, resolve, sep } from "path"
 import { tmpdir } from "os"
 import { logger } from "@lyrashield/logger"
@@ -61,6 +61,8 @@ export function interpretExitCode(
 }
 
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024
+const MAX_ENGINE_VULNERABILITIES_BYTES = 10 * 1024 * 1024
+const MAX_ENGINE_RUN_BYTES = 1 * 1024 * 1024
 const MAX_STREAM_EVENTS = 200
 const SIGKILL_GRACE_MS = 5000
 
@@ -401,6 +403,25 @@ export async function findRunOutputDir(workDir: string): Promise<string | null> 
   return newest?.path ?? null
 }
 
+async function readTextFileBounded(path: string, maxBytes: number): Promise<string> {
+  // The artifact location is selected only from a validated engine output directory.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  const handle = await open(path, "r")
+  try {
+    const buffer = Buffer.allocUnsafe(maxBytes + 1)
+    let offset = 0
+    while (offset <= maxBytes) {
+      const { bytesRead } = await handle.read(buffer, offset, maxBytes + 1 - offset, offset)
+      if (bytesRead === 0) break
+      offset += bytesRead
+    }
+    if (offset > maxBytes) throw new Error(`Engine artifact exceeds ${maxBytes} byte limit`)
+    return buffer.subarray(0, offset).toString("utf8")
+  } finally {
+    await handle.close()
+  }
+}
+
 async function readEngineOutput(outputDir: string): Promise<{
   vulnerabilitiesRaw: string
   runJsonRaw: string
@@ -409,17 +430,24 @@ async function readEngineOutput(outputDir: string): Promise<{
   let runJsonRaw = ""
 
   try {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    vulnerabilitiesRaw = await readFile(join(outputDir, "vulnerabilities.json"), "utf-8")
-  } catch {
-    logger.warn("vulnerabilities.json not found", { outputDir })
+    vulnerabilitiesRaw = await readTextFileBounded(
+      join(outputDir, "vulnerabilities.json"),
+      MAX_ENGINE_VULNERABILITIES_BYTES
+    )
+  } catch (error) {
+    logger.warn("vulnerabilities.json unavailable or oversized", {
+      outputDir,
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 
   try {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    runJsonRaw = await readFile(join(outputDir, "run.json"), "utf-8")
-  } catch {
-    logger.warn("run.json not found", { outputDir })
+    runJsonRaw = await readTextFileBounded(join(outputDir, "run.json"), MAX_ENGINE_RUN_BYTES)
+  } catch (error) {
+    logger.warn("run.json unavailable or oversized", {
+      outputDir,
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 
   return { vulnerabilitiesRaw, runJsonRaw }

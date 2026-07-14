@@ -29,6 +29,19 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     )
   }
+  if (!/^[1-9][0-9]*$/.test(installationId) || !Number.isSafeInteger(Number(installationId))) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: "INVALID_INSTALLATION_ID",
+          message: "installation_id must be a canonical integer",
+        },
+      },
+      { status: 400 }
+    )
+  }
+  const canonicalInstallationId = String(Number(installationId))
 
   // The state must be a token this app signed at POST time for a workspace the
   // caller could manage. This prevents tampering `state` to point at another
@@ -53,7 +66,7 @@ export async function GET(request: NextRequest) {
     )
 
     const installations = await getAppInstallations()
-    const installation = installations.find((i) => i.id === Number(installationId))
+    const installation = installations.find((i) => i.id === Number(canonicalInstallationId))
 
     if (!installation) {
       return NextResponse.json(
@@ -62,66 +75,36 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Anti-hijack: an installation may belong to exactly one workspace. If this
-    // installation id is already linked to a DIFFERENT workspace, refuse — a
-    // caller must not be able to attach another tenant's installation (whose
-    // numeric id is enumerable) into their own workspace. (S2)
-    const existingElsewhere = await prisma.integration.findFirst({
+    // A callback state proves our workspace flow, not ownership of an arbitrary
+    // app-global installation ID. Until the provider flow supplies an ownership
+    // assertion, only refresh an existing workspace binding; never create a new
+    // one from a caller-controlled callback parameter.
+    const existing = await prisma.integration.findFirst({
       where: {
-        type: "GITHUB",
-        externalId: String(installationId),
-        deletedAt: null,
-        NOT: { workspaceId },
-      },
-    })
-    if (existingElsewhere) {
-      logger.warn(
-        "GitHub install callback rejected — installation already linked to another workspace",
-        {
-          installationId,
-          requestedWorkspaceId: workspaceId,
-        }
-      )
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "ALREADY_LINKED",
-            message: "This installation is already connected to another workspace",
-          },
-        },
-        { status: 409 }
-      )
-    }
-
-    const integration = await prisma.integration.upsert({
-      where: {
-        workspaceId_type_externalId: {
-          workspaceId,
-          type: "GITHUB",
-          externalId: String(installationId),
-        },
-      },
-      create: {
         workspaceId,
         type: "GITHUB",
-        name: installation.account.login,
-        externalId: String(installationId),
-        status: "active",
-        metadata: {
-          installationId: Number(installationId),
-          accountLogin: installation.account.login,
-          accountId: installation.account.id,
-          accountType: installation.account.type,
-          setupAction,
-        },
+        externalId: canonicalInstallationId,
+        deletedAt: null,
       },
-      update: {
+    })
+    if (!existing) {
+      logger.warn("GitHub install callback requires provider ownership verification", {
+        installationId: canonicalInstallationId,
+        workspaceId,
+      })
+      const redirectUrl = new URL("/dashboard/integrations", request.url)
+      redirectUrl.searchParams.set("github", "verification_required")
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    const integration = await prisma.integration.update({
+      where: { id: existing.id },
+      data: {
         name: installation.account.login,
         status: "active",
         deletedAt: null,
         metadata: {
-          installationId: Number(installationId),
+          installationId: Number(canonicalInstallationId),
           accountLogin: installation.account.login,
           accountId: installation.account.id,
           accountType: installation.account.type,
@@ -141,7 +124,7 @@ export async function GET(request: NextRequest) {
     })
 
     logger.info("GitHub App installation connected", {
-      installationId,
+      installationId: canonicalInstallationId,
       workspaceId,
       account: installation.account.login,
     })
@@ -152,7 +135,10 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
-    logger.error("Failed to store GitHub installation", { error: String(error), installationId })
+    logger.error("Failed to store GitHub installation", {
+      error: String(error),
+      installationId: canonicalInstallationId,
+    })
     return NextResponse.json(
       {
         success: false,

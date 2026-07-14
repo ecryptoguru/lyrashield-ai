@@ -185,6 +185,22 @@ describe("notification-service", () => {
         })
       )
     })
+
+    it("includes only the caller's and workspace-wide notifications in a personal feed", async () => {
+      mockPrisma.notification.findMany.mockResolvedValue([])
+
+      await listNotifications({ workspaceId: "ws-1", userId: "user-1" })
+
+      expect(mockPrisma.notification.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            workspaceId: "ws-1",
+            deletedAt: null,
+            OR: [{ userId: "user-1" }, { userId: null }],
+          },
+        })
+      )
+    })
   })
 
   describe("markNotificationSent", () => {

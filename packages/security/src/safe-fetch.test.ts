@@ -51,4 +51,38 @@ describe("safeFetch", () => {
     expect(result).toBeNull()
     expect(reachedLoopback).toBe(false)
   })
+
+  it("applies the timeout while reading a response body", async () => {
+    const fetchFn = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const body = new ReadableStream({
+        start(controller) {
+          ;(init.signal as AbortSignal).addEventListener(
+            "abort",
+            () => controller.error(new DOMException("aborted", "AbortError")),
+            { once: true }
+          )
+        },
+      })
+      return Promise.resolve(new Response(body, { status: 200 }))
+    })
+
+    const result = await safeFetch("https://body-timeout.test", {
+      fetchFn,
+      resolver: async () => ["93.184.216.34"],
+      timeoutMs: 25,
+    })
+
+    expect(result).toBeNull()
+  })
+
+  it("applies cancellation while resolving DNS", async () => {
+    const controller = new AbortController()
+    const pending = safeFetch("https://resolver.test", {
+      signal: controller.signal,
+      resolver: async () => await new Promise<string[]>(() => {}),
+      fetchFn: vi.fn(),
+    })
+    controller.abort()
+    await expect(pending).resolves.toBeNull()
+  })
 })
