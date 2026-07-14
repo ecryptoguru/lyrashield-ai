@@ -355,18 +355,9 @@ Security tests required before launch:
 - JWT inspector: malformed token, unsafe algorithm observation, expired/not-yet-valid timestamps, missing audience/issuer, and no-network regression
 - checklist: versioned scoring, deterministic result, keyboard flow, mobile layout, print/download, and no guarantee language
 
-### Phase 3 - publishing waves
+### Phase 3 - localhost draft completion
 
-| Wave                      | Weeks | Output                                                                 | Goal                                                            |
-| ------------------------- | ----: | ---------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Foundation                |   1-2 | Authority draft, `/tools` hub, analytics contract, Search Console plan | Establish canonical structure                                   |
-| High-intent launch        |   3-6 | Tools 1-3 plus posts #2-#17                                            | Win access, secrets, auth, and input demand                     |
-| Commercial workflows      |  7-11 | Tools 4-5 plus posts #18-#38                                           | Connect diagnosis to SaaS and supply-chain needs                |
-| Agentic security          | 12-16 | Posts #39-#51 and #69-#70                                              | Own prompt, MCP, CI, and agent-permission questions             |
-| Platform workflows        | 17-21 | Posts #52-#68 and #71                                                  | Capture tool/stack-specific search intent without teardown copy |
-| Verification and audience | 22-26 | Posts #72-#100                                                         | Build durable workflow and decision content                     |
-
-Publishing pace: four founder-approved posts per week after the authority page. Do not publish 100 thin drafts in a burst. Update the authority page after each wave with the best new explanations and links.
+Build the authority article and all 99 supporting articles in the local content collection now. Every post remains `draft: true`; localhost previews include drafts, while production builds continue to exclude them. Do not deploy, submit pages to search consoles, enable analytics, or change `PUBLIC_INDEXABLE` as part of this phase.
 
 ### Phase 4 - AEO/GEO and E-E-A-T requirements
 
@@ -383,9 +374,7 @@ Every published page must include:
 - FAQ only for questions actually answered on the page
 - one authority link, one related-post link, and one tool/product link
 
-Monthly citation benchmark: run the same 20 non-branded questions in Google AI Overviews where available, Bing Copilot, ChatGPT Search, and Perplexity. Record whether LyraShield is cited, the cited URL, the answer accuracy, and competing sources. Do not automate scraping in violation of platform terms and do not treat citation appearance as a guaranteed ranking metric.
-
-## 9. Analytics and success criteria
+## 9. Local verification only
 
 ### Privacy-safe events
 
@@ -400,17 +389,7 @@ Allowlist only:
 
 Never send pasted code, URLs, hostnames, JWTs, SQL, secrets, finding text, file names, IPs, or user-authored captions to analytics.
 
-### 30 / 60 / 90-day measures after indexing
-
-| Metric      | 30 days                                                           | 60 days                                                   | 90 days                                                                      |
-| ----------- | ----------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Technical   | All intended URLs indexed; no canonical or structured-data errors | CWV good on representative blog/tool pages                | Stable crawl and no duplicate-intent pages                                   |
-| Search      | Baseline non-brand impressions and query set                      | First top-20 positions for long-tail issue/tool queries   | Growing clicks to authority, issue, and tool clusters                        |
-| AEO/GEO     | Establish 20-prompt citation baseline                             | Improve extractable-answer accuracy and citation coverage | Earn repeat citations for at least several non-brand questions               |
-| Product-led | Tool completion baseline                                          | Identify highest-intent tool-to-app path                  | Improve qualified tool-to-app conversion without collecting sensitive inputs |
-| Editorial   | Authority + first wave live                                       | Refresh weak titles/answers from Search Console evidence  | Consolidate cannibalizing posts rather than creating more variants           |
-
-No arbitrary traffic promises belong in the plan. Set numeric targets only after 30 days of real impressions and tool usage establish a baseline.
+For this localhost-only delivery, verify draft navigation, article metadata/FAQ JSON-LD, internal links, tool pages, mobile layout, content-schema validation, marketing lint/typecheck/build, and `git diff --check`. Indexing, citation tracking, analytics, and traffic metrics are deferred until the production domain is explicitly authorized.
 
 ## 10. Definition of done for each page
 
@@ -430,14 +409,9 @@ No arbitrary traffic promises belong in the plan. Set numeric targets only after
 - marketing lint, typecheck, build, focused tests, and `git diff --check` pass
 - real-domain visual QA and Search Console URL inspection pass before claiming the page is live/indexed
 
-## 11. Immediate next implementation slice
+## 11. Local completion definition
 
-The smallest useful slice is:
-
-1. Authority article draft.
-2. Done: `/tools` hub.
-3. Done: browser-local AI App Launch Security Checklist.
-4. Done: browser-local Secret Exposure Scanner, headers/CORS checker, Supabase RLS checker, and JWT/session inspector.
-5. Supporting posts #2, #3, #4, #13, #28, and #72.
-
-This slice validates authority-page linking, two privacy-safe interactive tools, the highest-demand issue cluster, structured data, analytics, and the blog-to-tool-to-app funnel before the team commits to all 100 posts.
+1. One authority article is 2,500-3,000 words; each of the other 99 articles is 1,200-1,500 words, all with the mapped unique intent.
+2. All 100 entries have valid frontmatter, `draft: true`, answer-first openings, citations, contextual authority/related/tool links, and honest limitations.
+3. Local blog navigation exposes drafts only in development; production output continues to omit drafts.
+4. All five browser-local tools, structured data, and local checks pass. Production deployment, indexing, analytics, and citation measurement remain out of scope.
