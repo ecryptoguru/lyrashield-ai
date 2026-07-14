@@ -256,6 +256,26 @@ function isFalsePositive(match: string, pattern: SecretPattern): boolean {
   return pattern.falsePositiveHints.some((hint) => lowerMatch.includes(hint.toLowerCase()))
 }
 
+function isTestFixturePath(relativePath: string): boolean {
+  return (
+    /(?:^|\/)(?:__tests__|fixtures?|e2e)(?:\/|$)/i.test(relativePath) ||
+    /(?:^|\/)[^/]+\.(?:test|spec)\.[^/]+$/i.test(relativePath) ||
+    /(?:^|\/)(?:test|tests?)\.(?:md|txt)$/i.test(relativePath)
+  )
+}
+
+function isComposeEnvironmentTemplate(
+  relativePath: string,
+  match: string,
+  pattern: SecretPattern
+): boolean {
+  return (
+    pattern.id === "database-url" &&
+    /(?:^|\/)docker-compose(?:\.[^/]+)?\.ya?ml$/i.test(relativePath) &&
+    match.includes("${")
+  )
+}
+
 function getFileExtension(filePath: string): string {
   return filePath.substring(filePath.lastIndexOf("."))
 }
@@ -310,6 +330,10 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
     const ext = getFileExtension(filePath)
     const language = getLanguageFromExt(ext)
 
+    // Test vectors and test-only examples deliberately contain credential-shaped
+    // strings. They prove scanner detection but are not deployable secrets.
+    if (isTestFixturePath(relPath)) continue
+
     for (const pattern of SECRET_PATTERNS) {
       const regex = new RegExp(pattern.pattern.source, pattern.pattern.flags)
       let match: RegExpExecArray | null
@@ -317,7 +341,12 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
         const matchedText = match[0]
         const lineNum = content.substring(0, match.index).split("\n").length
 
-        if (isFalsePositive(matchedText, pattern)) continue
+        if (
+          isFalsePositive(matchedText, pattern) ||
+          isComposeEnvironmentTemplate(relPath, matchedText, pattern)
+        ) {
+          continue
+        }
 
         const findingId = `${pattern.id}-${relPath}-${lineNum}`
         if (seenFindings.has(findingId)) continue

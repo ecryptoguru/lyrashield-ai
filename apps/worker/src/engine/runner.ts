@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "child_process"
-import { readFile, rm, mkdir, readdir, stat, lstat } from "fs/promises"
-import { join, resolve } from "path"
+import { readFile, rm, mkdir, readdir, stat, lstat, realpath } from "fs/promises"
+import { join, relative, resolve, sep } from "path"
+import { tmpdir } from "os"
 import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
 import { buildEngineCommand, type ScanConfig, type EngineCommand } from "./command-builder"
@@ -13,6 +14,8 @@ export interface EngineRunResult {
   output: ParsedScanOutput
   stdout: string
   stderr: string
+  /** Validated host-side checkout for deterministic repository scanners. */
+  sourceCheckoutPath: string | null
 }
 
 const EXIT_CODE_MAP: Record<
@@ -298,6 +301,55 @@ async function runEngineProcess(
 const ENGINE_RUN_LAYOUTS = ["strix_runs", "lyrashield_runs"] as const
 const ENGINE_OUTPUT_ARTIFACTS = ["run.json", "vulnerabilities.json"] as const
 const MAX_RUN_OUTPUT_ENTRIES = 50_000
+const ENGINE_CHECKOUT_ROOT = resolve(tmpdir(), "strix_repos")
+
+/**
+ * Extract only a repository checkout created by the engine below its dedicated
+ * temporary root. A run artifact must never redirect scanners to arbitrary
+ * worker files.
+ */
+export async function resolveEngineSourceCheckout(
+  runRecord: ParsedScanOutput["runRecord"]
+): Promise<string | null> {
+  if (!Array.isArray(runRecord?.targets_info)) return null
+
+  let checkoutRoot: string
+  try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    checkoutRoot = await realpath(ENGINE_CHECKOUT_ROOT)
+  } catch {
+    return null
+  }
+
+  for (const target of runRecord.targets_info) {
+    if (typeof target !== "object" || target === null) continue
+    const details = (target as { details?: unknown }).details
+    if (typeof details !== "object" || details === null) continue
+    const sourcePath = (details as { cloned_repo_path?: unknown }).cloned_repo_path
+    if (typeof sourcePath !== "string" || !sourcePath.trim()) continue
+
+    try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const checkout = await realpath(sourcePath)
+      const pathFromRoot = relative(checkoutRoot, checkout)
+      if (
+        pathFromRoot === "" ||
+        pathFromRoot === ".." ||
+        pathFromRoot.startsWith(`..${sep}`) ||
+        resolve(checkoutRoot, pathFromRoot) !== checkout
+      ) {
+        logger.warn("Engine checkout path escaped the expected root", { sourcePath })
+        continue
+      }
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      if ((await stat(checkout)).isDirectory()) return checkout
+    } catch {
+      // Missing checkouts are a coverage gap, not an empty source scan.
+    }
+  }
+
+  return null
+}
 
 async function hasEngineOutputArtifact(runDir: string): Promise<boolean> {
   for (const artifact of ENGINE_OUTPUT_ARTIFACTS) {
@@ -460,6 +512,19 @@ export async function runEngine(
     : { vulnerabilitiesRaw: "", runJsonRaw: "" }
 
   const output = parseEngineOutput(vulnerabilitiesRaw, runJsonRaw)
+  const sourceCheckoutPath = await resolveEngineSourceCheckout(output.runRecord)
+
+  if (config.target.type === "REPO") {
+    await emitScanEvent(
+      scanId,
+      "source_checkout",
+      sourceCheckoutPath ? "info" : "warning",
+      sourceCheckoutPath
+        ? "Validated engine source checkout for deterministic scanners"
+        : "Validated engine source checkout unavailable; deterministic repository scanners will be skipped",
+      { available: Boolean(sourceCheckoutPath) }
+    )
+  }
 
   await emitScanEvent(
     scanId,
@@ -473,7 +538,7 @@ export async function runEngine(
     }
   )
 
-  return { exitCode, cancelled, timedOut, output, stdout, stderr }
+  return { exitCode, cancelled, timedOut, output, stdout, stderr, sourceCheckoutPath }
 }
 
 export async function cleanupEngineWorkspace(workDir: string): Promise<void> {

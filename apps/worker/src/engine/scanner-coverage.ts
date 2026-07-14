@@ -1,7 +1,7 @@
 export type ScannerCoverageStatus = "partial" | "unsupported" | "bounded"
 
 export interface ScannerCoverageIssue {
-  scanner: "agent_config" | "sca" | "url"
+  scanner: "agent_config" | "sca" | "secrets" | "url"
   status: ScannerCoverageStatus
   subject?: string
   reason: string

@@ -13,6 +13,7 @@ import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
 import { persistFindings } from "../engine/finding-persister"
+import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
 import type { ScanJobData, ScanJobResult } from "../types"
@@ -174,7 +175,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         goal,
         mode,
         engineFindings: engineResult.output.vulnerabilities,
-        workspaceDir: `lyrashield_runs/${scanId}`,
+        workspaceDir: engineResult.sourceCheckoutPath ?? undefined,
       })
 
       try {
@@ -395,7 +396,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
 
       const maxAttempts = job.opts?.attempts ?? 1
-      if ((job.attemptsMade ?? 0) + 1 < maxAttempts) {
+      const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
+      if (!isTerminalPrerequisiteFailure && (job.attemptsMade ?? 0) + 1 < maxAttempts) {
         log.warn("Scan job failed and will be retried", {
           scanId,
           attempt: (job.attemptsMade ?? 0) + 1,

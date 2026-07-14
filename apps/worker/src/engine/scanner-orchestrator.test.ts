@@ -86,6 +86,7 @@ const engineFindings: EngineVulnerability[] = [
     remediation_steps: "Encode output",
   },
 ]
+const sourceCheckout = "/tmp/strix_repos/test/repo"
 
 describe("runScannerOrchestrator", () => {
   beforeEach(() => {
@@ -107,6 +108,7 @@ describe("runScannerOrchestrator", () => {
       goal: "TEST_APP",
       mode: "STANDARD",
       engineFindings,
+      workspaceDir: sourceCheckout,
     })
 
     expect(scanSca).toHaveBeenCalled()
@@ -131,6 +133,7 @@ describe("runScannerOrchestrator", () => {
       goal: "TEST_APP",
       mode: "STANDARD",
       engineFindings,
+      workspaceDir: sourceCheckout,
     })
 
     const critical = result.allFindings.filter((f) => f.normalizedSeverity === "CRITICAL")
@@ -148,6 +151,7 @@ describe("runScannerOrchestrator", () => {
       goal: "TEST_APP",
       mode: "STANDARD",
       engineFindings,
+      workspaceDir: sourceCheckout,
     })
 
     expect(result.stats.total).toBe(3)
@@ -164,6 +168,7 @@ describe("runScannerOrchestrator", () => {
       goal: "TEST_APP",
       mode: "STANDARD",
       engineFindings: [],
+      workspaceDir: sourceCheckout,
     })
 
     expect(result.engineFindings).toEqual([])
@@ -182,6 +187,7 @@ describe("runScannerOrchestrator", () => {
       goal: "TEST_APP",
       mode: "STANDARD",
       engineFindings: [],
+      workspaceDir: sourceCheckout,
     })
     expect(scanSca).not.toHaveBeenCalled()
     expect(scanSecrets).not.toHaveBeenCalled()
@@ -193,6 +199,35 @@ describe("runScannerOrchestrator", () => {
       "scanner",
       "info",
       "SCA/secrets skipped — no source checkout for this target type",
+      expect.any(Object)
+    )
+  })
+
+  it("records a coverage gap instead of scanning an empty repository artifact directory", async () => {
+    const result = await runScannerOrchestrator({
+      scanId: "scan-missing-checkout",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "REPO", name: "Repository" },
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      engineFindings: [],
+    })
+
+    expect(scanSca).not.toHaveBeenCalled()
+    expect(scanSecrets).not.toHaveBeenCalled()
+    expect(scanAgentConfig).not.toHaveBeenCalled()
+    expect(result.coverageIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scanner: "sca", status: "unsupported" }),
+        expect.objectContaining({ scanner: "secrets", status: "unsupported" }),
+      ])
+    )
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-missing-checkout",
+      "scanner",
+      "warning",
+      "SCA/secrets skipped — validated source checkout unavailable for repository target",
       expect.any(Object)
     )
   })
@@ -216,6 +251,7 @@ describe("runScannerOrchestrator", () => {
       goal: "TEST_APP",
       mode: "STANDARD",
       engineFindings: [],
+      workspaceDir: sourceCheckout,
     })
 
     expect(result.coverageIssues).toHaveLength(1)
@@ -240,6 +276,7 @@ describe("runScannerOrchestrator", () => {
         goal: "TEST_APP",
         mode: "STANDARD",
         engineFindings,
+        workspaceDir: sourceCheckout,
       })
     ).rejects.toThrow("OSV API down")
   })
@@ -256,6 +293,7 @@ describe("runScannerOrchestrator", () => {
         mode: "STANDARD",
         engineFindings: [],
         scannerPhaseTimeoutMs: 1,
+        workspaceDir: sourceCheckout,
       })
     ).rejects.toThrow("Scanner phase timed out")
     expect(addScanEvent).toHaveBeenCalledWith(
@@ -276,6 +314,7 @@ describe("runScannerOrchestrator", () => {
       goal: "TEST_APP",
       mode: "STANDARD",
       engineFindings,
+      workspaceDir: sourceCheckout,
     })
 
     expect(result.secretsFindings[0]?.scannerSource).toBe("secrets")
@@ -315,6 +354,7 @@ describe("runScannerOrchestrator", () => {
       goal: "TEST_APP",
       mode: "STANDARD",
       engineFindings: [lowEngineFinding],
+      workspaceDir: sourceCheckout,
     })
 
     // The dedupeKey should collide — only one finding should remain for this CWE

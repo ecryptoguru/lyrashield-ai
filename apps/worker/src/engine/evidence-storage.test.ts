@@ -25,7 +25,7 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { warn: vi.fn(), error: vi.fn() },
 }))
 
-const { uploadEvidence } = await import("./evidence-storage")
+const { uploadEvidence, EvidenceStorageConfigurationError } = await import("./evidence-storage")
 
 describe("uploadEvidence", () => {
   beforeEach(() => send.mockReset())
@@ -38,6 +38,6 @@ describe("uploadEvidence", () => {
         type: "poc",
         content: "proof",
       })
-    ).rejects.toThrow("Evidence storage is not configured")
+    ).rejects.toBeInstanceOf(EvidenceStorageConfigurationError)
   })
 })

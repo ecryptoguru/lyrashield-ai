@@ -84,6 +84,7 @@ import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
+import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
 import {
   completeScanWithScore,
@@ -368,6 +369,33 @@ describe("processScanJob", () => {
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
+  it("fails closed without replaying a billable scan when evidence storage is unconfigured", async () => {
+    vi.mocked(persistFindings).mockRejectedValue(new EvidenceStorageConfigurationError())
+    const retryingJob = {
+      id: "job-evidence-storage-1",
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      },
+    } as never
+
+    await expect(processScanJob(retryingJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "EVIDENCE_STORAGE_CONFIGURATION",
+      errorMessage: "Evidence storage is not configured",
+    })
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({ errorCategory: "EVIDENCE_STORAGE_CONFIGURATION" })
+    )
+  })
+
   it("always cleans up engine workspace", async () => {
     await processScanJob(mockJob)
 
@@ -384,6 +412,7 @@ describe("processScanJob", () => {
     const vulns = [{ id: "v1", title: "XSS", severity: "high", timestamp: "now" }]
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 2,
+      sourceCheckoutPath: "/tmp/strix_repos/r1/repo",
       output: {
         vulnerabilities: vulns,
         runRecord: { run_id: "r1", status: "completed" },
@@ -404,7 +433,7 @@ describe("processScanJob", () => {
         scanId: "scan-1",
         targetId: "target-1",
         engineFindings: vulns,
-        workspaceDir: "lyrashield_runs/scan-1",
+        workspaceDir: "/tmp/strix_repos/r1/repo",
       })
     )
     expect(persistFindings).toHaveBeenCalledWith({
