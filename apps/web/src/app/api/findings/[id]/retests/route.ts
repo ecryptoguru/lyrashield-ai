@@ -1,14 +1,17 @@
-import { getFinding, prisma } from "@lyrashield/db"
+import { createScan, getFinding, prisma } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 import { z } from "zod"
+import { enqueueScanJob } from "../../../../../lib/queue"
 
 const CreateRetestSchema = z.object({
   workspaceId: z.string().min(1),
-  scanId: z.string().min(1, "scanId is required"),
+  // Retests derive their target and mode from the finding's source scan. Keep
+  // this optional only for backwards-compatible clients; it is never trusted.
+  scanId: z.string().optional(),
 })
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return apiError("INVALID_PARAM", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
 
-    const { workspaceId, scanId } = parsed.data
+    const { workspaceId } = parsed.data
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.retest.create)
 
@@ -31,11 +34,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }
 
-    const scan = await prisma.scan.findFirst({
-      where: { id: scanId, workspaceId, deletedAt: null },
+    if (!finding.targetId) {
+      return apiError("RETEST_UNAVAILABLE", "This finding has no target to retest", 409)
+    }
+
+    const sourceScan = await prisma.scan.findFirst({
+      where: { id: finding.scanId, workspaceId, targetId: finding.targetId, deletedAt: null },
+      select: { id: true, targetId: true, goal: true, mode: true, policyId: true },
     })
-    if (!scan) {
-      return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
+    if (!sourceScan?.targetId) {
+      return apiError("RETEST_UNAVAILABLE", "The finding's source scan is unavailable", 409)
     }
 
     const existingPending = await prisma.retest.findFirst({
@@ -49,30 +57,80 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return apiError("RETEST_IN_PROGRESS", "A retest is already in progress for this finding", 409)
     }
 
-    const retest = await prisma.$transaction(async (tx) => {
-      const created = await tx.retest.create({
+    let scan: Awaited<ReturnType<typeof createScan>>
+    try {
+      scan = await createScan({
+        workspaceId,
+        targetId: sourceScan.targetId,
+        goal: sourceScan.goal,
+        mode: sourceScan.mode,
+        policyId: sourceScan.policyId ?? undefined,
+        createdById: session.userId,
+        triggerType: "retest",
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === "Target already has an active scan") {
+        return apiError(
+          "RETEST_IN_PROGRESS",
+          "A retest is already in progress for this target",
+          409
+        )
+      }
+      throw error
+    }
+
+    const retest = await prisma.retest.create({
+      data: {
+        workspaceId,
+        findingId: id,
+        scanId: scan.id,
+        status: "pending",
+        resultBefore: "Retest queued from the finding's source scan configuration.",
+      },
+    })
+
+    try {
+      await enqueueScanJob({
+        scanId: scan.id,
+        workspaceId,
+        targetId: sourceScan.targetId,
+        goal: sourceScan.goal,
+        mode: sourceScan.mode,
+        policyId: sourceScan.policyId ?? undefined,
+      })
+    } catch (enqueueError) {
+      await prisma.scan.update({
+        where: { id: scan.id },
         data: {
-          workspaceId,
-          findingId: id,
-          scanId,
-          status: "pending",
+          status: "FAILED",
+          errorCategory: "QUEUE",
+          errorMessage: "Retest could not be queued. Check Redis connectivity.",
+          endedAt: new Date(),
         },
       })
-
-      return created
-    })
+      await prisma.retest.update({
+        where: { id: retest.id },
+        data: { status: "error", resultAfter: "Retest could not be queued." },
+      })
+      logger.error("Failed to enqueue retest scan", {
+        findingId: id,
+        scanId: scan.id,
+        error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
+      })
+      return apiError("QUEUE_ERROR", "Retest could not be queued. Try again shortly.", 503)
+    }
 
     await prisma.auditLog.create({
       data: {
         workspaceId,
         actorUserId: session.userId,
-        action: "retest.created",
+        action: "retest.queued",
         resourceType: "retest",
         resourceId: retest.id,
       },
     })
 
-    return apiSuccess(retest, 201)
+    return apiSuccess({ retest, scan: { id: scan.id, status: scan.status } }, 201)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

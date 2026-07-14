@@ -47,6 +47,9 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
         cvssScore: true,
         summary: true,
         verified: true,
+        verificationStatus: true,
+        verificationMethod: true,
+        verificationReason: true,
         createdAt: true,
       },
       orderBy: { severity: "desc" },
@@ -86,6 +89,15 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
           : null,
       createdAt: e.createdAt.toISOString(),
     })),
+    integrity: {
+      manifestChecksum: scan.resultManifest?.checksum ?? null,
+      coverage: scan.coverageReceipts.map((receipt) => ({
+        scanner: receipt.scanner,
+        controlId: receipt.controlId,
+        status: receipt.status,
+        reason: receipt.reason,
+      })),
+    },
   }
 
   const findingsData = findings.map((f) => ({
@@ -97,6 +109,9 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     cvssScore: f.cvssScore,
     summary: f.summary,
     verified: f.verified,
+    verificationStatus: f.verificationStatus,
+    verificationMethod: f.verificationMethod,
+    verificationReason: f.verificationReason,
     createdAt: f.createdAt.toISOString(),
   }))
 

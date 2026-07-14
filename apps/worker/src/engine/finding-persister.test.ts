@@ -4,6 +4,8 @@ vi.mock("@lyrashield/db", () => ({
   prisma: {
     finding: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     evidence: { createMany: vi.fn() },
+    findingCandidate: { upsert: vi.fn() },
+    findingVerification: { upsert: vi.fn() },
   },
   assertEvidenceEncrypted: vi.fn(),
 }))
@@ -24,9 +26,10 @@ import { generateDedupeKey } from "./output-parser"
 describe("persistFindings", () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it("persists secret-scanner provenance for score hard caps", async () => {
+  it("records secret-scanner output as a detection, not verified proof", async () => {
     vi.mocked(prisma.finding.findMany).mockResolvedValue([])
     vi.mocked(prisma.finding.create).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
     const secret: NormalizedFinding = {
       id: "secret-1",
       title: "Exposed token",
@@ -50,8 +53,19 @@ describe("persistFindings", () => {
     })
 
     expect(prisma.finding.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ category: "Secrets", severity: "CRITICAL", verified: true }),
+      data: expect.objectContaining({
+        category: "Secrets",
+        severity: "CRITICAL",
+        verified: false,
+        verificationStatus: "DETECTED",
+        verificationMethod: "SCANNER_DETECTION",
+      }),
     })
+    expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ status: "DETECTED", method: "SCANNER_DETECTION" }),
+      })
+    )
   })
 
   it("backfills evidence on retry/reopen and uses the checksum uniqueness guard", async () => {
@@ -67,6 +81,7 @@ describe("persistFindings", () => {
       { id: "finding-1", dedupeKey: generateDedupeKey(vulnerability, "target-1"), status: "FIXED" },
     ] as never)
     vi.mocked(prisma.finding.update).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
     vi.mocked(uploadEvidence).mockResolvedValue({
       storageUri: "s3://bucket/evidence",
       checksum: "sha256-checksum",

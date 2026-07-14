@@ -176,6 +176,38 @@ enum FindingStatus {
   DUPLICATE
 }
 
+enum FindingCandidateStatus {
+  DETECTED
+  PROMOTED
+  SUPPRESSED
+}
+
+enum FindingVerificationStatus {
+  DETECTED
+  VALIDATED
+  VERIFIED
+  BLOCKED
+  INCONCLUSIVE
+}
+
+enum FindingVerificationMethod {
+  ENGINE_CLAIM
+  SCANNER_DETECTION
+  SOURCE_RULE
+  DEPENDENCY_ADVISORY
+  URL_CHECK
+  RETEST
+  HUMAN_REVIEW
+}
+
+enum ScanCoverageStatus {
+  COMPLETED
+  NOT_APPLICABLE
+  BLOCKED
+  TIMED_OUT
+  FAILED
+}
+
 enum ScoreGrade {
   A_PLUS
   A
@@ -242,6 +274,8 @@ model Workspace {
   retests           Retest[]
   agentApprovals    AgentApproval[]
   scoreSnapshots    ScoreSnapshot[]
+  findingCandidates FindingCandidate[]
+  findingVerifications FindingVerification[]
 }
 
 model WorkspaceMember {
@@ -310,6 +344,7 @@ model Target {
   credentials     CredentialSet[]
   schedules       Schedule[]
   scoreSnapshots  ScoreSnapshot[]
+  findingCandidates FindingCandidate[]
 
   @@unique([workspaceId, repoFullName])
   @@unique([workspaceId, url])
@@ -397,6 +432,10 @@ model Scan {
   retests         Retest[]
   reports         Report[]
   scoreSnapshot   ScoreSnapshot?
+  resultManifest  ScanResultManifest?
+  coverageReceipts ScanCoverageReceipt[]
+  findingCandidates FindingCandidate[]
+  findingVerifications FindingVerification[]
 
   @@index([workspaceId])
   @@index([projectId])
@@ -462,6 +501,9 @@ model Finding {
   cvss3Vector         String?
   sarifRuleId         String?
   verified            Boolean          @default(false)
+  verificationStatus  FindingVerificationStatus @default(DETECTED)
+  verificationMethod  FindingVerificationMethod?
+  verificationReason  String?
   exploitability      String?
   businessImpact      String?
   technicalDetail     String?
@@ -483,6 +525,8 @@ model Finding {
   target              Target?          @relation(fields: [targetId], references: [id], onDelete: SetNull)
   scan                Scan             @relation(fields: [scanId], references: [id], onDelete: Cascade)
   evidence            Evidence[]
+  candidates          FindingCandidate[]
+  verificationReceipts FindingVerification[]
   fixProposals        FixProposal[]
   tickets             Ticket[]
   retests             Retest[]
@@ -513,6 +557,89 @@ model Evidence {
 
   @@index([findingId])
   @@unique([findingId, checksum])
+}
+
+model ScanResultManifest {
+  id        String   @id @default(cuid())
+  scanId    String   @unique
+  version   Int      @default(1)
+  manifest  Json
+  checksum  String
+  createdAt DateTime @default(now())
+
+  scan      Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+model ScanCoverageReceipt {
+  id        String             @id @default(cuid())
+  scanId    String
+  scanner   String
+  controlId String
+  status    ScanCoverageStatus
+  reason    String?
+  subject   String?
+  metadata  Json?
+  createdAt DateTime           @default(now())
+
+  scan      Scan               @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@unique([scanId, controlId])
+  @@index([scanId])
+  @@index([status])
+}
+
+model FindingCandidate {
+  id             String                 @id @default(cuid())
+  workspaceId    String
+  scanId         String
+  targetId       String
+  findingId      String?
+  scannerSource  String
+  dedupeKey      String
+  status         FindingCandidateStatus @default(DETECTED)
+  payload        Json
+  evidenceHash   String
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  workspace      Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scan           Scan                    @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  target         Target                  @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  finding        Finding?                @relation(fields: [findingId], references: [id], onDelete: SetNull)
+  verificationReceipts FindingVerification[]
+
+  @@unique([scanId, dedupeKey, scannerSource])
+  @@index([workspaceId])
+  @@index([scanId])
+  @@index([targetId])
+  @@index([findingId])
+}
+
+model FindingVerification {
+  id             String                    @id @default(cuid())
+  workspaceId    String
+  findingId      String
+  scanId         String
+  candidateId    String?
+  status         FindingVerificationStatus
+  method         FindingVerificationMethod
+  reason         String
+  verifierVersion String?
+  sourceRevision String?
+  evidence       Json?
+  idempotencyKey String                    @unique
+  createdAt      DateTime                  @default(now())
+
+  workspace      Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  finding        Finding                   @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  scan           Scan                      @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  candidate      FindingCandidate?         @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([findingId, createdAt])
+  @@index([scanId])
+  @@index([candidateId])
+  @@index([status])
 }
 
 model FixProposal {

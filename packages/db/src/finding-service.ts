@@ -69,6 +69,13 @@ export async function getFinding(
 ): Promise<
   | (Finding & {
       evidence: { id: string; type: string; storageUri: string | null; redactionStatus: string }[]
+      verificationReceipts: {
+        id: string
+        status: string
+        method: string
+        reason: string
+        createdAt: Date
+      }[]
       fixProposals: { id: string; status: string; summary: string }[]
       retests: { id: string; status: string; createdAt: Date }[]
     })
@@ -84,6 +91,10 @@ export async function getFinding(
           storageUri: true,
           redactionStatus: true,
         },
+      },
+      verificationReceipts: {
+        select: { id: true, status: true, method: true, reason: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
       },
       fixProposals: {
         where: { deletedAt: null },
