@@ -20,6 +20,7 @@ import net from "node:net"
 export type SsrfReason =
   | "invalid_url"
   | "invalid_scheme"
+  | "credential_or_query_not_allowed"
   | "empty_host"
   | "trailing_dot"
   | "blocked_hostname"
@@ -30,6 +31,20 @@ export type SsrfReason =
 export type SsrfCheckResult = { safe: true } | { safe: false; reason: SsrfReason }
 export type SafeResolutionResult =
   { safe: true; addresses: string[] } | { safe: false; reason: SsrfReason }
+
+/** Return a diagnostic-safe URL without credentials, query parameters, or fragments. */
+export function redactUrlForLogs(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl)
+    url.username = ""
+    url.password = ""
+    url.search = ""
+    url.hash = ""
+    return url.toString()
+  } catch {
+    return "[invalid-url]"
+  }
+}
 
 /** Injectable resolver so tests don't hit the network. Returns resolved IP strings. */
 export type HostResolver = (hostname: string) => Promise<string[]>
@@ -194,9 +209,22 @@ function isBlockedIpv6(bytes: number[]): boolean {
   if (at(0) === 0x00 && at(1) === 0x64 && at(2) === 0xff && at(3) === 0x9b && zero(4, 12)) {
     return isBlockedIpv4(bytes.slice(12, 16).join("."))
   }
+  // RFC 8215 local-use IPv4/IPv6 translation prefix. Its mapped IPv4
+  // destination is deployment-defined, so block it rather than trusting it.
+  if (
+    at(0) === 0x00 &&
+    at(1) === 0x64 &&
+    at(2) === 0xff &&
+    at(3) === 0x9b &&
+    at(4) === 0x00 &&
+    at(5) === 0x01
+  ) {
+    return true
+  }
 
   if ((at(0) & 0xfe) === 0xfc) return true // fc00::/7 unique-local
   if (at(0) === 0xfe && (at(1) & 0xc0) === 0x80) return true // fe80::/10 link-local
+  if (at(0) === 0xfe && (at(1) & 0xc0) === 0xc0) return true // fec0::/10 site-local
   if (at(0) === 0xff) return true // ff00::/8 multicast
   return false
 }
@@ -253,6 +281,9 @@ export async function resolveScanUrlSafe(
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return { safe: false, reason: "invalid_scheme" }
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    return { safe: false, reason: "credential_or_query_not_allowed" }
   }
 
   const host = url.hostname.toLowerCase()

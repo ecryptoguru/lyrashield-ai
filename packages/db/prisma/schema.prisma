@@ -590,6 +590,7 @@ model Integration {
   @@index([type])
   @@index([workspaceId, createdAt])
   @@unique([workspaceId, type, externalId])
+  @@unique([type, externalId])
 }
 
 model UsageRecord {

@@ -221,4 +221,14 @@ describe("scanSecrets", () => {
     const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
     expect(findings).toEqual([])
   })
+
+  it("bounds findings from a dense single file", async () => {
+    const values = Array.from(
+      { length: 250 },
+      (_, index) => `password = "strong-password-${index}"`
+    ).join("\n")
+    const dir = await setupRepo({ "dense.env": values })
+    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
+    expect(findings).toHaveLength(200)
+  })
 })

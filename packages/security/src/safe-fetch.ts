@@ -1,7 +1,7 @@
 import { logger } from "@lyrashield/logger"
 import { isIP, type LookupFunction } from "node:net"
 import { Agent, fetch as undiciFetch } from "undici"
-import { resolveScanUrlSafe, type HostResolver } from "./ssrf"
+import { redactUrlForLogs, resolveScanUrlSafe, type HostResolver } from "./ssrf"
 
 /**
  * Fetch-time SSRF-safe HTTP client for the scan worker.
@@ -40,6 +40,8 @@ export interface SafeFetchOptions {
   fetchFn?: typeof fetch
   /** Injectable DNS resolver — only for tests. */
   resolver?: HostResolver
+  /** Cancels the request and body read when its owning scan phase stops. */
+  signal?: AbortSignal
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000
@@ -62,24 +64,40 @@ export async function safeFetch(
     userAgent = "LyraShield-Scanner/1.0",
     fetchFn,
     resolver,
+    signal: externalSignal,
   } = options
 
   let currentUrl = rawUrl
   const urlHistory: string[] = []
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
-    const check = await resolveScanUrlSafe(currentUrl, resolver)
+    if (externalSignal?.aborted) return null
+    const controller = new AbortController()
+    const onExternalAbort = () => controller.abort()
+    externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const check = await Promise.race([
+      resolveScanUrlSafe(currentUrl, resolver),
+      new Promise<null>((resolve) =>
+        controller.signal.addEventListener("abort", () => resolve(null), { once: true })
+      ),
+    ])
+    if (!check) {
+      clearTimeout(timer)
+      externalSignal?.removeEventListener("abort", onExternalAbort)
+      return null
+    }
     if (!check.safe) {
+      clearTimeout(timer)
+      externalSignal?.removeEventListener("abort", onExternalAbort)
       logger.warn("safeFetch blocked URL (SSRF guard)", {
-        url: currentUrl,
+        url: redactUrlForLogs(currentUrl),
         reason: check.reason,
         hop,
       })
       return null
     }
 
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
     const dispatcher = fetchFn ? undefined : createPinnedDispatcher(check.addresses)
     let res: Response
     try {
@@ -95,18 +113,19 @@ export async function safeFetch(
         : ((await undiciFetch(currentUrl, { ...init, dispatcher })) as unknown as Response)
     } catch (err) {
       clearTimeout(timer)
+      externalSignal?.removeEventListener("abort", onExternalAbort)
       await dispatcher?.destroy()
       logger.warn("safeFetch request failed", {
-        url: currentUrl,
+        url: redactUrlForLogs(currentUrl),
         error: err instanceof Error ? err.message : String(err),
       })
       return null
     }
-    clearTimeout(timer)
-
     if (!res || typeof res.status !== "number") {
+      clearTimeout(timer)
+      externalSignal?.removeEventListener("abort", onExternalAbort)
       await dispatcher?.destroy()
-      logger.warn("safeFetch received an invalid response", { url: currentUrl })
+      logger.warn("safeFetch received an invalid response", { url: redactUrlForLogs(currentUrl) })
       return null
     }
 
@@ -114,9 +133,11 @@ export async function safeFetch(
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get("location")
       if (!location) {
+        clearTimeout(timer)
+        externalSignal?.removeEventListener("abort", onExternalAbort)
         await dispatcher?.destroy()
         logger.warn("safeFetch redirect without Location header", {
-          url: currentUrl,
+          url: redactUrlForLogs(currentUrl),
           status: res.status,
         })
         return null
@@ -125,16 +146,25 @@ export async function safeFetch(
       try {
         nextUrl = new URL(location, currentUrl).toString()
       } catch {
+        clearTimeout(timer)
+        externalSignal?.removeEventListener("abort", onExternalAbort)
         await dispatcher?.destroy()
-        logger.warn("safeFetch redirect to invalid URL", { url: currentUrl, location })
+        logger.warn("safeFetch redirect to invalid URL", { url: redactUrlForLogs(currentUrl) })
         return null
       }
       if (hop === maxRedirects) {
+        clearTimeout(timer)
+        externalSignal?.removeEventListener("abort", onExternalAbort)
         await dispatcher?.destroy()
-        logger.warn("safeFetch exceeded max redirects", { url: rawUrl, maxRedirects })
+        logger.warn("safeFetch exceeded max redirects", {
+          url: redactUrlForLogs(rawUrl),
+          maxRedirects,
+        })
         return null
       }
       await res.body?.cancel().catch(() => {})
+      clearTimeout(timer)
+      externalSignal?.removeEventListener("abort", onExternalAbort)
       await dispatcher?.destroy()
       currentUrl = nextUrl
       continue
@@ -149,7 +179,15 @@ export async function safeFetch(
     try {
       const html = await readBounded(res, maxBytes)
       return { html, status: res.status, headers, finalUrl: currentUrl, urlHistory }
+    } catch (err) {
+      logger.warn("safeFetch response body read failed", {
+        url: redactUrlForLogs(currentUrl),
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return null
     } finally {
+      clearTimeout(timer)
+      externalSignal?.removeEventListener("abort", onExternalAbort)
       await dispatcher?.destroy()
     }
   }

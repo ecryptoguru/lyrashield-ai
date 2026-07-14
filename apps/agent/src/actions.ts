@@ -66,7 +66,7 @@ export const runScanAction: AgentActionDefinition<z.infer<typeof RunScanInputSch
   description: "Trigger a security scan on a target. Requires agent:act permission.",
   inputSchema: RunScanInputSchema,
   permission: PERMISSIONS.agent.act,
-  needsApproval: (input) => input.mode === "DEEP",
+  needsApproval: (input) => input.mode === "DEEP" || input.mode === "CUSTOM",
   auditAction: "agent.action.run_scan",
   auditResourceType: "scan",
   handler: async (input, context) => {

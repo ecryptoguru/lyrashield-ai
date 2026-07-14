@@ -57,7 +57,9 @@ export async function listNotifications(params: {
     where: {
       workspaceId: params.workspaceId,
       deletedAt: null,
-      ...(params.userId ? { userId: params.userId } : {}),
+      // A personal feed includes the caller's notifications and workspace-wide
+      // notices, but never another member's personal notifications.
+      ...(params.userId ? { OR: [{ userId: params.userId }, { userId: null }] } : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.type ? { type: params.type } : {}),
     },

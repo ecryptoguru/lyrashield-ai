@@ -105,14 +105,37 @@ const mockJob = {
   },
 } as never
 
-const mockTarget = {
+const mockRepoTarget = {
   id: "target-1",
   name: "Test Target",
+  type: "REPO",
+  url: null,
+  repoFullName: "acme/test-target",
+  deletedAt: null,
+}
+
+const mockUrlTarget = {
+  ...mockRepoTarget,
   type: "WEB_APP",
   url: "https://example.com",
   repoFullName: null,
-  deletedAt: null,
 }
+
+it("keeps URL targets out of the unpinned external engine", async () => {
+  vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+  vi.mocked(prisma.policy.findFirst).mockResolvedValue(null)
+
+  await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+
+  expect(runEngine).not.toHaveBeenCalled()
+  expect(addScanEvent).toHaveBeenCalledWith(
+    "scan-1",
+    "engine_skipped",
+    "info",
+    expect.any(String),
+    { targetType: "WEB_APP" }
+  )
+})
 
 it("extracts only finite non-negative engine cost signals", () => {
   expect(extractActualCostUsd({ total_cost_usd: 3.25 })).toBe(3.25)
@@ -149,7 +172,7 @@ describe("processScanJob", () => {
     vi.mocked(completeScanWithScore).mockResolvedValue({} as never)
     vi.mocked(qualifyReferralForWorkspace).mockResolvedValue(null)
     vi.mocked(cleanupEngineWorkspace).mockResolvedValue(undefined)
-    vi.mocked(prisma.target.findFirst).mockResolvedValue(mockTarget as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(mockRepoTarget as never)
     vi.mocked(prisma.policy.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
     vi.mocked(runScannerOrchestrator).mockResolvedValue({

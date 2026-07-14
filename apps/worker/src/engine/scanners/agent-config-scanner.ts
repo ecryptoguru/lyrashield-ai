@@ -8,6 +8,11 @@ import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-cover
 export interface AgentConfigScanConfig {
   repoPath: string
   coverageIssues?: ScannerCoverageIssue[]
+  signal?: AbortSignal
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("Agent configuration scan cancelled")
 }
 
 const INSTRUCTION_FILE_NAMES = new Set(["AGENTS.md", "CLAUDE.md", ".cursorrules", ".windsurfrules"])
@@ -89,12 +94,14 @@ async function readBoundedFile(
 
 async function findInstructionFiles(
   repoPath: string,
-  coverageIssues?: ScannerCoverageIssue[]
+  coverageIssues?: ScannerCoverageIssue[],
+  signal?: AbortSignal
 ): Promise<string[]> {
   const found: string[] = []
   const state = { entries: 0, bounded: false }
 
   async function visit(directory: string, relativeDirectory: string, depth: number): Promise<void> {
+    throwIfAborted(signal)
     if (depth > MAX_INSTRUCTION_WALK_DEPTH || state.entries >= MAX_INSTRUCTION_WALK_ENTRIES) {
       state.bounded = true
       return
@@ -106,6 +113,7 @@ async function findInstructionFiles(
       return
     }
     for (const entry of entries) {
+      throwIfAborted(signal)
       if (++state.entries > MAX_INSTRUCTION_WALK_ENTRIES) {
         state.bounded = true
         break
@@ -138,14 +146,17 @@ async function findInstructionFiles(
 
 async function scanInstructionFiles(
   repoPath: string,
-  coverageIssues?: ScannerCoverageIssue[]
+  coverageIssues?: ScannerCoverageIssue[],
+  signal?: AbortSignal
 ): Promise<EngineVulnerability[]> {
   const findings: EngineVulnerability[] = []
-  for (const file of await findInstructionFiles(repoPath, coverageIssues)) {
+  for (const file of await findInstructionFiles(repoPath, coverageIssues, signal)) {
+    throwIfAborted(signal)
     const content = await readBoundedFile(repoPath, file, coverageIssues)
     if (!content) continue
     let inCodeFence = false
     for (const [index, line] of content.split("\n").entries()) {
+      throwIfAborted(signal)
       if (line.trimStart().startsWith("```")) {
         inCodeFence = !inCodeFence
         continue
@@ -200,7 +211,11 @@ function findWritePermissionLine(lines: string[]): number {
   return -1
 }
 
-async function scanWorkflows(repoPath: string): Promise<EngineVulnerability[]> {
+async function scanWorkflows(
+  repoPath: string,
+  signal?: AbortSignal
+): Promise<EngineVulnerability[]> {
+  throwIfAborted(signal)
   const directory = join(repoPath, ".github/workflows")
   let files: string[]
   try {
@@ -213,6 +228,7 @@ async function scanWorkflows(repoPath: string): Promise<EngineVulnerability[]> {
 
   const findings: EngineVulnerability[] = []
   for (const fileName of files) {
+    throwIfAborted(signal)
     const file = `.github/workflows/${fileName}`
     const content = await readBoundedFile(repoPath, file)
     if (!content) continue
@@ -264,9 +280,10 @@ async function scanWorkflows(repoPath: string): Promise<EngineVulnerability[]> {
 export async function scanAgentConfig(
   config: AgentConfigScanConfig
 ): Promise<EngineVulnerability[]> {
+  throwIfAborted(config.signal)
   const [instructionFindings, workflowFindings] = await Promise.all([
-    scanInstructionFiles(config.repoPath, config.coverageIssues),
-    scanWorkflows(config.repoPath),
+    scanInstructionFiles(config.repoPath, config.coverageIssues, config.signal),
+    scanWorkflows(config.repoPath, config.signal),
   ])
   const findings = [...instructionFindings, ...workflowFindings]
   logger.info("Agent configuration scan complete", {

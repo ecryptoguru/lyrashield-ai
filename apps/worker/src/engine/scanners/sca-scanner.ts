@@ -10,6 +10,11 @@ export interface ScaScanConfig {
   workspaceDir: string
   fetchFn?: typeof fetch
   coverageIssues?: ScannerCoverageIssue[]
+  signal?: AbortSignal
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("SCA scan cancelled")
 }
 
 interface Dependency {
@@ -65,8 +70,10 @@ async function findDependencyFiles(
   directory = repoPath,
   state = { entries: 0 },
   depth = 0,
-  coverageIssues?: ScannerCoverageIssue[]
+  coverageIssues?: ScannerCoverageIssue[],
+  signal?: AbortSignal
 ): Promise<string[]> {
+  throwIfAborted(signal)
   if (depth > MAX_WALK_DEPTH || state.entries >= MAX_WALK_ENTRIES) {
     recordCoverageIssue(coverageIssues, {
       scanner: "sca",
@@ -79,6 +86,7 @@ async function findDependencyFiles(
     const entries = await readdir(directory, { withFileTypes: true, encoding: "utf8" })
     const found: string[] = []
     for (const entry of entries) {
+      throwIfAborted(signal)
       if (++state.entries > MAX_WALK_ENTRIES) break
       const fullPath = join(directory, entry.name)
       let entryStat
@@ -91,7 +99,14 @@ async function findDependencyFiles(
       if (entryStat.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) {
           found.push(
-            ...(await findDependencyFiles(repoPath, fullPath, state, depth + 1, coverageIssues))
+            ...(await findDependencyFiles(
+              repoPath,
+              fullPath,
+              state,
+              depth + 1,
+              coverageIssues,
+              signal
+            ))
           )
         }
       } else if (entryStat.isFile() && DEP_FILE_PATTERNS.includes(entry.name)) {
@@ -544,15 +559,19 @@ export async function queryOsv(
 
 export async function queryOsvBatch(
   dependencies: Dependency[],
-  fetchFn?: typeof fetch
+  fetchFn?: typeof fetch,
+  signal?: AbortSignal
 ): Promise<Map<string, OsvVulnerability[]>> {
   const result = new Map<string, OsvVulnerability[]>()
   const doFetch = fetchFn ?? fetch
   for (let start = 0; start < dependencies.length; start += 100) {
+    throwIfAborted(signal)
     const chunk = dependencies.slice(start, start + 100)
+    const controller = new AbortController()
+    const onAbort = () => controller.abort()
+    signal?.addEventListener("abort", onAbort, { once: true })
+    const timer = setTimeout(() => controller.abort(), 10_000)
     try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 10_000)
       const response = await doFetch("https://api.osv.dev/v1/querybatch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -564,18 +583,21 @@ export async function queryOsvBatch(
         }),
         signal: controller.signal,
       })
-      clearTimeout(timer)
       if (!response.ok) throw new Error(`OSV API returned ${response.status}`)
       const data = (await response.json()) as { results?: Array<{ vulns?: OsvVulnerability[] }> }
       for (const [index, dependency] of chunk.entries()) {
         result.set(dependencyKey(dependency), data.results?.[index]?.vulns ?? [])
       }
     } catch (error) {
+      if (signal?.aborted) throw new Error("SCA scan cancelled")
       logger.warn("OSV batch query failed", {
         error: error instanceof Error ? error.message : String(error),
         dependencyCount: chunk.length,
       })
       for (const dependency of chunk) result.set(dependencyKey(dependency), [])
+    } finally {
+      clearTimeout(timer)
+      signal?.removeEventListener("abort", onAbort)
     }
   }
   return result
@@ -628,10 +650,18 @@ function extractFixedVersion(vuln: OsvVulnerability): string | undefined {
 }
 
 export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerability[]> {
-  const { repoPath, fetchFn, coverageIssues } = config
+  const { repoPath, fetchFn, coverageIssues, signal } = config
+  throwIfAborted(signal)
   logger.info("Starting SCA scan", { repoPath })
 
-  const depFiles = await findDependencyFiles(repoPath, repoPath, { entries: 0 }, 0, coverageIssues)
+  const depFiles = await findDependencyFiles(
+    repoPath,
+    repoPath,
+    { entries: 0 },
+    0,
+    coverageIssues,
+    signal
+  )
   if (depFiles.length === 0) {
     logger.info("No dependency files found", { repoPath })
     return []
@@ -639,6 +669,7 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
 
   const allDeps: Dependency[] = []
   for (const file of depFiles) {
+    throwIfAborted(signal)
     const deps = await parseDependencyFile(file, repoPath, coverageIssues)
     allDeps.push(...deps)
   }
@@ -649,12 +680,13 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
     unique: uniqueDeps.length,
     files: depFiles.length,
   })
-  const osvResults = await queryOsvBatch(uniqueDeps, fetchFn)
+  const osvResults = await queryOsvBatch(uniqueDeps, fetchFn, signal)
 
   const seenVulnIds = new Set<string>()
   const findings: EngineVulnerability[] = []
 
   for (const dep of uniqueDeps) {
+    throwIfAborted(signal)
     const vulns = osvResults.get(dependencyKey(dep)) ?? []
     for (const vuln of vulns) {
       if (seenVulnIds.has(vuln.id)) continue

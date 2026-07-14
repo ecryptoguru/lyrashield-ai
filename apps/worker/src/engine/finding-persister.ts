@@ -118,7 +118,8 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
     const cwe = isNormalized ? (vuln as NormalizedFinding).normalizedCwe : vuln.cwe
     const cvss = isNormalized ? (vuln as NormalizedFinding).normalizedCvss : vuln.cvss
     const verified = isNormalized
-      ? (vuln as NormalizedFinding).confidenceScore >= 50
+      ? (vuln as NormalizedFinding).scannerSource !== "engine" &&
+        (vuln as NormalizedFinding).confidenceScore >= 50
       : verification.verified
     const normalized = isNormalized ? (vuln as NormalizedFinding) : null
     const category =

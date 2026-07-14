@@ -8,6 +8,11 @@ export interface SecretsScanConfig {
   repoPath: string
   workspaceDir: string
   maxFileSize?: number
+  signal?: AbortSignal
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("Secrets scan cancelled")
 }
 
 interface SecretPattern {
@@ -209,14 +214,17 @@ const IGNORED_EXTENSIONS = new Set([
 const MAX_FILE_SIZE = 512 * 1024
 const MAX_WALK_ENTRIES = 50_000
 const MAX_WALK_DEPTH = 40
+const MAX_FINDINGS_PER_FILE = 200
 
 async function walkDir(
   dir: string,
   basePath: string,
   files: string[],
   state = { entries: 0 },
-  depth = 0
+  depth = 0,
+  signal?: AbortSignal
 ): Promise<void> {
+  throwIfAborted(signal)
   if (depth > MAX_WALK_DEPTH || state.entries >= MAX_WALK_ENTRIES) return
   let entries
   try {
@@ -226,6 +234,7 @@ async function walkDir(
   }
 
   for (const entry of entries) {
+    throwIfAborted(signal)
     if (++state.entries > MAX_WALK_ENTRIES) break
     const fullPath = join(dir, entry)
     let s
@@ -239,7 +248,7 @@ async function walkDir(
 
     if (s.isDirectory()) {
       if (!IGNORED_DIRS.has(entry)) {
-        await walkDir(fullPath, basePath, files, state, depth + 1)
+        await walkDir(fullPath, basePath, files, state, depth + 1, signal)
       }
     } else if (s.isFile() && s.size <= MAX_FILE_SIZE) {
       const ext = entry.substring(entry.lastIndexOf("."))
@@ -307,11 +316,12 @@ function getLanguageFromExt(ext: string): string {
 }
 
 export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVulnerability[]> {
-  const { repoPath, workspaceDir } = config
+  const { repoPath, workspaceDir, signal } = config
+  throwIfAborted(signal)
   logger.info("Starting secrets scan", { repoPath })
 
   const files: string[] = []
-  await walkDir(repoPath, repoPath, files)
+  await walkDir(repoPath, repoPath, files, { entries: 0 }, 0, signal)
 
   logger.info("Files to scan", { total: files.length })
 
@@ -319,6 +329,7 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
   const seenFindings = new Set<string>()
 
   for (const filePath of files) {
+    throwIfAborted(signal)
     let content: string
     try {
       content = await readFile(filePath, "utf-8")
@@ -329,15 +340,18 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
     const relPath = relative(workspaceDir, filePath)
     const ext = getFileExtension(filePath)
     const language = getLanguageFromExt(ext)
+    let findingsInFile = 0
 
     // Test vectors and test-only examples deliberately contain credential-shaped
     // strings. They prove scanner detection but are not deployable secrets.
     if (isTestFixturePath(relPath)) continue
 
     for (const pattern of SECRET_PATTERNS) {
+      throwIfAborted(signal)
       const regex = new RegExp(pattern.pattern.source, pattern.pattern.flags)
       let match: RegExpExecArray | null
-      while ((match = regex.exec(content)) !== null) {
+      while (findingsInFile < MAX_FINDINGS_PER_FILE && (match = regex.exec(content)) !== null) {
+        throwIfAborted(signal)
         const matchedText = match[0]
         const lineNum = content.substring(0, match.index).split("\n").length
 
@@ -351,6 +365,7 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
         const findingId = `${pattern.id}-${relPath}-${lineNum}`
         if (seenFindings.has(findingId)) continue
         seenFindings.add(findingId)
+        findingsInFile++
 
         const redactedMatch =
           matchedText.substring(0, 8) + "..." + matchedText.substring(matchedText.length - 4)

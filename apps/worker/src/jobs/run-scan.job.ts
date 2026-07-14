@@ -10,7 +10,12 @@ import {
   type ScanStatus,
 } from "@lyrashield/db"
 import { runPreflight } from "./preflight.job"
-import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
+import {
+  runEngine,
+  cleanupEngineWorkspace,
+  interpretExitCode,
+  type EngineRunResult,
+} from "../engine/runner"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
 import { persistFindings } from "../engine/finding-persister"
 import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
@@ -104,31 +109,57 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
 
-      const engineResult = await runEngine(
-        {
+      const engineResult: EngineRunResult =
+        target.type === "REPO"
+          ? await runEngine(
+              {
+                scanId,
+                goal,
+                mode,
+                target: {
+                  id: target.id,
+                  type: target.type as TargetType,
+                  url: target.url,
+                  repoFullName: target.repoFullName,
+                  name: target.name,
+                },
+                instruction: buildVibeSecurityInstruction(goal),
+                maxBudgetUsd,
+              },
+              scanId,
+              undefined,
+              async () => {
+                const current = await prisma.scan.findUnique({
+                  where: { id: scanId },
+                  select: { status: true },
+                })
+                return current?.status === "CANCELLED"
+              }
+            )
+          : {
+              exitCode: 0,
+              cancelled: false,
+              timedOut: false,
+              stdout: "",
+              stderr: "",
+              sourceCheckoutPath: null,
+              output: {
+                vulnerabilities: [],
+                runRecord: null,
+                findingCount: 0,
+                summary: "URL target scanned through the pinned deterministic URL scanner.",
+              },
+            }
+
+      if (target.type !== "REPO") {
+        await addScanEvent(
           scanId,
-          goal,
-          mode,
-          target: {
-            id: target.id,
-            type: target.type as TargetType,
-            url: target.url,
-            repoFullName: target.repoFullName,
-            name: target.name,
-          },
-          instruction: buildVibeSecurityInstruction(goal),
-          maxBudgetUsd,
-        },
-        scanId,
-        undefined,
-        async () => {
-          const current = await prisma.scan.findUnique({
-            where: { id: scanId },
-            select: { status: true },
-          })
-          return current?.status === "CANCELLED"
-        }
-      )
+          "engine_skipped",
+          "info",
+          "External engine skipped for URL targets until it supports pinned transport",
+          { targetType: target.type }
+        )
+      }
 
       if (engineResult.cancelled) {
         return {
@@ -176,6 +207,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         mode,
         engineFindings: engineResult.output.vulnerabilities,
         workspaceDir: engineResult.sourceCheckoutPath ?? undefined,
+        isCancelled: async () => {
+          const current = await prisma.scan.findUnique({
+            where: { id: scanId },
+            select: { status: true },
+          })
+          return current?.status === "CANCELLED"
+        },
       })
 
       try {

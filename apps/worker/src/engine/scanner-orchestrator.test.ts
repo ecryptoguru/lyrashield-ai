@@ -282,7 +282,12 @@ describe("runScannerOrchestrator", () => {
   })
 
   it("fails the scanner phase and records an event when the phase times out", async () => {
-    vi.mocked(scanSca).mockImplementationOnce(() => new Promise(() => {}))
+    vi.mocked(scanSca).mockImplementationOnce(
+      ({ signal }) =>
+        new Promise((_, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true })
+        }) as never
+    )
     await expect(
       runScannerOrchestrator({
         scanId: "scan-timeout",
@@ -303,6 +308,29 @@ describe("runScannerOrchestrator", () => {
       "Scanner phase timed out",
       { timeoutMs: 1 }
     )
+  })
+
+  it("stops deterministic scanners when the scan has been cancelled", async () => {
+    vi.mocked(scanUrl).mockImplementationOnce(
+      ({ signal }) =>
+        new Promise((_, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true })
+        }) as never
+    )
+
+    await expect(
+      runScannerOrchestrator({
+        scanId: "scan-cancelled",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        target: { id: "target-1", type: "URL", url: "https://example.com", name: "Test" },
+        goal: "TEST_APP",
+        mode: "STANDARD",
+        engineFindings: [],
+        workspaceDir: sourceCheckout,
+        isCancelled: async () => true,
+      })
+    ).rejects.toThrow("Scanner phase cancelled")
   })
 
   it("tags detector provenance so secret findings receive the score cap", async () => {
