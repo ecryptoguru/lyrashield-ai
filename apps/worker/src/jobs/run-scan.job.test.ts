@@ -10,6 +10,7 @@ vi.mock("@lyrashield/db", () => ({
     },
     scan: {
       findUnique: vi.fn(),
+      update: vi.fn(),
     },
   },
   updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
@@ -91,6 +92,7 @@ import { extractActualCostUsd, processScanJob } from "./run-scan.job"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
+import { completeRetestsForScan } from "../engine/result-integrity"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
@@ -183,6 +185,7 @@ describe("processScanJob", () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(mockRepoTarget as never)
     vi.mocked(prisma.policy.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
+    vi.mocked(prisma.scan.update).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(runScannerOrchestrator).mockResolvedValue({
       allFindings: [],
       engineFindings: [],
@@ -212,6 +215,13 @@ describe("processScanJob", () => {
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "RUNNING")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
     expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Scan completed with 0 findings")
+    expect(vi.mocked(completeRetestsForScan).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(completeScanWithScore).mock.invocationCallOrder[0]!
+    )
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: { summary: "Scan completed with 0 findings" },
+    })
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({
         maxBudgetUsd: 1.2,
@@ -399,6 +409,23 @@ describe("processScanJob", () => {
 
     await expect(processScanJob(retryingJob)).rejects.toThrow("temporary database error")
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+  })
+
+  it("resumes final scoring from an immutable manifest without replaying the scan", async () => {
+    vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+      status: "VERIFYING",
+      summary: "Recovered finalization",
+      resultManifest: { id: "manifest-1" },
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      status: "completed",
+      summary: "Recovered finalization",
+    })
+
+    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Recovered finalization")
+    expect(runEngine).not.toHaveBeenCalled()
+    expect(runScannerOrchestrator).not.toHaveBeenCalled()
   })
 
   it("fails closed without replaying a billable scan when evidence storage is unconfigured", async () => {

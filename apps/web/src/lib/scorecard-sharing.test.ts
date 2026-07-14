@@ -10,7 +10,7 @@ describe("scorecard sharing", () => {
   it("builds scope-qualified copy and encoded channel URLs without sensitive fields", () => {
     const caption = scorecardCaption("A", 3, "fixes")
     expect(caption).toBe(
-      "3 findings fixed and retest-verified with LyraShield AI. Current scoped grade: A."
+      "3 findings fixed and retest-confirmed with LyraShield AI. Current scoped grade: A."
     )
     expect(scorecardChannelUrl("bluesky", "https://app.test/score/ABC", caption)).toContain(
       encodeURIComponent("source=bluesky")

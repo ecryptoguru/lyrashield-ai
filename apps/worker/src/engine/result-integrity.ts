@@ -32,37 +32,68 @@ function scannerStatus(
   scanner: string,
   applicable: boolean,
   coverageIssues: ScannerCoverageIssue[]
-): { status: "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"; reason?: string } {
+): {
+  status: "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
+  reason?: string
+  subject?: string
+  metadata?: { issues: ScannerCoverageIssue[] }
+} {
   if (!applicable) return { status: "NOT_APPLICABLE", reason: "Not applicable to this target" }
-  const issue = coverageIssues.find((candidate) => candidate.scanner === scanner)
-  if (issue) return { status: "BLOCKED", reason: issue.reason }
+  const issues = coverageIssues
+    .filter((candidate) => candidate.scanner === scanner)
+    .sort((left, right) =>
+      `${left.subject ?? ""}\u0000${left.status}\u0000${left.reason}`.localeCompare(
+        `${right.subject ?? ""}\u0000${right.status}\u0000${right.reason}`
+      )
+    )
+  if (issues.length > 0) {
+    const reasons = [...new Set(issues.map((issue) => issue.reason))]
+    const subjects = [...new Set(issues.flatMap((issue) => (issue.subject ? [issue.subject] : [])))]
+    return {
+      status: "BLOCKED",
+      reason: reasons.join("; "),
+      ...(subjects.length > 0 ? { subject: subjects.join(", ") } : {}),
+      metadata: { issues },
+    }
+  }
   return { status: "COMPLETED" }
 }
 
 export function buildCoverageReceipts(input: ResultManifestInput) {
   const repositoryTarget = input.target.type === "REPO"
+  const engineStatus = scannerStatus("engine", repositoryTarget, input.coverageIssues)
+  const urlStatus = scannerStatus("url", Boolean(input.target.url), input.coverageIssues)
   return [
     {
       scanner: "engine",
       controlId: "engine",
-      ...scannerStatus("engine", repositoryTarget, input.coverageIssues),
-      metadata: { findingCount: input.engineFindingCount },
+      ...engineStatus,
+      metadata: {
+        findingCount: input.engineFindingCount,
+        ...engineStatus.metadata,
+      },
     },
-    ...["sca", "secrets", "agent_config"].map((scanner) => ({
-      scanner,
-      controlId: scanner,
-      ...scannerStatus(
+    ...["sca", "secrets", "agent_config"].map((scanner) => {
+      const status = scannerStatus(
         scanner,
         repositoryTarget && input.sourceCheckoutAvailable,
         input.coverageIssues
-      ),
-      metadata: { sourceCheckoutAvailable: input.sourceCheckoutAvailable },
-    })),
+      )
+      return {
+        scanner,
+        controlId: scanner,
+        ...status,
+        metadata: { sourceCheckoutAvailable: input.sourceCheckoutAvailable, ...status.metadata },
+      }
+    }),
     {
       scanner: "url",
       controlId: "url",
-      ...scannerStatus("url", Boolean(input.target.url), input.coverageIssues),
-      metadata: { configured: Boolean(input.target.url) },
+      ...urlStatus,
+      metadata: {
+        configured: Boolean(input.target.url),
+        ...urlStatus.metadata,
+      },
     },
   ]
 }
@@ -80,7 +111,10 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
       urlChecksum: input.target.url ? checksum(input.target.url) : null,
     },
     sourceCheckoutAvailable: input.sourceCheckoutAvailable,
-    coverage: coverage.map(({ metadata: _metadata, ...receipt }) => receipt),
+    // Coverage limitations are part of the immutable result contract. Keep
+    // their bounded subjects and reasons in the manifest, not only in the
+    // mutable receipt table.
+    coverage,
   }
   const manifestChecksum = checksum(manifest)
   const existing = await prisma.scanResultManifest.findUnique({ where: { scanId: input.scanId } })
@@ -88,6 +122,14 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
   if (existing && existing.checksum !== manifestChecksum) {
     throw new Error("Scan result manifest already exists with different contents")
   }
+
+  // If this insert succeeds but the process stops before the manifest write,
+  // the next attempt can safely repeat it. Once the manifest exists, the
+  // worker resumes finalization rather than replaying the scan result.
+  await prisma.scanCoverageReceipt.createMany({
+    data: coverage.map((receipt) => ({ scanId: input.scanId, ...receipt })),
+    skipDuplicates: true,
+  })
 
   if (!existing) {
     await prisma.scanResultManifest.create({
@@ -99,11 +141,6 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
       },
     })
   }
-
-  await prisma.scanCoverageReceipt.createMany({
-    data: coverage.map((receipt) => ({ scanId: input.scanId, ...receipt })),
-    skipDuplicates: true,
-  })
 }
 
 function isNormalizedFinding(finding: FindingInput): finding is NormalizedFinding {

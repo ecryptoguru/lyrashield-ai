@@ -31,8 +31,8 @@ export function scorecardCaption(
 ) {
   const fixes = `${resolvedFindings} finding${resolvedFindings === 1 ? "" : "s"}`
   return variant === "fixes"
-    ? `${fixes} fixed and retest-verified with LyraShield AI. Current scoped grade: ${grade}.`
-    : `We ran a scoped LyraShield AI security review and earned grade ${grade}, with ${fixes} fixed and retest-verified.`
+    ? `${fixes} fixed and retest-confirmed with LyraShield AI. Current scoped grade: ${grade}.`
+    : `We ran a scoped LyraShield AI security review and earned grade ${grade}, with ${fixes} fixed and retest-confirmed.`
 }
 
 export function scorecardChannelUrl(channel: ShareChannel, url: string, caption: string) {

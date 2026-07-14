@@ -44,11 +44,24 @@ export function buildScorecardPayload(
 }
 
 function scoreInput(
-  findings: Array<{ severity: string; status: string; verified: boolean; category: string | null }>
+  findings: Array<{
+    severity: string
+    status: string
+    verified: boolean
+    verificationStatus: string
+    category: string | null
+  }>
 ) {
   return findings.map((finding) => ({
     severity: finding.severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO",
-    status: finding.status as
+    // Legacy or direct database updates can still contain FIXED without a
+    // retest/independent verification receipt. Keep those findings in the
+    // score until a trusted pipeline has established the resolved state.
+    status: (finding.status === "FIXED" &&
+    finding.verificationStatus !== "VALIDATED" &&
+    finding.verificationStatus !== "VERIFIED"
+      ? "FIXED_PENDING_RETEST"
+      : finding.status) as
       | "OPEN"
       | "FIX_READY"
       | "PR_OPENED"
@@ -80,7 +93,13 @@ export async function completeScanWithScore(scanId: string, summary: string | nu
 
     const findings = await tx.finding.findMany({
       where: { targetId: scan.targetId, workspaceId: scan.workspaceId, deletedAt: null },
-      select: { severity: true, status: true, verified: true, category: true },
+      select: {
+        severity: true,
+        status: true,
+        verified: true,
+        verificationStatus: true,
+        category: true,
+      },
     })
     const triaged = findings.filter(
       (finding) => finding.status === "ACCEPTED_RISK" || finding.status === "FALSE_POSITIVE"

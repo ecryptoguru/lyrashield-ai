@@ -33,7 +33,7 @@ export async function generateMetadata({
     `/api/og/score/${slug}?variant=${variant}&format=wide`,
     appOrigin()
   ).toString()
-  const description = `Grade ${grade} from a scoped LyraShield AI review, with ${fixes} finding${fixes === 1 ? "" : "s"} fixed and retest-verified. Not a security guarantee.`
+  const description = `Grade ${grade} from a scoped LyraShield AI review, with ${fixes} finding${fixes === 1 ? "" : "s"} fixed and retest-confirmed. Not a security guarantee.`
 
   return {
     title: `Grade ${grade} security review | LyraShield AI`,
@@ -141,7 +141,7 @@ export default async function ScorecardPage({
               </p>
               <p className="mt-3 text-4xl font-semibold">{payload.resolvedFindings}</p>
               <p className="text-muted-foreground mt-1 text-sm">
-                finding{payload.resolvedFindings === 1 ? "" : "s"} fixed and verified
+                finding{payload.resolvedFindings === 1 ? "" : "s"} fixed and retest-confirmed
               </p>
             </div>
           </div>
