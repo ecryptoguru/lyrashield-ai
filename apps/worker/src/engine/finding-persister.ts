@@ -10,6 +10,7 @@ import { assertEvidenceEncrypted } from "@lyrashield/db"
 import { verifyVulnerability } from "./verifier"
 import type { NormalizedFinding } from "./normalizer"
 import { uploadEvidence } from "./evidence-storage"
+import { persistDetectionReceipt } from "./result-integrity"
 
 export interface PersistFindingsParams {
   scanId: string
@@ -117,10 +118,15 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
       : verification.confidence
     const cwe = isNormalized ? (vuln as NormalizedFinding).normalizedCwe : vuln.cwe
     const cvss = isNormalized ? (vuln as NormalizedFinding).normalizedCvss : vuln.cvss
-    const verified = isNormalized
-      ? (vuln as NormalizedFinding).scannerSource !== "engine" &&
-        (vuln as NormalizedFinding).confidenceScore >= 50
-      : verification.verified
+    // A scanner's confidence is useful triage data, not proof. Verification is
+    // only granted by a separate immutable verification receipt.
+    const verified = false
+    const scannerSource = isNormalized ? (vuln as NormalizedFinding).scannerSource : "engine"
+    const verificationMethod = scannerSource === "engine" ? "ENGINE_CLAIM" : "SCANNER_DETECTION"
+    const verificationReason =
+      scannerSource === "engine"
+        ? "Engine claim recorded; independent validation is required before verification."
+        : "Scanner detection recorded; an independent validation receipt is required before verification."
     const normalized = isNormalized ? (vuln as NormalizedFinding) : null
     const category =
       normalized?.scannerSource === "secrets" ? "Secrets" : normalized?.enrichment.cweCategory
@@ -161,9 +167,21 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
           ...(vuln.impact ? { businessImpact: vuln.impact } : {}),
           ...(reopen ? { status: "OPEN" as const, fixedAt: null } : {}),
           verified,
+          verificationStatus: "DETECTED",
+          verificationMethod,
+          verificationReason,
         },
       })
       await persistEvidence(existing.id, workspaceId, vuln)
+      await persistDetectionReceipt({
+        scanId,
+        workspaceId,
+        targetId,
+        findingId: existing.id,
+        finding: vuln,
+        severity,
+        dedupeKey,
+      })
 
       results.push({
         id: existing.id,
@@ -185,6 +203,9 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
         severity,
         confidence,
         verified,
+        verificationStatus: "DETECTED",
+        verificationMethod,
+        verificationReason,
         dedupeKey,
         ...(cwe ? { cwe } : {}),
         ...(category ? { category } : {}),
@@ -199,6 +220,15 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
     })
 
     await persistEvidence(finding.id, workspaceId, vuln)
+    await persistDetectionReceipt({
+      scanId,
+      workspaceId,
+      targetId,
+      findingId: finding.id,
+      finding: vuln,
+      severity,
+      dedupeKey,
+    })
 
     results.push({
       id: finding.id,

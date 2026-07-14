@@ -20,6 +20,12 @@ import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder
 import { persistFindings } from "../engine/finding-persister"
 import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
+import {
+  completeRetestsForScan,
+  failTerminalRetestsForScan,
+  markRetestsRunning,
+  persistResultManifest,
+} from "../engine/result-integrity"
 import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
 import type { ScanJobData, ScanJobResult } from "../types"
 
@@ -78,6 +84,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       // 3. Run the scan engine
       await updateScanStatus(scanId, "RUNNING" as ScanStatus)
+      await markRetestsRunning(scanId)
 
       const policy = policyId
         ? await prisma.policy.findFirst({
@@ -255,6 +262,20 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
 
+      await persistResultManifest({
+        scanId,
+        target: {
+          id: target.id,
+          type: target.type,
+          repoFullName: target.repoFullName,
+          branch: target.branch,
+          url: target.url,
+        },
+        sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
+        engineFindingCount: orchestratorResult.engineFindings.length,
+        coverageIssues: orchestratorResult.coverageIssues,
+      })
+
       // Persist LLM usage data from engine run record for cost observability
       if (engineResult.output.runRecord?.llm_usage) {
         const actualCostUsd = extractActualCostUsd(engineResult.output.runRecord.llm_usage)
@@ -352,6 +373,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
 
       await completeScanWithScore(scanId, engineResult.output.summary)
+      await completeRetestsForScan({
+        scanId,
+        workspaceId,
+        persistedFindingIds: persistedFindings.map((finding) => finding.id),
+        coverageIssues: orchestratorResult.coverageIssues,
+      })
       try {
         await qualifyReferralForWorkspace(workspaceId)
       } catch (referralError) {
@@ -462,6 +489,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorMessage,
       }
     } finally {
+      try {
+        await failTerminalRetestsForScan(scanId)
+      } catch (retestError) {
+        log.warn("Failed to finalize retest state", {
+          scanId,
+          error: retestError instanceof Error ? retestError.message : String(retestError),
+        })
+      }
       try {
         await cleanupEngineWorkspace(`lyrashield_runs/${scanId}`)
       } catch {

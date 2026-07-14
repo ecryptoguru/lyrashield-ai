@@ -5227,9 +5227,9 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
-- Current local security-remediation branch gate: lint, typecheck, production build, formatting, Prisma client generation, `git diff --check`, **760 passing Vitest tests in 74 files**, and **2 passing Playwright Chromium tests**. This is branch-local proof, not a production deployment or migration-application claim.
+- Current `main` security-remediation baseline (PR #66): lint, typecheck, production build, formatting, Prisma client generation, `git diff --check`, **760 passing Vitest tests in 74 files**, and **2 passing Playwright Chromium tests**. The result-integrity branch has separate unmerged verification.
 - Current product surface: **22 page route files** and **40 API route files** in `apps/web`.
-- Current data surface: **35 Prisma models**, **14 enums**, and **17 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
+- Current data surface: **39 Prisma models**, **18 enums**, and **18 committed migrations**. After the result-integrity migration, Postgres RLS covers 20 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
 - Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
 - Current Docker proof: the web/worker stack and engine-bearing worker image build; the CLI reports `1.0.4.post1`; configuration failure occurs before sandbox pull when model credentials are missing.
@@ -5254,6 +5254,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - Finding normalization, CWE/OWASP enrichment, CVSS estimation, confidence and false-positive-risk scoring, deduplication, persistence, filtering, and plain-language explanations.
 - Evidence upload: PoC and code-location artifacts are uploaded to configured S3-compatible storage with `AES256` SSE and a SHA-256 checksum. Missing storage or upload failure fails closed; `Evidence.encryptionKeyRef` and `checksum` are validated before persistence. Retries are idempotent on finding/checksum.
 - Fix proposals, retests, immutable creation-time report snapshots, revocable shared reports, and launch-readiness verdicts computed from unpaginated database aggregates. PR creation deliberately fails closed until an immutable server-generated patch is bound to a consumed approval; it accepts no client patch, branch, or PR metadata.
+- New scans persist an immutable result manifest, per-scanner coverage receipts, privacy-bounded finding candidates, and idempotent verification receipts. Detection, validation, and independent verification are distinct states; confidence never sets a finding to verified. Retests queue a fresh source-configured scan and can validate deterministic scanner absence without asserting independent exploit proof.
 - Email, Slack, Discord, and in-app notification plumbing plus recurring scan schedules with atomic claims. Bulk notification reads are scoped to both workspace and user.
 
 ### C1.3 Detection and engine coverage
@@ -5313,12 +5314,19 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - Public report rendering reads the immutable snapshot, uses generic target/title disclosure, emits `noindex, nofollow, noarchive, noimageindex`, and applies `Referrer-Policy: no-referrer`. Legacy reports retain the safe fallback restored in PR #59.
 - Rendered QA covered both themes, marketing, auth, every dashboard route, mobile Sheet open/close behavior, report audience switching, report create/share, and shared-report privacy at desktop and 320px with clean application console output.
 
-### C1.9 Current security-remediation branch (unmerged)
+### C1.9 Security-remediation merge (PR #66)
 
 - All 14 findings from the full review are addressed with regression coverage: engine artifacts/fields are bounded; engine evidence never self-verifies a finding; scanner timeout aborts propagate through SCA, secrets, agent-config, URL, and OSV work; and `fec0::/10` is blocked.
 - URL credentials, query strings, and fragments are rejected for scan targets. Diagnostic URL logs contain only origin/path, never credentials, query parameters, or fragments. Response-body reads remain within the safe-fetch timeout.
 - Notification reads are limited to the caller's notifications plus workspace-wide notices. `(type, externalId)` is globally unique for integrations through `20260714170000_integration_global_external_id_unique`.
 - Fresh GitHub installation claims and client-authored Fix PR creation are intentionally unavailable until provider ownership verification and immutable server-generated patch binding are implemented. The dashboard/API report the blocked state rather than creating an unsafe resource.
+
+### C1.10 Result-integrity branch (unmerged)
+
+- `ScanResultManifest`, `ScanCoverageReceipt`, `FindingCandidate`, and `FindingVerification` make the scope, coverage, provenance, and proof state of every new scan durable and queryable. Candidate data excludes raw PoC and source-snippet content; retained evidence continues through encrypted evidence storage.
+- All scanner/engine output enters as `DETECTED`. Only a retained independent verification receipt may set `Finding.verified`; historical confidence-derived verified flags are reset by migration. A deterministic clean retest becomes `VALIDATED`, while an engine-only clean retest is `INCONCLUSIVE`.
+- Scan details, finding drawers, and report methodology render proof state and coverage receipts. Retest requests create a fresh server-owned queue job using the source scan configuration; client-supplied scan IDs are not trusted.
+- Intrusive sandbox reproduction is intentionally not implemented: it requires founder authorization, a constrained verifier specification, and transport-level egress control. This branch does not claim autonomous PoC execution or complete coverage.
 
 ## C2. Phase 1 gaps and release gates
 
@@ -5326,7 +5334,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 1. **Controlled scan proof:** one local Safe scan against an approved public repository completed with Luna/medium routing, Docker sandbox execution, retained scan events, zero findings, and a persisted post-run budget-overage warning. It is not a production proof and does not establish coverage of all controls. A production target, approved Terra/Deep run, production-pinned image provenance, retained artifacts when findings exist, and production egress enforcement are still required.
 2. **Transport-level egress control:** application SSRF checks are present, but untrusted multi-tenant scanning still requires a deployment-level proxy or equivalent DNS-pinned network enforcement.
-3. **Production infrastructure:** provision production PostgreSQL, Redis, mandatory S3-compatible evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all 17 migrations on a fresh database, including scorecard events, single-use approvals, evidence idempotency, report snapshots, the public-score lookup index, and global provider installation uniqueness. Reconcile legacy duplicate provider bindings before the final migration; evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
+3. **Production infrastructure:** provision production PostgreSQL, Redis, mandatory S3-compatible evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all 18 migrations on a fresh database, including scorecard events, single-use approvals, evidence idempotency, report snapshots, result-integrity receipts, the public-score lookup index, and global provider installation uniqueness. Reconcile legacy duplicate provider bindings before the final migration; evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
 
 ### C2.2 Required before self-serve paid launch
 

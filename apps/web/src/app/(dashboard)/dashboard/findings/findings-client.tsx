@@ -32,6 +32,9 @@ export interface FindingListItem {
   severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"
   status: string
   verified: boolean
+  verificationStatus: string
+  verificationMethod?: string | null
+  verificationReason?: string | null
   confidence: string
   cwe?: string | null
   cvssScore?: number | null
@@ -202,7 +205,8 @@ export function FindingsClient({
                       </span>
                     ) : (
                       <span className="text-muted-foreground flex items-center gap-1 text-xs">
-                        <XCircle className="h-3 w-3" aria-hidden="true" /> Unverified
+                        <XCircle className="h-3 w-3" aria-hidden="true" />{" "}
+                        {finding.verificationStatus.replaceAll("_", " ")}
                       </span>
                     )}
                     <Badge variant={STATUS_BADGE[finding.status] ?? "muted"}>
@@ -292,6 +296,16 @@ interface FindingDetail {
   recommendedFix?: string | null
   businessImpact?: string | null
   exploitability?: string | null
+  verificationStatus?: string
+  verificationMethod?: string | null
+  verificationReason?: string | null
+  verificationReceipts?: Array<{
+    id: string
+    status: string
+    method: string
+    reason: string
+    createdAt: string
+  }>
   evidence?: Array<{ id: string; type: string; storageUri: string | null; redactionStatus: string }>
   fixProposals?: Array<{ id: string; status: string; summary: string }>
   retests?: Array<{ id: string; status: string; createdAt: string }>
@@ -381,7 +395,7 @@ function FindingDetailDrawer({
                   Verified
                 </Badge>
               ) : (
-                <Badge variant="muted">Unverified</Badge>
+                <Badge variant="muted">{finding.verificationStatus.replaceAll("_", " ")}</Badge>
               )}
               {finding.confidence && <Badge variant="muted">{finding.confidence} confidence</Badge>}
             </div>
@@ -390,6 +404,37 @@ function FindingDetailDrawer({
               <h3 className="mb-1 text-sm font-medium">Summary</h3>
               <p className="text-muted-foreground text-sm">{detail.summary}</p>
             </div>
+
+            {detail.verificationReason && (
+              <div className="bg-muted/30 rounded-lg border p-3">
+                <h3 className="text-sm font-medium">Verification state</h3>
+                <p className="text-muted-foreground mt-1 text-sm">{detail.verificationReason}</p>
+              </div>
+            )}
+
+            {detail.verificationReceipts && detail.verificationReceipts.length > 0 && (
+              <div>
+                <h3 className="mb-1 text-sm font-medium">
+                  Verification receipts ({detail.verificationReceipts.length})
+                </h3>
+                <div className="space-y-2">
+                  {detail.verificationReceipts.map((receipt) => (
+                    <div key={receipt.id} className="rounded-lg border p-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={receipt.status === "VERIFIED" ? "success" : "muted"}>
+                          {receipt.status.replaceAll("_", " ")}
+                        </Badge>
+                        <Badge variant="muted">{receipt.method.replaceAll("_", " ")}</Badge>
+                        <span className="text-muted-foreground text-xs">
+                          {formatDate(receipt.createdAt)}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground mt-1 text-xs">{receipt.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {(detail.cwe || detail.cvssScore || detail.category) && (
               <div className="flex flex-wrap gap-2 text-xs">
@@ -538,7 +583,6 @@ function FindingDetailDrawer({
                     try {
                       await apiPost(`/api/findings/${finding.id}/retests`, {
                         workspaceId,
-                        scanId: detail.scanId,
                       })
                       const res = await apiGet<FindingDetail>(
                         `/api/findings/${finding.id}?workspaceId=${workspaceId}`
@@ -553,10 +597,10 @@ function FindingDetailDrawer({
                 >
                   {creatingRetest ? (
                     <span className="flex items-center gap-2">
-                      <Spinner /> Retesting...
+                      <Spinner /> Queuing retest...
                     </span>
                   ) : (
-                    "Retest Finding"
+                    "Queue Retest"
                   )}
                 </Button>
                 {!detail.scanId && (

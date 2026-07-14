@@ -68,6 +68,8 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "Retest",
   "AgentApproval",
   "ScoreSnapshot",
+  "FindingCandidate",
+  "FindingVerification",
 ])
 
 export const READ_OPS = new Set<string>([

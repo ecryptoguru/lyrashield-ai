@@ -49,6 +49,13 @@ vi.mock("../engine/finding-persister", () => ({
   persistFindings: vi.fn().mockResolvedValue([]),
 }))
 
+vi.mock("../engine/result-integrity", () => ({
+  persistResultManifest: vi.fn().mockResolvedValue(undefined),
+  markRetestsRunning: vi.fn().mockResolvedValue(undefined),
+  completeRetestsForScan: vi.fn().mockResolvedValue(undefined),
+  failTerminalRetestsForScan: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock("./preflight.job", () => ({
   runPreflight: vi.fn().mockResolvedValue({ passed: true, checks: [] }),
 }))
@@ -67,6 +74,7 @@ vi.mock("../engine/scanner-orchestrator", () => ({
     secretsFindings: [],
     urlFindings: [],
     agentConfigFindings: [],
+    coverageIssues: [],
     stats: {
       total: 0,
       bySeverity: {},
@@ -182,6 +190,7 @@ describe("processScanJob", () => {
       secretsFindings: [],
       urlFindings: [],
       agentConfigFindings: [],
+      coverageIssues: [],
       stats: {
         total: 0,
         bySeverity: {},

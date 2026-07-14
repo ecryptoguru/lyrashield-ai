@@ -1,5 +1,11 @@
 import { prisma } from "./client"
-import type { Scan, ScanEvent, ScanStatus } from "./generated/prisma"
+import type {
+  Scan,
+  ScanEvent,
+  ScanStatus,
+  ScanResultManifest,
+  ScanCoverageReceipt,
+} from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import { isValidTransition } from "./scan-transitions"
 
@@ -15,6 +21,8 @@ export interface CreateScanParams {
 
 export interface ScanWithEvents extends Scan {
   events: ScanEvent[]
+  resultManifest: ScanResultManifest | null
+  coverageReceipts: ScanCoverageReceipt[]
 }
 
 const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
@@ -162,6 +170,8 @@ export async function getScanWithEvents(scanId: string): Promise<ScanWithEvents 
         orderBy: { createdAt: "asc" },
         take: 200,
       },
+      resultManifest: true,
+      coverageReceipts: { orderBy: { controlId: "asc" } },
     },
   })
 }

@@ -15,6 +15,8 @@ export interface ReportData {
     targetUrl: string | null
     startedAt: Date | null
     endedAt: Date | null
+    manifestChecksum: string | null
+    coverage: { completed: number; limited: number; notApplicable: number }
   } | null
   findings: Array<{
     id: string
@@ -22,6 +24,7 @@ export interface ReportData {
     severity: string
     status: string
     verified: boolean
+    verificationStatus?: string
     confidence: string
     cwe: string | null
     cvssScore: number | null
@@ -72,6 +75,8 @@ export async function gatherReportData(
       where: { id: scanId, workspaceId, deletedAt: null },
       include: {
         target: { select: { name: true, type: true, url: true } },
+        resultManifest: { select: { checksum: true } },
+        coverageReceipts: { select: { status: true } },
       },
     })
 
@@ -86,6 +91,16 @@ export async function gatherReportData(
         targetUrl: scan.target?.url ?? null,
         startedAt: scan.startedAt,
         endedAt: scan.endedAt,
+        manifestChecksum: scan.resultManifest?.checksum ?? null,
+        coverage: (scan.coverageReceipts ?? []).reduce(
+          (acc, receipt) => {
+            if (receipt.status === "COMPLETED") acc.completed++
+            else if (receipt.status === "NOT_APPLICABLE") acc.notApplicable++
+            else acc.limited++
+            return acc
+          },
+          { completed: 0, limited: 0, notApplicable: 0 }
+        ),
       }
     }
 
@@ -104,6 +119,7 @@ export async function gatherReportData(
       severity: true,
       status: true,
       verified: true,
+      verificationStatus: true,
       confidence: true,
       cwe: true,
       cvssScore: true,
@@ -240,6 +256,7 @@ export async function gatherReportData(
       severity: f.severity,
       status: f.status,
       verified: f.verified,
+      verificationStatus: f.verificationStatus,
       confidence: f.confidence,
       cwe: f.cwe,
       cvssScore: f.cvssScore,
@@ -270,6 +287,10 @@ export async function gatherReportData(
       methodology: [
         "Counts are frozen at report creation time and do not change with live scan state.",
         "Findings are ordered by severity and limited to the 500 most recent records.",
+        "Detection is not verification; a verified finding requires an independent verification receipt.",
+        scanInfo?.manifestChecksum
+          ? `Result manifest SHA-256: ${scanInfo.manifestChecksum}. Coverage: ${scanInfo.coverage.completed} completed, ${scanInfo.coverage.limited} limited, ${scanInfo.coverage.notApplicable} not applicable.`
+          : "This legacy scan has no immutable result manifest; treat its coverage and verification state as incomplete.",
         "Public shares exclude evidence, repository coordinates, and technical finding details.",
       ],
     },
@@ -319,7 +340,7 @@ export function generateReportHTML(data: ReportData): string {
             <span style="display:inline-block;padding:2px 8px;border-radius:4px;color:#fff;background:${statusColor};font-size:11px;font-weight:600;">${f.status}</span>
           </td>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;">
-            ${f.verified ? "✅ Verified" : "⚠️ Unverified"}<br>
+            ${f.verified ? "✅ Verified" : `⚠️ ${escapeHtml((f.verificationStatus ?? "DETECTED").replaceAll("_", " "))}`}<br>
             <span style="color:#6b7280;">${escapeHtml(f.confidence)}</span>
           </td>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;">

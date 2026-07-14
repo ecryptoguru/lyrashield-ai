@@ -49,6 +49,10 @@ interface ScanData {
     repoFullName: string | null
   } | null
   events: ScanEvent[]
+  integrity: {
+    manifestChecksum: string | null
+    coverage: Array<{ scanner: string; controlId: string; status: string; reason: string | null }>
+  }
 }
 
 interface FindingItem {
@@ -60,6 +64,9 @@ interface FindingItem {
   cvssScore: number | null
   summary: string | null
   verified: boolean
+  verificationStatus: string
+  verificationMethod: string | null
+  verificationReason: string | null
   createdAt: string
 }
 
@@ -120,6 +127,7 @@ const EVENT_LEVEL_COLOR: Record<string, string> = {
 }
 
 const SCANNER_LABELS: Record<string, string> = {
+  engine: "Engine review",
   agent_config: "Agent configuration",
   sca: "Dependency scan",
   url: "URL scan",
@@ -211,6 +219,9 @@ export function ScanDetailClient({
   const visibleEvents = expandedEvents ? scan.events : scan.events.slice(-10)
   const coverageWarnings = getScannerCoverageWarnings(scan.events)
   const hasLimitedCoverage = coverageWarnings.length > 0
+  const incompleteCoverage = scan.integrity.coverage.filter(
+    (receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status)
+  )
 
   function toggleFinding(id: string) {
     setExpandedFindings((prev) => {
@@ -278,7 +289,7 @@ export function ScanDetailClient({
         <Card className="p-4">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            Verified
+            Independently verified
           </div>
           <p className="mt-1 text-lg font-semibold">
             {currentFindings.filter((f) => f.verified).length}
@@ -290,6 +301,15 @@ export function ScanDetailClient({
             Status
           </div>
           <p className="mt-1 text-lg font-semibold">{scan.status}</p>
+        </Card>
+        <Card className="p-4">
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            Result integrity
+          </div>
+          <p className="mt-1 text-lg font-semibold">
+            {scan.integrity.manifestChecksum ? "Manifested" : "Pending"}
+          </p>
         </Card>
       </div>
 
@@ -377,6 +397,55 @@ export function ScanDetailClient({
         </section>
       )}
 
+      {scan.integrity.coverage.length > 0 && (
+        <Card className="mb-6 p-4" aria-labelledby="integrity-heading">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 id="integrity-heading" className="font-semibold">
+                Coverage and proof state
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Detection and verification are separate. A finding is verified only after an
+                independent verification receipt is retained.
+              </p>
+            </div>
+            <Badge variant={incompleteCoverage.length > 0 ? "warning" : "success"}>
+              {incompleteCoverage.length > 0 ? "Coverage limited" : "Coverage recorded"}
+            </Badge>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {scan.integrity.coverage.map((receipt) => (
+              <div key={receipt.controlId} className="rounded-md border p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">
+                    {SCANNER_LABELS[receipt.scanner] ?? receipt.scanner}
+                  </span>
+                  <Badge
+                    variant={
+                      receipt.status === "COMPLETED"
+                        ? "success"
+                        : receipt.status === "NOT_APPLICABLE"
+                          ? "muted"
+                          : "warning"
+                    }
+                  >
+                    {receipt.status.replaceAll("_", " ")}
+                  </Badge>
+                </div>
+                {receipt.reason && (
+                  <p className="text-muted-foreground mt-1 text-xs">{receipt.reason}</p>
+                )}
+              </div>
+            ))}
+          </div>
+          {scan.integrity.manifestChecksum && (
+            <p className="text-muted-foreground mt-3 font-mono text-xs">
+              Manifest SHA-256: {scan.integrity.manifestChecksum}
+            </p>
+          )}
+        </Card>
+      )}
+
       {currentFindings.length > 0 && (
         <div className="mb-6">
           <h2 className="mb-3 text-lg font-semibold">Findings ({currentFindings.length})</h2>
@@ -421,6 +490,9 @@ export function ScanDetailClient({
                           {finding.verified && (
                             <span className="text-emerald-600 dark:text-emerald-400">Verified</span>
                           )}
+                          {!finding.verified && (
+                            <span>{finding.verificationStatus.replaceAll("_", " ")}</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -436,12 +508,15 @@ export function ScanDetailClient({
                       />
                     )}
                   </button>
-                  {isExpanded && finding.summary && (
+                  {isExpanded && (finding.summary || finding.verificationReason) && (
                     <div
                       id={`finding-${finding.id}-detail`}
                       className="text-muted-foreground mt-3 border-t pt-3 text-sm"
                     >
-                      {finding.summary}
+                      {finding.summary && <p>{finding.summary}</p>}
+                      {finding.verificationReason && (
+                        <p className="mt-2 text-xs">{finding.verificationReason}</p>
+                      )}
                     </div>
                   )}
                 </Card>
