@@ -33,7 +33,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: { code: "INVALID_INSTALLATION_ID", message: "installation_id must be a canonical integer" },
+        error: {
+          code: "INVALID_INSTALLATION_ID",
+          message: "installation_id must be a canonical integer",
+        },
       },
       { status: 400 }
     )
