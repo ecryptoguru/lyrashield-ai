@@ -80,6 +80,10 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
       stage: e.stage,
       level: e.level,
       message: e.message,
+      metadata:
+        e.metadata && typeof e.metadata === "object" && !Array.isArray(e.metadata)
+          ? (e.metadata as Record<string, unknown>)
+          : null,
       createdAt: e.createdAt.toISOString(),
     })),
   }

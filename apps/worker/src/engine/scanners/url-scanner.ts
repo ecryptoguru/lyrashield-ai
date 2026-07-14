@@ -4,6 +4,7 @@ import { readFile } from "fs/promises"
 import { join } from "path"
 import { safeFetch, type HostResolver } from "@lyrashield/security"
 import type { EngineVulnerability } from "../output-parser"
+import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 
 export interface UrlScanConfig {
   targetUrl: string
@@ -11,6 +12,7 @@ export interface UrlScanConfig {
   fetchFn?: typeof fetch
   /** Injectable DNS resolver — only for tests. */
   resolver?: HostResolver
+  coverageIssues?: ScannerCoverageIssue[]
 }
 
 const AI_BUILDER_PLATFORMS = [
@@ -63,6 +65,7 @@ async function fetchUrl(
   status: number
   headers: Record<string, string>
   finalUrl: string
+  urlHistory: string[]
 } | null> {
   const result = await safeFetch(url, { fetchFn, resolver })
   if (!result) return null
@@ -71,6 +74,7 @@ async function fetchUrl(
     status: result.status,
     headers: result.headers,
     finalUrl: result.finalUrl,
+    urlHistory: result.urlHistory,
   }
 }
 
@@ -404,12 +408,8 @@ function detectOpenRedirects(html: string): EngineVulnerability[] {
   return findings
 }
 
-function detectInsecureTransport(targetUrl: string): EngineVulnerability[] {
-  try {
-    if (new URL(targetUrl).protocol !== "http:") return []
-  } catch {
-    return []
-  }
+function detectInsecureTransport(urlHistory: string[]): EngineVulnerability[] {
+  if (!urlHistory.some((url) => new URL(url).protocol === "http:")) return []
   return [
     makeFinding(
       "url-insecure-http",
@@ -496,16 +496,22 @@ function detectSourceMapExposure(html: string): EngineVulnerability[] {
 }
 
 export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerability[]> {
-  const { targetUrl, repoPath, fetchFn, resolver } = config
+  const { targetUrl, repoPath, fetchFn, resolver, coverageIssues } = config
   logger.info("Starting AI-builder-aware URL scan", { targetUrl })
 
   const result = await fetchUrl(targetUrl, fetchFn, resolver)
   if (!result) {
     logger.warn("URL scan skipped — could not fetch target", { targetUrl })
+    recordCoverageIssue(coverageIssues, {
+      scanner: "url",
+      status: "partial",
+      subject: targetUrl,
+      reason: "URL content could not be fetched through the SSRF-safe transport",
+    })
     return []
   }
 
-  const { html, headers, finalUrl } = result
+  const { html, headers, urlHistory } = result
   const allFindings: EngineVulnerability[] = []
 
   allFindings.push(...detectSupabaseAnonKey(html))
@@ -517,7 +523,7 @@ export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerabilit
   allFindings.push(...(await detectMissingWebhookVerification(html, repoPath)))
   allFindings.push(...detectAiBuilderDefaults(html))
   allFindings.push(...detectOpenRedirects(html))
-  allFindings.push(...detectInsecureTransport(finalUrl))
+  allFindings.push(...detectInsecureTransport(urlHistory))
   allFindings.push(...detectInsecureCookies(headers))
   allFindings.push(...detectVerboseErrors(html))
   allFindings.push(...detectSourceMapExposure(html))

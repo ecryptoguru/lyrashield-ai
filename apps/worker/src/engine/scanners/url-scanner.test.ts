@@ -180,6 +180,19 @@ describe("scanUrl", () => {
     expect(findings.find((finding) => finding.id === "url-insecure-http")?.cwe).toBe("CWE-319")
   })
 
+  it("detects cleartext HTTP when the final redirect target is HTTPS", async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeResponse("", { location: "https://example.com/final" }, 302))
+      .mockResolvedValueOnce(makeResponse("<html></html>"))
+    const findings = await scanUrl({
+      targetUrl: "http://example.com/start",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
+    expect(findings.some((finding) => finding.id === "url-insecure-http")).toBe(true)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
   it("detects missing protections on sensitive cookies without storing the value", async () => {
     mockFetch.mockResolvedValueOnce(
       makeResponse("<html></html>", { "set-cookie": "sessionToken=super-secret-value; Path=/" })

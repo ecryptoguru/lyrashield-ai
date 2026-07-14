@@ -14,6 +14,7 @@ import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
+import type { ScannerCoverageIssue } from "./scanner-coverage"
 import { join, resolve } from "path"
 import { mkdir } from "fs/promises"
 
@@ -42,6 +43,7 @@ export interface ScannerOrchestratorResult {
   secretsFindings: NormalizedFinding[]
   urlFindings: NormalizedFinding[]
   agentConfigFindings: NormalizedFinding[]
+  coverageIssues: ScannerCoverageIssue[]
   stats: ReturnType<typeof getFindingStats>
   filteredFalsePositives: number
 }
@@ -67,10 +69,14 @@ async function withScannerPhaseTimeout<T>(
   }
 }
 
-async function runScaScan(scanId: string, workspaceDir: string): Promise<EngineVulnerability[]> {
+async function runScaScan(
+  scanId: string,
+  workspaceDir: string,
+  coverageIssues: ScannerCoverageIssue[]
+): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting SCA scan phase", { scanId })
-    const findings = await scanSca({ repoPath: workspaceDir, workspaceDir })
+    const findings = await scanSca({ repoPath: workspaceDir, workspaceDir, coverageIssues })
     logger.info("SCA scan phase complete", { scanId, findingCount: findings.length })
     return findings
   } catch (err) {
@@ -103,11 +109,12 @@ async function runSecretsScan(
 async function runUrlScan(
   scanId: string,
   targetUrl: string,
-  workspaceDir: string
+  workspaceDir: string,
+  coverageIssues: ScannerCoverageIssue[]
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting URL scan phase", { scanId, targetUrl })
-    const findings = await scanUrl({ targetUrl, repoPath: workspaceDir })
+    const findings = await scanUrl({ targetUrl, repoPath: workspaceDir, coverageIssues })
     logger.info("URL scan phase complete", { scanId, findingCount: findings.length })
     return findings
   } catch (err) {
@@ -121,11 +128,12 @@ async function runUrlScan(
 
 async function runAgentConfigScan(
   scanId: string,
-  workspaceDir: string
+  workspaceDir: string,
+  coverageIssues: ScannerCoverageIssue[]
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting agent configuration scan phase", { scanId })
-    const findings = await scanAgentConfig({ repoPath: workspaceDir })
+    const findings = await scanAgentConfig({ repoPath: workspaceDir, coverageIssues })
     logger.info("Agent configuration scan phase complete", {
       scanId,
       findingCount: findings.length,
@@ -160,6 +168,7 @@ export async function runScannerOrchestrator(
   // Source scanners must never report an empty non-repository workspace as clean.
   const targetUrl = target.url ?? ""
   const hasSourceCheckout = target.type === "REPO"
+  const coverageIssues: ScannerCoverageIssue[] = []
   if (!hasSourceCheckout) {
     await addScanEvent(
       scanId,
@@ -173,20 +182,26 @@ export async function runScannerOrchestrator(
     scanId,
     Promise.all([
       hasSourceCheckout
-        ? runScaScan(scanId, absWorkspace)
+        ? runScaScan(scanId, absWorkspace, coverageIssues)
         : Promise.resolve([] as EngineVulnerability[]),
       hasSourceCheckout
         ? runSecretsScan(scanId, absWorkspace)
         : Promise.resolve([] as EngineVulnerability[]),
       targetUrl
-        ? runUrlScan(scanId, targetUrl, absWorkspace)
+        ? runUrlScan(scanId, targetUrl, absWorkspace, coverageIssues)
         : Promise.resolve([] as EngineVulnerability[]),
       hasSourceCheckout
-        ? runAgentConfigScan(scanId, absWorkspace)
+        ? runAgentConfigScan(scanId, absWorkspace, coverageIssues)
         : Promise.resolve([] as EngineVulnerability[]),
     ]),
     scannerPhaseTimeoutMs
   )
+
+  for (const issue of coverageIssues) {
+    await addScanEvent(scanId, "scanner", "warning", "Deterministic scanner coverage incomplete", {
+      ...issue,
+    })
+  }
 
   // Normalize each category separately with the dedupe key function
   const engineNormalized = normalizeFindings(
@@ -279,6 +294,7 @@ export async function runScannerOrchestrator(
     secretsFindings: secretsFiltered,
     urlFindings: urlFiltered,
     agentConfigFindings: agentConfigFiltered,
+    coverageIssues,
     stats,
     filteredFalsePositives,
   }

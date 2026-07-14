@@ -197,6 +197,37 @@ describe("runScannerOrchestrator", () => {
     )
   })
 
+  it("persists deterministic scanner coverage limitations as scan evidence", async () => {
+    vi.mocked(scanSca).mockImplementationOnce(async (config) => {
+      config.coverageIssues?.push({
+        scanner: "sca",
+        status: "partial",
+        subject: "pom.xml",
+        reason: "A Maven dependency version could not be resolved from the local POM",
+      })
+      return []
+    })
+
+    const result = await runScannerOrchestrator({
+      scanId: "scan-coverage",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "REPO", name: "Test" },
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      engineFindings: [],
+    })
+
+    expect(result.coverageIssues).toHaveLength(1)
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-coverage",
+      "scanner",
+      "warning",
+      "Deterministic scanner coverage incomplete",
+      expect.objectContaining({ scanner: "sca", status: "partial" })
+    )
+  })
+
   it("fails closed when the SCA scanner cannot run", async () => {
     vi.mocked(scanSca).mockRejectedValueOnce(new Error("OSV API down") as never)
 
