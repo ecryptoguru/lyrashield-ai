@@ -16,6 +16,18 @@ describe("waitlist fallback rate limit", () => {
     )
     expect(source).toContain("referralCode: referralCode || undefined")
   })
+
+  it("preserves allowlisted tool attribution", () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const source = readFileSync(
+      new URL("../components/WaitlistForm.astro", import.meta.url),
+      "utf8"
+    )
+    expect(source).toContain('requestedSource === "tools" || requestedSource === "tool"')
+    expect(source).toContain(
+      '(form.querySelector("[name=source]") as HTMLInputElement).value = source'
+    )
+  })
 })
 
 describe("public marketing claims", () => {
