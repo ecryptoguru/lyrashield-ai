@@ -9,7 +9,7 @@ import {
 import { assertEvidenceEncrypted } from "@lyrashield/db"
 import { verifyVulnerability } from "./verifier"
 import type { NormalizedFinding } from "./normalizer"
-import { uploadEvidence, EVIDENCE_KEY_REF } from "./evidence-storage"
+import { uploadEvidence } from "./evidence-storage"
 
 export interface PersistFindingsParams {
   scanId: string
@@ -56,7 +56,6 @@ async function persistEvidence(
     }
   }
   for (const artifact of artifacts) {
-    assertEvidenceEncrypted(EVIDENCE_KEY_REF)
     const uploaded = await uploadEvidence({
       workspaceId,
       findingId,
@@ -64,8 +63,8 @@ async function persistEvidence(
       artifactId: artifact.artifactId,
       content: artifact.content,
       contentType: artifact.contentType,
-      encryptionKeyRef: EVIDENCE_KEY_REF,
     })
+    assertEvidenceEncrypted(uploaded.encryptionKeyRef)
     await prisma.evidence.createMany({
       data: {
         findingId,

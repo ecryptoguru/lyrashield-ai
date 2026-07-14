@@ -1,9 +1,15 @@
-import { createHash, randomUUID } from "node:crypto"
+/* eslint-disable security/detect-non-literal-fs-filename -- local paths are resolved below the configured evidence root */
+import { createCipheriv, createHash, hkdfSync, randomBytes, randomUUID } from "node:crypto"
+import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises"
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
+import { dirname, join, relative, resolve, sep } from "node:path"
+import { pathToFileURL } from "node:url"
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 
 export const EVIDENCE_KEY_REF = "vault/lyrashield-evidence-key/v1"
+const LOCAL_EVIDENCE_KEY_REF = "local-hkdf://better-auth-secret/lyrashield-evidence/v1"
+const LOCAL_EVIDENCE_KEY_INFO = "lyrashield-local-evidence-v1"
 
 export interface UploadEvidenceParams {
   workspaceId: string
@@ -37,6 +43,10 @@ function isS3Configured(): boolean {
   return !!(env.S3_ENDPOINT && env.S3_BUCKET && env.S3_ACCESS_KEY && env.S3_SECRET_KEY)
 }
 
+function isLocalEvidenceConfigured(): boolean {
+  return env.NODE_ENV !== "production" && env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE === "1"
+}
+
 function getS3Client(): S3Client {
   return new S3Client({
     endpoint: env.S3_ENDPOINT,
@@ -62,6 +72,55 @@ function buildKey(
   return `evidence/${workspaceId}/${findingId}/${type}/${artifactId}`
 }
 
+function getLocalEvidencePath(key: string): string {
+  const root = resolve(
+    env.LYRASHIELD_LOCAL_EVIDENCE_DIR || join(process.cwd(), ".lyrashield", "evidence")
+  )
+  const path = resolve(root, `${key}.enc`)
+  const pathFromRoot = relative(root, path)
+  if (pathFromRoot === "" || pathFromRoot === ".." || pathFromRoot.startsWith(`..${sep}`)) {
+    throw new Error("Invalid local evidence path")
+  }
+  return path
+}
+
+function encryptLocalEvidence(content: string): Buffer {
+  // ponytail: derive a purpose-specific local key from the required dev secret; add a dedicated key only if local key rotation is needed.
+  const key = Buffer.from(
+    hkdfSync("sha256", env.BETTER_AUTH_SECRET, "", LOCAL_EVIDENCE_KEY_INFO, 32)
+  )
+  const iv = randomBytes(12)
+  const cipher = createCipheriv("aes-256-gcm", key, iv)
+  const ciphertext = Buffer.concat([cipher.update(content, "utf8"), cipher.final()])
+  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext])
+}
+
+async function storeLocalEvidence(
+  key: string,
+  content: string,
+  checksum: string
+): Promise<UploadEvidenceResult> {
+  const path = getLocalEvidencePath(key)
+  const temporaryPath = `${path}.${randomUUID()}.tmp`
+  try {
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 })
+    await writeFile(temporaryPath, encryptLocalEvidence(content), { mode: 0o600 })
+    await rename(temporaryPath, path)
+    await chmod(path, 0o600)
+    return {
+      storageUri: pathToFileURL(path).toString(),
+      checksum,
+      encryptionKeyRef: LOCAL_EVIDENCE_KEY_REF,
+    }
+  } catch (err) {
+    await rm(temporaryPath, { force: true }).catch(() => undefined)
+    logger.error("Failed to store local evidence", {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    throw new Error("Failed to store local evidence", { cause: err })
+  }
+}
+
 export async function uploadEvidence(params: UploadEvidenceParams): Promise<UploadEvidenceResult> {
   const {
     workspaceId,
@@ -75,6 +134,10 @@ export async function uploadEvidence(params: UploadEvidenceParams): Promise<Uplo
 
   const checksum = computeChecksum(content)
   const key = buildKey(workspaceId, findingId, type, artifactId)
+
+  if (isLocalEvidenceConfigured()) {
+    return storeLocalEvidence(key, content, checksum)
+  }
 
   if (!isS3Configured()) {
     logger.error("Evidence storage is not configured", {

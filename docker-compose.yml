@@ -137,7 +137,7 @@ services:
       BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3000}"
       NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-lyrashield-dev-redis}@redis:6379"
-      NODE_ENV: "production"
+      NODE_ENV: "development"
       # This file is local-development only and binds the app to localhost.
       # Production must explicitly set this to the header its ingress strips and rewrites.
       TRUSTED_PROXY_IP_HEADER: "${TRUSTED_PROXY_IP_HEADER:-x-forwarded-for}"
@@ -154,6 +154,9 @@ services:
       LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-ghcr.io/usestrix/strix-sandbox@sha256:478e0b37ec83b2ba8c6e159593cb46d5dc9b624a45d6a9bb606851b83058d284}"
       LYRASHIELD_TELEMETRY: "${LYRASHIELD_TELEMETRY:-0}"
       LYRASHIELD_ENGINE_PATH: "${LYRASHIELD_ENGINE_PATH:-lyrashield}"
+      # Local-only encrypted evidence store; production must use S3-compatible storage.
+      LYRASHIELD_LOCAL_EVIDENCE_STORAGE: "1"
+      LYRASHIELD_LOCAL_EVIDENCE_DIR: "/app/.lyrashield/evidence"
       # Azure OpenAI (optional)
       AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY:-}"
       AZURE_OPENAI_ENDPOINT: "${AZURE_OPENAI_ENDPOINT:-}"
@@ -167,6 +170,7 @@ services:
       # DEV ONLY: the engine launches its isolated sandbox through Docker.
       - /var/run/docker.sock:/var/run/docker.sock
       - worker_runs:/app/lyrashield_runs
+      - worker_evidence:/app/.lyrashield/evidence
     working_dir: /app
     command: ["pnpm", "--filter", "@lyrashield/worker", "exec", "tsx", "src/index.ts"]
 
@@ -174,3 +178,4 @@ volumes:
   postgres_data:
   redis_data:
   worker_runs:
+  worker_evidence:
