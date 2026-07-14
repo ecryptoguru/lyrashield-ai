@@ -655,7 +655,7 @@ This separation allows:
 
 ### Engine Repo Status
 
-Status: **Thin-fork release gate passed offline; controlled scan still pending**
+Status: **Thin-fork offline gate passed; one local Safe scan completed; production controlled-scan proof still pending**
 
 ```txt
 Repo: ecryptoguru/lyrashield-engine
@@ -5229,7 +5229,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
-- Current automated gate: lint, typecheck, production build, **711 passing Vitest tests in 69 files**, and **2 passing Playwright Chromium tests**.
+- Current automated gate: lint, typecheck, production build, formatting, Docker Compose validation, **738 passing Vitest tests in 72 files**, and **2 passing Playwright Chromium tests**.
 - Current product surface: **22 page route files** and **40 API route files** in `apps/web`.
 - Current data surface: **35 Prisma models**, **14 enums**, and **16 committed migrations**. Postgres RLS covers 18 workspace-scoped tables.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
@@ -5267,6 +5267,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - GitHub Action diff gate with secret, dependency, and code checks plus SARIF output.
 - Hardened prompt-injection detection and sanitization for agent-controlled inputs, with `normalizeInput()` (zero-width characters, NFKC normalization, HTML entity decoding) and an expanded/tightened pattern set.
 - Azure AI / GPT 5.6 routing is wired through `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, and the fallback `LYRASHIELD_LLM`, sharing `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION`/`LLM_API_VERSION`. Safe/Quick/Standard select Luna at medium reasoning; Deep/Custom select Terra at high. Default dollar caps are $1.20/$1.20/$3.20/$15/$15, with positive workspace-policy overrides clamped to `PLATFORM_MAX_SCAN_BUDGET_USD` (default $50). Provider-reported overages are persisted and warned after execution.
+- The versioned Vibe Security 50 registry delivers 43 machine-testable controls to the existing engine and preserves an explicit 7-control evidence-required boundary. It adds bounded deterministic SCA, secret, URL, agent-instruction, and CI-workflow signals without treating no result as a pass. See `docs/vibe-security-50.md`.
 
 ### C1.4 Agent-native surfaces
 
@@ -5283,6 +5284,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - Liveness/readiness endpoints, structured Next.js request-error instrumentation, and maintained Playwright coverage for auth, onboarding, target/scan creation, and tenant denial boundaries.
 - Astro 7 marketing site with landing page, blog, authoring rules, RSS, sitemap, robots, JSON-LD, canonical/social metadata, and a Cloudflare D1 waitlist. The marketing header links to the app via `PUBLIC_APP_URL`; the app root redirects unauthenticated users to `NEXT_PUBLIC_MARKETING_URL` (or `/sign-in` as a fallback).
 - Marketing previews are deliberately non-indexable. Indexable builds require a public HTTPS origin and founder approval.
+- `/tools` provides five browser-local, no-upload utilities: AI app launch checklist, security headers/CORS checker, secret exposure scanner, Supabase RLS policy checker, and JWT/session inspector. They are educational heuristics with visible limitations, not scans or product-score substitutes.
 
 ### C1.6 Growth layer: LyraShield Score, public scorecards, and referrals (2026-07-12)
 
@@ -5317,7 +5319,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 ### C2.1 Required before a controlled product pilot
 
-1. **Controlled scan proof:** provide an approved target and authorized Luna/Terra deployments. Mode routing and caps are wired (`LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, fallback `LYRASHIELD_LLM`, shared Azure credentials/version), but a live sandbox scan with a pinned image digest and retained model/reasoning/budget/usage events is still required.
+1. **Controlled scan proof:** one local Safe scan against an approved public repository completed with Luna/medium routing, Docker sandbox execution, retained scan events, zero findings, and a persisted post-run budget-overage warning. It is not a production proof and does not establish coverage of all controls. A production target, approved Terra/Deep run, production-pinned image provenance, retained artifacts when findings exist, and production egress enforcement are still required.
 2. **Transport-level egress control:** application SSRF checks are present, but untrusted multi-tenant scanning still requires a deployment-level proxy or equivalent DNS-pinned network enforcement.
 3. **Production infrastructure:** provision production PostgreSQL, Redis, mandatory S3-compatible evidence storage, secrets, TLS, backups, monitoring, and worker capacity; apply and verify all 16 migrations on a fresh database, including scorecard events, single-use approvals, evidence idempotency, report snapshots, and the public-score lookup index. Evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
 

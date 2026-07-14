@@ -21,11 +21,12 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 - **Social distribution loop** is merged in PR #52: dynamic per-scorecard Open Graph/Twitter metadata; deterministic grade/fix cards in 1200×630, 1080×1080, and 1080×1350 formats; native/LinkedIn/X/Bluesky/WhatsApp/Reddit/email/copy/download sharing; revocable README badges; public conversion CTA; channel-preserving referral attribution; deduplicated privacy-safe view/share events; dashboard funnel counts; waitlist sharing/position; and client-handoff report copy. Public scorecard analytics never store target, repository, finding, IP, user-agent, or caption data. See `codebase.md` §34.
 - **Premium UI and Assurance Story reports (PR #60)**: the dashboard, auth, public scorecards, shared reports, and Astro marketing site use one responsive light/dark design system; the mobile app shell uses accessible Sheet navigation; the command center renders score, severity, trend, and remediation visuals; and executive/developer/compliance reports render immutable creation-time snapshots with privacy-redacted public sharing. See `codebase.md` §37.
 - Auth and routing review completed: sign-up/sign-in now handle email verification, redirect via `callbackURL`, and avoid `useSession` atom issues in `apps/web/src/app/sign-in/page.tsx` and `apps/web/src/app/sign-up/page.tsx`.
-- `pnpm test` passes **711 tests in 69 files** and `pnpm test:e2e` passes **2 Chromium tests**. Lint, typecheck, production build, formatting, `git diff --check`, the production dependency audit, and rendered desktop/320px browser QA pass locally. PRs #54–#57 also passed CI migration drift/apply, lint, formatting, typecheck, tests, build, Chromium E2E, SCA/secrets, and the security diff gate.
+- `pnpm test` passes **738 tests in 72 files** and `pnpm test:e2e` passes **2 Chromium tests**. Lint, typecheck, production build, formatting, `git diff --check`, Docker Compose validation, the production dependency audit, and rendered browser QA pass locally. PRs #54–#57 also passed CI migration drift/apply, lint, formatting, typecheck, tests, build, Chromium E2E, SCA/secrets, and the security diff gate.
 - The engine thin fork is merged in [engine PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1). It keeps the Strix upstream contract, defaults telemetry off, and syncs only through reviewable PRs. The engine gate passed 155 tests plus Ruff, formatting, headless mypy, and Bandit.
-- The worker image builds the sibling engine source, exposes the CLI on `PATH`, and fails before sandbox setup when model configuration is missing. A controlled scan still requires authorized model credentials and an approved target; do not claim one was run.
+- The worker image builds the sibling engine source, exposes the CLI on `PATH`, includes Git for repository targets, and fails before sandbox setup when model configuration is missing. One local Safe scan against an approved public repository completed through the Docker sandbox with Luna/medium routing and a recorded post-run budget-overage warning. It found no issues; that result is scoped to that target and is not production, coverage, or security proof.
 - **Azure AI / GPT 5.6 mode routing and spend caps are implemented**: Safe/Quick/Standard scans select `LYRASHIELD_LUNA_LLM` at `medium` reasoning; Deep/Custom select `LYRASHIELD_TERRA_LLM` at `high`. `LYRASHIELD_LLM` remains the backward-compatible fallback. Default engine caps are $1.20, $1.20, $3.20, $15, and $15 respectively; a positive workspace `Policy.maxBudgetUsd` overrides the mode default. The chosen model/reasoning and budget cap are retained as scan events. Azure credentials and endpoints remain shared through `AZURE_AI_*`, `AZURE_OPENAI_*`, or generic `LLM_*` variables.
 - The marketing site is implemented. Its metadata, sitemap, robots, JSON-LD, and social URLs share one build-time origin; indexable builds require public HTTPS. Pre-launch previews are noindex and return 404 for `llms.txt`. See `apps/marketing/README.md`.
+- **Vibe Security 50 and free tools (this release):** the versioned registry delivers 43 machine-testable controls to scans and separates the remaining 7 evidence-required controls. `/tools` provides five browser-local utilities (launch checklist, headers/CORS, secret exposure, Supabase RLS, and JWT/session inspection); inputs are not uploaded. See `docs/vibe-security-50.md` and the dated SEO/tools plan. Do not claim all 50 are found or fixed.
 
 ### Recent hardening and infrastructure merge
 
@@ -54,10 +55,10 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 
 Owner: engineering + founder authorization.
 
-1. Provision the authorized Luna and Terra deployments, set `LYRASHIELD_LUNA_LLM`/`LYRASHIELD_TERRA_LLM` plus the matching Azure credentials, and approve the first target. Keep `LYRASHIELD_LLM` as a tested fallback.
-2. Pin and inspect the production sandbox image by digest; do not use a mutable tag.
-3. Run the target through the full worker lifecycle and retain its scan events, findings, and audit evidence.
-4. Keep Docker health, engine CLI availability, sandbox execution, and controlled-scan proof as separate claims.
+1. Keep `LYRASHIELD_LUNA_LLM`/`LYRASHIELD_TERRA_LLM` and the tested `LYRASHIELD_LLM` fallback authorized for the target environment. Local Safe-mode routing has been exercised; Deep/Terra still needs its own approved run.
+2. Promote only an inspected sandbox image digest; the local compose default is digest-pinned, but production image provenance and approval remain operational gates.
+3. Run an approved production target through the full worker lifecycle with retained scan events, findings, storage artifacts when applicable, and audit evidence.
+4. Keep Docker health, engine CLI availability, local sandbox execution, and production controlled-scan proof as separate claims.
 
 ### 2. Billing and usage limits
 

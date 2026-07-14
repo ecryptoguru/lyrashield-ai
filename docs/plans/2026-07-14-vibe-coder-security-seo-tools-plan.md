@@ -1,7 +1,7 @@
 # Vibe-Coder Security SEO, AEO, GEO, and Free-Tools Plan
 
 Date: 2026-07-14
-Status: planning only - no posts or tools are approved for publication
+Status: free-tool foundation implemented locally; editorial plan remains draft-only and no page is approved for publication
 Owner: founder + marketing + engineering
 Primary audience: AI-assisted solo builders, small SaaS teams, and agencies shipping AI-built apps
 
@@ -11,7 +11,7 @@ Build one durable authority page, 99 supporting articles, and a product-led `/to
 
 `Target -> Scan -> Verified Finding -> Fix PR -> Retest -> Report`
 
-This plan does not promise pricing, a free product tier, benchmark results, customers, or a production-ready controlled scan. Every article remains `draft: true` until the founder approves it, the public domain is final, and the real-domain marketing launch gate passes.
+This plan does not promise pricing, a free product tier, benchmark results, customers, or a production-ready controlled scan. The five browser-local tools are implemented and locally browser-tested; they remain noindex until the public-domain launch gate passes. Every article remains `draft: true` until the founder approves it, the public domain is final, and the real-domain marketing launch gate passes.
 
 ## 2. Evidence base and limitations
 
@@ -288,31 +288,31 @@ The lazy implementation is the correct implementation here: native browser APIs,
 
 The `/tools` hub should include this product inventory below the free utilities. It must distinguish implemented code from release readiness.
 
-| Product capability                   | What it does                                                                                        | User value                                                         | Honest boundary                                                            |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| Repository and URL targets           | Registers a GitHub repository or deployed URL as a scan target                                      | One workflow for code and reachable applications                   | URL targets skip repository-only scanners by design                        |
-| Scan modes and budgets               | Routes Safe/Quick/Standard to Luna and Deep/Custom to Terra with positive spend caps                | Lets a team choose review depth while controlling spend            | This is mode routing, not a within-scan Luna-to-Terra cascade              |
-| Scan orchestration and preflight     | Queues scans, validates targets, blocks unsafe URLs and concurrent runs, records lifecycle events   | A traceable scan rather than a black-box request                   | First authorized controlled scan remains a release gate                    |
-| SCA dependency scanning              | Finds supported manifests, resolves dependencies, batches OSV checks, and emits normalized findings | Identifies known vulnerable components                             | It does not replace every ecosystem-specific package tool                  |
-| Secret scanning                      | Walks repository sources within bounds and identifies secret patterns                               | Catches committed credentials and tokens                           | No public detection-rate claims; users must rotate exposed credentials     |
-| URL checks                           | Applies public-target SSRF safety and URL-oriented security checks                                  | Useful for deployed apps without repository access                 | Application checks are not transport-level egress control                  |
-| Finding normalization                | Converts engine, SCA, secret, and URL results into a consistent finding model                       | One triage queue across scanners                                   | Normalization is not proof by itself                                       |
-| Verified findings and evidence       | Stores evidence, verification state, code locations, checksums, and encrypted artifact references   | Helps users distinguish demonstrated risk from scanner noise       | A score or report is not a security guarantee                              |
-| Plain-language explanations          | Explains what a finding is, why it matters, and how to address it                                   | Makes AppSec usable for founders and developers                    | Explanations remain scoped to the evidence available                       |
-| Fix proposals                        | Creates a structured remediation proposal for a finding                                             | Turns a problem into an actionable change plan                     | Users still review security-sensitive changes                              |
-| GitHub fix PRs                       | Opens a pull request from an approved fix proposal                                                  | Moves remediation into the existing developer workflow             | PR creation is approval- and permission-gated                              |
-| Retests                              | Re-runs validation after a fix and records the result                                               | Proves whether the change addressed the original finding           | A passing retest is scoped to that finding and test                        |
-| Immutable reports                    | Generates developer, executive, or supported report views from creation-time snapshots              | A stable handoff for teams, clients, or stakeholders               | Reports do not silently rebuild from later mutable state                   |
-| LyraShield Score                     | Produces a deterministic versioned 0-100 score and grade after qualifying scans                     | A concise summary of scoped security posture                       | Fully public methodology; never describe it as a guarantee                 |
-| Public scorecards, cards, and badges | Creates opt-in, revocable, privacy-allowlisted public artifacts                                     | Lets teams share verified progress without exposing findings       | Cards omit targets, open findings, CWEs, and private details               |
-| Launch readiness                     | Returns NOT_EVALUATED, GO, GO_WITH_CONDITIONS, or NO_GO from current scan/finding state             | Helps a team make a release decision                               | It stays NOT_EVALUATED until a scan completes                              |
-| Schedules                            | Creates recurring target scans with bounded cron validation                                         | Moves from one-off review to continuous checks                     | Production queue recovery and capacity still need target-environment proof |
-| Notifications                        | Sends in-app and configured external notifications for scan and finding events                      | Brings critical results into existing workflows                    | Provider availability must not rewrite completed scan truth                |
-| GitHub diff gate and SARIF           | Checks the exact base-to-head range and exports standard results                                    | Adds security feedback to pull requests and code-scanning surfaces | It complements, not replaces, dedicated point tools                        |
-| MCP tools                            | Exposes scan target, get findings, get launch readiness, and create report through JSON-RPC stdio   | Lets coding agents call LyraShield from their workflow             | Mutations require controlling-terminal approval and fail closed without it |
-| Agent actions                        | Lists targets, runs scans, gets scan state, lists/gets findings, and explains findings              | A permissioned automation surface                                  | Deep scans and sensitive mutations are approval-gated and audited          |
-| Workspaces, RBAC, and audit chaining | Scopes data/actions by workspace and records tamper-evident audit history                           | Supports teams without weakening tenant boundaries                 | Enterprise SCIM/SSO/private-worker features remain roadmap items           |
-| Privacy lifecycle                    | Supports account deletion/anonymization and privacy-minimized public analytics                      | Reduces unnecessary personal-data retention                        | Public analytics remain coarse product-funnel diagnostics                  |
+| Product capability                   | What it does                                                                                        | User value                                                         | Honest boundary                                                                       |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| Repository and URL targets           | Registers a GitHub repository or deployed URL as a scan target                                      | One workflow for code and reachable applications                   | URL targets skip repository-only scanners by design                                   |
+| Scan modes and budgets               | Routes Safe/Quick/Standard to Luna and Deep/Custom to Terra with positive spend caps                | Lets a team choose review depth while controlling spend            | This is mode routing, not a within-scan Luna-to-Terra cascade                         |
+| Scan orchestration and preflight     | Queues scans, validates targets, blocks unsafe URLs and concurrent runs, records lifecycle events   | A traceable scan rather than a black-box request                   | Local Safe scan completed; production controlled-scan evidence remains a release gate |
+| SCA dependency scanning              | Finds supported manifests, resolves dependencies, batches OSV checks, and emits normalized findings | Identifies known vulnerable components                             | It does not replace every ecosystem-specific package tool                             |
+| Secret scanning                      | Walks repository sources within bounds and identifies secret patterns                               | Catches committed credentials and tokens                           | No public detection-rate claims; users must rotate exposed credentials                |
+| URL checks                           | Applies public-target SSRF safety and URL-oriented security checks                                  | Useful for deployed apps without repository access                 | Application checks are not transport-level egress control                             |
+| Finding normalization                | Converts engine, SCA, secret, and URL results into a consistent finding model                       | One triage queue across scanners                                   | Normalization is not proof by itself                                                  |
+| Verified findings and evidence       | Stores evidence, verification state, code locations, checksums, and encrypted artifact references   | Helps users distinguish demonstrated risk from scanner noise       | A score or report is not a security guarantee                                         |
+| Plain-language explanations          | Explains what a finding is, why it matters, and how to address it                                   | Makes AppSec usable for founders and developers                    | Explanations remain scoped to the evidence available                                  |
+| Fix proposals                        | Creates a structured remediation proposal for a finding                                             | Turns a problem into an actionable change plan                     | Users still review security-sensitive changes                                         |
+| GitHub fix PRs                       | Opens a pull request from an approved fix proposal                                                  | Moves remediation into the existing developer workflow             | PR creation is approval- and permission-gated                                         |
+| Retests                              | Re-runs validation after a fix and records the result                                               | Proves whether the change addressed the original finding           | A passing retest is scoped to that finding and test                                   |
+| Immutable reports                    | Generates developer, executive, or supported report views from creation-time snapshots              | A stable handoff for teams, clients, or stakeholders               | Reports do not silently rebuild from later mutable state                              |
+| LyraShield Score                     | Produces a deterministic versioned 0-100 score and grade after qualifying scans                     | A concise summary of scoped security posture                       | Fully public methodology; never describe it as a guarantee                            |
+| Public scorecards, cards, and badges | Creates opt-in, revocable, privacy-allowlisted public artifacts                                     | Lets teams share verified progress without exposing findings       | Cards omit targets, open findings, CWEs, and private details                          |
+| Launch readiness                     | Returns NOT_EVALUATED, GO, GO_WITH_CONDITIONS, or NO_GO from current scan/finding state             | Helps a team make a release decision                               | It stays NOT_EVALUATED until a scan completes                                         |
+| Schedules                            | Creates recurring target scans with bounded cron validation                                         | Moves from one-off review to continuous checks                     | Production queue recovery and capacity still need target-environment proof            |
+| Notifications                        | Sends in-app and configured external notifications for scan and finding events                      | Brings critical results into existing workflows                    | Provider availability must not rewrite completed scan truth                           |
+| GitHub diff gate and SARIF           | Checks the exact base-to-head range and exports standard results                                    | Adds security feedback to pull requests and code-scanning surfaces | It complements, not replaces, dedicated point tools                                   |
+| MCP tools                            | Exposes scan target, get findings, get launch readiness, and create report through JSON-RPC stdio   | Lets coding agents call LyraShield from their workflow             | Mutations require controlling-terminal approval and fail closed without it            |
+| Agent actions                        | Lists targets, runs scans, gets scan state, lists/gets findings, and explains findings              | A permissioned automation surface                                  | Deep scans and sensitive mutations are approval-gated and audited                     |
+| Workspaces, RBAC, and audit chaining | Scopes data/actions by workspace and records tamper-evident audit history                           | Supports teams without weakening tenant boundaries                 | Enterprise SCIM/SSO/private-worker features remain roadmap items                      |
+| Privacy lifecycle                    | Supports account deletion/anonymization and privacy-minimized public analytics                      | Reduces unnecessary personal-data retention                        | Public analytics remain coarse product-funnel diagnostics                             |
 
 Do not describe billing, quotas, enterprise identity, Security Copilot sidebar, visual security plans, private workers, VPC deployment, or BYOK/BYOM as available. They are not implemented.
 
@@ -435,9 +435,9 @@ No arbitrary traffic promises belong in the plan. Set numeric targets only after
 The smallest useful slice is:
 
 1. Authority article draft.
-2. `/tools` hub.
-3. Browser-local AI App Launch Security Checklist.
-4. Browser-local Secret Exposure Scanner.
+2. Done: `/tools` hub.
+3. Done: browser-local AI App Launch Security Checklist.
+4. Done: browser-local Secret Exposure Scanner, headers/CORS checker, Supabase RLS checker, and JWT/session inspector.
 5. Supporting posts #2, #3, #4, #13, #28, and #72.
 
 This slice validates authority-page linking, two privacy-safe interactive tools, the highest-demand issue cluster, structured data, analytics, and the blog-to-tool-to-app funnel before the team commits to all 100 posts.
