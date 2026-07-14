@@ -156,7 +156,11 @@ export async function runScannerOrchestrator(
 
   const scanWorkspace = workspaceDir ?? join(process.cwd(), "lyrashield_runs", scanId)
   const absWorkspace = resolve(scanWorkspace)
-  await mkdir(absWorkspace, { recursive: true })
+  // An absent repository checkout must not become a newly created empty
+  // directory that source scanners would misreport as clean.
+  if (target.type !== "REPO" && !workspaceDir) {
+    await mkdir(absWorkspace, { recursive: true })
+  }
 
   logger.info("Scanner orchestrator starting", {
     scanId,
@@ -165,11 +169,24 @@ export async function runScannerOrchestrator(
     engineFindings: engineFindings.length,
   })
 
-  // Source scanners must never report an empty non-repository workspace as clean.
+  // Source scanners must never report an empty or unvalidated repository
+  // workspace as clean. The engine supplies the checkout after cloning it.
   const targetUrl = target.url ?? ""
-  const hasSourceCheckout = target.type === "REPO"
+  const hasSourceCheckout = target.type === "REPO" && Boolean(workspaceDir)
   const coverageIssues: ScannerCoverageIssue[] = []
-  if (!hasSourceCheckout) {
+  if (target.type === "REPO" && !hasSourceCheckout) {
+    const reason = "Validated engine source checkout unavailable for repository target"
+    for (const scanner of ["sca", "secrets", "agent_config"] as const) {
+      coverageIssues.push({ scanner, status: "unsupported", reason })
+    }
+    await addScanEvent(
+      scanId,
+      "scanner",
+      "warning",
+      "SCA/secrets skipped — validated source checkout unavailable for repository target",
+      { targetType: target.type, scanners: ["sca", "secrets", "agent_config"] }
+    )
+  } else if (!hasSourceCheckout) {
     await addScanEvent(
       scanId,
       "scanner",

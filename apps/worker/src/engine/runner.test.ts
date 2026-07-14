@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { mkdtemp, mkdir, rm, utimes, writeFile } from "fs/promises"
+import { mkdtemp, mkdir, realpath, rm, utimes, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join } from "path"
 
@@ -26,6 +26,7 @@ import {
   createKillEscalation,
   findRunOutputDir,
   interpretExitCode,
+  resolveEngineSourceCheckout,
   resolveEngineProfile,
 } from "./runner"
 
@@ -166,6 +167,45 @@ describe("resolveEngineProfile", () => {
       model: "azure/fallback",
       reasoningEffort: "medium",
     })
+  })
+})
+
+describe("resolveEngineSourceCheckout", () => {
+  it("accepts an engine checkout below its dedicated temporary root", async () => {
+    const runRoot = join(tmpdir(), "strix_repos", `runner-test-${Date.now()}`)
+    const checkout = join(runRoot, "repo")
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await mkdir(checkout, { recursive: true })
+    cleanupPaths.push(runRoot)
+
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const canonicalCheckout = await realpath(checkout)
+    await expect(
+      resolveEngineSourceCheckout({
+        run_id: "run",
+        run_name: "run",
+        start_time: "now",
+        end_time: null,
+        status: "completed",
+        targets_info: [{ details: { cloned_repo_path: checkout } }],
+      })
+    ).resolves.toBe(canonicalCheckout)
+  })
+
+  it("rejects a checkout path outside the engine temporary root", async () => {
+    const checkout = await mkdtemp(join(tmpdir(), "outside-strix-checkout-"))
+    cleanupPaths.push(checkout)
+
+    await expect(
+      resolveEngineSourceCheckout({
+        run_id: "run",
+        run_name: "run",
+        start_time: "now",
+        end_time: null,
+        status: "completed",
+        targets_info: [{ details: { cloned_repo_path: checkout } }],
+      })
+    ).resolves.toBeNull()
   })
 })
 

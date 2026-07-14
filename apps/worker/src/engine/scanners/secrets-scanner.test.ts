@@ -157,6 +157,31 @@ describe("scanSecrets", () => {
     expect(findings.find((f) => f.id.startsWith("aws-access-key"))).toBeUndefined()
   })
 
+  it("skips test-only credential fixtures while preserving production-source detection", async () => {
+    const dir = await setupRepo({
+      "src/config.ts": `const token = "ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD"`,
+      "src/config.test.ts": `const token = "ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD"`,
+      "e2e/auth.spec.ts": `const token = "ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD"`,
+    })
+    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
+
+    expect(findings).toHaveLength(1)
+    expect(findings[0]!.target).toBe("src/config.ts")
+  })
+
+  it("skips Docker Compose environment templates but flags static credentials", async () => {
+    const dir = await setupRepo({
+      "docker-compose.yml": [
+        `template: \"postgresql://\${POSTGRES_USER:-app}:\${POSTGRES_PASSWORD:-dev-password}@postgres:5432/app\"`,
+        `static: \"postgresql://app:real-password@db.example:5432/app\"`,
+      ].join("\n"),
+    })
+    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
+
+    expect(findings.filter((finding) => finding.id.startsWith("database-url"))).toHaveLength(1)
+    expect(findings[0]!.title).toContain("docker-compose.yml:2")
+  })
+
   it("includes code location with line number", async () => {
     const dir = await setupRepo({
       "app.ts": `line1\nline2\nconst token = "ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD"\nline4`,

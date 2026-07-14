@@ -21,6 +21,18 @@ export interface UploadEvidenceResult {
   encryptionKeyRef: string
 }
 
+/**
+ * A missing evidence-store configuration cannot become healthy through a job
+ * retry. Keep it distinct from an upload failure so callers do not replay a
+ * completed, billable engine run before failing closed.
+ */
+export class EvidenceStorageConfigurationError extends Error {
+  constructor() {
+    super("Evidence storage is not configured")
+    this.name = "EVIDENCE_STORAGE_CONFIGURATION"
+  }
+}
+
 function isS3Configured(): boolean {
   return !!(env.S3_ENDPOINT && env.S3_BUCKET && env.S3_ACCESS_KEY && env.S3_SECRET_KEY)
 }
@@ -71,7 +83,7 @@ export async function uploadEvidence(params: UploadEvidenceParams): Promise<Uplo
       type,
       artifactId,
     })
-    throw new Error("Evidence storage is not configured")
+    throw new EvidenceStorageConfigurationError()
   }
 
   const client = getS3Client()
