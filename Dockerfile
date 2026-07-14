@@ -84,7 +84,7 @@ CMD ["node", "server.js"]
 # engine repository.
 FROM builder AS worker
 
-RUN apk add --no-cache docker-cli python3 py3-pip
+RUN apk add --no-cache docker-cli git python3 py3-pip
 
 COPY --from=engine . /opt/lyrashield-engine
 
