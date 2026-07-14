@@ -5321,7 +5321,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - Notification reads are limited to the caller's notifications plus workspace-wide notices. `(type, externalId)` is globally unique for integrations through `20260714170000_integration_global_external_id_unique`.
 - Fresh GitHub installation claims and client-authored Fix PR creation are intentionally unavailable until provider ownership verification and immutable server-generated patch binding are implemented. The dashboard/API report the blocked state rather than creating an unsafe resource.
 
-### C1.10 Result-integrity branch (unmerged)
+### C1.10 Result integrity (PR #67)
 
 - `ScanResultManifest`, `ScanCoverageReceipt`, `FindingCandidate`, and `FindingVerification` make the scope, coverage, provenance, and proof state of every new scan durable and queryable. Candidate data excludes raw PoC and source-snippet content; retained evidence continues through encrypted evidence storage.
 - All scanner/engine output enters as `DETECTED`. Only a retained independent verification receipt may set `Finding.verified`; historical confidence-derived verified flags are reset by migration. A deterministic clean retest becomes `VALIDATED`, while an engine-only clean retest is `INCONCLUSIVE`.

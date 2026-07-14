@@ -1969,7 +1969,7 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - Fix-PR creation no longer accepts client-provided patch/branch/title/body data and returns a truthful conflict until a server-generated, approval-bound patch/evidence pipeline exists. This is a deliberate security boundary, not a claim that automatic PRs are currently available.
 - Verification on the branch: `pnpm db:generate`, lint, typecheck, formatting, production build, `git diff --check`, 760 Vitest tests in 74 files, and 2 Chromium E2E tests passed. Applying the new migration and production/browser verification of the blocked-state UX remain deployment gates.
 
-## §40 — Result integrity and evidence-backed retests (2026-07-14, unmerged)
+## §40 — Result integrity and evidence-backed retests (2026-07-14, PR #67)
 
 - Migration `20260714200000_result_integrity_receipts` adds an immutable `ScanResultManifest`, `ScanCoverageReceipt`, privacy-bounded `FindingCandidate`, and idempotent `FindingVerification` receipt. The result manifest records target identity without retaining raw URL content, source-checkout availability, coverage state, and a SHA-256 checksum.
 - `apps/worker/src/engine/result-integrity.ts` owns the receipt boundary. Scanner/engine output produces a `DETECTED` candidate and receipt; candidate payloads deliberately omit PoC bodies and source snippets. `apps/worker/src/engine/finding-persister.ts` now treats confidence as triage metadata and always leaves a new claim unverified pending independent proof.
