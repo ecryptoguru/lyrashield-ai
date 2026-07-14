@@ -233,5 +233,48 @@ describe("score-service", () => {
         data: { lastScanAt: expect.any(Date) },
       })
     })
+
+    it("keeps unvalidated FIXED findings in the score until a trusted receipt exists", async () => {
+      const tx = {
+        scan: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "scan-1",
+            workspaceId: "ws-1",
+            targetId: "t-1",
+            status: "VERIFYING",
+            mode: "STANDARD",
+            target: { id: "t-1", projectId: null, branch: "main" },
+          }),
+          update: vi.fn().mockResolvedValue({ id: "scan-1", status: "COMPLETED" }),
+        },
+        scoreSnapshot: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          findFirst: vi.fn().mockResolvedValue(null),
+          findMany: vi.fn(),
+          create: vi.fn().mockResolvedValue({ id: "snap-1", score: 90, grade: "B" }),
+        },
+        finding: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              severity: "HIGH",
+              status: "FIXED",
+              verified: true,
+              verificationStatus: "DETECTED",
+              category: null,
+            },
+          ]),
+        },
+        project: { update: vi.fn() },
+        target: { update: vi.fn().mockResolvedValue({}) },
+      }
+      mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
+      mockPrisma.scanEvent.create.mockResolvedValue({})
+
+      await completeScanWithScore("scan-1", "done")
+
+      expect(tx.scoreSnapshot.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ score: 90, grade: "B" }) })
+      )
+    })
   })
 })

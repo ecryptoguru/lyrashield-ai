@@ -40,6 +40,40 @@ describe("result integrity", () => {
     })
   })
 
+  it("retains every coverage limitation and subject in the scanner receipt", () => {
+    const receipts = buildCoverageReceipts({
+      scanId: "scan-1",
+      target: { id: "target-1", type: "REPO", repoFullName: "acme/app" },
+      sourceCheckoutAvailable: true,
+      engineFindingCount: 2,
+      coverageIssues: [
+        {
+          scanner: "sca",
+          status: "partial",
+          subject: "build.gradle",
+          reason: "A Gradle dependency version could not be resolved",
+        },
+        {
+          scanner: "sca",
+          status: "bounded",
+          subject: "packages/",
+          reason: "Dependency-manifest discovery reached its bounded repository walk limit",
+        },
+      ],
+    })
+
+    expect(receipts.find((receipt) => receipt.scanner === "sca")).toMatchObject({
+      status: "BLOCKED",
+      subject: "build.gradle, packages/",
+      metadata: {
+        issues: [
+          expect.objectContaining({ subject: "build.gradle" }),
+          expect.objectContaining({ subject: "packages/" }),
+        ],
+      },
+    })
+  })
+
   it("stores a manifest once and uses idempotent coverage receipts", async () => {
     vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
 
@@ -58,6 +92,13 @@ describe("result integrity", () => {
     )
     expect(prisma.scanCoverageReceipt.createMany).toHaveBeenCalledWith(
       expect.objectContaining({ skipDuplicates: true })
+    )
+    expect(prisma.scanResultManifest.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          manifest: expect.objectContaining({ coverage: expect.any(Array) }),
+        }),
+      })
     )
   })
 

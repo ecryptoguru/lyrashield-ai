@@ -49,6 +49,31 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
   // missed manual workspaceId filter could leak cross-tenant data.
   return runWithWorkspaceContext(workspaceId, async () => {
     try {
+      // A manifest is the immutable checkpoint after findings and retests have
+      // been persisted. If an infrastructure error interrupted only the final
+      // score transition, resume that transition without replaying a billable
+      // scan or comparing a fresh result against the original manifest.
+      const pendingFinalization = await prisma.scan.findUnique({
+        where: { id: scanId },
+        select: {
+          status: true,
+          summary: true,
+          resultManifest: { select: { id: true } },
+        },
+      })
+      if (pendingFinalization?.status === "VERIFYING" && pendingFinalization.resultManifest) {
+        await completeScanWithScore(scanId, pendingFinalization.summary)
+        try {
+          await qualifyReferralForWorkspace(workspaceId)
+        } catch (referralError) {
+          log.warn("Failed to qualify referral after resumed scan completion", {
+            scanId,
+            error: referralError instanceof Error ? referralError.message : String(referralError),
+          })
+        }
+        return { status: "completed", summary: pendingFinalization.summary ?? "Scan completed" }
+      }
+
       // 1. Preflight checks
       await updateScanStatus(scanId, "PREFLIGHT" as ScanStatus)
       const preflight = await runPreflight(scanId, targetId)
@@ -262,20 +287,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
 
-      await persistResultManifest({
-        scanId,
-        target: {
-          id: target.id,
-          type: target.type,
-          repoFullName: target.repoFullName,
-          branch: target.branch,
-          url: target.url,
-        },
-        sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
-        engineFindingCount: orchestratorResult.engineFindings.length,
-        coverageIssues: orchestratorResult.coverageIssues,
-      })
-
       // Persist LLM usage data from engine run record for cost observability
       if (engineResult.output.runRecord?.llm_usage) {
         const actualCostUsd = extractActualCostUsd(engineResult.output.runRecord.llm_usage)
@@ -372,13 +383,34 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       }
 
-      await completeScanWithScore(scanId, engineResult.output.summary)
       await completeRetestsForScan({
         scanId,
         workspaceId,
         persistedFindingIds: persistedFindings.map((finding) => finding.id),
         coverageIssues: orchestratorResult.coverageIssues,
       })
+      // Persist the user-facing summary before the immutable checkpoint so a
+      // resumed finalization retains the completed scan's original context.
+      await prisma.scan.update({
+        where: { id: scanId },
+        data: { summary: engineResult.output.summary },
+      })
+      await persistResultManifest({
+        scanId,
+        target: {
+          id: target.id,
+          type: target.type,
+          repoFullName: target.repoFullName,
+          branch: target.branch,
+          url: target.url,
+        },
+        sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
+        engineFindingCount: orchestratorResult.engineFindings.length,
+        coverageIssues: orchestratorResult.coverageIssues,
+      })
+      // Retests may validate a pending fix and change the target's scoreable
+      // state. Freeze the score only after those outcomes are persisted.
+      await completeScanWithScore(scanId, engineResult.output.summary)
       try {
         await qualifyReferralForWorkspace(workspaceId)
       } catch (referralError) {

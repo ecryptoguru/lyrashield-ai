@@ -126,8 +126,12 @@ export async function updateFindingStatus(
   })
   if (!finding) throw new Error(`Finding not found: ${findingId}`)
 
-  const updateData: Record<string, unknown> = { status }
-  if (status === "FIXED" || status === "FIXED_PENDING_RETEST") {
+  // Only the retest pipeline may set the terminal FIXED state. A human or API
+  // status change records the claimed remediation, but keeps it in the score
+  // until the fresh, server-owned retest validates it.
+  const resolvedStatus = status === "FIXED" ? "FIXED_PENDING_RETEST" : status
+  const updateData: Record<string, unknown> = { status: resolvedStatus }
+  if (resolvedStatus === "FIXED_PENDING_RETEST") {
     updateData.fixedAt = new Date()
   }
 
@@ -136,7 +140,7 @@ export async function updateFindingStatus(
     data: updateData,
   })
 
-  logger.info("Finding status updated", { findingId, status })
+  logger.info("Finding status updated", { findingId, status: resolvedStatus })
   return updated
 }
 

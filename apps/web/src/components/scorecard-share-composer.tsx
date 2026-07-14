@@ -216,7 +216,7 @@ export function ScorecardShareComposer({
             <Image
               key={cardPath}
               src={cardPath}
-              alt={`${variant === "grade" ? `Grade ${grade}` : `${resolvedFindings} verified fixes`} LyraShield AI sharing card preview`}
+              alt={`${variant === "grade" ? `Grade ${grade}` : `${resolvedFindings} retest-confirmed fixes`} LyraShield AI sharing card preview`}
               fill
               unoptimized
               loading={source === "public" ? "eager" : "lazy"}

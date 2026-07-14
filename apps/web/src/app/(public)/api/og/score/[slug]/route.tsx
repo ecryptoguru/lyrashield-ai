@@ -114,7 +114,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
             }}
           >
             {variant === "fixes"
-              ? `finding${payload.resolvedFindings === 1 ? "" : "s"} fixed and retest-verified`
+              ? `finding${payload.resolvedFindings === 1 ? "" : "s"} fixed and retest-confirmed`
               : "LyraShield Score"}
           </div>
           <div
@@ -122,7 +122,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           >
             {variant === "fixes"
               ? `Current grade ${grade}`
-              : `${payload.resolvedFindings} verified fixes`}
+              : `${payload.resolvedFindings} retest-confirmed fixes`}
             {superseded ? " · newer scan available" : ""}
           </div>
         </div>
