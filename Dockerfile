@@ -36,6 +36,7 @@ COPY . .
 ARG BUILD_DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
 ARG BUILD_APP_URL="http://localhost:3000"
 ARG BUILD_PUBLIC_APP_URL="http://localhost:3000"
+ARG BUILD_TRUSTED_PROXY_IP_HEADER="x-forwarded-for"
 
 RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     BETTER_AUTH_SECRET="build-placeholder-not-used-at-runtime" \
@@ -46,6 +47,7 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     BETTER_AUTH_SECRET="build-placeholder-not-used-at-runtime" \
     BETTER_AUTH_URL="$BUILD_APP_URL" \
     NEXT_PUBLIC_APP_URL="$BUILD_PUBLIC_APP_URL" \
+    TRUSTED_PROXY_IP_HEADER="$BUILD_TRUSTED_PROXY_IP_HEADER" \
     pnpm --filter @lyrashield/web build
 
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────
@@ -82,7 +84,7 @@ CMD ["node", "server.js"]
 # engine repository.
 FROM builder AS worker
 
-RUN apk add --no-cache python3 py3-pip
+RUN apk add --no-cache docker-cli python3 py3-pip
 
 COPY --from=engine . /opt/lyrashield-engine
 
