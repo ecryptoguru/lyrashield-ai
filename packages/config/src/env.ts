@@ -88,6 +88,9 @@ const envSchema = z
     S3_SECRET_KEY: z.string().optional().or(z.literal("")),
     S3_BUCKET: z.string().optional().or(z.literal("")),
     S3_REGION: z.string().optional().or(z.literal("")),
+    // Local Compose-only encrypted evidence store. Production must use S3-compatible storage.
+    LYRASHIELD_LOCAL_EVIDENCE_STORAGE: z.enum(["0", "1"]).optional().default("0"),
+    LYRASHIELD_LOCAL_EVIDENCE_DIR: z.string().optional().or(z.literal("")),
 
     // Email (Brevo)
     BREVO_API_KEY: z.string().optional().or(z.literal("")),
