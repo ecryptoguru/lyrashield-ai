@@ -22,6 +22,11 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
             Blog
           </a>
         </li>
+        <li class="hidden sm:block">
+          <a href="/tools" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            Tools
+          </a>
+        </li>
         <li>
           <a href={`${appUrl}/sign-in`} class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             Sign in

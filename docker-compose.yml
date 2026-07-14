@@ -151,7 +151,7 @@ services:
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_API_BASE: "${LLM_API_BASE:-}"
       LLM_API_VERSION: "${LLM_API_VERSION:-}"
-      LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-ghcr.io/usestrix/strix-sandbox:1.0.0}"
+      LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-ghcr.io/usestrix/strix-sandbox@sha256:478e0b37ec83b2ba8c6e159593cb46d5dc9b624a45d6a9bb606851b83058d284}"
       LYRASHIELD_TELEMETRY: "${LYRASHIELD_TELEMETRY:-0}"
       LYRASHIELD_ENGINE_PATH: "${LYRASHIELD_ENGINE_PATH:-lyrashield}"
       # Azure OpenAI (optional)
