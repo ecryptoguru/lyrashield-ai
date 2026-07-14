@@ -3,6 +3,7 @@ node_modules
 dist
 .turbo
 coverage
+.pytest_cache
 pnpm-lock.yaml
 prisma/migrations
 .devin

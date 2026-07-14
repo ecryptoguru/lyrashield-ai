@@ -13,6 +13,8 @@ import {
 import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
+import { scanAgentConfig } from "./scanners/agent-config-scanner"
+import type { ScannerCoverageIssue } from "./scanner-coverage"
 import { join, resolve } from "path"
 import { mkdir } from "fs/promises"
 
@@ -40,6 +42,8 @@ export interface ScannerOrchestratorResult {
   scaFindings: NormalizedFinding[]
   secretsFindings: NormalizedFinding[]
   urlFindings: NormalizedFinding[]
+  agentConfigFindings: NormalizedFinding[]
+  coverageIssues: ScannerCoverageIssue[]
   stats: ReturnType<typeof getFindingStats>
   filteredFalsePositives: number
 }
@@ -65,10 +69,14 @@ async function withScannerPhaseTimeout<T>(
   }
 }
 
-async function runScaScan(scanId: string, workspaceDir: string): Promise<EngineVulnerability[]> {
+async function runScaScan(
+  scanId: string,
+  workspaceDir: string,
+  coverageIssues: ScannerCoverageIssue[]
+): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting SCA scan phase", { scanId })
-    const findings = await scanSca({ repoPath: workspaceDir, workspaceDir })
+    const findings = await scanSca({ repoPath: workspaceDir, workspaceDir, coverageIssues })
     logger.info("SCA scan phase complete", { scanId, findingCount: findings.length })
     return findings
   } catch (err) {
@@ -101,15 +109,38 @@ async function runSecretsScan(
 async function runUrlScan(
   scanId: string,
   targetUrl: string,
-  workspaceDir: string
+  workspaceDir: string,
+  coverageIssues: ScannerCoverageIssue[]
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting URL scan phase", { scanId, targetUrl })
-    const findings = await scanUrl({ targetUrl, repoPath: workspaceDir })
+    const findings = await scanUrl({ targetUrl, repoPath: workspaceDir, coverageIssues })
     logger.info("URL scan phase complete", { scanId, findingCount: findings.length })
     return findings
   } catch (err) {
     logger.warn("URL scan phase failed", {
+      scanId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    throw err
+  }
+}
+
+async function runAgentConfigScan(
+  scanId: string,
+  workspaceDir: string,
+  coverageIssues: ScannerCoverageIssue[]
+): Promise<EngineVulnerability[]> {
+  try {
+    logger.info("Starting agent configuration scan phase", { scanId })
+    const findings = await scanAgentConfig({ repoPath: workspaceDir, coverageIssues })
+    logger.info("Agent configuration scan phase complete", {
+      scanId,
+      findingCount: findings.length,
+    })
+    return findings
+  } catch (err) {
+    logger.warn("Agent configuration scan phase failed", {
       scanId,
       error: err instanceof Error ? err.message : String(err),
     })
@@ -137,30 +168,40 @@ export async function runScannerOrchestrator(
   // Source scanners must never report an empty non-repository workspace as clean.
   const targetUrl = target.url ?? ""
   const hasSourceCheckout = target.type === "REPO"
+  const coverageIssues: ScannerCoverageIssue[] = []
   if (!hasSourceCheckout) {
     await addScanEvent(
       scanId,
       "scanner",
       "info",
       "SCA/secrets skipped — no source checkout for this target type",
-      { targetType: target.type, scanners: ["sca", "secrets"] }
+      { targetType: target.type, scanners: ["sca", "secrets", "agent_config"] }
     )
   }
-  const [scaRaw, secretsRaw, urlRaw] = await withScannerPhaseTimeout(
+  const [scaRaw, secretsRaw, urlRaw, agentConfigRaw] = await withScannerPhaseTimeout(
     scanId,
     Promise.all([
       hasSourceCheckout
-        ? runScaScan(scanId, absWorkspace)
+        ? runScaScan(scanId, absWorkspace, coverageIssues)
         : Promise.resolve([] as EngineVulnerability[]),
       hasSourceCheckout
         ? runSecretsScan(scanId, absWorkspace)
         : Promise.resolve([] as EngineVulnerability[]),
       targetUrl
-        ? runUrlScan(scanId, targetUrl, absWorkspace)
+        ? runUrlScan(scanId, targetUrl, absWorkspace, coverageIssues)
+        : Promise.resolve([] as EngineVulnerability[]),
+      hasSourceCheckout
+        ? runAgentConfigScan(scanId, absWorkspace, coverageIssues)
         : Promise.resolve([] as EngineVulnerability[]),
     ]),
     scannerPhaseTimeoutMs
   )
+
+  for (const issue of coverageIssues) {
+    await addScanEvent(scanId, "scanner", "warning", "Deterministic scanner coverage incomplete", {
+      ...issue,
+    })
+  }
 
   // Normalize each category separately with the dedupe key function
   const engineNormalized = normalizeFindings(
@@ -183,26 +224,39 @@ export async function runScannerOrchestrator(
     targetId,
     generateDedupeKey
   )
+  const agentConfigNormalized = normalizeFindings(
+    agentConfigRaw.map((finding) => ({ ...finding, scannerSource: "agent_config" as const })),
+    targetId,
+    generateDedupeKey
+  )
 
   // Filter false positives
   const engineFiltered = filterFalsePositives(engineNormalized)
   const scaFiltered = filterFalsePositives(scaNormalized)
   const secretsFiltered = filterFalsePositives(secretsNormalized)
   const urlFiltered = filterFalsePositives(urlNormalized)
+  const agentConfigFiltered = filterFalsePositives(agentConfigNormalized)
 
   const filteredFalsePositives =
     engineNormalized.length -
     engineFiltered.length +
     (scaNormalized.length - scaFiltered.length) +
     (secretsNormalized.length - secretsFiltered.length) +
-    (urlNormalized.length - urlFiltered.length)
+    (urlNormalized.length - urlFiltered.length) +
+    (agentConfigNormalized.length - agentConfigFiltered.length)
 
   // Merge all findings, deduping across sources by dedupeKey.
   // When two sources produce the same dedupeKey, keep the one with higher
   // severity (then higher confidence as tiebreaker).
   const SEVERITY_RANK: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 }
   const merged = new Map<string, NormalizedFinding>()
-  for (const finding of [...engineFiltered, ...scaFiltered, ...secretsFiltered, ...urlFiltered]) {
+  for (const finding of [
+    ...engineFiltered,
+    ...scaFiltered,
+    ...secretsFiltered,
+    ...urlFiltered,
+    ...agentConfigFiltered,
+  ]) {
     const existing = merged.get(finding.dedupeKey)
     if (!existing) {
       merged.set(finding.dedupeKey, finding)
@@ -228,6 +282,7 @@ export async function runScannerOrchestrator(
     sca: scaFiltered.length,
     secrets: secretsFiltered.length,
     url: urlFiltered.length,
+    agentConfig: agentConfigFiltered.length,
     falsePositivesFiltered: filteredFalsePositives,
     stats,
   })
@@ -238,6 +293,8 @@ export async function runScannerOrchestrator(
     scaFindings: scaFiltered,
     secretsFindings: secretsFiltered,
     urlFindings: urlFiltered,
+    agentConfigFindings: agentConfigFiltered,
+    coverageIssues,
     stats,
     filteredFalsePositives,
   }

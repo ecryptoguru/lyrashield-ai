@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current baseline — 2026-07-14:** 4 apps, 10 shared packages (including `packages/score`), 22 web page files, 40 API route files, 35 Prisma models, 14 enums, 16 migrations, 18 RLS-protected workspace tables, and passing lint, typecheck, test, E2E, production build, formatting, migration status, production dependency audit, and diff checks locally (709 Vitest tests in 68 files; 2 Playwright Chromium tests). Sections 17–36 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current baseline — 2026-07-14:** 4 apps, 10 shared packages (including `packages/score`), 22 web page files, 40 API route files, 35 Prisma models, 14 enums, 16 migrations, 18 RLS-protected workspace tables, and passing lint, typecheck, test, E2E, production build, formatting, Docker Compose validation, migration status, production dependency audit, and diff checks locally (738 Vitest tests in 72 files; 2 Playwright Chromium tests). Sections 17–37 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -44,7 +44,7 @@ Exit-code contract:
 - `2`: completed with findings
 - other nonzero exits: runtime/configuration failure
 
-No authorized sandbox scan has been completed. Production still requires authorized model credentials, an approved target, a pinned sandbox digest, and transport-level egress enforcement.
+One local Safe scan against an approved public repository has completed through the Docker sandbox with Luna/medium routing, zero findings, and a retained post-run budget-overage warning. It is target-scoped only. Production still requires approved target/environment proof, inspected image provenance, retained evidence artifacts where applicable, and transport-level egress enforcement.
 
 ### Naming Boundary
 
@@ -425,7 +425,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 | Foundation/auth/tenancy (0–3 + 2.5) | Core complete                | Better Auth, workspaces, RBAC, onboarding, projects, targets, team, GitHub App, RLS, account deletion/anonymization, scoping, pagination, shared UI.                                                                                                       |
 | Agent actions/approvals (3.5/7.5)   | Complete                     | Six actions, signed service tokens, registry permissions, queueing, exact input-hash checks, atomic single-use approvals, approval APIs, RLS model, and controlling-terminal MCP mutation approval.                                                        |
 | Scan orchestration (4)              | Complete                     | BullMQ producer/consumer, preflight, guarded lifecycle, bounded phases/shutdown, cancellation/retry, infrastructure exit categories, engine runner, artifact parsing, retry-safe findings/evidence persistence, polling UI.                                |
-| Engine adapter (5)                  | Code complete, release-gated | Thin adapter and Docker integration pass offline gates. Authorized sandbox/controlled scan remains unproven.                                                                                                                                               |
+| Engine adapter (5)                  | Code complete, release-gated | Thin adapter and Docker integration pass offline gates; one local Safe sandbox lifecycle completed. Production controlled-scan proof remains unproven.                                                                                                     |
 | Normalization/SCA/secrets (6/6.5)   | Complete                     | Normalizer, verifier, bounded/symlink-safe SCA and secrets discovery, batched/deduplicated OSV requests, explicit non-repository skips, scanner orchestrator, SARIF.                                                                                       |
 | Remediation/output (7–9)            | Complete                     | Finding APIs/UI, fix proposals, GitHub PR creation, retests, immutable report snapshots/sharing, aggregate launch readiness, scoped notifications, schedules, URL checks, exact-range diff gate. Evidence uploads are checksum-idempotent.                 |
 | Scorecards/referrals/distribution   | Complete                     | Versioned scores and immutable snapshots, frozen public scorecards, revocation/supersession, referrals/rewards, premium cards/badges, channel sharing, privacy-safe funnel events, dashboard metrics, waitlist sharing, and report handoff copy.           |
@@ -438,7 +438,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **709 tests in 68 files**, pass
+- `pnpm test`: **738 tests in 72 files**, pass
 - `pnpm test:e2e`: **2 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `pnpm format:check`: pass
@@ -1950,3 +1950,11 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - Report generation stores a versioned immutable Assurance Story snapshot for executive, developer, or compliance audiences. The shared report renderer exposes only the sanitized snapshot, generic target/title copy, and explicit methodology/limitations; public pages are `noindex` and `no-referrer`.
 - Regression coverage locks immutable report behavior, V2 assurance aggregation/HTML output, UI control sizing, and deterministic date formatting. The verified local gate is 711 Vitest tests in 69 files, 2 Chromium E2E tests, lint, typecheck, production build, formatting, production dependency audit, `git diff --check`, and browser QA across both themes and every dashboard route at 320px.
 - Production-domain visual/unfurl validation, external email delivery, authorized model scans, and Cloudflare production bindings remain release gates; this work does not claim them.
+
+## §38 — Vibe Security 50 coverage contract and browser-local tools (2026-07-14)
+
+- `packages/security/src/vibe-security-controls.ts` is the executable registry for the 50 researched issue classes. It separates 43 machine-testable controls from 7 evidence-required operational controls, sends applicable controls to the engine as a `coverage_contract` event, and never converts an absent finding into a pass. `docs/vibe-security-50.md` is the human-readable contract.
+- The worker adds bounded SCA manifest parsing for Maven/Gradle, agent-instruction checks, CI confused-deputy checks, URL signatures, and normalized coverage reporting. The existing scan detail UI labels the result scope rather than promising all controls were exercised.
+- Docker worker hardening keeps Git available for repository clones and reaches the Docker sandbox through its bridge address from inside the worker container. The compose sandbox reference is digest-pinned. A local Safe scan against an approved public repository exercised the lifecycle with Luna/medium routing and recorded a post-run budget-overage warning; zero findings is target-scoped and does not establish production or exhaustive coverage.
+- `apps/marketing/src/pages/tools/` adds five privacy-first browser-local tools: checklist, pasted-header/CORS review, selected-file secret pattern scan, pasted-SQL RLS lint, and non-production JWT claim inspection. Inputs are deliberately never sent to an API. Chrome browser QA covered tool rendering and JWT, RLS, and headers interactions with a clean console; marketing lint/typecheck/build also pass.
+- The dated SEO/AEO/GEO plan contains the 100-topic map and publishing rules. It intentionally keeps editorial work draft-only and rejects a burst of thin pages; the authority article and substantive supporting drafts remain editorial work, not implemented public content.

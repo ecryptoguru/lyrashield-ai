@@ -28,6 +28,7 @@ export interface SafeFetchResult {
   status: number
   headers: Record<string, string>
   finalUrl: string
+  urlHistory: string[]
 }
 
 export interface SafeFetchOptions {
@@ -64,6 +65,7 @@ export async function safeFetch(
   } = options
 
   let currentUrl = rawUrl
+  const urlHistory: string[] = []
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const check = await resolveScanUrlSafe(currentUrl, resolver)
@@ -81,6 +83,7 @@ export async function safeFetch(
     const dispatcher = fetchFn ? undefined : createPinnedDispatcher(check.addresses)
     let res: Response
     try {
+      urlHistory.push(currentUrl)
       const init = {
         method: "GET",
         redirect: "manual" as const,
@@ -145,7 +148,7 @@ export async function safeFetch(
     // Bound the body size so a hostile target can't exhaust worker memory.
     try {
       const html = await readBounded(res, maxBytes)
-      return { html, status: res.status, headers, finalUrl: currentUrl }
+      return { html, status: res.status, headers, finalUrl: currentUrl, urlHistory }
     } finally {
       await dispatcher?.destroy()
     }

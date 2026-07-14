@@ -88,6 +88,9 @@ services:
       PORT: "3000"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-lyrashield-dev-redis}@redis:6379"
       NODE_ENV: "production"
+      # This file is local-development only and binds the app to localhost.
+      # Production must explicitly set this to the header its ingress strips and rewrites.
+      TRUSTED_PROXY_IP_HEADER: "${TRUSTED_PROXY_IP_HEADER:-x-forwarded-for}"
       # Next standalone otherwise inherits Docker's container-ID hostname and
       # attempts to resolve it before binding the HTTP server.
       HOSTNAME: "0.0.0.0"
@@ -135,6 +138,9 @@ services:
       NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-lyrashield-dev-redis}@redis:6379"
       NODE_ENV: "production"
+      # This file is local-development only and binds the app to localhost.
+      # Production must explicitly set this to the header its ingress strips and rewrites.
+      TRUSTED_PROXY_IP_HEADER: "${TRUSTED_PROXY_IP_HEADER:-x-forwarded-for}"
       GITHUB_APP_ID: "${GITHUB_APP_ID:-}"
       GITHUB_APP_PRIVATE_KEY: "${GITHUB_APP_PRIVATE_KEY:-}"
       GITHUB_WEBHOOK_SECRET: "${GITHUB_WEBHOOK_SECRET:-}"
@@ -145,7 +151,7 @@ services:
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_API_BASE: "${LLM_API_BASE:-}"
       LLM_API_VERSION: "${LLM_API_VERSION:-}"
-      LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-ghcr.io/usestrix/strix-sandbox:1.0.0}"
+      LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-ghcr.io/usestrix/strix-sandbox@sha256:478e0b37ec83b2ba8c6e159593cb46d5dc9b624a45d6a9bb606851b83058d284}"
       LYRASHIELD_TELEMETRY: "${LYRASHIELD_TELEMETRY:-0}"
       LYRASHIELD_ENGINE_PATH: "${LYRASHIELD_ENGINE_PATH:-lyrashield}"
       # Azure OpenAI (optional)

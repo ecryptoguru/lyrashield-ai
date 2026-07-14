@@ -65,6 +65,8 @@ vi.mock("../engine/scanner-orchestrator", () => ({
     engineFindings: [],
     scaFindings: [],
     secretsFindings: [],
+    urlFindings: [],
+    agentConfigFindings: [],
     stats: {
       total: 0,
       bySeverity: {},
@@ -87,6 +89,7 @@ import {
   completeScanWithScore,
   qualifyReferralForWorkspace,
   updateScanStatus,
+  addScanEvent,
   prisma,
 } from "@lyrashield/db"
 
@@ -153,6 +156,8 @@ describe("processScanJob", () => {
       engineFindings: [],
       scaFindings: [],
       secretsFindings: [],
+      urlFindings: [],
+      agentConfigFindings: [],
       stats: {
         total: 0,
         bySeverity: {},
@@ -175,10 +180,20 @@ describe("processScanJob", () => {
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
     expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Scan completed with 0 findings")
     expect(runEngine).toHaveBeenCalledWith(
-      expect.objectContaining({ maxBudgetUsd: 1.2 }),
+      expect.objectContaining({
+        maxBudgetUsd: 1.2,
+        instruction: expect.stringContaining("vibe-security-50/1.0.0"),
+      }),
       "scan-1",
       undefined,
       expect.any(Function)
+    )
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "coverage_contract",
+      "info",
+      expect.stringContaining("43 machine-testable controls"),
+      expect.objectContaining({ totalControls: 50, evidenceControlsRequired: 7 })
     )
   })
 

@@ -17,12 +17,14 @@ import {
 } from "lucide-react"
 import { Card, Badge, Button, EmptyState } from "@lyrashield/ui"
 import { formatTime } from "@/lib/date-format"
+import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
 
 interface ScanEvent {
   id: string
   stage: string
   level: string
   message: string
+  metadata?: Record<string, unknown> | null
   createdAt: string
 }
 
@@ -113,7 +115,14 @@ const GOAL_LABELS: Record<string, string> = {
 const EVENT_LEVEL_COLOR: Record<string, string> = {
   info: "text-muted-foreground",
   warn: "text-amber-600 dark:text-amber-400",
+  warning: "text-amber-600 dark:text-amber-400",
   error: "text-destructive",
+}
+
+const SCANNER_LABELS: Record<string, string> = {
+  agent_config: "Agent configuration",
+  sca: "Dependency scan",
+  url: "URL scan",
 }
 
 function formatDuration(start: string | null, end: string | null): string {
@@ -200,6 +209,8 @@ export function ScanDetailClient({
   )
 
   const visibleEvents = expandedEvents ? scan.events : scan.events.slice(-10)
+  const coverageWarnings = getScannerCoverageWarnings(scan.events)
+  const hasLimitedCoverage = coverageWarnings.length > 0
 
   function toggleFinding(id: string) {
     setExpandedFindings((prev) => {
@@ -322,6 +333,50 @@ export function ScanDetailClient({
         </Card>
       )}
 
+      {hasLimitedCoverage && (
+        <section
+          aria-labelledby="coverage-warning-heading"
+          className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4"
+        >
+          <div className="flex items-start gap-3">
+            <ShieldAlert
+              className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300"
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              <h2 id="coverage-warning-heading" className="font-semibold">
+                Some scanner coverage was limited
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Results are available, but the checks below could not fully evaluate every supported
+                input. Review them before treating this scan as a complete clean result.
+              </p>
+              <ul className="mt-3 space-y-2 text-sm">
+                {coverageWarnings.map((warning, index) => (
+                  <li
+                    key={`${warning.scanner}-${warning.status}-${warning.subject ?? ""}-${index}`}
+                    className="bg-background/40 rounded-md border border-amber-500/30 p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">
+                        {SCANNER_LABELS[warning.scanner] ?? warning.scanner}
+                      </span>
+                      <Badge variant="warning">{warning.status}</Badge>
+                      {warning.subject && (
+                        <span className="text-muted-foreground wrap-break-word">
+                          {warning.subject}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground mt-1">{warning.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
       {currentFindings.length > 0 && (
         <div className="mb-6">
           <h2 className="mb-3 text-lg font-semibold">Findings ({currentFindings.length})</h2>
@@ -399,8 +454,14 @@ export function ScanDetailClient({
       {currentFindings.length === 0 && !isActive && (
         <EmptyState
           icon={ShieldCheck}
-          title="No findings"
-          description="This scan completed without any findings."
+          title={hasLimitedCoverage ? "No findings were reported" : "No findings"}
+          description={
+            hasLimitedCoverage
+              ? "Some scanner coverage was limited. Review the coverage notice above before treating this as a clean result."
+              : scan.status === "COMPLETED"
+                ? "This scan completed without any findings."
+                : "No findings were recorded before this scan ended."
+          }
         />
       )}
 

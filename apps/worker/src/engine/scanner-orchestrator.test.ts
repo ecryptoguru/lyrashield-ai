@@ -55,6 +55,10 @@ vi.mock("./scanners/url-scanner", () => ({
   ]),
 }))
 
+vi.mock("./scanners/agent-config-scanner", () => ({
+  scanAgentConfig: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock("fs/promises", () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
 }))
@@ -63,6 +67,7 @@ import { runScannerOrchestrator } from "./scanner-orchestrator"
 import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
+import { scanAgentConfig } from "./scanners/agent-config-scanner"
 import { addScanEvent } from "@lyrashield/db"
 import type { EngineVulnerability } from "./output-parser"
 
@@ -107,11 +112,13 @@ describe("runScannerOrchestrator", () => {
     expect(scanSca).toHaveBeenCalled()
     expect(scanSecrets).toHaveBeenCalled()
     expect(scanUrl).toHaveBeenCalled()
+    expect(scanAgentConfig).toHaveBeenCalled()
 
     expect(result.engineFindings.length).toBe(1)
     expect(result.scaFindings.length).toBe(1)
     expect(result.secretsFindings.length).toBe(1)
     expect(result.urlFindings.length).toBe(1)
+    expect(result.agentConfigFindings).toEqual([])
     expect(result.allFindings.length).toBe(4)
   })
 
@@ -178,6 +185,7 @@ describe("runScannerOrchestrator", () => {
     })
     expect(scanSca).not.toHaveBeenCalled()
     expect(scanSecrets).not.toHaveBeenCalled()
+    expect(scanAgentConfig).not.toHaveBeenCalled()
     expect(result.scaFindings).toEqual([])
     expect(result.secretsFindings).toEqual([])
     expect(addScanEvent).toHaveBeenCalledWith(
@@ -186,6 +194,37 @@ describe("runScannerOrchestrator", () => {
       "info",
       "SCA/secrets skipped — no source checkout for this target type",
       expect.any(Object)
+    )
+  })
+
+  it("persists deterministic scanner coverage limitations as scan evidence", async () => {
+    vi.mocked(scanSca).mockImplementationOnce(async (config) => {
+      config.coverageIssues?.push({
+        scanner: "sca",
+        status: "partial",
+        subject: "pom.xml",
+        reason: "A Maven dependency version could not be resolved from the local POM",
+      })
+      return []
+    })
+
+    const result = await runScannerOrchestrator({
+      scanId: "scan-coverage",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "REPO", name: "Test" },
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      engineFindings: [],
+    })
+
+    expect(result.coverageIssues).toHaveLength(1)
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-coverage",
+      "scanner",
+      "warning",
+      "Deterministic scanner coverage incomplete",
+      expect.objectContaining({ scanner: "sca", status: "partial" })
     )
   })
 
