@@ -32,4 +32,4 @@ No P0 issue was found. The P1 items above were release-quality gaps because they
 
 The release gate is: focused parser/header tests → marketing lint/typecheck/build → Worker-backed D1/API smoke → rendered mobile/desktop interaction → Docker artifact smoke → full repository lint/typecheck/test/build/E2E/format/diff checks → pull-request CI → merge → main-branch Cloudflare deploy → live header/link/Lighthouse smoke.
 
-Cloudflare and GitHub setup remain incomplete until the account-scoped API token is stored as `CLOUDFLARE_API_TOKEN` and the first merged marketing change completes the production deployment job.
+The account-owned Cloudflare token is stored as `CLOUDFLARE_API_TOKEN` with only Workers Scripts Write, Workers KV Storage Write, D1 Write, Account Settings Read, and Workers Routes Write. It expires on July 16, 2027. The remaining proof gate is the first successful main-branch production deployment and live verification.

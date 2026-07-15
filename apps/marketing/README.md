@@ -101,7 +101,7 @@ The `deploy-marketing` job in `.github/workflows/ci.yml` runs only for a push to
 Configure these GitHub Actions secrets for `ecryptoguru/lyrashield-ai`:
 
 - `CLOUDFLARE_ACCOUNT_ID` — the production Cloudflare account ID.
-- `CLOUDFLARE_API_TOKEN` — an account-scoped token based on Cloudflare's **Edit Cloudflare Workers** template, with **Account / D1 / Edit** added for migrations. Restrict it to the production account; do not use the Global API Key or a local interactive OAuth token.
+- `CLOUDFLARE_API_TOKEN` — an account-owned token restricted to the production account with Workers Scripts Write, Workers KV Storage Write, D1 Write, Account Settings Read, and Workers Routes Write. The current token expires on July 16, 2027 and must be rotated in Cloudflare and GitHub before then. Do not use the Global API Key or a local interactive OAuth token.
 
 The workflow pins both the Cloudflare action commit and Wrangler version. Rotate or revoke the API token in Cloudflare and replace the GitHub secret if it is ever exposed; never commit it or print it in workflow output.
 
