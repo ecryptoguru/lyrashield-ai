@@ -20,6 +20,10 @@ const description =
 
 const faqItems = [
   {
+    q: "What is release assurance for an AI-built app?",
+    a: "It is a review record that states which authorized checks ran, what they covered, the evidence behind each result, and what a retest established before a release ships.",
+  },
+  {
     q: "Is this live today?",
     a: "We're pre-launch, building in the open. The waitlist gets first invites and early design-partner access.",
   },
@@ -45,15 +49,19 @@ const jsonLd = [
   {
     "@context": "https://schema.org",
     "@type": "Organization",
+    "@id": `${siteOrigin}/#organization`,
     name: "LyraShield AI",
     url: siteUrl,
+    logo: new URL("/favicon.svg", siteOrigin).toString(),
     ...(xUrl ? { sameAs: [xUrl] } : {}),
   },
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
+    "@id": `${siteOrigin}/#website`,
     name: "LyraShield AI",
     url: siteUrl,
+    publisher: { "@id": `${siteOrigin}/#organization` },
   },
   {
     "@context": "https://schema.org",
@@ -63,6 +71,7 @@ const jsonLd = [
     operatingSystem: "Web",
     description,
     url: pageUrl,
+    provider: { "@id": `${siteOrigin}/#organization` },
   },
   {
     "@context": "https://schema.org",

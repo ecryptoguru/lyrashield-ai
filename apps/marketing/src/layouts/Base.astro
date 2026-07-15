@@ -11,6 +11,7 @@ interface Props {
   canonical?: string
   ogImage?: string
   ogType?: "website" | "article"
+  noindex?: boolean
   article?: {
     publishedTime?: string
     modifiedTime?: string
@@ -19,7 +20,7 @@ interface Props {
   jsonLd?: unknown[]
 }
 
-const { title, description, canonical, ogImage, ogType, article, jsonLd } = Astro.props
+const { title, description, canonical, ogImage, ogType, noindex, article, jsonLd } = Astro.props
 ---
 
 <!doctype html>
@@ -31,6 +32,7 @@ const { title, description, canonical, ogImage, ogType, article, jsonLd } = Astr
       canonical={canonical}
       ogImage={ogImage}
       ogType={ogType}
+      noindex={noindex}
       article={article}
     />
     {jsonLd && jsonLd.length > 0 && <JsonLd data={jsonLd} />}

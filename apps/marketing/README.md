@@ -21,8 +21,11 @@ cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
 
 - Set `PUBLIC_SITE_URL` in `.env`.
 - Set `PUBLIC_APP_URL` in `.env` to the app origin (e.g. `http://localhost:3001` for local dev, `https://app.example.com` for production). The build strips a trailing slash if present.
+- Set `PUBLIC_TURNSTILE_SITE_KEY` for the production Lite Check. The app origin must set the matching `TURNSTILE_SECRET_KEY`; its scanner endpoint fails closed in production when that secret is absent.
+- Set `PUBLIC_ABUSE_EMAIL` to the monitored abuse-report mailbox before enabling indexing. The address is rendered on `/terms`; the production build refuses `PUBLIC_INDEXABLE=true` without it.
 - Set `PUBLIC_POSTHOG_KEY`/`PUBLIC_POSTHOG_HOST` only for an approved analytics project. Waitlist referral shares emit the coarse `waitlist_referral_share` event with an allowlisted channel; never add email or referral-code properties.
 - Replace `WAITLIST_IP_SALT` in `.dev.vars` with a random 32+ character string (wrangler reads secrets from `.dev.vars` in local dev, not `.env`).
+- `public/_headers` supplies the global CSP, HSTS, framing, referrer, MIME, opener, and permissions policies. Keep any future third-party browser origin inside the narrowest applicable directive.
 
 ## Local dev
 
@@ -49,6 +52,16 @@ The preview command applies local D1 migrations to Astro's generated Worker conf
 
 Use the URL Wrangler prints (normally `http://localhost:8787`) for Worker-backed API checks. Astro dev at `http://localhost:4321` is useful for UI iteration but does not prove generated Worker bindings or D1 migrations.
 
+After running the marketing build, inspect the exact generated client artifact in the repository's Docker release surface:
+
+```bash
+docker compose --profile marketing up --build -d marketing
+curl -fsS http://localhost:8787/
+docker compose --profile marketing down
+```
+
+This Docker target proves the generated static pages and assets. The Worker-backed preview above separately proves Wrangler routing, D1 migrations, and waitlist API behavior because Astro's Cloudflare prerender subprocess is not reliable inside Docker Desktop's VM.
+
 ## Manual deploy (Cloudflare Workers)
 
 1. Run migrations to create the D1 database:
@@ -57,7 +70,7 @@ Use the URL Wrangler prints (normally `http://localhost:8787`) for Worker-backed
 pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrashield-marketing-waitlist --local
 ```
 
-For production, create the D1 database and Rate Limit namespace in your Cloudflare account, then update `wrangler.jsonc` with the `database_id` and `ratelimits.namespace_id`. Set `WAITLIST_IP_SALT` via:
+Production D1 is provisioned and migrations `0001`–`0003` are applied for `lyrashieldai.com`. For a new environment, create the D1 database in that Cloudflare account, then update `wrangler.jsonc` with its `database_id`. The configured Cloudflare Rate Limit binding is the primary limiter; the endpoint retains an atomic D1 sliding-window fallback if that binding errors or is unavailable. Set `WAITLIST_IP_SALT` via:
 
 ```bash
 pnpm --filter @lyrashield/marketing exec wrangler secret put WAITLIST_IP_SALT
@@ -73,13 +86,23 @@ PUBLIC_INDEXABLE=false pnpm --filter @lyrashield/marketing build
 pnpm --filter @lyrashield/marketing exec wrangler versions upload --config dist/server/wrangler.json
 
 # Production (only after founder approval and domain attach)
-PUBLIC_SITE_URL=https://example.com \
+PUBLIC_SITE_URL=https://lyrashieldai.com \
 PUBLIC_APP_URL=https://app.example.com \
 PUBLIC_INDEXABLE=true pnpm --filter @lyrashield/marketing build
 pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
 ```
 
-3. `PUBLIC_INDEXABLE` is `false` by default. Set it to `true` only on the real production domain after visual QA, referral/share verification, and founder approval.
+3. Production uses `PUBLIC_INDEXABLE=true` on `lyrashieldai.com`. The ready marketing, methodology, sample-report, resource, and browser-local tool routes are indexable; `/scan` and `/terms` remain individually `noindex` and are excluded from the sitemap while the scanner API is unavailable. Cloudflare permanently redirects `www.lyrashieldai.com` to the apex with path and query preservation so canonical URLs have one origin. Preview builds may still use `PUBLIC_INDEXABLE=false`.
+
+## Passive Lite Check
+
+- `/scan` is the no-signup public UI. When `PUBLIC_APP_URL` is set, the Astro page calls `PUBLIC_APP_URL/api/lite-scan`; without a public app origin, the form fails closed and explains that live scanning is unavailable. Do not move the fetch into the Cloudflare marketing Worker because the Node app endpoint reuses the DNS-resolving, connection-pinned SSRF client in `@lyrashield/security`.
+- The endpoint performs one bounded public-page GET and reads at most six same-origin JavaScript/CSS assets already linked by that page. It never logs in, sends attack payloads, queries a BaaS table/collection, actively tests RLS, fuzzes, or spiders arbitrary paths.
+- Enabling the production scanner requires `PUBLIC_APP_URL`, Turnstile, a monitored `PUBLIC_ABUSE_EMAIL`, and the scanner-specific hashed-IP rate limit together. Until then the ready marketing surface can remain indexable while `/scan` fails closed and stays `noindex`. Redirects are capped at three, every hop is re-resolved and pinned, request/body work is time- and byte-bounded, and page/asset contents are not persisted.
+- The deterministic detector is versioned in `packages/security/src/lite-scan.ts`. Supabase anon/publishable values, Firebase web config, Stripe publishable keys, and reCAPTCHA site keys never become exposed-secret findings. A Supabase/Firebase marker is only a data-layer review signal.
+- Saved cards are stateless signed URLs generated by `POST /api/lite-scorecards`. `buildLiteScorecardPayload()` is the sole constructor and allows only aggregate counters, versions, a timestamp, and an optional waitlist referral code. It has no field for target URLs, findings, headers, matched values, or exploit detail.
+- `/sample-report` is synthetic and labeled. `/terms` is a pre-launch acceptable-use summary; founder-approved legal text and the monitored abuse mailbox remain go-live gates.
+- See `docs/lite-scanner.md` for the trust boundary, verification matrix, and launch checklist.
 
 ## Waitlist referral and sharing loop
 

@@ -7,7 +7,8 @@ vi.mock("@lyrashield/config", () => ({
   isProd: false,
 }))
 
-const { checkAuthRateLimit, checkApiRateLimit } = await import("./rate-limit")
+const { checkAuthRateLimit, checkApiRateLimit, checkLiteScanRateLimit } =
+  await import("./rate-limit")
 
 describe("Rate Limiter", () => {
   beforeEach(() => {
@@ -95,6 +96,26 @@ describe("Rate Limiter", () => {
       const apiResult = await checkApiRateLimit(ip)
       expect(apiResult.limited).toBe(false)
       expect(apiResult.remaining).toBe(29)
+    })
+  })
+
+  describe("checkLiteScanRateLimit (in-memory, 5/min)", () => {
+    it("allows five requests and blocks the sixth for the same privacy-safe hash", async () => {
+      for (let i = 0; i < 5; i++) {
+        const result = await checkLiteScanRateLimit("hashed-client-a")
+        expect(result.limited).toBe(false)
+      }
+
+      const sixth = await checkLiteScanRateLimit("hashed-client-a")
+      expect(sixth.limited).toBe(true)
+      expect(sixth.remaining).toBe(0)
+      expect(sixth.retryAfter).toBeGreaterThan(0)
+    })
+
+    it("keeps separate client hashes isolated", async () => {
+      const result = await checkLiteScanRateLimit("hashed-client-b")
+      expect(result.limited).toBe(false)
+      expect(result.remaining).toBe(4)
     })
   })
 })

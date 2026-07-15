@@ -5,8 +5,8 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
 <header class="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur-xl">
   <div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
     <a href="/" class="flex min-h-11 shrink-0 items-center gap-2 rounded-lg text-sm font-semibold tracking-tight whitespace-nowrap text-text hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:gap-2.5 sm:text-base">
-      <span class="flex size-8 items-center justify-center rounded-lg bg-accent text-bg" aria-hidden="true">
-        <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 4.5 6v5.5c0 4.6 3.1 7.6 7.5 9.5 4.4-1.9 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-5"/></svg>
+      <span class="flex size-9 items-center justify-center rounded-xl border border-border bg-[#07111f] p-1 shadow-sm" aria-hidden="true">
+        <img src="/favicon.svg" alt="" width="32" height="32" class="size-8" />
       </span>
       <span>LyraShield AI</span>
     </a>
@@ -20,6 +20,11 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         <li class="hidden sm:block">
           <a href="/#how-it-works" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             How it works
+          </a>
+        </li>
+        <li class="hidden sm:block">
+          <a href="/scan" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-accent hover:bg-bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            Free scan
           </a>
         </li>
         <li class="hidden sm:block">

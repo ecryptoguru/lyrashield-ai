@@ -1,0 +1,43 @@
+---
+import Base from "@layouts/Base.astro"
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/terms", origin).toString()
+const abuseEmail = (import.meta.env.PUBLIC_ABUSE_EMAIL as string | undefined) || ""
+const description =
+  "Read the authorization, passive-use, privacy, result-limit, and abuse-reporting terms for LyraShield AI's free public security tools."
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "LyraShield AI free tools terms and acceptable use",
+    description,
+    url: canonical,
+    dateModified: "2026-07-16",
+    isPartOf: { "@id": `${origin}/#website` },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Terms", item: canonical },
+    ],
+  },
+]
+---
+<Base title="Free tools terms and acceptable use | LyraShield AI" description={description} canonical={canonical} jsonLd={jsonLd} noindex>
+  <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+    <nav aria-label="Breadcrumb" class="mb-8 text-sm text-text-muted"><a href="/" class="hover:text-accent">Home</a><span class="mx-2">/</span><span aria-current="page">Terms</span></nav>
+    <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Free tools · acceptable use</p>
+    <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Use the Lite Check only with permission.</h1>
+    <p class="mt-6 text-lg leading-8 text-text-muted">These terms cover the public LyraShield AI Lite Check and browser-local tools. They are a product-use summary for founder review, not a substitute for finalized company legal terms.</p>
+    <p class="mt-4 text-sm text-text-muted">Last reviewed: <time datetime="2026-07-16">July 16, 2026</time></p>
+    <div class="prose prose-slate mt-12 max-w-none dark:prose-invert">
+      <h2>Authorization</h2><p>Submit only an app you own or have explicit permission to test. Do not use the service to disrupt, harass, evade access controls, probe private systems, or collect another person's data.</p>
+      <h2>What the Lite Check does</h2><p>The check performs bounded GET requests for a public page and a small number of same-origin assets already linked by that page. It does not authenticate, exploit, fuzz, brute-force, enumerate a database, or actively test row-level security.</p>
+      <h2>Results and limitations</h2><p>A Lite Check is outside-only and incomplete. It is not the official LyraShield Score, a penetration test, certification, warranty, or guarantee that an application has no vulnerabilities.</p>
+      <h2>Privacy</h2><p>Page bodies and matched credential values are processed transiently and are not intentionally persisted by the scanner. Public scorecards contain aggregate counters only. Approved analytics receives a one-way hostname hash and coarse funnel events, subject to browser privacy signals.</p>
+      <h2 id="report-abuse">Report suspected abuse</h2><p>If you believe this tool was used against your service without permission, preserve the target URL, approximate time, and relevant request logs. {abuseEmail ? <a href={`mailto:${abuseEmail}?subject=Lite%20Check%20abuse%20report`}>Email the monitored abuse contact</a> : <span>The monitored abuse contact will appear here after founder approval; public indexing remains blocked until it is configured.</span>}</p>
+    </div>
+  </article>
+</Base>

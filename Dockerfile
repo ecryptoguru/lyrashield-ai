@@ -22,6 +22,15 @@ COPY apps/agent/package.json ./apps/agent/
 
 RUN pnpm install --frozen-lockfile
 
+# ─── Cloudflare marketing static-artifact preview ────────────────────────────
+# Build apps/marketing first, then use this target to inspect the exact generated
+# client artifact in Docker. Worker/D1 behavior is verified with Wrangler.
+FROM busybox:1.37 AS marketing-preview
+
+COPY apps/marketing/dist/client /site
+EXPOSE 8787
+CMD ["httpd", "-f", "-p", "8787", "-h", "/site"]
+
 # ─── Stage 2: Build ────────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@11.6.0 --activate

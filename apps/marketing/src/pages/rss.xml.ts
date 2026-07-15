@@ -19,7 +19,8 @@ export const GET: APIRoute = async (context) => {
 
   return rss({
     title: "LyraShield AI Blog",
-    description: "Posts on AI-built app security, verification, and the LyraShield AI approach.",
+    description:
+      "LyraShield AI research and practical guidance on securing AI-built apps, interpreting security evidence, verifying findings, and retesting fixes.",
     site: siteUrl,
     items,
     customData: `<language>en-us</language>`,

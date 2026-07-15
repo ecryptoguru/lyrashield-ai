@@ -85,4 +85,35 @@ describe("safeFetch", () => {
     controller.abort()
     await expect(pending).resolves.toBeNull()
   })
+
+  it("enforces the response byte cap when one stream chunk is oversized", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response("0123456789", { status: 200 }))
+
+    const result = await safeFetch("https://large-response.test", {
+      fetchFn,
+      resolver: async () => ["93.184.216.34"],
+      maxBytes: 5,
+    })
+
+    expect(result?.html).toBe("01234")
+    expect(Buffer.byteLength(result?.html ?? "", "utf8")).toBe(5)
+  })
+
+  it("stops after the configured redirect limit", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: { location: "/next" },
+      })
+    )
+
+    const result = await safeFetch("https://redirect-loop.test/start", {
+      fetchFn,
+      resolver: async () => ["93.184.216.34"],
+      maxRedirects: 1,
+    })
+
+    expect(result).toBeNull()
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+  })
 })

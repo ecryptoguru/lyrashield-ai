@@ -12,13 +12,23 @@ export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
 
 const { page } = Astro.props
 
-const title = page.currentPage === 1 ? "Blog — LyraShield AI" : `Blog — Page ${page.currentPage} — LyraShield AI`
-const description = "Posts on AI-built app security, verification, and the LyraShield AI approach."
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL(page.currentPage === 1 ? "/blog" : page.url.current, origin).toString()
+const title =
+  page.currentPage === 1
+    ? "AI App Security Resources | LyraShield AI"
+    : `AI App Security Resources — Page ${page.currentPage} | LyraShield AI`
+const description = "Read LyraShield AI research and practical guidance on securing AI-built apps, interpreting security evidence, verifying findings, and retesting fixes."
+const jsonLd = [
+  { "@context": "https://schema.org", "@type": "CollectionPage", name: "AI app security resources", description, url: canonical, isPartOf: { "@id": `${origin}/#website` } },
+  { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` }, { "@type": "ListItem", position: 2, name: "Resources", item: new URL("/blog", origin).toString() }] },
+]
 ---
 
-<Base title={title} description={description}>
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
   <section class="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
-    <h1 class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">Blog</h1>
+    <nav aria-label="Breadcrumb" class="mb-8 text-sm text-text-muted"><a href="/" class="hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Home</a><span class="mx-2" aria-hidden="true">/</span><span aria-current="page">Resources</span></nav>
+    <h1 class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">AI app security resources</h1>
     <p class="mt-4 text-lg text-text-muted">{description}</p>
 
     {import.meta.env.DEV && (
@@ -26,7 +36,14 @@ const description = "Posts on AI-built app security, verification, and the LyraS
     )}
 
     {page.data.length === 0 && (
-      <p class="mt-12 text-text-muted">No posts available in this view.</p>
+      <section aria-labelledby="start-heading" class="mt-12 border-y border-border py-10">
+        <h2 id="start-heading" class="text-2xl font-semibold text-text">Start with the published resources</h2>
+        <p class="mt-4 max-w-2xl leading-7 text-text-muted">The first long-form articles are still in editorial review. In the meantime, inspect the evidence model or run a focused browser-local check.</p>
+        <div class="mt-8 grid gap-5 sm:grid-cols-2">
+          <a href="/methodology" class="rounded-xl border border-border bg-bg-raised p-5 hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"><span class="font-semibold text-text">Evidence methodology</span><span class="mt-2 block text-sm leading-6 text-text-muted">How scope, coverage, verification, retest state, and limitations are recorded.</span></a>
+          <a href="/tools" class="rounded-xl border border-border bg-bg-raised p-5 hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"><span class="font-semibold text-text">Free security tools</span><span class="mt-2 block text-sm leading-6 text-text-muted">Five private checks for launch controls, headers, secrets, RLS, and sessions.</span></a>
+        </div>
+      </section>
     )}
 
     <ul class="mt-12 space-y-8">

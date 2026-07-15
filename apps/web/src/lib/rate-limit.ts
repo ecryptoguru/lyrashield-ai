@@ -11,6 +11,7 @@ const store = new Map<string, RateLimitEntry>()
 const WINDOW_MS = 60_000
 const AUTH_MAX = 5
 const API_MAX = 30
+const LITE_SCAN_MAX = 5
 
 // Bound the in-memory store so a long-running instance (dev / self-hosted
 // without Upstash) can't grow unboundedly with one entry per distinct IP.
@@ -151,4 +152,20 @@ export async function checkApiRateLimit(ip: string) {
   }
 
   return checkInMemory(`api:${ip}`, API_MAX, WINDOW_MS)
+}
+
+export async function checkLiteScanRateLimit(ipHash: string) {
+  if (isProd && upstashConfigured()) {
+    if (!ratelimit) ratelimit = await initUpstash()
+    if (ratelimit) {
+      const result = await ratelimit.slidingWindow(LITE_SCAN_MAX, "60 s", `lite-scan:${ipHash}`)
+      return {
+        limited: !result.success,
+        remaining: result.remaining,
+        retryAfter: Math.ceil((result.reset - Date.now()) / 1000),
+      }
+    }
+  }
+
+  return checkInMemory(`lite-scan:${ipHash}`, LITE_SCAN_MAX, WINDOW_MS)
 }

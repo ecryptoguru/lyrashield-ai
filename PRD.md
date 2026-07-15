@@ -1,4 +1,4 @@
-> **CURRENT SOURCE OF TRUTH — 2026-07-15:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
+> **CURRENT SOURCE OF TRUTH — 2026-07-16:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
 > The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, the Vitest suite, and the Playwright suite (current counts: see C0). Core auth (with email verification), tenancy, targets, scanning, findings, fix proposals, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, the GitHub diff gate, and the LyraShield Score / public scorecard / referral / social-distribution layer are implemented. Fresh GitHub installation claims and Fix PR execution remain fail-closed until their provider-ownership and server-generated-patch security proofs exist. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, real-domain sharing validation, and marketing gates.
 
@@ -5221,7 +5221,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 
 # PART C — Current Implementation and Release Readiness
 
-> **Status date:** 2026-07-15. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
+> **Status date:** 2026-07-16. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
 
 ## C0. Verified repository baseline
 
@@ -5229,6 +5229,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
 - Current `main` baseline (through PR #69): lint, typecheck, production build, formatting, Prisma client generation, `git diff --check`, **778 passing tests in 77 files**, and **2 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
+- Current unmerged marketing/Lite Scanner release branch: lint, typecheck, production build, formatting, `git diff --check`, and **818 passing tests in 85 files**. This is branch evidence, not `main` merge truth.
 - Current product surface: **22 page route files** and **40 API route files** in `apps/web`.
 - Current data surface: **39 Prisma models**, **18 enums**, and **18 committed migrations**. After the result-integrity migration, Postgres RLS covers 20 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
@@ -5283,7 +5284,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - Account deletion blocks sole owners, anonymizes loose user attribution, removes auth/membership data, and rebuilds affected audit chains.
 - Liveness/readiness endpoints, structured Next.js request-error instrumentation, and maintained Playwright coverage for auth, onboarding, target/scan creation, and tenant denial boundaries.
 - Astro 7 marketing site with landing page, blog, authoring rules, RSS, sitemap, robots, JSON-LD, canonical/social metadata, and a Cloudflare D1 waitlist. The marketing header links to the app via `PUBLIC_APP_URL`; the app root redirects unauthenticated users to `NEXT_PUBLIC_MARKETING_URL` (or `/sign-in` as a fallback).
-- Marketing previews are deliberately non-indexable. Indexable builds require a public HTTPS origin and founder approval.
+- The marketing Worker is live and indexable at `https://lyrashieldai.com` with production D1/Rate Limit/KV bindings, applied waitlist migrations, a Worker-secret IP salt, custom apex/`www` domains, a canonical 301 redirect, security headers, canonical/schema metadata, sitemap/robots, and `llms.txt`. The ready marketing/methodology/browser-local-tools surface is indexable; the unavailable Lite Scanner and legal terms remain individually `noindex`. Enabling the network scanner still requires a separately protected public app API, Turnstile, and a monitored abuse mailbox.
 - `/tools` provides five browser-local, no-upload utilities: AI app launch checklist, security headers/CORS checker, secret exposure scanner, Supabase RLS policy checker, and JWT/session inspector. They are educational heuristics with visible limitations, not scans or product-score substitutes.
 - PR #69 makes the public product narrative evidence-backed release assurance: `Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report`. The homepage, methodology page, tool funnel, and claim-regression tests distinguish detected candidates, independent verification, retest-confirmed validation, and inconclusive results. Tool signup attribution accepts only known `source=tools|tool` values and otherwise falls back to landing. The header omits the sign-in link when no app origin is configured for a pre-launch preview.
 
@@ -5353,13 +5354,13 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 ### C2.3 Marketing launch gate
 
-1. Confirm the public product name, trademark direction, and HTTPS domain.
-2. Replace Cloudflare D1 and Rate Limit placeholder IDs and store `WAITLIST_IP_SALT` as a Worker secret.
-3. Apply D1 migrations and build with the production `PUBLIC_SITE_URL` and `PUBLIC_APP_URL`.
-4. Keep `PUBLIC_INDEXABLE=false` until real-domain canonical, sitemap, robots, waitlist, referral-share actions, analytics, and visual QA pass.
-5. Validate the app origin separately: scorecard canonical/OG/Twitter metadata, all three image formats, script-free badge response, revoked/expired 404s, and referral continuity. Do not treat a local preview as an external-platform unfurl test.
-6. Publish only founder-approved posts and claims; no public pricing, unsupported metrics, exclusivity claims, or public naming of the upstream engine.
-7. Re-run the rendered desktop/mobile QA for the homepage, methodology page, and all five tools on the final domain; verify tool-origin waitlist attribution and that the sign-in destination is configured only on a real app origin.
+1. **Complete:** `lyrashieldai.com` is the canonical HTTPS marketing domain; trademark clearance remains a founder/legal decision.
+2. **Complete:** production Cloudflare D1, Rate Limit, KV, and `WAITLIST_IP_SALT` bindings are provisioned; migrations `0001`–`0003` are applied remotely.
+3. **Complete:** Astro's generated Worker configuration is deployed to the apex and `www` custom domains with `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. Live waitlist checks, canonical/schema metadata, sitemap/robots/`llms.txt`, headers, internal links, desktop Brave rendering, and representative mobile Lighthouse checks pass.
+4. **Complete:** the active permanent `www`-to-apex redirect preserves path and query strings.
+5. **Complete for the ready public surface:** homepage, methodology, sample report, resource hub, and five browser-local tools are indexable. `/scan` and `/terms` are excluded from the sitemap and individually `noindex`; the scanner stays disabled until the separately protected app origin, Turnstile, and monitored abuse mailbox are configured.
+6. Validate the app origin separately: Lite Scanner abuse controls, scorecard canonical/OG/Twitter metadata, all three image formats, script-free badge response, revoked/expired 404s, and referral continuity. Do not treat the live marketing Worker as application-origin or external-platform unfurl proof. Submit the sitemap in selected webmaster accounts once ownership access is available.
+7. Publish only founder-approved posts and claims; no public pricing, unsupported metrics, exclusivity claims, or public naming of the upstream engine.
 
 ### C2.4 Known follow-up debt
 
@@ -5393,7 +5394,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - A green unit/build gate is not proof of a successful sandbox scan.
 - A healthy Docker stack is not proof that model credentials, sandbox image, egress controls, and engine artifacts work end to end.
 - A schema model is not an implemented product feature: billing is not built merely because billing tables exist.
-- A merged marketing app is not a live site: Cloudflare provisioning, deployment, domain attachment, indexing, and production QA remain separate gates.
+- An indexable marketing Worker is not proof of the application runtime: app-origin deployment, scanner abuse controls, production scans, analytics interpretation, and external-platform unfurl validation remain separate gates.
 - A generated OG image or local share preview is not proof that LinkedIn, X, Bluesky, WhatsApp, or other external caches render the latest card. Validate on the approved public HTTPS origin and use each platform's cache refresh/debug tooling when available.
 - Scorecard views mean deduplicated browser sessions that executed the first-party event call. They do not mean impressions, unique people, crawler fetches, or verified referral conversions.
 - Public scorecard and analytics payloads are strict disclosure boundaries. Never add target URLs, repository names, findings, IPs, user agents, or captions for attribution convenience.
@@ -5405,5 +5406,5 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 1. Run and document the first authorized controlled scan with a pinned sandbox digest.
 2. Decide billing provider, plans, and usage metric; implement Sprint 10 with quota enforcement.
 3. Provision production application infrastructure and transport-level egress controls; validate migrations, backups, recovery, and observability.
-4. Complete the Cloudflare marketing launch gate and the separate app-origin scorecard/unfurl/referral gate on the approved public domains.
+4. Complete the remaining Cloudflare marketing indexing gates and the separate app-origin scanner/scorecard/unfurl/referral gate on the approved public domains.
 5. After pilot evidence, prioritize Security Copilot, visual plans, compliance-lite evidence, and Phase 2 features from real customer demand.

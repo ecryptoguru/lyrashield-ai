@@ -1,0 +1,54 @@
+import { readFileSync } from "node:fs"
+import { describe, expect, it } from "vitest"
+
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const page = readFileSync(new URL("../pages/scan.astro", import.meta.url), "utf8")
+
+describe("Lite Check marketing surface", () => {
+  it("keeps the founder-provided promise and permission copy", () => {
+    expect(page).toContain("Free security check for AI-built apps")
+    expect(page).toContain("Scan my app")
+    expect(page).toContain("Scan only apps you own or have permission to test")
+    expect(page).toContain("We only read what your app already sends to any visitor.")
+  })
+
+  it("labels the result as a limited Lite Check, never the official score", () => {
+    expect(page).toContain("Lite Check · not the LyraShield Score")
+    expect(page).toContain("a clean result here isn't a guarantee")
+    expect(page).not.toMatch(/your app is secure|no vulnerabilities found/i)
+  })
+
+  it("does not gate the on-screen result behind email", () => {
+    expect(page.indexOf('id="results"')).toBeLessThan(page.indexOf('id="capture-form"'))
+    expect(page).toContain('source: "lite_scanner"')
+  })
+
+  it("documents passive limits and privacy-safe sharing", () => {
+    expect(page).toContain("no active RLS test")
+    expect(page).toContain("It never queries a table or collection")
+    expect(page).toContain("target_domain_hash")
+    expect(page).toContain("needsAttention: s.needsAttention")
+    expect(page).not.toContain("secretValue")
+  })
+
+  it("publishes WebApplication and FAQ structured data behind the global indexability gate", () => {
+    expect(page).toContain('"@type": "WebApplication"')
+    expect(page).toContain('"@type": "FAQPage"')
+    expect(page).toContain("canonical={canonical}")
+  })
+
+  it("fails closed when the separately deployed app API has no public origin", () => {
+    expect(page).toContain("const scannerAvailable = Boolean(appOrigin)")
+    expect(page).toContain("disabled={!scannerAvailable}")
+    expect(page).toContain(
+      "This preview will not send a target to localhost or another fallback service."
+    )
+    expect(page).not.toContain('|| "http://localhost:3001"')
+  })
+
+  it("does not claim that fix PR execution is already available", () => {
+    expect(page).toContain("prepares a fix proposal")
+    expect(page).toContain("PR execution stays blocked")
+    expect(page).not.toContain("opens a fix PR")
+  })
+})

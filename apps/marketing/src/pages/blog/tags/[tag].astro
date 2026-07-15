@@ -16,7 +16,7 @@ const { tag, posts } = Astro.props
 const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 
 const title = `Tag: ${tag} — LyraShield AI Blog`
-const description = `Blog posts tagged ${tag}.`
+const description = `Read LyraShield AI articles tagged ${tag}, with practical guidance for securing AI-built apps, interpreting evidence, and verifying fixes.`
 ---
 
 <Base title={title} description={description}>

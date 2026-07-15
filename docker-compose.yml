@@ -1,6 +1,22 @@
 # DEV ONLY — do NOT use in production. Bind ports to localhost, no TLS,
 # predictable credentials. Use managed Postgres/Redis in production.
 services:
+  marketing:
+    profiles: ["marketing"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: marketing-preview
+    container_name: lyrashield-marketing
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8787/"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   postgres:
     image: postgres:16-alpine
     container_name: lyrashield-postgres
