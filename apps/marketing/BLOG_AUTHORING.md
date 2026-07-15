@@ -11,7 +11,7 @@ The blog has one job pre-launch: earn trust with developers, CTOs, and security 
 
 1. **Never mention "Strix"** or the scan engine's upstream, in any form.
 2. **No pricing numbers, no free-tier promise.** If a post must reference cost, the only sanctioned line is: pricing lands with early access.
-3. **No overclaims.** Findings are _verified/exploit-validated_, but every individual differentiator has some competitor doing it. Banned phrasings: "only we verify," "only we auto-fix," "the only tool with MCP/IDE integration," "first ever." The moat is the **combination**, and even that is stated as design philosophy, not supremacy.
+3. **No overclaims.** A detected candidate, an independently verified finding, a retest-confirmed fix, and an inconclusive result are different states. Do not collapse them into "verified" or imply every finding receives exploit proof. Banned phrasings: "only we verify," "only we auto-fix," "the only tool with MCP/IDE integration," "first ever," "we open the fix PR," and "provably fixed." The moat is the **combination**, and even that is stated as design philosophy, not supremacy.
 4. **No benchmark or accuracy numbers about LyraShield AI, ever.** No "catches 94% of…," no detection-rate claims, no false-positive-rate claims. Third-party industry research may be cited _with a source link_ and exact figures — never rounded up, never paraphrased into a stronger claim.
 5. **No fake anything:** no invented customers, quotes, incidents, or "we scanned X and found Y" stories unless the scan actually happened and the founder approved publishing it. No stock photos.
 6. **Honest status.** Pre-launch means pre-launch. Posts may say "building in public," describe design decisions, and share real progress. They may not imply the product is live, has users, or has results it doesn't have.
@@ -25,7 +25,7 @@ Anything that violates these does not get published, no matter how good the SEO 
 ## 2. Voice
 
 - **Evidence-first engineering-blog register.** The reader is a developer or security engineer with a working BS detector. Claims carry evidence or hedges; opinions are labeled as opinions.
-- Plain, direct sentences. Technical precision over marketing adjectives — "verifies the finding by exploiting it in a sandbox" beats "revolutionary AI-powered validation."
+- Plain, direct sentences. Technical precision over marketing adjectives — "records the detection, coverage, and retest state" beats "revolutionary AI-powered validation." Do not promise sandbox exploitation; intrusive replay is not implemented.
 - First person plural ("we") for design decisions; second person ("you") for the reader's workflow.
 - CWE/OWASP references welcome where accurate — link them.
 - Humor allowed, hype not.
@@ -93,7 +93,7 @@ AI search engines (Google AI Overviews, Perplexity, ChatGPT Search) extract and 
 Stay in lanes where we have standing and evidence:
 
 1. **Vulnerability patterns in AI-generated code** — the classic mistakes copilots ship (SSRF string-matching, unenforced role matrices, committed secrets). Concrete, reproducible patterns with fixes.
-2. **Building in public** — real engineering decisions from building LyraShield AI (sandbox isolation, why verified-findings-only, MCP integration design). Honest about tradeoffs and unfinished work.
+2. **Building in public** — real engineering decisions from building LyraShield AI (coverage receipts, evidence-state boundaries, approval-gated fix proposals, MCP integration design). Honest about tradeoffs and unfinished work.
 3. **Explainers** — CWE/OWASP concepts translated for developers who ship AI-built apps without a security background.
 4. **Workflow content** — securing code inside Cursor/Claude Code/Windsurf-style loops; MCP as an integration surface.
 
