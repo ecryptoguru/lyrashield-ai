@@ -1,5 +1,5 @@
 ---
-const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:3001"
+const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "")
 ---
 
 <header class="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur-xl">
@@ -13,13 +13,13 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
     <nav aria-label="Main">
       <ul class="flex items-center gap-1 sm:gap-2">
         <li class="hidden sm:block">
-          <a href="/" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            Home
+          <a href="/methodology" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            Methodology
           </a>
         </li>
         <li class="hidden sm:block">
-          <a href="/blog" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            Blog
+          <a href="/#how-it-works" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            How it works
           </a>
         </li>
         <li class="hidden sm:block">
@@ -27,11 +27,13 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
             Tools
           </a>
         </li>
-        <li>
-          <a href={`${appUrl}/sign-in`} class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            Sign in
-          </a>
-        </li>
+        {appUrl && (
+          <li>
+            <a href={`${appUrl}/sign-in`} class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              Sign in
+            </a>
+          </li>
+        )}
         <li>
           <button id="theme-toggle" type="button" class="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Change color theme">
             <svg viewBox="0 0 24 24" class="size-[18px]" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v2m0 14v2M3 12h2m14 0h2m-3.64-6.36-1.42 1.42M8.06 15.94l-1.42 1.42m0-11.72 1.42 1.42m7.88 8.88 1.42 1.42"/><circle cx="12" cy="12" r="4"/></svg>

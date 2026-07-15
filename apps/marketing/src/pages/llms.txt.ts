@@ -27,16 +27,18 @@ export const GET: APIRoute = async (context) => {
   const sections = [
     "# LyraShield AI — llms.txt",
     "",
-    "LyraShield AI is an AI security agent for AI-built apps.",
-    "Core loop: scan a target, verify findings, open a fix PR, retest, and share a report.",
+    "LyraShield AI is a pre-launch release-assurance platform for AI-built apps.",
+    "Core loop: scan an authorized target, record coverage and evidence state, prepare a fix proposal, retest, and share an immutable report.",
     "",
     "## Public URLs",
     `${origin}/`,
+    `${origin}/methodology`,
+    `${origin}/tools`,
     `${origin}/blog`,
     ...sortedPosts.map((post) => `${origin}/blog/${post.id}`),
     "",
     "## Copy-safe summary for LLM context",
-    "No pricing, no free-tier promises, no benchmark claims, no customer names.",
+    "No automatic Fix PR claim, no pricing, no free-tier promises, no benchmark claims, no customer names.",
     "Pre-launch; access is via waitlist.",
   ]
 

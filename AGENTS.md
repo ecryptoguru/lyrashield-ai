@@ -4,7 +4,7 @@ Start here. This file is the current handoff and execution queue; `codebase.md` 
 
 ## Repository
 
-LyraShield AI is an agent-native application-security platform for AI-built software. Its loop is **Target → Scan → Verified Finding → Fix Proposal → Retest → Report**. PR execution is a guarded future step that requires a server-generated patch and exact approval binding.
+LyraShield AI is the evidence-backed release-assurance layer for AI-built software. Its loop is **Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report**. Findings remain detected until independent verification evidence exists, clean deterministic retests are described as retest-confirmed, and PR execution is a guarded future step that requires a server-generated patch and exact approval binding.
 
 - `apps/web` — Next.js 16 dashboard
 - `apps/worker` — BullMQ scan worker
