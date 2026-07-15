@@ -105,6 +105,8 @@ Configure these GitHub Actions secrets for `ecryptoguru/lyrashield-ai`:
 
 The workflow pins both the Cloudflare action commit and Wrangler version. Rotate or revoke the API token in Cloudflare and replace the GitHub secret if it is ever exposed; never commit it or print it in workflow output.
 
+The first automated production run completed successfully on July 16, 2026 and deployed Worker version `eba63368-9dd4-4dcb-bb0c-09f46c26ec7f`. Post-deploy verification covered both custom domains, D1/API error boundaries, defensive headers, all sitemap pages, discovered internal links, metadata/schema validity, console output, and mobile/desktop Lighthouse. A later version supersedes this identifier normally; use the successful main-branch workflow and Cloudflare deployment history as the current source of truth.
+
 ## Passive Lite Check
 
 - `/scan` is the no-signup public UI. When `PUBLIC_APP_URL` is set, the Astro page calls `PUBLIC_APP_URL/api/lite-scan`; without a public app origin, the form fails closed and explains that live scanning is unavailable. Do not move the fetch into the Cloudflare marketing Worker because the Node app endpoint reuses the DNS-resolving, connection-pinned SSRF client in `@lyrashield/security`.
