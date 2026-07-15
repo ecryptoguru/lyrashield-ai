@@ -176,6 +176,11 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
     form.addEventListener("submit", async (event) => {
       event.preventDefault()
 
+      if (errorEl) {
+        errorEl.textContent = ""
+        errorEl.classList.add("hidden")
+      }
+
       const formData = new FormData(form)
       const body = {
         email: String(formData.get("email") || "").trim(),

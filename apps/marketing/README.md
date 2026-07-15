@@ -25,7 +25,7 @@ cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
 - Set `PUBLIC_ABUSE_EMAIL` to the monitored abuse-report mailbox before enabling indexing. The address is rendered on `/terms`; the production build refuses `PUBLIC_INDEXABLE=true` without it.
 - Set `PUBLIC_POSTHOG_KEY`/`PUBLIC_POSTHOG_HOST` only for an approved analytics project. Waitlist referral shares emit the coarse `waitlist_referral_share` event with an allowlisted channel; never add email or referral-code properties.
 - Replace `WAITLIST_IP_SALT` in `.dev.vars` with a random 32+ character string (wrangler reads secrets from `.dev.vars` in local dev, not `.env`).
-- `public/_headers` supplies the global CSP, HSTS, framing, referrer, MIME, opener, and permissions policies. Keep any future third-party browser origin inside the narrowest applicable directive.
+- `public/_headers` supplies the CSP, HSTS, framing, referrer, MIME, opener, and permissions policies for static assets. `src/middleware.ts` applies the same policy to Worker-generated responses and adds `no-store` plus `X-Robots-Tag: noindex` to `/api/*`. Keep the two policies aligned and place any future third-party browser origin inside the narrowest applicable directive.
 
 ## Local dev
 
@@ -94,6 +94,17 @@ pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wr
 
 3. Production uses `PUBLIC_INDEXABLE=true` on `lyrashieldai.com`. The ready marketing, methodology, sample-report, resource, and browser-local tool routes are indexable; `/scan` and `/terms` remain individually `noindex` and are excluded from the sitemap while the scanner API is unavailable. Cloudflare permanently redirects `www.lyrashieldai.com` to the apex with path and query preservation so canonical URLs have one origin. Preview builds may still use `PUBLIC_INDEXABLE=false`.
 
+## Automatic production deploy (GitHub Actions)
+
+The `deploy-marketing` job in `.github/workflows/ci.yml` runs only for a push to `main` that changes `apps/marketing` or a root dependency/build input. It waits for the repository security and release gates, builds the Worker, applies remote D1 migrations, deploys Astro's generated `dist/server/wrangler.json`, and then smoke-checks the canonical routes, API 404 boundary, and `www` redirect. A failed gate, migration, deployment, or smoke check fails the job.
+
+Configure these GitHub Actions secrets for `ecryptoguru/lyrashield-ai`:
+
+- `CLOUDFLARE_ACCOUNT_ID` — the production Cloudflare account ID.
+- `CLOUDFLARE_API_TOKEN` — an account-owned token restricted to the production account with Workers Scripts Write, Workers KV Storage Write, D1 Write, Account Settings Read, and Workers Routes Write. The current token expires on July 16, 2027 and must be rotated in Cloudflare and GitHub before then. Do not use the Global API Key or a local interactive OAuth token.
+
+The workflow pins both the Cloudflare action commit and Wrangler version. Rotate or revoke the API token in Cloudflare and replace the GitHub secret if it is ever exposed; never commit it or print it in workflow output.
+
 ## Passive Lite Check
 
 - `/scan` is the no-signup public UI. When `PUBLIC_APP_URL` is set, the Astro page calls `PUBLIC_APP_URL/api/lite-scan`; without a public app origin, the form fails closed and explains that live scanning is unavailable. Do not move the fetch into the Cloudflare marketing Worker because the Node app endpoint reuses the DNS-resolving, connection-pinned SSRF client in `@lyrashield/security`.
@@ -107,6 +118,7 @@ pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wr
 ## Waitlist referral and sharing loop
 
 - `POST /api/waitlist` always returns the same success shape for a new address, an existing address, and the honeypot path. JSON responses include a referral code in every case; do not change this contract in a way that reveals whether an email exists.
+- Waitlist request bodies are streamed with a 16 KiB limit and accept only JSON or URL-encoded form data. Oversized and unsupported payloads return `413` and `415` before rate-limit or D1 work.
 - `?ref=<8-character-code>` attributes a valid new signup and increments the referrer's count. Invalid codes do not break signup.
 - `GET /api/waitlist/position?code=<code>` returns `{ position, referrals }` with `Cache-Control: no-store`.
 - After JavaScript submission, the success state shows position/referral progress and Copy, LinkedIn, X, and WhatsApp actions. The shared URL is the canonical marketing origin with only `?ref=` added.

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { getSecret } from "astro:env/server"
 import { env } from "cloudflare:workers"
 import { createHash } from "node:crypto"
+import { parseBoundedBody, RequestBodyError } from "../../lib/request-body"
 
 const bodySchema = z.object({
   email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
@@ -66,37 +67,6 @@ export const prerender = false
 
 const RATE_LIMIT_MAX = 5
 const RATE_LIMIT_WINDOW_MS = 60_000
-
-async function parseBody(request: Request): Promise<Record<string, unknown>> {
-  const contentType = request.headers.get("content-type") || ""
-
-  if (contentType.includes("application/json")) {
-    const raw = await request.text()
-    try {
-      return JSON.parse(raw) as Record<string, unknown>
-    } catch {
-      return {}
-    }
-  }
-
-  if (contentType.includes("multipart/form-data")) {
-    const formData = await request.formData()
-    const result: Record<string, unknown> = {}
-    formData.forEach((value, key) => {
-      result[key] = value.toString()
-    })
-    return result
-  }
-
-  // application/x-www-form-urlencoded or missing content-type
-  const raw = await request.text()
-  const params = new URLSearchParams(raw)
-  const result: Record<string, unknown> = {}
-  for (const [key, value] of params) {
-    result[key] = value
-  }
-  return result
-}
 
 function getClientIp(request: Request): string {
   const cf = request.headers.get("cf-connecting-ip")
@@ -231,7 +201,19 @@ export const POST: APIRoute = async ({ request, site }) => {
   const ip = getClientIp(request)
   const ipHash = createHash("sha256").update(`${ip}:${salt}`).digest("hex")
 
-  const body = await parseBody(request)
+  let body: Record<string, unknown>
+  try {
+    body = await parseBoundedBody(request)
+  } catch (error) {
+    if (!(error instanceof RequestBodyError)) throw error
+    if (acceptsHtml(request)) {
+      return htmlResponse(error.status, `<p>${error.message}</p>`)
+    }
+    return new Response(JSON.stringify({ error: error.code, message: error.message }), {
+      status: error.status,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
   const parsed = bodySchema.safeParse(body)
 
   if (!parsed.success) {
@@ -339,7 +321,12 @@ export const POST: APIRoute = async ({ request, site }) => {
       }
     }
 
-    console.error("Waitlist signup failed", error)
+    console.error(
+      JSON.stringify({
+        event: "waitlist_signup_failed",
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      })
+    )
 
     if (acceptsHtml(request)) {
       return htmlResponse(500, "<p>Something went wrong. Please try again.</p>")
