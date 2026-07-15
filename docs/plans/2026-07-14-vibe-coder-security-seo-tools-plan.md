@@ -1,7 +1,7 @@
 # Vibe-Coder Security SEO, AEO, GEO, and Free-Tools Plan
 
 Date: 2026-07-14
-Status: free-tool foundation implemented locally; editorial plan remains draft-only and no page is approved for publication
+Status: free-tool foundation and evidence-backed public methodology implemented on `main`; editorial plan remains draft-only and no page is approved for publication
 Owner: founder + marketing + engineering
 Primary audience: AI-assisted solo builders, small SaaS teams, and agencies shipping AI-built apps
 
@@ -9,9 +9,9 @@ Primary audience: AI-assisted solo builders, small SaaS teams, and agencies ship
 
 Build one durable authority page, 99 supporting articles, and a product-led `/tools` surface with five useful free tools. The system should capture search demand around securing AI-generated applications, answer questions clearly enough to be cited by AI search engines, and move qualified builders from a free diagnosis into LyraShield AI's implemented workflow:
 
-`Target -> Scan -> Verified Finding -> Fix PR -> Retest -> Report`
+`Target -> Scan -> Evidence State -> Fix Proposal -> Retest -> Assurance Report`
 
-This plan does not promise pricing, a free product tier, benchmark results, customers, or a production-ready controlled scan. The five browser-local tools are implemented and locally browser-tested; they remain noindex until the public-domain launch gate passes. Every article remains `draft: true` until the founder approves it, the public domain is final, and the real-domain marketing launch gate passes.
+This plan does not promise pricing, a free product tier, benchmark results, customers, automatic PR execution, universal verification, or a production-ready controlled scan. The five browser-local tools and `/methodology` are implemented; the tools remain noindex until the public-domain launch gate passes. Every article remains `draft: true` until the founder approves it, the public domain is final, and the real-domain marketing launch gate passes. In editorial copy, distinguish detected candidates, independently verified findings, retest-confirmed fixes, and inconclusive results.
 
 ## 2. Evidence base and limitations
 

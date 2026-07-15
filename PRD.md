@@ -1,4 +1,4 @@
-> **CURRENT SOURCE OF TRUTH — 2026-07-14:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
+> **CURRENT SOURCE OF TRUTH — 2026-07-15:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
 > The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, the Vitest suite, and the Playwright suite (current counts: see C0). Core auth (with email verification), tenancy, targets, scanning, findings, fix proposals, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, the GitHub diff gate, and the LyraShield Score / public scorecard / referral / social-distribution layer are implemented. Fresh GitHub installation claims and Fix PR execution remain fail-closed until their provider-ownership and server-generated-patch security proofs exist. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, real-domain sharing validation, and marketing gates.
 
@@ -4556,7 +4556,7 @@ Absolute priority order:
 22. Self-hosted
 ```
 
-**Agent-Native features are interleaved after the core product loop (Target → Scan → Finding → Fix → Retest → Report) is complete.** The agent layer wraps existing APIs, so it depends on the core being functional first.
+**Agent-Native features are interleaved after the core product loop (Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report) is complete.** The agent layer wraps existing APIs, so it depends on the core being functional first.
 
 ---
 
@@ -4567,7 +4567,7 @@ Build one product, not two.
 The same core flow must serve everyone:
 
 ```txt
-Target → Scan → Verified Finding → Fix → Retest → Report
+Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report
 ```
 
 For vibe coders:
@@ -4594,6 +4594,8 @@ LyraShield should feel simple enough for a solo founder and controlled enough fo
 # 22. Agent-Native Integration Analysis
 
 > **Note:** This section is the canonical source for the Agent-Native integration analysis. It was originally in a separate `Update.md` file and has been inlined here so `PRD.md` is the single source of truth.
+>
+> **Current-state qualifier — 2026-07-15:** This is retained architecture analysis, not a current implementation contract. For shipped capability and release gates, use Part C. In particular, the implemented product distinguishes detection, independent verification, retest confirmation, and inconclusive results; server-generated approval-bound Fix PR execution remains unavailable.
 
 ## 22.1 What Agent-Native Adds
 
@@ -4602,7 +4604,7 @@ Agent-Native is an open-source framework from BuilderIO for building apps where 
 That is extremely relevant for LyraShield because our product loop is already action-driven:
 
 ```txt
-Target → Scan → Finding → Fix → Retest → Report
+Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report
 ```
 
 Agent-Native lets us convert each of those operations into agent-callable, UI-callable, externally callable actions.
@@ -5219,14 +5221,14 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 
 # PART C — Current Implementation and Release Readiness
 
-> **Status date:** 2026-07-14. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
+> **Status date:** 2026-07-15. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
 
 ## C0. Verified repository baseline
 
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
-- Current `main` security-remediation baseline (PR #66): lint, typecheck, production build, formatting, Prisma client generation, `git diff --check`, **760 passing Vitest tests in 74 files**, and **2 passing Playwright Chromium tests**. The result-integrity branch has separate unmerged verification.
+- Current `main` baseline (through PR #69): lint, typecheck, production build, formatting, Prisma client generation, `git diff --check`, **778 passing tests in 77 files**, and **2 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
 - Current product surface: **22 page route files** and **40 API route files** in `apps/web`.
 - Current data surface: **39 Prisma models**, **18 enums**, and **18 committed migrations**. After the result-integrity migration, Postgres RLS covers 20 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
@@ -5283,6 +5285,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - Astro 7 marketing site with landing page, blog, authoring rules, RSS, sitemap, robots, JSON-LD, canonical/social metadata, and a Cloudflare D1 waitlist. The marketing header links to the app via `PUBLIC_APP_URL`; the app root redirects unauthenticated users to `NEXT_PUBLIC_MARKETING_URL` (or `/sign-in` as a fallback).
 - Marketing previews are deliberately non-indexable. Indexable builds require a public HTTPS origin and founder approval.
 - `/tools` provides five browser-local, no-upload utilities: AI app launch checklist, security headers/CORS checker, secret exposure scanner, Supabase RLS policy checker, and JWT/session inspector. They are educational heuristics with visible limitations, not scans or product-score substitutes.
+- PR #69 makes the public product narrative evidence-backed release assurance: `Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report`. The homepage, methodology page, tool funnel, and claim-regression tests distinguish detected candidates, independent verification, retest-confirmed validation, and inconclusive results. Tool signup attribution accepts only known `source=tools|tool` values and otherwise falls back to landing. The header omits the sign-in link when no app origin is configured for a pre-launch preview.
 
 ### C1.6 Growth layer: LyraShield Score, public scorecards, and referrals (2026-07-12)
 
@@ -5327,6 +5330,12 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - Scan details, finding drawers, and report methodology render proof state and coverage receipts. Retest requests create a fresh server-owned queue job using the source scan configuration; client-supplied scan IDs are not trusted.
 - Intrusive sandbox reproduction is intentionally not implemented: it requires founder authorization, a constrained verifier specification, and transport-level egress control. This branch does not claim autonomous PoC execution or complete coverage.
 
+### C1.11 Evidence-backed marketing and documentation truth (2026-07-15, PR #69)
+
+- The Astro landing page now describes a bounded release-assurance record rather than a generic scanner or a security guarantee. It preserves the control/coverage boundary: detected, independently verified, retest-confirmed, and inconclusive are separate outcome states.
+- `/methodology` presents the operating loop, evidence record, scanner coverage, and non-claims in one public reference. `/tools` remains a privacy-first acquisition surface: its five browser-local utilities never upload supplied files or pasted text and do not substitute for a scan.
+- The marketing claim suite prevents regressions to universal-verification, automatic-Fix-PR, offensive-scanning, or "provably gone" language. Current call-to-actions request a design-partner conversation; no pricing, customer, benchmark, production-coverage, or upstream-engine claims are published.
+
 ## C2. Phase 1 gaps and release gates
 
 ### C2.1 Required before a controlled product pilot
@@ -5350,6 +5359,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 4. Keep `PUBLIC_INDEXABLE=false` until real-domain canonical, sitemap, robots, waitlist, referral-share actions, analytics, and visual QA pass.
 5. Validate the app origin separately: scorecard canonical/OG/Twitter metadata, all three image formats, script-free badge response, revoked/expired 404s, and referral continuity. Do not treat a local preview as an external-platform unfurl test.
 6. Publish only founder-approved posts and claims; no public pricing, unsupported metrics, exclusivity claims, or public naming of the upstream engine.
+7. Re-run the rendered desktop/mobile QA for the homepage, methodology page, and all five tools on the final domain; verify tool-origin waitlist attribution and that the sign-in destination is configured only on a real app origin.
 
 ### C2.4 Known follow-up debt
 

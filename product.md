@@ -55,14 +55,14 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 
 ## Product status
 
-Implemented: core workspaces/targets/scans, existing GitHub integration refresh, scan orchestration, findings normalization, SCA and secret scanning, pinned deterministic URL scanning, fix proposals, queued retests, reports, notifications, schedules, MCP, agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksums, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, LyraShield Score, public scorecards, referrals, premium social sharing, and Azure AI / GPT 5.6 mode routing. New scans retain a manifest, coverage receipts, candidate provenance, and verification receipts: detected, validated, and independently verified are separate states. Safe/Quick/Standard scans use Luna with medium reasoning; Deep/Custom use Terra with high reasoning. Every engine run receives a positive dollar cap, with workspace policy overrides supported. Engine findings are not self-verified.
+Implemented: core workspaces/targets/scans, existing GitHub integration refresh, scan orchestration, findings normalization, SCA and secret scanning, pinned deterministic URL scanning, fix proposals, queued retests, reports, notifications, schedules, MCP, agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksums, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, LyraShield Score, public scorecards, referrals, premium social sharing, Azure AI / GPT 5.6 mode routing, and an evidence-backed marketing surface with a public methodology page plus five browser-local no-upload tools. New scans retain a manifest, coverage receipts, candidate provenance, and verification receipts: detected, validated, and independently verified are separate states. Safe/Quick/Standard scans use Luna with medium reasoning; Deep/Custom use Terra with high reasoning. Every engine run receives a positive dollar cap, with workspace policy overrides supported. Engine findings are not self-verified.
 
 Not implemented: billing/plan quotas, provider-backed proof for a fresh GitHub installation claim, server-generated approval-bound PR patches, constrained intrusive sandbox exploit replay, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities. See `PRD.md` for the authoritative roadmap.
 
 ## Pre-launch GTM
 
 - Start with a small number of design partners, prioritizing teams that can provide structured feedback.
-- Use reports, fix proposals, retests, and MCP read workflows as demonstrations; do not promise automatic PR creation or use unverified marketing claims.
+- Use reports, fix proposals, retests, the public methodology, browser-local tools, and MCP read workflows as demonstrations; do not promise automatic PR creation or use unverified marketing claims.
 - Publish answer-first technical content for AI-built-app security only after founder approval.
 - Keep sample blog posts as drafts until their claims, sources, author, and launch timing are approved.
 

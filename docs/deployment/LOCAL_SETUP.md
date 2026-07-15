@@ -68,7 +68,7 @@ pnpm build
 git diff --check
 ```
 
-The current source suite is 689 Vitest tests in 65 files plus 2 Chromium E2E tests; treat command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+The merged `main` baseline is 778 tests in 77 files plus 2 Chromium E2E tests; treat command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Verify scorecards and social sharing
 

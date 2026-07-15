@@ -8,6 +8,7 @@ Astro 7 marketing site for the future LyraShield AI domain. Lives at `apps/marke
 - Distinguish detected risks, independently verified findings, and retest-confirmed fixes.
 - Describe scanner coverage and limitations explicitly; do not imply every control ran or every finding was verified.
 - PR execution remains fail-closed until a server-generated patch can be bound to an exact approval.
+- The public route set includes `/methodology`, which is the canonical explanation of evidence states, coverage, and non-claims. Keep homepage, tools, blog, and social copy aligned with it.
 
 ## Environment
 
@@ -86,6 +87,7 @@ pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wr
 - `?ref=<8-character-code>` attributes a valid new signup and increments the referrer's count. Invalid codes do not break signup.
 - `GET /api/waitlist/position?code=<code>` returns `{ position, referrals }` with `Cache-Control: no-store`.
 - After JavaScript submission, the success state shows position/referral progress and Copy, LinkedIn, X, and WhatsApp actions. The shared URL is the canonical marketing origin with only `?ref=` added.
+- Tool CTAs may add only `source=tools` or `source=tool`; the API normalizes any other source to `landing`. Do not add target names, pasted values, filenames, or referral details to attribution.
 - Clipboard denial must leave a readable “Copy unavailable” state. External channel buttons open a new tab with `noopener,noreferrer`.
 - This ladder is pre-launch prioritization, not a guaranteed invitation or monetary reward. Do not describe it as one.
 
@@ -111,6 +113,7 @@ curl -X POST -d "email=you@example.com" -d "source=landing" http://localhost:878
 ## Notes
 
 - `/tools` is a browser-local free-utility hub. The launch checklist, headers/CORS checker, secret scanner, Supabase RLS checker, and JWT/session inspector intentionally do not fetch a supplied target or upload pasted text/files. They are bounded heuristics, not security scans; see `docs/plans/2026-07-14-vibe-coder-security-seo-tools-plan.md` for the product and publishing boundaries.
+- The pre-launch header intentionally hides Sign in when `PUBLIC_APP_URL` is unset. Configure a real app origin before exposing that destination.
 - No pricing, no fake metrics, no public mention of the forked engine.
 - Blog posts are `draft: true` by default. Only un-draft a post after founder sign-off.
 - Marketing share buttons promote the waitlist referral link. Product scorecards, grades, verified-fix cards, and README badges come from the app origin and must never be recreated or edited as marketing artwork.
