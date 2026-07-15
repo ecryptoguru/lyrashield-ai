@@ -1,0 +1,241 @@
+---
+import Base from "@layouts/Base.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/scan", origin).toString()
+const appOrigin = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") || ""
+const scannerAvailable = Boolean(appOrigin)
+const turnstileSiteKey = (import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string | undefined) || ""
+const title = "Free security check for AI-built apps — LyraShield"
+const description = "Run a free, passive security check for exposed secrets, missing browser protections, risky data-layer signals, and HTTPS basics. No signup."
+const faqs = [
+  { question: "What does the free security check inspect?", answer: "It reads the public page, response headers, and up to six same-origin JavaScript or CSS assets linked by that page. It checks for high-confidence secret patterns, baseline security headers, data-layer signals, HTTPS consistency, and supported framework fingerprints." },
+  { question: "Is the LyraShield Lite Check safe?", answer: "It is passive and read-only. It does not log in, send attack payloads, query databases, enumerate private paths, exploit a finding, or actively test row-level security. Scan only apps you own or have permission to test." },
+  { question: "Do you store my app data or exposed secrets?", answer: "The scanner does not persist page bodies, matched secret values, or findings. Analytics receives only a one-way hash of the target hostname plus coarse funnel data. A public scorecard contains aggregate counters only and never the target URL or finding detail." },
+  { question: "Does a clean Lite Check mean my app is secure?", answer: "No. A clean result means no surface issues were found in this limited, outside-only check. Business-logic flaws, authenticated access issues, server-side code, and exploit validation require a deeper authorized assessment." },
+]
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: "LyraShield AI Lite Check",
+    applicationCategory: "SecurityApplication",
+    operatingSystem: "Web",
+    url: canonical,
+    description,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    featureList: ["Passive public-page check", "Exposed secret pattern detection", "Security header review", "Data-layer risk signals", "HTTPS and mixed-content basics"],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map((faq) => ({ "@type": "Question", name: faq.question, acceptedAnswer: { "@type": "Answer", text: faq.answer } })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Free security check", item: canonical },
+    ],
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd} noindex={!scannerAvailable}>
+  <section class="relative overflow-hidden border-b border-border">
+    <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_18%,color-mix(in_srgb,var(--accent)_15%,transparent),transparent_32%)]"></div>
+    <div class="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:px-8 lg:py-24">
+      <div>
+        <nav aria-label="Breadcrumb" class="mb-8 text-sm text-text-muted"><a href="/" class="hover:text-accent">Home</a><span class="mx-2" aria-hidden="true">/</span><span aria-current="page">Free security check</span></nav>
+        <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Lite Check · passive and read-only</p>
+        <h1 class="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-text sm:text-5xl lg:text-6xl">Free security check for AI-built apps</h1>
+        <p class="mt-6 max-w-2xl text-lg leading-8 text-text-muted">{scannerAvailable ? "Paste your app's URL. We'll check for the security gaps that AI coding tools most often leave behind — exposed secrets, missing protections, risky data-access setups. Results in seconds. No signup." : "The passive Lite Check is available after the separately protected LyraShield app API is deployed. Explore the methodology and browser-local tools while this preview remains in pre-launch mode."}</p>
+
+        <form id="scan-form" class="mt-9 max-w-2xl" data-api-origin={appOrigin} data-turnstile-site-key={turnstileSiteKey}>
+          <label for="scan-url" class="block text-sm font-semibold text-text">Public app URL</label>
+          <div class="mt-2 flex flex-col gap-3 sm:flex-row">
+            <input id="scan-url" name="url" type="url" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg-raised px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
+            <button id="scan-button" type="submit" disabled={!scannerAvailable} class="min-h-13 rounded-xl bg-accent px-6 font-semibold text-bg shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-55">{scannerAvailable ? "Scan my app" : "Scanner API not connected"}</button>
+          </div>
+          <label class="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-bg-raised/70 p-4 text-sm leading-6 text-text-muted">
+            <input id="authorized" name="authorized" type="checkbox" required disabled={!scannerAvailable} class="mt-1 size-4 shrink-0 accent-[var(--accent)]" />
+            <span>Scan only apps you own or have permission to test. We run a passive, read-only check — nothing intrusive. By scanning you agree to our <a href="/terms" class="font-medium text-accent underline underline-offset-4">Terms</a>.</span>
+          </label>
+          <div id="turnstile-container" class="mt-4"></div>
+          {!scannerAvailable && <p class="mt-4 rounded-lg border border-[#b57a14]/40 bg-[#f3b95f]/10 p-3 text-sm leading-6 text-text-muted" role="status">Live scanning requires the separately deployed LyraShield app API. This preview will not send a target to localhost or another fallback service.</p>}
+          <p id="scan-error" class="mt-4 hidden rounded-lg border border-danger/40 bg-danger/5 p-3 text-sm text-danger" role="alert"></p>
+        </form>
+      </div>
+
+      <div class="rounded-2xl border border-border bg-[#07131d] p-5 text-[#edf8fb] shadow-2xl sm:p-7" aria-label="Lite Check preview">
+        <div class="flex items-center justify-between border-b border-[#203246] pb-4 font-mono text-xs"><span class="text-[#54d6df]">lyrashield / lite-check</span><span class="text-[#91a7b8]">PASSIVE</span></div>
+        <div class="space-y-4 py-6 font-mono text-sm leading-6">
+          <p><span class="mr-3 text-[#54d6df]">01</span>Fetch only public browser assets</p>
+          <p><span class="mr-3 text-[#54d6df]">02</span>Keep credentials out of results</p>
+          <p><span class="mr-3 text-[#f3b95f]">03</span>Separate signals from proof</p>
+          <p><span class="mr-3 text-[#91a7b8]">04</span>State every important limit</p>
+        </div>
+        <p class="border-t border-[#203246] pt-4 text-sm leading-6 text-[#91a7b8]">No login · no exploit payloads · no table queries · no active RLS test</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="scanning" class="mx-auto hidden max-w-4xl px-4 py-14 sm:px-6 lg:px-8" aria-live="polite">
+    <div class="overflow-hidden rounded-2xl border border-border bg-[#07131d] text-[#edf8fb] shadow-xl">
+      <div class="flex items-center justify-between border-b border-[#203246] px-5 py-4 font-mono text-xs"><span class="text-[#54d6df]">public-surface.log</span><span class="animate-pulse text-[#f3b95f] motion-reduce:animate-none">RUNNING</span></div>
+      <ol id="scan-steps" class="space-y-4 p-5 font-mono text-sm sm:p-7">
+        <li data-step="0"><span class="mr-3 text-[#f3b95f]">›</span>Fetching public assets…</li>
+        <li data-step="1" class="text-[#91a7b8]"><span class="mr-3">·</span>Checking response headers…</li>
+        <li data-step="2" class="text-[#91a7b8]"><span class="mr-3">·</span>Scanning client bundles for exposed secrets…</li>
+        <li data-step="3" class="text-[#91a7b8]"><span class="mr-3">·</span>Detecting data-layer setup…</li>
+      </ol>
+      <p class="border-t border-[#203246] px-5 py-4 text-sm text-[#91a7b8] sm:px-7">We only read what your app already sends to any visitor.</p>
+    </div>
+  </section>
+
+  <section id="results" class="mx-auto hidden max-w-5xl px-4 py-14 sm:px-6 lg:px-8" aria-live="polite" tabindex="-1">
+    <div class="rounded-2xl border border-border bg-bg-raised p-6 shadow-xl sm:p-8">
+      <div class="flex flex-wrap items-center justify-between gap-4"><div><p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Lite Check · not the LyraShield Score</p><h2 id="result-heading" class="mt-3 text-3xl font-semibold tracking-tight text-text"></h2></div><div id="result-counts" class="flex flex-wrap gap-2"></div></div>
+      <p id="result-target" class="mt-4 break-all font-mono text-xs text-text-muted"></p>
+      <p class="mt-6 max-w-3xl leading-7 text-text-muted">This is a surface-level, passive check — a preview of what LyraShield's full loop does. It can't see everything, and a clean result here isn't a guarantee.</p>
+    </div>
+
+    <div id="clean-result" class="mt-8 hidden rounded-2xl border border-accent/40 bg-accent-dim/25 p-6 sm:p-8"><h3 class="text-2xl font-semibold text-text">No surface issues found in this passive check.</h3><p class="mt-3 max-w-3xl leading-7 text-text-muted">That's a good sign — but it's a limited, outside-only look. Deeper classes of vulnerability (business-logic flaws, authenticated access issues, exploit validation) need the full LyraShield scan. Want us to run it when it's live?</p></div>
+    <div id="findings" class="mt-8 space-y-4"></div>
+
+    <section id="upsell" class="mt-10 rounded-2xl border border-border bg-[#07131d] p-6 text-[#edf8fb] sm:p-9">
+      <p class="font-mono text-xs font-semibold tracking-[.2em] text-[#54d6df] uppercase">Full loop · in active development</p>
+      <h2 class="mt-4 text-3xl font-semibold tracking-tight">This is the surface. LyraShield goes the whole loop.</h2>
+      <p class="mt-4 max-w-3xl leading-7 text-[#b7c8d4]">The full product runs an agentic scan, records evidence state, prepares a fix proposal, retests, and hands you a shareable report — from your first vibe-coded app to production. PR execution stays blocked until an exact server-generated patch is bound to approval. It's in active development.</p>
+      <form id="capture-form" class="mt-7 max-w-2xl">
+        <label for="result-email" class="block text-sm font-semibold">Email for waitlist or saved card</label>
+        <div class="mt-2 flex flex-col gap-3 sm:flex-row"><input id="result-email" type="email" required autocomplete="email" placeholder="you@example.com" class="min-h-12 flex-1 rounded-lg border border-[#365069] bg-[#0e1a28] px-4 text-[#edf8fb] placeholder:text-[#91a7b8]" /><button type="submit" data-capture-action="waitlist" class="min-h-12 rounded-lg bg-[#54d6df] px-5 font-semibold text-[#07131d]">Join the waitlist</button></div>
+        <div class="mt-3 flex flex-col gap-3 sm:flex-row"><button type="submit" data-capture-action="scorecard" class="min-h-12 rounded-lg border border-[#54d6df] px-5 font-semibold text-[#54d6df]">Get my shareable scorecard</button><a href="/sample-report" data-upsell="sample_report" class="inline-flex min-h-12 items-center justify-center rounded-lg px-5 font-semibold text-[#b7c8d4] hover:text-white">See a sample full report</a></div>
+        <p id="capture-status" class="mt-4 text-sm text-[#b7c8d4]" role="status"></p>
+      </form>
+      <div id="scorecard-actions" class="mt-5 hidden flex-wrap gap-3"><a id="scorecard-link" href="#" target="_blank" rel="noreferrer" class="inline-flex min-h-11 items-center rounded-lg bg-[#54d6df] px-4 font-semibold text-[#07131d]">Open scorecard</a><button id="share-scorecard" type="button" class="min-h-11 rounded-lg border border-[#365069] px-4 font-semibold">Share scorecard</button></div>
+    </section>
+  </section>
+
+  <section class="border-t border-border bg-bg-raised/65"><div class="mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8"><p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">What this check can tell you</p><div class="mt-8 grid gap-8 md:grid-cols-2"><article><h2 class="text-xl font-semibold text-text">Exposed secrets</h2><p class="mt-3 leading-7 text-text-muted">Looks for high-confidence server-side credential patterns in public HTML and linked client assets. Public Supabase anon keys, Firebase web config, Stripe publishable keys, and reCAPTCHA site keys are not labeled secrets.</p></article><article><h2 class="text-xl font-semibold text-text">Browser protections</h2><p class="mt-3 leading-7 text-text-muted">Reads Content Security Policy, HSTS, MIME sniffing, framing, referrer, and browser-permission headers. Missing headers are hardening gaps, not automatic proof of exploitation.</p></article><article><h2 class="text-xl font-semibold text-text">Data-layer signals</h2><p class="mt-3 leading-7 text-text-muted">Recognizes supported public BaaS markers and explains why server-enforced RLS or security rules deserve review. It never queries a table or collection.</p></article><article><h2 class="text-xl font-semibold text-text">Transport and framework signals</h2><p class="mt-3 leading-7 text-text-muted">Checks HTTPS and obvious mixed-content references, then records ordinary public framework fingerprints to help scope a deeper authorized review.</p></article></div></div></section>
+
+  <section class="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8"><h2 class="text-3xl font-semibold tracking-tight text-text">Questions about the free Lite Check</h2><div class="mt-8 divide-y divide-border border-y border-border">{faqs.map((faq, index) => (<details data-question-id={`lite-${index + 1}`} class="group py-5"><summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 font-semibold text-text"><span>{faq.question}</span><span class="text-accent group-open:rotate-45" aria-hidden="true">+</span></summary><p class="max-w-3xl pb-2 pr-8 leading-7 text-text-muted">{faq.answer}</p></details>))}</div></section>
+
+  {turnstileSiteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer is:inline></script>}
+  <script>
+    type LiteCheck = { category: string; severity: "needs_attention" | "worth_reviewing" | "ok"; title: string; whatItIs: string; whyItMatters: string; learnMoreUrl: string }
+    type LiteResult = { target: string; scannedAt: string; checks: LiteCheck[]; liteResultSummary: { needsAttention: number; worthReviewing: number; looksOk: number; findingCount: number }; disclaimers: string[] }
+    type TurnstileWindow = Window & { turnstile?: { render: (element: string | HTMLElement, options: Record<string, unknown>) => string; reset: (id: string) => void } }
+
+    const scanForm = document.querySelector<HTMLFormElement>("#scan-form")
+    const scanning = document.querySelector<HTMLElement>("#scanning")
+    const results = document.querySelector<HTMLElement>("#results")
+    const errorBox = document.querySelector<HTMLElement>("#scan-error")
+    const scanButton = document.querySelector<HTMLButtonElement>("#scan-button")
+    const appOrigin = scanForm?.dataset.apiOrigin || ""
+    const turnstileSiteKey = scanForm?.dataset.turnstileSiteKey || ""
+    let turnstileToken = ""
+    let turnstileWidget = ""
+    let currentResult: LiteResult | null = null
+    let lastAction = "waitlist"
+
+    const capture = (event: string, props: Record<string, unknown> = {}) => window.posthog?.capture(event, { product: "LyraShield", ...props })
+    const query = new URL(location.href).searchParams
+    const attribution = { utm_source: query.get("utm_source") || undefined, utm_medium: query.get("utm_medium") || undefined, utm_campaign: query.get("utm_campaign") || undefined, referrer: document.referrer || undefined }
+    const referralCode = query.get("ref")?.toUpperCase().match(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/)?.[0]
+
+    async function hashDomain(url: string): Promise<string> {
+      const host = new URL(url).hostname.toLowerCase()
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(host))
+      return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("")
+    }
+
+    function normalizeUrl(value: string): string {
+      return /^https?:\/\//i.test(value) ? value : `https://${value}`
+    }
+
+    function animateSteps() {
+      const steps = [...document.querySelectorAll<HTMLElement>("#scan-steps li")]
+      let active = 0
+      steps.forEach((step, index) => { step.classList.toggle("text-[#91a7b8]", index !== 0); const mark = step.querySelector("span"); if (mark) mark.textContent = index === 0 ? "›" : "·" })
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {}
+      const timer = window.setInterval(() => { const previous = steps[active]; if (previous) { previous.classList.remove("text-[#91a7b8]"); const mark = previous.querySelector("span"); if (mark) { mark.textContent = "✓"; mark.className = "mr-3 text-[#54d6df]" } } active = Math.min(active + 1, steps.length - 1); const next = steps[active]; if (next) { next.classList.remove("text-[#91a7b8]"); const mark = next.querySelector("span"); if (mark) { mark.textContent = "›"; mark.className = "mr-3 text-[#f3b95f]" } } }, 650)
+      return () => window.clearInterval(timer)
+    }
+
+    function chip(label: string, value: number, tone: string): HTMLElement { const el = document.createElement("span"); el.className = `rounded-full border px-3 py-1.5 text-xs font-semibold ${tone}`; el.textContent = `${value} ${label}`; return el }
+    const severityLabel = { needs_attention: "Needs attention", worth_reviewing: "Worth reviewing", ok: "Looks OK" }
+    const severityTone = { needs_attention: "border-danger/40 bg-danger/10 text-danger", worth_reviewing: "border-[#b57a14]/40 bg-[#f3b95f]/10 text-[#9b6509] dark:text-[#f3b95f]", ok: "border-accent/40 bg-accent-dim/35 text-accent" }
+
+    function renderResult(result: LiteResult, durationMs: number) {
+      currentResult = result
+      const summary = result.liteResultSummary
+      const heading = document.querySelector<HTMLElement>("#result-heading")!
+      heading.textContent = summary.findingCount === 0 ? "No surface issues found" : `${summary.findingCount} thing${summary.findingCount === 1 ? "" : "s"} worth a look`
+      document.querySelector<HTMLElement>("#result-target")!.textContent = `${result.target} · ${new Date(result.scannedAt).toLocaleString()}`
+      const counts = document.querySelector<HTMLElement>("#result-counts")!; counts.replaceChildren(chip("needs attention", summary.needsAttention, severityTone.needs_attention), chip("worth reviewing", summary.worthReviewing, severityTone.worth_reviewing), chip("look OK", summary.looksOk, severityTone.ok))
+      document.querySelector<HTMLElement>("#clean-result")!.classList.toggle("hidden", summary.findingCount !== 0)
+      const findings = document.querySelector<HTMLElement>("#findings")!; findings.replaceChildren()
+      result.checks.forEach((check) => {
+        const details = document.createElement("details")
+        details.className = "group rounded-2xl border border-border bg-bg-raised p-5 sm:p-6"
+        const summaryEl = document.createElement("summary")
+        summaryEl.className = "flex min-h-11 cursor-pointer list-none items-center justify-between gap-4"
+        const left = document.createElement("span")
+        left.className = "flex flex-wrap items-center gap-3"
+        const tag = document.createElement("span")
+        tag.className = `rounded-full border px-2.5 py-1 text-xs font-semibold ${severityTone[check.severity]}`
+        tag.textContent = severityLabel[check.severity]
+        const title = document.createElement("strong")
+        title.className = "text-left text-text"
+        title.textContent = check.title
+        left.appendChild(tag)
+        left.appendChild(title)
+        const plus = document.createElement("span")
+        plus.className = "text-xl text-accent group-open:rotate-45"
+        plus.textContent = "+"
+        summaryEl.appendChild(left)
+        summaryEl.appendChild(plus)
+        const body = document.createElement("div")
+        body.className = "mt-4 grid gap-5 border-t border-border pt-5 text-sm leading-6 text-text-muted sm:grid-cols-2"
+        const what = document.createElement("p")
+        what.textContent = check.whatItIs
+        const why = document.createElement("p")
+        why.textContent = check.whyItMatters
+        const link = document.createElement("a")
+        link.href = `${check.learnMoreUrl}#evidence-states`
+        link.className = "mt-4 inline-flex min-h-11 items-center font-semibold text-accent"
+        link.textContent = "How LyraShield handles this →"
+        const wrap = document.createElement("div")
+        wrap.appendChild(why)
+        wrap.appendChild(link)
+        body.appendChild(what)
+        body.appendChild(wrap)
+        details.appendChild(summaryEl)
+        details.appendChild(body)
+        details.addEventListener("toggle", () => { if (details.open) capture("finding_expanded", { category: check.category, severity: check.severity }) })
+        findings.appendChild(details)
+      })
+      results?.classList.remove("hidden"); results?.focus(); capture("scan_completed", { duration_ms: durationMs, finding_count: summary.findingCount, categories_flagged: [...new Set(result.checks.filter((check) => check.severity !== "ok").map((check) => check.category))], had_findings: summary.findingCount > 0 }); capture("upsell_viewed")
+    }
+
+    scanForm?.addEventListener("submit", async (event) => {
+      event.preventDefault(); errorBox?.classList.add("hidden")
+      if (!appOrigin) return
+      const input = document.querySelector<HTMLInputElement>("#scan-url")!; const url = normalizeUrl(input.value.trim()); input.value = url
+      let domainHash = ""; try { domainHash = await hashDomain(url) } catch { if (errorBox) { errorBox.textContent = "Enter a valid public URL."; errorBox.classList.remove("hidden") }; return }
+      capture("scan_started", { target_domain_hash: domainHash, device: matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop", ...attribution })
+      scanButton!.disabled = true; scanButton!.textContent = "Scanning…"; results?.classList.add("hidden"); scanning?.classList.remove("hidden"); const stop = animateSteps()
+      try { const response = await fetch(`${appOrigin}/api/lite-scan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, authorized: true, ...(turnstileToken ? { turnstileToken } : {}) }) }); const body = await response.json() as { result?: LiteResult; durationMs?: number; error?: string; message?: string }; if (!response.ok || !body.result) throw Object.assign(new Error(body.message || "The passive check could not finish."), { reason: body.error || "scan_error" }); renderResult(body.result, body.durationMs ?? 0) } catch (cause) { const error = cause as Error & { reason?: string }; if (errorBox) { errorBox.textContent = error.message; errorBox.classList.remove("hidden") }; capture(error.reason === "ssrf_blocked" ? "scan_blocked" : "scan_error", { reason: error.reason || "unreachable", target_domain_hash: domainHash }); (window as TurnstileWindow).turnstile?.reset(turnstileWidget) } finally { stop(); scanning?.classList.add("hidden"); scanButton!.disabled = false; scanButton!.textContent = "Scan my app" }
+    })
+
+    document.querySelectorAll<HTMLButtonElement>("[data-capture-action]").forEach((button) => button.addEventListener("click", () => { lastAction = button.dataset.captureAction || "waitlist"; capture("upsell_clicked", { cta: lastAction }) }))
+    document.querySelector("[data-upsell='sample_report']")?.addEventListener("click", () => capture("upsell_clicked", { cta: "sample_report" }))
+    document.querySelector<HTMLFormElement>("#capture-form")?.addEventListener("submit", async (event) => { event.preventDefault(); if (!currentResult) return; const email = document.querySelector<HTMLInputElement>("#result-email")!.value; const status = document.querySelector<HTMLElement>("#capture-status")!; status.textContent = "Saving…"; try { const waitlist = await fetch("/api/waitlist", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, source: "lite_scanner", referralCode, utmSource: attribution.utm_source, utmMedium: attribution.utm_medium, utmCampaign: attribution.utm_campaign, referrer: attribution.referrer }) }); const waitlistBody = await waitlist.json() as { referralCode?: string; message?: string }; if (!waitlist.ok) throw new Error(waitlistBody.message || "Could not save your email."); capture("waitlist_joined", { source: "lite_scanner" }); if (referralCode) capture("referral_signup", { source: "lite_scanner" }); status.textContent = "You're on the waitlist. One email when your invite is ready."; if (lastAction === "scorecard") { const s = currentResult.liteResultSummary; const card = await fetch(`${appOrigin}/api/lite-scorecards`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ needsAttention: s.needsAttention, worthReviewing: s.worthReviewing, looksOk: s.looksOk, referralCode: waitlistBody.referralCode }) }); const cardBody = await card.json() as { url?: string }; if (!card.ok || !cardBody.url) throw new Error("Could not create the scorecard."); const absolute = new URL(cardBody.url, appOrigin).toString(); const link = document.querySelector<HTMLAnchorElement>("#scorecard-link")!; link.href = absolute; document.querySelector<HTMLElement>("#scorecard-actions")!.classList.remove("hidden"); document.querySelector<HTMLElement>("#scorecard-actions")!.classList.add("flex"); capture("scorecard_generated", { referral_code: waitlistBody.referralCode ? "present" : "absent" }) } } catch (cause) { status.textContent = cause instanceof Error ? cause.message : "Could not save this result." } })
+    document.querySelector<HTMLButtonElement>("#share-scorecard")?.addEventListener("click", async () => { const url = document.querySelector<HTMLAnchorElement>("#scorecard-link")!.href; const usedNativeShare = typeof navigator.share === "function"; if (usedNativeShare) await navigator.share({ title: "My LyraShield AI Lite Check", url }); else await navigator.clipboard.writeText(url); capture("scorecard_shared", { channel: usedNativeShare ? "native" : "copy" }) })
+
+    if (referralCode) capture("referral_visit", { source: "lite_scanner" })
+    if (turnstileSiteKey) { const boot = () => { const turnstile = (window as TurnstileWindow).turnstile; if (!turnstile) return window.setTimeout(boot, 100); turnstileWidget = turnstile.render("#turnstile-container", { sitekey: turnstileSiteKey, size: "flexible", appearance: "interaction-only", callback: (token: string) => { turnstileToken = token }, "expired-callback": () => { turnstileToken = "" } }) }; boot() }
+  </script>
+</Base>

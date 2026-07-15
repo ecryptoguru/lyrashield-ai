@@ -3,10 +3,15 @@ import Base from "@layouts/Base.astro"
 import { tools, toolUrl } from "../../lib/tools"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/tools", origin).toString()
-const jsonLd = [{ "@context": "https://schema.org", "@type": "CollectionPage", name: "Free Security Tools for AI-Built Apps", url: canonical, hasPart: tools.map((tool) => ({ "@type": "WebApplication", name: tool.title, url: new URL(toolUrl(tool.slug), origin).toString() })) }]
+const description = "Use five free browser-local security tools to review AI app launch controls, HTTP headers, exposed secrets, Supabase RLS policies, and JWT sessions."
+const jsonLd = [
+  { "@context": "https://schema.org", "@type": "CollectionPage", name: "Free Security Tools for AI-Built Apps", description, url: canonical, isPartOf: { "@id": `${origin}/#website` }, mainEntity: { "@type": "ItemList", numberOfItems: tools.length, itemListElement: tools.map((tool, index) => ({ "@type": "ListItem", position: index + 1, name: tool.title, url: new URL(toolUrl(tool.slug), origin).toString() })) } },
+  { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` }, { "@type": "ListItem", position: 2, name: "Tools", item: canonical }] },
+]
 ---
-<Base title="Free Security Tools for AI-Built Apps | LyraShield AI" description="Use privacy-first free security tools to review launch readiness, headers, secrets, RLS policies, and JWT sessions." canonical={canonical} jsonLd={jsonLd}>
+<Base title="Free Security Tools for AI-Built Apps | LyraShield AI" description={description} canonical={canonical} jsonLd={jsonLd}>
   <section class="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:py-20">
+    <nav aria-label="Breadcrumb" class="mb-8 text-sm text-text-muted"><a href="/" class="hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Home</a><span class="mx-2" aria-hidden="true">/</span><span aria-current="page">Tools</span></nav>
     <h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-text sm:text-5xl">Free security tools for AI-built apps</h1>
     <p class="mt-5 max-w-2xl text-lg leading-8 text-text-muted">Get a useful answer before creating an account. Each focused check runs in your browser, keeps sensitive input on your device, and states what it cannot prove.</p>
     <div class="mt-12 divide-y divide-border border-y border-border">
@@ -22,10 +27,14 @@ const jsonLd = [{ "@context": "https://schema.org", "@type": "CollectionPage", n
         </article>
       ))}
     </div>
+    <section class="mt-16 grid gap-8 border-y border-border py-10 md:grid-cols-2">
+      <div><h2 class="text-2xl font-semibold text-text">How do these free security tools work?</h2><p class="mt-4 leading-7 text-text-muted">Each tool performs a focused deterministic check in your browser. The page explains exactly what input it reviews, what signals it reports, and what the result cannot establish.</p></div>
+      <div><h2 class="text-2xl font-semibold text-text">Are inputs uploaded?</h2><p class="mt-4 leading-7 text-text-muted">No. The checklist, pasted headers, selected files, SQL, JWTs, and cookie values are processed on your device by the page code. Use non-production tokens and review each tool's stated limits.</p></div>
+    </section>
     <section class="mt-20 grid gap-8 border-y border-border py-10 lg:grid-cols-[1fr_auto] lg:items-center">
       <div class="max-w-3xl">
         <h2 class="text-2xl font-semibold text-text">Need an app-wide assurance record?</h2>
-        <p class="mt-4 leading-7 text-text-muted">The complete product adds authorized target scanning, SCA and secret checks, explicit coverage receipts, evidence states, approval-gated fix proposals, server-owned retests, immutable reports, schedules, notifications, and workspace-scoped audit history.</p>
+        <p class="mt-4 leading-7 text-text-muted">The complete product adds authorized target scanning, SCA and secret checks, explicit coverage receipts, evidence states, approval-gated fix proposals, server-owned retests, immutable reports, schedules, notifications, and workspace-scoped audit history. Read the <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">evidence methodology</a> before interpreting a result.</p>
       </div>
       <a href="/?source=tools#waitlist" class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Request design-partner access</a>
     </section>

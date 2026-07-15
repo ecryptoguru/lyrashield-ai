@@ -7,21 +7,38 @@ const { tool, faq = [] } = Astro.props
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL(`/tools/${tool.slug}`, origin).toString()
 const jsonLd = [
-  { "@context": "https://schema.org", "@type": "WebApplication", name: `${tool.title} | LyraShield AI`, applicationCategory: "SecurityApplication", operatingSystem: "Web", url: canonical, description: tool.description },
-  { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Tools", item: new URL("/tools", origin).toString() }, { "@type": "ListItem", position: 2, name: tool.title, item: canonical }] },
+  { "@context": "https://schema.org", "@type": "WebApplication", name: tool.title, applicationCategory: "SecurityApplication", operatingSystem: "Web", url: canonical, description: tool.description, featureList: tool.checks, provider: { "@id": `${origin}/#organization` } },
+  { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` }, { "@type": "ListItem", position: 2, name: "Tools", item: new URL("/tools", origin).toString() }, { "@type": "ListItem", position: 3, name: tool.title, item: canonical }] },
   ...(faq.length ? [{ "@context": "https://schema.org", "@type": "FAQPage", mainEntity: faq.map(({ q, a }) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })) }] : []),
 ]
 ---
-<Base title={`${tool.title} | LyraShield AI`} description={tool.description} canonical={canonical} jsonLd={jsonLd}>
+<Base title={tool.seoTitle} description={tool.description} canonical={canonical} jsonLd={jsonLd}>
   <section class="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:py-16">
-    <a href="/tools" class="text-sm font-medium text-accent hover:underline">← All free tools</a>
+    <nav aria-label="Breadcrumb" class="text-sm text-text-muted">
+      <a href="/" class="hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Home</a>
+      <span class="mx-2" aria-hidden="true">/</span>
+      <a href="/tools" class="hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Tools</a>
+      <span class="mx-2" aria-hidden="true">/</span>
+      <span aria-current="page">{tool.title}</span>
+    </nav>
     <h1 class="mt-5 text-4xl font-semibold tracking-tight text-text sm:text-5xl">{tool.title}</h1>
-    <p class="mt-4 max-w-2xl text-lg leading-8 text-text-muted">{tool.description}</p>
+    <p class="mt-4 max-w-3xl text-lg leading-8 text-text-muted">{tool.summary}</p>
     <p class="mt-5 rounded-xl border border-border bg-bg-raised px-4 py-3 text-sm text-text-muted"><strong class="text-text">Privacy:</strong> {tool.privacy}</p>
     <div class="mt-8 rounded-2xl border border-border bg-bg-raised p-5 shadow-sm sm:p-8"><slot /></div>
     <section class="mt-12 grid gap-8 border-t border-border pt-10 md:grid-cols-2">
-      <div><h2 class="text-xl font-semibold text-text">What this checks</h2><p class="mt-3 text-sm leading-6 text-text-muted">A focused set of visible, deterministic signals relevant to this tool.</p></div>
-      <div><h2 class="text-xl font-semibold text-text">What this cannot prove</h2><p class="mt-3 text-sm leading-6 text-text-muted">It does not establish exploitability, live application behavior, or overall security posture.</p></div>
+      <div>
+        <h2 class="text-xl font-semibold text-text">What this checks</h2>
+        <ul class="mt-4 space-y-3 text-sm leading-6 text-text-muted">{tool.checks.map((item) => <li class="flex gap-3"><span class="mt-2 size-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true"></span><span>{item}</span></li>)}</ul>
+      </div>
+      <div>
+        <h2 class="text-xl font-semibold text-text">What this cannot prove</h2>
+        <ul class="mt-4 space-y-3 text-sm leading-6 text-text-muted">{tool.limitations.map((item) => <li class="flex gap-3"><span class="mt-2 size-1.5 shrink-0 rounded-full bg-text-muted" aria-hidden="true"></span><span>{item}</span></li>)}</ul>
+      </div>
+    </section>
+    <section aria-labelledby="sources-heading" class="mt-10 border-t border-border pt-8">
+      <h2 id="sources-heading" class="text-xl font-semibold text-text">Primary references</h2>
+      <p class="mt-3 text-sm leading-6 text-text-muted">Use these standards and vendor references when you investigate a result. A link does not imply certification or full coverage of the source.</p>
+      <ul class="mt-4 flex flex-wrap gap-x-6 gap-y-3">{tool.references.map((reference) => <li><a href={reference.url} rel="noreferrer" class="text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{reference.label}</a></li>)}</ul>
     </section>
     <section class="mt-10 rounded-2xl border border-border bg-bg-raised p-6"><h2 class="text-xl font-semibold text-text">Need an app-wide assurance record?</h2><p class="mt-3 leading-7 text-text-muted">LyraShield AI adds authorized target scanning, explicit coverage receipts, evidence states, approval-gated fix proposals, server-owned retests, and immutable reports. This browser tool remains guidance, not a security guarantee.</p><a href="/?source=tool#waitlist" class="mt-5 inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Request design-partner access</a></section>
     {faq.length > 0 && <section class="mt-12"><h2 class="text-2xl font-semibold text-text">Frequently asked questions</h2><div class="mt-4 divide-y divide-border rounded-xl border border-border bg-bg-raised">{faq.map((item) => <details class="p-4"><summary class="cursor-pointer font-medium text-text">{item.q}</summary><p class="mt-3 text-sm leading-6 text-text-muted">{item.a}</p></details>)}</div></section>}

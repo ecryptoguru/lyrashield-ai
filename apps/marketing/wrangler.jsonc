@@ -3,38 +3,51 @@
   "compatibility_date": "2026-07-08",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@astrojs/cloudflare/entrypoints/server",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "lyrashieldai.com",
+      "custom_domain": true,
+    },
+    {
+      "pattern": "www.lyrashieldai.com",
+      "custom_domain": true,
+    },
+  ],
   "assets": {
     "binding": "ASSETS",
-    "directory": "./dist"
+    "directory": "./dist",
+    "html_handling": "drop-trailing-slash",
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
   },
   "vars": {
     "PUBLIC_SITE_URL": "https://lyrashieldai.com",
     "PUBLIC_APP_URL": "",
     "PUBLIC_X_URL": "",
-    "PUBLIC_INDEXABLE": "false",
+    "PUBLIC_INDEXABLE": "true",
     "PUBLIC_POSTHOG_KEY": "",
-    "PUBLIC_POSTHOG_HOST": "https://eu.i.posthog.com"
+    "PUBLIC_POSTHOG_HOST": "https://eu.i.posthog.com",
+    "PUBLIC_TURNSTILE_SITE_KEY": "",
+    "PUBLIC_ABUSE_EMAIL": "",
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "lyrashield-marketing-waitlist",
-      // Replace with your D1 database ID before deploying.
-      "database_id": "00000000-0000-0000-0000-000000000000"
-    }
+      "database_id": "3c6a52d3-808d-47cc-81da-a40218d413b5",
+    },
   ],
   "ratelimits": [
     {
       "name": "WAITLIST_RL",
-      // Replace with your Rate Limit namespace ID before deploying.
       "namespace_id": "1001",
       "simple": {
         "limit": 5,
-        "period": 60
-      }
-    }
-  ]
+        "period": 60,
+      },
+    },
+  ],
 }

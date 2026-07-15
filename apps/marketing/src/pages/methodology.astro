@@ -3,6 +3,9 @@ import Base from "@layouts/Base.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/methodology", origin).toString()
+const title = "AI app security evidence methodology | LyraShield AI"
+const description =
+  "How LyraShield AI records authorized scan scope, coverage, finding evidence, independent verification, retest outcomes, and every known limitation."
 const evidenceStates = [
   {
     name: "Detected candidate",
@@ -21,15 +24,48 @@ const evidenceStates = [
     meaning: "The available retest evidence cannot establish that the condition is gone. The uncertainty remains visible.",
   },
 ]
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "LyraShield AI security evidence methodology",
+    description,
+    url: canonical,
+    dateModified: "2026-07-16",
+    reviewedBy: { "@id": `${origin}/#organization` },
+    isPartOf: { "@id": `${origin}/#website` },
+    about: [
+      "application security testing",
+      "scan coverage",
+      "security evidence",
+      "independent verification",
+      "security retesting",
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Methodology", item: canonical },
+    ],
+  },
+]
 ---
 
 <Base
-  title="Evidence and coverage methodology | LyraShield AI"
-  description="How LyraShield AI records scan scope, coverage, finding evidence, retest outcomes, and the limits of each result."
+  title={title}
+  description={description}
   canonical={canonical}
+  jsonLd={jsonLd}
 >
-  <main class="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:py-24">
+  <section class="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:py-24">
     <header class="max-w-3xl">
+      <nav aria-label="Breadcrumb" class="mb-8 text-sm text-text-muted">
+        <a href="/" class="hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Home</a>
+        <span class="mx-2" aria-hidden="true">/</span>
+        <span aria-current="page">Methodology</span>
+      </nav>
       <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Methodology</p>
       <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">
         A security result should say what it knows—and what it does not.
@@ -37,6 +73,7 @@ const evidenceStates = [
       <p class="mt-6 text-lg leading-8 text-text-muted">
         LyraShield AI preserves scope, coverage, evidence provenance, and retest state as separate facts. It does not turn scanner confidence or missing evidence into a universal security verdict.
       </p>
+      <p class="mt-4 text-sm text-text-muted">Last reviewed: <time datetime="2026-07-16">July 16, 2026</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
     <section aria-labelledby="record-heading" class="mt-16 border-y border-border py-12">
@@ -72,9 +109,15 @@ const evidenceStates = [
       </ul>
     </section>
 
+    <section aria-labelledby="interpret-heading" class="py-16">
+      <h2 id="interpret-heading" class="text-2xl font-semibold text-text">How should you interpret a LyraShield AI result?</h2>
+      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted">Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected candidates from independently verified findings, then read the retest receipt and retained limitations. A score or confidence value never replaces those facts.</p>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted">For a broader catalog of web application verification requirements, consult the <a href="https://owasp.org/www-project-application-security-verification-standard/" rel="noreferrer" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">OWASP Application Security Verification Standard</a>. This reference does not imply certification or full ASVS coverage.</p>
+    </section>
+
     <section class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between">
       <div><h2 class="text-2xl font-semibold text-text">Start with a check you can inspect.</h2><p class="mt-2 text-text-muted">The free tools run locally in your browser and state their limits.</p></div>
       <a href="/tools" class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">View free tools</a>
     </section>
-  </main>
+  </section>
 </Base>

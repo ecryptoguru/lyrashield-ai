@@ -214,9 +214,18 @@ async function readBounded(res: Response, maxBytes: number): Promise<string> {
       const { done, value } = await reader.read()
       if (done) break
       if (value) {
-        total += value.byteLength
+        const remaining = Math.max(0, maxBytes - total)
+        if (remaining === 0) break
+
+        if (value.byteLength > remaining) {
+          chunks.push(value.subarray(0, remaining))
+          total += remaining
+          break
+        }
+
         chunks.push(value)
-        if (total >= maxBytes) break
+        total += value.byteLength
+        if (total === maxBytes) break
       }
     }
   } finally {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { authClient } from "@lyrashield/auth"
@@ -18,7 +19,6 @@ import {
   Radar,
   Rocket,
   Settings,
-  ShieldCheck,
   Users,
   Wrench,
 } from "lucide-react"
@@ -99,8 +99,15 @@ function SidebarPanel({
   return (
     <div className="bg-sidebar flex h-full min-h-0 flex-col">
       <div className="flex h-16 shrink-0 items-center gap-3 border-b px-5">
-        <div className="gradient-primary shadow-primary-glow flex size-9 items-center justify-center rounded-xl">
-          <ShieldCheck className="text-primary-foreground size-5" aria-hidden="true" />
+        <div className="shadow-primary-glow flex size-9 items-center justify-center rounded-xl border bg-[#07111f] p-1">
+          <Image
+            src="/icon.svg"
+            alt=""
+            width={32}
+            height={32}
+            className="size-8"
+            aria-hidden="true"
+          />
         </div>
         <div className="min-w-0">
           <span className="block text-[15px] font-bold tracking-[-0.025em]">LyraShield AI</span>
@@ -234,8 +241,15 @@ export function Sidebar({
     <>
       <div className="bg-background/92 fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between border-b px-4 backdrop-blur-xl md:hidden">
         <div className="flex items-center gap-2.5">
-          <div className="gradient-primary flex size-8 items-center justify-center rounded-lg">
-            <ShieldCheck className="text-primary-foreground size-[18px]" aria-hidden="true" />
+          <div className="flex size-8 items-center justify-center rounded-lg border bg-[#07111f] p-0.5">
+            <Image
+              src="/icon.svg"
+              alt=""
+              width={28}
+              height={28}
+              className="size-7"
+              aria-hidden="true"
+            />
           </div>
           <span className="text-sm font-bold tracking-tight">LyraShield AI</span>
         </div>

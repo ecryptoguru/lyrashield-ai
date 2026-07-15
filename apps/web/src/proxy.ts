@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { checkAuthRateLimit, checkApiRateLimit } from "@/lib/rate-limit"
+import { checkAuthRateLimit, checkApiRateLimit, checkLiteScanRateLimit } from "@/lib/rate-limit"
 
 let warnedUnknownIp = false
 
@@ -60,7 +60,11 @@ export async function proxy(request: NextRequest) {
       request: { headers: requestHeaders },
     })
     response.headers.set("Content-Security-Policy", csp)
-    if (pathname.startsWith("/score/") || pathname.startsWith("/reports/shared/"))
+    if (
+      pathname.startsWith("/score/") ||
+      pathname.startsWith("/lite-check/") ||
+      pathname.startsWith("/reports/shared/")
+    )
       response.headers.set("Referrer-Policy", "no-referrer")
     return response
   }
@@ -94,7 +98,18 @@ export async function proxy(request: NextRequest) {
     return response
   }
 
-  const result = await checkApiRateLimit(ip)
+  const rateLimitKey =
+    pathname === "/api/lite-scan"
+      ? Array.from(
+          new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip)))
+        )
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("")
+      : ip
+  const result =
+    pathname === "/api/lite-scan"
+      ? await checkLiteScanRateLimit(rateLimitKey)
+      : await checkApiRateLimit(rateLimitKey)
   if (result.limited) {
     const response = NextResponse.json(
       {

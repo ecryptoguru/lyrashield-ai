@@ -12,9 +12,9 @@ LyraShield AI is the evidence-backed release-assurance layer for AI-built softwa
 - `apps/marketing` — Astro 7 / Cloudflare Workers waitlist site
 - `packages/*` — auth, config, db, integrations, logger, MCP, score, security, types, UI
 
-Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables without founder approval. Public copy uses **LyraShield AI**; the public domain remains undecided.
+Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables without founder approval. Public copy uses **LyraShield AI**; the canonical marketing domain is **`lyrashieldai.com`**. Trademark clearance remains a founder/legal decision.
 
-## Current verified state — 2026-07-15
+## Current verified state — 2026-07-16
 
 - Sprints 0–7, the agent action layer, SCA/secrets scanning, URL scanning, reports, schedules, notifications, MCP, the GitHub diff gate, reliability/tenant-safety hardening, and the social distribution loop are merged on `main`. GPT-5.6 routing/caps merged in PR #53; Deep Review v3 remediation merged in PRs #54–#57; deletion attribution and legacy-report fallback landed in PR #59; the premium UI and Assurance Story release is PR #60.
 - **LyraShield Score + public scorecards + referrals (spec Phases 0–2)** are implemented (PR #43 plus post-review fixes): pure versioned score engine in `packages/score`, immutable `ScoreSnapshot` per completed scan, frozen-allowlist public scorecards with supersession notices and OG images, RBAC- and audit-gated share create/revoke, new-account-gated referral attribution with idempotent dual-sided agent-minute rewards, and the Phase 0 waitlist referral ladder. Landmines: `buildScorecardPayload` in `packages/db/src/score-service.ts` is the ONLY place a public payload may be constructed (its allowlist regression test is load-bearing); never add fields to it casually, and never derive share-eligibility client-side. See `codebase.md` §33.
@@ -22,11 +22,11 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 - **Premium UI and Assurance Story reports (PR #60)**: the dashboard, auth, public scorecards, shared reports, and Astro marketing site use one responsive light/dark design system; the mobile app shell uses accessible Sheet navigation; the command center renders score, severity, trend, and remediation visuals; and executive/developer/compliance reports render immutable creation-time snapshots with privacy-redacted public sharing. See `codebase.md` §37.
 - Auth and routing review completed: sign-up/sign-in now handle email verification, redirect via `callbackURL`, and avoid `useSession` atom issues in `apps/web/src/app/sign-in/page.tsx` and `apps/web/src/app/sign-up/page.tsx`.
 - **Evidence-backed release assurance marketing (PR #69):** the public site now leads with `Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report`, makes detected, independently verified, retest-confirmed, and inconclusive states explicit, links a public methodology page, and routes five browser-local no-upload tools into design-partner signup. Fix PR execution remains fail-closed; no page claims universal verification, automatic PR execution, security guarantees, production coverage, pricing, benchmarks, customers, or the upstream engine.
-- `main` passes **778 tests in 77 files** and **2 Chromium E2E tests**, plus lint, typecheck, production build, formatting, Prisma client generation, and `git diff --check`. Production deployment, migration application, and browser QA of the new blocked-state messages remain separate release gates.
+- `main` passes **778 tests in 77 files** and **2 Chromium E2E tests**, plus lint, typecheck, production build, formatting, Prisma client generation, and `git diff --check`. The current marketing/Lite Scanner release branch passes **818 tests in 85 files**, lint, typecheck, production build, formatting, and `git diff --check`; it remains unmerged until its focused PR is reviewed.
 - The engine thin fork is merged in [engine PR #1](https://github.com/ecryptoguru/lyrashield-engine/pull/1). It keeps the Strix upstream contract, defaults telemetry off, and syncs only through reviewable PRs. The engine gate passed 155 tests plus Ruff, formatting, headless mypy, and Bandit.
 - The worker image builds the sibling engine source, exposes the CLI on `PATH`, includes Git for repository targets, and fails before sandbox setup when model configuration is missing. One local Safe scan against an approved public repository completed through the Docker sandbox with Luna/medium routing and a recorded post-run budget-overage warning. It found no issues; that result is scoped to that target and is not production, coverage, or security proof.
 - **Azure AI / GPT 5.6 mode routing and spend caps are implemented**: Safe/Quick/Standard scans select `LYRASHIELD_LUNA_LLM` at `medium` reasoning; Deep/Custom select `LYRASHIELD_TERRA_LLM` at `high`. `LYRASHIELD_LLM` remains the backward-compatible fallback. Default engine caps are $1.20, $1.20, $3.20, $15, and $15 respectively; a positive workspace `Policy.maxBudgetUsd` overrides the mode default. The chosen model/reasoning and budget cap are retained as scan events. Azure credentials and endpoints remain shared through `AZURE_AI_*`, `AZURE_OPENAI_*`, or generic `LLM_*` variables.
-- The marketing site is implemented. Its metadata, sitemap, robots, JSON-LD, and social URLs share one build-time origin; indexable builds require public HTTPS. Pre-launch previews are noindex and return 404 for `llms.txt`. See `apps/marketing/README.md`.
+- The marketing Worker is deployed and indexable at **`https://lyrashieldai.com`** on Cloudflare with custom apex and `www` domains, an active path/query-preserving 301 from `www` to apex, production D1 plus all three migrations, Cloudflare Rate Limits, a generated `WAITLIST_IP_SALT` Worker secret, KV sessions, HTTPS, defensive response headers, canonical metadata, sitemap/robots, and an AEO/GEO `llms.txt`. Live waitlist flows and a 19-URL internal crawl pass. Homepage/methodology/tools Lighthouse scores are 97–99 performance and 100 accessibility, best practices, and SEO. The unavailable Lite Scanner and legal terms remain individually `noindex`; scanner controls fail closed without an app origin and never fall back to localhost. See `apps/marketing/README.md`.
 - **Vibe Security 50 and free tools (this release):** the versioned registry delivers 43 machine-testable controls to scans and separates the remaining 7 evidence-required controls. `/tools` provides five browser-local utilities (launch checklist, headers/CORS, secret exposure, Supabase RLS, and JWT/session inspection); inputs are not uploaded. See `docs/vibe-security-50.md` and the dated SEO/tools plan. Do not claim all 50 are found or fixed.
 
 ### Recent hardening and infrastructure merge
@@ -87,12 +87,12 @@ Provision production data stores, evidence storage, secrets, TLS, backups, monit
 
 Owner: founder + marketing + engineering.
 
-1. Confirm the public HTTPS domain and trademark direction.
-2. Replace Cloudflare D1 and Rate Limit placeholders and set `WAITLIST_IP_SALT` as a Worker secret.
-3. Apply D1 migrations and build with the production `PUBLIC_SITE_URL`.
-4. Deploy with Astro's generated `dist/server/wrangler.json`.
-5. Verify canonical URLs, sitemap, robots, waitlist submission/referral sharing, analytics, and visual QA on the real domain. On the app origin, also verify scorecard metadata, all card formats, badge output, revocation/expiry 404s, referral attribution, and human-event deduplication before setting `PUBLIC_INDEXABLE=true`.
-6. Publish only founder-approved posts; sample posts remain drafts by design.
+1. **Done:** use `https://lyrashieldai.com` as the canonical marketing origin; trademark clearance remains separate.
+2. **Done:** production D1, Rate Limit, KV, and `WAITLIST_IP_SALT` bindings are provisioned; D1 migrations `0001`–`0003` are applied remotely.
+3. **Done:** the indexable marketing Worker is deployed from Astro's generated `dist/server/wrangler.json`; apex TLS, waitlist/referral APIs, canonical metadata, sitemap/robots/`llms.txt`, schema, security headers, Cloudflare analytics compatibility, internal links, and representative mobile Lighthouse/desktop Brave QA pass on the real domain.
+4. **Done:** `www` permanently redirects to the apex with path and query preservation.
+5. **Pending only for the network scanner:** deploy the separately protected public app origin, set `PUBLIC_APP_URL`, provision Turnstile and set `PUBLIC_TURNSTILE_SITE_KEY`, and set the monitored `PUBLIC_ABUSE_EMAIL`. Until then `/scan` stays disabled and `noindex` while the ready marketing/methodology/tools surface remains indexable.
+6. On the app origin, separately verify scorecard metadata, all card formats, badge output, revocation/expiry 404s, referral attribution, and human-event deduplication. Submit the sitemap in the selected search-engine webmaster accounts when ownership access is available. Publish only founder-approved posts; sample posts remain drafts by design.
 
 ## Deferred roadmap
 
@@ -103,7 +103,7 @@ Owner: founder + marketing + engineering.
 
 ## Founder decisions still needed
 
-- Public domain and trademark clearance
+- Trademark clearance for the confirmed `lyrashieldai.com` public domain
 - Pricing, plan boundaries, usage metric, and billing provider
 - Design-partner and public-launch timing
 - Authorized model/provider and first controlled-scan target

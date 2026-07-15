@@ -3,6 +3,9 @@ node_modules
 **/.next
 **/.astro
 **/dist
+!apps/marketing/dist/
+!apps/marketing/dist/client/
+!apps/marketing/dist/client/**
 **/*.tsbuildinfo
 .git
 .gitignore
