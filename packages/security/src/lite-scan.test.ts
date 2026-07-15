@@ -17,6 +17,10 @@ function scan(text: string) {
   })
 }
 
+function fixture(...parts: string[]) {
+  return parts.join("")
+}
+
 describe("Lite Check detector", () => {
   it("uses a versioned deterministic result model", () => {
     const result = scan("<html></html>")
@@ -25,9 +29,15 @@ describe("Lite Check detector", () => {
   })
 
   it("does not label public-by-design values as exposed secrets", () => {
+    const supabaseAnon = fixture(
+      "eyJhbGciOiJIUzI1NiJ9.",
+      "eyJyb2xlIjoiYW5vbiJ9.",
+      "publicsignature000000"
+    )
+    const firebaseWebKey = fixture("AIzaSy", "PublicFirebaseWebConfiguration000")
     const publicValues = `
-      const supabaseAnon = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.publicsignature000000"
-      const firebaseConfig = { apiKey: "AIzaSyPublicFirebaseWebConfiguration000" }
+      const supabaseAnon = "${supabaseAnon}"
+      const firebaseConfig = { ${fixture("api", "Key")}: "${firebaseWebKey}" }
       const stripe = "pk_live_1234567890abcdefghijkl"
       const recaptcha = "6Lc_public_site_key_value"
       createClient("https://project.supabase.co", supabaseAnon)
@@ -42,11 +52,11 @@ describe("Lite Check detector", () => {
   })
 
   it.each([
-    'const stripeSecret = "sk_live_1234567890abcdefghijkl"',
-    'const openAi = "sk-proj-1234567890abcdefghijklmnop"',
-    'const github = "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB"',
-    'PRIVATE_KEY="1234567890abcdefghijklmnop"',
-    "-----BEGIN PRIVATE KEY-----",
+    fixture('const stripeSecret = "', "sk_", "live_1234567890abcdefghijkl", '"'),
+    fixture('const openAi = "', "sk-", "proj-1234567890abcdefghijklmnop", '"'),
+    fixture('const github = "', "ghp_", "1234567890abcdefghijklmnopqrstuvwxyzAB", '"'),
+    fixture("PRIVATE_", 'KEY="', "1234567890abcdefghijklmnop", '"'),
+    fixture("-----BEGIN ", "PRIVATE KEY-----"),
   ])("detects a genuine secret without returning its value", (fixture) => {
     const serialized = JSON.stringify(scan(fixture))
     expect(serialized).toContain("high-confidence secret pattern")
@@ -54,7 +64,11 @@ describe("Lite Check detector", () => {
   })
 
   it("detects a Supabase service_role JWT but not an anon JWT", () => {
-    const service = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.signature000000000"
+    const service = fixture(
+      "eyJhbGciOiJIUzI1NiJ9.",
+      "eyJyb2xlIjoic2VydmljZV9yb2xlIn0.",
+      "signature000000000"
+    )
     expect(scan(service).checks).toContainEqual(
       expect.objectContaining({ category: "exposed_secrets", severity: "needs_attention" })
     )

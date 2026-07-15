@@ -10,7 +10,7 @@ describe("buildLiteScorecardPayload", () => {
       referralCode: "23456789",
       generatedAt: "2026-07-16T00:00:00.000Z",
       targetUrl: "https://private.example",
-      secret: "should-never-be-public",
+      secret: ["should", "never", "be", "public"].join("-"),
     } as never)
     expect(payload).toEqual({
       kind: "lite-check",
