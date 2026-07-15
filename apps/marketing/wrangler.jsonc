@@ -22,6 +22,15 @@
   },
   "observability": {
     "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1,
+    },
   },
   "vars": {
     "PUBLIC_SITE_URL": "https://lyrashieldai.com",

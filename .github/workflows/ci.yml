@@ -146,3 +146,73 @@ jobs:
 
       - name: Browser E2E
         run: pnpm test:e2e
+
+  deploy-marketing:
+    name: Deploy Marketing to Cloudflare
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [security, lint-and-typecheck]
+    runs-on: ubuntu-latest
+    environment:
+      name: cloudflare-production
+      url: https://lyrashieldai.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 2
+
+      - name: Detect marketing changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- \
+            apps/marketing package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup pnpm
+        if: steps.changes.outputs.changed == 'true'
+        uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788 # v6.0.6
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.changed == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.changes.outputs.changed == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production marketing Worker
+        if: steps.changes.outputs.changed == 'true'
+        run: pnpm --filter @lyrashield/marketing build
+
+      - name: Apply D1 migrations and deploy
+        if: steps.changes.outputs.changed == 'true'
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.14.1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/marketing
+          wranglerVersion: "4.110.0"
+          command: |
+            d1 migrations apply lyrashield-marketing-waitlist --remote --config dist/server/wrangler.json
+            deploy --config dist/server/wrangler.json
+
+      - name: Smoke production routes
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: |
+          for path in / /methodology /tools /robots.txt /sitemap-index.xml /llms.txt; do
+            curl --fail --silent --show-error --retry 5 --retry-all-errors \
+              "https://lyrashieldai.com${path}" > /dev/null
+          done
+          curl --silent --show-error --retry 5 --retry-all-errors \
+            "https://lyrashieldai.com/api/waitlist/position?code=INVALID" \
+            --output /dev/null --write-out '%{http_code}' | grep --quiet '^404$'
+          curl --silent --show-error --head "https://www.lyrashieldai.com/tools?source=ci" \
+            | grep --ignore-case --quiet '^location: https://lyrashieldai.com/tools?source=ci'
