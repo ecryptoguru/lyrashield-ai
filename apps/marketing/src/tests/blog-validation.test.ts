@@ -707,4 +707,48 @@ ${filler}
     expect(errors.join("\n")).not.toContain("secret")
     expect(errors.join("\n")).not.toContain("hidden")
   })
+
+  it("uses one ranged GET to disambiguate every unsuccessful HEAD response", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 502 }))
+      .mockResolvedValueOnce(new Response(null, { status: 403 }))
+      .mockResolvedValueOnce(new Response(null, { status: 403 }))
+
+    const errors = await checkExternalLinks(
+      [
+        { slug: "head-404", urls: ["https://www.rfc-editor.org/source?token=secret"] },
+        { slug: "still-down", urls: ["https://nist.gov/source?key=hidden"] },
+        { slug: "protected", urls: ["https://help.openai.com/source?session=private"] },
+      ],
+      { fetchImpl: fetchMock, timeoutMs: 50 }
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(6)
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+    })
+    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+    })
+    expect(fetchMock.mock.calls[5]?.[1]).toMatchObject({
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+    })
+    expect(errors).not.toContain(
+      "head-404: external source returned 404: https://www.rfc-editor.org/source"
+    )
+    expect(errors).toContain("still-down: external source returned 502: https://nist.gov/source")
+    expect(errors).not.toContain(
+      "protected: external source returned 403: https://help.openai.com/source"
+    )
+    expect(errors.join("\n")).not.toContain("secret")
+    expect(errors.join("\n")).not.toContain("hidden")
+    expect(errors.join("\n")).not.toContain("private")
+  })
 })
