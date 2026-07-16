@@ -75,11 +75,12 @@ function appendVary(res, token) {
 }
 
 function applyCors(req, res, routePolicy) {
+  appendVary(res, "Origin")
+
   const origin = req.headers.origin
   if (!origin || !allowedOrigins.has(origin)) return
 
   res.setHeader("Access-Control-Allow-Origin", origin)
-  appendVary(res, "Origin")
 
   if (routePolicy.credentials) {
     res.setHeader("Access-Control-Allow-Credentials", "true")
@@ -89,7 +90,7 @@ function applyCors(req, res, routePolicy) {
 
 The domains are reserved test examples. In production, load a reviewed set and compare canonical origin strings. Do not use suffix checks such as `endsWith("approved.test")`, which can accept a different hostname such as `approved.test.attacker.test`.
 
-Each route passes an explicit policy with `credentials: true` only when that browser flow needs ambient credentials. Noncredentialed routes omit `Access-Control-Allow-Credentials`; they do not send it with a false value. If the response already varies on other headers, `appendVary` preserves those tokens and adds `Origin` once. This tells caches that responses for different origins are not interchangeable.
+Each route passes an explicit policy with `credentials: true` only when that browser flow needs ambient credentials. Noncredentialed routes omit `Access-Control-Allow-Credentials`; they do not send it with a false value. `appendVary` runs before the missing-origin and denied-origin returns because those responses are also part of the origin-dependent cache set. It preserves existing tokens and adds `Origin` once. Routes whose response never depends on Origin should not call this dynamic policy.
 
 Keep development origins out of production configuration. `http://localhost:3000` may be necessary for local work, but a production API should not grant it by habit. Preview deployments create many changing origins; prefer a controlled preview gateway or an explicit short-lived allowlist over a wildcard subdomain rule.
 
@@ -135,9 +136,11 @@ Check:
 4. Credentialed routes return the exact origin plus `Access-Control-Allow-Credentials: true`, while noncredentialed routes omit the credentials header.
 5. Disallowed methods and request headers fail the preflight.
 6. An existing value such as `Vary: Accept-Encoding` becomes `Vary: Accept-Encoding, Origin` without losing or duplicating tokens.
-7. Approved error responses carry the intended CORS headers.
-8. Routes that do not need cross-origin access return no broad policy.
-9. A direct non-browser request still reaches normal authentication and authorization checks.
+7. A denied-origin response and a no-origin response both carry `Vary: Origin`, so a shared cache cannot reuse either response for a later allowed origin.
+8. A denied request followed by an allowed request through the same test cache returns the allowed origin's own CORS headers.
+9. Approved error responses carry the intended CORS headers.
+10. Routes that do not need cross-origin access return no broad policy.
+11. A direct non-browser request still reaches normal authentication and authorization checks.
 
 Inspect redirects too. A preflight or actual request redirected to another origin can behave differently, and the destination needs its own policy.
 
