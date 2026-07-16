@@ -80,18 +80,151 @@ const jsonLd = [
     </div>
   </section>
 
-  <section id="scanning" class="mx-auto hidden max-w-4xl px-4 py-14 sm:px-6 lg:px-8" aria-live="polite">
+  <section id="scanning" class="mx-auto hidden max-w-5xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="scanning-heading">
     <div class="overflow-hidden rounded-2xl border border-border bg-[#07131d] text-[#edf8fb] shadow-xl">
-      <div class="flex items-center justify-between border-b border-[#203246] px-5 py-4 font-mono text-xs"><span class="text-[#54d6df]">public-surface.log</span><span class="animate-pulse text-[#f3b95f] motion-reduce:animate-none">RUNNING</span></div>
-      <ol id="scan-steps" class="space-y-4 p-5 font-mono text-sm sm:p-7">
-        <li data-step="0"><span class="mr-3 text-[#f3b95f]">›</span>Fetching public assets…</li>
-        <li data-step="1" class="text-[#91a7b8]"><span class="mr-3">·</span>Checking response headers…</li>
-        <li data-step="2" class="text-[#91a7b8]"><span class="mr-3">·</span>Scanning client bundles for exposed secrets…</li>
-        <li data-step="3" class="text-[#91a7b8]"><span class="mr-3">·</span>Detecting data-layer setup…</li>
-      </ol>
-      <p class="border-t border-[#203246] px-5 py-4 text-sm text-[#91a7b8] sm:px-7">We only read what your app already sends to any visitor.</p>
+      <div class="flex items-center justify-between border-b border-[#203246] px-5 py-4 font-mono text-xs sm:px-7"><span class="text-[#54d6df]">public-surface.log</span><span class="flex items-center gap-2 text-[#f3b95f]"><span class="scan-running-dot" aria-hidden="true"></span>RUNNING</span></div>
+      <div class="grid items-center gap-8 px-5 py-8 sm:px-7 md:grid-cols-[.75fr_1.25fr] md:py-10">
+        <div class="scan-radar mx-auto" aria-hidden="true">
+          <div class="scan-orbit scan-orbit-outer"><span></span><span></span><span></span></div>
+          <div class="scan-orbit scan-orbit-inner"><span></span><span></span></div>
+          <div class="scan-core"><img src="/favicon.svg" alt="" width="54" height="54" /></div>
+        </div>
+
+        <div>
+          <p class="font-mono text-xs tracking-[.18em] text-[#91a7b8] uppercase">Passive review in progress</p>
+          <h2 id="scanning-heading" class="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Reading the public surface</h2>
+          <p class="sr-only" role="status" aria-live="polite">Lite Check in progress. Results will appear below when the passive review finishes.</p>
+          <p id="scan-activity" class="mt-3 min-h-6 text-sm leading-6 text-[#b7c8d4]">Establishing a bounded, read-only connection.</p>
+
+          <ol id="scan-steps" class="mt-6 space-y-2 font-mono text-sm" aria-label="What the Lite Check is reviewing">
+            <li class="scan-stage" data-step="0" data-state="active" data-status="Establishing a bounded, read-only connection." aria-current="step"><span class="scan-stage-marker" aria-hidden="true"></span>Safe public connection</li>
+            <li class="scan-stage" data-step="1" data-state="pending" data-status="Reading public HTML and same-origin assets."><span class="scan-stage-marker" aria-hidden="true"></span>Public HTML and linked assets</li>
+            <li class="scan-stage" data-step="2" data-state="pending" data-status="Reviewing response headers and browser protections."><span class="scan-stage-marker" aria-hidden="true"></span>Browser protection headers</li>
+            <li class="scan-stage" data-step="3" data-state="pending" data-status="Checking client bundles for high-confidence secret patterns."><span class="scan-stage-marker" aria-hidden="true"></span>Exposed secret patterns</li>
+            <li class="scan-stage" data-step="4" data-state="pending" data-status="Separating data-layer signals from what this check cannot prove."><span class="scan-stage-marker" aria-hidden="true"></span>Data-layer signals and limits</li>
+          </ol>
+        </div>
+      </div>
+      <p class="border-t border-[#203246] px-5 py-4 text-sm text-[#91a7b8] sm:px-7">We only read what your app already sends to any visitor. The highlighted row shows activity, not a claimed completion percentage.</p>
     </div>
   </section>
+
+  <style>
+    .scan-radar {
+      position: relative;
+      width: min(15rem, 68vw);
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+    }
+
+    .scan-radar::before,
+    .scan-radar::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      border: 1px solid #203246;
+    }
+
+    .scan-radar::before { inset: 7%; }
+    .scan-radar::after { inset: 25%; }
+
+    .scan-orbit {
+      position: absolute;
+      inset: 7%;
+      border-radius: 999px;
+      animation: scan-orbit 7s linear infinite;
+      will-change: transform;
+    }
+
+    .scan-orbit-inner {
+      inset: 25%;
+      animation-duration: 4.5s;
+      animation-direction: reverse;
+    }
+
+    .scan-orbit span {
+      position: absolute;
+      width: .55rem;
+      height: .55rem;
+      border-radius: 999px;
+      background: #54d6df;
+      box-shadow: 0 0 0 .35rem rgb(84 214 223 / 10%), 0 0 1.5rem rgb(84 214 223 / 55%);
+    }
+
+    .scan-orbit span:nth-child(1) { top: -.25rem; left: 50%; }
+    .scan-orbit span:nth-child(2) { right: 5%; bottom: 18%; background: #f3b95f; }
+    .scan-orbit span:nth-child(3) { bottom: 10%; left: 10%; }
+    .scan-orbit-inner span:nth-child(2) { top: 65%; right: -4%; bottom: auto; }
+
+    .scan-core {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      width: 5.25rem;
+      aspect-ratio: 1;
+      place-items: center;
+      border: 1px solid #365069;
+      border-radius: 1.25rem;
+      background: #0e1a28;
+      box-shadow: 0 0 0 1rem rgb(84 214 223 / 4%);
+      animation: scan-core 2.4s ease-in-out infinite;
+    }
+
+    .scan-running-dot,
+    .scan-stage-marker {
+      display: inline-block;
+      width: .55rem;
+      height: .55rem;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: #f3b95f;
+      box-shadow: 0 0 0 .25rem rgb(243 185 95 / 12%);
+      animation: scan-pulse 1.4s ease-in-out infinite;
+    }
+
+    .scan-stage {
+      display: flex;
+      min-height: 2.5rem;
+      align-items: center;
+      gap: .85rem;
+      border-left: 1px solid #203246;
+      padding: .5rem 0 .5rem 1rem;
+      color: #6f8495;
+      transition: color .35s ease, transform .35s cubic-bezier(.2, .8, .2, 1), border-color .35s ease;
+    }
+
+    .scan-stage-marker {
+      width: .45rem;
+      height: .45rem;
+      background: #365069;
+      box-shadow: none;
+      animation: none;
+    }
+
+    .scan-stage[data-state="active"] {
+      transform: translateX(.45rem);
+      border-left-color: #54d6df;
+      color: #edf8fb;
+    }
+
+    .scan-stage[data-state="active"] .scan-stage-marker {
+      background: #54d6df;
+      box-shadow: 0 0 0 .3rem rgb(84 214 223 / 12%);
+      animation: scan-pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes scan-orbit { to { transform: rotate(1turn); } }
+    @keyframes scan-core { 50% { transform: scale(1.04); opacity: .86; } }
+    @keyframes scan-pulse { 50% { transform: scale(.72); opacity: .55; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .scan-orbit,
+      .scan-core,
+      .scan-running-dot,
+      .scan-stage-marker { animation: none; }
+    }
+  </style>
 
   <section id="results" class="mx-auto hidden max-w-5xl px-4 py-14 sm:px-6 lg:px-8" aria-live="polite" tabindex="-1">
     <div class="rounded-2xl border border-border bg-bg-raised p-6 shadow-xl sm:p-8">
@@ -168,10 +301,22 @@ const jsonLd = [
 
     function animateSteps() {
       const steps = [...document.querySelectorAll<HTMLElement>("#scan-steps li")]
+      const activity = document.querySelector<HTMLElement>("#scan-activity")
       let active = 0
-      steps.forEach((step, index) => { step.classList.toggle("text-[#91a7b8]", index !== 0); const mark = step.querySelector("span"); if (mark) mark.textContent = index === 0 ? "›" : "·" })
+
+      const showStep = (index: number) => {
+        steps.forEach((step, stepIndex) => {
+          const isActive = stepIndex === index
+          step.dataset.state = isActive ? "active" : "pending"
+          if (isActive) step.setAttribute("aria-current", "step")
+          else step.removeAttribute("aria-current")
+        })
+        if (activity) activity.textContent = steps[index]?.dataset.status || "Reviewing the public surface."
+      }
+
+      showStep(active)
       if (matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {}
-      const timer = window.setInterval(() => { const previous = steps[active]; if (previous) { previous.classList.remove("text-[#91a7b8]"); const mark = previous.querySelector("span"); if (mark) { mark.textContent = "✓"; mark.className = "mr-3 text-[#54d6df]" } } active = Math.min(active + 1, steps.length - 1); const next = steps[active]; if (next) { next.classList.remove("text-[#91a7b8]"); const mark = next.querySelector("span"); if (mark) { mark.textContent = "›"; mark.className = "mr-3 text-[#f3b95f]" } } }, 650)
+      const timer = window.setInterval(() => { active = (active + 1) % steps.length; showStep(active) }, 1600)
       return () => window.clearInterval(timer)
     }
 
@@ -237,8 +382,8 @@ const jsonLd = [
       const input = document.querySelector<HTMLInputElement>("#scan-url")!; const url = normalizeUrl(input.value.trim()); input.value = url
       let domainHash = ""; try { domainHash = await hashDomain(url) } catch { if (errorBox) { errorBox.textContent = "Enter a valid public URL."; errorBox.classList.remove("hidden") }; return }
       capture("scan_started", { target_domain_hash: domainHash, device: matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop", ...attribution })
-      scanButton!.disabled = true; scanButton!.textContent = "Scanning…"; results?.classList.add("hidden"); scanning?.classList.remove("hidden"); const stop = animateSteps()
-      try { const response = await fetch(`${appOrigin}/api/lite-scan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, authorized: true, ...(turnstileToken ? { turnstileToken } : {}) }) }); const body = await response.json() as { result?: LiteResult; durationMs?: number; error?: string; message?: string }; if (!response.ok || !body.result) throw Object.assign(new Error(body.message || "The passive check could not finish."), { reason: body.error || "scan_error" }); renderResult(body.result, body.durationMs ?? 0) } catch (cause) { const error = cause as Error & { reason?: string }; if (errorBox) { errorBox.textContent = error.message; errorBox.classList.remove("hidden") }; capture(error.reason === "ssrf_blocked" ? "scan_blocked" : "scan_error", { reason: error.reason || "unreachable", target_domain_hash: domainHash }); (window as TurnstileWindow).turnstile?.reset(turnstileWidget) } finally { stop(); scanning?.classList.add("hidden"); scanButton!.disabled = false; scanButton!.textContent = "Scan my app" }
+      scanButton!.disabled = true; scanButton!.textContent = "Scanning…"; results?.classList.add("hidden"); scanning?.classList.remove("hidden"); scanning?.setAttribute("aria-busy", "true"); scanning?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); const stop = animateSteps()
+      try { const response = await fetch(`${appOrigin}/api/lite-scan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, authorized: true, ...(turnstileToken ? { turnstileToken } : {}) }) }); const body = await response.json() as { result?: LiteResult; durationMs?: number; error?: string; message?: string }; if (!response.ok || !body.result) throw Object.assign(new Error(body.message || "The passive check could not finish."), { reason: body.error || "scan_error" }); renderResult(body.result, body.durationMs ?? 0) } catch (cause) { const error = cause as Error & { reason?: string }; if (errorBox) { errorBox.textContent = error.message; errorBox.classList.remove("hidden") }; capture(error.reason === "ssrf_blocked" ? "scan_blocked" : "scan_error", { reason: error.reason || "unreachable", target_domain_hash: domainHash }); (window as TurnstileWindow).turnstile?.reset(turnstileWidget) } finally { stop(); scanning?.classList.add("hidden"); scanning?.removeAttribute("aria-busy"); scanButton!.disabled = false; scanButton!.textContent = "Scan my app" }
     })
 
     document.querySelectorAll<HTMLButtonElement>("[data-capture-action]").forEach((button) => button.addEventListener("click", () => { lastAction = button.dataset.captureAction || "waitlist"; capture("upsell_clicked", { cta: lastAction }) }))

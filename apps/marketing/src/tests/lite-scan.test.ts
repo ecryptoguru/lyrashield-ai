@@ -10,6 +10,11 @@ const homeScan = readFileSync(
   new URL("../components/landing/HomeLiteScan.astro", import.meta.url),
   "utf8"
 )
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const assurancePreview = readFileSync(
+  new URL("../components/landing/AssuranceRecord.astro", import.meta.url),
+  "utf8"
+)
 
 describe("Lite Check marketing surface", () => {
   it("keeps the founder-provided promise and permission copy", () => {
@@ -57,6 +62,25 @@ describe("Lite Check marketing surface", () => {
     expect(page).toContain("prepares a fix proposal")
     expect(page).toContain("PR execution stays blocked")
     expect(page).not.toContain("opens a fix PR")
+  })
+
+  it("shows honest scan activity without inventing a completion percentage", () => {
+    expect(page).toContain("Reading the public surface")
+    expect(page).toContain('data-status="Reading public HTML and same-origin assets."')
+    expect(page).toContain('role="status"')
+    expect(page).toContain("prefers-reduced-motion: reduce")
+    expect(page).toContain("active = (active + 1) % steps.length")
+    expect(page).not.toMatch(/scan-progress|\d+% complete/i)
+  })
+
+  it("previews the future product with clearly labeled sample and registry data", () => {
+    expect(assurancePreview).toContain("Illustrative product preview · sample data")
+    expect(assurancePreview).toContain("Counts show product states, not production performance.")
+    expect(assurancePreview).toContain("Vibe Security 50 registry")
+    expect(assurancePreview).toContain(">43<")
+    expect(assurancePreview).toContain(">7<")
+    expect(assurancePreview).toContain(">50<")
+    expect(assurancePreview).toContain('href="/sample-report"')
   })
 
   it("starts the real Lite Check from the homepage without putting the target in the URL", () => {
