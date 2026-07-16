@@ -89,7 +89,7 @@ The prompt carries the shape of the problem without a production record, secret,
 
 ## Verify controls without leaking data
 
-Use a repository built for testing. Place a clearly synthetic marker in a file that should be excluded, then confirm each approved assistant surface does not use it. Repeat the test for inline completion, chat, review, and any agent mode because control coverage may differ.
+Use a repository built for testing. Place a clearly synthetic marker in a file that should be excluded, then check each approved assistant surface for that marker. This is only an obvious-failure probe: if the marker appears, the exclusion failed for that surface. Its absence is not proof that the file was never transmitted, indexed, or otherwise made available to the provider. Repeat the probe for inline completion, chat, review, and any agent mode because control coverage may differ.
 
 Inspect organization settings and current vendor documentation. Confirm who can change policy, whether users can add connectors or alternate models, what audit events exist, and how accounts are removed. Test deletion or export procedures with non-sensitive content.
 

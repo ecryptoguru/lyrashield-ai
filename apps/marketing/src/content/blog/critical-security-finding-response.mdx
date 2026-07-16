@@ -15,7 +15,7 @@ faq:
     a: "A mitigation can be appropriate when it quickly removes exposure and is monitored, time-bounded, assigned to an owner, and followed by a durable fix plus a fresh retest."
 ---
 
-Assign one incident owner, preserve the finding and relevant logs, then confirm the affected asset, version, path, and exposure. Contain credible active risk before making a rushed code change. Choose a fix or mitigation from the verified context, test it independently, and run a fresh retest of the original condition. Escalate notification duties through the applicable response plan.
+Assign one incident owner and contain credible active risk without waiting for perfect evidence. Preserve the finding and relevant logs in parallel when safe, then confirm the affected asset, version, path, and exposure. Choose a fix or mitigation from the verified context, test it independently, and run a fresh retest. Escalate notification duties through the applicable response plan.
 
 ## What a critical label tells you
 
@@ -24,6 +24,8 @@ A scanner's severity rating is useful, but it does not prove that the condition 
 The [LyraShield AI security guide for vibe-coded applications](/blog/vibe-coding-security-guide) separates a detected candidate from an independently verified finding, a retest-confirmed outcome, and an inconclusive result. That vocabulary keeps the response tied to the available evidence.
 
 [NIST SP 800-61 Rev. 3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) integrates incident response with risk management and treats detection, response, recovery, and later improvement as connected work. [CISA's SSVC guide](https://www.cisa.gov/sites/default/files/publications/cisa-ssvc-guide%20508c.pdf) adds decision context such as exploitation status, technical impact, mission prevalence, and public or safety impact. Neither approach says to sort solely by a severity number.
+
+[CVSS](https://www.first.org/cvss/v4-0/) describes technical severity under stated conditions. It does not establish that the affected component is present, the path is exposed, exploitation has occurred, or the resulting business and safety impact is acceptable. Applicability and exposure establish whether the scenario can exist in this environment. Exploitation evidence changes urgency. Business impact shapes the response, while risk acceptance is a separate, accountable decision with an owner, rationale, compensating controls, and review date.
 
 ## The dangerous pattern: patch first, understand later
 
@@ -44,7 +46,7 @@ AI-generated remediation is especially prone to this mistake because a model see
 
 ## First 30 minutes: establish control
 
-Name one decision owner and one technical lead. Open a restricted record with the original alert, detection time, target revision, affected asset, reporter, and current evidence state. Preserve relevant logs and configuration before rotation, rollback, or redeployment overwrites them.
+Name one decision owner and one technical lead. Open a restricted record with the original alert, detection time, target revision, affected asset, reporter, and current evidence state. Preserve relevant logs and configuration before rotation, rollback, or redeployment overwrites them when that can be done without delaying urgent containment. If exploitation is active, contain it first, then record which evidence could not be retained and why.
 
 Then answer four questions:
 
@@ -132,3 +134,4 @@ The response closes only when containment is stable, the durable change has pass
 - [NIST SP 800-61 Rev. 3, Incident Response Recommendations and Considerations](https://csrc.nist.gov/pubs/sp/800/61/r3/final)
 - [CISA, Stakeholder-Specific Vulnerability Categorization Guide](https://www.cisa.gov/sites/default/files/publications/cisa-ssvc-guide%20508c.pdf)
 - [CISA, Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)
+- [FIRST, Common Vulnerability Scoring System version 4.0](https://www.first.org/cvss/v4-0/)

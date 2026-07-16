@@ -128,7 +128,7 @@ Use only the approved stable tags. The suggested tags below are intentionally na
 - Authority link context: reference the guide when separating detected tool output from independent review evidence.
 - Free-tool CTA: `/tools/ai-app-security-checklist`, used after the diff review to check whether launch controls changed.
 - Product bridge: GitHub diff gate and approval-bound fix proposals. State that automatic PR execution is not available.
-- Related dependency: `/blog/scan-ai-generated-github-diff`.
+- Related dependency: `/blog/security-diff-gate-pull-requests`.
 - Suggested tags: `verification`, `agent-security`.
 - FAQ decision: yes. Cover very large PRs, AI review of AI code, and generated tests.
 - Image concept: a pull-request artifact divided into scoped evidence panes, each passing a separate review gate before the merge lock opens.

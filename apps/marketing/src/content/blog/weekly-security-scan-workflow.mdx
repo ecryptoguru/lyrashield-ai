@@ -50,12 +50,14 @@ AI coding tools often generate the shortest workflow that makes the requested co
 A better design has two kinds of triggers and one response path.
 
 ```yaml
-# REVIEWED PATTERN: adapt branches, permissions, and scanner setup
+# TRIGGER AND PERMISSION FRAGMENT: add to a complete pinned scanner workflow
 name: security-review
 
 on:
   pull_request:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
   schedule:
@@ -65,6 +67,8 @@ permissions:
   contents: read
   security-events: write
 ```
+
+This fragment is not a complete runnable job. Add it to the repository's pinned scanner workflow, and narrow permissions further at the job level when only one job uploads security results. If the repository uses GitHub merge queues, keep the `merge_group` trigger so required checks run against the merge candidate rather than only the pull-request head.
 
 The exact cron expression is less important than the surrounding contract. Record these choices beside the workflow:
 
