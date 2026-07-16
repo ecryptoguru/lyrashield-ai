@@ -1,0 +1,122 @@
+---
+title: "Secure internal tools built by non-developers"
+description: "Protect AI-built internal tools with managed identity, per-action authorization, narrow service accounts, audit logs, recovery, and a shutdown owner."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["access-control", "agent-security"]
+draft: true
+heroImage: decision-operations-02
+faq:
+  - q: "Is an internal tool safe if it is available only through a VPN?"
+    a: "No. A VPN can reduce network exposure, but it does not decide which connected employee, contractor, device, or service may perform each action or access each record."
+  - q: "Do no-code and AI app platforms handle internal-tool security?"
+    a: "They may provide identity, hosting, secrets, and policy features. The builder still needs to configure roles, data access, integrations, environments, logging, recovery, and offboarding for the actual workflow."
+  - q: "How should an internal tool use service accounts?"
+    a: "Give each integration a separate non-human identity with only the resources, actions, environment, and lifetime it needs. Store its credential server-side and audit its activity separately."
+---
+
+Treat an internal tool as an application with real users and data, not as a trusted webpage. Require managed identity, enforce every sensitive action on the server, and give integrations narrow service accounts. Separate test and production resources, minimize stored data, retain useful audit events, test backups, and name an owner who can revoke access or shut the tool down.
+
+## Internal describes location, not permission
+
+Employees click malicious links. Contractors keep old accounts. A shared URL enters a ticket. An integration token outlives the project. None of these require the tool to be marketed publicly.
+
+The target and authorization layers in the [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) apply to internal systems before scanning begins. Name the tool, users, data, actions, integrations, and environment. Then decide who may do what to each resource.
+
+[NIST SP 800-207](https://csrc.nist.gov/pubs/sp/800/207/final) states that network location and asset ownership should not create implicit trust. Its zero-trust architecture is broader than one internal app, but the practical lesson is small: authenticate the actor and authorize access to the resource instead of trusting the office network.
+
+## The unsafe pattern: trust the network and browser role
+
+An AI-built operations tool may send a role with the request:
+
+```ts
+// UNSAFE: the caller supplies both authority and target
+app.post("/api/refunds", async (req, res) => {
+  if (req.body.role !== "finance") return res.sendStatus(403)
+  await paymentProvider.refund(req.body.paymentId)
+  return res.sendStatus(204)
+})
+```
+
+Anyone who can reach the route can claim the role. The handler does not verify a session, membership, payment scope, refund amount, duplicate request, or approval state.
+
+Generated tools miss this because a business prompt often says "finance users can refund payments" without defining identity or enforcement. The interface hides the button for everyone else, so the demo appears complete.
+
+A server-owned decision starts differently:
+
+```ts
+app.post("/api/refunds", requireManagedSession, async (req, res) => {
+  const input = refundRequestSchema.parse(req.body)
+  const payment = await loadPayment(input.paymentId)
+  const permission = await loadPermission(req.user.id, payment.workspaceId, "refund")
+
+  if (!permission) return res.sendStatus(404)
+  const approval = await requireBoundApproval(input.approvalId, payment.id, input.amount)
+  await enqueueIdempotentRefund({ payment, amount: input.amount, approval })
+  return res.sendStatus(202)
+})
+```
+
+The fragment is illustrative. A real refund flow also needs provider signature handling, currency rules, amount limits, audit events, safe retries, separation of duties where required, and a clear reconciliation process.
+
+## Use managed identity and deliberate roles
+
+Connect the tool to the organization's managed identity provider where practical. Require multi-factor authentication according to risk, then map groups to a small set of application roles. Do not use a shared login for a department.
+
+Authentication answers who is present. Authorization answers whether that identity may perform this action on this resource now. Check both on every sensitive server route. Include tenant or business-unit scope, record ownership, current employment or contract status, and any temporary elevation.
+
+Test offboarding. Disable one synthetic worker and confirm that active sessions, API tokens, group membership, support access, and downstream applications no longer work. Decide how quickly removal must propagate. A deleted row in the tool is weak evidence if the identity provider still grants a session.
+
+[OWASP ASVS 5.0.0](https://owasp.org/www-project-application-security-verification-standard/) can help define technical requirements for authentication, access control, validation, sessions, logging, and configuration. Select requirements by risk and record the actual coverage. Do not describe an informal checklist as ASVS verification.
+
+## Constrain service accounts and integrations
+
+Internal tools often have broader machine access than their human users. A dashboard may read the customer database, write to payroll, send messages, update CRM records, and call an AI model through one server process.
+
+Inventory every integration. Give each a distinct identity limited to the required environment, resources, and actions. Use read-only access when the workflow only reads. Keep credentials in server-side secret storage, rotate them, and remove them when the integration is disabled.
+
+Do not let a user-entered URL become an unrestricted server fetch. Allowlist destinations or bind integrations to configured resource identifiers. Treat webhook payloads and model output as untrusted. Validate their shape before they influence a database change, message, or external action.
+
+If the tool invokes an AI agent, separate read tools from mutations. Consequential actions need an exact permission check and, where impact warrants it, a human approval bound to the proposed action. A prompt such as "only update the selected account" is not an authorization boundary.
+
+## Separate test and production resources
+
+A private test page can still email customers, charge a card, or update a production sheet if it inherits live credentials. Use separate accounts, databases, buckets, queues, model keys, and callback destinations for development and production where supported.
+
+Populate test environments with synthetic data. If production-derived data is required, use an approved minimized process with the same access, retention, and deletion controls. Do not copy a full customer export into an AI builder or spreadsheet to make a demo realistic.
+
+Review how the platform publishes updates. Bind the review to a version, commit, or immutable artifact where possible. A visual change can regenerate server functions, dependencies, or permissions. Test the published version, not only the editor preview.
+
+Shared-link and spreadsheet workflows need their own review. A link described as internal may be forwarded outside the company, indexed by another service, or remain active after the recipient leaves. Require identity for sensitive exports, expire temporary shares, and verify that revocation reaches cached copies where the platform supports it. When the tool writes to a shared sheet, database, or document store, authorization in the tool does not automatically protect the destination.
+
+## Keep audit and recovery evidence useful
+
+Log security-relevant actions such as sign-in, access denial, role change, export, approval, integration change, and destructive mutation. Include actor, action, resource reference, outcome, time, and request correlation. Avoid secrets and unnecessary personal payloads.
+
+Protect logs from ordinary editors and set retention for their actual purpose. An audit log written by the same user-controlled request it describes is weak evidence. Derive the actor from the verified session and record the server outcome.
+
+Back up important data and configuration, then restore them into an isolated destination. Verify permissions and critical records after restore. Name the person who receives backup failures and the owner who can disable the tool if data, identity, or integrations cannot be trusted.
+
+[CISA's Zero Trust Maturity Model 2.0](https://www.cisa.gov/sites/default/files/2023-04/CISA_Zero_Trust_Maturity_Model_Version_2_508c.pdf) considers identity, devices, networks, applications, workloads, and data together. A small team does not need to reproduce a federal program, but it should avoid treating one perimeter control as the whole design.
+
+## Test the paths that internal demos skip
+
+Use owned accounts and synthetic records. Attempt the same action as an ordinary employee, a different business unit, a contractor, a removed user, an administrator, and the relevant service account. Test stale sessions, guessed identifiers, repeated requests, oversized inputs, provider failure, and disabled integrations.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help inventory these controls. The related guide to [why client-side authentication is not access control](/blog/client-side-auth-not-security) covers the browser boundary in more depth.
+
+For a wider release inventory that satisfies the site's related-content map, use the [AI app prelaunch security checklist](/blog/ai-app-prelaunch-security-checklist). Apply only the controls relevant to the internal tool and retain the ones that require operational evidence.
+
+The public [LyraShield Lite Check](/scan) examines an authorized public surface passively. It cannot inspect a private internal route, managed-identity settings, service-account scope, database authorization, or audit history. Full repository and application review is a separate depth, and the full platform remains in active development.
+
+## What automation cannot own
+
+Automation can flag unsafe patterns, test defined permissions, and record selected events. It cannot decide whether a finance contractor should retain refund access, whether an integration's business purpose still exists, or whether an outage is safer than continued operation.
+
+Every internal tool needs a product owner and a technical shutdown owner. If both names are missing, narrow the tool's data and authority until someone can operate it responsibly.
+
+### Sources
+
+- [NIST SP 800-207, Zero Trust Architecture](https://csrc.nist.gov/pubs/sp/800/207/final)
+- [OWASP Application Security Verification Standard 5.0.0](https://owasp.org/www-project-application-security-verification-standard/)
+- [CISA Zero Trust Maturity Model 2.0](https://www.cisa.gov/sites/default/files/2023-04/CISA_Zero_Trust_Maturity_Model_Version_2_508c.pdf)

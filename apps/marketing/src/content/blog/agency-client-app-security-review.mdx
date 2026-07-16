@@ -1,0 +1,137 @@
+---
+title: "Security reviews for agencies shipping client apps"
+description: "Define authorization, scope, evidence ownership, remediation, retesting, and handoff before an agency calls a client app ready to release."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["verification", "vibe-coding-security"]
+draft: true
+heroImage: decision-operations-05
+faq:
+  - q: "Who authorizes an agency security review?"
+    a: "A client representative with authority over the named systems should approve the targets, methods, timing, data handling, and contacts in writing. Platform or hosting permission may also be required."
+  - q: "Can an agency reuse a prior security report?"
+    a: "Only as historical context. Reuse requires confirming that the target revision, environment, configuration, dependencies, scope, and test evidence still match. Material change needs fresh review and retesting."
+  - q: "Who owns unresolved findings after handoff?"
+    a: "The contract and handoff should name the accountable client owner, agency obligations, accepted exceptions, deadlines, and escalation route. Delivery does not silently transfer or erase unresolved risk."
+---
+
+Agree on security requirements, authorized targets, test methods, evidence handling, and decision owners in writing before review begins. Test the release candidate against that scope, route changes through client-approved control, and retest the original conditions. Hand over a stable report that preserves coverage limits, unresolved findings, accepted decisions, and the owner responsible after delivery.
+
+## Define the review before anyone scans
+
+"Review the app before launch" is not enough authority to probe production, upload customer data, test another vendor's account, or run a destructive check. It also does not say what result allows release.
+
+The evidence loop in the [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) gives agency and client teams shared terms: target, scan, evidence state, fix proposal, retest, and assurance report. A detected candidate, independently verified finding, and clean retest are different records.
+
+[NIST SP 800-218](https://csrc.nist.gov/pubs/sp/800/218/final) provides a common secure-development vocabulary that producers, acquirers, and suppliers can use to set expectations. [OWASP ASVS 5.0.0](https://owasp.org/www-project-application-security-verification-standard/) can help define technical requirements and verification scope. Neither source turns an agency review into a guarantee.
+
+## The weak pattern: an open-ended statement of work
+
+An unsafe review clause often looks like this:
+
+```yaml
+security_review:
+  target: client-app
+  instruction: scan everything and make it secure
+  due: before launch
+```
+
+The target is ambiguous. There is no authorized origin, repository, account, environment, method, test window, data rule, stop condition, or client decision owner. "Make it secure" has no measurable completion state.
+
+Generated project plans repeat this mistake because they optimize for a neat checklist. They cannot infer contractual authority, client risk tolerance, third-party platform rules, or which organization owns a production credential.
+
+A usable authorization record is narrower:
+
+```yaml
+review:
+  release: client-portal-2026-07
+  repository_revision: immutable-commit-id
+  authorized_targets:
+    - staging.example.invalid
+  methods:
+    - passive-url-review
+    - source-and-dependency-review
+    - two-owned-account-authorization-tests
+  excluded:
+    - denial-of-service
+    - production-customer-data
+  client_owner: named-client-role
+  agency_owner: named-agency-role
+  evidence_retention: agreed-restricted-location-and-period
+  stop_contact: named-escalation-channel
+```
+
+Replace every placeholder with project facts. Confirm whether the client can authorize the infrastructure, integrations, and data involved. Written client approval does not override a cloud provider's acceptable-use rules or another party's rights.
+
+## Set requirements that can be reviewed
+
+Translate broad language such as "industry standard security" into agreed controls and evidence. ASVS can support procurement and delivery when both parties select the relevant version, level, requirements, and exclusions. Do not claim ASVS verification for requirements the review did not test.
+
+Record application-specific rules beside the standard:
+
+- which roles may read, change, export, or delete each sensitive resource;
+- how tenant boundaries, invitations, support access, and administrators behave;
+- which secrets, service accounts, webhook actions, and payment paths exist;
+- what release failures block delivery and who may accept an exception;
+- which recovery, logging, monitoring, and incident contacts the client will operate.
+
+[OWASP SAMM](https://owasp.org/www-project-samm/) covers governance, design, implementation, verification, and operations as an improvement model. It is useful for deciding what the agency and client need to mature over time. It is not a one-time application certificate.
+
+## Review the exact release candidate
+
+Bind the review to an immutable source revision, built artifact where possible, environment, database migration state, and configuration identity. If the agency reviews one commit and publishes another, the report should not follow automatically.
+
+Use an isolated or staging environment with synthetic accounts for active tests. Confirm signed-out, ordinary-user, cross-tenant, elevated-role, malformed-input, retry, and failure behavior according to scope. Review source, dependencies, secrets, build output, workflows, and deployment settings separately because each has a different owner and failure mode.
+
+Keep tool failures visible. A dependency scan that could not resolve private packages has incomplete coverage. A passive URL check cannot inspect server authorization, database policy, repository secrets, authenticated routes, or destructive flows.
+
+The public [LyraShield Lite Check](/scan) is passive and read-only for an authorized public surface. It is not the full repository review, client acceptance decision, or security guarantee. The full platform remains in active development.
+
+## Route fixes through client-approved change control
+
+A finding should include the affected target, evidence, severity input, business context known so far, coverage, and limitations. Assign an owner before discussing a deadline. The agency may own a code change while the client owns an identity-provider setting or vendor contract.
+
+Do not let an automated fix bypass review. A generated patch can alter behavior outside the finding, introduce a migration risk, or conflict with client requirements. Present it as a proposal bound to the exact finding and artifact.
+
+After approval, test the changed behavior and run a fresh check against the original condition. Preserve the original result and retest separately. If the retest cannot reach the relevant path, call it inconclusive rather than fixed.
+
+## Agree on release acceptance before the deadline
+
+The client should know which conditions block release before a critical finding appears. Define who may accept a temporary mitigation, what evidence that decision needs, how long the exception lasts, and which changes require another review. Keep commercial approval separate from technical state.
+
+If a client chooses to release with an unresolved finding, record the affected release, current evidence, exposure, mitigation, monitoring, owner, deadline, and escalation trigger. The agency should not relabel the finding as fixed to make the delivery packet look complete. Likewise, an agency should not hold the release decision indefinitely when the contract assigns that decision to the client. State the recommendation and evidence, then preserve the authorized choice.
+
+Emergency changes need the same identity and artifact discipline. Record the exact patch, approver, deployment, rollback point, and fresh test. A verbal approval during an incident can be documented promptly afterward according to the agreed process, but it should not become an undocumented standing exception.
+
+## Build a handoff that survives personnel change
+
+The delivery packet should identify:
+
+1. Reviewed release, targets, environment, dates, and authorized methods.
+2. Completed, skipped, limited, and inapplicable checks.
+3. Detected candidates, verified findings, retest outcomes, and open uncertainty.
+4. Fixes, mitigations, accepted risks, expiry dates, and named owners.
+5. Production secrets and operational access transferred through an approved channel, never embedded in the report.
+6. Monitoring, backups, restore evidence, incident contacts, and the party responsible for each.
+
+Use the [client security report handoff guide](/blog/client-security-report-handoff) for the report structure. A prior report is historical evidence for its named release. It should show supersession when a later review replaces it, not be quietly edited to look current.
+
+Before an authorized engagement, the browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help the agency and client discover missing ownership and release questions. It does not scan the client system or grant testing authorization.
+
+## Handle common commercial edge cases
+
+If the client delays a required configuration change, record the unresolved condition and release decision. If the agency retains operational access after handoff, specify its duration, purpose, approval process, and revocation owner. If a subcontractor performs part of the review, the client authorization and evidence rules must cover that party.
+
+Avoid putting exploit-ready detail, credentials, personal data, or unrelated architecture into a widely shared report. Give technical evidence to the people who need it and a reduced summary to other recipients. Redaction must not remove evidence state, coverage, or limitations.
+
+## What automation cannot accept
+
+Scanners can repeat selected checks and produce useful artifacts. They cannot sign a statement of work, establish authority over a target, accept residual business risk, or confirm that the client's operating team can restore service after handoff.
+
+Close the engagement only when delivery status and security status are both explicit. A client may accept delivery with open work, but the report should say so without turning commercial acceptance into technical verification.
+
+### Sources
+
+- [NIST SP 800-218, Secure Software Development Framework 1.1](https://csrc.nist.gov/pubs/sp/800/218/final)
+- [OWASP Application Security Verification Standard 5.0.0](https://owasp.org/www-project-application-security-verification-standard/)
+- [OWASP Software Assurance Maturity Model](https://owasp.org/www-project-samm/)

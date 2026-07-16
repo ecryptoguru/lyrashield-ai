@@ -1,0 +1,134 @@
+---
+title: "Privacy checklist for AI-built apps"
+description: "Map personal data, purposes, retention, processors, user rights, deletion, and incident handling before an AI-built app reaches real users."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["vibe-coding-security", "web-security"]
+draft: true
+heroImage: decision-operations-04
+faq:
+  - q: "Is a privacy policy enough for an AI-built app?"
+    a: "No. A policy describes handling to users, but the application still needs implemented collection limits, access controls, retention, deletion, rights procedures, processor governance, and incident response."
+  - q: "Does hashing personal data make it anonymous?"
+    a: "Not automatically. A stable hash can remain linkable and may be reversible through guessing or matching. Treat pseudonymous data as personal unless a qualified review establishes that reidentification is no longer reasonably possible in context."
+  - q: "Are small apps exempt from privacy requirements?"
+    a: "Do not assume so. Duties depend on jurisdiction, role, data, users, and processing purpose rather than team size alone. Obtain qualified legal advice for the actual product and markets."
+---
+
+Inventory every personal-data field, why the app needs it, where it travels, who can access it, and when it is deleted. Minimize collection before adding controls. Define user notice, rights handling, processor terms, retention, security, and incident ownership for the actual jurisdictions involved. Test those decisions against the running system, then update the record when data flows change.
+
+## Privacy work starts with the data flow
+
+A security scan can find an exposed endpoint or a secret in code. It cannot decide whether collecting a birth date is necessary, whether a model provider is an approved processor, or when an account record should be erased.
+
+The [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) keeps privacy evidence separate from scanner findings. That separation prevents a clean technical result from becoming an unsupported compliance claim.
+
+The [NIST Privacy Framework](https://www.nist.gov/privacy-framework/privacy-framework) treats privacy risk as a product and organizational concern involving data processing, governance, control, communication, and protection. The [NIST Cybersecurity Framework 2.0](https://www.nist.gov/publications/nist-cybersecurity-framework-csf-20) complements that work with cybersecurity outcomes. Neither framework determines which law applies to one product.
+
+## The unsafe pattern: collect first and decide later
+
+Generated analytics code often captures the whole object because it is convenient:
+
+```ts
+// UNSAFE: unrelated personal data and prompt content enter one event
+analytics.capture("assistant_request", {
+  user: currentUser,
+  prompt: request.body.prompt,
+  ip: request.ip,
+  headers: request.headers,
+  response: modelResponse,
+})
+```
+
+This event may copy email, role, tenant, IP address, prompt content, model output, tokens, and arbitrary headers into a second system. The code says nothing about purpose, access, retention, deletion, or whether users were told.
+
+AI coding tools miss this boundary because a request such as "add product analytics" defines a feature, not a data policy. The fastest implementation sends enough context to debug anything. That convenience creates a new data store with its own access and lifecycle.
+
+Start with an allowlisted event instead:
+
+```ts
+const event = assistantUsageEvent.parse({
+  accountRef: rotateDailyPseudonym(session.accountId),
+  modelFamily: result.modelFamily,
+  outcome: result.status,
+  latencyBucket: bucketLatency(result.elapsedMs),
+})
+
+await approvedAnalytics.capture("assistant_request", event)
+```
+
+This shape is smaller, but it is not automatically anonymous or lawful. A rotating pseudonym can still be personal data when another party can relate it to a person. Record that limitation rather than calling the event anonymous by habit.
+
+## Build a data map another person can check
+
+For each field or data class, record:
+
+| Decision   | Evidence to keep                                                                       |
+| ---------- | -------------------------------------------------------------------------------------- |
+| Collection | Field, source, required or optional status, and the interface that collects it         |
+| Purpose    | Specific product or operational use and the owner who approved it                      |
+| Storage    | Database, object store, logs, analytics, backups, and regional location where relevant |
+| Access     | Human roles, service identities, support paths, and privileged exports                 |
+| Sharing    | Processors, subprocessors, model providers, email services, and webhook destinations   |
+| Retention  | Active period, backup behavior, deletion trigger, and exception owner                  |
+| Rights     | Export, correction, restriction, objection, and deletion procedure where applicable    |
+
+Trace derived data too. A support summary, embedding, fraud score, model transcript, or redacted log may still relate to a person. Do not stop the map at the first database table.
+
+Keep development, staging, and production separate. Synthetic test accounts should not quietly become production support records. Production exports should not enter a developer laptop or AI prompt because the destination is convenient.
+
+Pay attention to inference. An app may collect ordinary profile fields and then use a model to infer health, financial stress, intent, emotion, or eligibility. The inferred output can create a new privacy risk even when the source fields looked harmless in isolation. Record who receives the inference, how it affects a decision, whether a person can challenge it, and how long it remains available. Do not use a confidence score as a reason to omit the field from the data map.
+
+## Turn purpose limitation into application behavior
+
+Purpose statements need enforcement. If a phone number is collected only for account recovery, do not add it to marketing exports. If a support transcript is retained for 30 days, the deletion job and backups need a documented treatment after that period.
+
+The EU General Data Protection Regulation is one example of binding law, not a universal checklist. [Article 5](https://eur-lex.europa.eu/eli/reg/2016/679/art_5/oj/eng) includes purpose limitation and data minimization. [Article 25](https://eur-lex.europa.eu/eli/reg/2016/679/art_25/oj/eng) addresses data protection by design and default, while [Article 32](https://eur-lex.europa.eu/eli/reg/2016/679/art_32/oj/eng) requires security appropriate to risk. Applicability and the correct legal basis depend on jurisdiction, role, people, data, and processing context. This article is engineering guidance, not legal advice.
+
+Use qualified counsel or a privacy owner where the product needs a legal determination. Engineering should still provide concrete facts: fields, purposes, systems, recipients, retention, safeguards, and user paths. A lawyer cannot assess a flow that nobody has mapped.
+
+## Make retention and deletion testable
+
+"Delete inactive data regularly" cannot fail a test. Define which record starts the clock, what event pauses deletion, which related tables and objects are included, and what backups do.
+
+Use synthetic accounts to test:
+
+1. Account closure removes or irreversibly separates the intended live records.
+2. Search indexes, object storage, analytics, queues, and support tools receive the same lifecycle signal.
+3. A repeated deletion request is safe and does not recreate data.
+4. Audit records retain only the fields justified for their separate purpose.
+5. A restore procedure does not silently return deleted records to active use.
+
+Legal holds, fraud investigations, payment records, and security evidence may need different retention. Record the authority and scope for each exception. Do not keep every record forever because one category has a longer duty.
+
+## Verify rights and access with real roles
+
+A user export should return that user's authorized data without another tenant's rows, internal secrets, or privileged fraud notes. A correction request should not let the user rewrite server-owned identity or authorization fields. A deletion request needs fresh authentication for sensitive accounts and a recovery path for mistakes or abuse.
+
+Test ordinary user, support, administrator, and service identities separately. Remove a staff member or contractor and confirm access ends in the identity provider, application, database, analytics, support, and cloud consoles. A disabled button is not access revocation.
+
+Review processor access with the same care. Name the product tier, account, region, data classes, contract, retention, support access, and deletion path. If an AI feature sends prompts or files to a provider, document that transfer rather than hiding it under a generic "AI processing" label.
+
+The related guide to [keeping sensitive data out of logs](/blog/sensitive-data-logging) covers log redaction and access in more detail.
+
+For data sent to coding assistants during development, use the separate guide to [AI coding assistant data privacy](/blog/ai-coding-assistant-data-privacy). A production app's lifecycle record and a developer-tool approval answer different questions, even when they involve the same repository.
+
+## Prepare for incidents and product changes
+
+Decide who receives a privacy report, who can isolate a processor or feature, who preserves appropriate records, and who assesses notification duties. Test the route with synthetic data. Evidence collection must not delay urgent containment of active exposure.
+
+Revisit the map when a model, connector, analytics tool, authentication provider, data region, or business purpose changes. A code diff may look small while moving personal data to a new recipient.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record privacy and security questions during release review. It does not inspect the application, identify applicable law, or prove compliance. An immutable assurance report can preserve a scoped snapshot of evidence and limitations, but the report itself cannot establish legal compliance.
+
+## What automation cannot establish
+
+Schema scanners can locate likely personal fields. Secret tools can flag recognized credentials. Tests can exercise deletion and access paths you define. None can decide whether a purpose is fair, whether notice is understandable, whether an exception is lawful, or whether every processor and shadow export has been identified.
+
+Keep unresolved questions visible with an owner and review date. Privacy evidence becomes stale when the data flow changes, even if the policy page does not.
+
+### Sources
+
+- [Regulation (EU) 2016/679, official text](https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng)
+- [NIST Privacy Framework](https://www.nist.gov/privacy-framework/privacy-framework)
+- [NIST Cybersecurity Framework 2.0](https://www.nist.gov/publications/nist-cybersecurity-framework-csf-20)

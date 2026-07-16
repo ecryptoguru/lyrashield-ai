@@ -1,0 +1,123 @@
+---
+title: "Security for solo founders who vibe code"
+description: "A founder-sized security sequence for accounts, authorization, secrets, dependencies, recovery, monitoring, and release decisions."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["vibe-coding-security", "verification"]
+draft: true
+heroImage: decision-operations-06
+faq:
+  - q: "When should a solo founder hire a security reviewer?"
+    a: "Get specialist help before handling regulated or highly sensitive data, moving money, exposing privileged automation, launching multi-tenant access, or operating infrastructure whose failure would cause serious harm."
+  - q: "What should I do before the first user signs up?"
+    a: "Protect owner accounts, separate development from production, keep secrets server-side, enforce resource authorization, test with two owned accounts, prove recovery, enable monitoring, and define release blockers."
+  - q: "Does a private beta reduce security priorities?"
+    a: "It may reduce audience size, but real identities, data, credentials, payments, and integrations still create consequences. Restrict access and data while keeping the same authorization, recovery, and incident basics."
+---
+
+Start with the controls that can prevent a founder-ending event: protect owner accounts, keep secrets and privileged actions on trusted servers, enforce tenant authorization, review dependencies, and prove that important data can be restored. Add monitoring and a written release stop rule. Hire focused help when the app handles money, regulated data, sensitive multi-tenant access, or unfamiliar production infrastructure.
+
+## Build a minimum operating loop
+
+A solo founder does not need a miniature enterprise program. The app does need someone who knows what exists, who can change it, what blocks release, and how to recover.
+
+The [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) is the deeper reference for identity, authorization, data, agents, supply chain, verification, release, and operations. Use it after the minimum sequence is stable instead of trying to finish every possible control at once.
+
+The [NIST CSF 2.0 Small Business Quick Start Guide](https://www.nist.gov/itl/smallbusinesscyber/nist-cybersecurity-framework-0) is designed to help smaller organizations prioritize cybersecurity work according to their context. That is a useful model for a founder: choose controls by consequence and dependency, not by how easy they are to check off.
+
+Write a one-page threat inventory before choosing another tool. List the most damaging account takeover, data disclosure, cross-tenant action, payment mistake, destructive automation, and unavailable-service scenario that the current product can cause. For each, name the control that should prevent it and the evidence that control works. Unknown high-impact paths go ahead of cosmetic scanner warnings.
+
+## The risky pattern: trust the generated interface
+
+A generated admin action may look protected because the button is hidden:
+
+```ts
+// UNSAFE: browser state decides whether a destructive call is sent
+if (currentUser.role === "owner") {
+  await fetch(`/api/workspaces/${workspaceId}`, { method: "DELETE" })
+}
+```
+
+Another caller can send the request directly or replace `workspaceId`. The interface condition is useful for presentation, but it does not authenticate the request or authorize the resource.
+
+AI coding tools produce this pattern because the requested demo is usually tested with one founder account and one workspace. The happy path works. Nobody asks the generated app to act as a second valid user trying another tenant's identifier.
+
+Enforce the decision on the server:
+
+```ts
+app.delete("/api/workspaces/:id", requireSession, async (req, res) => {
+  const membership = await db.membership.findUnique({
+    where: { workspaceId_userId: { workspaceId: req.params.id, userId: req.user.id } },
+  })
+
+  if (membership?.role !== "OWNER") return res.sendStatus(404)
+  await queueApprovedWorkspaceDeletion(req.params.id, req.user.id)
+  return res.sendStatus(202)
+})
+```
+
+This fragment still needs bounded identifiers, fresh authentication for a high-impact action, audit logging, a confirmation or recovery design, rate limits, and safe repeated requests. Its important property is that the server derives identity from the verified session and checks membership for the named workspace.
+
+## Protect the accounts that can end the company
+
+Start with email, domain registrar, source host, cloud, database, payment, analytics, and password-manager accounts. Use strong unique credentials, phishing-resistant multi-factor authentication where supported, reviewed recovery methods, and a second safe recovery path that does not depend on the same phone or inbox.
+
+Remove stale collaborators and OAuth applications. Do not use one broad personal token for source, deployment, database, and support. Give CI and integrations separate identities with the smallest permissions and an expiry where the provider supports it.
+
+Store a short asset register outside the application repository. Include provider, account owner, recovery route, billing contact, data class, and shutdown consequence. If the founder becomes unavailable, another authorized person should be able to identify the critical systems without finding production secrets in a document.
+
+## Keep secrets and data boundaries small
+
+Never put privileged API keys, database credentials, signing keys, or service tokens in browser code. Public variable prefixes are not secret stores. Server functions must authenticate the caller, authorize the resource, validate input, and return only required fields even when they hold a privileged database key.
+
+Map the data the app collects and why. Avoid collecting a field because it may be useful later. Separate synthetic development data from production records. Set a retention and deletion rule before logs, prompts, uploads, and support exports grow into permanent stores.
+
+Run a two-account authorization test in an owned local or staging environment. Create Account A and Account B with synthetic records. As B, request A's known record ID for every read, update, delete, export, and file path. The server should deny the action without returning A's data.
+
+## Review dependencies and changes before release
+
+Pin dependency versions through the repository's supported lockfile. Review new packages, ownership, install scripts, advisory status, and transitive changes. A package with no current advisory can still be the wrong or impersonated package.
+
+Keep generated changes on a branch. Read the full diff, including migrations, workflows, environment files, lockfiles, and generated clients. Add at least one test derived from the requirement or abuse case rather than the implementation.
+
+[CISA's Secure by Design guidance](https://www.cisa.gov/sites/default/files/2023-10/Shifting-the-Balance-of-Cybersecurity-Risk-Principles-and-Approaches-for-Secure-by-Design-Software.pdf) argues that products should reduce avoidable security burden through design and defaults. For a founder, that means choosing managed identity, safe server libraries, constrained hosting, and provider controls that remove work you cannot operate reliably.
+
+[OWASP ASVS 5.0.0](https://owasp.org/www-project-application-security-verification-standard/) can supply technical requirements when the app needs a deeper review. Select requirements according to the product's risk and record what was actually verified. Do not claim ASVS coverage from a general checklist.
+
+## Prove recovery before you need it
+
+A configured backup is not restore evidence. Restore a recent backup into an isolated destination, verify schema and critical records, confirm the application can use the recovered data, and record how long it took. Keep outbound email, payment callbacks, and production integrations disabled during the drill.
+
+Define what happens if the main account is locked, a migration fails, the database is deleted, or a provider suspends the project. Keep a known rollback artifact and deployment instructions another authorized person can follow.
+
+Monitor authentication failures, privileged changes, payment and webhook errors, unexpected spend, backup failure, and service health according to the app. Send a synthetic test event and confirm it reaches a channel the founder actually watches.
+
+## Write a release stop rule
+
+Release should stop when a high-impact boundary is unknown, not merely when a scanner prints red. Useful stop conditions include:
+
+- cross-tenant access succeeds or has not been tested for a changed sensitive path;
+- a production credential appears in source, build output, logs, or an unapproved tool;
+- a critical dependency or migration cannot be evaluated;
+- backup or rollback evidence is missing for a destructive change;
+- monitoring cannot reach the person expected to respond.
+
+Record exceptions with a reason, owner, compensating control, and review date. A private beta can narrow audience and data while a missing control is fixed. It should not become a permanent excuse for live customer risk.
+
+Keep beta invitations revocable and avoid real production privileges for users who only need to evaluate the interface. If beta feedback includes screenshots, uploads, or support messages, give that data the same access and retention decisions as other user content.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) helps organize this release review. The longer [AI app prelaunch checklist](/blog/ai-app-prelaunch-security-checklist) covers the wider launch gate.
+
+The public [LyraShield Lite Check](/scan) performs a passive, read-only review of an authorized public surface. It cannot inspect repository code, authenticated authorization, database policy, secrets, backups, or destructive behavior. A later full repository review is a separate depth; the full platform remains in active development.
+
+## Know when the problem needs another specialist
+
+Hire focused help for payment state, regulated or highly sensitive data, complex identity, cryptography, multi-tenant isolation, mobile signing, cloud network design, or a credible incident. Ask for a scoped review and evidence, not a generic promise to make the app secure.
+
+Automation can find selected patterns, run tests, and repeat checks. It cannot accept the business impact of an outage, determine every legal duty, or prove that untested paths are safe. The founder remains the release owner until that responsibility is assigned to someone else.
+
+### Sources
+
+- [NIST Cybersecurity Framework 2.0 Small Business Quick Start Guide](https://www.nist.gov/itl/smallbusinesscyber/nist-cybersecurity-framework-0)
+- [CISA, Shifting the Balance of Cybersecurity Risk](https://www.cisa.gov/sites/default/files/2023-10/Shifting-the-Balance-of-Cybersecurity-Risk-Principles-and-Approaches-for-Secure-by-Design-Software.pdf)
+- [OWASP Application Security Verification Standard 5.0.0](https://owasp.org/www-project-application-security-verification-standard/)
