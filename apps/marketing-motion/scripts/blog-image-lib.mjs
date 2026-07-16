@@ -2,6 +2,16 @@ import { createHash } from "node:crypto"
 
 const IMAGE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
+export const BLOG_IMAGE_MANIFEST_CONTRACT = Object.freeze([
+  Object.freeze({ file: "authority.json", release: "authority", count: 1 }),
+  Object.freeze({ file: "batch-1.json", release: "batch-1", count: 17 }),
+  Object.freeze({ file: "batch-2.json", release: "batch-2", count: 17 }),
+  Object.freeze({ file: "batch-3.json", release: "batch-3", count: 17 }),
+  Object.freeze({ file: "batch-4.json", release: "batch-4", count: 16 }),
+  Object.freeze({ file: "batch-5.json", release: "batch-5", count: 16 }),
+  Object.freeze({ file: "batch-6.json", release: "batch-6", count: 16 }),
+])
+
 export const BLOG_IMAGE_OUTPUTS = Object.freeze([
   Object.freeze({
     key: "avif",
@@ -160,6 +170,49 @@ export function collectImageDefinitions(manifests) {
   }
 
   return new Map([...definitions].sort(([left], [right]) => left.localeCompare(right)))
+}
+
+export function validateManifestSet(manifests, contract = BLOG_IMAGE_MANIFEST_CONTRACT) {
+  if (!Array.isArray(manifests)) throw new Error("Blog image manifests must be an array")
+
+  const actualFiles = manifests
+    .map(({ file }) => file)
+    .sort((left, right) => left.localeCompare(right))
+  const expectedFiles = contract
+    .map(({ file }) => file)
+    .sort((left, right) => left.localeCompare(right))
+  if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
+    throw new Error(`Manifest filenames must be exactly: ${expectedFiles.join(", ")}`)
+  }
+
+  const byFile = new Map(manifests.map((manifest) => [manifest.file, manifest]))
+  for (const expected of contract) {
+    const manifest = byFile.get(expected.file)
+    if (!Array.isArray(manifest?.entries)) {
+      throw new Error(`${expected.file} must contain a top-level array`)
+    }
+    if (manifest.entries.length !== expected.count) {
+      throw new Error(
+        `${expected.file} must contain exactly ${expected.count} entries; received ${manifest.entries.length}`
+      )
+    }
+  }
+
+  const definitions = collectImageDefinitions(
+    contract.map(({ file }) => ({ file, entries: byFile.get(file).entries }))
+  )
+  for (const manifest of manifests) {
+    for (const entry of manifest.entries) {
+      const actualUsage = definitions.get(entry.imageId)?.usageCount
+      if (!Number.isInteger(entry.usageCount) || entry.usageCount !== actualUsage) {
+        throw new Error(
+          `${manifest.file} declares usageCount ${entry.usageCount} for ${entry.imageId}; expected ${actualUsage}`
+        )
+      }
+    }
+  }
+
+  return definitions
 }
 
 export function buildCatalogEntry({ imageId, cluster, alt }) {
