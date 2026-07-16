@@ -58,6 +58,10 @@ function unique(values) {
   return [...new Set(values)]
 }
 
+function normalizePath(path) {
+  return path.length > 1 ? path.replace(/\/+$/, "") : path
+}
+
 function classIncludes(tag, className) {
   return (attributes(tag).get("class") ?? "").split(/\s+/).includes(className)
 }
@@ -260,6 +264,10 @@ function expectedArticlePaths(slugs) {
   return new Set(slugs.map((slug) => `/blog/${slug}`))
 }
 
+function isBlogPaginationPath(path) {
+  return /^\/blog\/[1-9]\d*$/.test(path)
+}
+
 function checkCanonicalUniqueness(pageFacts, errors) {
   const byCanonical = new Map()
   for (const [url, facts] of pageFacts) {
@@ -293,7 +301,12 @@ export async function crawlBuiltBlog({
     (path) => path === "/blog" || path.startsWith("/blog/")
   )
   const discoveredArticlePaths = new Set(
-    blogPaths.filter((path) => /^\/blog\/[^/]+$/.test(path) && path !== "/blog/editorial-policy")
+    blogPaths.filter(
+      (path) =>
+        /^\/blog\/[^/]+$/.test(path) &&
+        path !== "/blog/editorial-policy" &&
+        !isBlogPaginationPath(path)
+    )
   )
 
   for (const path of expectedPaths) {
@@ -357,12 +370,17 @@ export async function crawlBuiltBlog({
 
   const rssUrl = new URL(RSS_PATH, localOrigin).href
   const rss = await fetchText(fetchImpl, rssUrl, "RSS", errors)
+  const rssLinks = rss === null ? [] : extractRssLinks(rss)
   const rssPaths = new Set(
-    (rss === null ? [] : extractRssLinks(rss)).map((url) => new URL(url, localOrigin).pathname)
+    rssLinks.map((url) => normalizePath(new URL(url, localOrigin).pathname))
   )
-  for (const articlePath of expectedPaths) {
-    if (!rssPaths.has(articlePath)) {
-      errors.push(`${new URL(articlePath, localOrigin).href}: article missing from RSS`)
+  const expectedRssItemCount = Math.min(expectedPaths.size, 20)
+  if (rssLinks.length !== expectedRssItemCount || rssPaths.size !== expectedRssItemCount) {
+    errors.push(`${rssUrl}: expected ${expectedRssItemCount} unique recent article items`)
+  }
+  for (const articlePath of rssPaths) {
+    if (!expectedPaths.has(articlePath)) {
+      errors.push(`${new URL(articlePath, localOrigin).href}: RSS references an unmapped article`)
     }
   }
 

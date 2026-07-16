@@ -94,8 +94,33 @@ describe("blog program contracts", () => {
     expect(new Set(program.map((entry) => entry.slug)).size).toBe(100)
   })
 
-  it("starts with an empty typed image catalog", () => {
-    expect(images).toEqual({})
+  it("contains the reviewed 36-image catalog with every production rendition", () => {
+    const entries = Object.entries(images)
+
+    expect(entries).toHaveLength(36)
+    expect(new Set(entries.map(([, image]) => image.cluster))).toEqual(
+      new Set([
+        "authority",
+        "access-control",
+        "web-execution",
+        "supply-chain",
+        "agent-security",
+        "verification",
+        "decision-operations",
+      ])
+    )
+    for (const [id, image] of entries) {
+      expect(image).toMatchObject({
+        avif: `/images/blog/library/${id}/hero.avif`,
+        webp: `/images/blog/library/${id}/hero.webp`,
+        jpeg: `/images/blog/library/${id}/hero.jpg`,
+        og: `/images/blog/library/${id}/og.jpg`,
+        socialPortrait: `/images/blog/library/${id}/social-portrait.jpg`,
+        width: 1600,
+        height: 900,
+      })
+      expect(image.alt.length).toBeGreaterThanOrEqual(20)
+    }
   })
 
   it("declares LyraShield Team as an organization", () => {

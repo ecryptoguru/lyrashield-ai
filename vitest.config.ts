@@ -8,6 +8,14 @@ export default defineConfig({
     // Exclude build output and deps so compiled *.test.js copies in dist/ are
     // never discovered — otherwise a stray local/CI build inflates the run with
     // duplicate, stale tests. Source *.test.ts under apps/ and packages/ only.
-    exclude: ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/.turbo/**", "e2e/**"],
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.next/**",
+      "**/.turbo/**",
+      "e2e/**",
+      "apps/marketing/src/tests/**",
+      "apps/marketing-motion/tests/**",
+    ],
   },
 })
