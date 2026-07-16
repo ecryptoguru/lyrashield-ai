@@ -1,0 +1,133 @@
+---
+title: "Secure npm Install Scripts and Transitive Dependencies"
+description: "Inspect dependency scripts before they execute, install without production credentials, and allow only reviewed lifecycle code in npm."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - supply-chain
+  - verification
+draft: true
+heroImage: supply-chain-01
+faq:
+  - q: "What does an npm postinstall script do?"
+    a: "It runs package-defined code during npm install or npm ci after dependencies are placed in node_modules. The code runs with the environment and operating-system permissions of the package-manager process."
+  - q: "Should every project disable npm scripts?"
+    a: "No. Disabling scripts blocks one execution path but can break packages that legitimately compile native modules or prepare assets. Use an allow policy where the supported npm version permits it, and review each required script."
+  - q: "Can a transitive dependency run an install script?"
+    a: "Yes. A package that your direct dependency pulls into the resolved graph may define an install-time lifecycle script. Review the full graph and script policy rather than stopping at direct package.json entries."
+  - q: "What is a safe CI installation environment?"
+    a: "Use a disposable runner with no production credentials, the smallest necessary token scopes, a reviewed lockfile, restricted network access, and no deployment authority during dependency installation."
+---
+
+**Direct answer:** Treat dependency installation as code execution. Review the lockfile and package metadata first, run installation in a disposable environment without production credentials, and block or allow lifecycle scripts under an explicit policy. Disabling scripts narrows one path, but it can break legitimate packages and does not prevent harmful code from running later when imported.
+
+`npm install` does more than copy JavaScript. Packages can define lifecycle scripts such as `preinstall`, `install`, `postinstall`, and, in some cases, `prepare`. These commands run with the package manager's environment and operating-system permissions. On a developer laptop or privileged CI runner, that can include sensitive credentials and writable source files.
+
+The execution boundary in [the guide's dependency and build controls](/blog/vibe-coding-security-guide) starts before application runtime. A package does not need to be imported by the app to execute during installation.
+
+## The vulnerable pattern: install first, review later
+
+**Vulnerable review pattern. The script below is harmless but still unreviewed.**
+
+```json
+{
+  "name": "example-build-helper",
+  "scripts": {
+    "postinstall": "node ./scripts/setup.js"
+  },
+  "dependencies": {
+    "example-native-addon": "^3.0.0"
+  }
+}
+```
+
+Nothing in the name `setup.js` explains what the process reads, writes, or contacts. The direct package may also pull a transitive package with its own script. Running the install on a workstation with cloud tokens, registry credentials, SSH agents, or production environment variables gives every executed script a chance to use what the process can access.
+
+Generated code can hide this boundary because assistants usually edit the application manifest and then run the package manager to make the feature work. The lockfile change appears as generated noise. The terminal's successful exit becomes the only review signal.
+
+## See what npm can execute
+
+The current [npm v11 scripts documentation](https://docs.npmjs.com/cli/v11/using-npm/scripts/) lists lifecycle events for `npm ci` and `npm install`, including `preinstall`, `install`, and `postinstall`. It also notes that a Git dependency with a `prepare` script may install development dependencies and run that script before packaging.
+
+Review the resolved packages rather than stopping at the top-level manifest. Useful questions include:
+
+- Which new direct and transitive packages define install-time scripts?
+- What files do those scripts invoke, and are those files included in the artifact?
+- Does the script compile a native module, download a binary, modify configuration, or contact a network service?
+- Which environment variables and filesystem paths will exist when it runs?
+- Is the script required on every platform, or only for an optional feature?
+
+Read the package artifact and upstream source from a controlled review environment. Do not execute a suspicious script merely to discover its behavior.
+
+## Start with a no-secret installation
+
+Use a disposable container or ephemeral runner. Mount only the source and lockfile required for the build. Do not expose production database URLs, deployment tokens, signing keys, cloud credentials, SSH agents, or a writable home directory full of developer secrets.
+
+Restrict outbound access to the registries and artifact hosts the build actually needs. A broad network connection lets install code retrieve changing inputs or send accessible data elsewhere. Egress control is a separate boundary from containerization.
+
+Run with the same package-manager version used in CI. Regenerate the dependency tree from the reviewed lockfile and compare the result. If the install needs a registry token, make it read-only, short-lived, and limited to the required packages. Do not reuse a publish token.
+
+The related [CI/CD confused-deputy guide](/blog/cicd-agent-confused-deputy) covers the larger workflow problem: an untrusted change should not inherit deployment authority merely because a privileged job processes it.
+
+## Choose a script policy deliberately
+
+npm documents `ignore-scripts=true` as a way to stop scripts specified in package manifests from running automatically. Commands explicitly intended to run a named script can still run that script, without its pre and post hooks. This setting is useful for inspection, but it is not a full supply-chain sandbox.
+
+```ini
+# Inspection phase in an isolated runner
+ignore-scripts=true
+```
+
+Some packages need lifecycle scripts to compile native code or prepare assets. A blanket block can leave the installation incomplete. Current npm v11 documentation also describes a project `allowScripts` policy and `strict-allow-scripts`, which can turn unreviewed install scripts into a hard failure.
+
+```json
+{
+  "allowScripts": {
+    "reviewed-native-addon": true,
+    "unexpected-helper": false
+  }
+}
+```
+
+```ini
+strict-allow-scripts=true
+```
+
+Use these fields only with an npm version that supports them and keep the version pinned in CI. Review what each allowed package runs and why. A package name on an allowlist is not permanently trustworthy. Recheck scripts when the resolved version or maintainer changes.
+
+Avoid the documented escape hatch that allows all scripts. A migration convenience should not become the team's default policy.
+
+## Verify required scripts without granting deployment power
+
+After review, run each required installation in the disposable environment. Capture the package-manager version, resolved lockfile hash, allowed package list, network policy, and exit result. Then inspect the filesystem diff. Unexpected writes outside the build directory should fail the job.
+
+Build and test the application before moving artifacts into a release stage. The install job should not hold credentials that can deploy, publish a package, alter infrastructure, or access production data. Pass a content-addressed build artifact to a separate approval-gated deployment job.
+
+[GitHub dependency review](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependency-review) can expose direct and transitive changes in supported ecosystems. The [SLSA threat model](https://slsa.dev/spec/v1.1/threats-overview) describes build and dependency paths that can alter an artifact. Neither source says that an allowlist makes a package benign. The policy limits which code may run at a particular stage.
+
+## Recheck policy when a version changes
+
+An allow decision applies to reviewed code, not a package name forever. A minor or patch release can change its scripts, download locations, native artifacts, or transitive graph. Make the dependency update show those differences before the runner executes the new version.
+
+Bind the approval record to the resolved package version and lockfile hash. If the project supports several operating systems, inspect the artifacts and optional dependencies for each production platform. A Linux CI run may never reveal the script or binary selected on macOS or Windows.
+
+When a package stops needing a script, remove its allow entry. Stale permissions make later changes harder to notice. When a new script appears, fail the installation and require a reason, source review, and updated test evidence. Do not automatically approve it because the package was already in the graph.
+
+This is also where a clean-room rebuild helps. Delete the dependency cache, use the reviewed lockfile, apply the current script policy, and compare the resulting artifact with the expected build. The result covers that build setup and input set. It does not prove reproducibility across every environment.
+
+## What this control misses
+
+Blocking lifecycle scripts does not stop imported runtime code. A dependency can wait until an application starts, a test runs, or a build plugin loads. Native artifacts can contain behavior that a JavaScript review will not reveal. Optional dependencies can differ by operating system and CPU architecture.
+
+Cached `node_modules` directories also deserve care. Restoring a cache created under a different lockfile or policy can bypass the review you thought the current job performed. Bind caches to the lockfile, package-manager version, platform, and policy hash. Prefer rebuilding when any of those inputs changes.
+
+The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) can review selected text files before a sandboxed installation. It does not inspect process environment variables, Git history, binary artifacts, or what a lifecycle script accesses at runtime. A clean result cannot prove the install environment contains no secrets.
+
+## Sources
+
+- [npm CLI v11: Scripts](https://docs.npmjs.com/cli/v11/using-npm/scripts/)
+- [npm CLI v11: Configuration, including ignore-scripts and allowScripts](https://docs.npmjs.com/cli/v11/using-npm/config/)
+- [GitHub Docs: Dependency review](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependency-review)
+- [SLSA specification: Threats overview](https://slsa.dev/spec/v1.1/threats-overview)
+- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final)

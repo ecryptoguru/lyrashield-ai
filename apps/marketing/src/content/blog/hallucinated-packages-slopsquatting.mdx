@@ -1,0 +1,127 @@
+---
+title: "Hallucinated Packages and Slopsquatting"
+description: "Check generated package names against official registries, repositories, releases, and owners before any installation runs."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - supply-chain
+  - verification
+draft: true
+heroImage: supply-chain-03
+faq:
+  - q: "What is an AI-hallucinated package?"
+    a: "It is a package name suggested by a model even though the intended dependency does not exist in the relevant registry or does not match the described software. The suggestion may be repeatable, but that does not make it legitimate."
+  - q: "How is slopsquatting different from typosquatting?"
+    a: "Typosquatting relies on a person mistyping a known package name. Slopsquatting relies on a model suggesting a nonexistent name that an attacker may later register. Both still require someone or an automated agent to trust and install the package."
+  - q: "Does a successful package installation prove the name is legitimate?"
+    a: "No. Installation proves that a registry served an artifact under that name. It does not prove that the suggested package is the intended project, that its owner is trustworthy, or that its code is benign."
+  - q: "How can I check a generated package name safely?"
+    a: "Query the official registry without installing, compare its repository and release metadata with the upstream project, review ownership and provenance where available, and ask why the dependency is needed before approving it."
+---
+
+**Direct answer:** A hallucinated package is a dependency name generated even though the intended package does not exist. Slopsquatting is the risk that someone registers such a name and waits for a developer or agent to install it. Before installation, check the official registry, linked repository, release history, ownership, and the feature that supposedly requires the package.
+
+A generated import can look ordinary enough to escape review. The name follows an ecosystem's conventions, the surrounding code calls plausible methods, and the assistant may describe the library confidently. None of that is registry evidence.
+
+Package identity belongs in the [supply-chain layer of the security guide](/blog/vibe-coding-security-guide). It comes before vulnerability matching. A scanner cannot find a CVE for the intended package if the code pulled a different artifact under a convincing name.
+
+## The vulnerable pattern: trust the generated import
+
+**Vulnerable pattern. The package name below is fictional and must not be installed.**
+
+```python
+from reliable_json_plus import repair_document
+
+def normalize_payload(raw: str) -> dict:
+    return repair_document(raw)
+```
+
+The import gives no evidence that `reliable_json_plus` exists, belongs to a known project, or provides the stated function. If a developer copies the suggestion into a dependency file and installation succeeds, they may assume the question has been settled. In fact, success proves only that the configured registry served something under that name.
+
+Code assistants can produce this pattern when they combine familiar naming conventions with incomplete or conflicting package knowledge. The function signature makes the answer look finished. A normal test may even pass if the downloaded package exposes a compatible function. Identity still has not been established.
+
+## What the package-hallucination research showed
+
+Spracklen and coauthors evaluated package recommendations from 16 code-generating models using two prompt datasets. Their USENIX Security 2025 study generated 576,000 code samples across Python and JavaScript and checked the package references in that defined setup.
+
+Those results demonstrate that nonexistent package recommendations occurred under the study's models, prompts, languages, and repetitions. They do not establish a failure rate for every model, current version, private deployment, or developer workflow. Model behavior and registry state also change over time.
+
+The paper describes the attacker opportunity around recurrent hallucinated names. A harmful outcome still requires several conditions: the name is available, someone registers it, the model suggests it again, and a developer or agent installs the package without adequate review. A hallucination by itself is not a compromise.
+
+The coined term "slopsquatting" distinguishes this path from typosquatting. A typosquat waits for a human to mistype a known dependency. A slopsquat targets a plausible name that generated code may introduce even when the user typed it correctly.
+
+## Check identity without installing
+
+Use the official registry directly. Do not follow a package URL invented in generated prose. For npm, the current [`npm view` documentation](https://docs.npmjs.com/cli/v11/commands/npm-view/) describes a metadata query that prints registry data without installing the package. PyPI provides a documented [JSON API](https://docs.pypi.org/api/json/) for project and release metadata.
+
+A safe identity check should answer:
+
+1. Does the exact package and scope exist in the configured official registry?
+2. Does the registry link to the repository you expected?
+3. Does that repository name the package and publish the same release?
+4. Do owners or maintainers match the upstream project's records?
+5. Does the release history make sense for the feature and version described?
+6. Is there provenance or an attestation that connects the artifact to its build source?
+
+Registry metadata is supplied by package publishers, so it is evidence to compare, not proof by itself. A new repository and a new package created on the same day can agree perfectly because one actor controls both. Read release diffs and maintainer changes with the same care as source changes.
+
+## Exact names and scopes are security data
+
+Do not normalize a generated package name by intuition. An omitted scope, swapped character, plural suffix, or punctuation change can select a different registry object. Copy the exact identifier into the review record and compare it with the upstream project's installation documentation.
+
+Record the registry origin too. Organization-wide package-manager settings, user configuration, and CI configuration can resolve the same name from different places. A private registry may intentionally proxy public packages, while a misconfigured client may search a public registry for an internal name. Review the resolved artifact URL without publishing private repository details.
+
+Package ownership is not static. Check whether maintainers changed recently, whether a dormant project released an unexpected version, and whether the upstream repository recognizes the current publisher. These signals justify more review, but none proves malicious intent.
+
+The safest decision may be to remove the dependency proposal and ask the assistant for a standard-library or already-approved alternative. That is not always the right tradeoff. A custom parser, cryptographic helper, or authentication component can create more maintenance risk than a reviewed dependency. Document why the chosen code path is smaller and more supportable for this application.
+
+## A corrected pre-install gate
+
+Replace automatic trust with a written dependency proposal:
+
+```yaml
+dependency_proposal:
+  requested_capability: "repair malformed JSON from a trusted file"
+  candidate_name: "REVIEW_REQUIRED"
+  registry_verified: false
+  upstream_repository_verified: false
+  resolved_version: null
+  owner_reviewed: false
+  alternatives_considered:
+    - "standard library validation"
+    - "small local parser with bounded input"
+  approved_by: null
+```
+
+The placeholder forces the reviewer to supply evidence before the manifest changes. It also asks whether a dependency is needed. For small parsing, formatting, or retry helpers, a short local implementation may have less supply-chain surface. That is a tradeoff, not a universal rule. Maintaining custom security-sensitive code can be worse than using a mature library.
+
+Once the package identity is reviewed, lock the exact resolved version and inspect the full dependency graph. Continue with the [AI dependency vulnerability audit](/blog/ai-dependency-vulnerability-audit) for known-advisory matching. Identity review and SCA answer different questions.
+
+## Edge cases that deserve a pause
+
+Package scopes and namespaces can make familiar names misleading. Confirm the whole identifier, including capitalization rules and scope. Private registries can shadow public packages depending on package-manager configuration. A generated command may point to a Git repository, local path, or direct tarball instead of the expected registry.
+
+Ownership changes matter too. A long-standing package can move to a new maintainer. A legitimate repository can be archived while an unrelated registry release appears later. Provenance helps connect an artifact to a build process, but it does not tell you whether the source itself is safe or whether the maintainer's account was authorized.
+
+Do not test a suspicious package by installing it on a developer laptop or CI runner. Reading metadata is safer than execution. If a security team needs to inspect an artifact, use an isolated environment with no production credentials, no reusable tokens, a read-only input copy, restricted egress, and a disposable filesystem. That inspection still does not justify publishing claims about a named package without evidence.
+
+## What automation can and cannot prove
+
+A policy can reject unapproved registries, floating versions, or direct URLs. A dependency review can show graph changes. SCA can match resolved versions to known advisories. None of those controls can infer that a generated name was the package the developer meant to use.
+
+Registry existence is also not a trust score. Download counts, stars, age, and a polished README can be manipulated or misunderstood. The defensible record is narrower: which artifact was proposed, which sources were compared, who approved it, and which limitations remain.
+
+[OWASP's vulnerable dependency guidance](https://cheatsheetseries.owasp.org/cheatsheets/Vulnerable_Dependency_Management_Cheat_Sheet.html) recommends building an inventory and controlling how dependencies enter a project. That process helps preserve the reviewed artifact after identity is established. It does not decide whether a generated name refers to the intended project.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) gives teams a place to record package-review ownership. It is not a registry verifier and does not query package metadata.
+
+## Sources
+
+- [Spracklen et al.: We Have a Package for You](https://www.usenix.org/conference/usenixsecurity25/presentation/spracklen)
+- [Original arXiv preprint for the package-hallucination study](https://arxiv.org/abs/2406.10279)
+- [npm CLI documentation: npm view](https://docs.npmjs.com/cli/v11/commands/npm-view/)
+- [Python Package Index JSON API](https://docs.pypi.org/api/json/)
+- [SLSA threats overview](https://slsa.dev/spec/v1.1/threats-overview)
+- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final)
+- [OWASP Vulnerable Dependency Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Vulnerable_Dependency_Management_Cheat_Sheet.html)
