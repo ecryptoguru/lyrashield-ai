@@ -1,0 +1,171 @@
+---
+title: "A Security Review Prompt That Does Not Replace Testing"
+description: "Use a bounded AI security review prompt to produce traceable candidate findings, safe test ideas, and explicit uncertainty without mistaking output for proof."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - agent-security
+draft: true
+heroImage: verification-04
+faq:
+  - q: "Is a longer security review prompt always better?"
+    a: "No. Relevant architecture, data classification, trust boundaries, exact changed code, and required output fields matter more than length. Extra instructions can conflict, hide the decision criteria, or consume context needed for the code itself."
+  - q: "Should the model generate exploit code to prove a finding?"
+    a: "Not by default. Ask for the least harmful verification that can distinguish the claim, using an owned local test, synthetic data, and minimum effect. Escalate only within explicit authorization and a controlled testing plan."
+  - q: "How should I validate a model-reported finding?"
+    a: "Confirm that the cited code and data flow exist, identify the required preconditions, reproduce the condition safely, and seek evidence from a method independent of the model's assertion. A second model opinion or high confidence score is not proof."
+---
+
+**Direct answer:** Give the model the exact diff, architecture, data classifications, trust boundaries, and security requirements. Require it to separate observations from hypotheses, cite code paths, propose safe tests, and state unknowns. Treat every output as a review candidate, then validate it with code review, deterministic tools, owned tests, or a qualified reviewer. The prompt improves questions, not proof.
+
+"Review this code for security" is not a security process. It gives the model no target boundary, no business rules, no protected assets, and no standard for evidence. The output will often be polished because polished language is what the request rewards.
+
+A useful prompt makes uncertainty visible and turns the response into a work queue. It does not grant the model authority to label a vulnerability verified or to change production code. This distinction is part of the [security model for AI-built applications](/blog/vibe-coding-security-guide).
+
+## Why generic prompts produce generic reviews
+
+Security depends on context that code alone may not contain. A route named `getProject` does not reveal whether projects are public, tenant-scoped, or restricted to one team. A call to an AI provider does not reveal which fields are sensitive. A webhook handler does not reveal whether replay is acceptable.
+
+Models can also invent files, misunderstand framework behavior, or recommend a change that breaks the intended authorization rule. GitHub's responsible-use documentation for coding agents states that AI output can be inaccurate, insecure, or incomplete and requires human review and testing. That is not a measured failure rate, but it is a useful boundary.
+
+The risky prompt rewards certainty and action:
+
+```text
+Find every vulnerability in this repository, rank it accurately, and fix
+everything automatically. Return only confirmed issues.
+```
+
+No prompt can establish that "every" vulnerability was found. "Confirmed" has no evidence rule here. Automatic changes can alter trust boundaries while the reviewer loses the original claim.
+
+## Use this bounded review template
+
+Replace the bracketed fields with facts. Exclude production secrets, personal data, and unrelated proprietary code.
+
+```text
+Role: Assist a human reviewer by identifying security candidates. Do not claim
+that a candidate is verified and do not modify files.
+
+Scope
+- Exact commit or diff: [attach or paste the reviewed change]
+- In-scope files and services: [list]
+- Out-of-scope areas: [list]
+- Runtime and framework versions: [list]
+
+System context
+- Assets and data classes: [credentials, tenant data, billing state]
+- Actors and roles: [anonymous, member, administrator, service]
+- Trust boundaries and data flows: [concise description]
+- Required security rules: [server-side authorization, signature checks]
+- Assumptions and unknowns: [list]
+
+Review tasks
+1. Trace changed input to security-sensitive effects.
+2. Check authentication, authorization, validation, secret handling,
+   dependency, logging, and failure behavior where relevant.
+3. Identify changed trust boundaries and missing negative tests.
+4. Reject any claim that depends on a file, API, or behavior not provided.
+
+For each candidate return
+- claim;
+- observation or hypothesis;
+- exact file and code location;
+- supporting data flow and prerequisites;
+- plausible impact, labeled as inferred when not demonstrated;
+- least harmful verification in an owned environment;
+- confidence as triage metadata only;
+- limitations and missing context.
+
+Prohibitions
+- no live-target testing;
+- no credential use;
+- no destructive or persistence steps;
+- no claim of complete coverage;
+- no automatic patching.
+```
+
+This structure forces the model to show its work. It also makes a weak answer easy to reject. A candidate without a real location, plausible data flow, and stated prerequisite is not ready for verification.
+
+## Apply it to a minimal toy handler
+
+Consider this intentionally incomplete local example:
+
+```ts
+type Request = { userId: string; params: { reportId: string } }
+
+async function getReport(req: Request) {
+  return db.report.findUnique({ where: { id: req.params.reportId } })
+}
+```
+
+A bounded review can observe that `req.userId` is not used and hypothesize that one authenticated user may retrieve another user's report. It should not call that a verified IDOR yet. The missing context might include a database policy, middleware scope, or a rule that reports are public.
+
+A useful candidate would say:
+
+- **Claim:** server-side ownership enforcement may be absent.
+- **Observation:** the shown query filters only by `reportId`.
+- **Prerequisites:** an authenticated user can choose another valid report ID, and no upstream or database policy narrows the query.
+- **Safe verification:** in a local test database, create two users and two private reports, call the handler as user A with user B's ID, and expect denial.
+- **Unknowns:** middleware and database row policies were not supplied.
+
+That answer gives a reviewer a precise next step without pretending to know the runtime result.
+
+## Verify the output independently
+
+First, inspect the cited location. Reject invented filenames, functions, framework APIs, or call paths. Trace the request through middleware, service code, database policy, and response serialization. Confirm the target commit matches the review.
+
+Next, run the smallest owned test that can distinguish the claim. For the toy handler, use synthetic users and records in an isolated environment:
+
+```ts
+it("denies a report owned by another user", async () => {
+  const response = await requestAs(userA).get(`/reports/${userBReport.id}`)
+  expect(response.status).toBe(404)
+})
+```
+
+The exact expected status is a product decision. A `403` can also be correct if the policy allows disclosure that the object exists. What matters is server-side denial and no sensitive response body.
+
+Then use a method independent of the original assertion. A focused static rule, a deterministic integration test, or review by someone who can inspect the full data flow can supply separate evidence. Asking the same model to reconsider its own answer is not independent verification.
+
+If the test cannot run, the middleware is unavailable, or the expected policy is undecided, keep the candidate unverified. Do not convert missing context into a false positive merely to empty the queue.
+
+## Treat proposed fixes as new claims
+
+A model may propose adding a check, changing a query, or replacing an API. Review that suggestion separately from the finding. The patch can be wrong even when the original candidate is real.
+
+Require the proposed change to name the security rule it enforces, the trust boundary it affects, and the expected failure behavior. Ask for the smallest diff and the tests that should fail before the change and pass after it. Do not ask the model to edit unrelated files or modernize the surrounding code during security remediation.
+
+For the toy handler, a useful fix would bind the lookup to a workspace or owner derived from the authenticated server session. Passing an owner ID from the browser would merely move the attacker-controlled value. Returning `null` for every request would satisfy the negative test while breaking normal access. The corrected test set therefore needs two cases: user A cannot retrieve user B's private report, and user B can retrieve their own report.
+
+Run existing tests before and after the patch, then add the focused regression. Review database policies and alternate report paths that share the same lookup. If the framework behavior is uncertain, consult its primary documentation or create a local characterization test. The model's explanation is not a replacement for either.
+
+Keep the original candidate, patch, review notes, and test evidence as separate records. This lets a later reviewer see whether the finding was verified, whether the fix was approved, and what the fresh retest actually covered.
+
+## Make the prompt fit the change
+
+The template is a starting point. Add only checks relevant to the diff. A payment webhook needs signature, replay, amount, currency, and idempotency context. A file upload needs content, storage, access-control, and processing boundaries. An agent tool needs approval, authority, untrusted-output, and side-effect controls.
+
+For large changes, split the review by trust boundary rather than pasting the entire repository into one prompt. Preserve shared architecture context, then give each review the exact files and requirements it needs. This improves traceability and reduces the chance that important code falls outside the model's working context.
+
+Ask the model to stop when essential context is missing. A concise request for the route middleware or data-classification rule is more useful than a complete-looking report built on a guessed architecture. Unknowns are output, not a failure to answer.
+
+Do not paste secrets or customer data. Redact values while preserving types and flow. If a finding depends on a secret value or a live customer record, redesign the test around a fake credential or synthetic tenant.
+
+## What this workflow can establish
+
+The prompt can help identify candidate paths, missing tests, ambiguous assumptions, and areas that deserve human attention. It can make review output more consistent. It cannot prove complete code coverage, runtime exploitability, absence of vulnerabilities, or correctness of a generated fix.
+
+OWASP's [Secure Code Review Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Code_Review_Cheat_Sheet.html) explains why manual review adds business and data-flow context that automated tools may miss. Manual review also has limits, so combine it with targeted tests and automated checks. NIST's verification guidance likewise recommends multiple techniques.
+
+The LyraShield AI [methodology](/methodology) separates a detected candidate from independently verified evidence. Confidence is useful for triage, not proof. The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign an owner to review and testing controls. It does not inspect code, send a prompt, validate model output, or verify a finding.
+
+Continue with [security tests for AI-generated code](/blog/ai-generated-tests-security) or the [human review and threat-model workflow](/blog/human-review-threat-model-vibe-coding) when the prompt exposes an architectural question.
+
+## Sources
+
+- [GitHub Docs: Responsible use of Copilot coding agents](https://docs.github.com/en/enterprise-cloud@latest/copilot/responsible-use/agents)
+- [GitHub Docs: Best practices for using GitHub Copilot](https://docs.github.com/en/copilot/get-started/best-practices)
+- [OWASP: Secure Code Review Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Code_Review_Cheat_Sheet.html)
+- [NIST: Guidelines on Minimum Standards for Developer Verification of Software](https://www.nist.gov/publications/guidelines-minimum-standards-developer-verification-software)
+- [NIST SP 800-115: Technical Guide to Information Security Testing and Assessment](https://csrc.nist.gov/pubs/sp/800/115/final)

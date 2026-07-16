@@ -1,0 +1,136 @@
+---
+title: "Why Every Security Fix Needs a Retest"
+description: "Retest a security fix against a fresh build, preserve equivalent coverage, check adjacent paths, and record confirmed or inconclusive outcomes."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+draft: true
+heroImage: verification-06
+faq:
+  - q: "Is code review a security retest?"
+    a: "Not by itself. Code review can find bypasses and confirm that the intended change exists, but a retest reruns a method capable of observing the original condition against the changed target. Use both when the risk warrants it."
+  - q: "Does a clean scan automatically close a finding?"
+    a: "Only if the scan targeted the fixed build, completed the applicable coverage needed to observe the original condition, and produced a result that can be compared with the original evidence. A skipped, failed, or narrower run is inconclusive."
+  - q: "Who should perform the retest?"
+    a: "A person or controlled system with the necessary authorization, target access, and understanding of the original method can perform it. Independence can improve confidence, but retest-confirmed is still different from independently verified evidence."
+  - q: "What does an inconclusive retest mean?"
+    a: "It means the available run could not establish whether the original condition remains. Keep the finding open, record the limitation, and resolve the missing environment, coverage, evidence, or authorization before trying again."
+---
+
+**Direct answer:** Rerun the original safe reproduction or originating deterministic check against the fixed build. Confirm that the relevant coverage completed, test adjacent abuse paths and normal behavior, and retain the result with the target version and limitations. If the check could not run or the original condition cannot be recreated, mark the retest inconclusive instead of closing the finding.
+
+A plausible patch is not the end of a security finding. It is a new claim: the original condition no longer exists, and the change did not create a nearby bypass or regression. A retest supplies evidence for that claim.
+
+This article begins after the finding has already been accepted as real. If the initial claim still needs validation, use [how to verify a security finding](/blog/verify-security-finding). The wider [security guide for AI-built applications](/blog/vibe-coding-security-guide) explains where retesting fits in release assurance.
+
+## Preserve the original condition before changing it
+
+A useful retest starts with the original evidence. Keep:
+
+- the affected target, commit, image, or deployment version;
+- the weakness and exact source or request path;
+- prerequisites, actor, account role, and relevant configuration;
+- the safe reproduction or originating scanner rule;
+- the original result and asserted impact;
+- coverage and limitations of that first assessment.
+
+Without these details, a team can run a different check against a different target and call the absence a fix. OWASP's [Web Security Testing Guide reporting guidance](https://owasp.org/www-project-web-security-testing-guide/v42/5-Reporting/README) emphasizes retaining enough detail to understand findings and remediation. The record is not paperwork. It is the retest specification.
+
+Redact credentials, personal data, and destructive payloads. Preserve the minimum evidence needed to reproduce the condition safely in an owned environment.
+
+## Review the fix before running it
+
+Read the changed code and identify the control it introduces. Does it enforce authorization in the server query, validate a signature before parsing state, parameterize a database operation, or remove an affected dependency version? Then inspect adjacent paths that share the same boundary.
+
+Generated fixes often optimize for the reported line. An authorization patch may protect `GET /reports/:id` while leaving the export route unchanged. A sanitizer may be applied only to one renderer. A dependency override may silence the advisory while producing an unsupported graph.
+
+The risky workflow changes status from the diff alone:
+
+```yaml
+# RISKY: the intended patch is treated as evidence of runtime behavior.
+finding: AUTH-17
+status: fixed
+reason: "ownership condition added in pull request"
+```
+
+A better record separates proposed remediation from a fresh result:
+
+```yaml
+finding: AUTH-17
+fix_commit: abc1234
+retest:
+  target: preview-build-abc1234
+  method: two-tenant negative integration test
+  coverage: completed
+  result: original-condition-not-observed
+limitations:
+  - administrative export path reviewed separately
+```
+
+These values are illustrative. Bind a real record to your real commit, build, and test identity.
+
+## Create a fresh target
+
+Do not reuse a cached report or a server that may still run the old code. Build from the fix commit in a clean environment. Record the artifact digest or deployment identity when available. Seed synthetic accounts and data that reproduce the original prerequisites.
+
+For dependency remediation, reinstall from the updated lockfile and scan the built artifact when supported. For a runtime flaw, deploy the fixed candidate with the same relevant feature flags, middleware, and security configuration. For a source-level finding, rerun the originating analyzer with equivalent rules and project coverage.
+
+Equivalent does not always mean identical. A repaired endpoint may need a new safe request token, and a supported scanner version may change. Record any difference and explain why it can still observe the original condition.
+
+## Rerun the originating check
+
+Use the method that can see the weakness. A clean dependency scan does not retest broken object authorization. A unit test does not retest a production header configuration. A manual glance does not establish that a runtime path denies the request.
+
+Run the least harmful reproduction in an owned environment. For cross-tenant access, create two synthetic accounts, request the second account's object as the first, and expect server-side denial with no data. For a webhook replay, send the same signed synthetic event twice and verify one state change. For a dependency finding, confirm the fixed version is in the resolved graph and the advisory no longer matches.
+
+Keep the original control conditions equivalent. If the finding required a member role, do not retest only as an administrator. If it depended on a feature flag, do not disable the feature. If a runtime scanner originally authenticated into three workflows, a public unauthenticated crawl is a narrower check. Any intentional difference belongs beside the result.
+
+Retain the request or test identity, relevant response, scanner version, rule, start and completion state, and target. Do not store secrets or unnecessary customer data in the evidence.
+
+The absence matters only when the required coverage completed. If authentication setup failed, the route was skipped, the analyzer excluded the project, or the package extractor missed the lockfile, there is no clean retest. There is an incomplete one.
+
+## Test adjacent paths and expected behavior
+
+The original reproduction is necessary but narrow. Add variants suggested by the root cause:
+
+- another endpoint that uses the same object lookup;
+- a different role or workspace;
+- encoded, empty, duplicated, or boundary input;
+- a retry, replay, or concurrent request;
+- a disabled and enabled feature state;
+- the ordinary allowed action.
+
+Normal behavior matters. A fix that denies every request removes the vulnerability by breaking the feature. A dependency change that crashes the application is not a successful remediation. Add regression checks for both the denied abuse case and the intended use case.
+
+Keep the suite focused. A giant generated test set can pass while never recreating the original condition. Every security regression test should name the boundary and expected decision it protects.
+
+## Record one of three honest outcomes
+
+Use terms your team defines consistently. A practical set is:
+
+- **Retest-confirmed:** the fresh target completed the applicable check, and the original condition was not observed.
+- **Detected again:** the condition or an equivalent bypass remains observable.
+- **Inconclusive:** the run could not provide enough coverage or evidence to decide.
+
+Retest-confirmed is not the same as independently verified. It says the changed target passed a fresh check under recorded conditions. Independent verification requires separate evidence under your verification policy.
+
+The LyraShield AI [methodology](/methodology) uses a specific repository contract: a clean deterministic retest becomes validated only when the originating scanner completed applicable coverage. Absence from an engine-only or incomplete retest remains inconclusive. These are product-specific evidence states, not universal industry labels. The [sample assurance report](/sample-report) shows how coverage and limitations remain visible.
+
+NIST SP 800-115 advises choosing assessment methods for their objectives, benefits, and limitations. That principle applies directly to retesting. A method earns confidence because it can observe the condition and completed its scope, not because its output is green.
+
+## Keep the evidence after closure
+
+Retain the original finding, fix commit, fresh target, retest evidence, limitations, and regression test. This history helps when the same pattern appears elsewhere or a later change reopens the path. It also prevents a future reviewer from mistaking "closed" for "never existed."
+
+Link the regression to the finding without making the ticket its only documentation. Future maintainers should understand the protected boundary from the test name, setup, and assertion. If the test is removed or quarantined, reopen the evidence decision instead of leaving a stale retest status unchallenged.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign an owner to remediation and retest controls. It does not inspect a patch, create a fresh build, run a scanner, or validate a finding. For tests that resist generated happy-path bias, read [security tests for AI-generated code](/blog/ai-generated-tests-security). For silent incomplete implementations, use the [placeholder logic review](/blog/placeholder-logic-silent-failures).
+
+## Sources
+
+- [NIST SP 800-115: Technical Guide to Information Security Testing and Assessment](https://csrc.nist.gov/pubs/sp/800/115/final)
+- [OWASP Web Security Testing Guide v4.2: Reporting](https://owasp.org/www-project-web-security-testing-guide/v42/5-Reporting/README)
+- [OWASP Web Security Testing Guide v4.2: Introduction](https://owasp.org/www-project-web-security-testing-guide/v42/2-Introduction/README)
+- [LyraShield AI Methodology](/methodology)

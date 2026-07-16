@@ -1,0 +1,137 @@
+---
+title: "Threat Modeling for Non-Security Founders"
+description: "Build a lightweight startup threat model from assets, trust boundaries, misuse cases, mitigations, owners, tests, and review triggers."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - agent-security
+  - access-control
+draft: true
+heroImage: verification-05
+faq:
+  - q: "Does a threat model require a formal diagram?"
+    a: "No. The representation can be a simple sketch, table, or clear text description if everyone recognizes the same actors, services, data stores, flows, and trust boundaries. A diagram is useful when it makes those relationships easier to see."
+  - q: "Is STRIDE mandatory?"
+    a: "No. OWASP presents threat modeling as methodology-neutral and lists several approaches. STRIDE can prompt useful questions, but choose a method that fits the system, decision, team, and privacy or security goals."
+  - q: "How long should a first startup threat model take?"
+    a: "There is no universal duration. Scope one meaningful release or workflow, stop when the team can name its key assets, boundaries, threats, decisions, owners, and tests, then deepen the model where unresolved risk justifies more work."
+  - q: "When should the threat model be updated?"
+    a: "Review it when architecture, sensitive data, privilege, external integrations, agent capabilities, or production effects change. Also revisit it after an incident or when a prior assumption no longer holds."
+---
+
+**Direct answer:** Sketch the users, services, data stores, agents, third parties, and data flows for one release or workflow. Mark every trust boundary, then ask what can go wrong at each boundary. Choose a mitigation or explicit risk decision for each important threat, assign an owner and verification step, record assumptions, and revisit the model when the system changes.
+
+Threat modeling is not a document reserved for a security department. It is a structured way to turn what a founder knows about the product into testable security decisions. The first useful model can be one page if its scope is clear and its owners act on it.
+
+The model should complement the [security guide for AI-built applications](/blog/vibe-coding-security-guide), not replace implementation review. It can tell you that a cross-tenant data flow needs authorization. Only code inspection and tests can establish whether the deployed control behaves as intended.
+
+## Begin with one decision-sized scope
+
+"Our whole platform" is usually too broad. Choose a release, feature, or workflow with a beginning and an end. Good examples include inviting a team member, connecting a repository, approving an agent action, exporting a report, or processing a billing webhook.
+
+Write down:
+
+- the exact feature and version in scope;
+- the actors who can start or influence it;
+- the sensitive data, credentials, money, or production effects involved;
+- the services, stores, queues, agents, and third parties it crosses;
+- what is explicitly out of scope;
+- assumptions the team is currently relying on.
+
+The risky shortcut is a generic checklist with no system context:
+
+```text
+Threat model: authentication, encryption, backups, input validation. Done.
+```
+
+Those topics may matter, but the list does not show which asset is protected, where trust changes, what failure is plausible, or how anyone will verify a control.
+
+## Draw the system people actually recognize
+
+Use boxes and arrows, a table, or concise text. Include the browser or mobile client, APIs, background workers, databases, object storage, model providers, identity providers, payment services, and coding agents. Add data flows that carry session tokens, tenant identifiers, prompts, uploaded files, tool output, or deployment instructions.
+
+Mark a trust boundary whenever authority or control changes. A browser-to-API call crosses from user-controlled input to server authority. An API-to-agent request may cross from a deterministic service into a component that interprets untrusted text. A webhook crosses from an external provider into your state-changing code. A queue can separate the identity that requested an action from the worker that performs it.
+
+Highlight:
+
+- credentials and secret-bearing paths;
+- personal, tenant, financial, or regulated data;
+- changes from anonymous to authenticated or member to administrator;
+- any operation that writes, sends, deletes, deploys, pays, or publishes;
+- logs and analytics that could become a second copy of sensitive data.
+
+The representation does not have to be beautiful. It has to be recognizable by the people who build and operate the feature. If two engineers disagree about where authorization occurs, the disagreement is already a useful finding.
+
+## Ask four practical questions
+
+The maintained [OWASP Threat Modeling Project](https://owasp.org/www-project-threat-modeling/) offers a methodology-neutral starting point:
+
+1. What are we working on?
+2. What can go wrong?
+3. What are we going to do about it?
+4. Did we do a good job?
+
+OWASP does not define one official threat-modeling method. STRIDE, abuse cases, attack trees, privacy-focused approaches, and other techniques can support the second question. Use a method as a prompt, not as a substitute for understanding your product.
+
+For each boundary, describe a concrete misuse case. "Authorization issue" is vague. "A member changes the workspace ID in an export request and receives another workspace's report" gives the team a condition it can prevent and test.
+
+For an agent workflow, ask whether untrusted repository text can influence a privileged tool call, whether approval is bound to the exact action, and whether tool output becomes trusted input elsewhere. For a webhook, ask whether an attacker can forge, replay, reorder, or alter an event. For storage, ask whether object identifiers or signed links cross tenant boundaries.
+
+Keep accidental failures too. A queue retry can duplicate a payment without an attacker. A logging change can copy secrets into a third-party system. Threat modeling covers security and privacy concerns caused by malicious or incidental events.
+
+## Turn threats into owned decisions
+
+A threat entry should lead to action, an accepted residual risk, or a clear reason it is not applicable.
+
+| Field          | Example                                            |
+| -------------- | -------------------------------------------------- |
+| Asset          | Private workspace report                           |
+| Boundary       | Browser request to report API                      |
+| Misuse case    | Member requests a report from another workspace    |
+| Mitigation     | Query by report ID and server-derived workspace ID |
+| Owner          | API team                                           |
+| Verification   | Two-workspace negative integration test            |
+| Evidence       | Test result bound to release commit                |
+| Residual risk  | Administrative support path not covered            |
+| Review trigger | New support impersonation feature                  |
+
+This format keeps mitigation separate from evidence. "We use middleware" is an implementation claim. The negative test is evidence about one expected behavior under stated conditions. Neither proves that every route is correct.
+
+Avoid mitigations such as "sanitize input" or "use best practices" without an owner and observable condition. Prefer "reject requests whose server-derived workspace does not own the object, and test with two accounts." A specific rule is easier to implement, review, and retest.
+
+If the team accepts a risk, record who made the decision, the reason, compensating controls, expiry or review date, and signals that should reopen it. Acceptance is governance, not disappearance.
+
+## Validate the model safely
+
+Review the sketch with someone who knows the product flow and someone who knows the implementation. Walk one normal path and one misuse path. Confirm that every important data store and production effect has an incoming authority decision.
+
+Then translate threats into safe tests:
+
+1. Use synthetic tenants, credentials, and records.
+2. Test in a local or isolated owned environment.
+3. Exercise the minimum behavior needed to distinguish the claim.
+4. Verify both denial and expected normal behavior.
+5. Retain the target version, preconditions, result, and limitations.
+
+A threat model can identify that an upload processor should not reach internal network addresses. It cannot establish the egress policy, redirect handling, or DNS behavior of the running system. Those need implementation checks. Likewise, a model can require approval for a tool call, but only an integration test can show whether replay or parameter substitution is rejected.
+
+NIST's developer-verification guidance includes threat modeling for design-level issues, while the [NIST Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) places secure practices throughout the development lifecycle. This is why the model should travel with the feature rather than live as an annual compliance artifact.
+
+## Update it when the product changes
+
+Review triggers belong in the model from the start. Reopen it when you add a third-party integration, new sensitive data, a role, an agent tool, public sharing, a production write, or a new trust boundary. Revisit it after an incident, a surprising test result, or a failed assumption.
+
+Small changes can alter architecture. A generated helper that moves authorization from a server query into the client has changed a trust boundary even if the user interface looks identical. A new model provider changes where prompts and uploaded data flow. A background job with broader credentials changes who can cause an effect.
+
+The LyraShield AI [methodology](/methodology) connects scoped checks to retained evidence and limitations. It does not claim automated threat-model verification. The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign owners for agent, data, secret, and release controls. It does not inspect architecture or generate a threat model.
+
+For a deeper human-review process, read [human review and threat modeling for vibe-coded apps](/blog/human-review-threat-model-vibe-coding). If coding agents consume repository content, add the [indirect prompt-injection threat model](/blog/indirect-prompt-injection-coding-agents).
+
+## Sources
+
+- [OWASP Threat Modeling Project](https://owasp.org/www-project-threat-modeling/)
+- [OWASP Threat Modeling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html)
+- [NIST: Guidelines on Minimum Standards for Developer Verification of Software](https://www.nist.gov/publications/guidelines-minimum-standards-developer-verification-software)
+- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final)
