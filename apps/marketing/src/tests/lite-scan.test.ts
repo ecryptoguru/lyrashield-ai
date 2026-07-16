@@ -3,6 +3,13 @@ import { describe, expect, it } from "vitest"
 
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const page = readFileSync(new URL("../pages/scan.astro", import.meta.url), "utf8")
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const home = readFileSync(new URL("../pages/index.astro", import.meta.url), "utf8")
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const homeScan = readFileSync(
+  new URL("../components/landing/HomeLiteScan.astro", import.meta.url),
+  "utf8"
+)
 
 describe("Lite Check marketing surface", () => {
   it("keeps the founder-provided promise and permission copy", () => {
@@ -50,5 +57,17 @@ describe("Lite Check marketing surface", () => {
     expect(page).toContain("prepares a fix proposal")
     expect(page).toContain("PR execution stays blocked")
     expect(page).not.toContain("opens a fix PR")
+  })
+
+  it("starts the real Lite Check from the homepage without putting the target in the URL", () => {
+    expect(home).toContain("<HomeLiteScan />")
+    expect(homeScan).toContain('id="free-scan"')
+    expect(homeScan).toContain('sessionStorage.setItem("lyrashield-lite-target", target)')
+    expect(homeScan).toContain('location.assign("/scan?start=1")')
+    expect(homeScan).toContain("Enter a valid public HTTP or HTTPS URL without credentials.")
+    expect(homeScan).toContain('href="/terms"')
+    expect(page).toContain('sessionStorage.getItem("lyrashield-lite-target")')
+    expect(page).toContain("scanForm?.requestSubmit()")
+    expect(homeScan).not.toMatch(/location\.assign\([^)]*target/)
   })
 })

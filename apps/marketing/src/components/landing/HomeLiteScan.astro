@@ -1,0 +1,58 @@
+---
+const appOrigin = (import.meta.env.PUBLIC_SCANNER_URL as string | undefined)?.replace(/\/$/, "") || ""
+const scannerAvailable = Boolean(appOrigin)
+---
+
+<section id="free-scan" aria-labelledby="free-scan-heading" class="border-y border-border bg-bg-raised/55 px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+  <div class="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[.8fr_1.2fr] lg:items-center">
+    <div class="max-w-xl">
+      <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Lite Check · passive and read-only</p>
+      <h2 id="free-scan-heading" class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl">Check your public app before it ships.</h2>
+      <p class="mt-5 text-lg leading-8 text-text-muted">Look for exposed secrets, missing browser protections, risky data-layer signals, and HTTPS issues. Results in seconds. No signup.</p>
+      <a href="/scan" class="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">What the Lite Check covers and cannot prove</a>
+    </div>
+
+    <form id="home-lite-scan-form" action="/scan" class="border-l-2 border-accent pl-5 sm:pl-8">
+      <label for="home-scan-url" class="block text-sm font-semibold text-text">Public app URL</label>
+      <div class="mt-2 flex flex-col gap-3 sm:flex-row">
+        <input id="home-scan-url" type="text" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
+        <button type="submit" data-cta-id="homepage_lite_scan" disabled={!scannerAvailable} class="min-h-13 rounded-xl bg-accent px-6 font-semibold text-bg shadow-sm hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-55">{scannerAvailable ? "Scan my app" : "Scanner unavailable"}</button>
+      </div>
+      <label class="mt-4 flex cursor-pointer items-start gap-3 text-sm leading-6 text-text-muted">
+        <input id="home-scan-authorized" type="checkbox" required disabled={!scannerAvailable} class="mt-1 size-4 shrink-0 accent-[var(--accent)]" />
+        <span>I own this app or have permission to test it. The check is passive and read-only. By scanning I agree to the <a href="/terms" class="font-medium text-accent underline underline-offset-4">Terms</a>.</span>
+      </label>
+      {!scannerAvailable && <p class="mt-4 text-sm leading-6 text-text-muted" role="status">The separately protected scanner API is not connected in this environment.</p>}
+      <p id="home-scan-error" class="mt-4 hidden text-sm leading-6 text-danger" role="alert"></p>
+    </form>
+  </div>
+</section>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("#home-lite-scan-form")
+  form?.addEventListener("submit", (event) => {
+    event.preventDefault()
+    const input = document.querySelector<HTMLInputElement>("#home-scan-url")
+    const error = document.querySelector<HTMLElement>("#home-scan-error")
+    if (!input || !error) return
+    error.classList.add("hidden")
+    const value = input.value.trim()
+    const target = /^https?:\/\//i.test(value) ? value : `https://${value}`
+    try {
+      const url = new URL(target)
+      if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password) throw new Error()
+    } catch {
+      error.textContent = "Enter a valid public HTTP or HTTPS URL without credentials."
+      error.classList.remove("hidden")
+      input.focus()
+      return
+    }
+    try {
+      sessionStorage.setItem("lyrashield-lite-target", target)
+      location.assign("/scan?start=1")
+    } catch {
+      error.textContent = "Your browser blocked the private handoff. Open the full Lite Check and paste the URL there."
+      error.classList.remove("hidden")
+    }
+  })
+</script>

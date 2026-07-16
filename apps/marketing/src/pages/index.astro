@@ -1,6 +1,7 @@
 ---
 import Base from "@layouts/Base.astro"
 import Hero from "@components/landing/Hero.astro"
+import HomeLiteScan from "@components/landing/HomeLiteScan.astro"
 import Problem from "@components/landing/Problem.astro"
 import AssuranceRecord from "@components/landing/AssuranceRecord.astro"
 import Loop from "@components/landing/Loop.astro"
@@ -25,7 +26,7 @@ const faqItems = [
   },
   {
     q: "Is this live today?",
-    a: "We're pre-launch, building in the open. The waitlist gets first invites and early design-partner access.",
+    a: "The passive Lite Check and five browser-local tools are live. The full release-assurance platform is in active development; the waitlist gets first invites and early design-partner access.",
   },
   {
     q: "What does a LyraShield result actually prove?",
@@ -95,6 +96,7 @@ const jsonLd = [
   jsonLd={jsonLd}
 >
   <Hero />
+  <HomeLiteScan />
   <Problem />
   <AssuranceRecord />
   <Loop />
