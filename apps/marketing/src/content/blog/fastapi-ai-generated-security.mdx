@@ -73,6 +73,14 @@ Generated code often misses this because typing is visible and immediate. The en
 Keep the authenticated principal small, load current membership on the server, and include the tenant boundary in the query.
 
 ```py
+from pydantic import BaseModel, ConfigDict
+
+class DocumentSummary(BaseModel):
+    id: UUID
+    title: str
+
+    model_config = ConfigDict(from_attributes=True)
+
 def load_editable_document(
     *,
     session: Session,
@@ -106,7 +114,9 @@ def update_document(
     return DocumentSummary.model_validate(document)
 ```
 
-This example covers one active-tenant edit. It still needs decisions about shared documents, administrators, ownership transfer, concurrent updates, audit events, rollback, and which fields an editor may change. A response model narrows serialization but does not repair an unscoped query.
+`from_attributes=True` allows Pydantic to validate the selected ORM object by reading its attributes. Without that configuration, `DocumentSummary.model_validate(document)` can fail even though the response fields are present on the model. The response schema still narrows only serialization; it does not repair an unscoped query.
+
+This example covers one active-tenant edit. It still needs decisions about shared documents, administrators, ownership transfer, concurrent updates, audit events, rollback, and which fields an editor may change.
 
 The [IDOR guide for AI-built apps](/blog/idor-ai-built-apps) provides a deeper two-account test.
 
