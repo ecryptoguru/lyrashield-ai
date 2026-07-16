@@ -1,0 +1,158 @@
+---
+title: "Secure Firebase Rules and Storage"
+description: "Design Firebase security as separate identity, authorization, app-attestation, and abuse-resistance layers, then test Firestore and Storage rules locally."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - access-control
+  - web-security
+  - verification
+draft: true
+heroImage: access-boundary-04
+faq:
+  - q: "Is a Firebase API key a secret?"
+    a: "Firebase says its client API keys identify the project rather than authorize access to Firebase data. Restrict each key to the required APIs, but rely on Security Rules, IAM, and server credentials for access control. Service-account and server keys remain secrets."
+  - q: "Does Firebase App Check replace Authentication?"
+    a: "No. App Check attests that a request comes from an allowed app or device context, while Authentication identifies a user. Security Rules still decide what that user may do."
+  - q: "Can a Firebase app stay in test mode for launch?"
+    a: "No. Test-mode rules are intentionally permissive and may expire into a denial. Start from locked or production mode, then add and test only the access the application needs."
+  - q: "Can Cloud Storage rules validate uploaded file metadata?"
+    a: "Yes. Rules can inspect properties such as request.resource.size and request.resource.contentType. These checks help enforce limits, but server-side content inspection may still be needed because client-provided metadata is not proof of file contents."
+---
+
+**Direct answer:** Start Firebase from locked or production rules, then add only the access each workflow needs. Use Authentication for identity, Security Rules for document and file authorization, App Check for app attestation, restricted API keys and quotas for abuse resistance, and Emulator Suite tests for signed-out, owner, non-owner, malformed, and oversized requests before deployment.
+
+_Firebase Security Rules, App Check, API key, and Cloud Storage guidance was reviewed against official documentation on July 17, 2026. Verify the active project, rules version, and enforcement state before release._
+
+Firebase client SDKs are designed to talk directly to managed services. That makes server-enforced Security Rules essential. A disabled button or filtered query in React does not constrain a modified client. At the same time, one layer cannot do every job: Authentication identifies a user, Rules authorize data operations, App Check evaluates app provenance, and quotas plus monitoring limit abuse.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) recommends naming the control that enforces each decision. In Firebase, vague statements such as "users must log in" hide the more important question: which documents and files can that user read or change?
+
+## Separate the four Firebase security layers
+
+Build a short map for Firestore, Realtime Database, Cloud Storage, callable functions, and any server process.
+
+| Layer                                | Answers                                                 | Does not answer                           |
+| ------------------------------------ | ------------------------------------------------------- | ----------------------------------------- |
+| Authentication                       | Who is the caller?                                      | Which record may they access?             |
+| Security Rules                       | Is this data operation allowed?                         | Is the request from the genuine app?      |
+| App Check                            | Does the request carry valid app attestation?           | Is this user allowed to edit this record? |
+| API restrictions, quotas, monitoring | Which APIs can a key call, and how much traffic occurs? | Row or object authorization               |
+
+Server SDKs commonly use IAM and may bypass client Security Rules. Any Cloud Function or trusted server using administrative credentials must repeat business authorization before acting for a user.
+
+## The risky pattern: any signed-in user may read any record
+
+**Vulnerable pattern. Authentication is mistaken for ownership.**
+
+```text
+match /projects/{projectId} {
+  allow read, write: if request.auth != null;
+}
+```
+
+This rule rejects signed-out callers but gives every signed-in user access to every project. The interface may query only the current user's records, making the app look correct until another account requests a known document path directly.
+
+AI-generated rules often stop at `request.auth != null` because the prompt says "only logged-in users." They do not infer tenant ownership, immutable fields, membership removal, or the difference between create and update unless those rules are specified.
+
+## Encode ownership and write invariants
+
+For Firestore, derive the caller from `request.auth.uid` and constrain both the existing and proposed document as needed.
+
+```text
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /projects/{projectId} {
+      allow create: if request.auth != null
+        && request.resource.data.ownerId == request.auth.uid;
+
+      allow read, delete: if request.auth != null
+        && resource.data.ownerId == request.auth.uid;
+
+      allow update: if request.auth != null
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId;
+    }
+  }
+}
+```
+
+This is a minimal owner-only example, not a universal policy. Real projects need decisions for shared membership, administrators, required fields, allowed field changes, type validation, nested collections, list queries, delete cascades, and account deletion. Firestore queries must be compatible with the rules; Rules do not filter an unsafe query into a safe result.
+
+Test collection queries as their own cases. A document-level owner rule can be correct while the application sends a query that Firebase must reject because its constraints could return forbidden documents. Keep the expected query shape beside its rule test so an AI-generated filter change cannot quietly break either access or availability.
+
+For Realtime Database, apply the same reasoning to path rules and `.validate` conditions. Start locked, scope paths to verified identities, and test parent writes that can affect multiple children.
+
+## Validate Cloud Storage paths and uploads
+
+Authentication alone is not enough for a bucket. Decide who can list, read, create, replace, and delete each object path. Link the path or trusted metadata to a user or membership that Rules can verify.
+
+Cloud Storage Rules expose the proposed upload through `request.resource`, including `size` and `contentType`.
+
+```text
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /user-uploads/{userId}/{fileName} {
+      allow read: if request.auth != null
+        && request.auth.uid == userId;
+
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpeg)');
+    }
+  }
+}
+```
+
+This rule constrains path, size, and declared content type. It does not prove the bytes are a safe image, remove active content, generate a safe filename, or scan malware. If files are later rendered inline or processed by other systems, add a quarantine and server-side inspection workflow. The [secure file-upload guide](/blog/secure-file-uploads-ai-apps) covers those downstream checks.
+
+Also test overwrite and delete separately. A rule that allows `write` may permit both creation and replacement. If objects should be immutable, express and test that condition rather than relying on the UI to avoid overwrites.
+
+## Deploy rules as versioned code
+
+Keep Firestore, Realtime Database, and Storage rules in source control. Review changes beside the schema and application code they support. Deploy to the intended Firebase project through a controlled command or pipeline, then record the project ID and rule revision.
+
+Use Emulator Suite and the Rules testing libraries for repeatable allow and deny cases. A useful test set covers:
+
+1. signed-out reads and writes;
+2. owner create, read, update, and delete;
+3. a second authenticated user's access to the owner's IDs and paths;
+4. attempts to change owner or role fields;
+5. missing, extra, wrong-type, and oversized data;
+6. list queries and nested collections;
+7. upload size, declared type, overwrite, and delete behavior.
+
+Run negative tests before positive ones so permissive setup is visible. The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can organize the review, but it cannot parse the deployed rules, run Emulator Suite, or inspect the Firebase project.
+
+## Add App Check without confusing it with authorization
+
+App Check helps reject requests that lack valid attestation for your registered application. Enable it for supported services, observe metrics, register legitimate environments, and then turn on enforcement deliberately. Development, CI, and server clients may need documented debug or custom-provider handling.
+
+App Check does not identify the user or authorize a document. A copied valid App Check token must not grant access to another user's data. Keep Authentication and Rules tests unchanged after enforcement is enabled.
+
+Likewise, do not treat CAPTCHA or App Check as a complete abuse control. Add service-specific quotas, billing alerts, rate limits where available, bounded functions, and monitoring for unusual reads, writes, uploads, or messages.
+
+## Handle API keys and admin credentials correctly
+
+Firebase documentation explains that client API keys identify the Firebase project and are not the authorization mechanism for Firebase resources. They will appear in client applications. Restrict each key to the APIs the application uses and apply platform restrictions where supported.
+
+Service-account private keys, FCM server credentials, and other administrative secrets are different. Keep them out of browser bundles and repositories, scope IAM roles, rotate exposed credentials, and prefer managed runtime identity over downloaded long-lived keys when possible.
+
+An Admin SDK path can bypass client Rules. If a function accepts a document ID from a user, verify the ID token, load current membership, authorize the exact action, validate the input, and return a minimal response. Do not trust a role sent in JSON.
+
+## Verify the deployed project, not just the emulator
+
+After Emulator tests pass, deploy to an authorized test project and repeat representative requests with two accounts. Confirm the web or mobile build points to the expected project. Check that App Check enforcement, API restrictions, quotas, and rules are enabled for that project rather than only configured locally.
+
+The [server-side authorization guide](/blog/server-side-authorization-ai-apis) helps design role and ownership rules for trusted functions. The [React frontend security guide](/blog/react-frontend-security-ai-code) explains why client filtering cannot replace Firebase Rules. Keep the result scoped: a passing rules suite supports the modeled operations and schema version. It does not prove Cloud Functions, IAM, third-party integrations, file contents, or unmodeled business behavior.
+
+## Sources
+
+- [Firebase: Security checklist](https://firebase.google.com/support/guides/security-checklist)
+- [Firebase: Security Rules basics](https://firebase.google.com/docs/rules/basics)
+- [Firebase: App Check](https://firebase.google.com/docs/app-check)
+- [Firebase: Cloud Storage Security Rules](https://firebase.google.com/docs/storage/security)
+- [Firebase: Test Security Rules with Emulator Suite](https://firebase.google.com/docs/rules/emulator-setup)
+- [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)

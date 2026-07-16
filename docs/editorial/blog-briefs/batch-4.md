@@ -157,7 +157,7 @@ Do not turn platform security features into proof that an application is secure.
 - Relevant entities: Base44, app visibility, roles, data permissions, CRUD rules, security scan, secrets, backend functions, field-level permission limitation.
 - Authority link: `/blog/vibe-coding-security-guide`
 - Tool CTA: `/tools/ai-app-security-checklist`
-- Related dependency: `/blog/two-account-idor-test` and `/blog/authorization-default-deny`.
+- Related dependency: `/blog/idor-ai-built-apps` and `/blog/server-side-authorization-ai-apis`.
 - Cannibalization boundary: Focus on Base44's app and table permission model. The IDOR article owns the complete two-account test method.
 - FAQ decision: Include four because platform terms are easy to conflate. Cover visibility versus permissions, role versus editor access, field-level restrictions, and what a scan can miss.
 - Image concept: A public outer gate around multiple table compartments, each with separate CRUD apertures and one hidden backend secret vault.
@@ -176,7 +176,7 @@ Do not turn platform security features into proof that an application is secure.
 - Relevant entities: Supabase Auth, Postgres RLS, `anon`, `authenticated`, `service_role`, `auth.uid()`, `auth.jwt()`, `raw_app_meta_data`, views, `security invoker`, `security definer`.
 - Authority link: `/blog/vibe-coding-security-guide`
 - Tool CTA: `/tools/supabase-rls-checker`
-- Related dependency: `/blog/supabase-rls-vibe-coded-apps` and `/blog/service-role-key-exposure`.
+- Related dependency: `/blog/supabase-rls-vibe-coded-apps` and `/blog/api-keys-frontend-ai-apps`.
 - Cannibalization boundary: This is the complete stack guide. The earlier RLS article should remain a focused fix tutorial, and the service-key article should remain incident-focused.
 - FAQ decision: Include four. Cover public anon keys, RLS on SQL-created tables, authorization metadata, and service-role use.
 - Image concept: A PostgreSQL data plane segmented by tenant, with public and authenticated paths filtered by policies and a privileged service path isolated server-side.
@@ -195,7 +195,7 @@ Do not turn platform security features into proof that an application is secure.
 - Relevant entities: Firebase Authentication, Security Rules, Cloud Firestore, Realtime Database, Cloud Storage, App Check, API keys, IAM, Emulator Suite.
 - Authority link: `/blog/vibe-coding-security-guide`
 - Tool CTA: `/tools/ai-app-security-checklist`
-- Related dependency: `/blog/authorization-default-deny` and `/blog/file-upload-security-ai-apps`.
+- Related dependency: `/blog/server-side-authorization-ai-apis` and `/blog/secure-file-uploads-ai-apps`.
 - Cannibalization boundary: Own the Firebase control model. Do not imply the Supabase RLS checker applies to Firebase rules.
 - FAQ decision: Include four. Cover whether Firebase API keys are secrets, App Check versus Authentication, test mode, and Storage metadata validation.
 - Image concept: Identity, database-rule, and storage-rule planes around a project core, with a separate App Check signal entering before resource access.
@@ -214,7 +214,7 @@ Do not turn platform security features into proof that an application is secure.
 - Relevant entities: Next.js App Router, Server Components, Client Components, Route Handlers, Server Actions, Data Access Layer, `server-only`, DTOs, `NEXT_PUBLIC_`.
 - Authority link: `/blog/vibe-coding-security-guide`
 - Tool CTA: `/tools/security-headers-checker`
-- Related dependency: `/blog/react-frontend-security-ai-code` and `/blog/api-authentication-authorization-ai-code`.
+- Related dependency: `/blog/react-frontend-security-ai-code` and `/blog/server-side-authorization-ai-apis`.
 - Cannibalization boundary: Own Next.js server-client and route boundaries. The React article owns DOM rendering and browser trust; the API article owns framework-neutral endpoint policy.
 - FAQ decision: Include four. Cover whether unused Server Actions are private, middleware as the only auth check, `NEXT_PUBLIC_`, and Server Components as an authorization boundary.
 - Image concept: Server and client component planes separated by a narrow DTO membrane, with actions and route handlers shown as public entry paths.
@@ -233,7 +233,7 @@ Do not turn platform security features into proof that an application is secure.
 - Relevant entities: React 19.2, JSX, `dangerouslySetInnerHTML`, Server Functions, client state, local storage, CSP, DOM XSS.
 - Authority link: `/blog/vibe-coding-security-guide`
 - Tool CTA: `/tools/secret-exposure-scanner`
-- Related dependency: `/blog/nextjs-ai-app-security` and `/blog/xss-ai-generated-ui`.
+- Related dependency: `/blog/nextjs-ai-app-security` and `/blog/xss-ai-app-markdown-output`.
 - Cannibalization boundary: This article owns the browser trust model in React. The XSS article owns a deeper injection tutorial, and Next.js owns server implementation details.
 - FAQ decision: Include three. Cover JSX escaping, safe use of raw HTML, and whether hiding a button enforces authorization.
 - Image concept: A translucent browser plane that can be inspected from all sides, with protected authorization and secrets remaining behind a server boundary.
@@ -252,7 +252,7 @@ Do not turn platform security features into proof that an application is secure.
 - Relevant entities: Node.js, Express 5, middleware order, Helmet, `trust proxy`, `express-session`, secure cookies, rate limiting, dependency audit, Node permission model.
 - Authority link: `/blog/vibe-coding-security-guide`
 - Tool CTA: `/tools/ai-app-security-checklist`
-- Related dependency: `/blog/api-authentication-authorization-ai-code` and `/blog/rate-limiting-ai-api`.
+- Related dependency: `/blog/server-side-authorization-ai-apis` and `/blog/rate-limiting-ai-apps`.
 - Cannibalization boundary: Own Express implementation and ingress configuration. Generic API authorization and rate limiting remain separate deep dives.
 - FAQ decision: Include four. Cover Helmet, `trust proxy`, in-memory sessions, and whether Node's permission model replaces application authorization.
 - Image concept: An API request corridor crossing ordered validation, authentication, authorization, and rate-limit gates before a service chamber.
