@@ -108,33 +108,72 @@ async function prepareImage(definition, masterDirectory, outputs) {
   return { definition, sourceHash: sha256(source), derivatives }
 }
 
-async function atomicWrite(file, contents) {
-  await mkdir(dirname(file), { recursive: true })
-  const temporary = `${file}.tmp-${process.pid}-${randomUUID()}`
-  try {
-    await writeFile(temporary, contents)
-    await rename(temporary, file)
-  } finally {
-    await rm(temporary, { force: true })
-  }
-}
-
-async function replaceDirectory(staged, target) {
+async function stageFile(target, contents) {
   await mkdir(dirname(target), { recursive: true })
-  const backup = `${target}.backup-${process.pid}-${randomUUID()}`
-  const hadTarget = await pathExists(target)
-  if (hadTarget) await rename(target, backup)
+  const staged = `${target}.stage-${process.pid}-${randomUUID()}`
   try {
-    await rename(staged, target)
-    if (hadTarget) await rm(backup, { recursive: true, force: true })
+    await writeFile(staged, contents)
+    return staged
   } catch (error) {
-    if (await pathExists(target)) await rm(target, { recursive: true, force: true })
-    if (hadTarget && (await pathExists(backup))) await rename(backup, target)
+    await rm(staged, { force: true })
     throw error
   }
 }
 
-async function persist(preparedImages, manifests, paths) {
+async function removePath(path) {
+  await rm(path, { recursive: true, force: true })
+}
+
+async function replaceTransaction(replacements, persistenceFault) {
+  const transaction = replacements.map((replacement) => ({
+    ...replacement,
+    backup: `${replacement.target}.backup-${process.pid}-${randomUUID()}`,
+    hadTarget: false,
+    installed: false,
+  }))
+  let preserveBackups = false
+
+  try {
+    for (const replacement of transaction) {
+      await mkdir(dirname(replacement.target), { recursive: true })
+      replacement.hadTarget = await pathExists(replacement.target)
+      if (replacement.hadTarget) await rename(replacement.target, replacement.backup)
+      if (persistenceFault) await persistenceFault(replacement.label)
+      await rename(replacement.staged, replacement.target)
+      replacement.installed = true
+    }
+  } catch (error) {
+    const rollbackErrors = []
+    for (const replacement of [...transaction].reverse()) {
+      try {
+        if (replacement.installed && (await pathExists(replacement.target))) {
+          await removePath(replacement.target)
+        }
+        if (replacement.hadTarget && (await pathExists(replacement.backup))) {
+          await rename(replacement.backup, replacement.target)
+        }
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError)
+      }
+    }
+    if (rollbackErrors.length > 0) {
+      preserveBackups = true
+      throw new AggregateError(
+        [error, ...rollbackErrors],
+        "Persistence failed and rollback was incomplete"
+      )
+    }
+    throw error
+  } finally {
+    const cleanup = transaction.map((replacement) => removePath(replacement.staged))
+    if (!preserveBackups) {
+      cleanup.push(...transaction.map((replacement) => removePath(replacement.backup)))
+    }
+    await Promise.allSettled(cleanup)
+  }
+}
+
+async function persist(preparedImages, manifests, paths, persistenceFault) {
   const catalog = {}
   const verification = {
     version: 1,
@@ -147,8 +186,14 @@ async function persist(preparedImages, manifests, paths) {
     dirname(paths.libraryDirectory),
     `.library-stage-${process.pid}-${randomUUID()}`
   )
+  const replacements = [{ label: "library", staged: stagedLibrary, target: paths.libraryDirectory }]
 
-  await rm(stagedLibrary, { recursive: true, force: true })
+  async function addFileReplacement(label, target, contents) {
+    const staged = await stageFile(target, contents)
+    replacements.push({ label, staged, target })
+  }
+
+  await removePath(stagedLibrary)
   try {
     for (const image of preparedImages) {
       const { definition } = image
@@ -179,21 +224,20 @@ async function persist(preparedImages, manifests, paths) {
       sourceHashes.set(definition.imageId, image.sourceHash)
     }
 
-    await replaceDirectory(stagedLibrary, paths.libraryDirectory)
+    await addFileReplacement("catalog", paths.catalogFile, stableJson(catalog))
+    await addFileReplacement("verification", paths.verificationFile, stableJson(verification))
+    for (const manifest of manifests) {
+      const entries = manifest.entries.map((entry) => ({
+        ...entry,
+        sourceHash: sourceHashes.get(entry.imageId),
+      }))
+      await addFileReplacement(`manifest:${manifest.file}`, manifest.path, stableJson(entries))
+    }
+    await addFileReplacement("report", paths.reportFile, stableJson(verification))
+    await replaceTransaction(replacements, persistenceFault)
   } finally {
-    await rm(stagedLibrary, { recursive: true, force: true })
+    await Promise.allSettled(replacements.map(({ staged }) => removePath(staged)))
   }
-
-  await atomicWrite(paths.catalogFile, stableJson(catalog))
-  await atomicWrite(paths.verificationFile, stableJson(verification))
-  for (const manifest of manifests) {
-    const entries = manifest.entries.map((entry) => ({
-      ...entry,
-      sourceHash: sourceHashes.get(entry.imageId),
-    }))
-    await atomicWrite(manifest.path, stableJson(entries))
-  }
-  await atomicWrite(paths.reportFile, stableJson(verification))
 }
 
 export async function deriveBlogImages(options = {}) {
@@ -217,7 +261,7 @@ export async function deriveBlogImages(options = {}) {
     preparedImages.push(await prepareImage(definition, paths.masterDirectory, outputs))
     if (!options.quiet) process.stdout.write("ok\n")
   }
-  await persist(preparedImages, manifests, paths)
+  await persist(preparedImages, manifests, paths, options.persistenceFault)
 
   if (!options.quiet) {
     console.log(

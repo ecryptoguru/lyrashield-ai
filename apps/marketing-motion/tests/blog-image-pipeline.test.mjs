@@ -1,10 +1,13 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import {
   appendFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -77,16 +80,16 @@ function makeWorkspace(manifests) {
   writeJson(join(repositoryRoot, "apps/marketing/src/content/blog-images/images.json"), {})
   writeJson(
     join(repositoryRoot, "apps/marketing/src/content/blog-images/image-verification.json"),
-    { version: 1, images: {} }
+    { version: 1, imageCount: 0, outputCount: 0, images: {} }
   )
   return { repositoryRoot, motionRoot, manifestRoot }
 }
 
-async function writeSource(motionRoot, imageId) {
+async function writeSource(motionRoot, imageId, background = "#07111f") {
   const source = join(motionRoot, "renders/blog-masters", imageId, "source.png")
   mkdirSync(dirname(source), { recursive: true })
   await sharp({
-    create: { width: 2048, height: 2048, channels: 3, background: "#07111f" },
+    create: { width: 2048, height: 2048, channels: 3, background },
   })
     .composite([
       {
@@ -101,6 +104,33 @@ async function writeSource(motionRoot, imageId) {
     .png()
     .toFile(source)
   return source
+}
+
+function snapshotPath(path, relative = ".") {
+  const snapshot = new Map()
+  if (!statSync(path).isDirectory()) {
+    snapshot.set(relative, readFileSync(path))
+    return snapshot
+  }
+  for (const entry of readdirSync(path).sort()) {
+    const child = join(path, entry)
+    const childRelative = join(relative, entry)
+    if (statSync(child).isDirectory()) {
+      for (const [name, contents] of snapshotPath(child, childRelative)) {
+        snapshot.set(name, contents)
+      }
+    } else {
+      snapshot.set(childRelative, readFileSync(child))
+    }
+  }
+  return snapshot
+}
+
+function assertSnapshotEqual(actual, expected) {
+  assert.deepEqual([...actual.keys()], [...expected.keys()])
+  for (const [path, contents] of expected) {
+    assert.deepEqual(actual.get(path), contents, `${path} changed across rollback`)
+  }
 }
 
 test("requires the exact seven top-level-array manifests and declared aggregate usage", () => {
@@ -166,11 +196,23 @@ test("allow-empty still validates the canonical manifest set", async () => {
   )
   writeJson(verificationFile, {
     version: 1,
+    imageCount: 0,
+    outputCount: 0,
     images: { stale: { sourceHash: `sha256:${"a".repeat(64)}`, outputs: {} } },
   })
   await assert.rejects(
     () => verifyBlogImages({ ...validWorkspace, allowEmpty: true, quiet: true }),
     /stale image verification records/i
+  )
+  writeJson(verificationFile, { version: 1, imageCount: 1, outputCount: 0, images: {} })
+  await assert.rejects(
+    () => verifyBlogImages({ ...validWorkspace, allowEmpty: true, quiet: true }),
+    /imageCount/i
+  )
+  writeJson(verificationFile, { version: 1, imageCount: 0, outputCount: 5, images: {} })
+  await assert.rejects(
+    () => verifyBlogImages({ ...validWorkspace, allowEmpty: true, quiet: true }),
+    /outputCount/i
   )
 
   const invalidWorkspace = makeWorkspace(fullManifestFixture().slice(0, -1))
@@ -294,6 +336,39 @@ test("derives deterministically and detects mutations without source masters", a
   await assert.rejects(() => verifyBlogImages(options), /encoder contract/i)
   writeFileSync(verificationFile, firstVerification)
 
+  const wrongCounts = JSON.parse(firstVerification)
+  wrongCounts.imageCount = 2
+  writeJson(verificationFile, wrongCounts)
+  await assert.rejects(() => verifyBlogImages(options), /imageCount/i)
+  wrongCounts.imageCount = 1
+  wrongCounts.outputCount = 4
+  writeJson(verificationFile, wrongCounts)
+  await assert.rejects(() => verifyBlogImages(options), /outputCount/i)
+  writeFileSync(verificationFile, firstVerification)
+
+  const qualityTamper = JSON.parse(firstVerification)
+  const canonicalQuality = qualityTamper.images[manifestEntry.imageId].outputs.jpeg.quality
+  assert.ok(canonicalQuality > BLOG_IMAGE_OUTPUTS[2].minimumQuality)
+  const alteredQuality = canonicalQuality - 2
+  const alteredDerivative = await encodeDerivative(readFileSync(source), manifestEntry.imageId, {
+    ...BLOG_IMAGE_OUTPUTS[2],
+    initialQuality: alteredQuality,
+    minimumQuality: alteredQuality,
+  })
+  const alteredHero = join(publicImageRoot, BLOG_IMAGE_OUTPUTS[2].filename)
+  writeFileSync(alteredHero, alteredDerivative.buffer)
+  qualityTamper.images[manifestEntry.imageId].outputs.jpeg = {
+    ...qualityTamper.images[manifestEntry.imageId].outputs.jpeg,
+    quality: alteredQuality,
+    bytes: alteredDerivative.buffer.byteLength,
+    sha256: `sha256:${createHash("sha256").update(alteredDerivative.buffer).digest("hex")}`,
+  }
+  writeJson(verificationFile, qualityTamper)
+  await assert.rejects(() => verifyBlogImages(options), /canonical quality selection/i)
+
+  await deriveBlogImages(options)
+  assert.equal(readFileSync(verificationFile, "utf8"), firstVerification)
+
   const manifestFile = join(workspace.manifestRoot, "authority.json")
   const manifestText = readFileSync(manifestFile, "utf8")
   const manifest = JSON.parse(manifestText)
@@ -320,4 +395,53 @@ test("derives deterministically and detects mutations without source masters", a
     { recursive: true }
   )
   await assert.rejects(() => verifyBlogImages(options), /unexpected public image entry/i)
+})
+
+test("restores every persisted artifact after a metadata commit failure", async () => {
+  const manifestEntry = {
+    slug: "fixture-article",
+    imageId: "verification-rollback",
+    cluster: "verification",
+    alt: "A deterministic fixture protecting a transactional metadata boundary",
+    sourceHash: null,
+    usageCount: 1,
+    approved: true,
+  }
+  const workspace = makeWorkspace([{ file: "authority.json", entries: [manifestEntry] }])
+  await writeSource(workspace.motionRoot, manifestEntry.imageId)
+  const options = {
+    ...workspace,
+    manifestContract: MINI_CONTRACT,
+    expectedImageCount: 1,
+    quiet: true,
+  }
+  await deriveBlogImages(options)
+
+  const persistedPaths = [
+    join(workspace.repositoryRoot, "apps/marketing/public/images/blog/library"),
+    join(workspace.repositoryRoot, "apps/marketing/src/content/blog-images/images.json"),
+    join(
+      workspace.repositoryRoot,
+      "apps/marketing/src/content/blog-images/image-verification.json"
+    ),
+    join(workspace.manifestRoot, "authority.json"),
+    join(workspace.motionRoot, "renders/blog-image-previews/byte-budget-report.json"),
+  ]
+  const before = persistedPaths.map((path) => snapshotPath(path))
+  await writeSource(workspace.motionRoot, manifestEntry.imageId, "#421811")
+
+  await assert.rejects(
+    () =>
+      deriveBlogImages({
+        ...options,
+        persistenceFault(label) {
+          if (label === "verification") throw new Error("induced metadata write failure")
+        },
+      }),
+    /induced metadata write failure/i
+  )
+
+  persistedPaths.forEach((path, index) => {
+    assertSnapshotEqual(snapshotPath(path), before[index])
+  })
 })

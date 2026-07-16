@@ -163,11 +163,12 @@ async function verifyDerivative({
   }
 
   if (source) {
-    const regenerated = await encodeDerivative(source, imageId, {
-      ...output,
-      initialQuality: record.quality,
-      minimumQuality: record.quality,
-    })
+    const regenerated = await encodeDerivative(source, imageId, output)
+    if (regenerated.quality !== record.quality) {
+      throw new Error(
+        `${expectedPath} does not match the canonical quality selection for its source`
+      )
+    }
     if (sha256(regenerated.buffer) !== record.sha256) {
       throw new Error(`${expectedPath} is not deterministic for its source and encoder settings`)
     }
@@ -194,6 +195,17 @@ export async function verifyBlogImages(options = {}) {
   const verification = await readJson(paths.verificationFile, "Blog image verification manifest")
   validateVerificationManifest(verification)
   const catalogIds = Object.keys(catalog).sort((left, right) => left.localeCompare(right))
+  if (verification.imageCount !== catalogIds.length) {
+    throw new Error(
+      `Verification imageCount must be ${catalogIds.length}; received ${verification.imageCount}`
+    )
+  }
+  const expectedOutputCount = catalogIds.length * BLOG_IMAGE_OUTPUTS.length
+  if (verification.outputCount !== expectedOutputCount) {
+    throw new Error(
+      `Verification outputCount must be ${expectedOutputCount}; received ${verification.outputCount}`
+    )
+  }
 
   if (catalogIds.length === 0) {
     if (!options.allowEmpty) {
