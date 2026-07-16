@@ -49,11 +49,10 @@ describe("marketing SEO metadata", () => {
     const base = source("../layouts/Base.astro")
 
     expect(base).toContain("capture_pageview: false")
-    expect(base).toContain("capture_pageleave: false")
+    expect(base).toContain("capture_pageleave: true")
+    expect(base).toContain("disable_scroll_properties: false")
     expect(base).toContain('posthog.capture("$pageview"')
-    expect(base).toContain('"$pageleave"')
     expect(base).toContain("privacyBoundedPageUrl")
-    expect(base).toContain('transport: "sendBeacon"')
     expect(base).toContain("before_send:")
     expect(base).toContain('"$current_url", "$referrer", "$initial_referrer", "referrer"')
     expect(base).not.toContain("$current_url: location.href")

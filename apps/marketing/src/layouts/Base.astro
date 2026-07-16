@@ -93,7 +93,8 @@ const { title, description, canonical, ogImage, ogType, noindex, article, jsonLd
               ui_host: posthogUiHost,
               autocapture: false,
               capture_pageview: false,
-              capture_pageleave: false,
+              capture_pageleave: true,
+              disable_scroll_properties: false,
               disable_session_recording: true,
               persistence: "localStorage",
               respect_dnt: true,
@@ -120,17 +121,6 @@ const { title, description, canonical, ogImage, ogType, noindex, article, jsonLd
             posthog.capture("$pageview", {
               $current_url: privacyBoundedPageUrl,
             })
-            window.addEventListener(
-              "pagehide",
-              () => {
-                posthog.capture(
-                  "$pageleave",
-                  { $current_url: privacyBoundedPageUrl },
-                  { send_instantly: true, transport: "sendBeacon" },
-                )
-              },
-              { once: true },
-            )
             const props = {
               utm_source: pageUrl.searchParams.get("utm_source") || undefined,
               utm_medium: pageUrl.searchParams.get("utm_medium") || undefined,
