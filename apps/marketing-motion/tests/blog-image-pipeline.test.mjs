@@ -106,6 +106,43 @@ async function writeSource(motionRoot, imageId, background = "#07111f") {
   return source
 }
 
+function singleImageFixture(imageId = "verification-contract") {
+  return {
+    slug: "fixture-article",
+    imageId,
+    cluster: "verification",
+    alt: `A deterministic fixture enforcing the image contract for ${imageId}`,
+    sourceHash: null,
+    usageCount: 1,
+    approved: true,
+  }
+}
+
+function singleImageOptions(workspace) {
+  return {
+    ...workspace,
+    manifestContract: MINI_CONTRACT,
+    expectedImageCount: 1,
+    quiet: true,
+  }
+}
+
+function updateRecordedSourceHash(workspace, imageId, source) {
+  const sourceHash = `sha256:${createHash("sha256").update(source).digest("hex")}`
+  const manifestFile = join(workspace.manifestRoot, "authority.json")
+  const manifest = JSON.parse(readFileSync(manifestFile, "utf8"))
+  manifest[0].sourceHash = sourceHash
+  writeJson(manifestFile, manifest)
+
+  const verificationFile = join(
+    workspace.repositoryRoot,
+    "apps/marketing/src/content/blog-images/image-verification.json"
+  )
+  const verification = JSON.parse(readFileSync(verificationFile, "utf8"))
+  verification.images[imageId].sourceHash = sourceHash
+  writeJson(verificationFile, verification)
+}
+
 function snapshotPath(path, relative = ".") {
   const snapshot = new Map()
   if (!statSync(path).isDirectory()) {
@@ -222,6 +259,119 @@ test("allow-empty still validates the canonical manifest set", async () => {
   )
 })
 
+test("verifier rejects present masters outside the square PNG source contract", async () => {
+  const manifestEntry = singleImageFixture("verification-source-contract")
+  const workspace = makeWorkspace([{ file: "authority.json", entries: [manifestEntry] }])
+  const sourceFile = await writeSource(workspace.motionRoot, manifestEntry.imageId)
+  const options = singleImageOptions(workspace)
+  await deriveBlogImages(options)
+
+  const invalidSources = [
+    {
+      label: "non-square",
+      buffer: await sharp({
+        create: { width: 4096, height: 2048, channels: 3, background: "#07111f" },
+      })
+        .png()
+        .toBuffer(),
+      message: /square/i,
+    },
+    {
+      label: "undersized",
+      buffer: await sharp({
+        create: { width: 1024, height: 1024, channels: 3, background: "#07111f" },
+      })
+        .png()
+        .toBuffer(),
+      message: /2048/i,
+    },
+    {
+      label: "non-PNG",
+      buffer: await sharp({
+        create: { width: 2048, height: 2048, channels: 3, background: "#07111f" },
+      })
+        .jpeg()
+        .toBuffer(),
+      message: /must be PNG/i,
+    },
+  ]
+
+  for (const invalid of invalidSources) {
+    writeFileSync(sourceFile, invalid.buffer)
+    updateRecordedSourceHash(workspace, manifestEntry.imageId, invalid.buffer)
+    await assert.rejects(
+      () => verifyBlogImages(options),
+      invalid.message,
+      `${invalid.label} source should fail verification`
+    )
+  }
+})
+
+test("masterless verification rejects JPEGs outside the pinned encoder contract", async () => {
+  const manifestEntry = singleImageFixture("verification-masterless-jpeg")
+  const workspace = makeWorkspace([{ file: "authority.json", entries: [manifestEntry] }])
+  const sourceFile = await writeSource(workspace.motionRoot, manifestEntry.imageId)
+  const options = singleImageOptions(workspace)
+  await deriveBlogImages(options)
+
+  const verificationFile = join(
+    workspace.repositoryRoot,
+    "apps/marketing/src/content/blog-images/image-verification.json"
+  )
+  const verification = JSON.parse(readFileSync(verificationFile, "utf8"))
+  const record = verification.images[manifestEntry.imageId].outputs.jpeg
+  const output = BLOG_IMAGE_OUTPUTS.find(({ key }) => key === "jpeg")
+  const noncanonical = await sharp(readFileSync(sourceFile), { failOn: "error" })
+    .rotate()
+    .resize(output.width, output.height, {
+      fit: "cover",
+      position: "centre",
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: record.quality, progressive: false, chromaSubsampling: "4:4:4" })
+    .toBuffer()
+  const outputFile = join(
+    workspace.repositoryRoot,
+    "apps/marketing/public/images/blog/library",
+    manifestEntry.imageId,
+    output.filename
+  )
+  writeFileSync(outputFile, noncanonical)
+  record.bytes = noncanonical.byteLength
+  record.sha256 = `sha256:${createHash("sha256").update(noncanonical).digest("hex")}`
+  writeJson(verificationFile, verification)
+  rmSync(join(workspace.motionRoot, "renders/blog-masters"), { recursive: true })
+
+  const metadata = await sharp(noncanonical).metadata()
+  assert.equal(metadata.isProgressive, false)
+  assert.equal(metadata.chromaSubsampling, "4:4:4")
+  await assert.rejects(() => verifyBlogImages(options), /encoder contract/i)
+})
+
+test("verification and derivation require exactly the five canonical outputs", async () => {
+  const manifestEntry = singleImageFixture("verification-output-contract")
+  const workspace = makeWorkspace([{ file: "authority.json", entries: [manifestEntry] }])
+  await writeSource(workspace.motionRoot, manifestEntry.imageId)
+  const options = singleImageOptions(workspace)
+  await deriveBlogImages(options)
+
+  const verificationFile = join(
+    workspace.repositoryRoot,
+    "apps/marketing/src/content/blog-images/image-verification.json"
+  )
+  const verification = JSON.parse(readFileSync(verificationFile, "utf8"))
+  verification.images[manifestEntry.imageId].outputs.legacy = {
+    ...verification.images[manifestEntry.imageId].outputs.jpeg,
+  }
+  writeJson(verificationFile, verification)
+  await assert.rejects(() => verifyBlogImages(options), /output keys/i)
+
+  await assert.rejects(
+    () => deriveBlogImages({ ...options, outputs: [BLOG_IMAGE_OUTPUTS[2]] }),
+    /exactly the five canonical outputs/i
+  )
+})
+
 test("derives deterministically and detects mutations without source masters", async () => {
   const manifestEntry = {
     slug: "fixture-article",
@@ -292,21 +442,15 @@ test("derives deterministically and detects mutations without source masters", a
     "utf8"
   )
   const heroBeforeFailedDerive = readFileSync(join(publicImageRoot, "hero.jpg"))
-  await assert.rejects(
-    () =>
-      deriveBlogImages({
-        ...options,
-        outputs: [
-          {
-            ...BLOG_IMAGE_OUTPUTS[2],
-            initialQuality: 70,
-            minimumQuality: 70,
-            budgetBytes: 1,
-          },
-        ],
-      }),
-    /minimum quality 70/i
-  )
+  const validSource = readFileSync(source)
+  const invalidSource = await sharp({
+    create: { width: 1024, height: 1024, channels: 3, background: "#07111f" },
+  })
+    .png()
+    .toBuffer()
+  writeFileSync(source, invalidSource)
+  await assert.rejects(() => deriveBlogImages(options), /2048/i)
+  writeFileSync(source, validSource)
   assert.equal(
     readFileSync(
       join(workspace.repositoryRoot, "apps/marketing/src/content/blog-images/images.json"),

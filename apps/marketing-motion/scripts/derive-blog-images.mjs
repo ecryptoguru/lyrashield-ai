@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { access, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
+import { isDeepStrictEqual } from "node:util"
 import sharp from "sharp"
 import {
   BLOG_IMAGE_MANIFEST_CONTRACT,
@@ -77,6 +78,18 @@ async function encodeAtQuality(source, output, quality) {
   return pipeline.jpeg(options).toBuffer()
 }
 
+export async function validateSourceImage(source, imageId) {
+  const metadata = await sharp(source, { failOn: "error" }).metadata()
+  const errors = validateSourceDimensions(metadata)
+  if (metadata.format !== "png") {
+    errors.push(`Source must be PNG; received ${metadata.format ?? "unknown"}`)
+  }
+  if (errors.length > 0) {
+    throw new Error(`${imageId}: ${errors.join("; ")}`)
+  }
+  return metadata
+}
+
 export async function encodeDerivative(source, imageId, output) {
   let lastSize = 0
   for (const quality of qualitySequence(output.initialQuality, output.minimumQuality)) {
@@ -92,14 +105,7 @@ export async function encodeDerivative(source, imageId, output) {
 async function prepareImage(definition, masterDirectory, outputs) {
   const sourceFile = resolve(masterDirectory, definition.imageId, "source.png")
   const source = await readFile(sourceFile)
-  const metadata = await sharp(source, { failOn: "error" }).metadata()
-  const dimensionErrors = validateSourceDimensions(metadata)
-  if (metadata.format !== "png") {
-    dimensionErrors.push(`Source must be PNG; received ${metadata.format ?? "unknown"}`)
-  }
-  if (dimensionErrors.length > 0) {
-    throw new Error(`${definition.imageId}: ${dimensionErrors.join("; ")}`)
-  }
+  await validateSourceImage(source, definition.imageId)
 
   const derivatives = []
   for (const output of outputs) {
@@ -178,7 +184,7 @@ async function persist(preparedImages, manifests, paths, persistenceFault) {
   const verification = {
     version: 1,
     imageCount: preparedImages.length,
-    outputCount: preparedImages.length * BLOG_IMAGE_OUTPUTS.length,
+    outputCount: 0,
     images: {},
   }
   const sourceHashes = new Map()
@@ -214,6 +220,15 @@ async function persist(preparedImages, manifests, paths, persistenceFault) {
           format: output.format,
           sha256: sha256(buffer),
         }
+        verification.outputCount += 1
+      }
+
+      const outputKeys = Object.keys(outputRecords)
+      const expectedOutputKeys = BLOG_IMAGE_OUTPUTS.map(({ key }) => key)
+      if (!isDeepStrictEqual(outputKeys, expectedOutputKeys)) {
+        throw new Error(
+          `${definition.imageId} must persist exactly the five canonical outputs: ${expectedOutputKeys.join(", ")}`
+        )
       }
 
       catalog[definition.imageId] = buildCatalogEntry(definition)
@@ -235,6 +250,7 @@ async function persist(preparedImages, manifests, paths, persistenceFault) {
     }
     await addFileReplacement("report", paths.reportFile, stableJson(verification))
     await replaceTransaction(replacements, persistenceFault)
+    return { imageCount: verification.imageCount, outputCount: verification.outputCount }
   } finally {
     await Promise.allSettled(replacements.map(({ staged }) => removePath(staged)))
   }
@@ -246,6 +262,11 @@ export async function deriveBlogImages(options = {}) {
   const manifestContract = options.manifestContract ?? BLOG_IMAGE_MANIFEST_CONTRACT
   const expectedImageCount = options.expectedImageCount ?? 36
   const outputs = options.outputs ?? BLOG_IMAGE_OUTPUTS
+  if (!isDeepStrictEqual(outputs, BLOG_IMAGE_OUTPUTS)) {
+    throw new Error(
+      `Blog image derivation requires exactly the five canonical outputs: ${BLOG_IMAGE_OUTPUTS.map(({ key }) => key).join(", ")}`
+    )
+  }
   const paths = pathsFor(repositoryRoot, motionRoot)
   const { manifests, definitions } = await loadManifests(paths.manifestDirectory, manifestContract)
 
@@ -261,15 +282,15 @@ export async function deriveBlogImages(options = {}) {
     preparedImages.push(await prepareImage(definition, paths.masterDirectory, outputs))
     if (!options.quiet) process.stdout.write("ok\n")
   }
-  await persist(preparedImages, manifests, paths, options.persistenceFault)
+  const result = await persist(preparedImages, manifests, paths, options.persistenceFault)
 
   if (!options.quiet) {
     console.log(
-      `Derived ${preparedImages.length} catalog images and ${preparedImages.length * outputs.length} optimized files.`
+      `Derived ${result.imageCount} catalog images and ${result.outputCount} optimized files.`
     )
     console.log(`Byte-budget report: ${paths.reportFile}`)
   }
-  return { imageCount: preparedImages.length, outputCount: preparedImages.length * outputs.length }
+  return result
 }
 
 async function main() {

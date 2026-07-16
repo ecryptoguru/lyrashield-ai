@@ -10,7 +10,7 @@ import {
   sha256,
   validateManifestSet,
 } from "./blog-image-lib.mjs"
-import { encodeDerivative } from "./derive-blog-images.mjs"
+import { encodeDerivative, validateSourceImage } from "./derive-blog-images.mjs"
 
 const defaultMotionRoot = resolve(import.meta.dirname, "..")
 const defaultRepositoryRoot = resolve(defaultMotionRoot, "../..")
@@ -161,6 +161,12 @@ async function verifyDerivative({
   if (metadata.exif || metadata.icc || metadata.iptc || metadata.xmp) {
     throw new Error(`${expectedPath} contains metadata that should have been stripped`)
   }
+  if (
+    output.format === "jpeg" &&
+    (metadata.isProgressive !== true || metadata.chromaSubsampling !== "4:2:0")
+  ) {
+    throw new Error(`${expectedPath} does not match the pinned JPEG encoder contract`)
+  }
 
   if (source) {
     const regenerated = await encodeDerivative(source, imageId, output)
@@ -233,6 +239,8 @@ export async function verifyBlogImages(options = {}) {
 
   const manifestHashes = verifyManifestHashes(manifests, definitions)
   const { default: sharp } = await import("sharp")
+  const expectedOutputKeys = BLOG_IMAGE_OUTPUTS.map(({ key }) => key)
+  let verifiedOutputCount = 0
   for (const imageId of catalogIds) {
     const expectedEntry = buildCatalogEntry(definitions.get(imageId))
     if (!isDeepStrictEqual(catalog[imageId], expectedEntry)) {
@@ -242,6 +250,17 @@ export async function verifyBlogImages(options = {}) {
     if (verificationRecord.sourceHash !== manifestHashes.get(imageId)) {
       throw new Error(`${imageId} source hash does not match its verification record`)
     }
+    const outputKeys =
+      verificationRecord.outputs &&
+      !Array.isArray(verificationRecord.outputs) &&
+      typeof verificationRecord.outputs === "object"
+        ? Object.keys(verificationRecord.outputs)
+        : []
+    if (!isDeepStrictEqual(outputKeys, expectedOutputKeys)) {
+      throw new Error(
+        `${imageId} verification output keys must be exactly: ${expectedOutputKeys.join(", ")}`
+      )
+    }
     await verifyManagedEntries(
       resolve(paths.libraryDirectory, imageId),
       BLOG_IMAGE_OUTPUTS.map(({ filename }) => filename),
@@ -250,8 +269,11 @@ export async function verifyBlogImages(options = {}) {
 
     const sourceFile = resolve(paths.masterDirectory, imageId, "source.png")
     const source = (await exists(sourceFile)) ? await readFile(sourceFile) : null
-    if (source && sha256(source) !== manifestHashes.get(imageId)) {
-      throw new Error(`${imageId} source hash does not match its manifest`)
+    if (source) {
+      await validateSourceImage(source, imageId)
+      if (sha256(source) !== manifestHashes.get(imageId)) {
+        throw new Error(`${imageId} source hash does not match its manifest`)
+      }
     }
     for (const output of BLOG_IMAGE_OUTPUTS) {
       await verifyDerivative({
@@ -263,12 +285,19 @@ export async function verifyBlogImages(options = {}) {
         libraryDirectory: paths.libraryDirectory,
         source,
       })
+      verifiedOutputCount += 1
     }
+  }
+
+  if (verifiedOutputCount !== verification.outputCount) {
+    throw new Error(
+      `Verified ${verifiedOutputCount} outputs but the verification manifest records ${verification.outputCount}`
+    )
   }
 
   const result = {
     imageCount: catalogIds.length,
-    outputCount: catalogIds.length * BLOG_IMAGE_OUTPUTS.length,
+    outputCount: verifiedOutputCount,
   }
   if (!options.quiet) {
     console.log(
