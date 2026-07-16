@@ -5355,6 +5355,12 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - Header and footer Free scan links point to the homepage form. Visible breadcrumb rows are removed from methodology, scanner, resource, report, terms, tools, and tool-detail surfaces; `BreadcrumbList` structured data remains for search engines.
 - The final branch gate passed the production dependency audit, Prisma generation, lint, formatting, typecheck, 841 Vitest tests in 90 files, all production builds, two Chromium E2E flows, desktop/mobile rendered QA, and `git diff --check`.
 
+### C1.14 Scan progress and future-product preview (2026-07-16, PR #85)
+
+- The Lite Check waiting state uses an animated public-surface map, a live activity sentence, and five rotating review categories. The UI does not claim a percentage or backend phase completion because the scanner API does not stream progress events; returned results remain the only completion proof.
+- The homepage assurance section presents the future product as a single evidence ledger rather than another feature grid. Illustrative finding-state counts are labeled as sample data and not production performance, while the Vibe Security 50 registry truthfully states the current 43 machine-testable and 7 evidence-required control split.
+- Motion uses transforms and opacity, respects `prefers-reduced-motion`, keeps a single stable screen-reader progress announcement, and has no desktop or 390 px horizontal overflow. The final branch gate passed the production dependency audit, Prisma generation, lint, formatting, typecheck, 843 Vitest tests in 90 files, every production build, two Chromium E2E flows, rendered desktop/mobile QA, and `git diff --check`.
+
 ## C2. Phase 1 gaps and release gates
 
 ### C2.1 Required before a controlled product pilot
