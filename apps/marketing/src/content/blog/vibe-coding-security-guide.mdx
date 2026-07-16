@@ -52,15 +52,17 @@ Database controls need the same negative test. Row-level security can provide a 
 
 ## Layer 2: identity, secrets, and session handling
 
-Keep secrets on trusted servers. A value embedded in a browser bundle, mobile package, public environment variable, source map, or client request must be treated as public even if the interface calls it a secret. Passwords need a password-hashing function with an appropriate work factor, not reversible encryption or a fast general-purpose hash.
+Keep secrets on trusted servers. A value embedded in a browser bundle, public environment variable, source map, or client request must be treated as public. The [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) recommends slow password hashing rather than reversible encryption or a fast general-purpose hash, with current algorithm and parameter guidance.
 
-Session validation belongs on the server. Verify the signature or server-side session identifier, issuer, audience, expiry, revocation rules, and the binding between the session and the requested tenant. Cookies that carry session authority generally need `Secure`, `HttpOnly`, and an intentional `SameSite` policy. Those attributes help at the browser boundary, but they do not correct a server that accepts an invalid or mis-scoped session.
+Session validation belongs on the server, but its checks depend on the token type. For a self-contained JWT, verify the signature or MAC with a trusted key, constrain the algorithm, and validate issuer, audience, validity, and purpose before trusting claims. [ASVS 5.0's self-contained token requirements](https://github.com/OWASP/ASVS/blob/v5.0.0/5.0/en/0x18-V9-Self-contained-Tokens.md) cover these boundaries. An opaque reference token is an unpredictable identifier. The backend looks up its state and enforces expiry, revocation, user identity, and tenant binding. It has no embedded issuer or audience claims. [ASVS 5.0 session management](https://github.com/OWASP/ASVS/blob/v5.0.0/5.0/en/0x16-V7-Session-Management.md) requires trusted backend verification.
+
+Session cookies need `Secure`, an intentional `SameSite` policy, and `HttpOnly` when scripts do not need the value. [ASVS 5.0 cookie requirements](https://github.com/OWASP/ASVS/blob/v5.0.0/5.0/en/0x12-V3-Web-Frontend-Security.md) also specify the `__Host-` prefix unless sharing across hosts is intentional. These attributes do not correct invalid server-side acceptance.
 
 OAuth callbacks require tight redirect handling and state protection. [RFC 9700, the OAuth 2.0 Security Best Current Practice](https://www.rfc-editor.org/info/rfc9700/), requires exact matching for registered redirect URIs in the cases it describes and extends PKCE guidance to web applications as well as native clients. Do not accept an arbitrary callback URL because it begins with a familiar domain.
 
-Password reset and email verification flows deserve their own tests. Tokens should be unpredictable, single use, short lived, stored safely, and bound to the intended purpose. Responses should not reveal whether an address has an account. Changing a password should have a deliberate effect on existing sessions, and the user should receive an actionable notification.
+Password reset and email verification need separate tests. The [OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html) calls for random, sufficiently long, securely stored, single-use tokens that expire, plus consistent responses for existing and non-existing accounts. Bind each token to its purpose. Decide whether a password change terminates existing sessions, and notify the user without sending the password.
 
-Two free local analyzers can help with narrow parts of this layer. The [Secret Exposure Scanner](/tools/secret-exposure-scanner) checks selected text files for common credential patterns and redacts matches. It does not scan Git history, deployed assets, logs, cloud stores, or custom formats. The [JWT and Session Inspector](/tools/jwt-session-inspector) decodes a non-production JWT and reviews basic claims and cookie attributes. It does not verify the token's signature, issuer, audience, key, or revocation state. Never paste a production token into a diagnostic page.
+Two free browser-local tools cover narrow parts of this layer. The [Secret Exposure Scanner](/tools/secret-exposure-scanner) checks selected text files for credential patterns but not Git history, deployed assets, logs, or cloud stores. The [JWT and Session Inspector](/tools/jwt-session-inspector) decodes a non-production JWT and reviews claims and cookie attributes. It does not verify the signature, issuer, audience, key, or revocation state. Never paste a production token into a diagnostic page.
 
 ## Layer 3: inputs, outputs, and server-side execution
 
@@ -91,7 +93,9 @@ export async function findProject(request: Request) {
 
 The corrected snippet still needs authorization, result limits, error handling, and tests. It demonstrates one interpreter boundary rather than claiming the route is finished.
 
-Server-side URL fetching needs more than a URL parser. Restrict schemes and ports, resolve hostnames, reject private and special-purpose addresses, pin the permitted destination for the connection, and repeat the checks after every redirect. File uploads need size and type limits, generated storage names, isolation from executable paths, and safe downstream processing. Path operations should resolve against an approved root and reject escape attempts.
+Server-side URL fetching needs more than a parser. The [OWASP SSRF Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) recommends allowlisting known destinations where possible, validating resolved addresses, accounting for DNS pinning or rebinding, and disabling automatic redirects. If redirects are required, apply the same scheme, host, address, and port checks before each connection.
+
+File uploads need size and type limits, generated names, isolation from executable paths, and safe processing. The [OWASP File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) recommends another server or storage outside the webroot. [ASVS 5.0 file handling](https://github.com/OWASP/ASVS/blob/v5.0.0/5.0/en/0x14-V5-File-Handling.md) covers content validation, non-executable storage, and trusted path construction. Normalize each candidate path, resolve it against an approved root, and reject escape. [OWASP Path Traversal guidance](https://owasp.org/www-community/attacks/Path_Traversal) also recommends known-good values and restricted filesystem access.
 
 For browser-facing configuration, the [Security Headers and CORS Checker](/tools/security-headers-checker) reviews pasted headers for a focused set of missing or permissive signals. It does not fetch a URL, observe redirects or preflight behavior, or establish that a policy value is safe on every route. Treat its output as a prompt for route-level verification.
 
@@ -101,7 +105,7 @@ A dependency review begins with the resolved artifact, not the package name in a
 
 The [OWASP Software Supply Chain Failures category](https://owasp.org/Top10/2025/A03_2025-Software_Supply_Chain_Failures/) covers dependencies, build systems, and distribution infrastructure. That is wider than known-vulnerability matching. [OSV](https://osv.dev/) supplies machine-readable affected package versions and commit ranges. A version match is useful detection evidence, but this guide makes an editorial inference from that data boundary: the advisory record alone does not prove your application reaches or can exploit the affected code.
 
-Review CI permissions as production permissions. A pull request from an untrusted fork should not receive a write token or deployment secret. Pin reusable workflow and action references where your threat model requires it. Separate build, test, and deploy identities, and make production promotion an explicit action with a reviewed artifact.
+Review CI permissions as production permissions. GitHub's [secure use reference for Actions](https://docs.github.com/en/actions/reference/security/secure-use) warns against checking out untrusted pull-request code in privileged workflows and recommends full-length commit SHAs. An untrusted fork should not receive a write token or deployment secret. Separate build, test, and deploy identities, and promote a reviewed artifact explicitly.
 
 Deployment defaults deserve tests of their own. Check that storage is private unless intentionally public, debug routes and source maps are absent, production error responses do not expose secrets, TLS is enforced, and backups exist outside the primary failure domain. Configuration drift can invalidate a clean repository review.
 
@@ -131,9 +135,9 @@ Choose tests for the target and the claims you need to support. Static analysis,
 
 Keep detection separate from independent verification. A pattern match may identify a credential-like string. A dependency scanner may match an affected version. An engine may assign high confidence. Those are reasons to investigate. An independently verified state requires separate evidence that supports the finding under the stated scope. Confidence alone is triage metadata.
 
-After a fix, run a fresh check against the changed system. Do not turn a manual status change into proof. A complete deterministic retest may show that the original condition is absent and support a retest-confirmed outcome. If coverage is incomplete or the original check depended on model judgment, absence may remain inconclusive. Preserve that uncertainty.
+After a fix, run a fresh, server-owned check against the changed system. Do not turn a manual status change or a client-supplied result into proof. A complete deterministic retest may show that the original condition is absent and support a retest-confirmed outcome. If coverage is incomplete or the original check depended on model judgment, absence may remain inconclusive. Preserve that uncertainty.
 
-Operations supply evidence that source review cannot. Prove that monitoring reaches an owner, alerts are actionable, backups restore, queues recover, cancellations stop work, credentials rotate, and incident decisions have named responsibility. Test recovery before relying on it. A screenshot of a configured backup job is weaker than a retained restore record with timing and integrity checks.
+Operations supply evidence that source review cannot. Prove that monitoring reaches an owner, alerts are actionable, queues recover, cancellations stop work, credentials rotate, and incident decisions have named responsibility. [NIST SP 800-34 Rev. 1](https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final) treats contingency planning as a recovery process that must be developed, tested, and maintained. Test restoration before relying on a backup. A screenshot of a configured job is weaker than a retained restore record with timing, recovered-data validation, and functionality checks.
 
 ## Use an evidence loop for the release decision
 
@@ -149,7 +153,7 @@ Record which checks ran, which subjects they examined, what was skipped, and eve
 
 ### Evidence State
 
-Keep detected, independently verified, retest-confirmed, and inconclusive outcomes distinct. A detected candidate is a signal worth review. Independent verification needs a separate receipt. Retest-confirmed means a fresh, applicable deterministic check found the condition absent with complete relevant coverage. Inconclusive means the available evidence cannot settle the question.
+Keep detected, independently verified, retest-confirmed, and inconclusive outcomes distinct. A detected candidate is a signal worth review. Independent verification needs a separate receipt. Retest-confirmed means a fresh, server-owned, applicable deterministic check found the condition absent with complete relevant coverage. Inconclusive means the available evidence cannot settle the question.
 
 ### Fix Proposal
 
@@ -157,7 +161,7 @@ A fix proposal should describe the intended change, affected files or controls, 
 
 ### Retest
 
-Run the relevant check against the new state. Retest the abuse case, not merely the happy path. Also look for regression in neighboring controls. An authorization fix that blocks every user is not a successful security outcome.
+Create the retest from the original server-owned target and mode, then run the relevant check against the new state. Retest the abuse case, not merely the happy path. Also look for regression in neighboring controls. An authorization fix that blocks every user is not a successful security outcome.
 
 ### Assurance Report
 
@@ -173,7 +177,7 @@ Use the [AI App Launch Security Checklist](/tools/ai-app-security-checklist) to 
 
 ## Use the free tools for narrow questions
 
-The [free security tools hub](/tools) contains five browser-local analyzers. Inputs stay on the device, but that privacy boundary does not make the results comprehensive.
+The [free security tools hub](/tools) contains five browser-local tools. Inputs stay on the device, but that privacy boundary does not make the results comprehensive.
 
 - The [AI App Launch Security Checklist](/tools/ai-app-security-checklist) helps organize release evidence.
 - The [Security Headers and CORS Checker](/tools/security-headers-checker) reviews pasted response headers.
