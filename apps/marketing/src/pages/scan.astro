@@ -54,7 +54,7 @@ const jsonLd = [
         <form id="scan-form" class="mt-9 max-w-2xl" data-api-origin={appOrigin} data-turnstile-site-key={turnstileSiteKey}>
           <label for="scan-url" class="block text-sm font-semibold text-text">Public app URL</label>
           <div class="mt-2 flex flex-col gap-3 sm:flex-row">
-            <input id="scan-url" name="url" type="url" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg-raised px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
+            <input id="scan-url" name="url" type="text" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="lyrashieldai.com or https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg-raised px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
             <button id="scan-button" type="submit" disabled={!scannerAvailable} class="min-h-13 rounded-xl bg-accent px-6 font-semibold text-bg shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-55">{scannerAvailable ? "Scan my app" : "Scanner API not connected"}</button>
           </div>
           <label class="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-bg-raised/70 p-4 text-sm leading-6 text-text-muted">
@@ -302,7 +302,18 @@ const jsonLd = [
     function animateSteps() {
       const steps = [...document.querySelectorAll<HTMLElement>("#scan-steps li")]
       const activity = document.querySelector<HTMLElement>("#scan-activity")
+      const stepDurationMs = 800 // ponytail: fixed UI cadence; make configurable only if product timing diverges.
       let active = 0
+      let timer = 0
+      let resolveFinished = () => {}
+      let isFinished = false
+      const finished = new Promise<void>((resolve) => { resolveFinished = resolve })
+
+      const finish = () => {
+        if (isFinished) return
+        isFinished = true
+        resolveFinished()
+      }
 
       const showStep = (index: number) => {
         steps.forEach((step, stepIndex) => {
@@ -315,9 +326,20 @@ const jsonLd = [
       }
 
       showStep(active)
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {}
-      const timer = window.setInterval(() => { active = (active + 1) % steps.length; showStep(active) }, 1600)
-      return () => window.clearInterval(timer)
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        showStep(steps.length - 1)
+        finish()
+      } else {
+        const advance = () => {
+          active += 1
+          if (active >= steps.length) return finish()
+          showStep(active)
+          timer = window.setTimeout(advance, stepDurationMs)
+        }
+        timer = window.setTimeout(advance, stepDurationMs)
+      }
+
+      return { finished, stop: () => { window.clearTimeout(timer); finish() } }
     }
 
     function chip(label: string, value: number, tone: string): HTMLElement { const el = document.createElement("span"); el.className = `rounded-full border px-3 py-1.5 text-xs font-semibold ${tone}`; el.textContent = `${value} ${label}`; return el }
@@ -382,8 +404,8 @@ const jsonLd = [
       const input = document.querySelector<HTMLInputElement>("#scan-url")!; const url = normalizeUrl(input.value.trim()); input.value = url
       let domainHash = ""; try { domainHash = await hashDomain(url) } catch { if (errorBox) { errorBox.textContent = "Enter a valid public URL."; errorBox.classList.remove("hidden") }; return }
       capture("scan_started", { target_domain_hash: domainHash, device: matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop", ...attribution })
-      scanButton!.disabled = true; scanButton!.textContent = "Scanning…"; results?.classList.add("hidden"); scanning?.classList.remove("hidden"); scanning?.setAttribute("aria-busy", "true"); scanning?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); const stop = animateSteps()
-      try { const response = await fetch(`${appOrigin}/api/lite-scan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, authorized: true, ...(turnstileToken ? { turnstileToken } : {}) }) }); const body = await response.json() as { result?: LiteResult; durationMs?: number; error?: string; message?: string }; if (!response.ok || !body.result) throw Object.assign(new Error(body.message || "The passive check could not finish."), { reason: body.error || "scan_error" }); renderResult(body.result, body.durationMs ?? 0) } catch (cause) { const error = cause as Error & { reason?: string }; if (errorBox) { errorBox.textContent = error.message; errorBox.classList.remove("hidden") }; capture(error.reason === "ssrf_blocked" ? "scan_blocked" : "scan_error", { reason: error.reason || "unreachable", target_domain_hash: domainHash }); (window as TurnstileWindow).turnstile?.reset(turnstileWidget) } finally { stop(); scanning?.classList.add("hidden"); scanning?.removeAttribute("aria-busy"); scanButton!.disabled = false; scanButton!.textContent = "Scan my app" }
+      scanButton!.disabled = true; scanButton!.textContent = "Scanning…"; results?.classList.add("hidden"); scanning?.classList.remove("hidden"); scanning?.setAttribute("aria-busy", "true"); scanning?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); const progress = animateSteps()
+      try { const response = await fetch(`${appOrigin}/api/lite-scan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, authorized: true, ...(turnstileToken ? { turnstileToken } : {}) }) }); const body = await response.json() as { result?: LiteResult; durationMs?: number; error?: string; message?: string }; if (!response.ok || !body.result) throw Object.assign(new Error(body.message || "The passive check could not finish."), { reason: body.error || "scan_error" }); await progress.finished; renderResult(body.result, body.durationMs ?? 0) } catch (cause) { const error = cause as Error & { reason?: string }; if (errorBox) { errorBox.textContent = error.message; errorBox.classList.remove("hidden") }; capture(error.reason === "ssrf_blocked" ? "scan_blocked" : "scan_error", { reason: error.reason || "unreachable", target_domain_hash: domainHash }); (window as TurnstileWindow).turnstile?.reset(turnstileWidget) } finally { progress.stop(); scanning?.classList.add("hidden"); scanning?.removeAttribute("aria-busy"); scanButton!.disabled = false; scanButton!.textContent = "Scan my app" }
     })
 
     document.querySelectorAll<HTMLButtonElement>("[data-capture-action]").forEach((button) => button.addEventListener("click", () => { lastAction = button.dataset.captureAction || "waitlist"; capture("upsell_clicked", { cta: lastAction }) }))

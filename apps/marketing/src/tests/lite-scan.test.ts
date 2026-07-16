@@ -69,8 +69,17 @@ describe("Lite Check marketing surface", () => {
     expect(page).toContain('data-status="Reading public HTML and same-origin assets."')
     expect(page).toContain('role="status"')
     expect(page).toContain("prefers-reduced-motion: reduce")
-    expect(page).toContain("active = (active + 1) % steps.length")
+    expect(page).toContain("active >= steps.length")
+    expect(page).toContain("await progress.finished")
+    expect(page).not.toContain("setInterval")
     expect(page).not.toMatch(/scan-progress|\d+% complete/i)
+  })
+
+  it("accepts bare domains and normalizes them to HTTPS before scanning", () => {
+    expect(page).toContain('id="scan-url" name="url" type="text" inputmode="url"')
+    expect(page).toContain("return /^https?:\\/\\//i.test(value) ? value : `https://${value}`")
+    expect(page).toContain("lyrashieldai.com or https://your-app.com")
+    expect(homeScan).toContain("lyrashieldai.com or https://your-app.com")
   })
 
   it("previews the future product with clearly labeled sample and registry data", () => {

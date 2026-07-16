@@ -5361,6 +5361,12 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - The homepage assurance section presents the future product as a single evidence ledger rather than another feature grid. Illustrative finding-state counts are labeled as sample data and not production performance, while the Vibe Security 50 registry truthfully states the current 43 machine-testable and 7 evidence-required control split.
 - Motion uses transforms and opacity, respects `prefers-reduced-motion`, keeps a single stable screen-reader progress announcement, and has no desktop or 390 px horizontal overflow. The final branch gate passed the production dependency audit, Prisma generation, lint, formatting, typecheck, 843 Vitest tests in 90 files, every production build, two Chromium E2E flows, rendered desktop/mobile QA, and `git diff --check`.
 
+### C1.15 Direct scan URLs and one-pass progress (2026-07-16, PR #86)
+
+- Both public Lite Check entry forms accept a bare domain such as `lyrashieldai.com` or a complete HTTP(S) URL. Bare domains are normalized to HTTPS before hashing, private session-storage handoff, or API submission; the scanner service remains the final SSRF and target-validation boundary.
+- The five waiting rows advance once at an 800 ms cadence. A fast API response remains hidden until the fifth row has been shown, while a slower response leaves the fifth row active instead of restarting the sequence. Errors stop the timer immediately, and reduced-motion users do not receive an artificial delay.
+- Instrumented browser QA recorded rows 1–5 at approximately 0, 0.8, 1.6, 2.4, and 3.2 seconds, then rendered the result after the four-second pass. The release gate passed Prisma generation, lint, formatting, typecheck, 844 Vitest tests in 90 files, every production build, two Chromium E2E flows, desktop/mobile QA, and `git diff --check`.
+
 ## C2. Phase 1 gaps and release gates
 
 ### C2.1 Required before a controlled product pilot
