@@ -29,6 +29,7 @@ function batchFor(index: number) {
 }
 
 function readApprovedBlogProgram(): BlogProgramEntry[] {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The URL is a fixed repository-owned editorial plan fixture.
   const plan = readFileSync(
     new URL(
       "../../../../docs/plans/2026-07-14-vibe-coder-security-seo-tools-plan.md",

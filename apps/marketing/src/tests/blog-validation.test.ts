@@ -18,6 +18,16 @@ import {
   validateUsageCounts,
 } from "../../scripts/blog-validation-lib.mjs"
 
+function createFixtureDirectory(path: string) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are descendants of mkdtemp-created fixture roots.
+  mkdirSync(path, { recursive: true })
+}
+
+function writeFixtureFile(path: string, contents: string | Uint8Array) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are descendants of mkdtemp-created fixture roots.
+  writeFileSync(path, contents)
+}
+
 const scripts = [
   "validate-blog-content.mjs",
   "validate-blog-images.mjs",
@@ -91,12 +101,12 @@ function catalogEntry(imageId: string, cluster = "verification") {
 
 function writeImageSet(root: string, imageId: string, avifSize = 40) {
   const imageRoot = join(root, "public/images/blog/library", imageId)
-  mkdirSync(imageRoot, { recursive: true })
-  writeFileSync(join(imageRoot, "hero.avif"), avif(1600, 900, avifSize))
-  writeFileSync(join(imageRoot, "hero.webp"), webp(1600, 900))
-  writeFileSync(join(imageRoot, "hero.jpg"), jpeg(1600, 900))
-  writeFileSync(join(imageRoot, "og.jpg"), jpeg(1200, 630))
-  writeFileSync(join(imageRoot, "social-portrait.jpg"), jpeg(1080, 1350))
+  createFixtureDirectory(imageRoot)
+  writeFixtureFile(join(imageRoot, "hero.avif"), avif(1600, 900, avifSize))
+  writeFixtureFile(join(imageRoot, "hero.webp"), webp(1600, 900))
+  writeFixtureFile(join(imageRoot, "hero.jpg"), jpeg(1600, 900))
+  writeFixtureFile(join(imageRoot, "og.jpg"), jpeg(1200, 630))
+  writeFixtureFile(join(imageRoot, "social-portrait.jpg"), jpeg(1080, 1350))
   return imageRoot
 }
 
@@ -309,6 +319,83 @@ ${filler}
     ).toEqual([])
   })
 
+  it("counts query and fragment variants of one external resource only once", () => {
+    const directAnswer = Array(45).fill("answer").join(" ")
+    const filler = Array(1160).fill("guidance").join(" ")
+    const entry = {
+      index: 2,
+      slug: "source-count-article",
+      cluster: "Access",
+      cta: "Pillar + RLS Checker",
+    }
+    const article = {
+      slug: entry.slug,
+      data: stableFrontmatter,
+      body: `${directAnswer}
+
+## Verify safely
+
+[Authority guide](/blog/vibe-coding-security-guide)
+
+${filler}
+
+[RLS checker](/tools/supabase-rls-checker) and [related article](/blog/access-post).
+
+[First view](https://owasp.org/reference?view=1) [Second view](https://owasp.org/reference?view=2) [Fragment](https://owasp.org/reference#third)
+`,
+    }
+    const errors = validateArticle(article, entry, {
+      availableSlugs: new Set(["vibe-coding-security-guide", "access-post"]),
+      programBySlug: new Map([
+        [entry.slug, entry],
+        ["access-post", { index: 3, slug: "access-post", cluster: "Access" }],
+      ]),
+    })
+
+    expect(errors).toContain("article requires at least 3 external sources")
+    expect(errors).toContain("article requires at least 2 primary or official sources")
+  })
+
+  it("rejects FTP and scheme-relative external source links", () => {
+    const directAnswer = Array(45).fill("answer").join(" ")
+    const filler = Array(1160).fill("guidance").join(" ")
+    const entry = {
+      index: 2,
+      slug: "https-only-article",
+      cluster: "Access",
+      cta: "Pillar + RLS Checker",
+    }
+    const article = {
+      slug: entry.slug,
+      data: stableFrontmatter,
+      body: `${directAnswer}
+
+## Verify safely
+
+[Authority guide](/blog/vibe-coding-security-guide)
+
+${filler}
+
+[RLS checker](/tools/supabase-rls-checker) and [related article](/blog/access-post).
+
+[OWASP](https://owasp.org/a) [NIST](https://nist.gov/b) [RFC](https://www.rfc-editor.org/c)
+[FTP source](ftp://insecure.example.org/source?token=secret)
+[Scheme-relative source](//insecure.example.org/relative?token=secret)
+`,
+    }
+    const errors = validateArticle(article, entry, {
+      availableSlugs: new Set(["vibe-coding-security-guide", "access-post"]),
+      programBySlug: new Map([
+        [entry.slug, entry],
+        ["access-post", { index: 3, slug: "access-post", cluster: "Access" }],
+      ]),
+    })
+
+    expect(errors).toContain("external source must use HTTPS: ftp://insecure.example.org/source")
+    expect(errors).toContain("external source must use HTTPS: //insecure.example.org/relative")
+    expect(errors.join("\n")).not.toContain("secret")
+  })
+
   it.each([
     ["GitHub diff", "Pillar + GitHub diff gate"],
     ["MCP", "Pillar + MCP security"],
@@ -369,14 +456,14 @@ ${filler}
   it("validates catalog paths, dimensions, budgets, hashes, clusters, and adjacency", () => {
     const root = mkdtempSync(join(tmpdir(), "blog-validation-"))
     const imageRoot = join(root, "public/images/blog/library/verification-01")
-    mkdirSync(imageRoot, { recursive: true })
+    createFixtureDirectory(imageRoot)
 
     const jpeg = Buffer.from([
       0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x03, 0x84, 0x06, 0x40, 0x03, 0x01, 0x11, 0x00,
       0x02, 0x11, 0x00, 0x03, 0x11, 0x00, 0xff, 0xd9,
     ])
     for (const file of ["hero.avif", "hero.webp", "hero.jpg", "og.jpg", "social-portrait.jpg"]) {
-      writeFileSync(join(imageRoot, file), jpeg)
+      writeFixtureFile(join(imageRoot, file), jpeg)
     }
 
     const catalog = {
@@ -450,7 +537,7 @@ ${filler}
       },
     ]
     for (const boundary of boundaryFiles) {
-      writeFileSync(join(imageRoot, boundary.file), boundary.build(boundary.max))
+      writeFixtureFile(join(imageRoot, boundary.file), boundary.build(boundary.max))
     }
     const catalog = { [imageId]: catalogEntry(imageId, "authority") }
     const manifests = [
@@ -459,11 +546,11 @@ ${filler}
 
     expect(validateImageLibrary(catalog, manifests, root)).toEqual([])
     for (const boundary of boundaryFiles) {
-      writeFileSync(join(imageRoot, boundary.file), boundary.build(boundary.max + 1))
+      writeFixtureFile(join(imageRoot, boundary.file), boundary.build(boundary.max + 1))
       expect(validateImageLibrary(catalog, manifests, root)).toContain(
         `${imageId} ${boundary.file} exceeds ${boundary.max} bytes`
       )
-      writeFileSync(join(imageRoot, boundary.file), boundary.build(boundary.max))
+      writeFixtureFile(join(imageRoot, boundary.file), boundary.build(boundary.max))
     }
   })
 
@@ -502,12 +589,58 @@ ${filler}
     expect(validateImageLibrary(catalog, manifests, root, { finalDistribution: true })).toEqual([])
   })
 
+  it("requires exactly one authority image and 36 images across 100 final assignments", () => {
+    const root = mkdtempSync(join(tmpdir(), "blog-validation-cardinality-"))
+    const catalog: Record<string, ReturnType<typeof catalogEntry>> = {}
+    const authorityIds = ["authority-guide-01", "authority-guide-02"]
+    for (const imageId of authorityIds) {
+      catalog[imageId] = catalogEntry(imageId, "authority")
+      writeImageSet(root, imageId)
+    }
+
+    const sharedIds = [...Array(35)].map((_, index) => `verification-${index + 1}`)
+    const tripleIds = new Set(sharedIds.slice(0, 29))
+    for (const imageId of sharedIds) {
+      catalog[imageId] = catalogEntry(imageId)
+      writeImageSet(root, imageId)
+    }
+    const assignments = [
+      ...sharedIds,
+      ...sharedIds,
+      ...sharedIds.filter((imageId) => tripleIds.has(imageId)),
+    ]
+    const counts = new Map(sharedIds.map((imageId) => [imageId, tripleIds.has(imageId) ? 3 : 2]))
+    const manifests = [
+      {
+        release: "authority",
+        entries: authorityIds.map((imageId, index) =>
+          manifestEntry(`authority-${index + 1}`, imageId, 1, "authority")
+        ),
+      },
+      {
+        release: "batch-1",
+        entries: assignments.map((imageId, index) =>
+          manifestEntry(`article-${index + 1}`, imageId, counts.get(imageId)!)
+        ),
+      },
+    ]
+
+    const errors = validateImageLibrary(catalog, manifests, root, { finalDistribution: true })
+    expect(errors).toContain(
+      "final image distribution must contain exactly 1 authority image; found 2"
+    )
+    expect(errors).toContain("final image distribution must contain exactly 36 images; found 37")
+    expect(errors).toContain(
+      "final image distribution must contain exactly 100 assignments; found 101"
+    )
+  })
+
   it("rejects malformed manifest roots, orphan catalog entries, and unexpected library files", () => {
     const root = mkdtempSync(join(tmpdir(), "blog-validation-shape-"))
     const imageId = "verification-01"
     const imageRoot = writeImageSet(root, imageId)
-    writeFileSync(join(imageRoot, "unexpected.txt"), "unexpected")
-    mkdirSync(join(root, "public/images/blog/library/orphan-directory"), { recursive: true })
+    writeFixtureFile(join(imageRoot, "unexpected.txt"), "unexpected")
+    createFixtureDirectory(join(root, "public/images/blog/library/orphan-directory"))
     const catalog = {
       [imageId]: catalogEntry(imageId),
       "orphan-catalog": catalogEntry("orphan-catalog"),
