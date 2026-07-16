@@ -1,0 +1,156 @@
+---
+title: "Prevent Mass Assignment in CRUD APIs"
+description: "Stop request bodies from changing roles, owners, prices, and workflow state with operation-specific schemas and explicit data writes."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - web-security
+  - verification
+draft: true
+heroImage: web-execution-01
+faq:
+  - q: "Is stripping unknown request keys enough?"
+    a: "No. A known field can still be forbidden for this operation or caller. Use an operation-specific allowlist and set ownership, role, price, status, and approval fields from trusted server context."
+  - q: "Do TypeScript types validate an API request at runtime?"
+    a: "No. TypeScript types and interfaces are erased during compilation. Parse untrusted HTTP input with a runtime schema or validated class before constructing the database update."
+  - q: "How should PATCH differ from PUT?"
+    a: "PATCH should allow only the explicitly supported mutable subset and distinguish omission from a deliberate null or removal. PUT may replace a complete client-owned representation, but server-owned fields still remain outside the request model."
+---
+
+**Direct answer:** Prevent mass assignment by parsing each create, update, and administrative operation with its own runtime schema, rejecting unexpected fields, and constructing the database write explicitly. Never spread a request body into an ORM call. Set role, owner, price, status, approval, tenant, and audit fields from trusted server context or dedicated privileged workflows.
+
+CRUD generators are built to move data quickly from a form to a database. That convenience becomes unsafe when the public request model and internal record share every property. A valid field name is not automatically writable by every caller.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) separates input shape, action authorization, and property authorization. A request can have valid types, come from a user allowed to edit the object, and still attempt to change a field that only the server owns.
+
+## The vulnerable pattern: spreading the body into an update
+
+**Vulnerable pattern. Do not pass an entire request body to the ORM.**
+
+```ts
+app.patch("/api/users/:id", requireSession, async (req, res) => {
+  const user = await db.user.update({
+    where: { id: req.params.id },
+    data: { ...req.body },
+  })
+
+  return res.json(user)
+})
+```
+
+The intended form might send `displayName` and `timezone`. The model may also contain `role`, `workspaceId`, `emailVerified`, `creditBalance`, or `disabledAt`. If the ORM accepts those fields, an extra JSON property can change server-owned state.
+
+[CWE-915](https://cwe.mitre.org/data/definitions/915.html) covers improperly controlled modification of dynamically determined object attributes. OWASP's [API3:2023](https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/) includes unauthorized reading and modification of object properties.
+
+## Why generated CRUD handlers over-bind
+
+Object spread is concise and survives model changes without compiler errors. A new database column appears, and the generic handler can start accepting it without any route change. That is exactly the maintenance behavior an authorization boundary should avoid.
+
+Generated code may add a broad type such as `Partial<User>`. The annotation helps the editor but does not parse runtime JSON. It also says that every user property is potentially part of the operation, which is usually false.
+
+A denylist is brittle for the same reason. Removing `role` and `isAdmin` today does not protect `billingStatus` added next month. Renamed or nested fields can bypass the list. Define what the operation accepts rather than trying to remember every field it must reject.
+
+## Give every operation its own input model
+
+Start with the product action, not the database row. A profile update might permit only two strings.
+
+```ts
+const updateProfileSchema = z
+  .object({
+    displayName: z.string().trim().min(1).max(80).optional(),
+    timezone: z.string().max(64).optional(),
+  })
+  .strict()
+
+app.patch("/api/profile", requireSession, async (req, res) => {
+  const input = updateProfileSchema.parse(req.body)
+  const currentUser = await requireActiveUser(req.session)
+
+  const profile = await db.user.update({
+    where: { id: currentUser.id },
+    data: {
+      ...(input.displayName !== undefined && { displayName: input.displayName }),
+      ...(input.timezone !== undefined && { timezone: input.timezone }),
+    },
+    select: { id: true, displayName: true, timezone: true },
+  })
+
+  return res.json(profile)
+})
+```
+
+Strict parsing rejects unknown keys. The update still lists each writable field, which keeps the boundary visible during review. The query derives the user ID from the authenticated session rather than accepting an owner from the body.
+
+Keep administrative changes in separate operations with separate authorization. A role update should not reuse a general profile DTO. Load current membership, verify the exact permission and workspace, constrain the target role, prevent invalid last-owner transitions, and write an audit event.
+
+Create a writable-field inventory for each resource. Mark fields as client-editable, server-derived, immutable, workflow-controlled, or administrative. Review that inventory when a migration adds a column. This small artifact gives reviewers a concrete answer when a generated endpoint starts accepting a new property.
+
+Defaults belong to trusted code too. A create request should not supply its tenant, creator, approval state, billing status, or creation timestamp. Derive those fields after parsing:
+
+```ts
+const input = createProjectSchema.parse(req.body)
+const context = await requireWorkspaceMember(req.session)
+
+await db.project.create({
+  data: {
+    name: input.name,
+    visibility: input.visibility,
+    workspaceId: context.workspaceId,
+    createdById: context.userId,
+    approvalState: "PENDING",
+  },
+})
+```
+
+The schema and explicit write make a future ownership field visible in review. Do not let a serializer silently copy defaults back from the request.
+
+Framework allowlisting must run at runtime. NestJS's current [validation documentation](https://docs.nestjs.com/techniques/validation) describes DTO validation and whitelist options. It also warns that TypeScript interfaces disappear at runtime and cannot provide the metadata its validation pipe needs.
+
+## Validation and authorization answer different questions
+
+A schema can prove that `status` is one of three strings. It cannot prove that this user may choose any status. Property authorization depends on the operation, caller, current object state, and sometimes a workflow transition.
+
+For a support ticket, the customer may change `subject` while the server controls `assignedAgentId` and `resolvedAt`. A support agent may assign the ticket but not change its tenant. An automated job may set `resolvedAt` only after a reviewed transition. Use distinct functions or command objects for those paths.
+
+The related [input validation guide](/blog/input-validation-ai-generated-api) covers types, formats, lengths, and unknown fields in more detail. Those checks still need property and object authorization beside them.
+
+Response models need the same restraint. Returning the updated ORM record can expose internal flags, password metadata, provider IDs, or another tenant field. Select a public response shape after the write.
+
+## PATCH needs omission semantics
+
+Partial updates must distinguish a missing field from an explicit `null`, empty string, or removal instruction. Do not use truthiness checks that ignore valid values such as `false` or zero.
+
+For arrays and nested objects, decide whether the operation replaces, merges, appends, or removes. Generic deep merge utilities can resurrect mass assignment inside a nested settings object. Parse the complete nested shape and construct the allowed update explicitly.
+
+Bulk operations require per-object checks. A request containing twenty IDs and one update object must authorize every target and every writable property. Do not authorize the first record and apply the update to the rest. Scope the database update by tenant and permitted state, then compare the affected count with the expected authorized set.
+
+Beware of alternate input paths. Query parameters, multipart form fields, GraphQL input objects, CSV imports, background jobs, and administrative scripts can reach the same model. Reusing the safe service function is better than rebuilding a broad ORM call in each transport. The service should accept the narrow command type, not an HTTP request or ORM model.
+
+PUT does not make every database property client-owned. Even when it replaces a complete public representation, server-generated IDs, ownership, billing state, moderation state, and audit fields stay outside the input.
+
+## Verify with harmless extra fields
+
+Use a local or authorized test environment. Create two ordinary users and an administrative fixture. Send a normal profile update, then repeat it with extra values for role, owner, tenant, balance, verification, and status. Expect a bounded validation error and confirm the stored record did not change.
+
+Test known but forbidden fields as well as unknown ones. Exercise nested objects, arrays, nulls, duplicate JSON keys according to the parser, and fields added by recent migrations. Test each administrative endpoint separately.
+
+Review the response body after success and failure. It should contain only the documented public fields and no stack trace or internal record.
+
+Add a regression test when a sensitive column is introduced. Send that property through every public mutation and assert that the parser rejects it or the service ignores it by explicit design. Also confirm that no audit, webhook, or job payload later rebinds the rejected client data under a different name.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can prompt a review of writable fields and privileged transitions. It does not send API requests or inspect the ORM schema.
+
+## What automation can and cannot prove
+
+Static tools can flag request spreads and broad ORM updates. Schema tests can verify unknown-key rejection. Negative integration tests can confirm that selected fields remain unchanged.
+
+Automation cannot infer the complete product policy for every property. A field allowed for one role or workflow may be forbidden in another. Keep operation-specific allowlists and tests beside the business rules, then revisit them whenever the data model gains a sensitive field.
+
+## Sources
+
+- [OWASP API3:2023: Broken Object Property Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/)
+- [MITRE CWE-915: Improperly Controlled Object Attributes](https://cwe.mitre.org/data/definitions/915.html)
+- [OWASP: Mass Assignment Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html)
+- [NestJS: Validation](https://docs.nestjs.com/techniques/validation)

@@ -1,0 +1,147 @@
+---
+title: "Keep Pricing and Entitlements Off the Client"
+description: "Authorize paid features from server-owned entitlement state, reconcile provider updates, and handle stale access without trusting client claims."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - verification
+draft: true
+heroImage: decision-operations-01
+faq:
+  - q: "Is a plan claim in a JWT enough to authorize a paid feature?"
+    a: "Only if the server issued the claim from trusted entitlement state, verifies the token correctly, and accepts the claim's staleness and revocation model. Long-lived client tokens should not remain authoritative after access changes."
+  - q: "Should webhooks update a local entitlement table?"
+    a: "A local table can reduce latency and support product-specific policy. Its update path needs verified events, idempotency, stable customer mapping, revocation handling, and reconciliation with the provider after missed or delayed events."
+  - q: "What should happen when an entitlement event is delayed?"
+    a: "Choose a documented failure policy for each feature. Sensitive or costly operations may fail closed or query the provider. Lower-risk features may use a short, bounded grace period while reconciliation runs."
+---
+
+**Direct answer:** Keep plan names, prices, credits, and feature access out of client authority. At each protected operation, the server should load a server-owned entitlement record tied to the authenticated account, apply current product policy, and deny stale or revoked access. Update that record from verified provider events and reconcile it against provider state.
+
+A pricing card can display what a user appears to have. It cannot grant the feature. Browser state, local storage, form fields, and client-visible token claims are all under the user's control or can become stale after a plan change.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) puts paid access inside the same server authorization boundary as roles and ownership. Payment status is an input to policy, not a replacement for policy.
+
+## The vulnerable pattern: trusting the browser's plan
+
+**Vulnerable pattern. Do not authorize from client-submitted plan data.**
+
+```ts
+app.post("/api/exports", requireSession, async (req, res) => {
+  if (req.body.plan !== "pro") return res.sendStatus(403)
+
+  const exportJob = await createLargeExport({
+    workspaceId: req.session.workspaceId,
+  })
+  return res.status(202).json({ id: exportJob.id })
+})
+```
+
+The server checks a field the caller supplied. Hiding the export button or signing the checkout return URL does not repair the route. A user can send the same request with a different plan value.
+
+MITRE describes this design class as [CWE-602](https://cwe.mitre.org/data/definitions/602.html), client-side enforcement of a server-side security control. The browser can assist with presentation, but the server must enforce the decision.
+
+## Why generated billing flows stop at checkout
+
+Generated SaaS code often treats the successful checkout redirect as the moment access becomes active. That path is visible and easy to demo. Subscription systems continue changing after the redirect through payment failures, cancellations, pauses, refunds, and administrator actions.
+
+Provider identifiers can also be attached too loosely. An email address from an event may be matched to whichever local user currently has that address. A client may submit a price ID and the server assumes that price maps to the requested feature. Neither is a durable account relationship.
+
+The missing object is usually a server-owned entitlement model. It connects one internal account or workspace to one provider customer, records the features product policy currently allows, and retains enough source information to explain the decision.
+
+## Build a server-owned entitlement record
+
+Keep provider mapping and feature policy on the server. One possible record looks like this:
+
+```ts
+type EntitlementRecord = {
+  workspaceId: string
+  providerCustomerId: string
+  feature: "large-export" | "scheduled-scan"
+  state: "active" | "grace" | "revoked"
+  sourceVersion: string
+  effectiveAt: Date
+  checkedAt: Date
+}
+```
+
+Use an immutable internal workspace identifier as the ownership key. Bind the provider customer during an authenticated, server-created checkout or a reviewed administrative process. Enforce uniqueness so one provider customer cannot silently attach to multiple unrelated workspaces unless the product explicitly supports that model.
+
+The feature mapping belongs in trusted configuration. A provider product, price, or feature identifier can select a reviewed rule, but the browser should not choose the outcome. Keep environment-specific identifiers separate because test and live provider objects are not interchangeable.
+
+Model quantity and scope explicitly. A subscription may grant ten seats, one workspace, a monthly credit pool, or access to a feature only in selected regions. A boolean `isPro` column cannot represent those differences safely. Store the measured allowance, its reset or effective period, and the resource it belongs to. Decrement consumable credits through an atomic server operation so two concurrent requests cannot spend the same balance.
+
+Keep commercial labels out of enforcement code. Marketing may rename a plan while the feature contract stays stable. Authorize against durable feature identifiers and reviewed limits, then let the pricing layer describe which products currently supply them.
+
+Stripe's current [Entitlements documentation](https://docs.stripe.com/billing/entitlements) maps product features to active customer entitlements and exposes updates through events and API retrieval. A product can use that system or maintain its own policy. Either way, local authorization still needs an exact mapping to the application's account and operation.
+
+## Authorize at the protected operation
+
+Check entitlement after authentication and workspace resolution, next to the action that consumes the feature.
+
+```ts
+app.post("/api/exports", requireSession, async (req, res) => {
+  const workspace = await requireActiveWorkspace(req.session)
+  const entitlement = await entitlementStore.findCurrent({
+    workspaceId: workspace.id,
+    feature: "large-export",
+  })
+
+  if (!entitlement || entitlement.state === "revoked") {
+    return res.status(403).json({ error: "Feature is not available" })
+  }
+
+  if (entitlement.checkedAt < freshnessBoundary()) {
+    return res.status(503).json({ error: "Feature status is being refreshed" })
+  }
+
+  const job = await createLargeExport({ workspaceId: workspace.id })
+  return res.status(202).json({ id: job.id })
+})
+```
+
+Freshness is a product decision. A high-cost operation may require recent provider confirmation. A low-risk feature may tolerate a short grace period. Make the rule explicit and do not silently turn every provider outage into permanent free access or an unexplained lockout.
+
+If an access token carries entitlement claims, give them a short, reviewed lifetime and establish how revocation reaches active sessions. The authoritative server record should win when the operation cannot tolerate stale access.
+
+## Process events, then reconcile
+
+Subscription activity is asynchronous. Stripe's current [subscription webhook guidance](https://docs.stripe.com/billing/subscriptions/webhooks) tells integrations to handle lifecycle events, including active entitlement updates and subscription status changes. Verify the webhook signature before trusting its body, as described in the [Stripe webhook verification guide](/blog/stripe-webhook-signature-security).
+
+A valid signature proves the event body came through the configured signing boundary. It does not prove which local workspace should receive access. Resolve the provider customer through the server-owned mapping, reject ambiguous or missing links, and apply the product's current feature rules.
+
+Make event handling idempotent and transactional. Record the provider event or source version with the resulting entitlement change. Duplicate delivery should not grant credits or extend access twice.
+
+Revocation deserves its own path. When an entitlement becomes inactive, stop new protected operations before cleaning up optional cached state. Decide what happens to work already running and artifacts already created. A revoked export feature might block new exports without deleting existing customer files. That product decision belongs in policy, not in the webhook handler.
+
+Events can be delayed, missed, or processed out of order. Run reconciliation that retrieves current provider state for mapped customers and compares it with local records. Use a cursor or bounded work queue rather than scanning every customer in one request. Record differences and apply revocations as carefully as grants.
+
+Cache entitlement reads only with a revocation plan. Evict or version the cache after an update. A long cache lifetime can preserve access after cancellation even when the database is correct.
+
+Watch reconciliation as an operational control. Alert on unmapped provider customers, repeated event failures, unexpected entitlement removals, stale records, and sustained provider disagreement. Keep identifiers and state changes in protected logs without copying full payment objects or personal billing data. A manual repair should use the same reviewed mapping and audit path as automated updates.
+
+Support actions need equal care. An agent may grant a temporary feature after a billing dispute, but the grant should name the feature, workspace, reason, approver, and expiry. Do not edit a client-visible plan field or bypass the protected operation. Reconciliation must know whether a manual override is allowed to survive provider refresh.
+
+## Verify the decision safely
+
+Use provider sandbox objects and disposable local accounts. Create one workspace with an active feature and another without it. Call the protected operation directly as both accounts. Changing a plan label, price ID, feature flag, or token payload in the browser must not change the server decision.
+
+Send verified test events for activation and revocation. Confirm customer mapping, duplicate handling, cache invalidation, and audit records. Pause event processing, change provider state, then run reconciliation and confirm the local record converges.
+
+Test stale-state policy by making the provider unavailable in a controlled environment. Verify the documented fail-closed, refresh, or grace behavior for each feature.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help identify paid operations that need a server check. It does not connect to Stripe, inspect entitlement tables, or prove that customer mapping is correct.
+
+## What automation cannot decide
+
+Static review can flag plan fields read from a request. Integration tests can prove defined account and feature cases. Reconciliation metrics can show known drift.
+
+Automation cannot invent the product's refund, grace, support, or shared-account policy. It also cannot infer whether a provider customer was linked to the right legal or workspace identity. Keep the evidence scoped to the tested mapping, feature, event set, and failure behavior.
+
+## Sources
+
+- [Stripe: Entitlements](https://docs.stripe.com/billing/entitlements)
+- [Stripe: Using webhooks with subscriptions](https://docs.stripe.com/billing/subscriptions/webhooks)
+- [MITRE CWE-602: Client-Side Enforcement of Server-Side Security](https://cwe.mitre.org/data/definitions/602.html)
