@@ -1,0 +1,135 @@
+---
+title: "Secure Vercel Deployments and Preview URLs"
+description: "Treat every Vercel preview as a live environment, then control deployment access, variables, data, bypass secrets, callbacks, and retirement."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - web-security
+  - access-control
+  - verification
+draft: true
+heroImage: supply-chain-02
+faq:
+  - q: "Are Vercel preview deployments private by default?"
+    a: "Do not assume so. Access depends on the project's current Deployment Protection method, scope, domains, exceptions, and plan. Test the exact preview URL while signed out before connecting sensitive data."
+  - q: "Does changing a Vercel environment variable update old deployments?"
+    a: "No. Vercel documents that variable changes apply to new deployments, not previously built deployments. Redeploy affected versions and rotate any credential that an older accessible deployment may still hold."
+  - q: "Is a Vercel shareable link the same as making a deployment public?"
+    a: "A shareable link grants anyone holding its secret-bearing URL access to the associated branch deployment. Distribute it narrowly, account for the fact that the branch URL can move to a newer deployment, and revoke it when review ends."
+  - q: "Should automation bypass use a header or query parameter?"
+    a: "Vercel recommends the bypass header for test tooling. Some webhooks require the query form, which is more likely to appear in histories, logs, referrers, or screenshots. Scope distribution and rotate on exposure."
+---
+
+**Direct answer:** Treat every Vercel preview as a live environment. Enable the appropriate Deployment Protection scope, isolate preview credentials and data from production, use branch-specific variables where needed, store automation bypass secrets outside URLs when the caller supports headers, validate callback domains, keep application authorization active after deployment access, and retire share links, exceptions, secrets, and stale deployments when review ends.
+
+_Vercel Deployment Protection, environment, share-link, and automation-bypass behavior was reviewed against official documentation on July 17, 2026. Availability and protection scope can change, so verify the current project controls before release._
+
+A preview deployment is not a private screenshot. It is a live application with a generated URL, executable server code, environment variables, network access, and whatever database or provider accounts those variables select. Vercel access protection controls who reaches the deployment. It does not decide which signed-in application user may read a record.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) recommends naming the exact release target. On Vercel, record both the commit-specific deployment URL and any branch URL that moves to the latest deployment.
+
+## Inventory every live URL and trust connection
+
+For Production, Preview, Development, and any Custom Environment in use, record:
+
+1. generated, branch, and custom domains;
+2. current protection method and scope;
+3. environment and branch-specific variables;
+4. database, object storage, queue, email, payment, and AI provider accounts;
+5. OAuth callbacks and webhook endpoints;
+6. shareable links, protection exceptions, automation bypass consumers, and OPTIONS allowlists;
+7. the owner and retirement date.
+
+Do not infer access from a pull-request label or repository visibility. Open the exact URL in a signed-out browser and with a direct HTTP request. Check custom domains separately because protection scope may treat production and generated URLs differently.
+
+## The risky pattern: preview uses production authority
+
+A common generated setup selects one variable set for every environment:
+
+```text
+Preview deployment
+  DATABASE_URL -> production database
+  STORAGE_BUCKET -> production uploads
+  EMAIL_API_KEY -> production sender
+  OAUTH_CALLBACK -> production domain
+  Protection -> unverified
+```
+
+The preview can now change real data, send real messages, or expose customer records. A long generated URL does not make it private. Even if Vercel Authentication blocks anonymous visitors, every invited reviewer and bypass consumer may reach application routes that still need resource authorization.
+
+AI deployment suggestions often optimize for making a preview work. Reusing production variables avoids migrations, seed data, and callback setup. The missing work is the environment boundary: deciding which data and provider capabilities a temporary branch may hold.
+
+## Give Preview its own capability set
+
+Create a release matrix before adding variables:
+
+| Capability     | Preview                               | Production                    |
+| -------------- | ------------------------------------- | ----------------------------- |
+| Database       | Isolated test data                    | Production data               |
+| Email          | Sink or allowlisted recipients        | Approved sender               |
+| Payments       | Provider test mode                    | Production mode               |
+| Object storage | Separate bucket or prefix with policy | Production bucket             |
+| OAuth          | Preview callback allowlist            | Production callback allowlist |
+
+Use Preview or branch-specific Vercel variables for the selected resources. Give each credential only the provider permissions the preview needs. Seed fake records and prevent test accounts from crossing into production services.
+
+Vercel documents that environment-variable changes affect new deployments, not old ones. After rotating a preview secret or correcting a database URL, redeploy the affected commit and test the new deployment. An older accessible deployment can still contain its previous build-time values or runtime configuration.
+
+Sensitive variables also need access review inside the Vercel team. Do not print them during builds, return them from diagnostics, expose them through framework client prefixes, or pull them onto unmanaged devices. If a value entered a client bundle or public log, remove and rotate it rather than only changing the project setting.
+
+The [public-by-default deployment guide](/blog/public-by-default-ai-apps) covers the provider-neutral data boundary.
+
+## Configure Deployment Protection deliberately
+
+Vercel currently documents protection methods and a scope that determines which preview, generated, and production URLs they cover. Names and availability vary, so choose behavior first: who must authenticate, which environments are covered, which domains remain public, and how external systems enter.
+
+Verify all of these cases:
+
+- a signed-out human opens the commit-specific and branch URLs;
+- an authenticated reviewer with and without project access opens them;
+- a production domain remains reachable if it is meant to be public;
+- an old preview is still blocked or retired;
+- a custom domain follows the expected scope;
+- application APIs continue to reject unauthorized records after deployment access succeeds.
+
+Deployment Protection applies before application code. It complements session and tenant checks rather than replacing them. The [Next.js security guide](/blog/nextjs-ai-app-security) covers those server-level decisions for a common Vercel stack.
+
+## Treat bypasses as credentials
+
+Shareable Links contain a secure query parameter and grant external access to a branch deployment. A branch URL can point at newer code after another deployment. Share only with intended reviewers, decide whether comments are appropriate, and revoke the link after the review window.
+
+Protection Bypass for Automation uses a project secret. Vercel recommends the `x-vercel-protection-bypass` header for test tools. Store it in the CI secret store, mask it in logs, limit which jobs can read it, and rotate it if a fork, artifact, or debug output exposes it.
+
+Some webhook providers cannot set a custom header and require the query parameter. Query secrets can appear in provider dashboards, browser history, proxy logs, screenshots, analytics, and referrers. Use a dedicated webhook URL, avoid copying it into tickets, apply no-store and careful logging, and rotate after suspected disclosure. The webhook must still verify the provider's own signature and reject replay. The Vercel bypass says only that a request may reach the deployment.
+
+Review Deployment Protection Exceptions and the OPTIONS Allowlist too. An exception makes the selected preview domain bypass protection. An OPTIONS allowlist exposes matching preflight requests, not every API method. Keep path prefixes narrow and test that a nearby route is not accidentally covered.
+
+## Validate callbacks and cross-origin behavior
+
+Preview domains change more often than production domains. Register only required OAuth redirect URIs. Use OAuth state and PKCE where the provider flow requires them. Do not accept arbitrary `*.vercel.app` callbacks or derive a redirect host from an untrusted request header.
+
+Webhooks should have stable, purpose-specific endpoints. If a provider needs the current preview, update the endpoint deliberately and remove it when testing ends. For browser calls, configure CORS against exact trusted frontend origins. Protection can block unauthenticated preflight, but weakening application CORS for every origin is not the answer.
+
+Use the browser-local [security headers checker](/tools/security-headers-checker) against an authorized public or bypassed URL to inspect response headers. It cannot see Vercel access settings, environment variables, branch data, bypass-secret storage, or authenticated authorization behavior.
+
+## Verify and retire the preview
+
+Run a small release procedure with fake data:
+
+1. Record the commit-specific URL, branch URL, commit, environment, and variable revision.
+2. Confirm anonymous access is blocked where intended.
+3. Confirm the approved reviewer and CI job can enter using their separate methods.
+4. After entry, use Account B to request Account A's test record and expect denial.
+5. Verify the preview talks only to test databases, buckets, senders, payment mode, and callbacks.
+6. Inspect responses, source maps, logs, and build output for secrets.
+7. Revoke the share link or bypass, remove exceptions and callbacks, delete temporary data, and confirm the old path no longer works.
+
+Keep the result narrow. These tests support the named deployment and controls at that time. They do not prove every application route, Vercel team permission, third-party account, or future preview is safe.
+
+## Sources
+
+- [Vercel: Deployment Protection](https://vercel.com/docs/deployment-protection)
+- [Vercel: Methods to bypass Deployment Protection](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection)
+- [Vercel: Environment variables](https://vercel.com/docs/environment-variables)
+- [Vercel: Environments](https://vercel.com/docs/deployments/environments)
+- [OWASP: Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html)

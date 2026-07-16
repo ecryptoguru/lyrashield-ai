@@ -271,7 +271,7 @@ Do not turn platform security features into proof that an application is secure.
 - Relevant entities: FastAPI, Pydantic, OAuth2, dependencies, CORSMiddleware, TrustedHostMiddleware, Uvicorn, proxy headers, TLS termination, Starlette.
 - Authority link: `/blog/vibe-coding-security-guide`
 - Tool CTA: `/tools/ai-app-security-checklist`
-- Related dependency: `/blog/idor-bola-ai-apps` and `/blog/cors-misconfiguration-ai-apps`.
+- Related dependency: `/blog/idor-ai-built-apps` and `/blog/cors-vibe-coded-apps`.
 - Cannibalization boundary: Own FastAPI and ASGI implementation. The IDOR and CORS articles remain framework-neutral deep dives.
 - FAQ decision: Include four. Cover Pydantic validation, wildcard CORS with credentials, proxy headers, and public OpenAPI docs.
 - Image concept: A typed API contract entering a service through separate validation and authorization rings, with proxy and host boundaries outside.
@@ -290,7 +290,7 @@ Do not turn platform security features into proof that an application is secure.
 - Relevant entities: Vercel Preview, Production, Deployment Protection, Vercel Authentication, shareable links, automation bypass, environment variables, branch environments.
 - Authority link: `/blog/vibe-coding-security-guide`
 - Tool CTA: `/tools/security-headers-checker`
-- Related dependency: `/blog/preview-deployment-security` and `/blog/nextjs-ai-app-security`.
+- Related dependency: `/blog/public-by-default-ai-apps` and `/blog/nextjs-ai-app-security`.
 - Cannibalization boundary: This is the Vercel-specific control guide. The preview-deployment article owns provider-neutral threat modeling.
 - FAQ decision: Include four. Cover default preview visibility, environment variable updates, shareable links, and automation bypass headers versus query strings.
 - Image concept: Multiple branch deployments behind distinct access membranes, each connected to a separate credential and data compartment.
@@ -309,7 +309,7 @@ Do not turn platform security features into proof that an application is secure.
 - Relevant entities: Cloudflare Workers, V8 isolates, bindings, Wrangler secrets, service bindings, `fetch`, redirects, `Authorization` headers, route fail modes, memory and subrequest limits.
 - Authority link: `/blog/vibe-coding-security-guide`
 - Tool CTA: `/tools/security-headers-checker`
-- Related dependency: `/blog/ssrf-ai-generated-backends` and `/blog/cors-misconfiguration-ai-apps`.
+- Related dependency: `/blog/ssrf-protection-dns-redirects` and `/blog/cors-vibe-coded-apps`.
 - Cannibalization boundary: Own Worker runtime and binding-specific controls. The SSRF and CORS articles own complete vulnerability treatments.
 - FAQ decision: Include four. Cover isolate security, bindings versus API tokens, redirect header forwarding, and fail-open routes.
 - Image concept: A Worker isolate chamber with narrowly scoped binding conduits and an outbound request path stopped at a redirect policy gate.
