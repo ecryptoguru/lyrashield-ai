@@ -124,19 +124,21 @@ const FALSE_POSITIVE_PATTERNS = [
 ]
 
 export function assessFalsePositiveRisk(vuln: EngineVulnerability): "low" | "medium" | "high" {
-  // Only check target and endpoint fields for false-positive patterns.
-  // Checking title/description would filter legitimate findings that happen
-  // to mention test/example domains in their analysis text.
-  const text = [vuln.target, vuln.endpoint].filter(Boolean).join(" ")
+  // These patterns describe hosts and URLs, not repository paths. Applying
+  // them to path-based scanners would suppress real findings under tests/,
+  // examples/, or samples/ merely because of the directory name.
+  if (!vuln.scannerSource || vuln.scannerSource === "engine" || vuln.scannerSource === "url") {
+    const text = [vuln.target, vuln.endpoint].filter(Boolean).join(" ")
 
-  for (const fp of FALSE_POSITIVE_PATTERNS) {
-    if (fp.pattern.test(text)) {
-      logger.debug("False positive pattern matched", {
-        pattern: fp.pattern.source,
-        reason: fp.reason,
-        title: vuln.title,
-      })
-      return "high"
+    for (const fp of FALSE_POSITIVE_PATTERNS) {
+      if (fp.pattern.test(text)) {
+        logger.debug("False positive pattern matched", {
+          pattern: fp.pattern.source,
+          reason: fp.reason,
+          title: vuln.title,
+        })
+        return "high"
+      }
     }
   }
 

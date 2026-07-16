@@ -25,6 +25,7 @@ export interface FindingStats {
 export async function listFindings(params: ListFindingsParams): Promise<{
   items: (Finding & {
     _count?: { evidence: number; fixProposals: number }
+    target?: { id: string; name: string; type: string } | null
   })[]
   nextCursor: string | null
 }> {

@@ -18,6 +18,16 @@ export interface ListApprovalsParams {
   limit?: number
 }
 
+export class ApprovalMutationError extends Error {
+  constructor(
+    readonly code: "NOT_FOUND" | "NOT_PENDING" | "EXPIRED",
+    message: string
+  ) {
+    super(message)
+    this.name = "ApprovalMutationError"
+  }
+}
+
 export async function createApproval(params: CreateApprovalParams): Promise<AgentApproval> {
   const inputHash = hashInput(params.actionName, params.input)
   const expiresAt = params.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000)
@@ -83,10 +93,13 @@ export async function approveApproval(
   const approval = await prisma.agentApproval.findFirst({
     where: { id: approvalId, workspaceId },
   })
-  if (!approval) throw new Error(`Approval not found: ${approvalId}`)
+  if (!approval) throw new ApprovalMutationError("NOT_FOUND", `Approval not found: ${approvalId}`)
 
   if (approval.status !== "PENDING") {
-    throw new Error(`Approval is not pending (current: ${approval.status})`)
+    throw new ApprovalMutationError(
+      "NOT_PENDING",
+      `Approval is not pending (current: ${approval.status})`
+    )
   }
 
   if (approval.expiresAt && approval.expiresAt < new Date()) {
@@ -94,7 +107,7 @@ export async function approveApproval(
       where: { id: approvalId },
       data: { status: "EXPIRED" },
     })
-    throw new Error(`Approval has expired`)
+    throw new ApprovalMutationError("EXPIRED", "Approval has expired")
   }
 
   const updated = await prisma.agentApproval.update({
@@ -118,10 +131,13 @@ export async function denyApproval(
   const approval = await prisma.agentApproval.findFirst({
     where: { id: approvalId, workspaceId },
   })
-  if (!approval) throw new Error(`Approval not found: ${approvalId}`)
+  if (!approval) throw new ApprovalMutationError("NOT_FOUND", `Approval not found: ${approvalId}`)
 
   if (approval.status !== "PENDING") {
-    throw new Error(`Approval is not pending (current: ${approval.status})`)
+    throw new ApprovalMutationError(
+      "NOT_PENDING",
+      `Approval is not pending (current: ${approval.status})`
+    )
   }
 
   // approvedById stores the user who made the decision (approve or deny)

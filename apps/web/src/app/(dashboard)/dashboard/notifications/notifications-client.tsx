@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Bell, AlertCircle, CheckCircle2, Mail, MessageSquare } from "lucide-react"
-import { Button, Badge, type BadgeProps, Card, EmptyState, Spinner, LoadMore } from "@lyrashield/ui"
+import { Button, Badge, type BadgeProps, Card, EmptyState, LoadMore } from "@lyrashield/ui"
 import { apiGetPaginated, apiPatch } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface NotificationItem {
   id: string
@@ -100,15 +101,6 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  if (loading && notifications.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
-        <Spinner className="h-6 w-6" />
-        <p className="text-muted-foreground text-sm">Loading notifications...</p>
-      </div>
-    )
-  }
-
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -146,7 +138,13 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
         </Card>
       )}
 
-      {notifications.length === 0 ? (
+      {loading && notifications.length === 0 ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Loading notifications">
+          {[0, 1, 2].map((item) => (
+            <Skeleton key={item} className="h-28 w-full" />
+          ))}
+        </div>
+      ) : notifications.length === 0 ? (
         <EmptyState
           icon={Bell}
           title="No notifications"

@@ -60,12 +60,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     switch (action) {
       case "share": {
-        const { token } = await generateShareToken(id)
-        return apiSuccess({ token, shareUrl: `/reports/shared/${id}?token=${token}` })
+        const { token, tokenHash, expiresAt } = await generateShareToken(id)
+        return apiSuccess({
+          token,
+          tokenHash,
+          expiresAt: expiresAt.toISOString(),
+          shareUrl: `/reports/shared/${id}?token=${token}`,
+        })
       }
       case "revoke": {
-        await revokeShareToken(id)
-        return apiSuccess({ revoked: true })
+        const revokedAt = await revokeShareToken(id)
+        return apiSuccess({ revoked: true, revokedAt: revokedAt.toISOString() })
       }
     }
   } catch (error) {

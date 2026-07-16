@@ -168,6 +168,7 @@ export {
   expireStaleApprovals,
   hashInput,
   verifyInputHash,
+  ApprovalMutationError,
   type CreateApprovalParams,
   type ListApprovalsParams,
 } from "./agent-approval-service"

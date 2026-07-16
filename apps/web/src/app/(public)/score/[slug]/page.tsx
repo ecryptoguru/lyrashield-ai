@@ -112,7 +112,7 @@ export default async function ScorecardPage({
             aria-hidden="true"
           />
           {superseded && (
-            <p className="relative mb-6 rounded-lg border border-amber-300/25 bg-amber-300/5 px-4 py-3 text-sm text-amber-100">
+            <p className="relative mb-6 rounded-lg border border-amber-300/25 bg-amber-300/5 px-4 py-3 text-sm text-amber-800 dark:text-amber-100">
               A newer qualifying scan exists. This card reflects the dated snapshot below.
             </p>
           )}

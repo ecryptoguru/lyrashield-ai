@@ -26,6 +26,7 @@ import { apiGetPaginated, apiPost } from "@/lib/api-client"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { formatDate } from "@/lib/date-format"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface ReportItem {
   id: string
@@ -45,7 +46,8 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
   const [loading, setLoading] = useState(true)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [sharedReportId, setSharedReportId] = useState<string | null>(null)
+  const [copied, setCopied] = useState<"link" | "handoff" | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const loadReports = useCallback(async () => {
@@ -136,20 +138,23 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
 
   const handleShare = async (reportId: string) => {
     try {
-      const res = await apiPost<{ token: string; shareUrl: string }>(`/api/reports/${reportId}`, {
-        workspaceId,
-        action: "share",
-      })
+      const res = await apiPost<{
+        token: string
+        tokenHash: string
+        expiresAt: string
+        shareUrl: string
+      }>(`/api/reports/${reportId}`, { workspaceId, action: "share" })
       const fullUrl = `${window.location.origin}${res.shareUrl}`
       setShareUrl(fullUrl)
-      setCopied(false)
+      setSharedReportId(reportId)
+      setCopied(null)
       setReports((prev) =>
         prev.map((r) =>
           r.id === reportId
             ? {
                 ...r,
-                shareTokenHash: "active",
-                shareExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                shareTokenHash: res.tokenHash,
+                shareExpiresAt: res.expiresAt,
               }
             : r
         )
@@ -160,11 +165,22 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
   }
 
   const handleRevoke = async (reportId: string) => {
+    if (!window.confirm("Revoke this report link? Anyone using it will immediately lose access.")) {
+      return
+    }
     try {
-      await apiPost(`/api/reports/${reportId}`, { workspaceId, action: "revoke" })
-      setReports((prev) =>
-        prev.map((r) => (r.id === reportId ? { ...r, revokedAt: new Date().toISOString() } : r))
+      const result = await apiPost<{ revoked: true; revokedAt: string }>(
+        `/api/reports/${reportId}`,
+        { workspaceId, action: "revoke" }
       )
+      setReports((prev) =>
+        prev.map((r) => (r.id === reportId ? { ...r, revokedAt: result.revokedAt } : r))
+      )
+      if (sharedReportId === reportId) {
+        setShareUrl(null)
+        setSharedReportId(null)
+        setCopied(null)
+      }
     } catch {
       setError("Failed to revoke share link.")
     }
@@ -174,7 +190,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
     if (shareUrl) {
       try {
         await writeClipboard(shareUrl)
-        setCopied(true)
+        setCopied("link")
       } catch {
         setError("Failed to copy share link.")
       }
@@ -184,15 +200,6 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
   const handoffMessage = shareUrl
     ? `Security review ready for your review. This private link expires in 30 days: ${shareUrl}`
     : ""
-
-  if (loading && reports.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
-        <Spinner className="h-6 w-6" />
-        <p className="text-muted-foreground text-sm">Loading reports...</p>
-      </div>
-    )
-  }
 
   return (
     <div>
@@ -316,30 +323,30 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
 
       {shareUrl && (
         <Card className="mb-4 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-4" role="status">
-            <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0 flex-1" role="status">
               <p className="mb-1 text-sm font-medium">Share link generated (valid 30 days):</p>
               <p className="text-muted-foreground truncate font-mono text-sm">{shareUrl}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="secondary" onClick={() => void copyToClipboard()}>
-                {copied ? (
+                {copied === "link" ? (
                   <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                 ) : (
                   <Copy className="h-4 w-4" aria-hidden="true" />
                 )}
-                {copied ? "Copied" : "Copy link"}
+                {copied === "link" ? "Copied" : "Copy link"}
               </Button>
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={() => {
                   void writeClipboard(handoffMessage)
-                    .then(() => setCopied(true))
+                    .then(() => setCopied("handoff"))
                     .catch(() => setError("Failed to copy client handoff."))
                 }}
               >
-                Copy client handoff
+                {copied === "handoff" ? "Handoff copied" : "Copy client handoff"}
               </Button>
               <a
                 className="hover:bg-accent bg-card inline-flex h-11 items-center rounded-lg border px-3 text-xs font-medium"
@@ -352,7 +359,13 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
         </Card>
       )}
 
-      {reports.length === 0 ? (
+      {loading && reports.length === 0 ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Loading reports">
+          {[0, 1, 2].map((item) => (
+            <Skeleton key={item} className="h-24 w-full" />
+          ))}
+        </div>
+      ) : reports.length === 0 ? (
         <EmptyState
           icon={FileText}
           title="No reports yet"
@@ -368,7 +381,9 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex items-center gap-2">
-                    <h3 className="truncate font-medium">{report.title}</h3>
+                    <h3 className="truncate font-medium" title={report.title}>
+                      {report.title}
+                    </h3>
                     <Badge variant="info">{report.type}</Badge>
                     <Badge
                       variant={

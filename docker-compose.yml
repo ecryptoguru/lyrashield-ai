@@ -187,6 +187,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - worker_runs:/app/lyrashield_runs
       - worker_evidence:/app/.lyrashield/evidence
+    pids_limit: ${WORKER_PIDS_LIMIT:-512}
+    deploy:
+      resources:
+        limits:
+          cpus: ${WORKER_CPU_LIMIT:-2.0}
+          memory: ${WORKER_MEMORY_LIMIT:-4G}
+          pids: ${WORKER_PIDS_LIMIT:-512}
     working_dir: /app
     command: ["pnpm", "--filter", "@lyrashield/worker", "exec", "tsx", "src/index.ts"]
 

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     finding: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
-    evidence: { createMany: vi.fn() },
+    evidence: { createMany: vi.fn(), findUnique: vi.fn() },
     findingCandidate: { upsert: vi.fn() },
     findingVerification: { upsert: vi.fn() },
   },
@@ -24,7 +24,10 @@ import { uploadEvidence } from "./evidence-storage"
 import { generateDedupeKey } from "./output-parser"
 
 describe("persistFindings", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(prisma.evidence.findUnique).mockResolvedValue(null)
+  })
 
   it("records secret-scanner output as a detection, not verified proof", async () => {
     vi.mocked(prisma.finding.findMany).mockResolvedValue([])
@@ -102,5 +105,31 @@ describe("persistFindings", () => {
       data: expect.objectContaining({ findingId: "finding-1", checksum: "sha256-checksum" }),
       skipDuplicates: true,
     })
+  })
+
+  it("does not re-upload evidence that already exists", async () => {
+    const vulnerability = {
+      id: "vuln-1",
+      title: "Reflected XSS",
+      severity: "high",
+      timestamp: "2026-07-14T00:00:00Z",
+      poc_description: "safe proof",
+    }
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([
+      { id: "finding-1", dedupeKey: generateDedupeKey(vulnerability, "target-1"), status: "OPEN" },
+    ] as never)
+    vi.mocked(prisma.finding.update).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    vi.mocked(prisma.evidence.findUnique).mockResolvedValue({ id: "evidence-1" } as never)
+
+    await persistFindings({
+      scanId: "scan-2",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: [vulnerability],
+    })
+
+    expect(uploadEvidence).not.toHaveBeenCalled()
+    expect(prisma.evidence.createMany).not.toHaveBeenCalled()
   })
 })

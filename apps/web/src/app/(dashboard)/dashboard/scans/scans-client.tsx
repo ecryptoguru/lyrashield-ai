@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Radar, Play, X, RefreshCw, ChevronRight } from "lucide-react"
 import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@lyrashield/ui"
 import { apiPost, apiGetPaginated } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
+import { mergePolledScans } from "./scans-client.utils"
 
 interface ScanItem {
   id: string
@@ -78,6 +79,7 @@ export function ScansClient({
   const [scans, setScans] = useState<ScanItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [hasLoadedMore, setHasLoadedMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [selectedTarget, setSelectedTarget] = useState("")
@@ -112,6 +114,7 @@ export function ScansClient({
   }
 
   async function handleCancelScan(scanId: string) {
+    if (!window.confirm("Cancel this scan? Any active scanner work will be stopped.")) return
     setCancelling(scanId)
     setError(null)
     try {
@@ -141,6 +144,7 @@ export function ScansClient({
       })
       setScans((prev) => [...prev, ...result.items])
       setNextCursor(result.nextCursor)
+      setHasLoadedMore(true)
     } catch {
       setError("Failed to load more scans")
     } finally {
@@ -155,6 +159,7 @@ export function ScansClient({
       const result = await apiGetPaginated<ScanItem>("/api/scans", { workspaceId })
       setScans(result.items)
       setNextCursor(result.nextCursor)
+      setHasLoadedMore(false)
     } catch {
       setError("Failed to refresh scans")
     } finally {
@@ -164,6 +169,24 @@ export function ScansClient({
 
   const isActive = (status: string) =>
     ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"].includes(status)
+  const hasActiveScans = scans.some((scan) => isActive(scan.status))
+
+  useEffect(() => {
+    if (!hasActiveScans) return
+    const interval = window.setInterval(() => {
+      void apiGetPaginated<ScanItem>("/api/scans", { workspaceId })
+        .then((result) => {
+          setScans((current) =>
+            hasLoadedMore ? mergePolledScans(current, result.items) : result.items
+          )
+          if (!hasLoadedMore) setNextCursor(result.nextCursor)
+        })
+        .catch(() => {
+          // Keep the current list visible; the manual refresh action reports errors.
+        })
+    }, 10_000)
+    return () => window.clearInterval(interval)
+  }, [hasActiveScans, hasLoadedMore, workspaceId])
 
   return (
     <div>
@@ -342,9 +365,10 @@ export function ScansClient({
                   )}
                   <Link
                     href={`/dashboard/scans/${scan.id}`}
-                    className="text-muted-foreground hover:text-foreground"
+                    aria-label={`View details for ${scan.target?.name ?? "scan"}`}
+                    className="text-muted-foreground hover:text-foreground inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg"
                   >
-                    <ChevronRight className="h-5 w-5" aria-label="View scan details" />
+                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
                   </Link>
                 </div>
               </div>

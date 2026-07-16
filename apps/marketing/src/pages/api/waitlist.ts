@@ -4,6 +4,7 @@ import { getSecret } from "astro:env/server"
 import { env } from "cloudflare:workers"
 import { createHash } from "node:crypto"
 import { parseBoundedBody, RequestBodyError } from "../../lib/request-body"
+import { checkD1RateLimit, getClientIp } from "../../lib/waitlist-rate-limit"
 
 const bodySchema = z.object({
   email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
@@ -65,20 +66,6 @@ const bodySchema = z.object({
 
 export const prerender = false
 
-const RATE_LIMIT_MAX = 5
-const RATE_LIMIT_WINDOW_MS = 60_000
-
-function getClientIp(request: Request): string {
-  const cf = request.headers.get("cf-connecting-ip")
-  if (cf) return cf
-  const forwarded = request.headers.get("x-forwarded-for")
-  if (forwarded) {
-    // Use the last address in the chain (closest proxy) instead of the spoofable client-proclaimed first.
-    return forwarded.split(",").at(-1)?.trim() || "unknown"
-  }
-  return "unknown"
-}
-
 function acceptsHtml(request: Request): boolean {
   const accept = request.headers.get("accept") || ""
   return accept.includes("text/html")
@@ -134,34 +121,6 @@ function makeReferralCode(): string {
   const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
   const bytes = crypto.getRandomValues(new Uint8Array(8))
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("")
-}
-
-/**
- * Fallback limiter used only when the Workers rate-limiting binding
- * (WAITLIST_RL) is unavailable. Single-table sliding window on D1, as
- * specified in the build plan (§6.5). Fails open (allows the request) on
- * any D1 error so an outage in the limiter never blocks real signups.
- */
-async function checkD1RateLimit(db: Env["DB"], ipHash: string): Promise<boolean> {
-  try {
-    const now = Date.now()
-    const windowStart = now - RATE_LIMIT_WINDOW_MS
-
-    await db.prepare(`DELETE FROM waitlist_rate_limit WHERE ts < ?`).bind(windowStart).run()
-
-    const result = await db
-      .prepare(
-        `INSERT INTO waitlist_rate_limit (ip_hash, ts)
-         SELECT ?, ?
-         WHERE (SELECT COUNT(*) FROM waitlist_rate_limit WHERE ip_hash = ? AND ts >= ?) < ?`
-      )
-      .bind(ipHash, now, ipHash, windowStart, RATE_LIMIT_MAX)
-      .run()
-    return (result.meta.changes ?? 0) > 0
-  } catch {
-    // Fail open: a broken fallback limiter must not block real signups.
-    return true
-  }
 }
 
 export const POST: APIRoute = async ({ request, site }) => {

@@ -50,7 +50,7 @@ export function WorkspaceSwitcher({
       <button
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        aria-haspopup="listbox"
+        aria-haspopup="true"
         className="hover:bg-sidebar-accent/50 flex min-h-11 w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
       >
         <span className="truncate">{active?.name ?? "Select workspace"}</span>
@@ -58,10 +58,7 @@ export function WorkspaceSwitcher({
       </button>
 
       {open && (
-        <div
-          className="bg-popover absolute top-full right-0 left-0 z-50 mt-1 rounded-lg border p-1 shadow-md"
-          role="listbox"
-        >
+        <div className="bg-popover absolute top-full right-0 left-0 z-50 mt-1 rounded-lg border p-1 shadow-md">
           {workspaces.map((w) => (
             <button
               key={w.id}
@@ -70,8 +67,7 @@ export function WorkspaceSwitcher({
                 setOpen(false)
               }}
               className="hover:bg-accent flex min-h-11 w-full items-center justify-between rounded-lg px-2 text-sm transition-colors"
-              role="option"
-              aria-selected={w.id === activeId}
+              aria-current={w.id === activeId ? "true" : undefined}
             >
               <span className="truncate">{w.name}</span>
               {w.id === activeId && <Check className="h-3 w-3 shrink-0" aria-hidden="true" />}

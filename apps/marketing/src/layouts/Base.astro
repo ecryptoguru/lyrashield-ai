@@ -93,6 +93,9 @@ const { title, description, canonical, ogImage, ogType, noindex, article, jsonLd
             window.posthog = posthog
 
             const pageUrl = new URL(location.href)
+            posthog.capture("$pageview", {
+              $current_url: `${pageUrl.origin}${pageUrl.pathname}`,
+            })
             const props = {
               utm_source: pageUrl.searchParams.get("utm_source") || undefined,
               utm_medium: pageUrl.searchParams.get("utm_medium") || undefined,

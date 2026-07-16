@@ -211,6 +211,25 @@ describe("filterFalsePositives", () => {
     expect(filtered.length).toBe(1)
     expect(filtered[0]!.title).toBe("SQLi in production")
   })
+
+  it("keeps path-scanner findings in test and example directories", () => {
+    const normalized = normalizeFindings(
+      [
+        makeVuln({
+          id: "secret-in-tests",
+          title: "Committed cloud credential",
+          target: "src/tests/example-credentials.ts",
+          scannerSource: "secrets",
+          poc_description: "A live credential pattern was detected",
+        }),
+      ],
+      "target-1",
+      generateDedupeKey
+    )
+
+    expect(normalized[0]?.falsePositiveRisk).toBe("low")
+    expect(filterFalsePositives(normalized)).toHaveLength(1)
+  })
 })
 
 describe("getFindingStats", () => {

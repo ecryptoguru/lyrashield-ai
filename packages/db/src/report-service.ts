@@ -180,29 +180,32 @@ export async function createReport(params: CreateReportParams): Promise<Report> 
 
 export async function generateShareToken(
   reportId: string
-): Promise<{ token: string; tokenHash: string }> {
+): Promise<{ token: string; tokenHash: string; expiresAt: Date }> {
   const token = randomBytes(32).toString("hex")
   const tokenHash = createHash("sha256").update(token).digest("hex")
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 
   await prisma.report.update({
     where: { id: reportId },
     data: {
       shareTokenHash: tokenHash,
-      shareExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      shareExpiresAt: expiresAt,
       revokedAt: null,
     },
   })
 
-  return { token, tokenHash }
+  return { token, tokenHash, expiresAt }
 }
 
-export async function revokeShareToken(reportId: string): Promise<void> {
+export async function revokeShareToken(reportId: string): Promise<Date> {
+  const revokedAt = new Date()
   await prisma.report.update({
     where: { id: reportId },
     data: {
-      revokedAt: new Date(),
+      revokedAt,
     },
   })
+  return revokedAt
 }
 
 export async function getReportByShareToken(token: string): Promise<Report | null> {

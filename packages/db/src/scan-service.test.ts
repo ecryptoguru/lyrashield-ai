@@ -31,6 +31,7 @@ describe("Scan Lifecycle — State Machine Transitions", () => {
     })
     it("RUNNING → STOPPED_BUDGET", () => {
       expect(isValidTransition("RUNNING", "STOPPED_BUDGET")).toBe(true)
+      expect(isValidTransition("VERIFYING", "STOPPED_BUDGET")).toBe(true)
     })
     it("RUNNING → TIMED_OUT", () => {
       expect(isValidTransition("RUNNING", "TIMED_OUT")).toBe(true)

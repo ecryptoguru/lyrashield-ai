@@ -11,6 +11,7 @@ import { verifyVulnerability } from "./verifier"
 import type { NormalizedFinding } from "./normalizer"
 import { uploadEvidence } from "./evidence-storage"
 import { persistDetectionReceipt } from "./result-integrity"
+import { createHash } from "node:crypto"
 
 export interface PersistFindingsParams {
   scanId: string
@@ -57,6 +58,13 @@ async function persistEvidence(
     }
   }
   for (const artifact of artifacts) {
+    const checksum = createHash("sha256").update(artifact.content, "utf8").digest("hex")
+    const existingEvidence = await prisma.evidence.findUnique({
+      where: { findingId_checksum: { findingId, checksum } },
+      select: { id: true },
+    })
+    if (existingEvidence) continue
+
     const uploaded = await uploadEvidence({
       workspaceId,
       findingId,
