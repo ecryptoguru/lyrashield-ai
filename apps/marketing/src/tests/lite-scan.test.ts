@@ -15,6 +15,15 @@ const assurancePreview = readFileSync(
   new URL("../components/landing/AssuranceRecord.astro", import.meta.url),
   "utf8"
 )
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const freeToolsPreview = readFileSync(
+  new URL("../components/landing/FreeToolsPreview.astro", import.meta.url),
+  "utf8"
+)
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const toolsIndex = readFileSync(new URL("../pages/tools/index.astro", import.meta.url), "utf8")
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const toolLayout = readFileSync(new URL("../layouts/ToolLayout.astro", import.meta.url), "utf8")
 
 describe("Lite Check marketing surface", () => {
   it("keeps the founder-provided promise and permission copy", () => {
@@ -80,6 +89,15 @@ describe("Lite Check marketing surface", () => {
     expect(page).toContain("return /^https?:\\/\\//i.test(value) ? value : `https://${value}`")
     expect(page).toContain("lyrashieldai.com or https://your-app.com")
     expect(homeScan).toContain("lyrashieldai.com or https://your-app.com")
+  })
+
+  it("distinguishes the live URL scan from browser-local analyzers", () => {
+    expect(page).toContain("Live URL scan · passive and read-only")
+    expect(homeScan).toContain("Live URL scan · passive and read-only")
+    expect(freeToolsPreview).toContain("Local analyzer · {tool.privacy}")
+    expect(toolsIndex).toContain("Local analyzer · {tool.privacy}")
+    expect(toolLayout).toContain("Local analyzer:")
+    expect(toolLayout).toContain("Runs entirely in this browser.")
   })
 
   it("previews the future product with clearly labeled sample and registry data", () => {
