@@ -122,6 +122,8 @@ Blocking lifecycle scripts does not stop imported runtime code. A dependency can
 
 Cached `node_modules` directories also deserve care. Restoring a cache created under a different lockfile or policy can bypass the review you thought the current job performed. Bind caches to the lockfile, package-manager version, platform, and policy hash. Prefer rebuilding when any of those inputs changes.
 
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help document whether the team has an owner, review step, and release gate for dependency scripts. It does not read the lockfile, inspect package artifacts, or prove that an allowed script is safe.
+
 The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) can review selected text files before a sandboxed installation. It does not inspect process environment variables, Git history, binary artifacts, or what a lifecycle script accesses at runtime. A clean result cannot prove the install environment contains no secrets.
 
 ## Sources

@@ -96,7 +96,7 @@ All public drafts must link to `/blog/vibe-coding-security-guide` in the first t
 - Cannibalization check: Topic 40 owns installation-time code and transitive execution. Topic 38 owns advisory matching. Topic 39 owns hallucinated names. Topic 48 owns privileged workflow triggers. Keep CI workflow privilege detail as a link, not a second article.
 - Required sources: S17, S18, S09, S19.
 - Authority link: Link from the explanation of supply-chain execution to `/blog/vibe-coding-security-guide` with anchor `the guide's dependency and build controls`.
-- Tool CTA: `/tools/secret-exposure-scanner`, used only to check selected configuration files before a sandboxed install. State that it does not inspect process environment or Git history.
+- Tool CTA: `/tools/ai-app-security-checklist`, framed as a place to document dependency-script ownership and release policy, not a package or lockfile inspector. Retain `/tools/secret-exposure-scanner` as a secondary selected-file check before a sandboxed install, and state that it cannot inspect process environment or Git history.
 - Related dependency: `/blog/cicd-agent-confused-deputy` in this batch.
 - FAQ decision: Include four questions on postinstall, disabling scripts, transitive packages, and safe CI installation.
 - Image cluster concept: Supply chain. Nested dependency plates enter an isolation chamber while a restrained amber script path is held behind a gate.
