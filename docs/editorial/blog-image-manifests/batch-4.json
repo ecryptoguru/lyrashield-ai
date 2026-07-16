@@ -121,13 +121,13 @@
   },
   {
     "slug": "nextjs-ai-app-security",
-    "imageId": "web-execution-02",
+    "imageId": "web-execution-04",
     "cluster": "web-execution",
-    "concept": "Untrusted rendered output isolated behind an encoding plane",
-    "prompt": "Text-free square cinematic technical artwork, an untrusted content stream meeting a translucent encoding plane before a browser surface, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "An untrusted content stream passing through an encoding plane",
+    "concept": "A server-side request route rechecked across redirects and resolved destinations",
+    "prompt": "Text-free square cinematic technical artwork, a request path bending through redirect checkpoints while private destination chambers remain sealed, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "A request path checked at each bend while private chambers stay sealed",
     "sourceHash": null,
-    "cropNotes": "Keep the encoding plane large enough to remain legible after the Open Graph crop",
+    "cropNotes": "Keep two redirect bends and the sealed private chamber visible in all crops",
     "usageCount": 3,
     "approved": false
   },
@@ -145,6 +145,18 @@
   },
   {
     "slug": "node-express-ai-api-security",
+    "imageId": "web-execution-02",
+    "cluster": "web-execution",
+    "concept": "Untrusted rendered output isolated behind an encoding plane",
+    "prompt": "Text-free square cinematic technical artwork, an untrusted content stream meeting a translucent encoding plane before a browser surface, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "An untrusted content stream passing through an encoding plane",
+    "sourceHash": null,
+    "cropNotes": "Keep the encoding plane large enough to remain legible after the Open Graph crop",
+    "usageCount": 3,
+    "approved": false
+  },
+  {
+    "slug": "fastapi-ai-generated-security",
     "imageId": "web-execution-04",
     "cluster": "web-execution",
     "concept": "A server-side request route rechecked across redirects and resolved destinations",
@@ -152,18 +164,6 @@
     "alt": "A request path checked at each bend while private chambers stay sealed",
     "sourceHash": null,
     "cropNotes": "Keep two redirect bends and the sealed private chamber visible in all crops",
-    "usageCount": 3,
-    "approved": false
-  },
-  {
-    "slug": "fastapi-ai-generated-security",
-    "imageId": "web-execution-06",
-    "cluster": "web-execution",
-    "concept": "A narrow execution funnel separating data from commands",
-    "prompt": "Text-free square cinematic technical artwork, data signals passing through a constrained execution funnel while command-like branches are blocked, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "Data signals entering a constrained execution funnel while other paths are blocked",
-    "sourceHash": null,
-    "cropNotes": "Keep the funnel mouth and blocked branches within the protected center",
     "usageCount": 3,
     "approved": false
   },

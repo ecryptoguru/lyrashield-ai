@@ -12,11 +12,11 @@ draft: true
 heroImage: access-boundary-05
 faq:
   - q: "Can an OAuth redirect URI use a wildcard?"
-    a: "Current OAuth security guidance requires exact string matching for registered redirect URIs, apart from the native-app localhost port exception. Register each intended callback explicitly and do not use prefix matching."
+    a: "Current OAuth security guidance requires exact string matching for registered redirect URIs. The narrow exception permits the port to vary on a native app's loopback IP redirect URI. Register every other callback explicitly and do not use prefix matching."
   - q: "Does state replace PKCE?"
     a: "Not in every flow. State can bind a browser callback to a transaction for CSRF protection. PKCE binds the authorization code exchange to a verifier. RFC 9700 explains when PKCE can provide CSRF protection, but the client must follow the provider's complete contract."
-  - q: "Why can a native localhost callback use a changing port?"
-    a: "RFC 8252 permits loopback redirect URIs for native apps and requires authorization servers to allow any port for that registered loopback address. The scheme, loopback host form, and path still need the correct registration and validation."
+  - q: "Why can a native loopback callback use a changing port?"
+    a: "RFC 8252 permits native apps to use a loopback IP redirect URI and requires authorization servers to allow any port for that URI. The loopback IP literal and path still need the correct registration and validation."
 ---
 
 **Direct answer:** Secure an OAuth callback as a bound transaction. Register exact redirect URIs, create one-time state on the server, use PKCE, verify the callback belongs to the initiating browser and expected issuer, then exchange the short-lived code using the same redirect URI. Reject mismatches before creating a session or following any post-login destination.
@@ -40,7 +40,7 @@ app.get("/auth/callback", async (req, res) => {
 
 This handler accepts any code delivered to the route, does not bind it to a local transaction, and follows a destination from the query string. Even if the provider validates its own registered redirect, the client has exposed an open redirector after login. It also lacks a way to distinguish which authorization server produced the response when multiple issuers are supported.
 
-[RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html), the current OAuth 2.0 security best current practice, requires exact string matching for registered redirect URIs except for native-app localhost port numbers. It also says clients and authorization servers must not expose open redirectors. A check such as `url.startsWith("https://client.invalid")` is not exact matching and can accept unintended hosts or paths.
+[RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html), the current OAuth 2.0 security best current practice, requires exact string matching for registered redirect URIs. Its narrow exception allows the port to vary for a native app's loopback IP redirect URI. It also says clients and authorization servers must not expose open redirectors. A check such as `url.startsWith("https://client.invalid")` is not exact matching and can accept unintended hosts or paths.
 
 ## Why generated OAuth code looks complete too early
 
@@ -62,7 +62,7 @@ https://client.invalid/auth/callback/provider
 
 Scheme, host, port, path, and trailing slash all matter under exact comparison. Query components require special care and are best avoided in the registered callback when a stable path works.
 
-Native apps follow different redirect patterns. [RFC 8252](https://www.rfc-editor.org/rfc/rfc8252.html) describes claimed HTTPS redirects, reverse-domain private-use schemes, and loopback interfaces. Loopback redirects may use an ephemeral port because a desktop app often binds a port at runtime. That exception does not make arbitrary web callback ports or wildcard paths acceptable.
+Native apps follow different redirect patterns. [RFC 8252](https://www.rfc-editor.org/rfc/rfc8252.html) describes claimed HTTPS redirects, reverse-domain private-use schemes, and loopback IP redirects. A desktop app can bind an ephemeral port on `127.0.0.1` or `[::1]`, then include that variable port in its authorization request. Authorization servers must allow any port for this native loopback pattern. The IP literal and path remain part of the registered redirect, and the exception does not permit arbitrary web callback ports or wildcard paths.
 
 Custom URI schemes need a reverse-domain name controlled by the app publisher, and claimed HTTPS links need operating-system association with the app. A callback URI alone does not prove which installed application received it. PKCE remains necessary for public native clients because they cannot keep a shared client secret confidential.
 
@@ -76,6 +76,7 @@ Create a server-side transaction before sending the browser away. Store a random
 const transaction = await oauthTransactions.create({
   state: randomUrlSafeValue(),
   pkceVerifier: randomPkceVerifier(),
+  browserSessionId: request.session.id,
   issuer: EXPECTED_ISSUER,
   redirectUri: OAUTH_CALLBACK,
   returnPath: allowLocalReturnPath(request.query.next),

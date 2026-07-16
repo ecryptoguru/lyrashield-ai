@@ -65,23 +65,40 @@ For login, perform a password-hash verification in both branches. Keep a fixed d
 ```ts
 const DUMMY_PASSWORD_HASH = process.env.DUMMY_PASSWORD_HASH!
 
+assertPasswordHashMatchesPolicy(DUMMY_PASSWORD_HASH, ACTIVE_PASSWORD_HASH_POLICY)
+
 app.post("/login", async (req, res) => {
   const input = loginSchema.parse(req.body)
   const normalizedEmail = normalizeEmailForLookup(input.email)
   const user = await db.user.findUnique({ where: { email: normalizedEmail } })
 
+  const attempt = await loginAttemptLimiter.begin({
+    accountId: user?.id,
+    networkKey: trustedClientNetworkKey(req),
+    sessionId: req.session.id,
+  })
+
   const hash = user?.passwordHash ?? DUMMY_PASSWORD_HASH
   const passwordAccepted = await verifyPassword(input.password, hash)
-  const allowed = user && passwordAccepted && (await mayAttemptLogin(user.id, req))
+  const credentialMatched = Boolean(user && passwordAccepted)
+  const allowed = credentialMatched && attempt.allowed
+
+  await attempt.finish({ credentialMatched })
 
   if (!allowed) {
-    await recordInternalLoginFailure({ userId: user?.id, request: req })
+    await recordInternalLoginFailure({
+      userId: user?.id,
+      limitReason: attempt.reason,
+      request: req,
+    })
     return res.status(401).json({ error: "Email or password was not accepted" })
   }
 
   return rotateAndCreateSession(user, res)
 })
 ```
+
+Validate the dummy hash when the process starts. Its algorithm and work parameters must match the active password policy, and an invalid value should stop startup rather than create a fast nonexistent-account branch. The limiter begins for every request before password verification. It uses trusted network and session signals plus an internal account ID when one exists, then records the credential result without changing the public denial.
 
 This sketch omits many product details, but it shows the boundary. Normalize identifiers according to a documented product policy. Do not invent provider-specific email canonicalization such as removing dots or tags unless the provider guarantees it.
 
