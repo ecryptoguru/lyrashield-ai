@@ -1,0 +1,153 @@
+---
+title: "Secure an AI SaaS With Stripe"
+description: "Secure Stripe billing with server-owned entitlements, raw-body webhook verification, idempotent processing, constrained keys, and failure-path tests."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - access-control
+  - verification
+draft: true
+heroImage: supply-chain-05
+faq:
+  - q: "Can a Stripe success page grant paid access?"
+    a: "No. A redirect is browser-controlled and can arrive before durable payment processing. Use it to improve the user experience, then read server-owned billing or entitlement state before granting access."
+  - q: "Does Stripe retry webhooks?"
+    a: "Yes. Delivery can be retried when an endpoint fails or times out, so the handler and its business operation must tolerate duplicates. Store processed event or operation identities and make fulfillment idempotent."
+  - q: "Do Stripe webhook events arrive in order?"
+    a: "Stripe does not guarantee event delivery order. Model valid state transitions and retrieve the current Stripe object when an older or incomplete event cannot safely determine the next local state."
+  - q: "Is a Stripe publishable key a secret?"
+    a: "No. Stripe publishable keys are intended for client-side use. Secret and restricted keys belong on trusted servers, with the narrowest useful permissions and separate sandbox and live configurations."
+---
+
+**Direct answer:** Keep Stripe secret keys on the server, verify every webhook signature against the raw request body, and process events idempotently without assuming delivery order. Grant features from server-owned billing or entitlement state, not a browser redirect. Before live mode, test retries, delayed events, payment failure, downgrade, cancellation, refund, and key rotation in an owned sandbox.
+
+A generated checkout often passes the happy path: click, pay, return to the app, unlock a feature. That path says little about the state machine that has to survive duplicate events, an unavailable webhook endpoint, a refund, or a user who opens the success URL directly.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats payment state as an authorization input. Stripe can report payment and subscription events. Your application still decides which account receives access, how long it lasts, and what happens when billing state changes.
+
+## Map the payment-to-access boundary
+
+Draw the browser, application server, Stripe API, webhook endpoint, database, and the authorization check that guards a paid feature. Mark which system owns each fact.
+
+The browser may own presentation state, such as whether to show a thank-you message. Stripe owns its payment and subscription objects. Your server owns the mapping from a Stripe customer or subscription to the correct application account. Your database owns the local entitlement decision used on each request.
+
+Do not let an email address become the only link between those systems. Email can change, differ in case, or be shared in test fixtures. Persist stable Stripe object IDs against a server-authenticated application account when you create the Checkout Session or subscription.
+
+## The vulnerable success-redirect pattern
+
+This example is intentionally unsafe.
+
+```ts
+// VULNERABLE: browser-controlled query data grants access
+app.get("/billing/success", async (req, res) => {
+  await db.users.update({
+    where: { id: req.user.id },
+    data: { plan: String(req.query.plan ?? "pro") },
+  })
+
+  res.redirect("/app")
+})
+```
+
+The route proves neither payment nor the selected product. A user can call it directly or change `plan`. Even if it retrieves a Checkout Session first, the handler can update the wrong application account unless the session was bound to that account on the server.
+
+Generated code gravitates to this design because the redirect is visible, synchronous, and easy to demo. Webhooks are asynchronous and force the code to handle retries and partial failure. The inconvenient path is the real billing path.
+
+Use the success page as a status view. It may ask the server to retrieve current state for a session that belongs to the signed-in user, but it should not be the sole fulfillment mechanism. The paid API checks server-owned entitlement state on every protected operation.
+
+## Verify the raw webhook before business logic
+
+Stripe signs webhook deliveries. Its official libraries verify the signature using the raw request payload, the `Stripe-Signature` header, and the endpoint signing secret. A framework body parser that transforms the payload before verification can break the check.
+
+```ts
+app.post("/stripe/webhook", rawBodyMiddleware, async (req, res) => {
+  const event = stripe.webhooks.constructEvent(
+    req.rawBody,
+    req.header("Stripe-Signature"),
+    process.env.STRIPE_WEBHOOK_SECRET
+  )
+
+  await enqueueVerifiedStripeEvent({
+    eventId: event.id,
+    eventType: event.type,
+    objectId: event.data.object.id,
+  })
+
+  return res.sendStatus(200)
+})
+```
+
+Reject a missing or invalid signature before enqueueing anything. Keep the signing secret separate from the Stripe API secret. Use the endpoint secret for the exact webhook destination and environment.
+
+A valid signature establishes that Stripe signed the payload received by that endpoint. It does not prove that the event belongs to the current application user, that the requested transition is allowed, or that the same event was not processed already. The worker still resolves the stored customer mapping and applies an allowed state transition.
+
+## Make delivery and fulfillment idempotent
+
+Stripe may retry deliveries, and event order is not guaranteed. Put a unique constraint on the processed event ID or on a stable business-operation key. Claim the event and update local state in a transaction where practical.
+
+```ts
+await db.transaction(async (tx) => {
+  const claimed = await tx.stripeEvents.insertIfAbsent({
+    eventId: event.id,
+    type: event.type,
+  })
+  if (!claimed) return
+
+  const subscription = await stripe.subscriptions.retrieve(event.objectId)
+  await reconcileEntitlement(tx, subscription)
+})
+```
+
+This is a pattern, not drop-in code. A real implementation needs bounded retries, error recording, and a way to replay an event safely. If external work cannot participate in the database transaction, write an outbox record and make each consumer operation idempotent.
+
+Use Stripe idempotency keys when retrying API writes such as creating a subscription or refund. Reuse one key only for the same logical operation and parameters. Stripe's API idempotency does not automatically make your email, credit allocation, database update, or downstream job idempotent.
+
+Do not apply events as an unchecked sequence. If `subscription.updated` arrives after `subscription.deleted`, blindly writing the event's status could revive access. Define allowed local transitions or retrieve the current Stripe object when the event alone is insufficient. Record the Stripe object ID, its relevant status, the event ID that caused reconciliation, and the local decision time.
+
+## Keep entitlement state server-owned
+
+Protect a paid operation with a server-side check tied to the authenticated account and workspace. A client flag, hidden route, or cached React state is not an authorization control.
+
+Your local model might store an active feature set, a subscription status plus product mapping, or an expiry derived from an authoritative payment object. Stripe Entitlements can send updates when a customer's active features change, but it does not remove the need for correct local identity mapping, persistence, and authorization.
+
+Decide how the app behaves during uncertainty. If Stripe is temporarily unavailable, a previously granted low-risk entitlement might remain valid for a short bounded period. A high-impact operation may fail closed. Write that policy down rather than letting a timeout handler invent it.
+
+Refunds, disputes, unpaid invoices, trial endings, pauses, and cancellation-at-period-end need explicit behavior. Tax and fraud decisions also sit outside a signature check. Stripe supplies payment infrastructure; the application owns its product and risk rules.
+
+## Constrain keys and environments
+
+Publishable keys are designed for the client. Secret and restricted keys stay on trusted servers. Prefer a restricted key when the integration needs only a subset of API resources, and use provider controls such as IP restrictions where they fit the deployment.
+
+Keep sandbox and live objects separate. A test customer, price, webhook secret, or product ID must not be accepted in live processing. Review preview deployments carefully so they do not inherit production billing credentials.
+
+If a secret key appears in client code, logs, a prompt, or repository history, rotate or expire it. Review provider logs for the exposure window. Obfuscation and deletion do not invalidate a copied credential.
+
+The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) can inspect selected text files for common Stripe credential patterns without uploading them. It does not scan Git history, deployment settings, webhook destinations, Stripe objects, or access logs.
+
+## Exercise the failure paths in a sandbox
+
+Use Stripe's sandbox and CLI with synthetic accounts and non-production products.
+
+1. Complete Checkout, then delay webhook processing. The success page should wait on server state rather than grant access itself.
+2. Deliver the same event more than once. The entitlement and every side effect should occur once.
+3. Deliver related events out of order and confirm reconciliation reaches the current valid state.
+4. Simulate payment failure, recovery, downgrade, period-end cancellation, refund, and dispute handling.
+5. Break the webhook endpoint temporarily, restore it, and observe bounded retry and replay behavior.
+6. Rotate the webhook and API secrets without mixing sandbox and live values.
+
+The passive public [LyraShield Lite Check](/scan) reviews an authorized public web surface. It cannot inspect private Stripe settings, billing records, webhook signatures, or entitlements. A clean public-surface result says nothing about this private state machine.
+
+Automated tests can prove specific transitions for the fixtures and event sequences they exercise. They cannot decide your refund policy, detect every fraud pattern, or prove that every future Stripe event type is handled correctly. Keep unknown event types visible in logs and alerts without treating them as paid-access instructions.
+
+Read [Stripe webhook signature security](/blog/stripe-webhook-signature-security) for raw-body handling details, [server-owned payment entitlements](/blog/payment-entitlement-server-source-truth) for the authorization model, and [idempotency and replay protection](/blog/idempotency-replay-protection) for duplicate-operation design.
+
+## Sources
+
+- [Stripe Docs: Receive events in your webhook endpoint](https://docs.stripe.com/webhooks)
+- [Stripe API Reference: Idempotent requests](https://docs.stripe.com/api/idempotent_requests)
+- [Stripe Docs: API keys](https://docs.stripe.com/keys)
+- [Stripe Docs: Fulfill orders](https://docs.stripe.com/checkout/fulfillment)
+- [Stripe Docs: Entitlements](https://docs.stripe.com/billing/entitlements)
+- [Stripe Docs: Using webhooks with subscriptions](https://docs.stripe.com/billing/subscriptions/webhooks)
