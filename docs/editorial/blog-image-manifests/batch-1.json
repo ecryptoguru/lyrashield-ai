@@ -99,12 +99,12 @@
     "slug": "password-reset-email-verification-security",
     "imageId": "access-boundary-06",
     "cluster": "access-control",
-    "concept": "A single-use recovery path under rate and identity controls",
-    "prompt": "Text-free square cinematic technical artwork, a recovery signal entering a single-use gate with a restrained timing ring and identity boundary, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "A recovery signal entering a controlled single-use gate",
+    "concept": "A scoped identity and action path under rate, verification, and authorization controls",
+    "prompt": "Text-free square cinematic technical artwork, a scoped identity and action path crossing distinct rate, verification, and authorization checkpoints before one protected operation, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "A scoped identity and action path crossing rate, verification, and authorization checkpoints",
     "sourceHash": null,
-    "cropNotes": "Keep the recovery gate central and the timing ring visible in portrait crop",
-    "usageCount": 2,
+    "cropNotes": "Keep the identity, rate, verification, and authorization checkpoints visible in the central crop",
+    "usageCount": 3,
     "approved": false
   },
   {

@@ -25,7 +25,7 @@ The data and agent-boundary layers in the [LyraShield AI guide to vibe-coding se
 
 The [NIST Privacy Framework](https://www.nist.gov/privacy-framework/privacy-framework) starts with data processing, purpose, governance, and privacy risk. That is more durable than memorizing one vendor setting because assistant products and policies change.
 
-## The unsafe pattern: paste the whole environment
+## A debugging request can become a data export
 
 A debugging prompt can quietly become a data export:
 
@@ -58,9 +58,9 @@ Check current official documentation immediately before approval. The following 
 
 OpenAI's [data-use documentation](https://help.openai.com/en/articles/5722486-api-data-usage-policies) distinguishes individual services, including ChatGPT and Codex, from business services and the API. It says individual-service content may be used for training unless the user opts out, while business inputs and outputs are not used for training by default unless the organization opts in. Feedback and certain separate controls can change how data is handled. Training choice is not the whole privacy review.
 
-GitHub's [Copilot content-exclusion documentation](https://docs.github.com/en/copilot/concepts/context/content-exclusion) currently limits the feature to organizations with Copilot Business or Enterprise. Supported exclusions can keep selected files out of inline suggestions, chat responses, and code review. GitHub also documents important gaps: exclusions do not cover agent mode in editors, cloud agents, Copilot CLI, symbolic links, or remote-file-system repositories, and an IDE may indirectly provide semantic information from an excluded file.
+GitHub's [Copilot content-exclusion documentation](https://docs.github.com/en/copilot/concepts/context/content-exclusion) currently limits the feature to organizations with Copilot Business or Enterprise. Supported exclusions can keep selected files out of inline suggestions, chat responses, and code review. GitHub also documents important gaps: exclusions do not cover agent mode in editors, symbolic links, or remote-file-system repositories, and an IDE may indirectly provide semantic information from an excluded file.
 
-Anthropic's [consumer training documentation](https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training) distinguishes consumer products from commercial products. It describes consumer opt-in, safety-review, feedback, and incognito behavior. Anthropic separately states in its [commercial data guidance](https://privacy.claude.com/en/articles/9267385-does-anthropic-act-as-a-data-processor-or-controller) that commercial product data is not used for training unless the customer joins an explicit program. Your organization's agreement and settings still control the actual authorized use.
+Anthropic's [consumer training documentation](https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training) distinguishes consumer products from commercial products. It describes consumer opt-in, safety-review, feedback, and incognito behavior. Anthropic separately states in its [commercial training guidance](https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training) that commercial product data is not used for training unless the customer joins an explicit program. Your organization's agreement and settings still control the actual authorized use.
 
 Do not combine those statements into a generic claim that one brand "does not train on code." Product tier, feedback, surface, and date matter.
 
@@ -109,13 +109,11 @@ Feedback buttons can attach the surrounding conversation. Screen recordings and 
 
 Private repositories also contain third-party code and customer material that your organization may not have permission to send to every processor. Authorization needs to cover the content, not only repository ownership.
 
-## What automation cannot prove
+## Keep the policy owner and review date visible
 
 Secret scanners can detect recognized credential patterns in selected files. Data-loss prevention tools can block known labels. Exclusion policies can reduce which files reach supported features. None can prove that a prompt is authorized, that a synthetic record cannot be reidentified, or that every assistant surface obeys the same path.
 
-Treat assistant access like any other external processing boundary. Minimize first, approve the exact workflow, test the controls, and keep an exit path for policy or product changes.
-
-Record the review date and policy owner.
+Treat assistant access like any other external processing boundary. Minimize first, approve the exact workflow, test the controls, and keep an exit path for policy or product changes. Record the policy owner and review date where developers can find them before they use a new assistant surface.
 
 ### Sources
 
@@ -123,4 +121,4 @@ Record the review date and policy owner.
 - [OpenAI, How your data is used to improve model performance](https://help.openai.com/en/articles/5722486-api-data-usage-policies)
 - [GitHub, Content exclusion for Copilot](https://docs.github.com/en/copilot/concepts/context/content-exclusion)
 - [Anthropic, Is my data used for model training?](https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training)
-- [Anthropic, Data processor or controller for commercial products](https://privacy.claude.com/en/articles/9267385-does-anthropic-act-as-a-data-processor-or-controller)
+- [Anthropic, Is my data used for model training?](https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training)

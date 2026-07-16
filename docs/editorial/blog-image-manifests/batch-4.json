@@ -25,13 +25,13 @@
   },
   {
     "slug": "windsurf-security-workflow",
-    "imageId": "agent-security-05",
+    "imageId": "agent-security-01",
     "cluster": "agent-security",
-    "concept": "A coding workspace protected from poisoned rule changes",
-    "prompt": "Text-free square cinematic technical artwork, stacked repository and rule planes with one altered plane isolated before it reaches the agent path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "Repository rule planes with one altered layer isolated from the agent path",
+    "concept": "Untrusted instructions propagating across agent and rules planes while the control path remains isolated",
+    "prompt": "Text-free square cinematic technical artwork, an untrusted red instruction signal attempting to propagate across several separated agent and repository-rules planes while a hardened trust boundary isolates the privileged control path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "Untrusted instructions crossing agent and rules planes while the control path remains isolated",
     "sourceHash": null,
-    "cropNotes": "Keep the isolated layer obvious without using warning text or recognizable file icons",
+    "cropNotes": "Keep several instruction planes, the propagation path, trust boundary, and isolated control path inside the central 60 percent; show no readable prompt or interface text",
     "usageCount": 3,
     "approved": false
   },
@@ -128,7 +128,7 @@
     "alt": "A sealed build artifact moving through a controlled deployment corridor",
     "sourceHash": null,
     "cropNotes": "Keep source, artifact, and destination aligned through the central safe area",
-    "usageCount": 2,
+    "usageCount": 3,
     "approved": false
   },
   {
@@ -176,7 +176,7 @@
     "alt": "A sealed build artifact moving through a controlled deployment corridor",
     "sourceHash": null,
     "cropNotes": "Keep source, artifact, and destination aligned through the central safe area",
-    "usageCount": 2,
+    "usageCount": 3,
     "approved": false
   },
   {

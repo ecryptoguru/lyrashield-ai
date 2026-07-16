@@ -8,7 +8,7 @@
     "alt": "A monitoring path feeding a recovery loop around a production core",
     "sourceHash": null,
     "cropNotes": "Keep the loop complete in landscape and portrait crops",
-    "usageCount": 3,
+    "usageCount": 2,
     "approved": false
   },
   {
@@ -20,30 +20,30 @@
     "alt": "An incident signal contained before entering a retest path",
     "sourceHash": null,
     "cropNotes": "Keep containment and retest stages separate and inside the protected center",
-    "usageCount": 3,
+    "usageCount": 2,
     "approved": false
   },
   {
     "slug": "ai-generated-code-production-safety",
-    "imageId": "verification-04",
+    "imageId": "verification-03",
     "cluster": "verification",
-    "concept": "A changed or placeholder component crossing fresh evidence and a retest ring while a false-success path stops before durable state",
-    "prompt": "Text-free square cinematic technical artwork, a changed or placeholder graphite component crossing a fresh evidence plane and circular retest beam while a polished but disconnected false-success path stops before a sealed durable-state chamber, with an earlier receipt behind the retest, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "A changed or placeholder component retested while a false-success path stops before durable state",
+    "concept": "Independent evidence crossing exact changed scope and joining a candidate finding",
+    "prompt": "Text-free square cinematic technical artwork, an exact changed-scope plane and a separate independent evidence path converging on one candidate finding while an unresolved path remains open, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "Independent evidence crossing an exact changed scope and joining a candidate finding",
     "sourceHash": null,
-    "cropNotes": "Keep the component, fresh evidence, retest ring, stopped false-success path, and durable-state chamber inside the central 60 percent",
+    "cropNotes": "Keep the changed-scope plane, independent evidence path, candidate, and unresolved path distinct inside the central safe area",
     "usageCount": 3,
     "approved": false
   },
   {
     "slug": "prototype-to-production-security",
-    "imageId": "decision-operations-03",
-    "cluster": "decision-operations",
-    "concept": "An incident path moving from containment to verified recovery",
-    "prompt": "Text-free square cinematic technical artwork, an amber incident signal contained by a graphite boundary before entering a green retest path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "An incident signal contained before entering a retest path",
+    "imageId": "supply-chain-02",
+    "cluster": "supply-chain",
+    "concept": "A deployment artifact sealed from source to production",
+    "prompt": "Text-free square cinematic technical artwork, a sealed build artifact traveling from a source chamber through a controlled deployment corridor, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "A sealed build artifact moving through a controlled deployment corridor",
     "sourceHash": null,
-    "cropNotes": "Keep containment and retest stages separate and inside the protected center",
+    "cropNotes": "Keep source, artifact, and destination aligned through the central safe area",
     "usageCount": 3,
     "approved": false
   },
@@ -109,13 +109,13 @@
   },
   {
     "slug": "secure-ai-built-internal-tools",
-    "imageId": "decision-operations-02",
-    "cluster": "decision-operations",
-    "concept": "Monitoring and recovery paths forming a continuous operating loop",
-    "prompt": "Text-free square cinematic technical artwork, a restrained monitoring path feeding a tested recovery loop around a production core, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "A monitoring path feeding a recovery loop around a production core",
+    "imageId": "access-boundary-06",
+    "cluster": "access-control",
+    "concept": "A scoped identity and action path under rate, verification, and authorization controls",
+    "prompt": "Text-free square cinematic technical artwork, a scoped identity and action path crossing distinct rate, verification, and authorization checkpoints before one protected operation, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "A scoped identity and action path crossing rate, verification, and authorization checkpoints",
     "sourceHash": null,
-    "cropNotes": "Keep the loop complete in landscape and portrait crops",
+    "cropNotes": "Keep the identity, rate, verification, and authorization checkpoints visible in the central crop",
     "usageCount": 3,
     "approved": false
   },
@@ -188,7 +188,7 @@
     "alt": "An incident signal contained before entering a retest path",
     "sourceHash": null,
     "cropNotes": "Keep containment and retest stages separate and inside the protected center",
-    "usageCount": 3,
+    "usageCount": 2,
     "approved": false
   }
 ]

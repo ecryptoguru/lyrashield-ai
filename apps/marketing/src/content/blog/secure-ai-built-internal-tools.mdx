@@ -5,7 +5,7 @@ pubDate: 2026-07-17
 author: lyrashield-team
 tags: ["access-control", "agent-security"]
 draft: true
-heroImage: decision-operations-02
+heroImage: access-boundary-06
 faq:
   - q: "Is an internal tool safe if it is available only through a VPN?"
     a: "No. A VPN can reduce network exposure, but it does not decide which connected employee, contractor, device, or service may perform each action or access each record."
@@ -25,7 +25,7 @@ The target and authorization layers in the [LyraShield AI guide to securing vibe
 
 [NIST SP 800-207](https://csrc.nist.gov/pubs/sp/800/207/final) states that network location and asset ownership should not create implicit trust. Its zero-trust architecture is broader than one internal app, but the practical lesson is small: authenticate the actor and authorize access to the resource instead of trusting the office network.
 
-## The unsafe pattern: trust the network and browser role
+## A browser role is not a trust boundary
 
 An AI-built operations tool may send a role with the request:
 
@@ -109,7 +109,7 @@ For a wider release inventory that satisfies the site's related-content map, use
 
 The public [LyraShield Lite Check](/scan) examines an authorized public surface passively. It cannot inspect a private internal route, managed-identity settings, service-account scope, database authorization, or audit history. Full repository and application review is a separate depth, and the full platform remains in active development.
 
-## What automation cannot own
+## Reserve ownership for a human operator
 
 Automation can flag unsafe patterns, test defined permissions, and record selected events. It cannot decide whether a finance contractor should retain refund access, whether an integration's business purpose still exists, or whether an outage is safer than continued operation.
 
