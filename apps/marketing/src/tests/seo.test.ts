@@ -45,12 +45,17 @@ describe("marketing SEO metadata", () => {
     expect(parsed.vars.PUBLIC_INDEXABLE).toBe("true")
   })
 
-  it("captures privacy-bounded PostHog pageviews without query or fragment data", () => {
+  it("captures privacy-bounded PostHog page lifecycle events without query or fragment data", () => {
     const base = source("../layouts/Base.astro")
 
     expect(base).toContain("capture_pageview: false")
+    expect(base).toContain("capture_pageleave: false")
     expect(base).toContain('posthog.capture("$pageview"')
-    expect(base).toContain("`${pageUrl.origin}${pageUrl.pathname}`")
+    expect(base).toContain('"$pageleave"')
+    expect(base).toContain("privacyBoundedPageUrl")
+    expect(base).toContain('transport: "sendBeacon"')
+    expect(base).toContain("before_send:")
+    expect(base).toContain('"$current_url", "$referrer", "$initial_referrer", "referrer"')
     expect(base).not.toContain("$current_url: location.href")
   })
 
