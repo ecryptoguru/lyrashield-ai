@@ -116,7 +116,7 @@
     "alt": "A restricted route passing through two policy locks",
     "sourceHash": null,
     "cropNotes": "Keep both locks and the privileged chamber inside the central 60 percent",
-    "usageCount": 2,
+    "usageCount": 3,
     "approved": false
   },
   {
@@ -147,11 +147,11 @@
     "slug": "node-express-ai-api-security",
     "imageId": "web-execution-02",
     "cluster": "web-execution",
-    "concept": "Untrusted rendered output isolated behind an encoding plane",
-    "prompt": "Text-free square cinematic technical artwork, an untrusted content stream meeting a translucent encoding plane before a browser surface, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "An untrusted content stream passing through an encoding plane",
+    "concept": "Layered browser response controls isolating untrusted output from an application core",
+    "prompt": "Text-free square cinematic technical artwork, an untrusted content stream crossing separate translucent encoding and browser-policy planes before a protected application surface, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "Untrusted output crossing layered browser response controls",
     "sourceHash": null,
-    "cropNotes": "Keep the encoding plane large enough to remain legible after the Open Graph crop",
+    "cropNotes": "Keep the input stream, both response-control planes, and protected application surface visible after landscape and portrait crops",
     "usageCount": 3,
     "approved": false
   },
@@ -176,7 +176,7 @@
     "alt": "A sealed build artifact moving through a controlled deployment corridor",
     "sourceHash": null,
     "cropNotes": "Keep source, artifact, and destination aligned through the central safe area",
-    "usageCount": 3,
+    "usageCount": 2,
     "approved": false
   },
   {

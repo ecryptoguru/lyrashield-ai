@@ -1,0 +1,140 @@
+---
+title: "Stop Shipping Source Maps and Private Build Artifacts"
+description: "Inspect source maps, bundles, package tarballs, and CI artifacts before release so private source and files do not reach public storage."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - supply-chain
+  - verification
+draft: true
+heroImage: supply-chain-05
+faq:
+  - q: "Are production source maps always unsafe?"
+    a: "No. A private source map uploaded to a trusted error service can support debugging without being public. The release check must confirm that the map is absent from the public origin and protected in the private service."
+  - q: "Does a hidden source map stay private?"
+    a: "Not by itself. Vite's hidden mode omits the mapping comment from the bundle but still creates the map file. Anyone who can guess or discover the file path may retrieve it if the deployment publishes it."
+  - q: "How should I upload source maps to an error service?"
+    a: "Generate maps in a controlled build, upload them over an authenticated channel, verify the service's project access and retention, then exclude the maps from public deployment. Test both the expected private upload and a public request for the map."
+  - q: "How can I inspect an npm package before publishing it?"
+    a: "Start in a disposable workspace without production credentials. Inspect the package scripts, then run npm pack --dry-run --json --ignore-scripts and review every reported path. If reviewed lifecycle scripts must build the package, run them separately in that workspace and repeat the script-free inventory afterward."
+---
+
+**Direct answer:** Stop source-map and build-artifact leaks by inspecting the exact files that deployment or publication will receive. Configure map output deliberately, keep private maps off the public origin, use package allowlists, review asset manifests and tarballs, scan generated files, and make the artifact check a release gate rather than a repository-only review.
+
+A repository can look clean while its release artifact contains source code, comments, private filenames, route details, development fixtures, or substituted configuration. Bundlers transform inputs. Packaging scripts copy files. CI jobs collect broad directories. The thing users download is therefore a separate security boundary from the source tree.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats generated output as evidence that deserves its own review. This matters for AI-built applications because a generated configuration or one-line upload glob can silently widen what ships. Reviewing the prompt and source diff will not reveal the final file list.
+
+## Decide where each source map may exist
+
+A browser source map connects minified JavaScript back to original source locations. It may include original source content, readable paths, function names, and comments. That detail helps developers debug a production error, but it can also give an unauthenticated visitor more information than the application intended to publish.
+
+There are three common delivery choices:
+
+- public maps sit next to browser bundles and are retrievable from the application origin
+- private maps are generated in CI and uploaded to an access-controlled error service
+- no production browser maps are generated or retained
+
+None is automatically correct for every application. Pick one based on debugging needs, the source contents, the error service's controls, and retention policy. Write the choice down so a later build change does not turn a private upload into a public asset.
+
+[Next.js documents](https://nextjs.org/docs/pages/api-reference/config/next-config-js/productionBrowserSourceMaps) that production browser source maps are disabled by default. Setting `productionBrowserSourceMaps: true` writes the maps beside the client JavaScript and makes Next.js serve them when requested.
+
+```js
+// Use only when public production browser maps are an intentional decision.
+const nextConfig = {
+  productionBrowserSourceMaps: true,
+}
+
+export default nextConfig
+```
+
+[Vite's `build.sourcemap` documentation](https://vite.dev/config/build-options.html#build-sourcemap) distinguishes `true`, `"inline"`, and `"hidden"`. `true` creates a separate map. Inline mode embeds it in the output. Hidden mode creates the separate map but removes the corresponding comment from the generated bundle.
+
+That last distinction catches teams out. Removing the mapping comment makes the map less obvious. It does not add authentication, change an object-store policy, or stop a deployment tool from copying `*.map`. A hidden map on a public bucket is still public if its path can be found or guessed.
+
+## Inspect the built directory as a new input
+
+Run the production build in a clean, disposable workspace. Inventory every output file before uploading anything. Preserve that inventory as an asset manifest tied to the commit and build configuration.
+
+```sh
+find dist -type f -print | LC_ALL=C sort > artifact-files.txt
+find dist -type f \( -name '*.map' -o -name '*.env*' -o -name '*.pem' \) -print
+```
+
+These commands only list local paths. They do not open a network connection or alter an external service. Adjust `dist` for the framework's real output directory, and do not paste file contents into an online tool.
+
+Review more than source maps. Check for environment files, test fixtures, database exports, local certificates, editor state, generated API specifications, old bundles, coverage reports, and server-only modules. Look at assets copied from a public directory as well as files emitted by the bundler.
+
+Then compare the local inventory with the deployment include rules. A clean `dist` directory does not help if the upload step publishes the repository root. Conversely, a broad build directory can be safe when the release job uses a narrow allowlist and verifies it.
+
+Diff the asset manifest against the previous approved release. New file types, unexpected duplicate chunks, and a sudden map file deserve review even when the total file count barely changes. Approve the explanation with the manifest, not in a chat message that the next release cannot reproduce. Keep the manifest private if its paths reveal internal structure.
+
+## Treat npm tarballs as release artifacts
+
+For a published package, `package.json` is not a reliable picture of the final tarball unless you inspect npm's packaging result. The [`files` field](https://docs.npmjs.com/files/package.json#files) is an allowlist for package contents. If it is omitted, npm's default inclusion is broad, subject to its inclusion and exclusion rules.
+
+Prefer a small explicit list:
+
+```json
+{
+  "files": ["dist", "README.md", "LICENSE"],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts"
+}
+```
+
+Start in a disposable clone or worktree without production credentials. Inspect `prepack`, `prepare`, and `postpack` in `package.json` plus every command they call. Then run a membership preview without lifecycle scripts:
+
+```sh
+npm pack --dry-run --json --ignore-scripts
+```
+
+The [npm pack command](https://docs.npmjs.com/cli/v11/commands/npm-pack) reports what packing would include without creating the release tarball. The `--json` flag gives the file list a machine-readable shape. The `--ignore-scripts` flag matters because ordinary `npm pack` has `prepack`, `prepare`, and `postpack` lifecycle stages. `--dry-run` prevents the pack operation from creating its normal tarball, but it is not a sandbox and should not be used as proof that package-controlled code is harmless.
+
+Some packages rely on a reviewed lifecycle script to produce `dist`. Run that build deliberately in the disposable workspace with only the credentials and network access it needs. Afterward, repeat the script-free dry run against the generated output. This separates the decision to execute build code from the decision about which files enter the package.
+
+If you need to examine bytes rather than paths, create a real tarball only after reviewing the lifecycle boundary. Keep it in the isolated local directory, list it with `tar -tf`, and delete the local copy after review.
+
+An allowlist reduces mistakes but does not prove that an allowed file is safe. A generated declaration, bundle, or README may contain a private path or value. Inspect both the membership of the tarball and the content of high-risk file types.
+
+## Keep CI artifact collection narrow
+
+CI artifacts often outlive the job that created them. They may also be visible to a larger group than production infrastructure. Do not upload the whole workspace for convenience. Name the exact output directories, exclude temporary credentials and diagnostic dumps, and set an intentional retention period.
+
+Separate public deployment files from private debugging files before upload:
+
+```text
+release/public/        browser bundles, approved static assets
+release/private-maps/  source maps for the error service
+release/evidence/      manifest and scan results with restricted access
+```
+
+Use independent upload steps with different destinations and credentials. After deployment, request a representative bundle and its expected map URL from the public origin. The bundle should load. A private map should not. A `404` alone is not proof of permanent privacy, so also inspect the object listing or deployment manifest under an authorized account.
+
+## Scan generated output without mistaking a pass for proof
+
+Search the built directory for known synthetic canaries and secret formats. Seed a test fixture with an inert value such as `TEST_ONLY_TOKEN_7H3K9Q` and confirm that the release check detects it. Never seed a real credential merely to test the scanner.
+
+Pattern-based scanning can find recognized token shapes, private-key headers, and values your team explicitly names. It will miss arbitrary private prose, undocumented formats, transformed values, and source code that is sensitive without containing a secret. Minification and binary containers can also reduce visibility.
+
+The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) analyzes only the text files you select on your device. Each selected file is limited to 1 MB, and detection is pattern based. Use it on safe local copies of selected text artifacts. It does not crawl a build directory, inspect binary files, contact a deployment, or prove that an artifact is free of secrets.
+
+## Make artifact review repeatable
+
+Record the build command, dependency lockfile, relevant framework configuration, output manifest, scan version, and deployment include rules. Fail the release when an unexpected file appears, a prohibited suffix reaches the public set, or the package dry run changes without review.
+
+For private maps, verify four separate facts: CI generated them, the authenticated upload succeeded, public deployment excluded them, and the error service can resolve a test stack frame for the correct release. A failed upload may reduce debugging. An accidental public upload changes the exposure risk. Track the failures separately because they need different responses.
+
+The related guide on [frontend API keys](/blog/api-keys-frontend-ai-apps) explains why values included in browser code cannot remain secret. Artifact inspection has a wider scope. It can reveal source, routes, filenames, fixtures, and packaging mistakes even when no credential is present.
+
+Artifact contents also depend on the packages selected during the build. The [AI dependency audit guide](/blog/ai-dependency-vulnerability-audit) covers provenance and vulnerability review for that separate supply-chain decision.
+
+A clean inspection is evidence about one exact artifact and one publication path. It does not prove that runtime debug routes are disabled, that storage access will never change, or that a later rebuild produces the same files. Repeat the gate for every releasable artifact.
+
+## Sources
+
+- [Next.js: `productionBrowserSourceMaps`](https://nextjs.org/docs/pages/api-reference/config/next-config-js/productionBrowserSourceMaps)
+- [Vite: Build options, `build.sourcemap`](https://vite.dev/config/build-options.html#build-sourcemap)
+- [npm: `package.json` files](https://docs.npmjs.com/files/package.json#files)
+- [npm CLI: `npm pack`](https://docs.npmjs.com/cli/v11/commands/npm-pack)

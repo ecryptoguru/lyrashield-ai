@@ -1,0 +1,125 @@
+---
+title: "Audit Logs for Security-Sensitive Actions"
+description: "Design scoped audit events that reconstruct sensitive actions, resist silent changes, protect private data, and survive collection failures."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - access-control
+draft: true
+heroImage: decision-operations-05
+faq:
+  - q: "What is the difference between an audit log and an application log?"
+    a: "An audit log reconstructs security-sensitive actions using stable actors, actions, subjects, outcomes, and time. Application logs support debugging and operations. They may overlap, but debug text and stack traces are usually too variable and sensitive to be the authoritative audit trail."
+  - q: "Should administrators be allowed to edit audit records?"
+    a: "Ordinary application and administrator roles should not update or delete audit events. Corrections should be new linked events. Exceptional retention or legal deletion workflows need separate authorization, an independent record, and controls outside the normal application path."
+  - q: "What should happen when the audit sink is unavailable?"
+    a: "Choose by action and risk. A highly sensitive mutation may fail closed. Other operations may write to a durable local outbox and alert an owner. Never silently discard the event or apply one availability rule to every action without a threat model."
+  - q: "Does an append-only audit table prove the record is complete?"
+    a: "No. Append-only permissions reduce ordinary modification. Hash chaining or signed checkpoints can reveal some changes, but neither proves that every event was emitted or prevents deletion by a sufficiently privileged operator. Test emission, collection, access, and integrity separately."
+---
+
+**Direct answer:** Record every security-sensitive action as a server-owned event with the actor, action, subject, scoped workspace, authorization decision, execution outcome, source, correlation ID, trustworthy time, and reason. Make records append-oriented, restrict readers, protect integrity, define retention, and test sink failures. An audit trail must reconstruct decisions without becoming a second store of secrets or user content.
+
+When a role changes or an agent action runs, a normal request log may say only `POST /api/action 200`. That is not enough to answer who acted, what changed, which workspace was affected, whether policy allowed it, or what the server observed afterward.
+
+An audit trail fills that gap. It supports investigation and accountability, but it is not automatically trustworthy because a table is named `audit_events`. The design needs event selection, stable fields, access control, failure handling, integrity checks, review, and retention. Those concerns sit inside the [release-assurance model for AI-built apps](/blog/vibe-coding-security-guide), where evidence is tied to a specific action and result.
+
+## Choose events from consequences
+
+Start with actions that change security posture or expose sensitive capability. Examples include sign-in failures, membership and role changes, public-share creation or revocation, secret rotation, administrative reads, data export or deletion, policy changes, deployment approval, and execution of an agent tool.
+
+Do not record every database write by reflex. A large undifferentiated stream is expensive to protect and hard to review. Write an event catalog with the action name, reason for collection, responsible owner, required fields, retention class, and failure policy.
+
+OWASP's [Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) recommends application security logging for authentication and authorization events, administrative activity, higher-risk functions, sensitive-data access, key operations, configuration changes, and suspicious business behavior. It also warns that process, audit, transaction, and security logs may have different purposes and should sometimes remain separate.
+
+An audit event is useful when someone can reconstruct one decision from it. It does not need the full request or response.
+
+## Use a stable, server-owned event shape
+
+A small TypeScript contract might look like this:
+
+```ts
+type AuditEvent = {
+  id: string
+  schemaVersion: 1
+  occurredAt: string
+  recordedAt: string
+  workspaceId: string
+  actor: { kind: "user" | "service" | "agent"; id: string }
+  action: string
+  subject: { kind: string; id: string }
+  authorizationDecision: "allow" | "deny"
+  executionOutcome: "succeeded" | "failed" | "not_attempted"
+  source: { service: string; requestId: string }
+  reasonCode: string
+}
+```
+
+The server derives the workspace, actor, subject, authorization decision, and time from authenticated context and policy evaluation. It records `executionOutcome` only after the business operation commits, fails, or is skipped because policy denied it. Do not accept an actor ID, authorization decision, or successful outcome merely because the client supplied it. If an agent proposes an action, record both the controlling human or service identity and the delegated actor where that distinction matters.
+
+Use controlled action and reason codes rather than prose that changes between releases. A display layer can translate those codes for a human reader. Keep a schema version so old records remain interpretable after fields evolve.
+
+NIST SP 800-53 Rev. 5 [AU-3](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) requires audit records to establish the event type, time, place, source, outcome, and associated identities or objects. The standard also asks organizations to consider privacy risk from audit content. The application still has to choose identifiers and detail appropriate to its own threat model.
+
+## Capture the decision and observed result
+
+For a sensitive mutation, preserve the request correlation and policy result before treating the operation as complete. Keep that decision separate from what execution did next. A denied attempt records `authorizationDecision: "deny"` and `executionOutcome: "not_attempted"`. An allowed operation can still end as `failed`; only a committed effect is `succeeded`. Otherwise, the trail can confuse permission with a state change or hide repeated attempts to cross a boundary.
+
+Use a server-generated correlation ID that contains no email, tenant name, IP address, or infrastructure detail. It should join the audit event to selected operational records without becoming an authentication token. A correlation ID helps retrieval; it does not prove two records are authentic.
+
+Separate the event time from the collection time. Prefer server time for authoritative actions and synchronize service clocks. If a client reports when something happened offline, store that as an attributed, lower-trust field rather than replacing the server timestamp.
+
+For queued work, record meaningful transitions. A user starting an export and a worker completing it are different actions by different actors. Link them through the request or job identifier. Do not rewrite the original event when the later outcome arrives.
+
+## Keep sensitive values out of the trail
+
+An audit event can become a privacy breach if it copies request bodies, prompts, access tokens, session identifiers, private repository URLs, or document content. Store stable internal identifiers and narrow reason codes. Authorized investigators can retrieve the underlying record through its normal access controls when it still exists.
+
+The companion guide to [keeping PII and secrets out of logs](/blog/sensitive-data-logging) covers minimization and redaction in depth. The same rule applies here: collect what the audit purpose requires and nothing extra. Hashing a predictable email address does not necessarily anonymize it.
+
+Audit viewers need their own authorization. Scope every query to the caller's workspace and role, paginate results, and record high-risk audit access where justified. A support operator who can read every tenant's audit trail may learn account names, resource patterns, and incident timing even when event payloads contain no secrets.
+
+## Make normal writes append-only
+
+The application role should create events but should not update or delete them. Corrections become new events linked to the record they clarify. Retention deletion should run through a separate, narrowly authorized path with its own evidence and legal basis.
+
+Append-only permissions reduce ordinary tampering. They do not stop a database owner, compromised infrastructure identity, or storage administrator. Add tamper detection where the threat warrants it. A sequence number and hash of the previous canonical record can reveal modification or a missing link. Periodic signed checkpoints stored in a separate trust domain can make undetected rewriting harder.
+
+Be precise about the result. A valid hash chain shows that the records presented follow the expected links. It does not prove that the application emitted every required event, that the first record is genuine, or that an attacker did not delete an uncheckpointed suffix.
+
+OWASP recommends protecting logs from unauthorized access, modification, and deletion, recording access to them, and adding tamper detection. NIST's [Guide to Computer Security Log Management](https://csrc.nist.gov/pubs/sp/800/92/final) places collection, storage, protection, analysis, and disposal inside one operational process.
+
+## Decide what happens when logging fails
+
+A remote audit sink can time out, reject a schema, run out of capacity, or become unavailable during deployment. Silent loss is the worst default because the business action succeeds while its accountability record disappears.
+
+For a high-impact action such as granting an administrator role or executing a production mutation, the threat model may justify failing closed when no durable audit write is possible. That choice affects availability and needs an explicit owner.
+
+For other actions, use a transactional outbox in the same durable transaction as the business change, then forward the event asynchronously. Monitor backlog age and delivery failures. Bound disk and queue growth so an attacker cannot turn audit generation into resource exhaustion. An alert and recovery procedure are part of the control.
+
+Do not claim one rule works everywhere. OWASP advises testing loss of connectivity, storage exhaustion, missing permissions, and runtime errors in logging code. It also notes that logging failures should not automatically stop an application. The action's consequence and recovery model decide the safer tradeoff.
+
+## Test the trail as a security control
+
+Use synthetic users in two workspaces. Exercise each cataloged action as an allowed user, a denied user, and a failing dependency. Confirm the actor, scope, subject, action, authorization decision, execution outcome, reason, and correlation fields. Verify that event text contains no seeded fake secret or personal field.
+
+Then test the system around the record:
+
+- a user from Workspace A cannot read Workspace B events
+- the application role cannot update or delete an event
+- concurrent actions preserve distinct identities and results
+- a broken sink follows the documented fail-closed or outbox path
+- retention removes only eligible records through the controlled job
+- chain or checkpoint verification detects an intentional test mutation
+
+A passing suite covers those event paths, roles, storage policies, and failure fixtures. It cannot prove that an uninstrumented action emits an event. Compare the event catalog with routes, jobs, administrative tools, and agent capabilities during every material change.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can record which actions need audit evidence, who owns them, and whether failure behavior has been tested. It does not connect to the application, inspect audit records, or verify tamper resistance.
+
+## Sources
+
+- [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
+- [NIST SP 800-53 Rev. 5: Security and Privacy Controls](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final)
+- [NIST SP 800-92: Guide to Computer Security Log Management](https://csrc.nist.gov/pubs/sp/800/92/final)
