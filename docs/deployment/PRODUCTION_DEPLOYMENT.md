@@ -140,9 +140,9 @@ Monitor only coarse funnel stages: deduplicated scorecard view, share-button han
 
 - `https://lyrashieldai.com` is live on the `lyrashield-marketing` Worker. The apex and `www` custom domains are attached.
 - Production D1, Rate Limit, and KV bindings are provisioned; migrations `0001`–`0003` are applied remotely; `WAITLIST_IP_SALT` is stored as a Worker secret.
-- `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. The ready marketing/methodology/browser-local-tools surface is indexable. `/scan` and `/terms` are page-scoped `noindex` and excluded from the sitemap.
-- Live HTTPS, security headers, canonical/schema metadata, sitemap/robots/`llms.txt`, waitlist behavior, a 19-URL internal crawl, representative Lighthouse/Brave rendering, and the permanent path/query-preserving `www`-to-apex redirect pass.
-- The scanner remains disabled because `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` are intentionally unset. Set all three together only after the separately protected scanner API and abuse workflow are live. `PUBLIC_APP_URL` remains independent and controls authenticated-app links.
+- `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. The marketing, methodology, browser-local tools, and passive `/scan` surface are indexable. `/terms` remains page-scoped `noindex` and excluded from the sitemap.
+- Live HTTPS, security headers, canonical/schema metadata, sitemap/robots/`llms.txt`, waitlist behavior, representative Lighthouse/Brave rendering, the permanent path/query-preserving `www`-to-apex redirect, and a production browser Lite Check pass.
+- Production sets `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` together because the separately protected scanner API and monitored abuse workflow are live. Keep all three configured as one availability gate. `PUBLIC_APP_URL` remains independent, is intentionally unset, and controls only authenticated-app links.
 
 Before deploying the Cloudflare marketing Worker:
 
