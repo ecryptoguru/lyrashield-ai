@@ -174,7 +174,7 @@ First paragraph.
       draft: false,
       heroImage: "verification-01",
     })
-    expect(article.data.faq).toHaveLength(2)
+    expect((article.data as { faq?: unknown[] }).faq).toHaveLength(2)
     expect(article.body).toContain("## Safe verification")
   })
 
@@ -269,7 +269,10 @@ ${filler}
 [OWASP](https://owasp.org/a) [NIST](https://csrc.nist.gov/b) [RFC](https://www.rfc-editor.org/c)
 `,
     }
-    const programBySlug = new Map([
+    const programBySlug = new Map<
+      string,
+      { index: number; slug: string; cluster: string; cta?: string }
+    >([
       [base.slug, { index: 2, slug: base.slug, cluster: "Access" }],
       ["payment-post", { index: 24, slug: "payment-post", cluster: "Payments" }],
     ])
@@ -313,7 +316,10 @@ ${filler}
     const directAnswer = Array(45).fill("answer").join(" ")
     const filler = Array(1160).fill("guidance").join(" ")
     const entry = { index: 28, slug: "workflow-post", cluster: "Agent", cta }
-    const programBySlug = new Map([
+    const programBySlug = new Map<
+      string,
+      { index: number; slug: string; cluster: string; cta?: string }
+    >([
       [entry.slug, entry],
       ["agent-post", { index: 29, slug: "agent-post", cluster: "Agent" }],
     ])

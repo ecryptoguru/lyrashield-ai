@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro"
-import { getCollection } from "astro:content"
+import { getCollection, getEntry } from "astro:content"
 
 export const prerender = false
 
@@ -23,6 +23,9 @@ export const GET: APIRoute = async (context) => {
 
   const posts = await getCollection("blog", (entry) => !entry.data.draft)
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
+  const postRecords = await Promise.all(
+    sortedPosts.map(async (post) => ({ post, image: await getEntry(post.data.heroImage) }))
+  )
 
   const sections = [
     "# LyraShield AI — llms.txt",
@@ -44,7 +47,11 @@ export const GET: APIRoute = async (context) => {
     `${origin}/tools`,
     `${origin}/sample-report`,
     `${origin}/blog`,
-    ...sortedPosts.map((post) => `${origin}/blog/${post.id}`),
+    `${origin}/blog/editorial-policy`,
+    ...postRecords.flatMap(({ post, image }) => [
+      `${origin}/blog/${post.id}`,
+      ...(image ? [`  Representative image: ${origin}${image.data.og}`] : []),
+    ]),
     "",
     "## Copy-safe summary for LLM context",
     "No automatic Fix PR claim, no pricing, no free-tier promises, no benchmark claims, no customer names.",

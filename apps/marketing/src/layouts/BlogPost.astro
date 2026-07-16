@@ -1,7 +1,6 @@
 ---
 import Base from "@layouts/Base.astro"
 import BlogCta from "@components/BlogCta.astro"
-import { getEntry } from "astro:content"
 import type { CollectionEntry } from "astro:content"
 
 interface Heading {
@@ -20,7 +19,7 @@ interface Props {
   description: string
   pubDate: Date
   updatedDate?: Date
-  authorId: string
+  author: CollectionEntry<"authors">
   tags: string[]
   draft: boolean
   canonical?: string
@@ -28,6 +27,8 @@ interface Props {
   headings: Heading[]
   readingMinutes: number
   relatedPosts: CollectionEntry<"blog">[]
+  wordCount: number
+  heroImage: CollectionEntry<"blogImages">
 }
 
 const {
@@ -35,7 +36,7 @@ const {
   description,
   pubDate,
   updatedDate,
-  authorId,
+  author,
   tags,
   draft,
   canonical,
@@ -43,12 +44,35 @@ const {
   headings,
   readingMinutes,
   relatedPosts,
+  wordCount,
+  heroImage,
 } = Astro.props
 
-const author = await getEntry("authors", authorId)
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const pageUrl = canonical ?? new URL(Astro.url.pathname, siteOrigin).toString()
-const ogImage = "/og/og-default.png"
+const ogImage = heroImage.data.og
+const imageUrl = new URL(ogImage, siteOrigin).toString()
+const ogImageWidth = 1200
+const ogImageHeight = 630
+const publisherId = `${siteOrigin}/#organization`
+const authorUrl = author?.data.profileUrl
+  ? new URL(author.data.profileUrl, siteOrigin).toString()
+  : pageUrl
+
+const authorJsonLd = author
+  ? {
+      "@type": author.data.kind,
+      name: author.data.name,
+      description: author.data.bio,
+      url: authorUrl,
+      ...(author.data.kind === "Person"
+        ? {
+            jobTitle: author.data.role,
+            ...(author.data.xUrl ? { sameAs: [author.data.xUrl] } : {}),
+          }
+        : { parentOrganization: { "@id": publisherId } }),
+    }
+  : { "@id": publisherId }
 
 const article = {
   publishedTime: pubDate.toISOString(),
@@ -68,15 +92,21 @@ const jsonLd: unknown[] = [
     url: pageUrl,
     datePublished: pubDate.toISOString(),
     dateModified: updatedDate?.toISOString() || pubDate.toISOString(),
-    author: {
-      "@type": "Person",
-      name: author?.data.name || "LyraShield Team",
+    author: authorJsonLd,
+    publisher: { "@id": publisherId },
+    isPartOf: { "@id": `${siteOrigin}/blog#collection` },
+    mainEntityOfPage: { "@type": "WebPage", "@id": pageUrl },
+    image: {
+      "@type": "ImageObject",
+      url: imageUrl,
+      width: ogImageWidth,
+      height: ogImageHeight,
+      caption: heroImage.data.alt,
     },
-    publisher: {
-      "@type": "Organization",
-      name: "LyraShield AI",
-    },
-    mainEntityOfPage: pageUrl,
+    inLanguage: "en-US",
+    wordCount,
+    timeRequired: `PT${readingMinutes}M`,
+    articleSection: tags,
     keywords: tags.join(", "),
   },
   {
@@ -109,25 +139,29 @@ if (faq && faq.length > 0) {
   ogType="article"
   article={article}
   ogImage={ogImage}
+  ogImageAlt={heroImage.data.alt}
+  ogImageWidth={ogImageWidth}
+  ogImageHeight={ogImageHeight}
   canonical={canonical}
   jsonLd={jsonLd}
 >
-  <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start lg:gap-12 lg:px-8">
-    <article class="max-w-3xl">
-      <header>
+  <div class="blog-post-shell">
+    <article class="blog-post">
+      <header class="blog-post__header">
         {draft && (
-          <span class="mb-4 inline-block rounded-full border border-border bg-bg-raised px-3 py-1 text-xs font-medium text-text-muted">
+          <span class="blog-post__draft">
             Draft
           </span>
         )}
-        <h1 class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">{title}</h1>
-        <p class="mt-4 text-text-muted">
+        <h1>{title}</h1>
+        <p class="blog-post__summary">{description}</p>
+        <p class="blog-post__meta">
           <time datetime={pubDate.toISOString()}>
             {pubDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
           </time>
           {updatedDate && (
             <span class="ml-2 text-sm">
-              (updated <time datetime={updatedDate.toISOString()}>{updatedDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</time>)
+              Updated <time datetime={updatedDate.toISOString()}>{updatedDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</time>
             </span>
           )}
           {author && (
@@ -137,9 +171,50 @@ if (faq && faq.length > 0) {
         </p>
       </header>
 
-      <div class="prose prose-invert mt-10 max-w-none prose-a:text-accent prose-headings:tracking-tight prose-headings:text-text">
+      <picture class="blog-post__hero">
+        <source srcset={heroImage.data.avif} type="image/avif" />
+        <source srcset={heroImage.data.webp} type="image/webp" />
+        <img
+          src={heroImage.data.jpeg}
+          alt={heroImage.data.alt}
+          width="1600"
+          height="900"
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
+          sizes="(min-width: 1024px) 784px, calc(100vw - 2rem)"
+        />
+      </picture>
+
+      {tocHeadings.length > 0 && (
+        <details class="blog-post__mobile-toc">
+          <summary>On this page <span aria-hidden="true">＋</span></summary>
+          <ul>
+            {tocHeadings.map((heading) => (
+              <li style={`margin-left: ${(heading.depth - 2) * 0.75}rem`}><a href={`#${heading.slug}`}>{heading.text}</a></li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      <div class="blog-post__content prose max-w-none prose-a:text-accent prose-headings:tracking-tight prose-headings:text-text">
         <slot />
       </div>
+
+      {author && (
+        <section class="blog-post__author" aria-labelledby="author-heading">
+          <div aria-hidden="true">LS</div>
+          <div>
+            <p id="author-heading">
+              Written by {author.data.name}
+            </p>
+            <p>{author.data.role}</p>
+            <p>{author.data.bio}</p>
+            {author.data.profileUrl && <a href={author.data.profileUrl}>Editorial standards and accountability</a>}
+            {author.data.xUrl && <a href={author.data.xUrl} rel="me noopener noreferrer" target="_blank">Social profile <span class="sr-only">(opens in a new tab)</span> ↗</a>}
+          </div>
+        </section>
+      )}
 
       {faq && faq.length > 0 && (
         <section aria-labelledby="post-faq-heading" class="mt-12 border-t border-border pt-8">
@@ -198,10 +273,10 @@ if (faq && faq.length > 0) {
     </article>
 
     {tocHeadings.length > 0 && (
-      <aside class="hidden lg:block">
-        <nav aria-label="Table of contents" class="sticky top-24 rounded-lg border border-border bg-bg-raised p-4 text-sm">
-          <p class="font-medium text-text">On this page</p>
-          <ul class="mt-3 space-y-2">
+      <aside class="blog-post__toc">
+        <nav aria-label="Table of contents">
+          <p>On this page</p>
+          <ul>
             {tocHeadings.map((heading) => (
               <li style={`margin-left: ${(heading.depth - 2) * 0.75}rem`}>
                 <a href={`#${heading.slug}`} class="text-text-muted hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
@@ -215,3 +290,40 @@ if (faq && faq.length > 0) {
     )}
   </div>
 </Base>
+
+<style>
+  .blog-post-shell { width: min(100% - 2rem, 76rem); margin-inline: auto; padding-block: clamp(4rem, 9vw, 8rem); }
+  .blog-post { min-width: 0; max-width: 49rem; }
+  .blog-post__header { border-bottom: 1px solid var(--color-border); padding-bottom: clamp(2.5rem, 6vw, 4.5rem); }
+  .blog-post__draft { display: inline-flex; margin-bottom: 1rem; border: 1px solid var(--color-border); border-radius: 999px; padding: .3rem .7rem; color: var(--color-accent); font: 600 .72rem/1.2 "JetBrains Mono Variable", monospace; text-transform: uppercase; }
+  .blog-post__header h1 { margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(3rem, 7.2vw, 6.3rem); font-weight: 800; line-height: .92; letter-spacing: -.055em; }
+  .blog-post__summary { max-width: 44rem; margin: 1.75rem 0 0; color: var(--color-text-muted); font-size: clamp(1.1rem, 2vw, 1.3rem); line-height: 1.65; }
+  .blog-post__meta { display: flex; flex-wrap: wrap; gap: .35rem .65rem; margin: 1.5rem 0 0; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .72rem; line-height: 1.7; text-transform: uppercase; }
+  .blog-post__meta .ml-2 { margin-left: 0; }
+  .blog-post__hero { display: block; margin-top: clamp(2rem, 5vw, 3.5rem); overflow: hidden; border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-bg-raised); }
+  .blog-post__hero img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+  .blog-post__content { margin-top: clamp(2.5rem, 6vw, 4.5rem); color: var(--color-text); font-size: 1.04rem; line-height: 1.8; }
+  .blog-post__content :global(h2) { margin-top: 3.25rem; font-size: clamp(1.8rem, 4vw, 2.6rem); }
+  .blog-post__content :global(h3) { margin-top: 2.5rem; font-size: 1.5rem; }
+  .blog-post__content :global(pre) { overflow-x: auto; border: 1px solid var(--color-border); border-radius: .75rem; background: var(--color-bg-raised); }
+  .blog-post__content :global(code) { border-radius: .25rem; padding: .12em .3em; color: var(--color-accent); background: var(--color-bg-raised); font-weight: 600; }
+  .blog-post__content :global(code::before), .blog-post__content :global(code::after) { content: none; }
+  .blog-post__content :global(pre code) { padding: 0; color: inherit; background: transparent; }
+  .blog-post__content :global(li), .blog-post__content :global(strong) { color: var(--color-text); }
+  .blog-post__content :global(blockquote) { border-left-color: var(--color-accent); color: var(--color-text-muted); }
+  .blog-post__author { display: grid; grid-template-columns: auto 1fr; gap: 1.25rem; border-block: 1px solid var(--color-border); padding-block: 2rem; margin-top: 4rem; }
+  .blog-post__author > div:first-child { display: grid; width: 3.25rem; height: 3.25rem; place-items: center; border: 1px solid var(--color-border); border-radius: 1rem; color: var(--color-accent); background: var(--color-bg-raised); font-family: "JetBrains Mono Variable", monospace; }
+  .blog-post__author p { margin: 0; }
+  .blog-post__author p:first-child { font-weight: 750; }
+  .blog-post__author p:nth-child(2) { margin-top: .15rem; color: var(--color-accent); font-size: .8rem; }
+  .blog-post__author p:nth-child(3) { margin-top: .65rem; color: var(--color-text-muted); line-height: 1.6; }
+  .blog-post__author a { display: inline-flex; margin-top: .75rem; color: var(--color-accent); font-size: .85rem; }
+  .blog-post__mobile-toc { margin-top: 2rem; border-block: 1px solid var(--color-border); }
+  .blog-post__mobile-toc summary { display: flex; min-height: 3.25rem; cursor: pointer; list-style: none; align-items: center; justify-content: space-between; font-weight: 700; }
+  .blog-post__mobile-toc ul { display: grid; gap: .65rem; margin: 0; padding: 0 0 1.25rem; list-style: none; }
+  .blog-post__mobile-toc a, .blog-post__toc a { color: var(--color-text-muted); text-decoration: none; }
+  .blog-post__mobile-toc a:hover, .blog-post__toc a:hover { color: var(--color-accent); }
+  .blog-post__toc { display: none; }
+  @media (min-width: 1024px) { .blog-post-shell { display: grid; grid-template-columns: minmax(0, 49rem) minmax(13rem, 1fr); gap: clamp(3rem, 7vw, 7rem); align-items: start; } .blog-post__mobile-toc { display: none; } .blog-post__toc { display: block; position: sticky; top: 6rem; } .blog-post__toc nav { border-left: 1px solid var(--color-border); padding-left: 1.25rem; } .blog-post__toc p { margin: 0; font: 650 .72rem/1.4 "JetBrains Mono Variable", monospace; letter-spacing: .06em; text-transform: uppercase; } .blog-post__toc ul { display: grid; gap: .7rem; margin: 1rem 0 0; padding: 0; list-style: none; font-size: .82rem; line-height: 1.45; } }
+  @media (max-width: 640px) { .blog-post__author { grid-template-columns: 1fr; } }
+</style>

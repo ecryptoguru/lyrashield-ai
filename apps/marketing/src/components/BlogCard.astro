@@ -1,0 +1,237 @@
+---
+import { getEntry, type CollectionEntry } from "astro:content"
+import { readingMinutes } from "../lib/blog-content"
+
+interface Props {
+  post: CollectionEntry<"blog">
+  featured?: boolean
+  headingLevel?: "h2" | "h3"
+  heroImage?: CollectionEntry<"blogImages">
+}
+
+const { post, featured = false, headingLevel = "h2", heroImage: suppliedHeroImage } = Astro.props
+const Heading = headingLevel
+const minutes = readingMinutes(post.body ?? "")
+const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
+---
+
+<article class:list={["blog-card", { "blog-card--featured": featured }]}>
+  {heroImage && (
+    <a class="blog-card__image" href={`/blog/${post.id}`} aria-label={`Read ${post.data.title}`}>
+      <picture>
+        <source srcset={heroImage.data.avif} type="image/avif" />
+        <source srcset={heroImage.data.webp} type="image/webp" />
+        <img
+          src={heroImage.data.jpeg}
+          alt={heroImage.data.alt}
+          width="1600"
+          height="900"
+          loading="lazy"
+          decoding="async"
+          sizes={featured ? "(min-width: 1280px) 1152px, calc(100vw - 4rem)" : "(min-width: 1024px) 768px, calc(100vw - 2rem)"}
+        />
+      </picture>
+    </a>
+  )}
+  <div class="blog-card__meta">
+    <time datetime={post.data.pubDate.toISOString()}>
+      {post.data.pubDate.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+    </time>
+    <span aria-hidden="true">·</span>
+    <span>{minutes} min read</span>
+    {post.data.draft && <span class="blog-card__draft">Draft preview</span>}
+  </div>
+  <Heading>
+    <a href={`/blog/${post.id}`}>{post.data.title}</a>
+  </Heading>
+  <p>{post.data.description}</p>
+  <div class="blog-card__footer">
+    {post.data.tags.length > 0 && (
+      <ul aria-label="Topics">
+        {post.data.tags.map((tag) => (
+          <li><a href={`/blog/tags/${tag.toLowerCase().replace(/\s+/g, "-")}`}>{tag}</a></li>
+        ))}
+      </ul>
+    )}
+    <a class="blog-card__read" href={`/blog/${post.id}`} aria-label={`Read ${post.data.title}`}>
+      Read article <span aria-hidden="true">→</span>
+    </a>
+  </div>
+</article>
+
+<style>
+  .blog-card {
+    display: grid;
+    gap: 0.9rem;
+    padding-block: clamp(1.75rem, 4vw, 2.75rem);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .blog-card__image {
+    display: block;
+    margin-bottom: 0.65rem;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: 0.9rem;
+    background: var(--color-bg-raised);
+  }
+
+  .blog-card__image picture,
+  .blog-card__image img {
+    display: block;
+  }
+
+  .blog-card__image img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    transition: transform 220ms ease;
+  }
+
+  .blog-card__image:hover img {
+    transform: scale(1.015);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .blog-card__image img {
+      transition: none;
+    }
+  }
+
+  .blog-card__meta,
+  .blog-card__footer,
+  .blog-card__footer ul {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .blog-card__meta {
+    gap: 0.55rem;
+    color: var(--color-text-muted);
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .blog-card__draft {
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    color: var(--color-accent);
+  }
+
+  .blog-card :global(h2),
+  .blog-card :global(h3) {
+    max-width: 48rem;
+    margin: 0;
+    font-family: "Bricolage Grotesque Variable", sans-serif;
+    font-size: clamp(1.65rem, 3.2vw, 2.45rem);
+    font-weight: 760;
+    line-height: 1.04;
+    letter-spacing: -0.035em;
+  }
+
+  .blog-card :global(h2 a),
+  .blog-card :global(h3 a) {
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .blog-card :global(h2 a:hover),
+  .blog-card :global(h2 a:focus-visible),
+  .blog-card :global(h3 a:hover),
+  .blog-card :global(h3 a:focus-visible),
+  .blog-card__read:hover,
+  .blog-card__read:focus-visible {
+    color: var(--color-accent);
+  }
+
+  .blog-card :global(h2 a:focus-visible),
+  .blog-card :global(h3 a:focus-visible),
+  .blog-card__footer a:focus-visible {
+    border-radius: 0.25rem;
+    outline: 2px solid var(--color-accent);
+    outline-offset: 4px;
+  }
+
+  .blog-card > p {
+    max-width: 45rem;
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.7;
+  }
+
+  .blog-card__footer {
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.25rem;
+  }
+
+  .blog-card__footer ul {
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .blog-card__footer li a {
+    display: inline-flex;
+    min-height: 2rem;
+    align-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding-inline: 0.7rem;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    text-decoration: none;
+  }
+
+  .blog-card__footer li a:hover {
+    border-color: var(--color-accent);
+    color: var(--color-text);
+  }
+
+  .blog-card__read {
+    color: var(--color-text);
+    font-size: 0.88rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .blog-card--featured {
+    min-height: 24rem;
+    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+    border-radius: 1.25rem;
+    padding: clamp(1.5rem, 5vw, 3.5rem);
+    background:
+      radial-gradient(circle at 85% 15%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 35%),
+      linear-gradient(145deg, var(--color-bg-raised), var(--color-bg));
+    overflow: hidden;
+  }
+
+  .blog-card--featured :global(h2) {
+    font-size: clamp(2.2rem, 5vw, 4.25rem);
+    max-width: 58rem;
+  }
+
+  @media (max-width: 640px) {
+    .blog-card__footer {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .blog-card__read {
+      min-height: 2.75rem;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .blog-card--featured {
+      min-height: 27rem;
+    }
+  }
+</style>
