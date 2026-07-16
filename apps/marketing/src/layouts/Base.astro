@@ -65,7 +65,7 @@ const { title, description, canonical, ogImage, ogType, noindex, article, jsonLd
     <Footer />
     <script>
       const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY
-      const posthogHost = import.meta.env.PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com"
+      const posthogHost = import.meta.env.PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com"
 
       function shouldOptOut(): boolean {
         const dnt = navigator.doNotTrack
@@ -79,6 +79,9 @@ const { title, description, canonical, ogImage, ogType, noindex, article, jsonLd
             posthog.init(posthogKey, {
               api_host: posthogHost,
               autocapture: false,
+              capture_pageview: false,
+              capture_pageleave: false,
+              disable_session_recording: true,
               persistence: "localStorage",
               loaded: (ph) => {
                 if (shouldOptOut()) {
