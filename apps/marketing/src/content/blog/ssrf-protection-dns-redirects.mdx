@@ -1,0 +1,153 @@
+---
+title: "SSRF Protection That Resolves DNS"
+description: "Bind URL validation to DNS resolution and the connection, recheck redirects, block private destinations, and restrict egress."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: true
+heroImage: web-execution-04
+faq:
+  - q: "Is a URL allowlist enough to prevent SSRF?"
+    a: "An exact allowlist of fixed destinations is a strong starting point, but DNS answers, redirects, ports, protocols, and the actual connection still need control. A suffix or substring allowlist is not sufficient."
+  - q: "How does DNS rebinding affect URL validation?"
+    a: "A hostname can resolve to an approved address during validation and a different address when the client connects. Bind the classified resolution to the connection and control later resolutions."
+  - q: "Should a server-side fetcher follow redirects?"
+    a: "Disable redirects when they are unnecessary. If required, limit their count and reapply the full scheme, hostname, port, DNS, address, and authorization policy to every destination."
+  - q: "Does IMDSv2 prevent SSRF?"
+    a: "IMDSv2 adds protections for EC2 instance metadata and can be required, but it does not make arbitrary outbound fetches safe or protect every internal service."
+---
+
+**Direct answer:** Prevent SSRF by treating URL parsing, DNS resolution, address classification, and connection setup as one decision. Allow only required schemes and ports, resolve every A and AAAA answer, reject any private or special-use destination, and connect to an approved address while preserving TLS hostname checks. Reapply the policy after every redirect and restrict network egress.
+
+Server-side request forgery occurs when attacker-influenced input causes a server to contact a destination it should not reach. The server may have access to loopback services, private networks, cloud metadata, or provider control planes that the external caller cannot reach directly.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats a fetcher as a transport boundary, not a string-validation problem. A URL that looks public can resolve or redirect somewhere else.
+
+## The vulnerable pattern: validate the string once
+
+**Vulnerable pattern. Use only a local fixture.**
+
+```ts
+const url = new URL(request.body.url)
+
+if (url.protocol !== "https:") {
+  throw new InvalidInputError()
+}
+
+const response = await fetch(url, { redirect: "follow" })
+```
+
+The code restricts the scheme, but the hostname can resolve to any address the runtime can reach. The HTTP client may resolve it later, choose one address from several, and follow redirects without returning to the application policy.
+
+Blocking hostname strings such as `localhost` is not enough. Numeric forms, IPv6, DNS changes, search domains, and redirects create more paths than a blacklist can reliably enumerate.
+
+## Why generated SSRF fixes stop too early
+
+AI coding tools often receive a prompt such as "allow the user to import an image by URL." The visible task is parsing a URL and calling `fetch`. Network topology, DNS timing, proxy behavior, and cloud metadata are outside the function.
+
+A generated fix may reject a few private IPv4 prefixes while forgetting IPv6, link-local ranges, loopback, unspecified addresses, multicast, mapped addresses, or multiple DNS answers. It may validate one answer and let the client connect to another.
+
+Library defaults hide redirects and proxy configuration. An application sees the initial URL while a shared HTTP agent follows a 302 or an environment proxy chooses the real network path.
+
+## Prefer fixed destinations when the feature allows it
+
+If the server only needs to call known providers, use an exact allowlist of scheme, hostname, and port. Store the destinations in trusted configuration rather than accepting arbitrary URLs.
+
+Match parsed hostnames exactly. A suffix rule can accept a hostile sibling such as `approved.example.test.attacker.test`. Normalize the hostname through the URL parser and reject embedded credentials, fragments, unsupported schemes, and unexpected ports.
+
+For APIs, use a provider SDK or construct the path beneath a fixed origin. Do not accept a complete callback or asset URL when the product can accept a resource ID instead.
+
+An arbitrary URL importer needs a stricter transport design and may still be unsuitable for a high-trust runtime.
+
+## Resolve and classify every address
+
+Resolve both A and AAAA records through an API that returns all candidate addresses. Node's DNS documentation distinguishes operating-system lookup behavior from direct DNS resolution APIs, so select the function deliberately and test it in the deployed runtime.
+
+Parse each returned address with a maintained IP library. Reject the complete policy set for the environment, including loopback, private, link-local, unspecified, multicast, carrier-grade or special-use space where relevant, and IPv4-mapped IPv6 representations.
+
+If any answer is disallowed, fail closed rather than choosing a convenient public answer. Otherwise an attacker can influence which address the HTTP client selects.
+
+```ts
+const destination = await approveDestination({
+  rawUrl: input.url,
+  schemes: ["https:"],
+  ports: [443],
+  resolver: trustedResolver,
+  addressPolicy: publicOnlyPolicy,
+})
+
+const response = await pinnedHttpClient.request({
+  url: destination.url,
+  approvedAddresses: destination.addresses,
+  tlsServerName: destination.hostname,
+  redirect: "manual",
+})
+```
+
+The interfaces are architectural pseudocode. A correct implementation depends on the HTTP library. The connection must use an approved address without disabling TLS certificate and hostname verification. Merely resolving before a normal `fetch` can leave a second unpinned resolution during connection.
+
+## Bind approval to the connection
+
+DNS rebinding exploits the gap between a safe-looking answer and a later connection to a different address. Pin the approved result through a custom lookup callback, socket connection, or transport feature whose behavior you can test.
+
+Consider all connection attempts. Happy Eyeballs and retry logic may race IPv4 and IPv6 or fall back after a failure. Every attempted address must come from the approved set.
+
+If an outbound proxy is required, the proxy needs an equivalent destination policy because it performs the final resolution and connection. Application checks cannot see every network path chosen beyond the proxy.
+
+Use connection, response-header, total-body, and idle timeouts. Cap response bytes before buffering. Restrict decompression growth. SSRF defenses should not create an unbounded resource-consumption path.
+
+## Recheck every redirect
+
+Disable redirects by default. When the feature needs them, set a small maximum and handle each `Location` yourself.
+
+Resolve relative locations against the current approved URL, then repeat the complete policy: parse, scheme, credentials, hostname, port, DNS answers, address classification, and pinned connection. Do not carry an Authorization header or sensitive cookie to a different origin.
+
+Reject protocol changes such as HTTPS to HTTP unless the product has a narrow reviewed reason. Record the redirect chain with URLs redacted according to the logging policy.
+
+The final response URL should be available to downstream policy so a content importer does not label data as if it came from the original origin after a redirect.
+
+## Restrict egress and protect cloud metadata
+
+Run public URL fetchers in a network segment with no route to internal services where practical. Use firewall, security-group, container, proxy, or service-mesh egress rules suited to the platform. Permit only required destinations and DNS paths.
+
+Network control limits impact when application checks fail. Application validation still matters because an egress policy may be incomplete or change later.
+
+On EC2, require IMDSv2 and apply appropriate hop limits and metadata options. IMDSv2 uses session-oriented requests and reduces several metadata abuse paths. It does not protect databases, internal dashboards, cluster APIs, or services on other private addresses.
+
+Remove cloud credentials from the fetcher runtime when it does not need them. Give its identity only the minimum provider permissions.
+
+## Verify without probing a real network
+
+Use dependency injection for the resolver and connection layer. Create local fixtures that return controlled public, private, loopback, link-local, IPv6, mixed, and changing answer sets without querying a real private network.
+
+Test:
+
+1. Exact approved HTTPS destinations succeed.
+2. Unsupported schemes, credentials, and ports fail.
+3. Every disallowed IPv4 and IPv6 category fails.
+4. A mixed public and private answer set fails closed.
+5. The transport attempts only the addresses returned by approval.
+6. A changed second resolution cannot alter the connection.
+7. Every redirect repeats validation and strips sensitive headers across origins.
+8. Response size, decompression, redirect, and timeout limits stop the request.
+9. Egress policy blocks a controlled destination outside the allowed route.
+
+Do not test cloud metadata or scan private ranges in a production account without explicit authorization and a safety plan.
+
+The related [API input validation guide](/blog/input-validation-ai-generated-api) covers the request schema around the URL. A well-formed URL still needs this transport policy.
+
+## What automated checks can and cannot prove
+
+A passive [Lite Check](/scan) observes the public surface of an approved URL. It cannot see an application's internal DNS resolution, sockets, proxy, egress rules, or metadata access. The [AI app security checklist](/tools/ai-app-security-checklist) can help document those controls without exercising them.
+
+Static analysis can flag raw `fetch(userUrl)` patterns. Unit tests can verify a resolver and address classifier. Neither proves the deployed network route, proxy configuration, DNS behavior, and cloud identity all match the tested model. Preserve transport tests and infrastructure evidence separately.
+
+## Sources
+
+- [OWASP: Server-Side Request Forgery Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)
+- [MITRE CWE-918: Server-Side Request Forgery](https://cwe.mitre.org/data/definitions/918.html)
+- [Node.js: DNS](https://nodejs.org/api/dns.html)
+- [AWS: Instance Metadata Service](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html)

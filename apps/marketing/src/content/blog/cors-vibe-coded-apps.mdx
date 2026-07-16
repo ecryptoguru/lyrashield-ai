@@ -1,0 +1,151 @@
+---
+title: "CORS for Vibe-Coded Apps"
+description: "Replace wildcard or reflected origins with a minimal browser-sharing policy, correct credential handling, and cache-safe headers."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: true
+heroImage: web-execution-03
+faq:
+  - q: "Can Access-Control-Allow-Origin use a wildcard?"
+    a: "A wildcard can fit deliberately public, non-credentialed responses. It cannot be used for credentialed browser access and should not be applied to private APIs by default."
+  - q: "What changes when CORS requests include credentials?"
+    a: "The server must return an exact allowed origin, opt into credentials, and configure cookies or authorization accordingly. The browser rejects wildcard-origin credentialed sharing."
+  - q: "Does CORS block non-browser API clients?"
+    a: "No. CORS is enforced by browsers when script reads a cross-origin response. Command-line tools and backend clients can send requests regardless, so the API still needs authentication and authorization."
+  - q: "Does a strict CORS policy prevent CSRF?"
+    a: "Not by itself. Some forged requests can be sent without reading the response. Cookie-authenticated state changes need a CSRF defense designed for that session model."
+---
+
+**Direct answer:** Configure CORS from the browser clients your API actually supports. Return an exact origin only when it appears in a server-side allowlist, add `Vary: Origin` for dynamic responses, and enable credentials only when required. CORS controls whether browser script may read a cross-origin response. It does not authenticate callers or replace authorization and CSRF protection.
+
+An origin is the scheme, host, and port tuple used by the browser's same-origin policy. `https://app.example.test` and `https://admin.example.test` are different origins. So are different ports in development.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats CORS as a browser response-sharing policy, not a server perimeter. That distinction prevents two common errors: trusting Origin as identity and adding a wildcard until the browser stops complaining.
+
+## The vulnerable pattern: reflect every Origin
+
+**Vulnerable pattern. Use only in a local fixture.**
+
+```ts
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "*")
+  res.setHeader("Access-Control-Allow-Credentials", "true")
+  next()
+})
+```
+
+The server copies any supplied Origin into its response and opts into credentials. A browser page from an unapproved origin may be allowed to read a sensitive response if cookies or other ambient credentials are sent.
+
+Applying the same headers to every route creates more surface. Public assets, login responses, administrative APIs, and webhook endpoints rarely need one identical sharing policy.
+
+## Why generated CORS fixes are too broad
+
+Development often places frontend and API servers on different localhost ports. The browser reports a CORS error, and the quickest generated fix is `origin: "*"` or `origin: true`. That makes the demo work without defining which production browser client needs access.
+
+AI tools also conflate CORS with authentication. They may treat a recognized Origin as proof that the caller came from the application. Non-browser clients can choose that header, and browser requests still need a user or service identity.
+
+Preflight behavior adds confusion. A successful `OPTIONS` response only tells the browser that the requested cross-origin method and headers may proceed. The actual request still needs authentication, authorization, validation, and ordinary error handling.
+
+## Derive the smallest policy
+
+List each browser application, its exact production origin, the API routes it calls, required methods, required request headers, and whether credentials are needed. Do not add mobile or server-to-server clients to CORS; they do not depend on the browser protocol.
+
+If one frontend and one API share an origin through routing, no cross-origin policy may be needed. Same-site is not the same as same-origin, so verify the actual scheme, host, and port.
+
+Build an exact allowlist from configuration:
+
+```ts
+const allowedOrigins = new Set(["https://app.example.test", "https://admin.example.test"])
+
+function applyCors(req, res) {
+  const origin = req.headers.origin
+  if (!origin || !allowedOrigins.has(origin)) return
+
+  res.setHeader("Access-Control-Allow-Origin", origin)
+  res.setHeader("Vary", "Origin")
+  res.setHeader("Access-Control-Allow-Credentials", "true")
+}
+```
+
+The domains are reserved test examples. In production, load a reviewed set and compare canonical origin strings. Do not use suffix checks such as `endsWith("approved.test")`, which can accept a different hostname such as `approved.test.attacker.test`.
+
+If the response already varies on other headers, append `Origin` to `Vary` rather than replacing the existing value. This tells caches that responses for different origins are not interchangeable.
+
+Keep development origins out of production configuration. `http://localhost:3000` may be necessary for local work, but a production API should not grant it by habit. Preview deployments create many changing origins; prefer a controlled preview gateway or an explicit short-lived allowlist over a wildcard subdomain rule.
+
+Treat the serialized origin list as security configuration. Review changes, avoid accepting environment input from untrusted tenants, and expose a startup error when a configured entry cannot be parsed as an exact origin.
+
+## Handle credentials deliberately
+
+Credentialed browser requests may include cookies, TLS client certificates, or HTTP authentication according to Fetch behavior. JavaScript can also send an authorization header when the preflight and API allow it, though that header is not an ambient cookie.
+
+When credentials are involved, `Access-Control-Allow-Origin` must name the allowed origin rather than `*`. The server must also return `Access-Control-Allow-Credentials: true`, and the browser request must use the matching credentials mode where applicable.
+
+Cookie `SameSite`, `Secure`, and domain settings still control whether cookies are sent. CORS does not override those rules. Likewise, allowing the browser to read a response does not grant the underlying user permission.
+
+Expose only response headers the frontend needs through `Access-Control-Expose-Headers`. Do not expose internal diagnostics or rate-limit metadata without a product reason.
+
+## Keep the preflight narrow
+
+For a preflight, validate the request Origin, requested method, and requested headers against the route's policy. Return only supported values. Avoid reflecting `Access-Control-Request-Headers` blindly.
+
+Cache preflight results for a duration the product can tolerate, understanding that browsers cap the effective value. A long cache can delay a policy revocation. A zero cache increases preflight traffic.
+
+Return CORS headers on error responses where the approved frontend needs to read the error. Missing them can turn an ordinary 401 or 422 into an opaque browser message and make debugging misleading.
+
+Do not run authentication side effects on `OPTIONS`. Treat it as protocol negotiation and keep state-changing logic on the actual method.
+
+### Keep caches from mixing origins
+
+A CDN or shared proxy can store a response bearing `Access-Control-Allow-Origin` for the first caller. Without `Vary: Origin`, a later request from another origin may receive that cached policy. The browser may reject a legitimate response or, under a bad cache key and header combination, receive permission intended for someone else.
+
+Verify the final headers at the edge, not only in the application server. Some platforms add or replace CORS headers after the Worker or framework returns. Confirm that 304 responses, cached errors, and redirects preserve the intended policy.
+
+For responses that never vary and are deliberately public without credentials, a wildcard can be simpler and does not need origin reflection. Keep that public policy on the specific asset or endpoint rather than applying it across the API.
+
+## Test allowed and denied origins
+
+Use local or authorized test origins. Test the preflight and actual response because either can be misconfigured.
+
+Check:
+
+1. An exact allowed origin receives its own value in `Access-Control-Allow-Origin`.
+2. A similar but unapproved hostname receives no sharing permission.
+3. `null` origin is denied unless the product has a specific reviewed need.
+4. Credentialed routes never return a wildcard origin.
+5. Disallowed methods and request headers fail the preflight.
+6. `Vary: Origin` remains present beside existing `Vary` values.
+7. Approved error responses carry the intended CORS headers.
+8. Routes that do not need cross-origin access return no broad policy.
+9. A direct non-browser request still reaches normal authentication and authorization checks.
+
+Inspect redirects too. A preflight or actual request redirected to another origin can behave differently, and the destination needs its own policy.
+
+Requests with `Origin: null` can come from sandboxed documents, local files, and other opaque origins. Do not map `null` to a trusted desktop client. Allow it only for a narrow documented use with other authentication and authorization controls.
+
+WebSocket handshakes do not use the CORS protocol in the same way as Fetch. Validate the handshake Origin through a separate WebSocket policy and keep channel-level authorization after connection.
+
+## CORS, CSRF, and information disclosure
+
+CORS usually controls response readability, not whether a basic cross-origin request can be sent. A forged form submission may change state even when the attacking page cannot read the response. Cookie-authenticated applications need a CSRF defense.
+
+The [CSRF protection guide](/blog/csrf-cookie-auth-ai-apps) covers synchronizer tokens, signed double-submit cookies, SameSite, and Fetch Metadata for that boundary.
+
+Do not use CORS to hide a public API key or secret. Browser code and requests remain inspectable by the user who runs them.
+
+## What the header checker can and cannot prove
+
+The browser-local [security headers checker](/tools/security-headers-checker) reviews headers you paste. It can point out wildcard and credential combinations or a missing `Vary: Origin` on one observed response.
+
+It cannot send preflights from several origins, inspect route-specific behavior, test cookies, or determine whether a response should be public. One correct response does not prove every method, error, cache, and deployment has the same policy.
+
+## Sources
+
+- [WHATWG Fetch Standard: CORS protocol](https://fetch.spec.whatwg.org/#http-cors-protocol)
+- [MDN: Cross-Origin Resource Sharing](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS)
+- [OWASP: HTML5 Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html#cross-origin-resource-sharing)
+- [OWASP WSTG: Testing Cross-Origin Resource Sharing](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/11-Client-side_Testing/07-Testing_Cross_Origin_Resource_Sharing)
