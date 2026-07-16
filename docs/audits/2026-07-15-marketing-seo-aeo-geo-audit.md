@@ -5,7 +5,7 @@ Scope: `apps/marketing` public routes, rendered metadata, crawl controls, struct
 
 ## Executive result
 
-The marketing site is now live and indexable at `https://lyrashieldai.com`: server-rendered HTML, self-referencing apex canonicals, a path/query-preserving `www` 301, crawlable robots and sitemap responses, an AEO/GEO `llms.txt`, accessible headings, honest product claims, and structured data that matches visible content. The unavailable network scanner and legal terms remain individually `noindex` and are excluded from the sitemap.
+The marketing site is now live and indexable at `https://lyrashieldai.com`: server-rendered HTML, self-referencing apex canonicals, a path/query-preserving `www` 301, crawlable robots and sitemap responses, an AEO/GEO `llms.txt`, accessible headings, honest product claims, and structured data that matches visible content. The passive network scanner subsequently launched through its separately protected origin and is indexable; legal terms remain individually `noindex` and excluded from the sitemap.
 
 This audit found and remediated the main code-level gaps:
 
@@ -21,7 +21,7 @@ This audit found and remediated the main code-level gaps:
 - Fixed a production-only canonical defect in which the JSONC reader rejected Wrangler's trailing commas and silently fell back to localhost. The parser now has regression coverage, and the live canonical, Open Graph URL/image, JSON-LD IDs, and sitemap all use the apex origin.
 - Added defensive Cloudflare response headers while allowing the injected Cloudflare analytics beacon, eliminating live CSP console errors.
 - Added schema and review metadata to the sample report, terms, and methodology; added explicit evidence-state definitions and citation boundaries to `llms.txt`.
-- Decoupled marketing indexability from the unavailable scanner: the ready public surface is crawlable now, while scanner enablement still fails closed unless the app origin, Turnstile, and monitored abuse mailbox are configured together.
+- Decoupled marketing indexability from scanner availability, then completed the separate scanner gate with `PUBLIC_SCANNER_URL`, Turnstile, rate limiting, and the monitored abuse mailbox. Environments without that complete tuple still fail closed.
 
 No ranking or AI-citation outcome is claimed. Cloudflare deployment, domain/canonical attachment, technical indexability, live crawl validation, and synthetic Lighthouse are proven. Search Console/Bing ownership, sitemap submission in those accounts, actual crawl discovery, backlinks, and real-user Core Web Vitals remain operational growth measurements.
 
@@ -39,7 +39,7 @@ No ranking or AI-citation outcome is claimed. Cloudflare deployment, domain/cano
 | `/tools/supabase-rls-checker`      | Supabase RLS policy checker                | Indexable                       | Static-analysis boundary, Supabase RLS reference                                     |
 | `/tools/jwt-session-inspector`     | JWT and cookie session inspection          | Indexable                       | Signature-verification boundary, RFC 7519 and MDN references                         |
 | `/blog`                            | AI app security resources                  | Indexable                       | Useful methodology/tool paths while articles remain in editorial review              |
-| `/scan`                            | Passive public security check              | `noindex`; omitted from sitemap | Disabled fail-closed until app API, Turnstile, and abuse contact are configured      |
+| `/scan`                            | Passive public security check              | Indexable                       | Separate scanner origin, Turnstile, abuse contact, bounded SSRF-safe passive checks  |
 | `/terms`                           | Acceptable use and abuse reporting         | `noindex`; omitted from sitemap | Visible authorization/privacy limits; monitored contact remains scanner gate         |
 | `/404`                             | Error recovery                             | Always `noindex`                | Explicit noindex directive                                                           |
 
@@ -49,12 +49,12 @@ Draft blog posts and tag routes were inspected but were not published or added t
 
 ### P0 — release blockers
 
-| Finding                                                     | Disposition                                                                                            |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Preview builds must not leak into search                    | Retained: preview builds can use global `noindex`, robots disallow, and 404 `llms.txt`                 |
-| Canonical/sitemap origin drifted to localhost in production | Fixed JSONC parsing, tested the Wrangler origin, rebuilt, redeployed, and verified live                |
-| Production indexing without a public HTTPS origin           | Blocked by the build; production is attached to the verified HTTPS apex                                |
-| Unavailable scanner accidentally becoming indexable         | Prevented with page-scoped `noindex`, sitemap exclusion, disabled controls, and no fallback app origin |
+| Finding                                                     | Disposition                                                                                                                    |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Preview builds must not leak into search                    | Retained: preview builds can use global `noindex`, robots disallow, and 404 `llms.txt`                                         |
+| Canonical/sitemap origin drifted to localhost in production | Fixed JSONC parsing, tested the Wrangler origin, rebuilt, redeployed, and verified live                                        |
+| Production indexing without a public HTTPS origin           | Blocked by the build; production is attached to the verified HTTPS apex                                                        |
+| Scanner becoming indexable before its protection tuple      | Prevented with page-scoped gating; later enabled only after scanner origin, Turnstile, rate limit, and abuse contact were live |
 
 No open P0 code defect remains in the audited surface.
 

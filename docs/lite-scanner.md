@@ -1,6 +1,6 @@
 # LyraShield AI Lite Check
 
-Status: implemented on a feature branch for engineering and founder review. It is not deployed or founder-approved.
+Status: deployed at `https://lyrashieldai.com/scan` with the scanner API isolated at `https://scanner.lyrashieldai.com`. Production Turnstile, origin-scoped CORS, rate limiting, monitored abuse routing, health/readiness, and a real browser Lite Check have passed. This status does not include the authenticated application or full worker/engine scan pipeline.
 
 ## Product boundary
 
@@ -47,7 +47,7 @@ The Next.js app HMAC-signs this payload before generating `/lite-check/[token]` 
 
 ## Analytics and privacy
 
-The marketing client sends the requested funnel events only when the approved PostHog project is configured and browser privacy controls allow capture. The target hostname is SHA-256 hashed in the browser. Events do not contain the URL, page content, matched value, email, IP, user agent, finding text, or referral code value.
+The marketing client sends the requested funnel events only when the approved PostHog project is configured and browser privacy controls allow capture. The target hostname is SHA-256 hashed in the browser. Manual `$pageview` events retain only origin and pathname; query strings and fragments are excluded. Events do not contain the scanned URL, page content, matched value, email, IP, user agent, finding text, or referral code value. Automatic pageview capture and session recording remain disabled.
 
 Waitlist email is submitted with consent to the existing D1 endpoint. The existing non-leaking duplicate/honeypot response and referral ladder remain unchanged.
 
@@ -63,13 +63,11 @@ Automated coverage includes:
 - card payload construction drops out-of-contract target/secret fields and signed tokens reject tampering;
 - exact public copy, no-signup findings, non-overstatement, analytics hash property, WebApplication schema, and FAQ schema.
 
-## Go-live gate
+## Production boundary and remaining gates
 
-Do not enable `PUBLIC_INDEXABLE=true` or deploy publicly until all are true:
+The passive Lite Check launch gate is complete: the canonical site, isolated scanner origin, Turnstile, abuse address, Upstash limiter, PostHog project, CORS, fail-closed bot check, five browser-local tools, waitlist boundaries, and a real scan are live and verified. Keep the following separate:
 
-1. Founder approves the route, copy, distinct Lite Check naming, referral coupling, and final legal terms.
-2. `PUBLIC_SITE_URL`, `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, `PUBLIC_ABUSE_EMAIL`, `PUBLIC_POSTHOG_KEY`, and production bindings are set; the scanner origin has `TURNSTILE_SECRET_KEY`, trusted proxy configuration, and shared Upstash rate limiting. `PUBLIC_APP_URL` is set separately only when authenticated-app links are ready.
-3. The real marketing and app origins pass CORS, scan, waitlist, scorecard, referral, OG unfurl, mobile, keyboard, reduced-motion, and error-state QA.
-4. X, LinkedIn, and Reddit render the PNG card correctly from the real app domain.
-5. Logs confirm no submitted URL query, matched value, response body, or raw client IP is retained.
-6. Founder gives final public-artifact approval after Vision QA.
+1. `PUBLIC_APP_URL` remains unset until the authenticated application has its own deployment and QA.
+2. Full repository scans require BullMQ-compatible TLS Redis, private evidence storage, dedicated sandbox-capable worker compute, authorized models, and controlled egress; the Lite Scanner's Supabase/Upstash/Azure Container App deployment does not supply that pipeline.
+3. Public app scorecards still require real-origin card/badge, revocation, referral, human-event deduplication, and external-network unfurl checks.
+4. Logs must continue to exclude submitted query data, matched values, response bodies, and raw client IPs. Any change to the payload or crawl boundary requires a fresh privacy/security review.
