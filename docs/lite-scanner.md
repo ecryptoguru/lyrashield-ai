@@ -68,7 +68,7 @@ Automated coverage includes:
 Do not enable `PUBLIC_INDEXABLE=true` or deploy publicly until all are true:
 
 1. Founder approves the route, copy, distinct Lite Check naming, referral coupling, and final legal terms.
-2. `PUBLIC_SITE_URL`, `PUBLIC_APP_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, `PUBLIC_ABUSE_EMAIL`, `PUBLIC_POSTHOG_KEY`, and production bindings are set; the app origin has `TURNSTILE_SECRET_KEY`, trusted proxy configuration, and shared Upstash rate limiting.
+2. `PUBLIC_SITE_URL`, `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, `PUBLIC_ABUSE_EMAIL`, `PUBLIC_POSTHOG_KEY`, and production bindings are set; the scanner origin has `TURNSTILE_SECRET_KEY`, trusted proxy configuration, and shared Upstash rate limiting. `PUBLIC_APP_URL` is set separately only when authenticated-app links are ready.
 3. The real marketing and app origins pass CORS, scan, waitlist, scorecard, referral, OG unfurl, mobile, keyboard, reduced-motion, and error-state QA.
 4. X, LinkedIn, and Reddit render the PNG card correctly from the real app domain.
 5. Logs confirm no submitted URL query, matched value, response body, or raw client IP is retained.

@@ -3,7 +3,7 @@ import Base from "@layouts/Base.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/scan", origin).toString()
-const appOrigin = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") || ""
+const appOrigin = (import.meta.env.PUBLIC_SCANNER_URL as string | undefined)?.replace(/\/$/, "") || ""
 const scannerAvailable = Boolean(appOrigin)
 const turnstileSiteKey = (import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string | undefined) || ""
 const title = "Free security check for AI-built apps — LyraShield"

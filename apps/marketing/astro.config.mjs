@@ -24,6 +24,7 @@ const siteUrl = configuredSiteUrl || "http://localhost:4321"
 const indexable = (process.env.PUBLIC_INDEXABLE || wranglerVar("PUBLIC_INDEXABLE") || "false") === "true"
 const xUrl = process.env.PUBLIC_X_URL || wranglerVar("PUBLIC_X_URL") || ""
 const configuredAppUrl = process.env.PUBLIC_APP_URL || wranglerVar("PUBLIC_APP_URL")
+const configuredScannerUrl = process.env.PUBLIC_SCANNER_URL || wranglerVar("PUBLIC_SCANNER_URL")
 const turnstileSiteKey =
   process.env.PUBLIC_TURNSTILE_SITE_KEY || wranglerVar("PUBLIC_TURNSTILE_SITE_KEY") || ""
 const abuseEmail = process.env.PUBLIC_ABUSE_EMAIL || wranglerVar("PUBLIC_ABUSE_EMAIL") || ""
@@ -43,6 +44,16 @@ if (indexable) {
       }
     } catch {
       throw new Error("PUBLIC_APP_URL must be a public HTTPS URL when configured")
+    }
+  }
+  if (configuredScannerUrl) {
+    try {
+      const scannerUrl = new URL(configuredScannerUrl)
+      if (scannerUrl.protocol !== "https:" || scannerUrl.hostname === "localhost") {
+        throw new Error("not a public HTTPS URL")
+      }
+    } catch {
+      throw new Error("PUBLIC_SCANNER_URL must be a public HTTPS URL when configured")
     }
     if (!turnstileSiteKey) {
       throw new Error("PUBLIC_TURNSTILE_SITE_KEY must be set when the public scanner is enabled")
@@ -65,7 +76,7 @@ export default defineConfig({
     sitemap({
       filter: (page) => {
         const pathname = new URL(page).pathname
-        return pathname !== "/terms" && (Boolean(configuredAppUrl) || pathname !== "/scan")
+        return pathname !== "/terms" && (Boolean(configuredScannerUrl) || pathname !== "/scan")
       },
     }),
   ],
@@ -81,6 +92,11 @@ export default defineConfig({
         context: "client",
         access: "public",
         default: "http://localhost:3001",
+      }),
+      PUBLIC_SCANNER_URL: envField.string({
+        context: "client",
+        access: "public",
+        optional: true,
       }),
       PUBLIC_X_URL: envField.string({
         context: "client",

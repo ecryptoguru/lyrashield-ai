@@ -142,7 +142,7 @@ Monitor only coarse funnel stages: deduplicated scorecard view, share-button han
 - Production D1, Rate Limit, and KV bindings are provisioned; migrations `0001`–`0003` are applied remotely; `WAITLIST_IP_SALT` is stored as a Worker secret.
 - `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. The ready marketing/methodology/browser-local-tools surface is indexable. `/scan` and `/terms` are page-scoped `noindex` and excluded from the sitemap.
 - Live HTTPS, security headers, canonical/schema metadata, sitemap/robots/`llms.txt`, waitlist behavior, a 19-URL internal crawl, representative Lighthouse/Brave rendering, and the permanent path/query-preserving `www`-to-apex redirect pass.
-- The scanner remains disabled because `PUBLIC_APP_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` are intentionally unset. Set all three together only after the separately protected app API and abuse workflow are live.
+- The scanner remains disabled because `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` are intentionally unset. Set all three together only after the separately protected scanner API and abuse workflow are live. `PUBLIC_APP_URL` remains independent and controls authenticated-app links.
 
 Before deploying the Cloudflare marketing Worker:
 
@@ -154,7 +154,7 @@ Before deploying the Cloudflare marketing Worker:
 
    ```bash
    PUBLIC_SITE_URL="https://lyrashieldai.com" \
-   PUBLIC_APP_URL="https://app.example.com" \
+   PUBLIC_SCANNER_URL="https://scanner.example.com" \
    PUBLIC_INDEXABLE=true \
      pnpm --filter @lyrashield/marketing build
    pnpm --filter @lyrashield/marketing exec wrangler deploy --config dist/server/wrangler.json
