@@ -1,4 +1,4 @@
-import { denyApproval } from "@lyrashield/db"
+import { ApprovalMutationError, denyApproval } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -24,13 +24,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const approval = await denyApproval(approvalId, workspaceId, session.userId)
     return apiSuccess(approval)
   } catch (err) {
-    if (err instanceof Error && err.message.includes("not found")) {
+    if (err instanceof ApprovalMutationError && err.code === "NOT_FOUND") {
       return apiError("NOT_FOUND", err.message, 404)
     }
-    if (
-      err instanceof Error &&
-      (err.message.includes("not pending") || err.message.includes("expired"))
-    ) {
+    if (err instanceof ApprovalMutationError) {
       return apiError("CONFLICT", err.message, 409)
     }
     const authErr = authErrorResponse(err)

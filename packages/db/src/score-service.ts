@@ -217,17 +217,6 @@ export async function createScorecardShare(targetId: string, workspaceId: string
   })
   if (!snapshot) throw new Error("No current shareable score for this target")
   const referralCode = await getOrCreateReferralCode(userId)
-  const existingShare = await prisma.scorecardShare.findFirst({
-    where: { snapshotId: snapshot.id, createdById: userId, revokedAt: null },
-  })
-  if (existingShare) {
-    const stats = await getScorecardShareStats(existingShare.id, existingShare.referralCodeId)
-    return {
-      share: existingShare,
-      referralCode: referralCode.code,
-      ...stats,
-    }
-  }
   const resolvedFindings = await prisma.finding.count({
     where: {
       targetId,
@@ -238,28 +227,45 @@ export async function createScorecardShare(targetId: string, workspaceId: string
     },
   })
   const publicPayload = buildScorecardPayload(snapshot, resolvedFindings)
-  const share = await prisma.scorecardShare.create({
-    data: {
-      snapshotId: snapshot.id,
-      slug: randomBase32(16),
-      publicPayload,
-      referralCodeId: referralCode.id,
-      createdById: userId,
-    },
+  const outcome = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${snapshot.id}, 0))`
+    const existingShare = await tx.scorecardShare.findFirst({
+      where: { snapshotId: snapshot.id, revokedAt: null },
+      include: { referralCode: { select: { code: true } } },
+    })
+    if (existingShare) {
+      return {
+        share: existingShare,
+        referralCode: existingShare.referralCode?.code ?? referralCode.code,
+        created: false,
+      }
+    }
+    const share = await tx.scorecardShare.create({
+      data: {
+        snapshotId: snapshot.id,
+        slug: randomBase32(16),
+        publicPayload,
+        referralCodeId: referralCode.id,
+        createdById: userId,
+      },
+    })
+    return { share, referralCode: referralCode.code, created: true }
   })
-  await prisma.auditLog.create({
-    data: {
-      workspaceId,
-      actorUserId: userId,
-      action: "scorecard.share.created",
-      resourceType: "scorecardShare",
-      resourceId: share.id,
-    },
-  })
+  if (outcome.created) {
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        actorUserId: userId,
+        action: "scorecard.share.created",
+        resourceType: "scorecardShare",
+        resourceId: outcome.share.id,
+      },
+    })
+  }
   return {
-    share,
-    referralCode: referralCode.code,
-    ...(await getScorecardShareStats(share.id, share.referralCodeId)),
+    share: outcome.share,
+    referralCode: outcome.referralCode,
+    ...(await getScorecardShareStats(outcome.share.id, outcome.share.referralCodeId)),
   }
 }
 

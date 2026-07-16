@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import { Card, cn } from "@lyrashield/ui"
+import { getTrendPointX } from "./security-visuals.utils"
 
 const severityColors: Record<string, string> = {
   CRITICAL: "var(--color-critical)",
@@ -39,10 +40,18 @@ export function MetricCard({
   )
 }
 
-export function ScoreGauge({ score, grade }: { score: number | null; grade: string | null }) {
+export function ScoreGauge({ score, grade }: { score: number | null; grade?: string | null }) {
   const value = score ?? 0
   const circumference = 2 * Math.PI * 48
   const offset = circumference - (value / 100) * circumference
+  const color =
+    score === null
+      ? "var(--color-muted-foreground)"
+      : score >= 80
+        ? "var(--color-success)"
+        : score >= 40
+          ? "var(--color-warning)"
+          : "var(--color-critical)"
 
   return (
     <div
@@ -59,7 +68,7 @@ export function ScoreGauge({ score, grade }: { score: number | null; grade: stri
           cy="56"
           r="48"
           fill="none"
-          stroke="var(--color-primary)"
+          stroke={color}
           strokeWidth="8"
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -147,11 +156,10 @@ export function ScoreTrend({ points }: { points: Array<{ label: string; score: n
   const width = 560
   const height = 180
   const inset = 18
-  const usableWidth = width - inset * 2
   const usableHeight = height - inset * 2
   const coords = points.map((point, index) => ({
     ...point,
-    x: inset + (index / Math.max(points.length - 1, 1)) * usableWidth,
+    x: getTrendPointX(index, points.length, width, inset),
     y: inset + ((100 - point.score) / 100) * usableHeight,
   }))
   const path = coords.map((point) => `${point.x},${point.y}`).join(" ")

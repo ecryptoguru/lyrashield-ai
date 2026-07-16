@@ -45,6 +45,15 @@ describe("marketing SEO metadata", () => {
     expect(parsed.vars.PUBLIC_INDEXABLE).toBe("true")
   })
 
+  it("captures privacy-bounded PostHog pageviews without query or fragment data", () => {
+    const base = source("../layouts/Base.astro")
+
+    expect(base).toContain("capture_pageview: false")
+    expect(base).toContain('posthog.capture("$pageview"')
+    expect(base).toContain("`${pageUrl.origin}${pageUrl.pathname}`")
+    expect(base).not.toContain("$current_url: location.href")
+  })
+
   it("indexes the ready marketing surface without exposing unavailable scanner routes", () => {
     const config = source("../../astro.config.mjs")
     const scanner = source("../pages/scan.astro")
@@ -68,5 +77,7 @@ describe("marketing SEO metadata", () => {
     expect(toolLayout).toContain('aria-label="Breadcrumb"')
     expect(toolLayout).toContain("tool.checks.map")
     expect(toolLayout).toContain("tool.limitations.map")
+    expect(toolLayout).toContain('target="_blank"')
+    expect(toolLayout).toContain("opens in a new tab")
   })
 })

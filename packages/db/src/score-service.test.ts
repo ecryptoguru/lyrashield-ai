@@ -37,6 +37,7 @@ import {
   getPublicScorecard,
   completeScanWithScore,
   recordScorecardEvent,
+  createScorecardShare,
 } from "./score-service"
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>> & {
@@ -161,6 +162,45 @@ describe("score-service", () => {
         where: { id: "share-1" },
         data: { viewCount: { increment: 1 } },
       })
+    })
+  })
+
+  describe("createScorecardShare", () => {
+    it("reuses one active scorecard across workspace admins", async () => {
+      mockPrisma.scoreSnapshot.findFirst.mockResolvedValue({
+        id: "snapshot-1",
+        grade: "A",
+        computedAt: new Date("2026-07-16T00:00:00Z"),
+        modelVersion: "test",
+      })
+      mockPrisma.referralCode.findUnique.mockResolvedValue({ id: "ref-b", code: "CODEBBBB" })
+      mockPrisma.finding.count.mockResolvedValue(0)
+      mockPrisma.scorecardEvent.count = vi.fn().mockResolvedValue(0)
+      mockPrisma.referralAttribution.count = vi.fn().mockResolvedValue(0)
+      const tx = {
+        $executeRaw: vi.fn(),
+        scorecardShare: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: "share-1",
+            snapshotId: "snapshot-1",
+            referralCodeId: "ref-a",
+            referralCode: { code: "CODEAAAA" },
+          }),
+          create: vi.fn(),
+        },
+      }
+      mockPrisma.$transaction.mockImplementation(async (fn: (client: typeof tx) => unknown) =>
+        fn(tx)
+      )
+
+      const result = await createScorecardShare("target-1", "workspace-1", "admin-b")
+
+      expect(result).toMatchObject({
+        share: { id: "share-1" },
+        referralCode: "CODEAAAA",
+      })
+      expect(tx.scorecardShare.create).not.toHaveBeenCalled()
+      expect(mockPrisma.auditLog.create).not.toHaveBeenCalled()
     })
   })
 

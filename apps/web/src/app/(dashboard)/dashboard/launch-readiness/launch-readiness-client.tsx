@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { Card, Badge, Button, Spinner, EmptyState } from "@lyrashield/ui"
 import { apiGet } from "@/lib/api-client"
+import { ScoreGauge } from "@/components/security-visuals"
 
 interface LaunchReadinessReport {
   verdict: "NOT_EVALUATED" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
@@ -59,47 +60,6 @@ const VERDICT_CONFIG = {
     border: "border-destructive/20",
     badgeVariant: "danger" as const,
   },
-}
-
-function ScoreGauge({ score }: { score: number | null }) {
-  const circumference = 2 * Math.PI * 45
-  const offset = score === null ? circumference : circumference - (score / 100) * circumference
-  const color =
-    score === null ? "#71717a" : score >= 80 ? "#10b981" : score >= 40 ? "#f59e0b" : "#ef4444"
-
-  return (
-    <div className="relative flex h-32 w-32 items-center justify-center">
-      <svg className="h-32 w-32 -rotate-90" viewBox="0 0 100 100">
-        <circle
-          cx="50"
-          cy="50"
-          r="45"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="6"
-          className="text-muted/30"
-        />
-        <circle
-          cx="50"
-          cy="50"
-          r="45"
-          fill="none"
-          stroke={color}
-          strokeWidth="6"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          style={{ transition: "stroke-dashoffset 0.5s ease" }}
-        />
-      </svg>
-      <div className="absolute flex flex-col items-center">
-        <span className="text-3xl font-bold" style={{ color }}>
-          {score ?? "—"}
-        </span>
-        <span className="text-muted-foreground text-xs">/ 100</span>
-      </div>
-    </div>
-  )
 }
 
 function SeverityBreakdown({ bySeverity }: { bySeverity: Record<string, number> }) {
