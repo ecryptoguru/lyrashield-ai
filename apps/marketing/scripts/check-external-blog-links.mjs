@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url"
 
 import {
   checkExternalLinks,
-  extractLinks,
+  extractExternalSourceLinks,
   parseArticle,
   validateProgramRoot,
 } from "./blog-validation-lib.mjs"
@@ -70,7 +70,7 @@ async function main() {
       const { body } = parseArticle(readFileSync(path, "utf8"))
       articles.push({
         slug: entry.slug,
-        urls: extractLinks(body).filter((url) => /^https?:\/\//i.test(url)),
+        urls: extractExternalSourceLinks(body),
       })
     } catch (error) {
       errors.push(`${entry.slug}: ${error.message}`)

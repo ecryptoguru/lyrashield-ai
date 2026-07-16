@@ -325,6 +325,21 @@ export function extractLinks(markdown) {
   return links
 }
 
+export function extractExternalSourceLinks(markdown) {
+  return extractLinks(markdown).filter((link) => /^(?:[a-z][a-z\d+.-]*:)?\/\//i.test(link))
+}
+
+function canonicalExternalSourceKey(rawUrl) {
+  try {
+    const url = new URL(rawUrl)
+    url.search = ""
+    url.hash = ""
+    return url.href
+  } catch {
+    return redactUrl(rawUrl)
+  }
+}
+
 function headingErrors(body) {
   const errors = []
   const headings = []
@@ -525,7 +540,12 @@ export function validateArticle(article, programEntry, context = {}) {
     errors.push("missing mapped topically related article link")
   }
 
-  const externalSources = [...new Set(links.filter((link) => /^https?:\/\//i.test(link)))]
+  const externalSourcesByResource = new Map()
+  for (const externalSource of extractExternalSourceLinks(body)) {
+    const key = canonicalExternalSourceKey(externalSource)
+    if (!externalSourcesByResource.has(key)) externalSourcesByResource.set(key, externalSource)
+  }
+  const externalSources = [...externalSourcesByResource.values()]
   const classified = externalSources.map(classifySource)
   const authoritativeCount = classified.filter(
     (kind) => kind === "primary" || kind === "official"
@@ -736,6 +756,7 @@ export function validateImageLibrary(catalog, manifests, root, options = {}) {
     normalized
       .filter(({ release, entries }) => release === "authority" && Array.isArray(entries))
       .flatMap(({ entries }) => entries.map((entry) => entry.imageId))
+      .filter((imageId) => typeof imageId === "string" && imageId)
   )
   for (const imageId of authorityIds) {
     if ((usage.get(imageId) ?? 0) !== 1) errors.push(`authority image ${imageId} must be exclusive`)
@@ -743,6 +764,32 @@ export function validateImageLibrary(catalog, manifests, root, options = {}) {
   const sharedCounts = [...usage.entries()]
     .filter(([imageId]) => !authorityIds.has(imageId))
     .map(([, count]) => count)
+  if (options.finalDistribution === true) {
+    const assignmentCount = [...usage.values()].reduce((total, count) => total + count, 0)
+    if (authorityIds.size !== 1) {
+      errors.push(
+        `final image distribution must contain exactly 1 authority image; found ${authorityIds.size}`
+      )
+    }
+    if (sharedCounts.length !== 35) {
+      errors.push(
+        `final image distribution must contain exactly 35 shared images; found ${sharedCounts.length}`
+      )
+    }
+    if (usage.size !== 36) {
+      errors.push(`final image distribution must contain exactly 36 images; found ${usage.size}`)
+    }
+    if (Object.keys(catalog).length !== 36) {
+      errors.push(
+        `final image catalog must contain exactly 36 images; found ${Object.keys(catalog).length}`
+      )
+    }
+    if (assignmentCount !== 100) {
+      errors.push(
+        `final image distribution must contain exactly 100 assignments; found ${assignmentCount}`
+      )
+    }
+  }
   errors.push(...validateUsageCounts(sharedCounts, options.finalDistribution === true))
 
   if (options.validateCatalogCompleteness !== false) {
@@ -848,6 +895,10 @@ export async function checkExternalLinks(articles, options = {}) {
 
   for (const article of articles) {
     for (const rawUrl of [...new Set(article.urls ?? [])]) {
+      if (rawUrl.startsWith("//")) {
+        errors.push(`${article.slug}: external source must use HTTPS: ${redactUrl(rawUrl)}`)
+        continue
+      }
       let url
       try {
         url = new URL(rawUrl)
@@ -869,7 +920,7 @@ export async function checkExternalLinks(articles, options = {}) {
               { method: "HEAD" },
               timeoutMs
             )
-            if (response.status === 405 || response.status === 501) {
+            if (response.status < 200 || response.status >= 400) {
               response = await fetchWithTimeout(
                 fetchImpl,
                 url.href,
@@ -877,7 +928,9 @@ export async function checkExternalLinks(articles, options = {}) {
                 timeoutMs
               )
             }
-            return response.status >= 200 && response.status < 400
+            return (response.status >= 200 && response.status < 400) ||
+              response.status === 401 ||
+              response.status === 403
               ? null
               : `external source returned ${response.status}`
           } catch (error) {

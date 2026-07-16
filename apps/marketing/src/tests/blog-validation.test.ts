@@ -346,7 +346,10 @@ ${filler}
     }
     const errors = validateArticle(article, entry, {
       availableSlugs: new Set(["vibe-coding-security-guide", "access-post"]),
-      programBySlug: new Map([
+      programBySlug: new Map<
+        string,
+        { index: number; slug: string; cluster: string; cta?: string }
+      >([
         [entry.slug, entry],
         ["access-post", { index: 3, slug: "access-post", cluster: "Access" }],
       ]),
@@ -385,7 +388,10 @@ ${filler}
     }
     const errors = validateArticle(article, entry, {
       availableSlugs: new Set(["vibe-coding-security-guide", "access-post"]),
-      programBySlug: new Map([
+      programBySlug: new Map<
+        string,
+        { index: number; slug: string; cluster: string; cta?: string }
+      >([
         [entry.slug, entry],
         ["access-post", { index: 3, slug: "access-post", cluster: "Access" }],
       ]),
@@ -677,6 +683,7 @@ ${filler}
       .mockResolvedValueOnce(new Response(null, { status: 405 }))
       .mockResolvedValueOnce(new Response(null, { status: 206 }))
       .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
 
     const errors = await checkExternalLinks(
       [
@@ -693,8 +700,12 @@ ${filler}
       { fetchImpl: fetchMock, timeoutMs: 50 }
     )
 
-    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock).toHaveBeenCalledTimes(4)
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+    })
+    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({
       method: "GET",
       headers: { Range: "bytes=0-0" },
     })
@@ -717,17 +728,20 @@ ${filler}
       .mockResolvedValueOnce(new Response(null, { status: 502 }))
       .mockResolvedValueOnce(new Response(null, { status: 403 }))
       .mockResolvedValueOnce(new Response(null, { status: 403 }))
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
 
     const errors = await checkExternalLinks(
       [
         { slug: "head-404", urls: ["https://www.rfc-editor.org/source?token=secret"] },
         { slug: "still-down", urls: ["https://nist.gov/source?key=hidden"] },
         { slug: "protected", urls: ["https://help.openai.com/source?session=private"] },
+        { slug: "auth-required", urls: ["https://doi.org/source?credential=private"] },
       ],
       { fetchImpl: fetchMock, timeoutMs: 50 }
     )
 
-    expect(fetchMock).toHaveBeenCalledTimes(6)
+    expect(fetchMock).toHaveBeenCalledTimes(8)
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
       method: "GET",
       headers: { Range: "bytes=0-0" },
@@ -740,12 +754,19 @@ ${filler}
       method: "GET",
       headers: { Range: "bytes=0-0" },
     })
+    expect(fetchMock.mock.calls[7]?.[1]).toMatchObject({
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+    })
     expect(errors).not.toContain(
       "head-404: external source returned 404: https://www.rfc-editor.org/source"
     )
     expect(errors).toContain("still-down: external source returned 502: https://nist.gov/source")
     expect(errors).not.toContain(
       "protected: external source returned 403: https://help.openai.com/source"
+    )
+    expect(errors).not.toContain(
+      "auth-required: external source returned 401: https://doi.org/source"
     )
     expect(errors.join("\n")).not.toContain("secret")
     expect(errors.join("\n")).not.toContain("hidden")
