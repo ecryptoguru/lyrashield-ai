@@ -22,11 +22,11 @@ faq:
 
 **Direct answer:** AI-generated tests are useful regression checks, but they are not independent security proof. They can repeat the implementation's assumptions, omit abuse cases, or pass against unrealistic mocks. Add human-defined security invariants, negative authorization and tenant tests, controlled mutation checks, and a fresh review whose evidence is separate from the generation context.
 
-When one assistant writes both a function and its tests, the pair can agree on the same wrong behavior. The test passes because it restates what the implementation does, not because it checks what the system must protect.
+When one assistant writes both a function and its tests, the pair can agree on the same wrong behavior. The generated assertion passes because it restates what the implementation returns, not because it checks the authorization, isolation, validation, or integrity property the system must protect.
 
-This distinction matters in [how tests fit into release assurance](/blog/vibe-coding-security-guide). A green run is execution evidence. Coverage describes what ran. Independent verification asks whether a separate method supports the security claim. Those are different records.
+This distinction matters in [how tests fit into release assurance](/blog/vibe-coding-security-guide). Keep four records separate: whether the suite ran, which code it exercised, whether a controlled security mutation made it fail, and whether evidence outside the generation context supports the claim. A green check answers only the first question unless the test record says more.
 
-## The vulnerable pattern: test only the generated happy path
+## A green test can preserve the authorization bug
 
 **Incomplete test pattern. Use only with synthetic accounts.**
 
@@ -46,7 +46,7 @@ it("returns a project", async () => {
 
 The function accepts a session user but never uses it in the query. The test supplies the owner and asserts only that a project returns. The mock cannot reveal whether a real database query allows User A to read User B's project.
 
-An assistant can generate this pair from a request such as "add a test for getProject." It sees the function signature and expected return shape. Unless the prompt contains the ownership invariant, the shortest passing test follows the implementation.
+The request "add a test for getProject" gives the assistant a function signature and an expected return shape, but no ownership rule. The resulting test follows the implementation and rewards the same omission. A security test needs an independently stated denial condition before it needs another example response.
 
 ## Write invariants before examples
 
@@ -93,7 +93,7 @@ Review test deletions and weakened assertions as carefully as implementation cha
 
 Run the accepted suite from a clean checkout using the committed lockfile and a controlled test environment. Preserve the command and result instead of relying on the assistant's statement that tests passed. If a required external service was unavailable or skipped, record the limitation.
 
-For sensitive boundaries, have the reviewer add at least one case that was not proposed in the generation context. The case may still miss a flaw, but it reduces direct copying of the implementation's assumptions and makes the acceptance decision easier to explain.
+For each sensitive boundary, have the reviewer add at least one case that was not proposed in the generation context. Name the invariant, the synthetic identities or resources, the expected denial, the state that must remain unchanged, and the layer the test actually crosses. The case may still miss a flaw, but the acceptance record will no longer be a paraphrase of the generated implementation.
 
 ## Inspect mocks and false success paths
 
@@ -105,7 +105,7 @@ Check that tests fail for the intended reason. A cross-tenant request returning 
 
 ## Record coverage and evidence state precisely
 
-When a generated suite passes, record the commit, environment, command, test selection, result, and limitations. If only unit tests ran with mocked storage, say so. Do not label the result "verified" without an independent verification receipt.
+When a generated suite passes, record the commit, environment, command, selected tests, assertion purpose, real and mocked dependencies, result, and limitations. If only unit tests ran with mocked storage, say so. Do not label the security claim "verified" without an independent verification receipt.
 
 A fresh deterministic retest can become retest-confirmed within its documented coverage. If the original signal came from an engine-only or incomplete path, absence on a later run may remain inconclusive. Confidence and code coverage are triage data, not proof.
 

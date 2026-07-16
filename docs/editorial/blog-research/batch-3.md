@@ -75,7 +75,7 @@ Evidence labels used in the claim maps:
 
 ### Rules files and repository change control
 
-- **S40. Rules.** Cursor documentation, current page accessed 2026-07-17. https://docs.cursor.com/context/rules-for-ai
+- **S40. Rules.** Cursor documentation, current page accessed 2026-07-17. https://cursor.com/docs/rules
 - **S41. About code owners.** GitHub Docs, current page accessed 2026-07-17. https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 - **S42. About protected branches.** GitHub Docs, current page accessed 2026-07-17. https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches
 

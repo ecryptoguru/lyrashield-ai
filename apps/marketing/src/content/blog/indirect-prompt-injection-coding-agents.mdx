@@ -22,17 +22,19 @@ faq:
 
 **Direct answer:** Indirect prompt injection happens when a coding agent reads untrusted content and treats embedded text as an instruction. Limit what the agent can read and do, preserve the content's untrusted origin, authorize every tool action on the server, and test with harmless local canaries. A prompt filter alone cannot prove the path is contained.
 
-The risky text may sit in an issue body, README, source comment, generated documentation, web page, package metadata, or tool result. A user asks the agent to summarize or fix something. The agent reads the content, folds it into one context, and may follow an instruction that came from the content rather than the user.
+Hostile text becomes dangerous when an agent carries it from an issue, README, source comment, web page, package record, or tool result into a context that can trigger an action. A routine request to summarize or fix something can open that path, even when the user never sees the embedded instruction.
 
-The path is easier to reason about as a trust boundary:
+Draw the path before choosing a filter:
 
 ```text
 untrusted content -> model context -> proposed action -> tool call -> server decision
 ```
 
+For each arrow, record which service owns the transition and what trusted data it checks before continuing.
+
 The [agent boundary in the vibe coding security guide](/blog/vibe-coding-security-guide) treats every arrow as a control point. A harmful result needs more than hostile text. The agent must read it, treat it as instruction, and have a reachable action or disclosure path.
 
-## The vulnerable pattern: content and control share one channel
+## Trace the instruction-to-action path
 
 **Inert test pattern. Use only in an isolated fixture.**
 
@@ -54,7 +56,7 @@ const context = `${userRequest}\n\nIssue content:\n${issue.body}`
 const result = await model.generate(context, availableTools)
 ```
 
-The label "Issue content" is helpful to a reader but does not create an enforcement boundary. The model can still use every exposed tool. Generated agent code often misses this because concatenating context is the shortest route to a working demo, while data provenance and action authorization live outside the model call.
+Putting "Issue content" above the text helps a human read the prompt, but it does not restrict the model's tools. The template has collapsed data provenance and action authority into one model call. Any real boundary must sit in the orchestrator and tool service, where the model cannot rewrite it.
 
 ## Preserve provenance through the action path
 

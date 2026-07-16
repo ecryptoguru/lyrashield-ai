@@ -23,13 +23,13 @@ faq:
 
 **Direct answer:** Do not give a coding agent standing production delete permission. Use a separate low-privilege identity, cap its maximum permissions, require short-lived elevation and an approval bound to the exact action and resource, then record the server-observed result. Backups reduce recovery uncertainty, but they do not make broad destructive authority acceptable.
 
-Production delete authority can hide behind database administration, cloud deployment, storage management, or a general CI role. An agent may receive that role because it needs one harmless operation. The same credential can then remove a table, bucket, deployment, environment, or audit record.
+A general CI or cloud-administration role often carries delete authority that its name does not advertise. An agent receives the credential for one harmless operation, then discovers that the same identity can remove a table, bucket, deployment, environment, or audit record.
 
 The failure is an authorization design, not a model personality problem. A careful agent can still execute a misunderstood command. An injected instruction can exploit the same authority. Start from deny by default and expose the smallest server-owned action path.
 
 The [approval-bound fix and release controls](/blog/vibe-coding-security-guide) keep proposals, approvals, and execution as separate records. An approval must describe the server-owned action that will run, not grant the agent a temporary general administrator session.
 
-## The vulnerable pattern: inherited administrator access
+## Administrator credentials erase the boundary
 
 **Vulnerable policy. Do not attach it to an agent.**
 
@@ -43,7 +43,7 @@ The [approval-bound fix and release controls](/blog/vibe-coding-security-guide) 
 
 This policy has no resource, action, environment, or time boundary. Adding a prompt that says "ask before deleting" does not change the credential's effective permissions. A non-interactive job may have no human available to ask.
 
-AI-generated deployment workflows miss this boundary when they reuse the credential that made a manual setup work. An administrator token removes authorization errors from the demo. It also turns any tool call, script, or dependency running in that job into a potential production actor.
+Reusing the credential that made a manual setup work removes authorization errors from a deployment demo. It also turns every tool call, script, and dependency in that job into a possible production actor.
 
 ## Separate the agent identity
 
@@ -73,32 +73,55 @@ async function deleteApprovedPreview(input: {
   resourceId: string
   requestHash: string // computed from the server-owned request
 }) {
-  return db.$transaction(async (tx) => {
-    const approval = await tx.approval.findUnique({ where: { id: input.approvalId } })
-    if (
-      !approval ||
-      approval.action !== "delete-preview-environment" ||
-      approval.environment !== "production" ||
-      approval.resourceId !== input.resourceId ||
-      approval.requestHash !== input.requestHash ||
-      approval.consumedAt ||
-      new Date(approval.expiresAt) <= new Date()
-    ) {
-      throw new Error("approval unavailable")
-    }
-
-    const consumed = await tx.approval.updateMany({
-      where: { id: approval.id, consumedAt: null },
-      data: { consumedAt: new Date().toISOString() },
+  const now = new Date()
+  const execution = await db.$transaction(async (tx) => {
+    const claimed = await tx.approval.updateMany({
+      where: {
+        id: input.approvalId,
+        action: "delete-preview-environment",
+        environment: "production",
+        resourceId: input.resourceId,
+        requestHash: input.requestHash,
+        consumedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { consumedAt: now },
     })
-    if (consumed.count !== 1) throw new Error("approval already consumed")
+    if (claimed.count !== 1) throw new Error("approval unavailable")
 
-    return production.deletePreviewEnvironment(approval.resourceId)
+    return tx.productionExecution.create({
+      data: {
+        id: crypto.randomUUID(),
+        approvalId: input.approvalId, // unique: one execution per approval
+        resourceId: input.resourceId,
+        requestHash: input.requestHash,
+        state: "PENDING",
+      },
+    })
   })
+
+  try {
+    const result = await production.deletePreviewEnvironment(execution.resourceId, {
+      idempotencyKey: execution.id,
+    })
+    await db.productionExecution.update({
+      where: { id: execution.id },
+      data: { state: "SUCCEEDED", providerOperationId: result.operationId },
+    })
+    return result
+  } catch {
+    await db.productionExecution.updateMany({
+      where: { id: execution.id, state: "PENDING" },
+      data: { state: "RECONCILE_REQUIRED" },
+    })
+    throw new Error("provider result requires reconciliation")
+  }
 }
 ```
 
-This illustrative action can delete only a preview environment selected by the trusted server. It cannot accept an arbitrary operation or resource type. A real service should compute `requestHash`, authorize the approver, verify the resource classification, and avoid holding a database transaction open across a slow provider call. It can atomically claim the approval first, then record the provider result in a separate idempotent execution record.
+The transaction consumes the exact approval and creates one `PENDING` execution record before it commits. Only then does the provider call begin. The execution ID is also the provider idempotency key, so a supported provider can deduplicate a retry. A timeout moves the record to `RECONCILE_REQUIRED`; an operator or provider-status job must settle that ambiguous result instead of blindly repeating a non-idempotent delete.
+
+This illustrative action can delete only a preview environment selected by the trusted server. It cannot accept an arbitrary operation or resource type. A real service must compute `requestHash`, authorize the approver, verify the resource classification, enforce the unique approval-to-execution constraint, and confirm the provider's idempotency contract. If the provider lacks idempotency or operation lookup, do not automate a retry after an ambiguous result.
 
 The example does not imply that LyraShield AI executes production changes or automatic pull requests.
 

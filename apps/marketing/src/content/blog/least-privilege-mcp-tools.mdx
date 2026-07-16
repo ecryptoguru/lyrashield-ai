@@ -22,11 +22,11 @@ faq:
 
 **Direct answer:** Give an MCP client only the tools and resource scopes needed for the current task. Split reads from mutations, validate arguments and authorization on the server, bind tokens to the intended MCP server, distrust unverified tool metadata, and require exact approval for sensitive calls. Protocol support does not enforce these application controls for you.
 
-Model Context Protocol makes tools discoverable to a model. That is useful, but discoverability can hide the real permission question. A tool named `workspace_admin` with a flexible schema may expose filesystem, database, and network authority behind one apparently convenient call.
+Model Context Protocol makes tools discoverable to a model. The protocol does not make a broad tool narrow. A single `workspace_admin` call can hide filesystem, database, and network authority behind a convenient name.
 
-Start with a permission inventory: caller, tenant, resource, verb, fields, side effects, credential, approval rule, and audit result. This inventory supports the [approval-gated agent security model](/blog/vibe-coding-security-guide) by showing which authority exists before any prompt chooses a tool.
+Write down the caller, tenant, resource, verb, permitted fields, side effects, credential, approval rule, and audit result for each tool. That inventory supports the [approval-gated agent security model](/blog/vibe-coding-security-guide) because it exposes authority before a prompt selects anything.
 
-## The vulnerable pattern: one broad administrative tool
+## Remove the catch-all administrative tool
 
 **Vulnerable design. Do not expose this tool.**
 
@@ -47,7 +47,7 @@ Start with a permission inventory: caller, tenant, resource, verb, fields, side 
 
 The schema accepts arbitrary verbs and objects. The description encourages the model to treat the tool as general authority. A client confirmation that says "Run workspace_admin?" gives a reviewer little basis for a decision.
 
-Generated MCP servers often start this way because one generic handler is easy to demonstrate. The model chooses an action string and the server forwards it to an SDK. The implementation may validate JSON shape while failing to constrain tenant, resource, field, or business state.
+One generic handler makes a quick demonstration easy: the model chooses an action string and the server forwards it to an SDK. Shape validation may pass even though no code has constrained the tenant, resource, fields, or business state.
 
 ## Use narrow verbs and schemas
 
@@ -68,6 +68,7 @@ Prefer a small tool for one bounded operation:
   },
   "outputSchema": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "content": { "type": "string", "maxLength": 20000 },
       "snapshotHash": { "type": "string" }

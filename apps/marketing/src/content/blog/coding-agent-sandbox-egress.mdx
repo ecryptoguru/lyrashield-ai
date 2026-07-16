@@ -22,9 +22,9 @@ faq:
 
 **Direct answer:** Run coding agents in a disposable environment with only the repository, tools, and short-lived credentials required for the task. Use a non-root identity, minimal mounts, process and resource limits, and an explicit outbound destination policy. A container alone is incomplete isolation, and isolation without egress control can still expose accessible data.
 
-Coding agents combine code reading, file writes, command execution, dependency installation, and network requests. That combination is productive. It also means a mistaken command or injected instruction can reach whatever the runtime exposes.
+A coding agent may read source, write files, run commands, install dependencies, and make network requests in one session. A mistaken command or injected instruction inherits whatever that runtime can reach.
 
-Model the boundary as separate questions:
+Four questions reveal where the containment gaps are:
 
 ```text
 What can enter? -> What can run? -> What can be read or changed? -> Where can data go?
@@ -32,7 +32,7 @@ What can enter? -> What can run? -> What can be read or changed? -> Where can da
 
 The [agent execution boundaries in the security guide](/blog/vibe-coding-security-guide) cover all four. A read-only mount does not constrain outbound traffic. A blocked network does not protect a writable host socket.
 
-## The vulnerable pattern: a container with host authority
+## A container can still hold host authority
 
 **Vulnerable configuration. Do not run an agent this way.**
 
@@ -50,7 +50,7 @@ services:
 
 This process can inspect the host filesystem, control the Docker daemon, read the inherited token, and use the default network. The container boundary adds packaging but little meaningful containment.
 
-Generated infrastructure often misses this because broad mounts and host credentials make setup errors disappear. The agent can build, test, and deploy from one place. The demo works while repository, host, credential, and production boundaries collapse.
+Broad mounts and host credentials make setup errors disappear, which is why this configuration can look attractive in a demo. The same process can build, test, and deploy, but the repository, host, credential, and production boundaries have collapsed into one runtime.
 
 ## Start with a disposable workspace
 
