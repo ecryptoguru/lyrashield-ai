@@ -6,10 +6,10 @@
     "concept": "Monitoring and recovery paths forming a continuous operating loop",
     "prompt": "Text-free square cinematic technical artwork, a restrained monitoring path feeding a tested recovery loop around a production core, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A monitoring path feeding a recovery loop around a production core",
-    "sourceHash": null,
+    "sourceHash": "sha256:8222cb1fcb4097fcf17ec9f8ff5076f87b188fb373d0aa874513b4f3dfabb729",
     "cropNotes": "Keep the loop complete in landscape and portrait crops",
     "usageCount": 2,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "backup-restore-agentic-apps",
@@ -18,10 +18,10 @@
     "concept": "A recovery proof path for small teams and internal systems",
     "prompt": "Text-free square cinematic technical artwork, a compact system chamber connected to a backup artifact and a verified restore path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A compact system connected to a backup artifact and verified restore path",
-    "sourceHash": null,
+    "sourceHash": "sha256:6fd8119b21a108ad8d615a825086c7455eb9a2d355b8bd74ce0a845c7fe5b3f0",
     "cropNotes": "Keep the system, backup, and restore path visible in the central safe area",
     "usageCount": 2,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "ai-dependency-vulnerability-audit",
@@ -30,10 +30,10 @@
     "concept": "Duplicate and scanner receipts normalized through one versioned inspection result with explicit coverage limits",
     "prompt": "Text-free square cinematic technical artwork, duplicate and scanner evidence receipts entering a precise normalization and coverage lens and converging on one immutable versioned inspection result while illuminated inspected space and dark uninspected space remain explicit, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Duplicate and scanner receipts normalized into one versioned inspection result with visible coverage limits",
-    "sourceHash": null,
+    "sourceHash": "sha256:1f85467c2b00d9b0a22808ebd73db1fd09ce0a1d492e3e042df26a1afff852c1",
     "cropNotes": "Keep the receipt inputs, single versioned result, and inspected and uninspected regions visible in every crop",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "hallucinated-packages-slopsquatting",
@@ -42,10 +42,10 @@
     "concept": "A build provenance chain crossing an approval checkpoint",
     "prompt": "Text-free square cinematic technical artwork, a provenance chain of commit-like blocks crossing a narrow approval checkpoint into a sealed build, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A provenance chain crossing an approval checkpoint into a sealed build",
-    "sourceHash": null,
+    "sourceHash": "sha256:93f4cb5556fe80f40a27a038ba9d9edd74248f1fca70efb28701f4988b257839",
     "cropNotes": "Keep the approval checkpoint central and avoid recognizable vendor interface motifs",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "install-script-supply-chain-security",
@@ -54,10 +54,10 @@
     "concept": "A dependency lattice with version and provenance joints",
     "prompt": "Text-free square cinematic technical artwork, a dependency lattice of sealed package forms connected through version rings and provenance joints, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A dependency lattice connected by version rings and provenance joints",
-    "sourceHash": null,
+    "sourceHash": "sha256:d7d74c4097d0ebbe6de5be29a4fe974fe67608305f6199e12fa410b8c3184d90",
     "cropNotes": "Keep at least three dependency nodes and their provenance path in both main crops",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "secrets-ai-coding-prompts",
@@ -66,10 +66,10 @@
     "concept": "A coding workspace protected from poisoned rule changes",
     "prompt": "Text-free square cinematic technical artwork, stacked repository and rule planes with one altered plane isolated before it reaches the agent path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Repository rule planes with one altered layer isolated from the agent path",
-    "sourceHash": null,
+    "sourceHash": "sha256:584d666e229ef12e007eff486c80490fd9ba8eca806365952531de8a603a0fc8",
     "cropNotes": "Keep the isolated layer obvious without using warning text or recognizable file icons",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "indirect-prompt-injection-coding-agents",
@@ -78,10 +78,10 @@
     "concept": "Untrusted instructions propagating across agent and rules planes while the control path remains isolated",
     "prompt": "Text-free square cinematic technical artwork, an untrusted red instruction signal attempting to propagate across several separated agent and repository-rules planes while a hardened trust boundary isolates the privileged control path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Untrusted instructions crossing agent and rules planes while the control path remains isolated",
-    "sourceHash": null,
+    "sourceHash": "sha256:a9b30153ef63291a96cebec1bd1b8cb468748e6e051a003ebf26d1128c0f06d2",
     "cropNotes": "Keep several instruction planes, the propagation path, trust boundary, and isolated control path inside the central 60 percent; show no readable prompt or interface text",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "least-privilege-mcp-tools",
@@ -90,10 +90,10 @@
     "concept": "A least-privilege tool path with one approval gate",
     "prompt": "Text-free square cinematic technical artwork, several abstract tool paths with only one narrow permitted route crossing a human approval gate, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "One permitted tool path crossing an approval gate while others remain closed",
-    "sourceHash": null,
+    "sourceHash": "sha256:6dc710fe9435ab06c5859725328ad237aceef2a4bdc3e827bfcef35704e02169",
     "cropNotes": "Keep the permitted path and approval gate central; no hand or person imagery",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "coding-agent-sandbox-egress",
@@ -102,10 +102,10 @@
     "concept": "An isolated agent chamber with constrained network egress",
     "prompt": "Text-free square cinematic technical artwork, an agent-like processing core inside a graphite isolation chamber with one filtered egress channel, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A processing core inside an isolation chamber with one filtered egress path",
-    "sourceHash": null,
+    "sourceHash": "sha256:c667e5ff3f91dc397e0bdcdbc43c94770bc100e3575e3ba16c0d7892bfe53f30",
     "cropNotes": "Keep chamber walls and filtered egress visible in landscape and portrait crops",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "agent-production-permissions",
@@ -114,10 +114,10 @@
     "concept": "Staged security gates binding exact approval to a privileged production action",
     "prompt": "Text-free square cinematic technical artwork, a code or agent workflow crossing staged data, dependency, policy, and evidence gates before an exact approval lock at a separated production boundary, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A workflow crossing staged security gates and an exact approval lock before production",
-    "sourceHash": null,
+    "sourceHash": "sha256:deb4f3a3e8738b1f2abc379ab633a2b7c16f5130912b02c9471b52188b47c4fb",
     "cropNotes": "Keep the staged gates, exact approval lock, and separated production boundary inside the central 60 percent",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "agent-rules-file-security",
@@ -126,10 +126,10 @@
     "concept": "A coding workspace protected from poisoned rule changes",
     "prompt": "Text-free square cinematic technical artwork, stacked repository and rule planes with one altered plane isolated before it reaches the agent path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Repository rule planes with one altered layer isolated from the agent path",
-    "sourceHash": null,
+    "sourceHash": "sha256:584d666e229ef12e007eff486c80490fd9ba8eca806365952531de8a603a0fc8",
     "cropNotes": "Keep the isolated layer obvious without using warning text or recognizable file icons",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "ai-generated-tests-security",
@@ -138,10 +138,10 @@
     "concept": "A changed or placeholder component crossing fresh evidence and a retest ring while a false-success path stops before durable state",
     "prompt": "Text-free square cinematic technical artwork, a changed or placeholder graphite component crossing a fresh evidence plane and circular retest beam while a polished but disconnected false-success path stops before a sealed durable-state chamber, with an earlier receipt behind the retest, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A changed or placeholder component retested while a false-success path stops before durable state",
-    "sourceHash": null,
+    "sourceHash": "sha256:9e600271d077708528c8785527c6ad9091c73385a0ec05bd8c60d6f9d2e0b2ec",
     "cropNotes": "Keep the component, fresh evidence, retest ring, stopped false-success path, and durable-state chamber inside the central 60 percent",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "cicd-agent-confused-deputy",
@@ -150,10 +150,10 @@
     "concept": "A least-privilege tool path with one approval gate",
     "prompt": "Text-free square cinematic technical artwork, several abstract tool paths with only one narrow permitted route crossing a human approval gate, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "One permitted tool path crossing an approval gate while others remain closed",
-    "sourceHash": null,
+    "sourceHash": "sha256:6dc710fe9435ab06c5859725328ad237aceef2a4bdc3e827bfcef35704e02169",
     "cropNotes": "Keep the permitted path and approval gate central; no hand or person imagery",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "multi-agent-prompt-injection",
@@ -162,10 +162,10 @@
     "concept": "Untrusted instructions propagating across agent and rules planes while the control path remains isolated",
     "prompt": "Text-free square cinematic technical artwork, an untrusted red instruction signal attempting to propagate across several separated agent and repository-rules planes while a hardened trust boundary isolates the privileged control path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Untrusted instructions crossing agent and rules planes while the control path remains isolated",
-    "sourceHash": null,
+    "sourceHash": "sha256:a9b30153ef63291a96cebec1bd1b8cb468748e6e051a003ebf26d1128c0f06d2",
     "cropNotes": "Keep several instruction planes, the propagation path, trust boundary, and isolated control path inside the central 60 percent; show no readable prompt or interface text",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "placeholder-logic-silent-failures",
@@ -174,10 +174,10 @@
     "concept": "A changed or placeholder component crossing fresh evidence and a retest ring while a false-success path stops before durable state",
     "prompt": "Text-free square cinematic technical artwork, a changed or placeholder graphite component crossing a fresh evidence plane and circular retest beam while a polished but disconnected false-success path stops before a sealed durable-state chamber, with an earlier receipt behind the retest, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A changed or placeholder component retested while a false-success path stops before durable state",
-    "sourceHash": null,
+    "sourceHash": "sha256:9e600271d077708528c8785527c6ad9091c73385a0ec05bd8c60d6f9d2e0b2ec",
     "cropNotes": "Keep the component, fresh evidence, retest ring, stopped false-success path, and durable-state chamber inside the central 60 percent",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "human-review-threat-model-vibe-coding",
@@ -186,10 +186,10 @@
     "concept": "A focused system or change set crossing trust boundaries and a human evidence gate",
     "prompt": "Text-free square cinematic technical artwork, a compact system or focused change set crossing translucent trust boundaries before a controlled human evidence gate, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A focused system or change set crossing trust boundaries and a human evidence gate",
-    "sourceHash": null,
+    "sourceHash": "sha256:752280b7b827084899399d847d62e5165e63e132925a2275e79fb4e907a5bf9a",
     "cropNotes": "Keep the focused subject, trust boundaries, and human evidence gate central; no code text, person, or vendor interface",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "cursor-app-security-checklist",
@@ -198,9 +198,9 @@
     "concept": "Staged security gates binding exact approval to a privileged production action",
     "prompt": "Text-free square cinematic technical artwork, a code or agent workflow crossing staged data, dependency, policy, and evidence gates before an exact approval lock at a separated production boundary, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A workflow crossing staged security gates and an exact approval lock before production",
-    "sourceHash": null,
+    "sourceHash": "sha256:deb4f3a3e8738b1f2abc379ab633a2b7c16f5130912b02c9471b52188b47c4fb",
     "cropNotes": "Keep the staged gates, exact approval lock, and separated production boundary inside the central 60 percent",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   }
 ]

@@ -6,10 +6,10 @@
     "concept": "A coding workspace protected from poisoned rule changes",
     "prompt": "Text-free square cinematic technical artwork, stacked repository and rule planes with one altered plane isolated before it reaches the agent path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Repository rule planes with one altered layer isolated from the agent path",
-    "sourceHash": null,
+    "sourceHash": "sha256:584d666e229ef12e007eff486c80490fd9ba8eca806365952531de8a603a0fc8",
     "cropNotes": "Keep the isolated layer obvious without using warning text or recognizable file icons",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "codex-security-workflow",
@@ -18,10 +18,10 @@
     "concept": "An isolated agent chamber with constrained network egress",
     "prompt": "Text-free square cinematic technical artwork, an agent-like processing core inside a graphite isolation chamber with one filtered egress channel, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A processing core inside an isolation chamber with one filtered egress path",
-    "sourceHash": null,
+    "sourceHash": "sha256:c667e5ff3f91dc397e0bdcdbc43c94770bc100e3575e3ba16c0d7892bfe53f30",
     "cropNotes": "Keep chamber walls and filtered egress visible in landscape and portrait crops",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "windsurf-security-workflow",
@@ -30,10 +30,10 @@
     "concept": "Untrusted instructions propagating across agent and rules planes while the control path remains isolated",
     "prompt": "Text-free square cinematic technical artwork, an untrusted red instruction signal attempting to propagate across several separated agent and repository-rules planes while a hardened trust boundary isolates the privileged control path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Untrusted instructions crossing agent and rules planes while the control path remains isolated",
-    "sourceHash": null,
+    "sourceHash": "sha256:a9b30153ef63291a96cebec1bd1b8cb468748e6e051a003ebf26d1128c0f06d2",
     "cropNotes": "Keep several instruction planes, the propagation path, trust boundary, and isolated control path inside the central 60 percent; show no readable prompt or interface text",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "lovable-app-security-checklist",
@@ -42,10 +42,10 @@
     "concept": "A private application workspace separated from an external assistant channel",
     "prompt": "Text-free square cinematic technical artwork, a protected data chamber separated by a translucent privacy boundary from an external assistant path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A protected data chamber separated from an external assistant path",
-    "sourceHash": null,
+    "sourceHash": "sha256:d4e070a2021276fc97fbf54b6befd9aa7caeff2491ec9c18f8abb04c52b39b92",
     "cropNotes": "Keep the privacy boundary and both sides visible; avoid depicting real user data",
     "usageCount": 2,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "bolt-app-security-checklist",
@@ -54,10 +54,10 @@
     "concept": "Staged security gates binding exact approval to a privileged production action",
     "prompt": "Text-free square cinematic technical artwork, a code or agent workflow crossing staged data, dependency, policy, and evidence gates before an exact approval lock at a separated production boundary, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A workflow crossing staged security gates and an exact approval lock before production",
-    "sourceHash": null,
+    "sourceHash": "sha256:deb4f3a3e8738b1f2abc379ab633a2b7c16f5130912b02c9471b52188b47c4fb",
     "cropNotes": "Keep the staged gates, exact approval lock, and separated production boundary inside the central 60 percent",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "replit-app-security-checklist",
@@ -66,10 +66,10 @@
     "concept": "An isolated agent chamber with constrained network egress",
     "prompt": "Text-free square cinematic technical artwork, an agent-like processing core inside a graphite isolation chamber with one filtered egress channel, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A processing core inside an isolation chamber with one filtered egress path",
-    "sourceHash": null,
+    "sourceHash": "sha256:c667e5ff3f91dc397e0bdcdbc43c94770bc100e3575e3ba16c0d7892bfe53f30",
     "cropNotes": "Keep chamber walls and filtered egress visible in landscape and portrait crops",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "v0-app-security-checklist",
@@ -78,10 +78,10 @@
     "concept": "A build provenance chain crossing an approval checkpoint",
     "prompt": "Text-free square cinematic technical artwork, a provenance chain of commit-like blocks crossing a narrow approval checkpoint into a sealed build, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A provenance chain crossing an approval checkpoint into a sealed build",
-    "sourceHash": null,
+    "sourceHash": "sha256:93f4cb5556fe80f40a27a038ba9d9edd74248f1fca70efb28701f4988b257839",
     "cropNotes": "Keep the approval checkpoint central and avoid recognizable vendor interface motifs",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "base44-app-security-checklist",
@@ -90,10 +90,10 @@
     "concept": "A platform boundary containing transitive service dependencies",
     "prompt": "Text-free square cinematic technical artwork, nested service modules contained inside a hardened platform boundary with a visible transitive chain, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Nested service modules contained inside a hardened platform boundary",
-    "sourceHash": null,
+    "sourceHash": "sha256:6dc329d09fd6d80e9a71fda7ffe63668c9a207d53701398aef1a716a02f94f24",
     "cropNotes": "Keep nested modules centered and separated enough for portrait crop",
     "usageCount": 2,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "supabase-security-guide",
@@ -102,10 +102,10 @@
     "concept": "Tenant compartments separated by one scoped data gate",
     "prompt": "Text-free square cinematic technical artwork, separate tenant chambers divided by graphite walls with one narrowly scoped data gate, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Separate tenant chambers divided by a narrow translucent data gate",
-    "sourceHash": null,
+    "sourceHash": "sha256:459342e0ef23056f353abf43590a30e92f11e219a032a3ac6ad22a5566934b57",
     "cropNotes": "Keep the tenant walls and gate centered; preserve separation in landscape and portrait crops",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "firebase-security-guide",
@@ -114,10 +114,10 @@
     "concept": "A privileged route protected by layered policy locks",
     "prompt": "Text-free square cinematic technical artwork, a restricted route corridor passing through layered policy locks before a privileged chamber, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A restricted route passing through two policy locks",
-    "sourceHash": null,
+    "sourceHash": "sha256:276cecb89f2e2151a2c184e0fcb446eb3ffd8c3a3ff9553b63a14de8e8b836c5",
     "cropNotes": "Keep both locks and the privileged chamber inside the central 60 percent",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "nextjs-ai-app-security",
@@ -126,10 +126,10 @@
     "concept": "A deployment artifact sealed from source to production",
     "prompt": "Text-free square cinematic technical artwork, a sealed build artifact traveling from a source chamber through a controlled deployment corridor, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A sealed build artifact moving through a controlled deployment corridor",
-    "sourceHash": null,
+    "sourceHash": "sha256:6bda72a9d9e8949a9f39df7ccf8552baa4685d56f9c56b5cd2d86bd7bad62e78",
     "cropNotes": "Keep source, artifact, and destination aligned through the central safe area",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "react-frontend-security-ai-code",
@@ -138,10 +138,10 @@
     "concept": "A dependency lattice with version and provenance joints",
     "prompt": "Text-free square cinematic technical artwork, a dependency lattice of sealed package forms connected through version rings and provenance joints, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A dependency lattice connected by version rings and provenance joints",
-    "sourceHash": null,
+    "sourceHash": "sha256:d7d74c4097d0ebbe6de5be29a4fe974fe67608305f6199e12fa410b8c3184d90",
     "cropNotes": "Keep at least three dependency nodes and their provenance path in both main crops",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "node-express-ai-api-security",
@@ -150,10 +150,10 @@
     "concept": "Layered browser response controls isolating untrusted output from an application core",
     "prompt": "Text-free square cinematic technical artwork, an untrusted content stream crossing separate translucent encoding and browser-policy planes before a protected application surface, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Untrusted output crossing layered browser response controls",
-    "sourceHash": null,
+    "sourceHash": "sha256:c6c80af88c70afc3c1a5c9139bfa3a887a42049f616703315677fd8266a54d9d",
     "cropNotes": "Keep the input stream, both response-control planes, and protected application surface visible after landscape and portrait crops",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "fastapi-ai-generated-security",
@@ -162,10 +162,10 @@
     "concept": "A server request or path corridor with input, authorization, and destination-boundary rechecks",
     "prompt": "Text-free square cinematic technical artwork, an untrusted server request or path corridor passing through gates for input validation and authorization before a destination-boundary chamber, with translucent checkpoint rings rechecking resolved destinations and redirects for request paths while sealed private and executable spaces remain off-path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A server request or path corridor crossing input, authorization, and destination-boundary rechecks",
-    "sourceHash": null,
+    "sourceHash": "sha256:0a5ab74215cb26b7119a1d70e84811c32b5b5c7149b8895ceac40b5c74aabd6a",
     "cropNotes": "Keep the input and authorization gates plus the destination-boundary checkpoint visible; retain a redirect recheck for request-path crops",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "vercel-deployment-security",
@@ -174,10 +174,10 @@
     "concept": "A deployment artifact sealed from source to production",
     "prompt": "Text-free square cinematic technical artwork, a sealed build artifact traveling from a source chamber through a controlled deployment corridor, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "A sealed build artifact moving through a controlled deployment corridor",
-    "sourceHash": null,
+    "sourceHash": "sha256:6bda72a9d9e8949a9f39df7ccf8552baa4685d56f9c56b5cd2d86bd7bad62e78",
     "cropNotes": "Keep source, artifact, and destination aligned through the central safe area",
     "usageCount": 3,
-    "approved": false
+    "approved": true
   },
   {
     "slug": "cloudflare-workers-ai-security",
@@ -186,9 +186,9 @@
     "concept": "A platform boundary containing transitive service dependencies",
     "prompt": "Text-free square cinematic technical artwork, nested service modules contained inside a hardened platform boundary with a visible transitive chain, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
     "alt": "Nested service modules contained inside a hardened platform boundary",
-    "sourceHash": null,
+    "sourceHash": "sha256:6dc329d09fd6d80e9a71fda7ffe63668c9a207d53701398aef1a716a02f94f24",
     "cropNotes": "Keep nested modules centered and separated enough for portrait crop",
     "usageCount": 2,
-    "approved": false
+    "approved": true
   }
 ]

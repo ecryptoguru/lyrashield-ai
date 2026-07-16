@@ -5367,6 +5367,13 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - The five waiting rows advance once at an 800 ms cadence. A fast API response remains hidden until the fifth row has been shown, while a slower response leaves the fifth row active instead of restarting the sequence. Errors stop the timer immediately, and reduced-motion users do not receive an artificial delay.
 - Instrumented browser QA recorded rows 1–5 at approximately 0, 0.8, 1.6, 2.4, and 3.2 seconds, then rendered the result after the four-second pass. The release gate passed Prisma generation, lint, formatting, typecheck, 844 Vitest tests in 90 files, every production build, two Chromium E2E flows, desktop/mobile QA, and `git diff --check`.
 
+### C1.16 Authority blog local release candidate (2026-07-17, branch only)
+
+- The branch-local authority program maps exactly 100 planned articles across seven releases and a planned 36-image source-artwork library. `apps/marketing/src/content/blog-program.json` is the program-membership source of truth; briefs, research records, image manifests, the image catalog, and article frontmatter must agree with it.
+- Authority articles target 2,500–3,000 useful words and at least eight credible sources. Supporting articles target 1,200–1,500 useful words and at least three credible sources, including at least two official or primary sources. Every article requires a direct answer, distinct reader value, claim-to-source mapping, stable anchors, bounded product language, a documented Humanizer pass, and approved image QA.
+- Release tooling validates manifest and article contracts, image assignments and derivatives, internal links, and the built Worker surface. The local crawler checks status, sitemap membership, unique canonicals, metadata, one H1 and main landmark, anchors, images, JSON-LD, draft exclusion, RSS membership, tag archives, and query-free error reporting.
+- All 100 entries are locally approved and `draft: false` at this checkpoint so the full built surface can be tested. The exact 100-published-article completeness test must pass. No article library, image library, route, sitemap, RSS entry, Cloudflare change, merge, or deployment is production truth yet.
+
 ## C2. Phase 1 gaps and release gates
 
 ### C2.1 Required before a controlled product pilot
@@ -5391,6 +5398,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 5. **Complete for the public marketing and Lite Scanner surface:** homepage, methodology, sample report, resource hub, five browser-local tools, and `/scan` are indexable. The scanner uses a separate protected Azure origin, Turnstile, origin-scoped CORS, rate limits, Supabase, Upstash, and a monitored abuse route. `/terms` remains excluded from the sitemap and individually `noindex`.
 6. Validate the authenticated app origin separately: scorecard canonical/OG/Twitter metadata, all three image formats, script-free badge response, revoked/expired 404s, referral continuity, and human-event deduplication. Do not treat the live passive scanner as the full worker/engine pipeline or external-platform unfurl proof. Submit the sitemap in selected webmaster accounts once ownership access is available.
 7. Publish only founder-approved posts and claims; no public pricing, unsupported metrics, exclusivity claims, or public naming of the upstream engine.
+8. The 100-article authority program remains a local release candidate. Before production publication, require the full content/image/link/completeness gate, Worker-backed crawl and browser QA, final local approval, a focused PR, green CI, guarded deployment, and live canonical/sitemap/RSS/tag/image/schema verification.
 
 ### C2.4 Known follow-up debt
 
