@@ -1,20 +1,94 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import program from "../content/blog-program.json"
 import images from "../content/blog-images/images.json"
 import authors from "../content/authors/authors.json"
 
+type BlogProgramEntry = {
+  index: number
+  title: string
+  slug: string
+  query: string
+  cluster: string
+  targetWords: number
+  batch: string
+  cta: string
+}
+
+const BLOG_MAP_HEADING = "## 5. The 100-blog map"
+const TOOLS_HEADING = "## 6. `/tools` product-led SEO surface"
+
+function batchFor(index: number) {
+  if (index === 1) return "authority"
+  if (index <= 18) return "batch-1"
+  if (index <= 35) return "batch-2"
+  if (index <= 52) return "batch-3"
+  if (index <= 68) return "batch-4"
+  if (index <= 84) return "batch-5"
+  return "batch-6"
+}
+
+function readApprovedBlogProgram(): BlogProgramEntry[] {
+  const plan = readFileSync(
+    new URL(
+      "../../../../docs/plans/2026-07-14-vibe-coder-security-seo-tools-plan.md",
+      import.meta.url
+    ),
+    "utf8"
+  )
+  const sectionStart = plan.indexOf(BLOG_MAP_HEADING)
+  const sectionEnd = plan.indexOf(TOOLS_HEADING, sectionStart)
+
+  if (sectionStart === -1 || sectionEnd === -1) {
+    throw new Error("Could not find the authoritative 100-blog map in the editorial plan")
+  }
+
+  return plan
+    .slice(sectionStart, sectionEnd)
+    .split("\n")
+    .filter((line) => /^\|\s*\d+\s*\|/.test(line))
+    .map((line, rowIndex) => {
+      const cells = line
+        .split("|")
+        .slice(1, -1)
+        .map((cell) => cell.trim())
+
+      if (cells.length !== 6) {
+        throw new Error(`Blog map row ${rowIndex + 1} has ${cells.length} columns instead of 6`)
+      }
+
+      const [indexValue, titleAndSlug, query, cluster, targetWordsValue, cta] = cells
+      const index = Number(indexValue)
+      const titleAndSlugMatch = /^(.*) \/ `([^`]+)`$/.exec(titleAndSlug)
+
+      if (!Number.isInteger(index) || !titleAndSlugMatch) {
+        throw new Error(`Could not parse authoritative blog map row ${rowIndex + 1}: ${line}`)
+      }
+
+      return {
+        index,
+        title: titleAndSlugMatch[1],
+        slug: titleAndSlugMatch[2],
+        query,
+        cluster,
+        targetWords: Number(targetWordsValue.replaceAll(",", "")),
+        batch: batchFor(index),
+        cta,
+      }
+    })
+}
+
 describe("blog program contracts", () => {
   it("contains the exact ordered 100-topic program", () => {
-    expect(program).toHaveLength(100)
-    expect(program[0]).toMatchObject({
-      index: 1,
-      slug: "vibe-coding-security-guide",
-      batch: "authority",
-    })
-    expect(program[99]).toMatchObject({
-      index: 100,
-      slug: "exposed-api-key-incident-response",
-      batch: "batch-6",
+    const approvedProgram = readApprovedBlogProgram()
+
+    expect(approvedProgram).toHaveLength(100)
+    expect(program).toHaveLength(approvedProgram.length)
+    approvedProgram.forEach((approvedEntry, position) => {
+      expect(
+        program[position],
+        `Manifest position ${position + 1} must exactly match approved topic ${approvedEntry.index} (${approvedEntry.slug})`
+      ).toEqual(approvedEntry)
     })
     expect(new Set(program.map((entry) => entry.slug)).size).toBe(100)
   })
