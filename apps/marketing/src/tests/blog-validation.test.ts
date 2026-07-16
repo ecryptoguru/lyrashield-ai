@@ -306,6 +306,49 @@ ${filler}
     ).toEqual([])
   })
 
+  it.each([
+    ["GitHub diff", "Pillar + GitHub diff gate"],
+    ["MCP", "Pillar + MCP security"],
+  ])("keeps %s topic CTAs on the honest free checklist", (_topic, cta) => {
+    const directAnswer = Array(45).fill("answer").join(" ")
+    const filler = Array(1160).fill("guidance").join(" ")
+    const entry = { index: 28, slug: "workflow-post", cluster: "Agent", cta }
+    const programBySlug = new Map([
+      [entry.slug, entry],
+      ["agent-post", { index: 29, slug: "agent-post", cluster: "Agent" }],
+    ])
+    const article = {
+      slug: entry.slug,
+      data: stableFrontmatter,
+      body: `${directAnswer}
+
+## Verify safely
+
+[Authority guide](/blog/vibe-coding-security-guide)
+
+${filler}
+
+[Free checklist](/tools/ai-app-security-checklist) and [related article](/blog/agent-post).
+
+[OWASP](https://owasp.org/a) [NIST](https://csrc.nist.gov/b) [RFC](https://www.rfc-editor.org/c)
+`,
+    }
+    const context = {
+      availableSlugs: new Set(["vibe-coding-security-guide", "agent-post"]),
+      programBySlug,
+    }
+
+    expect(validateArticle(article, entry, context)).toEqual([])
+
+    const scanOnly = {
+      ...article,
+      body: article.body.replace("/tools/ai-app-security-checklist", "/scan"),
+    }
+    expect(validateArticle(scanOnly, entry, context)).toContain(
+      `missing approved CTA link for ${cta}: /tools/ai-app-security-checklist`
+    )
+  })
+
   it("classifies primary and authoritative sources deterministically", () => {
     expect(classifySource("https://datatracker.ietf.org/doc/html/rfc9110")).toBe("primary")
     expect(classifySource("https://owasp.org/www-project-top-ten/")).toBe("official")
