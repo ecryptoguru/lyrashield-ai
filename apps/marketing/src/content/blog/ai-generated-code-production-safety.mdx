@@ -1,0 +1,129 @@
+---
+title: "Is AI-generated code safe for production?"
+description: "Not by default. Generated code needs requirements, human review, independent tests, constrained deployment, monitoring, and recovery evidence."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["vibe-coding-security", "verification"]
+draft: true
+heroImage: decision-operations-01
+faq:
+  - q: "Is AI-generated code less safe than human-written code?"
+    a: "Authorship alone does not determine safety. The relevant question is whether the change meets requirements, survives review and independent testing, respects trust boundaries, and can be operated and recovered safely."
+  - q: "Do passing tests make generated code safe for production?"
+    a: "No. Tests show only the behaviors they cover. Generated tests may repeat the same assumptions as generated implementation code and can miss authorization, deployment, abuse, and recovery conditions."
+  - q: "Who should approve AI-generated code for release?"
+    a: "A human with authority over the affected system should approve it after the required engineering, security, privacy, and operational checks pass. Higher-impact changes may need several accountable reviewers."
+---
+
+AI-generated code is not safe for production by default. It can be released when it passes the same or stronger requirements, review, independent testing, deployment, and monitoring gates used for any untrusted change. Code that compiles, looks idiomatic, or passes generated tests has cleared only part of that bar. The release owner still needs evidence and a recovery plan.
+
+## Authorship does not settle the production decision
+
+Human-written code can be insecure. Generated code can be correct. Treating either origin as a verdict skips the work that matters: understanding the intended behavior, trust boundaries, failure modes, and operating context.
+
+The six-layer model in the [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) covers requirements, code and dependencies, runtime boundaries, verification, release decisions, and operations. It is a practical answer to the binary production question because no single scan or test covers all six.
+
+[NIST SP 800-218](https://csrc.nist.gov/pubs/sp/800/218/final) defines secure development practices across the software life cycle without changing the standard based on who or what typed the code. The joint [NCSC Guidelines for Secure AI System Development](https://www.ncsc.gov.uk/files/Guidelines-for-secure-AI-system-development.pdf) likewise address secure design, development, deployment, and operation, including controls around sensitive data and actions.
+
+## The plausible-code trap
+
+Consider a generated route that looks complete:
+
+```ts
+// VULNERABLE: do not copy
+export async function deleteProject(request: Request) {
+  const { projectId } = await request.json()
+  await db.project.delete({ where: { id: projectId } })
+  return new Response(null, { status: 204 })
+}
+```
+
+The handler parses input, calls the database, and returns a sensible status. It never proves who the caller is or whether that caller may delete this project. Happy-path tests can all pass.
+
+AI coding tools miss this because authorization often lives outside the visible file: session middleware, workspace membership, role policy, ownership rules, and audit requirements. A prompt such as "add a delete endpoint" rarely contains the full policy. The model fills the gap with a common-looking pattern.
+
+A safer minimal structure makes the security decision explicit:
+
+```ts
+// REVIEWED PATTERN: adapt to your authentication and data layer
+export async function deleteProject(request: Request) {
+  const session = await requireSession(request)
+  const input = DeleteProjectInput.parse(await request.json())
+  const project = await getProjectInWorkspace(input.projectId, session.workspaceId)
+
+  await requirePermission(session.userId, project.workspaceId, "project:delete")
+  await deleteProjectAndWriteAuditEvent(project.id, session.userId)
+
+  return new Response(null, { status: 204 })
+}
+```
+
+This still needs tests for missing sessions, cross-workspace IDs, role changes, repeated requests, audit failure, and concurrent deletion. The snippet shows the boundary. It does not prove the surrounding helpers are correct.
+
+## Set a release evidence threshold
+
+Before reviewing implementation details, write the requirement in observable terms. Who may perform the action? Which records may they affect? What happens on partial failure? Which events must be auditable? How will the team recover?
+
+Then require evidence proportional to impact:
+
+1. **Intent and ownership.** A named reviewer can explain the requested behavior and owns the release decision.
+2. **Threat-boundary review.** The change identifies identities, data, privileges, external calls, secrets, and irreversible actions.
+3. **Independent tests.** Tests are derived from requirements and abuse cases, not only from the generated implementation.
+4. **Dependency and artifact review.** New packages, lockfile changes, generated code, build output, and deployment configuration receive inspection.
+5. **Constrained release.** Least-privilege credentials, staged rollout, monitoring, rollback, and recovery are ready.
+
+For a static landing page, the evidence may be small. For a multi-tenant deletion route, payment instruction, production migration, or agent with shell access, the threshold should be much higher.
+
+Generated code can also expand the supply chain without making that tradeoff obvious. Review new direct packages, lockfile churn, build plugins, container bases, and downloaded binaries. Ask whether the dependency is needed, who maintains it, how its version is constrained, and what permissions its install or runtime path receives.
+
+Reproduce generated artifacts from a clean environment. If a generated client, compiled bundle, or schema output cannot be recreated from reviewed inputs, it is difficult to know what the release contains. Record the tool version and relevant configuration, and keep unreviewed generated output out of the production artifact.
+
+This review does not assume that a new dependency is bad. It makes the added code and operational trust visible before release.
+
+## Review generated tests with suspicion, not contempt
+
+Generated tests are useful for coverage scaffolding and ordinary edge cases. Their weakness is shared context: the same prompt or model may produce both the implementation and the expectations. If the implementation misunderstands the requirement, the tests can faithfully encode the same misunderstanding.
+
+Write some tests from an independent source such as a policy, threat model, API contract, or past incident class. Include negative permissions, tenant boundaries, malformed state, dependency failure, retries, and rollback. The related article on [security limits of AI-generated tests](/blog/ai-generated-tests-security) explains why a passing suite is evidence of tested behavior, not proof of production safety.
+
+GitHub's current [responsible-use guidance for Copilot Chat](https://docs.github.com/en/copilot/responsible-use/chat) warns that generated code can appear valid while being incorrect or insecure and tells users to review and test it carefully. That is a product-specific limitation, not evidence about every tool or every generated change.
+
+## Verify without risking a live system
+
+Use an isolated environment with synthetic accounts and non-sensitive data. Exercise the intended action and the ways it should fail. For the delete example, attempt the request with no session, a permitted member, a member without delete permission, and a valid member from another workspace. Confirm that failed attempts do not reveal record existence.
+
+Run static analysis, dependency review, secret scanning, and relevant dynamic checks against an authorized target. Record what each check covered and skipped. Then stage the release under least privilege and test rollback before exposing it to real traffic.
+
+The [AI app security checklist](/tools/ai-app-security-checklist) provides a browser-local way to review launch controls. It does not inspect code and cannot decide whether a build is safe.
+
+## Production safety includes operation
+
+A sound diff can still fail through deployment configuration, excessive credentials, missing rate controls, untested migrations, weak alerting, or a rollback that does not restore compatible data. Production approval should include the running system and its recovery path.
+
+Record the deployed artifact, environment configuration identity, database migration state, approved exceptions, monitoring owner, rollback point, and relevant test evidence. Avoid recording secrets in the release note.
+
+After release, watch expected security and reliability signals. A clean deployment does not freeze assurance forever. Dependencies, threat information, and system behavior change.
+
+## Handle exceptions as temporary decisions
+
+Sometimes a release owner accepts a known limitation because a deadline, incident, or dependency blocks the preferred fix. That decision should be explicit rather than buried in chat. Record the affected control, consequence, compensating measure, owner, expiration date, and condition that forces reconsideration.
+
+An exception should narrow exposure. A route might remain disabled for most tenants, a privileged action might require manual approval, or a deployment might limit traffic while the durable change is prepared. Monitor the compensating control and test that it actually applies.
+
+Do not call an accepted limitation "safe." It is a scoped risk decision made with incomplete conditions, and it can become stale. Review it when the architecture, user population, data class, model tool, dependency, or threat information changes. If nobody can own the exception or detect its failure, the release is not ready.
+
+## What scanners and checklists cannot prove
+
+A scan can detect candidates within its configured target and rules. It may also record coverage limitations. It cannot prove the absence of every weakness, validate undocumented business intent, or choose the organization's risk acceptance.
+
+A checklist can expose missing decisions. It cannot verify that the implementation matches the checked box. A model can propose a fix. It cannot authorize the release.
+
+Decide whether this specific change, in this environment, has enough reviewed evidence for its consequence and a credible way back if that judgment is wrong.
+
+Record the approver and supporting evidence.
+
+### Sources
+
+- [NIST SP 800-218, Secure Software Development Framework 1.1](https://csrc.nist.gov/pubs/sp/800/218/final)
+- [NCSC and international partners, Guidelines for Secure AI System Development](https://www.ncsc.gov.uk/files/Guidelines-for-secure-AI-system-development.pdf)
+- [GitHub, Responsible use of Copilot Chat](https://docs.github.com/en/copilot/responsible-use/chat)

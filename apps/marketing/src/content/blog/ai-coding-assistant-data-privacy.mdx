@@ -1,0 +1,126 @@
+---
+title: "What not to share with AI coding assistants"
+description: "Do not share live credentials, customer data, regulated records, unreleased business information, or code outside your authorized policy."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["agent-security", "vibe-coding-security"]
+draft: true
+heroImage: agent-security-06
+faq:
+  - q: "Can I use an AI coding assistant with a private repository?"
+    a: "Only if your organization authorizes that product, plan, settings, repository, and data. A private repository label does not determine how an assistant receives, retains, or uses its context."
+  - q: "Are business plans safer for confidential code?"
+    a: "Business products often provide different contractual and administrative controls, but you must verify the current terms, retention, access, exclusions, and enabled features for the exact product and workflow."
+  - q: "Does disabling model training remove every privacy concern?"
+    a: "No. Training is one use of data. Retention, support access, safety review, subprocessors, feedback, legal duties, account administration, and accidental disclosure still need review."
+---
+
+Do not share live credentials, private keys, customer data, regulated records, production logs, unreleased business information, or proprietary code outside your authorized policy. Before enabling repository-wide context, verify the exact vendor product, plan, settings, retention, training controls, content exclusions, deletion path, and organizational agreement. Share only the smallest fragment needed for the task.
+
+## Inventory the data before choosing controls
+
+"Private" can describe a repository, an account setting, a contract, or a network location. Those are different controls. Inventory what the assistant can receive and why the task needs it.
+
+The data and agent-boundary layers in the [LyraShield AI guide to vibe-coding security](/blog/vibe-coding-security-guide) help separate source-code review from assistant permissions. An approved tool does not authorize every repository, file, customer record, or production log.
+
+The [NIST Privacy Framework](https://www.nist.gov/privacy-framework/privacy-framework) starts with data processing, purpose, governance, and privacy risk. That is more durable than memorizing one vendor setting because assistant products and policies change.
+
+## The unsafe pattern: paste the whole environment
+
+A debugging prompt can quietly become a data export:
+
+```text
+# VULNERABLE: do not paste this context into an assistant
+Here is our production .env, a customer error log, and the full private repo.
+Find the login bug and rewrite the authentication flow.
+```
+
+Even if the developer removes the obvious password, logs may contain session identifiers, email addresses, tokens, private URLs, tenant IDs, or request bodies. Repository context can include deployment credentials, unreleased product plans, customer contracts, and proprietary algorithms.
+
+AI coding tools encourage broad context because more context can improve relevance. They cannot know whether the person at the keyboard has authority to send each file to that exact service. They may also operate across chat, inline completion, code review, cloud-agent, extension, feedback, and web-search surfaces with different controls.
+
+## Classify material before sharing it
+
+Block these categories by default:
+
+- live passwords, API keys, signing material, session tokens, database URLs, and recovery codes;
+- customer or employee personal data, support exports, analytics rows, and production logs;
+- health, financial, educational, legal, or other regulated records;
+- incident evidence, vulnerability details, or private targets beyond the approved response group;
+- confidential contracts, roadmaps, pricing plans, acquisition work, and unreleased financial data;
+- proprietary source code or third-party material that the account is not authorized to process.
+
+Then decide whether a sanitized fragment is enough. Replace names and values with synthetic examples. Reproduce the behavior in a minimal test project. Share an interface or error shape instead of the full repository. Keep the transformation outside the prompt so the original data never reaches the assistant.
+
+## Vendor controls differ by product and surface
+
+Check current official documentation immediately before approval. The following boundaries were reverified on 17 July 2026 and may change.
+
+OpenAI's [data-use documentation](https://help.openai.com/en/articles/5722486-api-data-usage-policies) distinguishes individual services, including ChatGPT and Codex, from business services and the API. It says individual-service content may be used for training unless the user opts out, while business inputs and outputs are not used for training by default unless the organization opts in. Feedback and certain separate controls can change how data is handled. Training choice is not the whole privacy review.
+
+GitHub's [Copilot content-exclusion documentation](https://docs.github.com/en/copilot/concepts/context/content-exclusion) currently limits the feature to organizations with Copilot Business or Enterprise. Supported exclusions can keep selected files out of inline suggestions, chat responses, and code review. GitHub also documents important gaps: exclusions do not cover agent mode in editors, cloud agents, Copilot CLI, symbolic links, or remote-file-system repositories, and an IDE may indirectly provide semantic information from an excluded file.
+
+Anthropic's [consumer training documentation](https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training) distinguishes consumer products from commercial products. It describes consumer opt-in, safety-review, feedback, and incognito behavior. Anthropic separately states in its [commercial data guidance](https://privacy.claude.com/en/articles/9267385-does-anthropic-act-as-a-data-processor-or-controller) that commercial product data is not used for training unless the customer joins an explicit program. Your organization's agreement and settings still control the actual authorized use.
+
+Do not combine those statements into a generic claim that one brand "does not train on code." Product tier, feedback, surface, and date matter.
+
+## Build a least-disclosure workflow
+
+Write a short policy that developers can apply without a legal interpretation during every prompt.
+
+1. Name approved products, plans, accounts, extensions, and agent modes.
+2. Define prohibited data categories and repositories.
+3. Require synthetic or minimized examples for debugging.
+4. Configure exclusions where they are supported, then document unsupported surfaces.
+5. Disable unneeded feedback, web search, connectors, telemetry, and repository-wide indexing according to the organization's decision.
+6. Review admin access, retention, deletion, incident reporting, and offboarding.
+7. Recheck the policy when a product adds a new agent or context source.
+
+A safe prompt is narrow:
+
+```text
+# MINIMIZED EXAMPLE
+This synthetic TypeScript handler returns 401 instead of 403 after a role check.
+Explain the control-flow error without adding dependencies.
+[small synthetic function and test]
+```
+
+The prompt carries the shape of the problem without a production record, secret, or full codebase.
+
+## Verify controls without leaking data
+
+Use a repository built for testing. Place a clearly synthetic marker in a file that should be excluded, then confirm each approved assistant surface does not use it. Repeat the test for inline completion, chat, review, and any agent mode because control coverage may differ.
+
+Inspect organization settings and current vendor documentation. Confirm who can change policy, whether users can add connectors or alternate models, what audit events exist, and how accounts are removed. Test deletion or export procedures with non-sensitive content.
+
+Run the browser-local [secret exposure scanner](/tools/secret-exposure-scanner) against selected text files before sharing a minimized sample. It does not upload the chosen text, but it only checks the files you select and cannot prove that all confidential material is absent.
+
+The related guide to [keeping secrets out of AI coding prompts](/blog/secrets-ai-coding-prompts) covers the narrower credential problem and rotation response.
+
+Prepare for accidental disclosure before it happens. Give developers one private reporting route and a short containment sequence. Revoke any exposed credential first, preserve the relevant account and tool records, determine what context was submitted, and follow the vendor's current deletion or support process. Do not paste the original sensitive prompt into a new ticket or chat.
+
+The response owner should consider repository history, generated files, terminal logs, feedback submissions, and connectors, not only the visible conversation. If personal or regulated data was involved, route impact and notification decisions through the organization's privacy and legal process. A vendor deletion request does not replace credential rotation or local cleanup.
+
+## Edge cases that bypass a simple policy
+
+An IDE can send open files, nearby code, symbol definitions, build information, terminal output, or selected logs even when the user does not paste them. A cloud agent may clone a repository and run tools. A code-review assistant receives diff content. A connector can make external documents available to the conversation.
+
+Feedback buttons can attach the surrounding conversation. Screen recordings and support tickets can duplicate prompts. Generated output can repeat sensitive input into a new file that later enters version control.
+
+Private repositories also contain third-party code and customer material that your organization may not have permission to send to every processor. Authorization needs to cover the content, not only repository ownership.
+
+## What automation cannot prove
+
+Secret scanners can detect recognized credential patterns in selected files. Data-loss prevention tools can block known labels. Exclusion policies can reduce which files reach supported features. None can prove that a prompt is authorized, that a synthetic record cannot be reidentified, or that every assistant surface obeys the same path.
+
+Treat assistant access like any other external processing boundary. Minimize first, approve the exact workflow, test the controls, and keep an exit path for policy or product changes.
+
+Record the review date and policy owner.
+
+### Sources
+
+- [NIST Privacy Framework](https://www.nist.gov/privacy-framework/privacy-framework)
+- [OpenAI, How your data is used to improve model performance](https://help.openai.com/en/articles/5722486-api-data-usage-policies)
+- [GitHub, Content exclusion for Copilot](https://docs.github.com/en/copilot/concepts/context/content-exclusion)
+- [Anthropic, Is my data used for model training?](https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training)
+- [Anthropic, Data processor or controller for commercial products](https://privacy.claude.com/en/articles/9267385-does-anthropic-act-as-a-data-processor-or-controller)

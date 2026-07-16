@@ -1,0 +1,140 @@
+---
+title: "How to schedule weekly security checks"
+description: "Combine event-triggered checks with a weekly default-branch scan, named ownership, response deadlines, and recorded retests."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["vibe-coding-security", "verification"]
+draft: true
+heroImage: decision-operations-02
+faq:
+  - q: "Is a weekly security scan frequent enough?"
+    a: "Weekly is a useful baseline for many default-branch checks, but exposed, frequently released, or high-impact systems may need checks on every change and after new threat information appears."
+  - q: "When should security checks run more often?"
+    a: "Run them after material code or configuration changes, dependency updates, privilege changes, major releases, and credible new vulnerability or exploitation information that may affect the system."
+  - q: "Why rescan code that has not changed?"
+    a: "Scanner rules, dependency advisories, and evidence about active exploitation can change even when the repository does not. A scheduled scan can evaluate the stable code against that new information."
+---
+
+A practical scheduled security scan combines checks on pull requests and releases with a recurring scan of the default branch. Give the schedule a named owner, fixed configuration, response deadline, and retained result. Weekly is a reasonable starting point for many teams, but exposure, release frequency, and credible new threat information should change the cadence.
+
+## Why change-triggered scans are not enough
+
+A pull-request check answers a narrow question: what did this change introduce or expose under the configured rules? It does not revisit quiet code when a dependency advisory changes, a scanner adds a rule, or an existing vulnerability is reported as exploited in the wild.
+
+The [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) treats recurring review as part of the verification and operations layers. That distinction matters. A successful run shows that selected checks completed against a selected target. It does not prove that every relevant weakness was covered.
+
+[NIST's Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) places vulnerability identification, analysis, and remediation inside an ongoing response practice. GitHub's current [CodeQL workflow documentation](https://docs.github.com/en/code-security/reference/code-scanning/workflow-configuration-options) reflects the same operating idea: its default workflow scans once a week in addition to event-triggered runs, and teams can adjust the cron schedule.
+
+## The weak pattern: a scan with no operating owner
+
+This configuration runs a tool, but it does not create a dependable security process.
+
+```yaml
+# VULNERABLE OPERATING PATTERN: a result can sit unseen
+on:
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: example/security-scan@v1
+```
+
+There is no recurring trigger, no pull-request trigger, and no stated owner for failure or findings. A green run can also become misleading if someone quietly changes the target, rule set, exclusions, or build mode.
+
+AI coding tools often generate the shortest workflow that makes the requested command run. They do not know who is on call, how quickly a team can investigate, which branch represents production, or whether skipped build steps remove important coverage. Those are operating decisions, not syntax completion tasks.
+
+## Use an event-plus-cadence workflow
+
+A better design has two kinds of triggers and one response path.
+
+```yaml
+# REVIEWED PATTERN: adapt branches, permissions, and scanner setup
+name: security-review
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "20 3 * * 2"
+
+permissions:
+  contents: read
+  security-events: write
+```
+
+The exact cron expression is less important than the surrounding contract. Record these choices beside the workflow:
+
+1. **Target and configuration.** Name the default branch, build mode, scanner version policy, query set, and intentional exclusions.
+2. **Owner and backup.** Route failures and new results to a person or rotation that can act, with a backup for absence.
+3. **Response window.** Define when someone must acknowledge a failed run and when a candidate finding must be triaged.
+4. **Retest rule.** Require a fresh run after a fix or material mitigation. Keep the original result and the retest result separate.
+5. **Failure policy.** Decide which event-triggered failures block a merge and how scheduled-run failures are escalated.
+
+A notification is only delivery. It must not change a detected candidate into a verified finding or turn a failed scan into a pass.
+
+## Choose frequency from consequences
+
+Weekly is a baseline, not a security constant. Start by asking how long an exposed weakness could remain undetected and how quickly the team can respond.
+
+Run checks on every pull request when the change affects authentication, authorization, secrets, payment movement, public endpoints, privileged automation, or dependency manifests. Run again on the production branch because merge resolution, generated artifacts, and release configuration can differ from the reviewed diff.
+
+Increase the recurring frequency for internet-facing systems, fast-moving repositories, or services whose failure could affect customer data or business operations. A low-change internal tool may justify a slower full scan, but it should still have event-triggered checks and a documented reason for the cadence.
+
+Do not wait for the next Tuesday schedule when new information is relevant. The [CISA Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) is an urgency input when the listed product and affected version actually apply. Applicability comes first. A catalog entry for software you do not use is not a finding in your application.
+
+## Verify the workflow safely
+
+Test scheduling and alert behavior in a repository or branch that you are authorized to use. Do not add a real secret or weaken a live service just to prove that a scanner works.
+
+Use this sequence:
+
+1. Trigger the workflow manually and confirm the checked commit, branch, configuration, and scanner version.
+2. Introduce an inert test fixture supported by the scanner, such as a documented sample rule in a test-only directory.
+3. Confirm that the intended owner receives both a workflow-failure notification and a finding notification.
+4. Remove or correct the fixture, run a fresh scan, and preserve both records.
+5. Temporarily disable the test notification destination and confirm that delivery failure becomes visible somewhere else.
+
+The [AI app security checklist](/tools/ai-app-security-checklist) can help document whether scheduling, ownership, monitoring, recovery, and retesting exist. It is a browser-local checklist, not a scheduler and not evidence that a scan ran.
+
+## Keep the result useful over time
+
+Store enough context to compare runs without flattening their meaning. At minimum, retain the target revision, start and finish time, configuration identity, tool or rule version, execution status, coverage limitations, and resulting evidence state.
+
+Separate these situations:
+
+- The scan did not run or did not finish.
+- The scan finished but skipped relevant code or configuration.
+- The scan detected a candidate that still needs review.
+- An independent check verified the condition.
+- A fresh deterministic retest no longer detected the original condition under complete relevant coverage.
+- The retest was incomplete, so the outcome remains inconclusive.
+
+That record makes trend review possible without pretending that alert count is a risk score. It also stops a new scanner rule from making an unchanged repository look as if the team introduced a new bug that morning.
+
+### Baseline without hiding debt
+
+The first scheduled run may surface a backlog that predates the workflow. Do not solve that by excluding the directory or dismissing every existing result. Record the initial set as a baseline, triage it, and assign each accepted exception an owner, reason, and review date. New results can then be compared with the baseline without erasing old exposure.
+
+Budget investigation time before increasing scan frequency. Running a heavy check every night has little value if nobody can review its output for two weeks. A smaller event-triggered check may block risky changes quickly, while a broader weekly review gets a longer response window. Measure missed runs, time to acknowledgement, stale exceptions, and incomplete retests. Raw alert volume is a poor proxy for whether the operating loop works.
+
+Review the scanner itself as part of the schedule. Confirm that credentials remain least privilege, the build still reaches the expected languages, private dependencies resolve, and runner limits have not shortened analysis. Watch for a sudden drop in analyzed files or duration. It may reflect a faster tool, but it can also mean a failed build or new exclusion.
+
+Pin actions and important configuration according to repository policy, then review planned updates rather than leaving the workflow frozen forever. When a rule set changes, record that fact with the run. A new detection after a rule update should be investigated as newly observed evidence, not automatically described as a newly introduced weakness.
+
+For the surrounding alert and escalation design, use the related guide to [security monitoring for AI-built apps](/blog/security-monitoring-ai-apps).
+
+## What automation cannot decide
+
+Automation can trigger checks, pin configuration, record revisions, deliver notifications, and enforce selected merge rules. It cannot decide whether the selected scanner covered the relevant behavior, whether an exclusion is still justified, or whether the business impact demands a different response.
+
+Review the cadence after a material architecture change, a missed incident, a recurring alert-delivery failure, or a change in response capacity. A schedule that produces more findings than the team can investigate is not automatically safer. It may simply create an ignored queue.
+
+### Sources
+
+- [NIST SP 800-218, Secure Software Development Framework 1.1](https://csrc.nist.gov/pubs/sp/800/218/final)
+- [GitHub, Workflow configuration options for code scanning](https://docs.github.com/en/code-security/reference/code-scanning/workflow-configuration-options)
+- [CISA, Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)
