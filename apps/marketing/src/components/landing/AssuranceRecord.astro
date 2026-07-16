@@ -1,37 +1,88 @@
 <section aria-labelledby="assurance-heading" class="border-y border-border bg-bg-raised/70 px-4 py-24 sm:px-6 lg:px-8">
-  <div class="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
-    <div class="max-w-xl">
+  <div class="mx-auto max-w-6xl">
+    <div class="max-w-3xl">
       <h2 id="assurance-heading" class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
         A result you can defend.
       </h2>
       <p class="mt-6 text-lg leading-8 text-text-muted">
-        Every new scan keeps a versioned record of its scope, coverage, finding provenance, and retest state. Missing evidence stays visible instead of becoming a silent pass.
+        The full product keeps scope, coverage, evidence, fixes, and retests in one release record. Missing proof stays visible instead of becoming a silent pass.
       </p>
-      <a
-        href="/methodology"
-        class="mt-7 inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      >
-        Read the evidence methodology
-      </a>
     </div>
 
-    <dl class="divide-y divide-border border-y border-border">
-      <div class="grid gap-2 py-5 sm:grid-cols-[9rem_1fr] sm:gap-6">
-        <dt class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Scope</dt>
-        <dd class="text-sm leading-6 text-text-muted">The authorized target, source availability, mode, and result-manifest checksum.</dd>
+    <figure class="mt-12 overflow-hidden rounded-2xl border border-[#203246] bg-[#07131d] text-[#edf8fb] shadow-2xl shadow-accent/10">
+      <figcaption class="flex flex-wrap items-center justify-between gap-3 border-b border-[#203246] px-5 py-4 font-mono text-xs sm:px-7">
+        <span class="text-[#54d6df]">Illustrative product preview · sample data</span>
+        <span class="text-[#91a7b8]">RELEASE / WEB-042</span>
+      </figcaption>
+
+      <div class="px-5 py-7 sm:px-7 sm:py-9">
+        <div class="flex flex-wrap items-end justify-between gap-8">
+          <div>
+            <p class="font-mono text-xs tracking-[.18em] text-[#91a7b8] uppercase">Assurance state</p>
+            <p class="mt-3 text-3xl font-semibold tracking-tight text-[#f3b95f] sm:text-4xl">Review required</p>
+            <p class="mt-3 max-w-2xl leading-7 text-[#b7c8d4]">Two detected candidates still need independent evidence before this sample release can be treated as verified.</p>
+          </div>
+          <dl class="grid w-full grid-cols-2 gap-x-8 gap-y-4 border-t border-[#203246] pt-6 font-mono text-xs sm:w-auto sm:min-w-64 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-6">
+            <div><dt class="text-[#91a7b8]">TARGET</dt><dd class="mt-1 text-[#edf8fb]">authorized repo + URL</dd></div>
+            <div><dt class="text-[#91a7b8]">MODE</dt><dd class="mt-1 text-[#edf8fb]">standard</dd></div>
+            <div><dt class="text-[#91a7b8]">REPORT</dt><dd class="mt-1 text-[#edf8fb]">draft</dd></div>
+            <div><dt class="text-[#91a7b8]">RETEST</dt><dd class="mt-1 text-[#f3b95f]">1 pending</dd></div>
+          </dl>
+        </div>
+
+        <div class="mt-9 border-y border-[#203246]">
+          <div class="flex flex-col gap-3 border-b border-[#203246] py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p class="font-mono text-xs tracking-[.16em] text-[#91a7b8] uppercase">Illustrative evidence ledger</p>
+            <p class="text-sm text-[#91a7b8]">Counts show product states, not production performance.</p>
+          </div>
+          <dl class="grid grid-cols-2 md:grid-cols-4">
+            <div class="border-b border-[#203246] py-5 pr-4 md:border-r md:border-b-0"><dt class="text-sm text-[#91a7b8]">Detected</dt><dd class="mt-2 font-mono text-2xl text-[#edf8fb]">04</dd></div>
+            <div class="border-b border-l border-[#203246] py-5 pl-4 md:border-r md:border-b-0 md:border-l-0 md:px-4"><dt class="text-sm text-[#91a7b8]">Independently verified</dt><dd class="mt-2 font-mono text-2xl text-[#54d6df]">02</dd></div>
+            <div class="py-5 pr-4 md:border-r md:px-4"><dt class="text-sm text-[#91a7b8]">Retest-confirmed</dt><dd class="mt-2 font-mono text-2xl text-[#54d6df]">01</dd></div>
+            <div class="border-l border-[#203246] py-5 pl-4 md:border-l-0"><dt class="text-sm text-[#91a7b8]">Inconclusive</dt><dd class="mt-2 font-mono text-2xl text-[#f3b95f]">01</dd></div>
+          </dl>
+        </div>
+
+        <div class="mt-9">
+          <div class="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p class="font-mono text-xs tracking-[.16em] text-[#91a7b8] uppercase">Vibe Security 50 registry</p>
+              <p class="mt-2 text-sm leading-6 text-[#b7c8d4]">Machine checks and human evidence stay separate by design.</p>
+            </div>
+            <dl class="grid w-full grid-cols-3 gap-3 text-center sm:flex sm:w-auto sm:gap-9 sm:text-right">
+              <div><dt class="font-mono text-2xl text-[#edf8fb]">43</dt><dd class="mt-1 text-xs text-[#91a7b8]">machine-testable</dd></div>
+              <div><dt class="font-mono text-2xl text-[#edf8fb]">7</dt><dd class="mt-1 text-xs text-[#91a7b8]">evidence-required</dd></div>
+              <div><dt class="font-mono text-2xl text-[#54d6df]">50</dt><dd class="mt-1 text-xs text-[#91a7b8]">total controls</dd></div>
+            </dl>
+          </div>
+
+          <div class="mt-8">
+            <ol class="grid grid-cols-2 gap-4 font-mono text-xs text-[#91a7b8] sm:flex sm:min-w-max sm:items-center sm:gap-0" aria-label="Full product workflow">
+              {['Target', 'Scan', 'Evidence state', 'Fix proposal', 'Retest', 'Assurance report'].map((step, index) => (
+                <li class="product-step flex items-center" data-product-step={index + 1}>
+                  <span class="flex size-7 items-center justify-center rounded-full border border-[#365069] text-[#54d6df]">{index + 1}</span>
+                  <span class="ml-2 whitespace-nowrap">{step}</span>
+                  {index < 5 && <span class="mx-3 hidden h-px w-7 bg-[#365069] sm:block sm:w-12" aria-hidden="true"></span>}
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
       </div>
-      <div class="grid gap-2 py-5 sm:grid-cols-[9rem_1fr] sm:gap-6">
-        <dt class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Coverage</dt>
-        <dd class="text-sm leading-6 text-text-muted">Checks recorded as completed, limited, or not applicable—with limitations preserved.</dd>
-      </div>
-      <div class="grid gap-2 py-5 sm:grid-cols-[9rem_1fr] sm:gap-6">
-        <dt class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Evidence</dt>
-        <dd class="text-sm leading-6 text-text-muted">Detected candidates stay separate from independently verified findings.</dd>
-      </div>
-      <div class="grid gap-2 py-5 sm:grid-cols-[9rem_1fr] sm:gap-6">
-        <dt class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Retest</dt>
-        <dd class="text-sm leading-6 text-text-muted">A deterministic clean retest may validate a fix; incomplete or engine-only evidence remains inconclusive.</dd>
-      </div>
-    </dl>
+    </figure>
+
+    <div class="mt-7 flex flex-wrap gap-5 text-sm font-semibold">
+      <a href="/sample-report" class="inline-flex min-h-11 items-center text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">See the sample assurance report</a>
+      <a href="/methodology" class="inline-flex min-h-11 items-center text-text-muted underline decoration-border underline-offset-4 hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Read the evidence methodology</a>
+    </div>
   </div>
 </section>
+
+<style>
+  .product-step:nth-child(1) span:first-child,
+  .product-step:nth-child(2) span:first-child,
+  .product-step:nth-child(3) span:first-child {
+    border-color: #54d6df;
+    background: color-mix(in srgb, #54d6df 14%, transparent);
+  }
+</style>
