@@ -1,6 +1,6 @@
 # LyraShield AI — Product, Positioning & GTM
 
-> Internal, pre-launch guidance. Product name and public domain remain founder decisions; do not treat this document as approved public copy, pricing, or evidence of customer traction.
+> Internal launch guidance. `lyrashieldai.com` is the confirmed canonical public domain; trademark clearance remains a founder/legal decision. Do not treat this document as approved pricing or evidence of customer traction.
 
 ## Positioning
 
@@ -55,9 +55,11 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 
 ## Product status
 
-Implemented: core workspaces/targets/scans, existing GitHub integration refresh, scan orchestration, findings normalization, SCA and secret scanning, pinned deterministic URL scanning, fix proposals, queued retests, reports, notifications, schedules, MCP, agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksums, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, LyraShield Score, public scorecards, referrals, premium social sharing, Azure AI / GPT 5.6 mode routing, and an evidence-backed marketing surface with a public methodology page plus five browser-local no-upload tools. New scans retain a manifest, coverage receipts, candidate provenance, and verification receipts: detected, validated, and independently verified are separate states. Safe/Quick/Standard scans use Luna with medium reasoning; Deep/Custom use Terra with high reasoning. Every engine run receives a positive dollar cap, with workspace policy overrides supported. Engine findings are not self-verified.
+Implemented: core workspaces/targets/scans, existing GitHub integration refresh, scan orchestration, findings normalization, source-aware SCA/secret/agent-config handling, pinned deterministic URL scanning, fix proposals, queued retests, reports, notifications, schedules, MCP, single-use agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksum-first retry deduplication, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, LyraShield Score, cross-admin-idempotent public scorecards, referrals, premium social sharing, Azure AI / GPT 5.6 mode routing, and an evidence-backed marketing surface with a public methodology page plus five browser-local no-upload tools. New scans retain a manifest, coverage receipts, candidate provenance, and verification receipts: detected, validated, and independently verified are separate states. Safe/Quick/Standard scans use Luna with medium reasoning; Deep/Custom use Terra with high reasoning. Every engine run receives a positive dollar cap; a reported overage stops the scan and cannot bill above that cap. Engine findings are not self-verified.
 
-Not implemented: billing/plan quotas, provider-backed proof for a fresh GitHub installation claim, server-generated approval-bound PR patches, constrained intrusive sandbox exploit replay, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities. See `PRD.md` for the authoritative roadmap.
+Live acquisition status: the passive Lite Scanner and browser-local tools are public, and privacy-bounded PostHog funnel/pageview analytics are configured for the canonical domain. The authenticated application and full BullMQ/engine worker are separate deployment surfaces and are not public production capabilities yet.
+
+Not implemented: billing/plan quotas, provider-backed proof for a fresh GitHub installation claim, server-generated approval-bound PR patches, constrained intrusive sandbox exploit replay, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities. Production full scans additionally require private evidence storage, BullMQ-compatible TLS Redis, dedicated sandbox-capable worker compute, the authenticated application origin, monitoring/recovery, and transport-level egress enforcement. See `PRD.md` for the authoritative roadmap.
 
 ## Pre-launch GTM
 
@@ -72,7 +74,7 @@ Initial themes: secure AI-generated code, security review before SaaS launch, de
 
 ## Founder decisions
 
-1. Public domain and trademark clearance.
+1. Trademark clearance for the confirmed `lyrashieldai.com` domain and LyraShield AI name.
 2. Whether the Lyra prefix remains the public brand.
 3. Pricing, usage metric, payment-provider scope, and free-tier policy.
 4. Design-partner target, launch timing, and build-in-public voice.

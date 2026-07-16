@@ -21,6 +21,20 @@
 7. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
 8. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined.
 
+## Full-scan resource checklist
+
+The live Lite Scanner is a separate passive API and cannot be promoted into the full worker by configuration alone. A controlled repository scan requires all of the following:
+
+- migrated PostgreSQL for application and scan state;
+- a private/TLS `redis://` or `rediss://` service compatible with BullMQ and reachable by both web and worker—Upstash REST URL/token variables are for rate limiting and do not replace `REDIS_URL`;
+- a deployed authenticated Next.js application origin to create targets, authorize users, enqueue scans, and render retained results;
+- dedicated worker compute with Git, the `lyrashield` CLI, the inspected engine source, and controlled access to the digest-pinned sandbox runtime;
+- an authorized Luna/Terra/fallback model route and provider credentials;
+- private S3-compatible evidence storage configured through all five `S3_*` values;
+- secret management, TLS, monitoring, backup/restore, and deployment-level egress enforcement.
+
+Brevo is required when production email verification or invitations are enabled. GitHub App credentials are required for private-repository integration flows. Slack/Discord, billing, and product analytics are optional integrations and are not scan-runtime dependencies.
+
 ## Required application configuration
 
 Set the production values appropriate to the selected infrastructure:
@@ -93,7 +107,7 @@ These amounts are hard ceilings, not expected per-scan charges. Actual spend dep
 
 This is mode-level routing: a scan uses one model for its full engine invocation. It does not run Luna discovery followed by Terra validation inside the same scan.
 
-Add GitHub OAuth/App, R2/S3, email, notification, billing, and monitoring variables only when those integrations are enabled. Use `.env.example` as the complete variable index, not as a production secret file.
+Add GitHub OAuth/App, email, notification, billing, and analytics variables only when those integrations are enabled. R2/S3 is mandatory before controlled full scans, and monitoring is mandatory before general availability. Use `.env.example` as the complete variable index, not as a production secret file.
 
 ## Verification before release
 
@@ -110,7 +124,7 @@ git diff --check
 
 Then, in the target environment:
 
-1. Deploy all 17 migrations before application processes serve traffic, including `20260713170000_scorecard_events` and `20260714170000_integration_global_external_id_unique`; run the migration-diff gate against a fresh shadow database.
+1. Deploy all 20 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, and `20260716151000_scorecard_share_active_snapshot_unique`; run the migration-diff gate against a fresh shadow database.
 2. Verify `/api/health`, `/api/ready`, authentication, workspace isolation, Redis queue connectivity, and Worker readiness.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.
