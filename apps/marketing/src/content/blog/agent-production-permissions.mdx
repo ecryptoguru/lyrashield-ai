@@ -1,0 +1,156 @@
+---
+title: "Keep AI Agents Away From Production Deletes"
+description: "Block standing production delete authority with separate identities, permission ceilings, exact approvals, short-lived access, and audit records."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - access-control
+  - verification
+draft: true
+heroImage: agent-security-04
+faq:
+  - q: "Can a coding agent have read-only production access?"
+    a: "Only when the task requires it and the data policy permits it. Use a separate identity, narrow resources and fields, bound results, log access, and prefer sanitized replicas for investigation. Read access can still expose sensitive data."
+  - q: "What is a break-glass role?"
+    a: "It is an emergency identity kept outside normal automation, activated for a documented incident through strong authentication and approval. It should be short-lived, monitored, and reviewed after use."
+  - q: "Do backups make agent delete access acceptable?"
+    a: "No. Backups can reduce recovery impact only when restore tests pass. They cannot restore every external side effect, prevent downtime, or justify broad standing delete permission."
+  - q: "What should an approval record contain?"
+    a: "Bind it to the exact action, resource, reviewed artifact or request hash, environment, requester, approver, expiry, and one-time execution state. Record the server-observed result separately."
+---
+
+**Direct answer:** Do not give a coding agent standing production delete permission. Use a separate low-privilege identity, cap its maximum permissions, require short-lived elevation and an approval bound to the exact action and resource, then record the server-observed result. Backups reduce recovery uncertainty, but they do not make broad destructive authority acceptable.
+
+Production delete authority can hide behind database administration, cloud deployment, storage management, or a general CI role. An agent may receive that role because it needs one harmless operation. The same credential can then remove a table, bucket, deployment, environment, or audit record.
+
+The failure is an authorization design, not a model personality problem. A careful agent can still execute a misunderstood command. An injected instruction can exploit the same authority. Start from deny by default and expose the smallest server-owned action path.
+
+The [approval-bound fix and release controls](/blog/vibe-coding-security-guide) keep proposals, approvals, and execution as separate records. An approval must describe the server-owned action that will run, not grant the agent a temporary general administrator session.
+
+## The vulnerable pattern: inherited administrator access
+
+**Vulnerable policy. Do not attach it to an agent.**
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "*",
+  "Resource": "*"
+}
+```
+
+This policy has no resource, action, environment, or time boundary. Adding a prompt that says "ask before deleting" does not change the credential's effective permissions. A non-interactive job may have no human available to ask.
+
+AI-generated deployment workflows miss this boundary when they reuse the credential that made a manual setup work. An administrator token removes authorization errors from the demo. It also turns any tool call, script, or dependency running in that job into a potential production actor.
+
+## Separate the agent identity
+
+Create a dedicated workload identity for the agent or automation. Do not reuse a founder, developer, or CI administrator account. Grant ordinary read and proposal operations directly, while leaving destructive actions denied.
+
+Where the platform supports a permission ceiling, use it to cap what any attached policy can grant. AWS documents that an [IAM permissions boundary](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html) sets the maximum permissions available to an identity. A boundary does not grant permission by itself. Effective access still depends on identity, resource, session, and organizational policies.
+
+Keep production and test identities separate. A credential valid for synthetic staging data should not become valid in production by changing an argument. Bind environment on the server and in the workload identity claims.
+
+## Approve one exact action
+
+A useful approval is data consumed by the action service, not a chat message saying "looks good." Bind the decision to the resource and operation the server will execute.
+
+```ts
+type ProductionApproval = {
+  id: string
+  action: "delete-preview-environment"
+  resourceId: string
+  requestHash: string
+  environment: "production"
+  expiresAt: string
+  consumedAt: string | null
+}
+
+async function deleteApprovedPreview(input: {
+  approvalId: string
+  resourceId: string
+  requestHash: string // computed from the server-owned request
+}) {
+  return db.$transaction(async (tx) => {
+    const approval = await tx.approval.findUnique({ where: { id: input.approvalId } })
+    if (
+      !approval ||
+      approval.action !== "delete-preview-environment" ||
+      approval.environment !== "production" ||
+      approval.resourceId !== input.resourceId ||
+      approval.requestHash !== input.requestHash ||
+      approval.consumedAt ||
+      new Date(approval.expiresAt) <= new Date()
+    ) {
+      throw new Error("approval unavailable")
+    }
+
+    const consumed = await tx.approval.updateMany({
+      where: { id: approval.id, consumedAt: null },
+      data: { consumedAt: new Date().toISOString() },
+    })
+    if (consumed.count !== 1) throw new Error("approval already consumed")
+
+    return production.deletePreviewEnvironment(approval.resourceId)
+  })
+}
+```
+
+This illustrative action can delete only a preview environment selected by the trusted server. It cannot accept an arbitrary operation or resource type. A real service should compute `requestHash`, authorize the approver, verify the resource classification, and avoid holding a database transaction open across a slow provider call. It can atomically claim the approval first, then record the provider result in a separate idempotent execution record.
+
+The example does not imply that LyraShield AI executes production changes or automatic pull requests.
+
+## Protect the approval issuer
+
+The approval path is only as strong as the identity allowed to approve. Do not let the requesting agent approve its own action, modify the approver list, or write the approval record directly. Authenticate the reviewer, check their role for the exact environment and action class, and show enough context to make the decision.
+
+Keep approval short-lived and single-use. Notify a separate operations channel when a destructive approval is granted and when it executes. A notification is not a second approval unless the system explicitly requires and verifies two distinct decision makers.
+
+Avoid approvals that bind only a command string. Equivalent actions may be encoded in different commands, while a familiar command can select a different resource through environment state. Bind the structured provider operation, normalized resource identifier, server-owned request or artifact hash, environment, and relevant preconditions.
+
+If an approval expires or execution preconditions change, stop. Do not ask the model to reinterpret the old decision. A new provider version, resource replacement, or changed action preview should produce a new approval request.
+
+Test approver removal and role changes too. A previously authorized reviewer should lose approval authority on the next server decision, without waiting for an agent session or browser page to refresh.
+
+## Use short-lived elevation, not a standing role
+
+If the provider requires a privileged call, mint or assume a short-lived credential after the approval is consumed. Scope the session to the exact action and resource where the platform permits it. Do not place a reusable administrator token in the agent environment.
+
+GitHub [deployment environments](https://docs.github.com/en/actions/concepts/workflows-and-actions/deployment-environments) can restrict environment secrets and add deployment protection rules such as required reviewers, depending on repository and plan support. The environment gate protects the workflow only when jobs cannot obtain equivalent production credentials elsewhere.
+
+Separate the proposal job from the execution job. The proposal job can prepare a diff or action preview without production secrets. A protected execution job receives the reviewed artifact and a short-lived identity after policy checks pass.
+
+## Record the attempt and result
+
+Write an audit event when approval is requested, granted, rejected, expired, consumed, and completed. Record stable identifiers, action, resource class, actor, approver, request hash, environment, and outcome. Keep secrets and unrestricted payloads out of the event.
+
+An audit record does not prevent deletion. It supports investigation and can reveal repeated denied attempts. Alert when a destructive action bypasses the approved path, when a break-glass role activates, or when audit delivery fails.
+
+[AWS guidance on policy evaluation and access control](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_controlling.html) explains that multiple policy types contribute to the effective decision. Test the effective identity rather than relying on the document you intended to attach.
+
+## Recovery remains a separate gate
+
+Before any destructive automation, complete the [isolated backup restore test](/blog/backup-restore-agentic-apps). Bind recovery evidence to the backup, application version, schema version, environment, assertions, and a reviewed age limit.
+
+Restore evidence lowers uncertainty. It does not prevent the action, cover data outside the tested assertions, restore third-party messages, or eliminate downtime. Some delete operations need a product-specific soft-delete or retention design because infrastructure backup is too slow for routine mistakes.
+
+[NIST SP 800-34 Rev. 1](https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final) treats recovery planning and testing as part of contingency planning. That is a supporting control, not permission to grant broad access.
+
+## Verify denial and race behavior
+
+Use synthetic resources in an authorized test environment. Confirm that the ordinary agent identity cannot call delete APIs, change its own boundary, read production secrets, or select production by editing an argument. Test expired, reused, altered, and wrong-resource approvals.
+
+Send two concurrent requests with the same approval and confirm that only one claims it. Simulate a provider timeout after the claim and confirm the retry reads the execution record rather than consuming a new approval or repeating a non-idempotent action blindly.
+
+These tests cover the selected identity, policy, provider path, and action types. They cannot prove that every production credential is isolated or that a provider has no alternate administrative route. Keep a current inventory of identities and run effective-permission checks after policy changes.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can document whether production identities, approvals, audits, and restore proof have owners. It cannot inspect cloud IAM or prove a destructive call is blocked.
+
+## Sources
+
+- [AWS IAM: Permissions boundaries](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html)
+- [AWS IAM: Controlling access using policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_controlling.html)
+- [GitHub Docs: Deployment environments](https://docs.github.com/en/actions/concepts/workflows-and-actions/deployment-environments)
+- [NIST SP 800-34 Rev. 1: Contingency Planning Guide](https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final)

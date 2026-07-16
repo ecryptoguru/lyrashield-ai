@@ -1,0 +1,141 @@
+---
+title: "Design Least-Privilege MCP Tools"
+description: "Narrow MCP tools by verb, resource, schema, token audience, and approval so model-controlled calls cannot inherit broad authority."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - access-control
+draft: true
+heroImage: agent-security-02
+faq:
+  - q: "Does MCP authorization enforce application permissions?"
+    a: "No. MCP authorization can establish protected transport access and token audience. The server still has to enforce user, tenant, resource, action, and business-policy authorization for every tool call."
+  - q: "Is a read-only MCP tool always safe?"
+    a: "No. A read tool can disclose secrets, private files, customer data, or oversized content. Restrict resources, fields, result size, caller identity, and the contexts allowed to receive the output."
+  - q: "Can an MCP client trust a tool description?"
+    a: "Only when the server and discovery path are trusted. The 2025-06-18 MCP tools specification requires clients to treat tool annotations as untrusted unless they come from trusted servers. Descriptions do not replace server authorization."
+  - q: "Should every MCP mutation require approval?"
+    a: "Sensitive and destructive calls should require a fresh decision bound to the exact tool, arguments, resource, and expiry. Low-risk repeatable actions may use policy-based approval, but the server must still authorize each call."
+---
+
+**Direct answer:** Give an MCP client only the tools and resource scopes needed for the current task. Split reads from mutations, validate arguments and authorization on the server, bind tokens to the intended MCP server, distrust unverified tool metadata, and require exact approval for sensitive calls. Protocol support does not enforce these application controls for you.
+
+Model Context Protocol makes tools discoverable to a model. That is useful, but discoverability can hide the real permission question. A tool named `workspace_admin` with a flexible schema may expose filesystem, database, and network authority behind one apparently convenient call.
+
+Start with a permission inventory: caller, tenant, resource, verb, fields, side effects, credential, approval rule, and audit result. This inventory supports the [approval-gated agent security model](/blog/vibe-coding-security-guide) by showing which authority exists before any prompt chooses a tool.
+
+## The vulnerable pattern: one broad administrative tool
+
+**Vulnerable design. Do not expose this tool.**
+
+```json
+{
+  "name": "workspace_admin",
+  "description": "Perform any requested workspace operation",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": { "type": "string" },
+      "resource": { "type": "string" },
+      "payload": { "type": "object" }
+    }
+  }
+}
+```
+
+The schema accepts arbitrary verbs and objects. The description encourages the model to treat the tool as general authority. A client confirmation that says "Run workspace_admin?" gives a reviewer little basis for a decision.
+
+Generated MCP servers often start this way because one generic handler is easy to demonstrate. The model chooses an action string and the server forwards it to an SDK. The implementation may validate JSON shape while failing to constrain tenant, resource, field, or business state.
+
+## Use narrow verbs and schemas
+
+Prefer a small tool for one bounded operation:
+
+```json
+{
+  "name": "read_repository_file",
+  "description": "Read one UTF-8 text file from the approved repository snapshot",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "repositoryId": { "type": "string", "pattern": "^repo_[a-z0-9]+$" },
+      "path": { "type": "string", "maxLength": 240 }
+    },
+    "required": ["repositoryId", "path"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "content": { "type": "string", "maxLength": 20000 },
+      "snapshotHash": { "type": "string" }
+    },
+    "required": ["content", "snapshotHash"]
+  }
+}
+```
+
+The server still needs to normalize the path, reject traversal and links outside the snapshot, confirm the caller may access `repositoryId`, bound the file size, and return only the allowed encoding. JSON Schema does not know the caller's tenant or whether the repository is approved.
+
+Keep write capabilities separate. A `propose_patch` tool can create a review artifact without changing the repository. An `apply_approved_patch` tool can require a server-stored patch hash, repository, branch, consumed approval, and expiry. Do not accept client-authored patch or branch data as the approved object.
+
+The guide to [indirect prompt injection in coding agents](/blog/indirect-prompt-injection-coding-agents) explains why tool scope matters when untrusted content influences a proposal.
+
+## Enforce access on the server
+
+The MCP tools specification dated 2025-06-18 says servers must validate tool inputs, implement access controls, rate limit calls, and sanitize outputs. It also recommends confirmation for sensitive operations and audit logging on clients.
+
+Treat the authenticated identity as the starting point, not the final decision. For each call, resolve the tenant from trusted server context, look up the resource within that tenant, check the exact verb, and apply current policy. Do not trust a workspace ID in the model's arguments without comparing it to the authenticated scope.
+
+Return bounded errors that do not reveal whether another tenant's resource exists. Keep tool results structured and validate them before feeding them back to the model. A compromised or faulty server can return instructions or oversized content through a result just as a web page can.
+
+## Bind tokens to the intended MCP server
+
+For HTTP authorization, the 2025-06-18 MCP specification requires the OAuth `resource` parameter in authorization and token requests and requires the MCP server to validate that the access token was issued for it as the intended audience. This applies [RFC 8707 resource indicators](https://www.rfc-editor.org/rfc/rfc8707).
+
+Do not pass a client token through the MCP server to an upstream API. Token passthrough confuses audiences and can give the upstream service a token minted for a different resource. Exchange or obtain a separately scoped upstream credential through an approved server flow.
+
+Authorization is optional in that MCP version, and the HTTP authorization flow is not the model for local stdio transport. Local servers still need operating-system permissions, credential boundaries, and an explicit decision about which process may start them.
+
+MCP evolves. Record the protocol version negotiated by the client and server, then review the matching specification and SDK behavior. Do not mix requirements from a release candidate with a stable deployed version.
+
+## Treat discovery metadata as untrusted
+
+The 2025-06-18 tools specification says clients must treat tool annotations as untrusted unless they come from trusted servers. A read-only hint, display name, or description is metadata. It does not prove that the implementation lacks side effects.
+
+Pin or approve server identities and review tool-set changes. If a server adds a new tool or changes a schema, surface the change before exposing it to the model. A familiar server name discovered through an untrusted configuration file is not enough.
+
+Display the exact tool and arguments at approval time. For a mutation, also show the authenticated server, resource, intended side effect, relevant diff or preview, and expiry. Bind the decision to those values on the server. If any value changes, require another decision.
+
+## Bound read tools and their results
+
+Read-only is a verb, not a risk rating. A file reader can expose an environment file. A database query can return another tenant's rows. A search tool can retrieve millions of characters and push unrelated sensitive data into the model context.
+
+Give each read tool a server-owned root and field allowlist. Resolve paths after normalization, reject symbolic links that leave the root, and cap bytes, rows, pages, and execution time. For databases, offer named queries or constrained filters rather than arbitrary SQL. For SaaS tools, map the authenticated user to approved accounts and resources on the server.
+
+Return a receipt with the resource class, snapshot or version, truncation state, and policy decision. Do not echo bearer tokens, cookies, connection strings, or unrestricted upstream errors. If the tool truncates a result, make that limitation visible so the model does not describe a partial result as complete.
+
+Test disclosure boundaries with two synthetic tenants and files at the edge of the approved root. A passing read test covers those fixtures and policies. It does not prove that every backend field, alias, link, or pagination path is constrained.
+
+Cache read results only within the same identity, tenant, resource, and policy scope. A fast cache that omits one of those keys can bypass a correct server check on later calls.
+
+## Verify the boundary with safe tests
+
+Use synthetic tenants and disposable resources. Confirm that a token for Server A is rejected by Server B, a user from Tenant A cannot read Tenant B, traversal paths fail, unknown fields fail schema validation, oversized results are bounded, and a changed mutation argument invalidates approval.
+
+Then place an inert canary instruction in a tool result. The result may ask the model to propose a fixed local marker, but it must have no network or credential access. Confirm that the client treats it as untrusted result data and does not silently call a mutation tool.
+
+These tests cover named tools, policies, identities, and protocol versions. They cannot prove that every client renders approval correctly, that a trusted server is free of malicious code, or that business authorization is complete.
+
+The current official [MCP security best-practices guide](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices) covers token theft, confused-deputy risks, session and consent boundaries, and tool changes. Use it with the exact versioned [tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) and [authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization) specifications implemented by the system.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can record whether tool scope, token ownership, and approval rules have named owners. It does not connect to an MCP server or verify its permissions.
+
+## Sources
+
+- [MCP 2025-06-18: Tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
+- [MCP 2025-06-18: Authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
+- [MCP Security Best Practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices)
+- [RFC 8707: Resource Indicators for OAuth 2.0](https://www.rfc-editor.org/rfc/rfc8707)

@@ -1,0 +1,129 @@
+---
+title: "Why AI-Generated Tests Are Not Security Proof"
+description: "Use AI-generated tests as regression checks, then add independent invariants, negative cases, mutation checks, and scoped retest evidence."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - access-control
+draft: true
+heroImage: verification-03
+faq:
+  - q: "Are AI-generated unit tests useful?"
+    a: "Yes. They can accelerate regression coverage and expose obvious edge cases. Review them like generated implementation code and add tests derived from independent security requirements."
+  - q: "Does high code coverage prove security?"
+    a: "No. Coverage shows which code executed under the test suite. It does not show that assertions were meaningful, abuse cases were represented, mocks matched production, or security invariants held."
+  - q: "What is mutation testing?"
+    a: "Mutation testing makes small controlled changes to implementation behavior and checks whether tests fail. For security review, a harmless local mutation can reveal whether authorization or validation tests detect a weakened condition."
+  - q: "What counts as independent verification?"
+    a: "Evidence is more independent when its requirements, reviewer, tool, or execution path do not simply repeat the generated implementation's assumptions. Independence is scoped and does not create a universal security guarantee."
+---
+
+**Direct answer:** AI-generated tests are useful regression checks, but they are not independent security proof. They can repeat the implementation's assumptions, omit abuse cases, or pass against unrealistic mocks. Add human-defined security invariants, negative authorization and tenant tests, controlled mutation checks, and a fresh review whose evidence is separate from the generation context.
+
+When one assistant writes both a function and its tests, the pair can agree on the same wrong behavior. The test passes because it restates what the implementation does, not because it checks what the system must protect.
+
+This distinction matters in [how tests fit into release assurance](/blog/vibe-coding-security-guide). A green run is execution evidence. Coverage describes what ran. Independent verification asks whether a separate method supports the security claim. Those are different records.
+
+## The vulnerable pattern: test only the generated happy path
+
+**Incomplete test pattern. Use only with synthetic accounts.**
+
+```ts
+async function getProject(sessionUserId: string, projectId: string) {
+  return db.project.findUnique({ where: { id: projectId } })
+}
+
+it("returns a project", async () => {
+  db.project.findUnique.mockResolvedValue({ id: "project-a", ownerId: "user-a" })
+
+  await expect(getProject("user-a", "project-a")).resolves.toMatchObject({
+    id: "project-a",
+  })
+})
+```
+
+The function accepts a session user but never uses it in the query. The test supplies the owner and asserts only that a project returns. The mock cannot reveal whether a real database query allows User A to read User B's project.
+
+An assistant can generate this pair from a request such as "add a test for getProject." It sees the function signature and expected return shape. Unless the prompt contains the ownership invariant, the shortest passing test follows the implementation.
+
+## Write invariants before examples
+
+A security invariant states what must remain true across inputs and code changes. For this function:
+
+```text
+An authenticated user may receive a project only when the server establishes
+an allowed ownership, membership, or sharing relationship for that project.
+```
+
+Turn the invariant into positive and negative cases with two synthetic users and two projects. Test owner access, cross-user denial, missing membership, revoked membership, malformed identifiers, and any deliberate share path. Exercise the real query layer in a disposable database rather than mocking the authorization predicate away.
+
+Use [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/) or another reviewed requirement set to derive invariants outside the generated patch. Select requirements that match the application architecture. ASVS is a verification framework, not proof that every listed control applies or passes.
+
+## Make a safe mutation and expect failure
+
+Mutation testing asks whether the suite notices when behavior weakens. In a local branch, change a security condition to a fixed false or true value, run the relevant tests, and discard the mutation afterward.
+
+For example, if the corrected query contains both `id` and `ownerId`, temporarily remove `ownerId` in the isolated test branch. The cross-user negative test should fail. If every test stays green, the suite does not enforce the ownership invariant.
+
+Do not mutate a deployed environment or real customer data. Use a disposable database and synthetic fixtures. Keep the mutation small enough that its expected effect is clear, and record which tests detected it.
+
+Mutation survival is a detected test weakness, not evidence that the production app is exploitable. A killed mutation shows that the suite noticed one controlled change. It does not prove equivalent vulnerabilities are impossible.
+
+## Reduce shared assumptions
+
+Independence is not binary. A human can review AI-generated tests while still inheriting the same mistaken requirement. A different model can repeat common training patterns. A static analyzer can find a missing authorization predicate without knowing the business sharing rules.
+
+Increase independence by varying the source of the claim and evidence:
+
+- derive invariants from a threat model or reviewed requirement
+- have a reviewer who did not author the implementation inspect the boundary
+- run integration tests against the actual authorization and persistence layers
+- use a separate analysis method for classes the test suite may miss
+- compare the deployed behavior with a safe negative request in an authorized environment
+
+The companion article on [human review and threat modeling](/blog/human-review-threat-model-vibe-coding) explains how to define those requirements before reviewing generated code.
+
+## Separate generation from acceptance
+
+Ask the assistant to label which tests it generated, which requirements they cover, and which dependencies are mocked. Do not let that summary decide acceptance. A reviewer should compare the suite with the threat model, API contract, authorization rules, and known failure modes.
+
+Review test deletions and weakened assertions as carefully as implementation changes. A generated patch may make CI green by removing a failing negative case, changing an expected denial to success, or broadening a mock. Protect security test paths with code ownership where the repository risk justifies it.
+
+Run the accepted suite from a clean checkout using the committed lockfile and a controlled test environment. Preserve the command and result instead of relying on the assistant's statement that tests passed. If a required external service was unavailable or skipped, record the limitation.
+
+For sensitive boundaries, have the reviewer add at least one case that was not proposed in the generation context. The case may still miss a flaw, but it reduces direct copying of the implementation's assumptions and makes the acceptance decision easier to explain.
+
+## Inspect mocks and false success paths
+
+Mocks can make a unit test fast and precise. They can also bypass database policies, middleware, token validation, queues, retries, provider signatures, and deployment configuration. Keep unit tests, then add the smallest integration test that crosses the real security boundary.
+
+Assert durable state and side effects instead of stopping at an HTTP status. A handler can return 200 while failing to update ownership, enqueue a job, or persist an audit event. A mocked provider can accept a signature that the real SDK rejects.
+
+Check that tests fail for the intended reason. A cross-tenant request returning 500 is not an authorization pass merely because it did not return data. Assert the documented denial status and confirm no protected record or side effect appears.
+
+## Record coverage and evidence state precisely
+
+When a generated suite passes, record the commit, environment, command, test selection, result, and limitations. If only unit tests ran with mocked storage, say so. Do not label the result "verified" without an independent verification receipt.
+
+A fresh deterministic retest can become retest-confirmed within its documented coverage. If the original signal came from an engine-only or incomplete path, absence on a later run may remain inconclusive. Confidence and code coverage are triage data, not proof.
+
+The 2026 paper [The Illusion of Safety](https://arxiv.org/abs/2607.00107) compared passing tests, static findings, and confirmed runtime violations in its selected C++ task set. Use that study as scoped evidence that verification layers can disagree. It does not establish a universal failure rate for AI-generated tests or other languages.
+
+[NIST SSDF 1.1](https://csrc.nist.gov/pubs/sp/800/218/final) calls for code review, analysis, and testing as parts of secure development. [OWASP's Secure Coding with AI Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_with_AI_Cheat_Sheet.html) likewise recommends reviewing and testing generated output rather than accepting it on trust.
+
+## What automation can and cannot establish
+
+Test generators can propose boundary values and regression cases. Coverage tools can show executed lines and branches. Mutation tools can measure whether a selected set of changes is detected. Static and dynamic scanners can find patterns or behaviors within their scope.
+
+None of these tools knows every business invariant, valid delegation, operational dependency, or untested environment. Combining them reduces blind spots, but the result remains scoped to the reviewed requirements, tools, inputs, and runtime.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can document whether negative tests, independent review, and retest evidence exist. It cannot run the suite or decide whether its assertions prove the intended boundary.
+
+## Sources
+
+- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final)
+- [OWASP Secure Coding with AI Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_with_AI_Cheat_Sheet.html)
+- [OWASP Application Security Verification Standard](https://owasp.org/www-project-application-security-verification-standard/)
+- [The Illusion of Safety: Multi-Tier Verification of AI vs. Human C++ Code](https://arxiv.org/abs/2607.00107)

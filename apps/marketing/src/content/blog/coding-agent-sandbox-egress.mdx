@@ -1,0 +1,149 @@
+---
+title: "Sandbox Coding Agents and Control Egress"
+description: "Isolate coding agents with disposable workspaces, minimal mounts, non-root execution, resource limits, and explicit outbound network policy."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+draft: true
+heroImage: agent-security-03
+faq:
+  - q: "Is a container enough to sandbox a coding agent?"
+    a: "No. A container shares the host kernel and inherits its configured mounts, privileges, devices, and network access. Add non-root execution, minimal mounts, syscall and capability restrictions, resource limits, egress policy, and host hardening."
+  - q: "Should a coding agent have internet access?"
+    a: "Only when the task requires it. Prefer no network, then allow specific registries, source hosts, or APIs through a controlled proxy. Record destinations and deny unknown outbound traffic."
+  - q: "How should an agent receive secrets?"
+    a: "Avoid secrets when a synthetic fixture or public dependency is enough. If a credential is required, issue a short-lived, task-specific identity with narrow resource and network scope, then revoke it when the workspace ends."
+  - q: "Can a local coding agent be isolated?"
+    a: "Yes, but running directly under a developer account is weak isolation. Use a separate operating-system identity or disposable virtualized environment, narrow filesystem permissions, and prevent access to personal credentials and production tools."
+---
+
+**Direct answer:** Run coding agents in a disposable environment with only the repository, tools, and short-lived credentials required for the task. Use a non-root identity, minimal mounts, process and resource limits, and an explicit outbound destination policy. A container alone is incomplete isolation, and isolation without egress control can still expose accessible data.
+
+Coding agents combine code reading, file writes, command execution, dependency installation, and network requests. That combination is productive. It also means a mistaken command or injected instruction can reach whatever the runtime exposes.
+
+Model the boundary as separate questions:
+
+```text
+What can enter? -> What can run? -> What can be read or changed? -> Where can data go?
+```
+
+The [agent execution boundaries in the security guide](/blog/vibe-coding-security-guide) cover all four. A read-only mount does not constrain outbound traffic. A blocked network does not protect a writable host socket.
+
+## The vulnerable pattern: a container with host authority
+
+**Vulnerable configuration. Do not run an agent this way.**
+
+```yaml
+services:
+  coding-agent:
+    image: unreviewed-agent-image
+    user: root
+    volumes:
+      - /:/host
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CLOUD_TOKEN
+```
+
+This process can inspect the host filesystem, control the Docker daemon, read the inherited token, and use the default network. The container boundary adds packaging but little meaningful containment.
+
+Generated infrastructure often misses this because broad mounts and host credentials make setup errors disappear. The agent can build, test, and deploy from one place. The demo works while repository, host, credential, and production boundaries collapse.
+
+## Start with a disposable workspace
+
+Build the workspace from a pinned, reviewed image. Copy or mount a specific repository snapshot rather than the developer's home directory. Make source inputs read-only when the task only reviews code, and give write access to a separate output directory for proposed patches and test artifacts.
+
+Run as a dedicated non-root user. Drop operating-system capabilities the task does not need. Set `no-new-privileges`, process limits, memory and CPU bounds, a read-only root filesystem, and a small temporary filesystem. Keep host sockets, device nodes, SSH agents, browser profiles, cloud configuration, and package-publishing credentials outside the workspace.
+
+An illustrative review profile might include:
+
+```yaml
+services:
+  coding-agent:
+    image: registry.invalid/reviewed-agent@sha256:REVIEWED_DIGEST
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 2g
+    tmpfs:
+      - /tmp:size=128m,noexec,nosuid
+    volumes:
+      - ./repo-snapshot:/workspace/source:ro
+      - ./review-output:/workspace/output:rw
+    network_mode: none
+```
+
+The digest is a label here, not a real image. A production pipeline must replace it with an inspected artifact. Platform support for each setting varies, and a container still shares the host kernel unless stronger virtualization is used.
+
+[Docker rootless mode](https://docs.docker.com/engine/security/rootless/) runs the daemon and containers without root privileges to reduce the impact of daemon and runtime vulnerabilities. It does not remove every kernel, mount, or network risk. Docker's [default seccomp profile](https://docs.docker.com/engine/security/seccomp/) blocks selected system calls, but it is one layer and can be weakened by runtime flags.
+
+## Choose isolation strength from the task
+
+Static explanation of a public repository needs fewer capabilities than compiling untrusted native code. A documentation task may run with no shell and no network. A test task may need a compiler but no cloud identity. A build that executes third-party scripts may justify a separate virtual machine or stronger sandbox boundary rather than an ordinary container.
+
+Write the task profile before starting the agent:
+
+```text
+input snapshot: reviewed commit hash
+writable paths: /workspace/output and /tmp
+commands: test runner and compiler only
+network: package proxy and model endpoint only
+credentials: read-only package token, expires in 30 minutes
+outputs: patch and test report
+```
+
+Fail closed when the task asks for a capability outside that profile. Rebuilding the workspace with a reviewed expanded profile is easier to audit than changing mounts or network policy in the middle of a run.
+
+Keep sandbox administration outside the agent. If the process can edit its own container configuration, start privileged siblings, or control the host runtime socket, the written profile is only documentation. Verify the effective runtime settings after launch rather than trusting the requested configuration.
+
+Plan the end of the workspace as carefully as its start. On success, failure, cancellation, and timeout, stop child processes, revoke task credentials, detach writable storage, and remove temporary files. A cancelled parent process can leave a compiler, test server, or package script running unless the supervisor terminates the whole process group.
+
+Keep logs outside the disposable filesystem only when the review needs them, and redact tokens and sensitive paths before retention. Record cleanup failure as an operational alert. Reusing a half-cleaned workspace for the next task can cross repository, customer, or credential boundaries even when the original sandbox policy was sound.
+
+## Treat egress as a separate control
+
+No network is the easiest outbound policy to explain. It works for static review against a complete snapshot. Builds may need package registries, source archives, vulnerability databases, or a model API. Add those destinations explicitly through a controlled resolver and proxy rather than restoring unrestricted internet access.
+
+Resolve and connect through the policy layer so a hostname allowlist cannot switch to an unapproved address after validation. Constrain protocol, port, method, destination, response size, redirects, and time. Log destination decisions without recording secrets in URLs or headers.
+
+An allowlist reduces reachable destinations. It does not prevent every covert channel, a compromise of an allowed service, or data hidden in legitimate requests. Keep sensitive data out of the runtime even when egress is restricted.
+
+Model-provider traffic needs its own data review. Decide which source files may enter the request, which workspace and retention controls apply, and whether prompts pass through another product backend. Network permission is not data authorization.
+
+## Issue task-specific credentials
+
+Prefer public package access and synthetic test services. If the agent must call a private registry, issue a read-only token for the required scope and a short lifetime. If it needs a test database, give it a dedicated synthetic tenant rather than production credentials.
+
+Bind the credential to network policy where the provider supports it. Do not mount a developer's general cloud profile or reuse a CI deployment role. Destroy the workspace and revoke its identity at task completion, including on timeout and cancellation.
+
+The guide to [keeping agents away from production deletes](/blog/agent-production-permissions) covers approval and permission boundaries for the cases where an automated workflow reaches production at all.
+
+## Review outputs before promotion
+
+Treat everything produced inside the sandbox as untrusted until reviewed. Proposed source changes, compiled artifacts, dependency caches, test reports, and generated configuration can carry unexpected behavior beyond the disposable environment.
+
+Export only named artifacts. Record the input snapshot, image digest, policy version, tools, network destinations, commands, and output hashes. Scan and test the exported artifact in a separate stage, then require approval before it reaches a protected branch or release environment.
+
+Do not let the agent sign the artifact with a production key. Signing after review in a separate identity preserves the distinction between generated output and accepted release material.
+
+## Verify isolation without using real secrets
+
+Create synthetic files at the edge of each permitted mount and harmless canary files outside it. Confirm the agent can read and write only the intended paths. Attempt a fixed set of denied destinations owned by the test environment and confirm the proxy or network namespace blocks them.
+
+Test process limits, disk exhaustion, timeout, cancellation, and cleanup. Confirm that credentials expire, the workspace is removed, and logs do not retain token values. Repeat after runtime, image, mount, proxy, or policy changes.
+
+These tests demonstrate selected boundaries for one environment. They cannot prove the host kernel has no vulnerability, that an allowed destination is trustworthy, or that a destination policy blocks every possible data channel. [NIST SP 800-190](https://csrc.nist.gov/pubs/sp/800/190/final) treats images, registries, orchestrators, containers, and hosts as distinct risk areas for the same reason.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can record whether agent isolation, credentials, and approval have owners. The [secret exposure scanner](/tools/secret-exposure-scanner) can inspect selected text configuration before it is mounted. Neither tool can verify runtime isolation, process privileges, network egress, or host security.
+
+## Sources
+
+- [Docker Docs: Rootless mode](https://docs.docker.com/engine/security/rootless/)
+- [Docker Docs: Seccomp security profiles](https://docs.docker.com/engine/security/seccomp/)
+- [NIST SP 800-190: Application Container Security Guide](https://csrc.nist.gov/pubs/sp/800/190/final)
+- [OWASP AI Agent Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html)
