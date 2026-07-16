@@ -70,15 +70,26 @@ describe("marketing SEO metadata", () => {
     expect(terms).toMatch(/<Base[^>]+noindex/s)
   })
 
-  it("uses one page-level main landmark and visible structured-data counterparts", () => {
+  it("uses one page-level main landmark and keeps breadcrumbs in metadata only", () => {
     const methodology = source("../pages/methodology.astro")
     const toolLayout = source("../layouts/ToolLayout.astro")
+    const breadcrumbSurfaces = [
+      methodology,
+      toolLayout,
+      source("../pages/tools/index.astro"),
+      source("../pages/scan.astro"),
+      source("../pages/terms.astro"),
+      source("../pages/sample-report.astro"),
+      source("../pages/blog/[...page].astro"),
+      source("../layouts/BlogPost.astro"),
+    ]
 
     expect(methodology).not.toMatch(/<main(?:\s|>)/)
     expect(methodology).toContain('"@type": "WebPage"')
-    expect(methodology).toContain('aria-label="Breadcrumb"')
     expect(toolLayout).toContain('"@type": "BreadcrumbList"')
-    expect(toolLayout).toContain('aria-label="Breadcrumb"')
+    breadcrumbSurfaces.forEach((surface) =>
+      expect(surface).not.toContain('aria-label="Breadcrumb"')
+    )
     expect(toolLayout).toContain("tool.checks.map")
     expect(toolLayout).toContain("tool.limitations.map")
     expect(toolLayout).toContain('target="_blank"')

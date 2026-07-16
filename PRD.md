@@ -5348,6 +5348,13 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - Marketing emits an explicit PostHog `$pageview` with only origin and pathname, excluding query and fragment data. The canonical production domain is authorized in PostHog; session recording and automatic full-URL pageview capture remain disabled.
 - PR #79 merged as `98aea48`; main CI run `29487616647` passed the complete repository and production marketing gates and deployed Cloudflare Worker version `31514039-473b-4837-95cf-d61da009e238`.
 
+### C1.13 Homepage Lite Check funnel (2026-07-16, PR #84)
+
+- The homepage makes the live passive Lite Check the primary product action while retaining the existing `/scan` page as the canonical detailed scanner, limitations, FAQ, Turnstile, and results surface.
+- The homepage form validates HTTP(S) URLs without embedded credentials, requires authorization and Terms acceptance, and uses session storage for the cross-route handoff so the target is not placed in navigation parameters. Storage restrictions and invalid input render accessible inline errors.
+- Header and footer Free scan links point to the homepage form. Visible breadcrumb rows are removed from methodology, scanner, resource, report, terms, tools, and tool-detail surfaces; `BreadcrumbList` structured data remains for search engines.
+- The final branch gate passed the production dependency audit, Prisma generation, lint, formatting, typecheck, 841 Vitest tests in 90 files, all production builds, two Chromium E2E flows, desktop/mobile rendered QA, and `git diff --check`.
+
 ## C2. Phase 1 gaps and release gates
 
 ### C2.1 Required before a controlled product pilot

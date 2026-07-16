@@ -14,14 +14,7 @@ const jsonLd = [
 ---
 <Base title={tool.seoTitle} description={tool.description} canonical={canonical} jsonLd={jsonLd}>
   <section class="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:py-16">
-    <nav aria-label="Breadcrumb" class="text-sm text-text-muted">
-      <a href="/" class="hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Home</a>
-      <span class="mx-2" aria-hidden="true">/</span>
-      <a href="/tools" class="hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Tools</a>
-      <span class="mx-2" aria-hidden="true">/</span>
-      <span aria-current="page">{tool.title}</span>
-    </nav>
-    <h1 class="mt-5 text-4xl font-semibold tracking-tight text-text sm:text-5xl">{tool.title}</h1>
+    <h1 class="text-4xl font-semibold tracking-tight text-text sm:text-5xl">{tool.title}</h1>
     <p class="mt-4 max-w-3xl text-lg leading-8 text-text-muted">{tool.summary}</p>
     <p class="mt-5 rounded-xl border border-border bg-bg-raised px-4 py-3 text-sm text-text-muted"><strong class="text-text">Privacy:</strong> {tool.privacy}</p>
     <div class="mt-8 rounded-2xl border border-border bg-bg-raised p-5 shadow-sm sm:p-8"><slot /></div>

@@ -47,7 +47,6 @@ const jsonLd = [
     <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_18%,color-mix(in_srgb,var(--accent)_15%,transparent),transparent_32%)]"></div>
     <div class="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:px-8 lg:py-24">
       <div>
-        <nav aria-label="Breadcrumb" class="mb-8 text-sm text-text-muted"><a href="/" class="hover:text-accent">Home</a><span class="mx-2" aria-hidden="true">/</span><span aria-current="page">Free security check</span></nav>
         <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Lite Check · passive and read-only</p>
         <h1 class="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-text sm:text-5xl lg:text-6xl">Free security check for AI-built apps</h1>
         <p class="mt-6 max-w-2xl text-lg leading-8 text-text-muted">{scannerAvailable ? "Paste your app's URL. We'll check for the security gaps that AI coding tools most often leave behind — exposed secrets, missing protections, risky data-access setups. Results in seconds. No signup." : "The passive Lite Check is available after the separately protected LyraShield app API is deployed. Explore the methodology and browser-local tools while this preview remains in pre-launch mode."}</p>
@@ -142,6 +141,18 @@ const jsonLd = [
 
     const capture = (event: string, props: Record<string, unknown> = {}) => window.posthog?.capture(event, { product: "LyraShield", ...props })
     const query = new URL(location.href).searchParams
+    let pendingHomepageScan = false
+    if (query.get("start") === "1") {
+      try {
+        const target = sessionStorage.getItem("lyrashield-lite-target")
+        if (target) {
+          document.querySelector<HTMLInputElement>("#scan-url")!.value = target
+          document.querySelector<HTMLInputElement>("#authorized")!.checked = true
+          sessionStorage.removeItem("lyrashield-lite-target")
+          pendingHomepageScan = true
+        }
+      } catch {}
+    }
     const attribution = { utm_source: query.get("utm_source") || undefined, utm_medium: query.get("utm_medium") || undefined, utm_campaign: query.get("utm_campaign") || undefined, referrer: document.referrer || undefined }
     const referralCode = query.get("ref")?.toUpperCase().match(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/)?.[0]
 
@@ -236,6 +247,7 @@ const jsonLd = [
     document.querySelector<HTMLButtonElement>("#share-scorecard")?.addEventListener("click", async () => { const url = document.querySelector<HTMLAnchorElement>("#scorecard-link")!.href; const usedNativeShare = typeof navigator.share === "function"; if (usedNativeShare) await navigator.share({ title: "My LyraShield AI Lite Check", url }); else await navigator.clipboard.writeText(url); capture("scorecard_shared", { channel: usedNativeShare ? "native" : "copy" }) })
 
     if (referralCode) capture("referral_visit", { source: "lite_scanner" })
-    if (turnstileSiteKey) { const boot = () => { const turnstile = (window as TurnstileWindow).turnstile; if (!turnstile) return window.setTimeout(boot, 100); turnstileWidget = turnstile.render("#turnstile-container", { sitekey: turnstileSiteKey, size: "flexible", appearance: "interaction-only", callback: (token: string) => { turnstileToken = token }, "expired-callback": () => { turnstileToken = "" } }) }; boot() }
+    const startHomepageScan = () => { if (pendingHomepageScan) { pendingHomepageScan = false; scanForm?.requestSubmit() } }
+    if (turnstileSiteKey) { const boot = () => { const turnstile = (window as TurnstileWindow).turnstile; if (!turnstile) return window.setTimeout(boot, 100); turnstileWidget = turnstile.render("#turnstile-container", { sitekey: turnstileSiteKey, size: "flexible", appearance: "interaction-only", callback: (token: string) => { turnstileToken = token; startHomepageScan() }, "expired-callback": () => { turnstileToken = "" } }) }; boot() } else { startHomepageScan() }
   </script>
 </Base>
