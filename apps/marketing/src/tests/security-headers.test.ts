@@ -10,6 +10,7 @@ describe("Cloudflare marketing security headers", () => {
   it("applies a defensive browser policy to every public route", () => {
     expect(headers).toContain("/*")
     expect(headers).toContain("Content-Security-Policy:")
+    expect(headers).toContain("https://us-assets.i.posthog.com")
     expect(headers).toContain("https://static.cloudflareinsights.com")
     expect(headers).toContain("https://cloudflareinsights.com")
     expect(headers).toContain("frame-ancestors 'none'")
