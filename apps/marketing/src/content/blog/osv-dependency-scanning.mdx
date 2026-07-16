@@ -8,7 +8,7 @@ tags:
   - supply-chain
   - verification
 draft: true
-heroImage: verification-02
+heroImage: supply-chain-01
 faq:
   - q: "Does OSV Scanner scan source code for application bugs?"
     a: "No. Source scanning means OSV Scanner extracts packages from supported lockfiles and manifests in a source tree, then matches those packages to known vulnerability records. It is not a general static analyzer for first-party application logic."
@@ -83,7 +83,7 @@ The first three support known-vulnerable-version detection. The fourth requires 
 
 For a direct dependency, you can often update the declared range. For a transitive dependency, the safe change may be an upstream package update, a package-manager override, or removal of the parent dependency. Avoid an override that creates an unsupported combination merely to silence the scanner.
 
-When an update cannot ship immediately, record a narrow exception in `osv-scanner.toml`. The [OSV Scanner configuration](https://google.github.io/osv-scanner/configuration/) supports a vulnerability ID, reason, and optional expiry date.
+When an update cannot ship immediately, record a narrow exception in `osv-scanner.toml`. The [OSV Scanner configuration](https://google.github.io/osv-scanner/configuration/) supports a vulnerability ID, reason, and optional expiry date. Place a local config beside the scanned lockfile or manifest because it does not propagate into child directories. Use an explicit `--config=/path/to/config.toml` override when one reviewed config must apply to every parsed file.
 
 ```toml
 [[IgnoredVulns]]
