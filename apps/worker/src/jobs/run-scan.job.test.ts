@@ -270,6 +270,40 @@ describe("processScanJob", () => {
     )
   })
 
+  it("stops an over-budget scan and caps its recorded bill", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 0,
+      output: {
+        vulnerabilities: [],
+        runRecord: {
+          run_id: "r-over-budget",
+          status: "completed",
+          llm_usage: { total_cost_usd: 2.75 },
+        },
+        summary: "Engine completed above budget",
+        findingCount: 0,
+      },
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toEqual({
+      status: "failed",
+      errorCategory: "BUDGET_EXCEEDED",
+      errorMessage: "Engine reported spend above the worker budget cap",
+    })
+
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: { actualCostCents: 120 },
+    })
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
+      errorCategory: "BUDGET_EXCEEDED",
+      errorMessage: "Engine reported spend above the worker budget cap",
+      actualCostCents: 120,
+    })
+    expect(persistFindings).not.toHaveBeenCalled()
+    expect(completeScanWithScore).not.toHaveBeenCalled()
+  })
+
   it("keeps a completed scan completed when a completion notification fails", async () => {
     vi.mocked(notifyScanCompleted).mockRejectedValueOnce(
       new Error("notification provider unavailable")

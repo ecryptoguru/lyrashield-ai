@@ -104,7 +104,9 @@ export function FixesClient({
                   )}
                 </div>
 
-                <h3 className="truncate font-semibold">{proposal.finding.title}</h3>
+                <h3 className="truncate font-semibold" title={proposal.finding.title}>
+                  {proposal.finding.title}
+                </h3>
                 <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
                   {proposal.summary}
                 </p>
@@ -123,20 +125,30 @@ export function FixesClient({
 
                 {proposal.pullRequests.length > 0 && (
                   <div className="mt-3 space-y-1">
-                    {proposal.pullRequests.map((pr) => (
-                      <a
-                        key={pr.id}
-                        href={pr.prUrl ?? "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary inline-flex items-center gap-2 text-xs hover:underline"
-                      >
-                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
-                        {pr.repoOwner}/{pr.repoName}
-                        {pr.prNumber != null && ` #${pr.prNumber}`}
-                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                      </a>
-                    ))}
+                    {proposal.pullRequests.map((pr) => {
+                      const label = `${pr.repoOwner}/${pr.repoName}${pr.prNumber != null ? ` #${pr.prNumber}` : ""}`
+                      return pr.prUrl ? (
+                        <a
+                          key={pr.id}
+                          href={pr.prUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary inline-flex items-center gap-2 text-xs hover:underline"
+                        >
+                          <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
+                          {label}
+                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                        </a>
+                      ) : (
+                        <span
+                          key={pr.id}
+                          className="text-muted-foreground inline-flex items-center gap-2 text-xs"
+                        >
+                          <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
+                          {label} · Link pending
+                        </span>
+                      )
+                    })}
                   </div>
                 )}
               </div>

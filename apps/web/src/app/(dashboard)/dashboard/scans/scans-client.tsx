@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Radar, Play, X, RefreshCw, ChevronRight } from "lucide-react"
 import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@lyrashield/ui"
@@ -112,6 +112,7 @@ export function ScansClient({
   }
 
   async function handleCancelScan(scanId: string) {
+    if (!window.confirm("Cancel this scan? Any active scanner work will be stopped.")) return
     setCancelling(scanId)
     setError(null)
     try {
@@ -164,6 +165,22 @@ export function ScansClient({
 
   const isActive = (status: string) =>
     ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"].includes(status)
+  const hasActiveScans = scans.some((scan) => isActive(scan.status))
+
+  useEffect(() => {
+    if (!hasActiveScans) return
+    const interval = window.setInterval(() => {
+      void apiGetPaginated<ScanItem>("/api/scans", { workspaceId })
+        .then((result) => {
+          setScans(result.items)
+          setNextCursor(result.nextCursor)
+        })
+        .catch(() => {
+          // Keep the current list visible; the manual refresh action reports errors.
+        })
+    }, 10_000)
+    return () => window.clearInterval(interval)
+  }, [hasActiveScans, workspaceId])
 
   return (
     <div>
@@ -342,9 +359,10 @@ export function ScansClient({
                   )}
                   <Link
                     href={`/dashboard/scans/${scan.id}`}
-                    className="text-muted-foreground hover:text-foreground"
+                    aria-label={`View details for ${scan.target?.name ?? "scan"}`}
+                    className="text-muted-foreground hover:text-foreground inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg"
                   >
-                    <ChevronRight className="h-5 w-5" aria-label="View scan details" />
+                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
                   </Link>
                 </div>
               </div>

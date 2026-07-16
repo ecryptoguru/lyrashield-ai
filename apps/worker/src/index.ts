@@ -5,6 +5,7 @@ import { getScanQueueEvents } from "./queue"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
 import { startScheduleRunner } from "./schedules"
+import { terminateActiveEngineProcesses } from "./engine/runner"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let queueEvents: ReturnType<typeof getScanQueueEvents> | null = null
@@ -16,6 +17,11 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true
 
   logger.info("Worker shutting down", { signal })
+
+  const terminatedEngineProcesses = terminateActiveEngineProcesses()
+  if (terminatedEngineProcesses > 0) {
+    logger.info("Terminating active engine processes", { count: terminatedEngineProcesses })
+  }
 
   if (scheduleRunner) {
     clearInterval(scheduleRunner)

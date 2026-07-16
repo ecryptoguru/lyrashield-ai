@@ -28,6 +28,8 @@ import {
   interpretExitCode,
   resolveEngineSourceCheckout,
   resolveEngineProfile,
+  terminateActiveEngineProcesses,
+  trackActiveEngineProcess,
 } from "./runner"
 
 const cleanupPaths: string[] = []
@@ -233,4 +235,19 @@ describe("createKillEscalation (S5)", () => {
     expect(kills).toEqual(["SIGTERM"])
     vi.useRealTimers()
   })
+})
+
+it("terminates every tracked engine process during worker shutdown", () => {
+  const first = vi.fn()
+  const second = vi.fn()
+  const stopTrackingFirst = trackActiveEngineProcess(first)
+  const stopTrackingSecond = trackActiveEngineProcess(second)
+
+  expect(terminateActiveEngineProcesses()).toBe(2)
+  expect(first).toHaveBeenCalledOnce()
+  expect(second).toHaveBeenCalledOnce()
+
+  stopTrackingFirst()
+  expect(terminateActiveEngineProcesses()).toBe(1)
+  stopTrackingSecond()
 })

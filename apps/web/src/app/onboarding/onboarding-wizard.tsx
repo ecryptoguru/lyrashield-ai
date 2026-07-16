@@ -232,10 +232,14 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
   return (
     <div className="mx-auto max-w-2xl">
       {/* Progress Indicator */}
-      <div className="mb-8">
+      <nav className="mb-8" aria-label="Onboarding progress">
         <div className="flex items-center justify-between">
           {STEPS.map((s, i) => (
-            <div key={s.label} className="flex flex-1 flex-col items-center">
+            <div
+              key={s.label}
+              className="flex flex-1 flex-col items-center"
+              aria-current={i === step ? "step" : undefined}
+            >
               <div className="flex w-full items-center">
                 {i > 0 && (
                   <div
@@ -273,7 +277,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
             </div>
           ))}
         </div>
-      </div>
+      </nav>
 
       {/* Skip Button */}
       <div className="mb-4 flex justify-end">

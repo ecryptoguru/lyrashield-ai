@@ -8,7 +8,7 @@ export default async function FindingsPage() {
   const workspaceId = await getCachedWorkspaceId(session.userId)
   if (!workspaceId) return null
 
-  const findings = await getCachedFindings(workspaceId)
+  const { items: findings, nextCursor } = await getCachedFindings(workspaceId)
 
   const initialData: FindingListItem[] = findings.map((f) => ({
     id: f.id,
@@ -29,5 +29,11 @@ export default async function FindingsPage() {
     lastSeenAt: f.lastSeenAt.toISOString(),
   }))
 
-  return <FindingsClient workspaceId={workspaceId} initialData={initialData} />
+  return (
+    <FindingsClient
+      workspaceId={workspaceId}
+      initialData={initialData}
+      initialNextCursor={nextCursor}
+    />
+  )
 }

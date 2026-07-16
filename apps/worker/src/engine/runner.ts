@@ -70,6 +70,19 @@ export interface KillableChild {
   kill(signal?: NodeJS.Signals): boolean
 }
 
+const activeEngineTerminators = new Set<() => void>()
+
+export function trackActiveEngineProcess(terminate: () => void): () => void {
+  activeEngineTerminators.add(terminate)
+  return () => activeEngineTerminators.delete(terminate)
+}
+
+export function terminateActiveEngineProcesses(): number {
+  const active = [...activeEngineTerminators]
+  for (const terminate of active) terminate()
+  return active.length
+}
+
 /**
  * Two-stage kill escalation for the engine child process. `onTimeout()` sends
  * SIGTERM and schedules a SIGKILL after `graceMs` UNLESS the process has exited
@@ -231,6 +244,7 @@ async function runEngineProcess(
       terminationRequested = true
       escalation.onTimeout()
     }
+    const stopTracking = trackActiveEngineProcess(terminate)
 
     const timer = setTimeout(() => {
       timedOut = true
@@ -286,6 +300,7 @@ async function runEngineProcess(
       clearTimeout(timer)
       if (cancellationTimer) clearInterval(cancellationTimer)
       escalation.markExited()
+      stopTracking()
       const exitCode = code ?? (timedOut || cancelled ? -1 : 1)
       resolvePromise({ exitCode, stdout, stderr, timedOut, cancelled })
     })
@@ -295,6 +310,7 @@ async function runEngineProcess(
       clearTimeout(timer)
       if (cancellationTimer) clearInterval(cancellationTimer)
       escalation.markExited()
+      stopTracking()
       reject(err)
     })
   })

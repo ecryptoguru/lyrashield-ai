@@ -2,7 +2,16 @@ import type { APIRoute } from "astro"
 import { getCollection } from "astro:content"
 import rss from "@astrojs/rss"
 
+export const prerender = false
+
 export const GET: APIRoute = async (context) => {
+  if (!__MARKETING_INDEXABLE__) {
+    return new Response("Not found.", {
+      status: 404,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    })
+  }
+
   const siteUrl =
     context.site?.toString() ||
     (import.meta.env.PUBLIC_SITE_URL as string | undefined) ||

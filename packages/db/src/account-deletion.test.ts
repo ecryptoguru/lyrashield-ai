@@ -7,6 +7,7 @@ const userId = `delete-user-${suffix}`
 const otherUserId = `keep-user-${suffix}`
 const workspaceId = `delete-workspace-${suffix}`
 const referralCode = `234567${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
+const rewardedReferralCode = `765432${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
 
 describe("account deletion", () => {
   it("exports the privacy lifecycle service", async () => {
@@ -30,7 +31,9 @@ describe("account deletion", () => {
   })
 
   afterAll(async () => {
-    await prisma.referralCode.deleteMany({ where: { code: referralCode } })
+    await prisma.referralCode.deleteMany({
+      where: { code: { in: [referralCode, rewardedReferralCode] } },
+    })
     await prisma.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspaceId}`
     await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspaceId}`
     await prisma.user.deleteMany({
@@ -80,6 +83,9 @@ describe("account deletion", () => {
     await prisma.user.create({
       data: { id: rewardedUserId, name: "Rewarded", email: `${rewardedUserId}@example.com` },
     })
+    const rewardedCode = await prisma.referralCode.create({
+      data: { userId: rewardedUserId, code: rewardedReferralCode },
+    })
     const rewardedAttribution = await prisma.referralAttribution.create({
       data: {
         codeId: code.id,
@@ -110,7 +116,7 @@ describe("account deletion", () => {
     expect(await prisma.user.findUnique({ where: { id: userId } })).toBeNull()
     expect(await prisma.workspaceMember.count({ where: { userId } })).toBe(0)
     expect(await prisma.referralCode.findUnique({ where: { code: referralCode } })).toMatchObject({
-      userId: "deleted-user",
+      userId: `deleted-user:${code.id}`,
     })
     const rejected = await prisma.referralAttribution.findFirst({
       where: { codeId: code.id, status: "REJECTED" },
@@ -122,6 +128,9 @@ describe("account deletion", () => {
     // REWARDED status while anonymizing the user reference.
     const { deleteUserAccount: deleteRewardedUser } = await import("./account-deletion")
     await deleteRewardedUser(rewardedUserId)
+    expect(
+      await prisma.referralCode.findUnique({ where: { code: rewardedReferralCode } })
+    ).toMatchObject({ userId: `deleted-user:${rewardedCode.id}` })
     expect(
       await prisma.referralAttribution.findUnique({ where: { id: rewardedAttribution.id } })
     ).toMatchObject({

@@ -305,9 +305,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           })
         }
         if (actualCostUsd !== null) {
+          const billedCostUsd = Math.min(actualCostUsd, maxBudgetUsd)
           await prisma.scan.update({
             where: { id: scanId },
-            data: { actualCostCents: Math.round(actualCostUsd * 100) },
+            data: { actualCostCents: Math.round(billedCostUsd * 100) },
           })
           if (actualCostUsd > maxBudgetUsd) {
             log.warn("Engine reported spend above worker budget cap", {
@@ -320,8 +321,18 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               "budget_exceeded",
               "error",
               "Engine reported spend above the worker budget cap",
-              { actualCostUsd, maxBudgetUsd }
+              { actualCostUsd, billedCostUsd, maxBudgetUsd }
             )
+            await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
+              errorCategory: "BUDGET_EXCEEDED",
+              errorMessage: "Engine reported spend above the worker budget cap",
+              actualCostCents: Math.round(billedCostUsd * 100),
+            })
+            return {
+              status: "failed",
+              errorCategory: "BUDGET_EXCEEDED",
+              errorMessage: "Engine reported spend above the worker budget cap",
+            }
           }
         }
       }

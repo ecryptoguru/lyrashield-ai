@@ -27,4 +27,19 @@ describe("Cloudflare marketing security headers", () => {
     expect(middleware).toContain('headers.set("Cache-Control", "no-store")')
     expect(middleware).toContain('headers.set("X-Robots-Tag", "noindex")')
   })
+
+  it("keeps static and Worker security header values identical", () => {
+    const staticHeaders = headers
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && line !== "/*")
+
+    for (const line of staticHeaders) {
+      const separator = line.indexOf(":")
+      const name = line.slice(0, separator)
+      const value = line.slice(separator + 1).trim()
+      expect(middleware).toContain(JSON.stringify(name))
+      expect(middleware).toContain(JSON.stringify(value))
+    }
+  })
 })

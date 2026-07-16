@@ -78,7 +78,12 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
         where: { approvedById: userId },
         data: { approvedById: null },
       }),
-      tx.referralCode.updateMany({ where: { userId }, data: { userId: DELETED_USER } }),
+      // userId is UNIQUE, so retain a non-identifying per-row suffix. A shared
+      // sentinel makes the second account deletion with a referral code fail.
+      tx.$executeRaw`
+        UPDATE "ReferralCode"
+        SET "userId" = ${`${DELETED_USER}:`} || "id"
+        WHERE "userId" = ${userId}`,
       tx.scorecardShare.updateMany({
         where: { createdById: userId },
         data: { createdById: DELETED_USER },

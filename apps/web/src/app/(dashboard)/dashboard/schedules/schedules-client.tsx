@@ -15,6 +15,7 @@ import {
 } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { formatDate, formatDateTime } from "@/lib/date-format"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface ScheduleItem {
   id: string
@@ -33,6 +34,16 @@ interface TargetOption {
   id: string
   name: string
   type: string
+}
+
+function describeCron(cron: string): string {
+  const presets: Record<string, string> = {
+    "0 0 * * 0": "Every Sunday at 00:00 UTC",
+    "0 0 * * *": "Every day at 00:00 UTC",
+    "30 8 * * *": "Every day at 08:30 UTC",
+    "0 0 1 * *": "On the first day of every month at 00:00 UTC",
+  }
+  return presets[cron.trim()] ?? "Custom UTC schedule — verify the cron expression before saving"
 }
 
 export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
@@ -143,15 +154,6 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  if (loading && schedules.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
-        <Spinner className="h-6 w-6" />
-        <p className="text-muted-foreground text-sm">Loading schedules...</p>
-      </div>
-    )
-  }
-
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -201,9 +203,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                   value={cron}
                   onChange={(e) => setCron(e.target.value)}
                 />
-                <p className="text-muted-foreground mt-1 text-xs">
-                  UTC. Use weekly like 0 0 * * 0 or daily like 30 8 * * *
-                </p>
+                <p className="text-muted-foreground mt-1 text-xs">{describeCron(cron)}</p>
               </FormField>
               <FormField label="Scan Goal" htmlFor="scan-goal">
                 <Select id="scan-goal" value={goal} onChange={(e) => setGoal(e.target.value)}>
@@ -260,7 +260,13 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
         </Card>
       )}
 
-      {schedules.length === 0 ? (
+      {loading && schedules.length === 0 ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Loading schedules">
+          {[0, 1, 2].map((item) => (
+            <Skeleton key={item} className="h-28 w-full" />
+          ))}
+        </div>
+      ) : schedules.length === 0 ? (
         <EmptyState
           icon={Calendar}
           title="No scheduled scans"

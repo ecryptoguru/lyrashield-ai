@@ -24,6 +24,14 @@ import {
 } from "@lyrashield/ui"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export interface FindingListItem {
   id: string
@@ -68,12 +76,14 @@ const STATUS_BADGE: Record<string, BadgeVariant> = {
 export function FindingsClient({
   workspaceId,
   initialData,
+  initialNextCursor,
 }: {
   workspaceId: string
   initialData: FindingListItem[]
+  initialNextCursor: string | null
 }) {
   const [findings, setFindings] = useState<FindingListItem[]>(initialData)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
   const [filter, setFilter] = useState<string>("ALL")
   const [selectedFinding, setSelectedFinding] = useState<FindingListItem | null>(null)
   const [loading, setLoading] = useState(false)
@@ -84,7 +94,7 @@ export function FindingsClient({
       setFilter(newFilter)
       if (newFilter === "ALL") {
         setFindings(initialData)
-        setNextCursor(null)
+        setNextCursor(initialNextCursor)
         setError(null)
         return
       }
@@ -109,19 +119,10 @@ export function FindingsClient({
         setLoading(false)
       }
     },
-    [workspaceId, initialData]
+    [workspaceId, initialData, initialNextCursor]
   )
 
   const filters = ["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW", "OPEN", "FIXED", "VERIFIED"]
-
-  if (loading && findings.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
-        <Spinner className="h-6 w-6" />
-        <p className="text-muted-foreground text-sm">Loading findings...</p>
-      </div>
-    )
-  }
 
   return (
     <div>
@@ -166,7 +167,13 @@ export function FindingsClient({
         </Card>
       )}
 
-      {findings.length === 0 ? (
+      {loading && findings.length === 0 ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Loading findings">
+          {[0, 1, 2].map((item) => (
+            <Skeleton key={item} className="h-32 w-full" />
+          ))}
+        </div>
+      ) : findings.length === 0 ? (
         <EmptyState
           icon={Bug}
           title="No findings yet"
@@ -221,7 +228,9 @@ export function FindingsClient({
                       </span>
                     )}
                   </div>
-                  <h3 className="truncate font-medium">{finding.title}</h3>
+                  <h3 className="truncate font-medium" title={finding.title}>
+                    {finding.title}
+                  </h3>
                   <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
                     {finding.summary}
                   </p>
@@ -253,10 +262,15 @@ export function FindingsClient({
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated<FindingListItem>(`/api/findings`, {
-                workspaceId,
-                cursor,
-              })
+              const params: Record<string, string> = { workspaceId, cursor }
+              if (["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].includes(filter)) {
+                params.severity = filter
+              } else if (["OPEN", "FIXED", "ACCEPTED_RISK", "FALSE_POSITIVE"].includes(filter)) {
+                params.status = filter
+              } else if (filter === "VERIFIED") {
+                params.verified = "true"
+              }
+              const res = await apiGetPaginated<FindingListItem>(`/api/findings`, params)
               return { items: res.items, nextCursor: res.nextCursor }
             }}
             onItems={(items) => setFindings((prev) => [...prev, ...items])}
@@ -332,14 +346,6 @@ function FindingDetailDrawer({
   const [retestError, setRetestError] = useState<string | null>(null)
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    document.addEventListener("keydown", handleKeyDown)
-    return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [onClose])
-
-  useEffect(() => {
     let cancelled = false
     apiGet<FindingDetail>(`/api/findings/${finding.id}?workspaceId=${workspaceId}`)
       .then((res) => {
@@ -360,23 +366,14 @@ function FindingDetailDrawer({
   }, [finding.id, workspaceId])
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-end bg-black/50"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Finding details: ${finding.title}`}
-    >
-      <div
-        className="bg-background shadow-premium h-[80vh] w-full max-w-lg overflow-y-auto rounded-t-xl p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold">{finding.title}</h2>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close finding details">
-            Close
-          </Button>
-        </div>
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="w-full max-w-lg overflow-y-auto p-6 sm:max-w-lg">
+        <SheetHeader className="mb-4 p-0 pr-8 text-left">
+          <SheetTitle>{finding.title}</SheetTitle>
+          <SheetDescription className="sr-only">
+            Finding evidence, verification state, remediation, and retest actions
+          </SheetDescription>
+        </SheetHeader>
 
         {loading ? (
           <div className="flex justify-center py-8">
@@ -687,7 +684,7 @@ function FindingDetailDrawer({
         ) : (
           <p className="text-muted-foreground text-sm">Failed to load finding details.</p>
         )}
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }
