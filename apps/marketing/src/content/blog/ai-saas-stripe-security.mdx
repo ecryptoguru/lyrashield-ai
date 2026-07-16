@@ -9,7 +9,7 @@ tags:
   - access-control
   - verification
 draft: true
-heroImage: supply-chain-05
+heroImage: verification-01
 faq:
   - q: "Can a Stripe success page grant paid access?"
     a: "No. A redirect is browser-controlled and can arrive before durable payment processing. Use it to improve the user experience, then read server-owned billing or entitlement state before granting access."
@@ -62,6 +62,31 @@ Use the success page as a status view. It may ask the server to retrieve current
 Stripe signs webhook deliveries. Its official libraries verify the signature using the raw request payload, the `Stripe-Signature` header, and the endpoint signing secret. A framework body parser that transforms the payload before verification can break the check.
 
 ```ts
+function idOf(value: string | { id: string } | null): string | null {
+  if (!value) return null
+  return typeof value === "string" ? value : value.id
+}
+
+function subscriptionReference(event: Stripe.Event) {
+  switch (event.type) {
+    case "checkout.session.completed": {
+      const session = event.data.object as Stripe.Checkout.Session
+      const customerId = idOf(session.customer)
+      const subscriptionId = idOf(session.subscription)
+      return customerId && subscriptionId ? { customerId, subscriptionId } : null
+    }
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted": {
+      const subscription = event.data.object as Stripe.Subscription
+      const customerId = idOf(subscription.customer)
+      return customerId ? { customerId, subscriptionId: subscription.id } : null
+    }
+    default:
+      return null
+  }
+}
+
 app.post("/stripe/webhook", rawBodyMiddleware, async (req, res) => {
   const event = stripe.webhooks.constructEvent(
     req.rawBody,
@@ -69,38 +94,54 @@ app.post("/stripe/webhook", rawBodyMiddleware, async (req, res) => {
     process.env.STRIPE_WEBHOOK_SECRET
   )
 
+  const reference = subscriptionReference(event)
+  if (!reference) return res.sendStatus(200)
+
   await enqueueVerifiedStripeEvent({
     eventId: event.id,
     eventType: event.type,
-    objectId: event.data.object.id,
+    ...reference,
   })
 
   return res.sendStatus(200)
 })
 ```
 
-Reject a missing or invalid signature before enqueueing anything. Keep the signing secret separate from the Stripe API secret. Use the endpoint secret for the exact webhook destination and environment.
+Reject a missing or invalid signature before enqueueing anything. Keep the signing secret separate from the Stripe API secret. Use the endpoint secret for the exact webhook destination and environment. The switch is deliberately narrow: unsupported or one-time payment events do not enter the subscription worker. Add another event only with its typed object mapping and tests.
 
 A valid signature establishes that Stripe signed the payload received by that endpoint. It does not prove that the event belongs to the current application user, that the requested transition is allowed, or that the same event was not processed already. The worker still resolves the stored customer mapping and applies an allowed state transition.
 
 ## Make delivery and fulfillment idempotent
 
-Stripe may retry deliveries, and event order is not guaranteed. Put a unique constraint on the processed event ID or on a stable business-operation key. Claim the event and update local state in a transaction where practical.
+Stripe may retry deliveries, and event order is not guaranteed. Put a unique constraint on the processed event ID or on a stable business-operation key. Retrieve current Stripe state before opening a database transaction, validate its customer mapping, then claim the event and apply one allowed local transition atomically.
 
 ```ts
+const subscription = await stripe.subscriptions.retrieve(job.subscriptionId)
+const currentCustomerId = idOf(subscription.customer)
+if (currentCustomerId !== job.customerId) throw new Error("Billing reference mismatch")
+
+const nextEntitlement = entitlementFromSubscription(subscription)
+
 await db.transaction(async (tx) => {
   const claimed = await tx.stripeEvents.insertIfAbsent({
-    eventId: event.id,
-    type: event.type,
+    eventId: job.eventId,
+    type: job.eventType,
   })
   if (!claimed) return
 
-  const subscription = await stripe.subscriptions.retrieve(event.objectId)
-  await reconcileEntitlement(tx, subscription)
+  const account = await tx.accounts.findByStripeCustomerId(job.customerId)
+  if (!account) throw new Error("Unknown billing customer")
+
+  await applyAllowedEntitlementTransition(tx, {
+    accountId: account.id,
+    subscriptionId: job.subscriptionId,
+    next: nextEntitlement,
+    sourceEventId: job.eventId,
+  })
 })
 ```
 
-This is a pattern, not drop-in code. A real implementation needs bounded retries, error recording, and a way to replay an event safely. If external work cannot participate in the database transaction, write an outbox record and make each consumer operation idempotent.
+This is a pattern, not drop-in code. A real implementation needs bounded retries, error recording, and a way to replay an event safely. The remote Stripe call stays outside the database transaction so a provider delay does not hold database locks. If a local transition starts further external work, write an outbox record and make each consumer operation idempotent.
 
 Use Stripe idempotency keys when retrying API writes such as creating a subscription or refund. Reuse one key only for the same logical operation and parameters. Stripe's API idempotency does not automatically make your email, credit allocation, database update, or downstream job idempotent.
 
@@ -137,7 +178,7 @@ Use Stripe's sandbox and CLI with synthetic accounts and non-production products
 5. Break the webhook endpoint temporarily, restore it, and observe bounded retry and replay behavior.
 6. Rotate the webhook and API secrets without mixing sandbox and live values.
 
-The passive public [LyraShield Lite Check](/scan) reviews an authorized public web surface. It cannot inspect private Stripe settings, billing records, webhook signatures, or entitlements. A clean public-surface result says nothing about this private state machine.
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record whether server-owned authorization, secret handling, testing, monitoring, and recovery controls have owners before launch. It does not connect to Stripe, inspect webhook settings, read billing state, or exercise a failure path.
 
 Automated tests can prove specific transitions for the fixtures and event sequences they exercise. They cannot decide your refund policy, detect every fraud pattern, or prove that every future Stripe event type is handled correctly. Keep unknown event types visible in logs and alerts without treating them as paid-access instructions.
 

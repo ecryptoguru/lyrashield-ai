@@ -25,14 +25,14 @@
   },
   {
     "slug": "ai-saas-stripe-security",
-    "imageId": "supply-chain-05",
-    "cluster": "supply-chain",
-    "concept": "A reviewed change set tied to one immutable artifact",
-    "prompt": "Text-free square cinematic technical artwork, a review plane binding a small change set to one immutable sealed artifact and provenance receipt, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "A review plane binding a change set to a sealed artifact",
+    "imageId": "verification-01",
+    "cluster": "verification",
+    "concept": "A signed evidence plane bound to the check that produced it",
+    "prompt": "Text-free square cinematic technical artwork, a scanner beam producing a translucent evidence receipt bound to one inspected subject, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "A scanner beam producing an evidence receipt for one inspected subject",
     "sourceHash": null,
-    "cropNotes": "Keep the binding point and sealed artifact inside the central 60 percent",
-    "usageCount": 2,
+    "cropNotes": "Keep beam, subject, and receipt inside the central safe area",
+    "usageCount": 3,
     "approved": false
   },
   {
@@ -61,14 +61,14 @@
   },
   {
     "slug": "secret-scanning-before-commit",
-    "imageId": "verification-01",
-    "cluster": "verification",
-    "concept": "A signed evidence plane bound to the check that produced it",
-    "prompt": "Text-free square cinematic technical artwork, a scanner beam producing a translucent evidence receipt bound to one inspected subject, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "A scanner beam producing an evidence receipt for one inspected subject",
+    "imageId": "supply-chain-05",
+    "cluster": "supply-chain",
+    "concept": "A reviewed change set tied to one immutable artifact",
+    "prompt": "Text-free square cinematic technical artwork, a review plane binding a small change set to one immutable sealed artifact and provenance receipt, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "A review plane binding a change set to a sealed artifact",
     "sourceHash": null,
-    "cropNotes": "Keep beam, subject, and receipt inside the central safe area",
-    "usageCount": 3,
+    "cropNotes": "Keep the binding point and sealed artifact inside the central 60 percent",
+    "usageCount": 2,
     "approved": false
   },
   {

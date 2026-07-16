@@ -120,13 +120,13 @@ Use an owned test repository with fake credentials and a non-production cloud ro
 5. Change a workflow file and confirm the required reviewer blocks it.
 6. Verify that artifacts are bound to the expected commit and that logs contain no credential values.
 
-The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) can inspect selected workflow and configuration text for common credential patterns. It does not read repository settings, resolve action pins, inspect token permissions, or test a cloud trust policy.
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record whether agent, dependency, secret, testing, and operational controls have owners before release. It does not read repository settings, resolve action pins, inspect token permissions, run a workflow, or test a cloud trust policy.
 
 ## What automation can and cannot establish
 
 Static checks can flag mutable action tags, broad token permissions, dangerous trigger and checkout combinations, or unreviewed workflow changes. A repository rule can require those checks before merge. None of that proves the generated application is secure, and a green job does not prove that every privileged path was modeled.
 
-The LyraShield AI repository contains a diff-gate workflow that resolves exact base and head commits, runs secret and dependency checks, produces SARIF, and makes a separate severity decision. It is implemented repository code, not a claim of a generally available hosted service. Its current `DEEP` input has SAFE-equivalent coverage and must not be described as a deeper scan. The [evidence methodology](/methodology) explains why coverage and limitations stay attached to a result.
+The LyraShield AI repository contains a review-stage GitHub Actions workflow for secret and dependency checks plus SARIF output. It is repository code, not a generally available hosted service or production proof. Its current `DEEP` input has SAFE-equivalent coverage and must not be described as a deeper scan. The [evidence methodology](/methodology) explains why coverage and limitations stay attached to a result.
 
 For the adjacent confused-deputy problem, read [how coding agents can misuse CI/CD authority](/blog/cicd-agent-confused-deputy). That guide focuses on delegated identity. This one focuses on making the workflow itself a defensible boundary.
 
