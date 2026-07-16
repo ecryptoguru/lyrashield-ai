@@ -51,7 +51,7 @@ export default async function webhook(req: Request) {
 
 An agent may generate this after seeing repeated authorization failures. The webhook starts working, but the caller is no longer authenticated. A browser, script, or replayed request can reach the same business logic.
 
-The corrected pattern depends on the provider. Verify the provider's signature over the exact raw body, use constant-time comparison or the provider SDK, enforce any timestamp window, and deduplicate the event ID before changing state.
+The corrected pattern depends on the provider. Verify the provider's signature over the exact raw body, use constant-time comparison or the provider SDK, enforce any timestamp window, and claim the event ID atomically before changing state.
 
 ```ts
 export default async function webhook(req: Request) {
@@ -64,14 +64,30 @@ export default async function webhook(req: Request) {
     secret: Deno.env.get("WEBHOOK_SECRET"),
   })
 
-  if (await alreadyProcessed(event.id)) {
-    return new Response("ok")
-  }
+  const outcome = await db.transaction(async (tx) => {
+    const claimed = await tx.webhookEvents.createIfAbsent({
+      provider: "provider-name",
+      eventId: event.id,
+    })
 
-  await applyEventAtomically(event)
-  return new Response("accepted", { status: 202 })
+    if (!claimed) return "duplicate"
+
+    await applyDatabaseEvent(tx, event)
+    await tx.outbox.createIfAbsent({
+      key: `provider-name:${event.id}:effects`,
+      event,
+    })
+
+    return "accepted"
+  })
+
+  return new Response(outcome === "duplicate" ? "ok" : "accepted", {
+    status: outcome === "duplicate" ? 200 : 202,
+  })
 }
 ```
+
+Back `createIfAbsent` with a database uniqueness constraint on the provider and event ID. It must perform one atomic insert with conflict handling, not a separate existence check followed by an insert. Keep the claim, database mutation, and unique outbox write in one transaction. Send email, move money, or call another service from an outbox worker after commit, using the same event-derived idempotency key where the provider supports it.
 
 Keep this endpoint separate from browser-authenticated functions. A source IP or domain string is not usually enough because request sources can be proxied and DNS names are not proof of a signed message. Follow the provider's current verification procedure.
 
@@ -101,7 +117,7 @@ Test the actual published hostname, including a custom domain if one is used. Pr
 
 ## Design webhook failure and replay behavior
 
-Signature verification is only the first webhook decision. Providers retry when a handler times out or returns an error. Store a provider event ID before applying a non-idempotent change, and make duplicate delivery safe. If processing is slow, authenticate and persist the event, return the provider's expected success response, then handle it through a bounded queue.
+Signature verification is only the first webhook decision. Providers retry when a handler times out or returns an error. A separate `alreadyProcessed()` read followed by `applyEvent()` has a race: two concurrent deliveries can both pass the read. Claim a unique provider event ID and apply database state in one transaction. Persist external work to a uniquely keyed outbox before acknowledging the event. If processing is slow, authenticate and persist it, return the provider's expected success response, then handle it through a bounded queue.
 
 Decide what happens when the database is unavailable. Do not acknowledge an event that was neither applied nor durably recorded. Do not retry forever inside one request. Keep the raw body only as long as the verification and audit need requires, and avoid logging customer payloads by default.
 

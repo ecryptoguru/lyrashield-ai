@@ -12,7 +12,7 @@ draft: true
 heroImage: agent-security-03
 faq:
   - q: "Is a Replit Preview URL private?"
-    a: "Do not assume it is private. Development URL visibility depends on workspace and policy settings. Protect sensitive applications with authentication and verify the URL from a signed-out browser."
+    a: "By default, Replit development URLs are public to the web. You can enable the Private development URL control, and Enterprise administrators can require it for every project. Verify the active setting from a signed-out browser."
   - q: "Can a Replit Static Deployment host API routes?"
     a: "No. Replit documents Static Deployment for browser-only sites. Apps with server routes, authentication callbacks, server-side database calls, or long-running logic need a server-capable deployment such as Autoscale or Reserved VM."
   - q: "Can application code expose a Replit Secret?"
@@ -23,7 +23,7 @@ faq:
 
 _Replit deployment names, Secrets behavior, and launch guidance were reviewed against official documentation on July 17, 2026. Confirm the current project and workspace policy before publishing._
 
-Replit makes it easy to move from editor to a public URL, but Preview and publication do not run under one identical boundary. Replit documents separate development and deployment domains, snapshot-based publishing, deployment-specific secrets, and several compute types. A route that works in Preview can disappear, use the wrong callback, or reach a different data store after publication.
+Replit makes it easy to move from editor to a public URL, but Preview and publication do not run under one identical boundary. Development URLs are public to the web by default. You can enable the Private development URL control, and Enterprise workspace administrators can require it for every project. Replit also documents separate development and deployment domains, snapshot-based publishing, deployment-specific secrets, and several compute types. A route that works in Preview can disappear, use the wrong callback, or reach a different data store after publication.
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) calls for production-shaped verification. For a Replit app, that means checking the published host rather than relying on the editor iframe or `replit.dev` URL.
 
@@ -95,18 +95,18 @@ Do not store privileged tokens in local storage, session storage, or browser-rea
 
 Build a small environment matrix before launch:
 
-| Boundary      | Preview                      | Published app                              |
-| ------------- | ---------------------------- | ------------------------------------------ |
-| Host          | `replit.dev` development URL | `replit.app` or custom domain              |
-| Secrets       | Project editor values        | Deployment values selected at publish time |
-| Auth callback | Development callback         | Production callback                        |
-| Data          | Development database         | Intended production database               |
-| Filesystem    | Editor workspace             | Snapshot runtime, not durable storage      |
-| Visibility    | Workspace policy             | Public or private deployment setting       |
+| Boundary      | Preview                                | Published app                                              |
+| ------------- | -------------------------------------- | ---------------------------------------------------------- |
+| Host          | `replit.dev` development URL           | `replit.app` or custom domain                              |
+| Secrets       | Project editor values                  | Deployment values selected at publish time                 |
+| Auth callback | Development callback                   | Production callback                                        |
+| Data          | Development database                   | Intended production database                               |
+| Filesystem    | Editor workspace                       | Snapshot runtime, not durable storage                      |
+| Visibility    | Public by default; can be made private | Public, password protected, workspace only, or invite only |
 
 Verify every cell rather than assuming the publishing tool copied the intended value. Open the final URL in a private browser. Test sign-in, sign-out, session expiry, password recovery, OAuth redirects, and denied API calls.
 
-Private deployment availability and development URL policy vary by workspace and plan. Describe the behavior you verified, not a universal entitlement. Application authentication and resource authorization still matter inside a private deployment.
+Private Deployments are currently available on all plans. The publishing controls offer Public, Password protected, Workspace only, and Invite only access, but workspace membership, administrator access, invitations, and organization policy still determine who can enter. Enterprise administrators can also require new published apps and development URLs to be private. Describe the behavior you verified. Application authentication and resource authorization still matter inside a private deployment.
 
 ## Inspect headers on the published response
 
@@ -141,8 +141,11 @@ A platform security scan or agent review can find candidates. It cannot prove th
 ## Sources
 
 - [Replit: Secrets](https://docs.replit.com/core-concepts/project-editor/app-setup/secrets)
+- [Replit: Development URLs](https://docs.replit.com/core-concepts/project-editor/app-setup/development-urls)
 - [Replit: Security checklist](https://docs.replit.com/learn/security-checklist)
 - [Replit: Publishing](https://docs.replit.com/learn/projects-and-artifacts/replit-deployments)
+- [Replit: Private Deployments](https://docs.replit.com/references/publishing/private-deployments)
+- [Replit: May 2026 private publishing update](https://docs.replit.com/updates/2026/05/08/changelog)
 - [Replit: Publishing troubleshooting](https://docs.replit.com/build/troubleshooting)
 - [Replit: Reserved VM deployments](https://docs.replit.com/references/publishing/reserved-vm-deployments)
 - [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)

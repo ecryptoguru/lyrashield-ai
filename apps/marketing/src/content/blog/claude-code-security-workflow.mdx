@@ -72,14 +72,16 @@ Begin with `plan` or `default`. Add permission rules for repeatable, low-impact 
     ]
   },
   "sandbox": {
-    "failIfUnavailable": true
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false
   }
 }
 ```
 
 Treat this as an illustrative fragment, then confirm the current matcher syntax in Anthropic's permission documentation. Bash patterns have security limitations, and a slightly different command form may not match the rule you expected. Hard separation is stronger: leave cloud credentials out of the process, remove production network reach, and use an account that cannot deploy.
 
-Set `sandbox.failIfUnavailable` when sandboxing is a release requirement. Anthropic documents that sandbox startup can otherwise warn and continue without the sandbox on an unsupported or incomplete system. A visible warning is useful during exploration. It is not a reliable CI gate.
+Set all three sandbox values when sandboxing is a release requirement. `enabled` turns Bash sandboxing on. `failIfUnavailable` makes an unsupported or incomplete sandbox fail at startup instead of warning and continuing unsandboxed. `allowUnsandboxedCommands: false` disables the `dangerouslyDisableSandbox` escape hatch. Review `excludedCommands` separately because every command listed there still runs outside the sandbox. A visible warning or a permission prompt is useful during exploration. Neither is a fail-closed CI gate.
 
 ## Review repository configuration as executable policy
 
