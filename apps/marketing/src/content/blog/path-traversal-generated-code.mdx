@@ -1,0 +1,142 @@
+---
+title: "Prevent Path Traversal in Generated File Code"
+description: "Keep file reads, exports, and archive extraction inside a trusted directory with canonical containment checks and safer identifiers."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: true
+heroImage: web-execution-04
+faq:
+  - q: "Is path.basename enough to prevent path traversal?"
+    a: "It can reduce a user-supplied value to one filename, which helps in narrow upload or download designs. It is not enough when subdirectories are legitimate, when archive entries are extracted, or when a symlink inside the trusted root points elsewhere."
+  - q: "Does path.normalize make a path safe?"
+    a: "No. Normalization simplifies a path, but it does not decide whether the result is authorized. Normalize or resolve first, then enforce that the final path remains inside the intended root."
+  - q: "How do symlinks affect a containment check?"
+    a: "A lexical path can appear to stay inside the root while a symlink resolves outside it. Resolve real filesystem paths where symlinks are possible, restrict who can create links, and account for races between checking and opening a file."
+---
+
+**Direct answer:** Prevent path traversal by avoiding user-controlled filesystem paths where possible. Map a server-owned identifier to a file instead. If the application must accept a path, resolve it against a trusted root, calculate its relative position, reject absolute or escaping results, and account for symlinks before opening the file.
+
+File features often begin with one harmless-looking line: join a storage directory with a filename from the request. That pattern appears in download routes, export jobs, archive extractors, theme loaders, and agent tools. The danger is not limited to the literal string `../`. The server must decide whether the final filesystem object remains inside the directory that the feature is allowed to use.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats this as an input and execution boundary. Validation helps, but the decisive control is server-side containment tied to the actual path operation.
+
+## The vulnerable pattern: joining an untrusted filename
+
+**Vulnerable pattern. Use only with dummy files in a local test directory.**
+
+```ts
+app.get("/api/exports/:name", requireSession, async (req, res) => {
+  const filePath = path.join(EXPORT_ROOT, req.params.name)
+  return res.sendFile(filePath)
+})
+```
+
+The route authenticates the caller, but it gives the request control over part of a filesystem path. A traversal sequence, an absolute path, a platform-specific separator, or a value decoded at a different layer may change where the operation lands. A denylist for `../` misses variants and says nothing about whether the resolved destination is authorized.
+
+MITRE classifies this failure as [CWE-22](https://cwe.mitre.org/data/definitions/22.html): external input influences a pathname used to access a restricted directory without proper limitation. The practical question is simple: after every relevant transformation, is the destination still below the trusted root?
+
+## Why generated code misses the final path
+
+Generated handlers tend to follow the shortest successful example. `path.join(root, name)` looks like a boundary because the trusted root appears first. It is only string and path processing. It does not grant or deny access.
+
+Another common fix checks for one substring:
+
+```ts
+if (name.includes("../")) return res.sendStatus(400)
+```
+
+That check assumes one separator, one encoding pass, and one operating system. The [OWASP path traversal reference](https://owasp.org/www-community/attacks/Path_Traversal) documents why encoded separators and different path forms defeat simple filtering. Windows accepts backslashes as separators. Proxy, framework, and application layers may decode at different times. Absolute paths and archive entry names add more cases.
+
+AI-generated code also tends to stop after `path.normalize()`. Normalization can simplify dot segments, but it does not know which directory is allowed. A normalized path can still point outside the root. Authorization must compare the resolved destination with that root.
+
+## Prefer identifiers over paths
+
+The cleanest design does not let the browser name a filesystem location. Give each stored object a server-generated identifier and keep the actual path in trusted metadata.
+
+```ts
+app.get("/api/exports/:id", requireSession, async (req, res) => {
+  const exportFile = await db.exportFile.findFirst({
+    where: {
+      id: req.params.id,
+      workspaceId: req.context.workspaceId,
+    },
+    select: { storageName: true },
+  })
+
+  if (!exportFile) return res.sendStatus(404)
+  return res.sendFile(exportFile.storageName, { root: EXPORT_ROOT })
+})
+```
+
+The database lookup now enforces object ownership, while `storageName` comes from server-controlled creation logic. Keep the storage name opaque and constrained. Do not save the original upload filename as the disk path merely because it was recorded in the database.
+
+If users need nested folders, represent the hierarchy as data and resolve it through authorized records. A document ID and parent-folder relationship are easier to review than a raw relative path supplied by the client.
+
+## Enforce canonical containment when paths are necessary
+
+Some tools legitimately accept relative paths, especially developer utilities and server-side archive workflows. Resolve the trusted root and candidate, then use `path.relative()` to test containment.
+
+```ts
+import path from "node:path"
+
+const root = path.resolve(PROJECT_FILES_ROOT)
+
+function resolveInsideRoot(untrustedPath: string): string {
+  if (untrustedPath.includes("\0")) {
+    throw new Error("Invalid path")
+  }
+
+  const candidate = path.resolve(root, untrustedPath)
+  const relative = path.relative(root, candidate)
+
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("Path leaves the allowed directory")
+  }
+
+  return candidate
+}
+```
+
+Node's [Path API](https://nodejs.org/api/path.html) defines `path.resolve()` as producing an absolute resolved path and `path.relative()` as calculating the path from one location to another. The security decision is still application code. The rejection handles the parent itself, descendants of the parent, and platform-specific absolute results.
+
+Use the path flavor that matches the target filesystem. `path.win32` and `path.posix` are useful when code validates paths for a platform other than the one running the validator. Do not test Windows archive names with POSIX assumptions.
+
+Case and namespace rules also differ. A containment test written on a case-sensitive development machine can behave differently on a case-insensitive production volume. Network shares, drive-relative paths, and alternate filesystem namespaces deserve explicit rejection unless the feature was designed for them. Run the same fixture suite on the actual production filesystem type instead of assuming that Node's string result captures every storage rule.
+
+If the feature only needs a single filename, reject directory components and compare the input with `path.basename(input)`. That narrows the grammar considerably. It does not solve every filesystem issue, but it is easier to reason about than arbitrary nesting.
+
+## Symlinks and archive extraction need another layer
+
+Lexical containment is not physical containment. A path such as `root/cache/report.pdf` looks safe even if `root/cache` is a symlink to a directory outside `root`. Where an attacker or less-trusted process can create links, resolve the real path of the root and existing candidate before use, then compare those real paths.
+
+Files created after the check are harder. A second process can change a path between validation and open, producing a time-of-check to time-of-use race. Stronger designs use operating-system facilities that open relative to an already trusted directory handle, avoid following symlinks, or place the operation in a filesystem namespace where escaping the allowed tree has no useful effect. The exact API varies by platform and runtime.
+
+Archive extraction needs a containment check for every entry. Reject absolute entry names, resolve each output path below the extraction root, and treat symbolic links and hard links as separate entry types. Do not validate only the archive's top-level filename. Decompress into a new, low-privilege directory and impose limits on entry count and expanded size.
+
+The related guide on [secure file uploads](/blog/secure-file-uploads-ai-apps) covers content type, size, storage, and serving controls. Those controls complement path containment rather than replace it.
+
+## Verify without probing a real system
+
+Build the test around a temporary directory containing harmless marker files. Create an allowed root and a sibling directory. Confirm that a normal filename succeeds and that parent paths, absolute paths, mixed separators, and nested dot segments fail on every supported platform.
+
+Add tests for the application's actual decoding chain. Pass the value through the same router and framework middleware used in production rather than testing only the helper. For archive code, create synthetic archives with safe entry names, parent paths, absolute entries, and link entries. Extract them only inside a disposable test directory.
+
+Test authorization separately. A path can remain inside the shared root and still point to another workspace's file. Containment answers where the file is. Ownership answers whether this caller may access it.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record these review cases before release. It cannot open your server filesystem, inspect runtime symlinks, or prove that every file operation uses the helper.
+
+## What automation can and cannot prove
+
+Static analysis can detect request data flowing into `readFile`, `sendFile`, archive, or path APIs. Unit tests can exercise known path forms. A runtime scanner in an authorized environment may detect response differences from controlled traversal inputs.
+
+A clean result cannot prove physical containment across symlink changes, mounted directories, platform differences, or code paths the scanner did not reach. It also cannot infer your ownership model from a directory layout. Record the inspected operations and limitations. Treat suspicious data flow as a detected candidate until code review or a controlled test establishes the behavior.
+
+## Sources
+
+- [MITRE CWE-22: Improper Limitation of a Pathname to a Restricted Directory](https://cwe.mitre.org/data/definitions/22.html)
+- [OWASP: Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal)
+- [Node.js: Path API](https://nodejs.org/api/path.html)

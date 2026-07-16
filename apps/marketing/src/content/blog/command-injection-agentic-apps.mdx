@@ -1,0 +1,139 @@
+---
+title: "Command Injection in Agentic App Workflows"
+description: "Remove unsafe shell boundaries from agent tools, constrain process arguments, and isolate the external commands that remain necessary."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - web-security
+  - verification
+draft: true
+heroImage: web-execution-05
+faq:
+  - q: "Is shell escaping enough to prevent command injection?"
+    a: "Escaping is fragile because it depends on the shell, platform, quoting context, and every later transformation. Prefer a library call or execute a fixed program with a separate argument array and no shell."
+  - q: "Does an argument array remove every injection risk?"
+    a: "No. It removes shell metacharacter interpretation when no shell is used, but the program can still interpret dangerous options, filenames, configuration syntax, or nested commands. Validate each argument for that program."
+  - q: "When does an agent tool still need a sandbox?"
+    a: "Use isolation when an allowed process can read files, access networks, consume substantial resources, or invoke other tools. A sandbox limits impact, but it does not make unsafe command construction acceptable."
+---
+
+**Direct answer:** Prevent command injection by removing the shell from agent workflows. Call a library or constrained service when possible. If an external process is necessary, choose the executable in trusted code, pass validated arguments as a separate array, disable shell execution, control its environment and working directory, impose resource limits, and run it with minimal privileges.
+
+An agent does not need a malicious user prompt to cross a command boundary accidentally. Model output, repository text, filenames, issue bodies, build logs, and tool results can all become untrusted input. If a workflow splices any of them into a shell string, the shell interprets syntax that the application may have intended as plain data.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) separates authorization to invoke a tool from safe execution inside that tool. Both are required. An approval gate cannot repair a command built from unsafe text.
+
+## The vulnerable pattern: a shell string built from model output
+
+**Vulnerable pattern. Do not connect this example to a real shell.**
+
+```ts
+const task = await model.proposeBuildTask(userRequest)
+
+exec(`npm run ${task.script} -- --project ${task.project}`, (error, stdout) => {
+  if (error) throw error
+  saveOutput(stdout)
+})
+```
+
+The code assumes `script` and `project` are labels. The shell sees one command line. Quotes, substitutions, separators, redirections, and platform-specific syntax can change its meaning. The source does not need to be a human attacker. A repository file can contain instructions that influence a model, and the model can pass those words into a tool.
+
+[CWE-78](https://cwe.mitre.org/data/definitions/78.html) covers improper neutralization of elements used in an operating system command. The weakness exists at the process-construction boundary. Prompt filtering and output moderation do not define a safe command grammar.
+
+## Why generated workflows keep the shell
+
+Shell commands are compact and familiar. Documentation often shows them because a developer can paste one into a terminal. A code generator then translates the same example into `exec()` without changing the trust model.
+
+An AI tool can also apply a cosmetic fix such as replacing one metacharacter or wrapping the value in quotes. Shell quoting rules differ between POSIX shells and Windows command processors. Nested quoting, environment expansion, and later concatenation make an escaping helper easy to misuse. The [OWASP command injection guidance](https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html) puts the strongest defense first: avoid operating-system commands when a safer API can perform the task.
+
+Agentic workflows add a second blind spot. The model may be allowed to choose both the tool and its arguments. A broad tool named `run_command` turns every prompt and tool result into part of a command policy that is difficult to state and harder to test.
+
+## Replace commands with narrow capabilities
+
+Start by naming the operation the product needs. If the task is archive creation, use an archive library. If it is Git status, use a constrained Git library or a tool whose implementation owns the command. If it is image conversion, expose a fixed conversion function with typed options.
+
+```ts
+const ResizeRequest = z.object({
+  inputId: z.string().uuid(),
+  width: z.number().int().min(64).max(2400),
+  format: z.enum(["webp", "avif"]),
+})
+
+async function resizeApprovedImage(raw: unknown) {
+  const request = ResizeRequest.parse(raw)
+  const input = await loadWorkspaceImage(request.inputId)
+  return imageLibrary.resize(input, request.width, request.format)
+}
+```
+
+The agent chooses among product concepts, not shell syntax. The application resolves the workspace-owned image and constrains dimensions and formats. This is easier to authorize, log, and test than a generic process runner.
+
+Avoid giving the model a raw escape hatch for convenience. If one unusual operation genuinely needs human intervention, stop and present a bounded proposal rather than falling back to arbitrary execution.
+
+## Execute a fixed program without a shell
+
+When an external binary is necessary, select it in trusted code and pass each argument separately. In Node.js, `exec()` launches a shell. The [child process documentation](https://nodejs.org/api/child_process.html) describes `execFile()` as running an executable directly by default on Unix-like systems. `spawn()` also accepts an executable and argument array.
+
+```ts
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+
+const runFile = promisify(execFile)
+const allowedFormats = new Set(["json", "text"])
+
+async function inspectRepository(format: string) {
+  if (!allowedFormats.has(format)) throw new Error("Unsupported format")
+
+  return runFile(
+    "/usr/local/bin/repo-inspector",
+    ["--format", format, "--", "/workspace/repository"],
+    {
+      cwd: "/workspace",
+      env: { PATH: "/usr/local/bin:/usr/bin" },
+      timeout: 15_000,
+      maxBuffer: 512 * 1024,
+      windowsHide: true,
+    }
+  )
+}
+```
+
+The separator `--` is useful only if the chosen program treats it as the end of options. Confirm that behavior in the program's documentation. An argument array stops the shell from interpreting metacharacters, but it does not stop the executable from interpreting `--config`, a response-file marker, a repository URL, or its own mini-language.
+
+Platform behavior belongs in the review. On Windows, some script formats need a command processor even when ordinary executables do not. Do not silently switch to `shell: true` to make one file run. Choose a real executable, invoke a reviewed wrapper with a fixed interface, or implement the operation through a library. Keep platform-specific branches visible in tests.
+
+Allowlist the shape and meaning of every argument. Prefer enumerated modes and server-owned paths. Reject control characters and impose length limits. Do not accept a complete argument array from the model and call the wrapper safe merely because it uses `spawn()`.
+
+## Control the process boundary
+
+Use an absolute executable path or a minimal trusted `PATH`. A mutable search path can select the wrong binary. Fix the working directory and avoid inheriting the application's full environment, which may contain service credentials. Pass only variables that the child needs.
+
+Set a timeout, cap captured output, and bound concurrent processes. A command that never exits or prints unbounded data is an availability problem even without injection. Handle termination explicitly because some processes spawn children that outlive the parent.
+
+Run the child as a low-privilege identity. Give its filesystem only the inputs it needs and an isolated output directory. Restrict outbound network access when the operation does not require it. A container or sandbox can reduce the damage from a vulnerable parser or compromised dependency, but it is not a substitute for fixed executable selection and argument validation.
+
+Agent authorization remains separate. Define which users and workflows may invoke the tool, what resources it may touch, and which invocations require exact approval. Bind approval to the immutable operation and arguments. A generic approval for "run the build" should not authorize a later, changed command.
+
+## Verify the tool without running attack payloads
+
+Test the command builder as a pure function first. Feed it normal values, leading-dash values, spaces, quotes, separators, newlines, and oversized input. Assert the exact executable, argument array, environment keys, working directory, timeout, and shell setting. Use harmless marker strings rather than a command that changes the machine.
+
+Replace the real executable with a fixture process that prints its received arguments as JSON. This shows whether the program receives one argument or several without asking a shell to interpret anything. Run platform-specific tests on every operating system the tool supports.
+
+Then test policy. An unauthorized user cannot invoke the capability. A changed argument invalidates approval. Timeouts stop the child, oversized output fails safely, and errors return bounded public details. Preserve internal diagnostics without copying raw model or repository content into public logs.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can prompt a review of shell use, privileges, timeouts, and approvals. It does not inspect or execute the process. The guide to [input validation for AI-generated APIs](/blog/input-validation-ai-generated-api) covers how to parse the typed request before it reaches this boundary.
+
+## What automation can and cannot prove
+
+Static tools can flag `exec()`, `shell: true`, string interpolation, and untrusted data flowing toward process APIs. Unit tests can verify the constructed call. Sandbox policy tests can confirm some filesystem and network restrictions.
+
+Automation cannot assume that every safe-looking argument is harmless to the target program. It may not understand configuration files, plugins, response files, or nested interpreters. A clean scan also does not prove that tool authorization or approval binding is correct. Review the executable's grammar and the agent's permission model independently. Record which path was inspected and which controls were exercised.
+
+## Sources
+
+- [OWASP: OS Command Injection Defense Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html)
+- [MITRE CWE-78: OS Command Injection](https://cwe.mitre.org/data/definitions/78.html)
+- [Node.js: Child Process API](https://nodejs.org/api/child_process.html)
