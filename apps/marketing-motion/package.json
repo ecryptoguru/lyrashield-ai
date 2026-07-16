@@ -1,0 +1,46 @@
+{
+  "name": "@lyrashield/marketing-motion",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm build:desktop && pnpm build:portrait",
+    "build:desktop": "vite build --mode desktop",
+    "build:portrait": "vite build --mode portrait",
+    "dev": "pnpm build:desktop && cd dist/desktop && npx --yes hyperframes@0.7.60 preview --port 3002",
+    "check": "pnpm build && cd dist/desktop && npx --yes hyperframes@0.7.60 check && cd ../portrait && npx --yes hyperframes@0.7.60 check",
+    "inspect": "pnpm build && cd dist/desktop && npx --yes hyperframes@0.7.60 inspect --samples 15 && cd ../portrait && npx --yes hyperframes@0.7.60 inspect --samples 15",
+    "render:desktop": "pnpm build:desktop && mkdir -p renders/masters && cd dist/desktop && npx --yes hyperframes@0.7.60 render --fps 30 --quality high --output ../../renders/masters/assurance-world-desktop.mp4",
+    "render:portrait": "pnpm build:portrait && mkdir -p renders/masters && cd dist/portrait && npx --yes hyperframes@0.7.60 render --fps 30 --quality high --output ../../renders/masters/assurance-world-portrait.mp4",
+    "render": "pnpm render:desktop && pnpm render:portrait",
+    "render:web:desktop": "VITE_SHOW_COPY=false VITE_OUTPUT_VARIANT=desktop-web vite build --mode desktop && mkdir -p renders/masters && cd dist/desktop-web && npx --yes hyperframes@0.7.60 render --fps 30 --quality high --output ../../renders/masters/assurance-world-desktop-web.mp4",
+    "render:web:portrait": "VITE_SHOW_COPY=false VITE_OUTPUT_VARIANT=portrait-web vite build --mode portrait && mkdir -p renders/masters && cd dist/portrait-web && npx --yes hyperframes@0.7.60 render --fps 30 --quality high --output ../../renders/masters/assurance-world-portrait-web.mp4",
+    "render:web": "pnpm render:web:desktop && pnpm render:web:portrait",
+    "render:determinism:desktop": "VITE_SHOW_COPY=false VITE_OUTPUT_VARIANT=desktop-check VITE_COMP_ID=assurance-world-desktop-check VITE_COMP_WIDTH=480 VITE_COMP_HEIGHT=270 vite build --mode desktop && mkdir -p renders/masters && cd dist/desktop-check && npx --yes hyperframes@0.7.60 render --fps 30 --quality draft --no-browser-gpu --output ../../renders/masters/assurance-world-desktop-check-a.mp4 && npx --yes hyperframes@0.7.60 render --fps 30 --quality draft --no-browser-gpu --output ../../renders/masters/assurance-world-desktop-check-b.mp4",
+    "render:determinism:portrait": "VITE_SHOW_COPY=false VITE_OUTPUT_VARIANT=portrait-check VITE_COMP_ID=assurance-world-portrait-check VITE_COMP_WIDTH=270 VITE_COMP_HEIGHT=480 vite build --mode portrait && mkdir -p renders/masters && cd dist/portrait-check && npx --yes hyperframes@0.7.60 render --fps 30 --quality draft --no-browser-gpu --output ../../renders/masters/assurance-world-portrait-check-a.mp4 && npx --yes hyperframes@0.7.60 render --fps 30 --quality draft --no-browser-gpu --output ../../renders/masters/assurance-world-portrait-check-b.mp4",
+    "render:determinism": "pnpm render:determinism:desktop && pnpm render:determinism:portrait",
+    "derive": "node scripts/derive-media.mjs",
+    "verify": "node scripts/verify-media.mjs",
+    "verify:determinism": "node scripts/verify-determinism.mjs",
+    "prepare:local": "node scripts/prepare-local-preview.mjs",
+    "publish:r2": "node scripts/publish-r2.mjs",
+    "blog:images:derive": "node scripts/derive-blog-images.mjs",
+    "blog:images:verify": "node scripts/verify-blog-images.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src scripts vite.config.ts --max-warnings 0"
+  },
+  "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
+    "gsap": "3.14.2",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/three": "0.185.1",
+    "eslint": "^9.39.5",
+    "sharp": "0.34.5",
+    "typescript": "^6.0.0",
+    "typescript-eslint": "^8.62.1",
+    "vite": "8.1.4"
+  }
+}
