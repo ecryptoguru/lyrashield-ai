@@ -44,7 +44,9 @@ The browser receives `VITE_PROVIDER_SECRET` as part of the built application. A 
 
 This does not mean every browser key is a secret. Analytics write keys, payment publishable keys, Supabase publishable keys, and similar identifiers may be designed for public use. Their provider documentation should say so, and the server-side policy must limit what they can do.
 
-Supabase's current terminology makes the distinction explicit. Publishable keys and the legacy `anon` key can be used by public clients when database grants and RLS policies enforce access. Secret keys and the legacy `service_role` key are privileged. They bypass the same client boundary and stay on trusted servers.
+Supabase's current [API-key documentation](https://supabase.com/docs/guides/getting-started/api-keys) makes the distinction explicit. Publishable keys and the legacy `anon` key can be used by public clients when database grants and RLS policies enforce access. Secret keys and the legacy `service_role` key are privileged. They bypass the same client boundary and stay on trusted servers.
+
+Creating a new Supabase key does not revoke a legacy key. Disable the old credential explicitly after every component has moved to its replacement.
 
 ## Why generated apps leak credentials
 
@@ -128,4 +130,5 @@ For a practical example of public identifiers backed by database policy, read [S
 - [Next.js: Environment Variables](https://nextjs.org/docs/pages/guides/environment-variables)
 - [OWASP: Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html)
 - [GitHub: Push protection](https://docs.github.com/en/code-security/concepts/secret-security/push-protection)
+- [Supabase: Understanding API keys](https://supabase.com/docs/guides/getting-started/api-keys)
 - [Supabase: Securing your API](https://supabase.com/docs/guides/api/securing-your-api)

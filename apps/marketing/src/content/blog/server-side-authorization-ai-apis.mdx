@@ -91,7 +91,7 @@ function canCreateInvitation(input: AuthorizationRequest): boolean {
 }
 ```
 
-This example denies owner invitations to show that role is not the only input. A real product may allow them behind stronger review. The important part is that the rule has a name and a testable branch.
+This example denies admin invitations to show that role is not the only input. A real product may allow them behind stronger review. The important part is that the rule has a name and a testable branch.
 
 Use the policy before the operation:
 
@@ -119,11 +119,22 @@ app.post("/api/workspaces/:id/invitations", requireSession, async (req, res) => 
     role: input.role,
   })
 
-  return res.status(201).json(invitation)
+  const publicInvitation = {
+    id: invitation.id,
+    email: invitation.email,
+    role: invitation.role,
+    expiresAt: invitation.expiresAt,
+  }
+
+  return res.status(201).json(publicInvitation)
 })
 ```
 
-The server resolves the workspace instead of trusting a tenant field in the body. The service can also accept the authorization context so a future non-HTTP caller cannot bypass the handler and invoke the operation without policy.
+The server resolves the workspace instead of trusting a tenant field in the body. It also returns an explicit public projection. Internal state, audit fields, and any invitation token stay out of the response. The service can accept the authorization context so a future non-HTTP caller cannot bypass the handler and invoke the operation without policy.
+
+Define that projection through a response schema when the framework supports one. The persistence record may contain a token hash, creator metadata, delivery attempts, provider identifiers, or internal timestamps that the browser never needs. Returning the complete ORM object makes each future database column public by accident. A named response type reverses that default: adding a private column does not change the API. Test the serialized body so a refactor cannot reintroduce the raw record. If the interface does not need the invited email address after submission, omit that field too and return only the invitation ID, role, and expiry.
+
+Keep the projection separate from logs and audit events. An audit record may need the actor and workspace, while the HTTP response may not. Neither surface should contain the invitation token. The delivery service is the only component that should receive the one-time value needed to construct an invitation link.
 
 ## Deny by default and constrain data access
 

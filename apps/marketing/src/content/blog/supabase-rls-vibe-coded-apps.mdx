@@ -11,7 +11,7 @@ draft: true
 heroImage: access-boundary-01
 faq:
   - q: "Does every Supabase table need RLS?"
-    a: "Every table exposed through the Supabase Data API needs row-level security unless it is intentionally public and protected through another reviewed design. Tables outside exposed schemas still need appropriate grants and server-side controls."
+    a: "Every table exposed through the Supabase Data API needs RLS. Exposed views must preserve the underlying RLS boundary. If data is intentionally public, grant it through an explicit public policy. Otherwise remove the table or view from the exposed API schema."
   - q: "Is a Supabase publishable key a secret?"
     a: "No. Publishable keys, and the legacy anon key, are designed for client use. Their safety depends on grants and row-level policies. Secret keys and the legacy service_role key belong only on trusted servers."
   - q: "Why does service_role bypass RLS?"
@@ -118,11 +118,13 @@ Record the role, operation, expected outcome, and observed outcome. A passing re
 
 Views need attention because their execution context can bypass underlying table policies. Supabase documents options for security-invoker views in supported PostgreSQL versions. Review every view exposed through the API rather than assuming the base table policy carries through.
 
+Intentionally public data still needs an explicit boundary. For a table that anyone may read, create a narrowly named `SELECT` policy for the `anon` role and do not grant write commands unless the product requires them. If a table or view exists only for trusted backend work, remove it from the exposed API schema instead of leaving public access ambiguous. For an exposed view, verify that its execution mode preserves the underlying table policies and test it through the same public role used by the client. A public read policy on one object says nothing about related tables or functions.
+
 Functions can create a similar boundary. A security-definer function runs with its owner's privileges. Keep its search path controlled, expose only the intended arguments, and authorize inside the function where needed.
 
 Membership changes are another sharp edge. If a user loses workspace membership, their next request should lose access. Long-lived claims, cached membership, and background jobs can delay that effect unless the design has an explicit revocation path.
 
-Finally, distinguish Supabase key types. Current Supabase documentation uses publishable and secret keys while still supporting legacy `anon` and `service_role` JWT keys. Publishable and `anon` keys may appear in a browser. Secret and `service_role` keys must not.
+Finally, distinguish Supabase key types. Supabase's current [API-key documentation](https://supabase.com/docs/guides/getting-started/api-keys) uses publishable and secret keys while still supporting legacy `anon` and `service_role` JWT keys. Publishable and `anon` keys may appear in a browser. Secret and `service_role` keys must not.
 
 Review delete behavior even when the interface has no delete button. An old API client or direct request can still invoke a granted command. If the product never deletes projects through the Data API, revoke that grant instead of relying on the UI to keep the route quiet.
 
@@ -138,5 +140,6 @@ For a stack-wide boundary, continue with [preventing cross-tenant data leaks](/b
 
 - [Supabase: Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
 - [Supabase: Securing your API](https://supabase.com/docs/guides/api/securing-your-api)
+- [Supabase: Understanding API keys](https://supabase.com/docs/guides/getting-started/api-keys)
 - [PostgreSQL: Row Security Policies](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
 - [OWASP API Security: Broken Object Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
