@@ -35,12 +35,13 @@
   "vars": {
     "PUBLIC_SITE_URL": "https://lyrashieldai.com",
     "PUBLIC_APP_URL": "",
+    "PUBLIC_SCANNER_URL": "https://scanner.lyrashieldai.com",
     "PUBLIC_X_URL": "",
     "PUBLIC_INDEXABLE": "true",
     "PUBLIC_POSTHOG_KEY": "",
     "PUBLIC_POSTHOG_HOST": "https://eu.i.posthog.com",
-    "PUBLIC_TURNSTILE_SITE_KEY": "",
-    "PUBLIC_ABUSE_EMAIL": "",
+    "PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAD2y2YIoipDqDHsM",
+    "PUBLIC_ABUSE_EMAIL": "abuse@lyrashieldai.com",
   },
   "d1_databases": [
     {

@@ -46,6 +46,7 @@ docker-data/
 *.pem
 *.key
 *.crt
+!packages/db/prisma/certs/supabase-root-2021-ca.crt
 *.p12
 
 # Vercel
