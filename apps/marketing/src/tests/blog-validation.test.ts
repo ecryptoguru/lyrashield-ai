@@ -1,8 +1,11 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { describe, expect, it, vi } from "vitest"
+import program from "../content/blog-program.json"
 
 import {
   checkExternalLinks,
@@ -11,8 +14,107 @@ import {
   validateArticle,
   validateArticleText,
   validateImageLibrary,
+  validateProgramRoot,
   validateUsageCounts,
 } from "../../scripts/blog-validation-lib.mjs"
+
+const scripts = [
+  "validate-blog-content.mjs",
+  "validate-blog-images.mjs",
+  "check-external-blog-links.mjs",
+].map((file) => fileURLToPath(new URL(`../../scripts/${file}`, import.meta.url)))
+
+function avif(width: number, height: number, size = 40) {
+  const buffer = Buffer.alloc(size)
+  buffer.write("ftyp", 4, "ascii")
+  buffer.write("avif", 8, "ascii")
+  buffer.write("ispe", 16, "ascii")
+  buffer.writeUInt32BE(width, 24)
+  buffer.writeUInt32BE(height, 28)
+  return buffer
+}
+
+function webp(width: number, height: number, size = 30) {
+  const buffer = Buffer.alloc(size)
+  buffer.write("RIFF", 0, "ascii")
+  buffer.writeUInt32LE(22, 4)
+  buffer.write("WEBP", 8, "ascii")
+  buffer.write("VP8X", 12, "ascii")
+  buffer.writeUIntLE(width - 1, 24, 3)
+  buffer.writeUIntLE(height - 1, 27, 3)
+  return buffer
+}
+
+function jpeg(width: number, height: number, size = 23) {
+  const buffer = Buffer.alloc(size)
+  Buffer.from([
+    0xff,
+    0xd8,
+    0xff,
+    0xc0,
+    0x00,
+    0x11,
+    0x08,
+    (height >> 8) & 0xff,
+    height & 0xff,
+    (width >> 8) & 0xff,
+    width & 0xff,
+    0x03,
+    0x01,
+    0x11,
+    0x00,
+    0x02,
+    0x11,
+    0x00,
+    0x03,
+    0x11,
+    0x00,
+    0xff,
+    0xd9,
+  ]).copy(buffer)
+  return buffer
+}
+
+function catalogEntry(imageId: string, cluster = "verification") {
+  return {
+    cluster,
+    avif: `/images/blog/library/${imageId}/hero.avif`,
+    webp: `/images/blog/library/${imageId}/hero.webp`,
+    jpeg: `/images/blog/library/${imageId}/hero.jpg`,
+    og: `/images/blog/library/${imageId}/og.jpg`,
+    socialPortrait: `/images/blog/library/${imageId}/social-portrait.jpg`,
+    alt: `A deterministic evidence concept for ${imageId}`,
+    width: 1600,
+    height: 900,
+  }
+}
+
+function writeImageSet(root: string, imageId: string, avifSize = 40) {
+  const imageRoot = join(root, "public/images/blog/library", imageId)
+  mkdirSync(imageRoot, { recursive: true })
+  writeFileSync(join(imageRoot, "hero.avif"), avif(1600, 900, avifSize))
+  writeFileSync(join(imageRoot, "hero.webp"), webp(1600, 900))
+  writeFileSync(join(imageRoot, "hero.jpg"), jpeg(1600, 900))
+  writeFileSync(join(imageRoot, "og.jpg"), jpeg(1200, 630))
+  writeFileSync(join(imageRoot, "social-portrait.jpg"), jpeg(1080, 1350))
+  return imageRoot
+}
+
+function manifestEntry(
+  slug: string,
+  imageId: string,
+  usageCount: number,
+  cluster = "verification"
+) {
+  return {
+    slug,
+    imageId,
+    cluster,
+    sourceHash: `sha256:${"a".repeat(64)}`,
+    usageCount,
+    approved: true,
+  }
+}
 
 const stableFrontmatter = {
   title: "A unique security title",
@@ -92,7 +194,7 @@ First paragraph.
 
 ${filler}
 
-[Free tool](/tools/security-headers) and [related article](/blog/related-article).
+[RLS checker](/tools/supabase-rls-checker) and [related article](/blog/related-article).
 
 [OWASP](https://owasp.org/www-project-top-ten/) [NIST](https://csrc.nist.gov/publications) [RFC](https://www.rfc-editor.org/rfc/rfc9110)
 `,
@@ -101,9 +203,13 @@ ${filler}
     expect(
       validateArticle(
         article,
-        { index: 2, slug: article.slug },
+        { index: 2, slug: article.slug, cluster: "Access", cta: "Pillar + RLS Checker" },
         {
           availableSlugs: new Set(["vibe-coding-security-guide", "related-article"]),
+          programBySlug: new Map([
+            [article.slug, { index: 2, slug: article.slug, cluster: "Access" }],
+            ["related-article", { index: 3, slug: "related-article", cluster: "Access" }],
+          ]),
           titles: new Map([[stableFrontmatter.title, [article.slug]]]),
           descriptions: new Map([[stableFrontmatter.description, [article.slug]]]),
         }
@@ -123,9 +229,12 @@ ${filler}
           .replace("## Verify safely", "# Duplicate page title")
           .replace("/blog/related-article", "/blog/editorial-policy"),
       },
-      { index: 2, slug: article.slug },
+      { index: 2, slug: article.slug, cluster: "Access", cta: "Pillar + RLS Checker" },
       {
         availableSlugs: new Set(["vibe-coding-security-guide"]),
+        programBySlug: new Map([
+          [article.slug, { index: 2, slug: article.slug, cluster: "Access" }],
+        ]),
         titles: new Map([[stableFrontmatter.title, [article.slug, "duplicate"]]]),
         descriptions: new Map([[stableFrontmatter.description, [article.slug, "duplicate"]]]),
       }
@@ -137,8 +246,64 @@ ${filler}
     expect(errors).toContain("FAQ count must be between 2 and 4")
     expect(errors).toContain("duplicate article title")
     expect(errors).toContain("duplicate article description")
-    expect(errors).toContain("missing related-article link")
+    expect(errors).toContain("missing mapped topically related article link")
     expect(errors).not.toContain("unpublished internal dependency: editorial-policy")
+  })
+
+  it("requires the approved CTA route and a mapped topically related article", () => {
+    const directAnswer = Array(45).fill("answer").join(" ")
+    const filler = Array(1160).fill("guidance").join(" ")
+    const base = {
+      slug: "supporting-article",
+      data: stableFrontmatter,
+      body: `${directAnswer}
+
+## Verify safely
+
+[Authority guide](/blog/vibe-coding-security-guide)
+
+${filler}
+
+[Wrong tool](/tools/security-headers-checker) and [unrelated post](/blog/payment-post).
+
+[OWASP](https://owasp.org/a) [NIST](https://csrc.nist.gov/b) [RFC](https://www.rfc-editor.org/c)
+`,
+    }
+    const programBySlug = new Map([
+      [base.slug, { index: 2, slug: base.slug, cluster: "Access" }],
+      ["payment-post", { index: 24, slug: "payment-post", cluster: "Payments" }],
+    ])
+    const errors = validateArticle(
+      base,
+      { index: 2, slug: base.slug, cluster: "Access", cta: "Pillar + RLS Checker" },
+      {
+        availableSlugs: new Set(["vibe-coding-security-guide", "payment-post"]),
+        programBySlug,
+      }
+    )
+
+    expect(errors).toContain(
+      "missing approved CTA link for Pillar + RLS Checker: /tools/supabase-rls-checker"
+    )
+    expect(errors).toContain("missing mapped topically related article link")
+
+    const corrected = {
+      ...base,
+      body: base.body
+        .replace("/tools/security-headers-checker", "/tools/supabase-rls-checker")
+        .replace("/blog/payment-post", "/blog/access-post"),
+    }
+    programBySlug.set("access-post", { index: 3, slug: "access-post", cluster: "Access" })
+    expect(
+      validateArticle(
+        corrected,
+        { index: 2, slug: base.slug, cluster: "Access", cta: "Pillar + RLS Checker" },
+        {
+          availableSlugs: new Set(["vibe-coding-security-guide", "access-post"]),
+          programBySlug,
+        }
+      )
+    ).toEqual([])
   })
 
   it("classifies primary and authoritative sources deterministically", () => {
@@ -186,7 +351,7 @@ ${filler}
             slug: "one",
             imageId: "verification-01",
             cluster: "verification",
-            sourceHash: "a".repeat(64),
+            sourceHash: `sha256:${"a".repeat(64)}`,
             usageCount: 2,
             approved: false,
           },
@@ -194,7 +359,7 @@ ${filler}
             slug: "two",
             imageId: "verification-01",
             cluster: "verification",
-            sourceHash: "a".repeat(64),
+            sourceHash: `sha256:${"a".repeat(64)}`,
             usageCount: 2,
             approved: false,
           },
@@ -212,8 +377,116 @@ ${filler}
     const badHash = structuredClone(manifests)
     badHash[0].entries[0].sourceHash = "pending"
     expect(validateImageLibrary(catalog, badHash, root)).toContain(
-      "one: sourceHash must be a SHA-256 hex digest"
+      "one: sourceHash must be sha256:<64 lowercase hex>"
     )
+    badHash[0].entries[0].sourceHash = `sha256:${"A".repeat(64)}`
+    expect(validateImageLibrary(catalog, badHash, root)).toContain(
+      "one: sourceHash must be sha256:<64 lowercase hex>"
+    )
+  })
+
+  it("accepts valid five-format images exactly at the byte budget and rejects one byte over", () => {
+    const root = mkdtempSync(join(tmpdir(), "blog-validation-boundary-"))
+    const imageId = "authority-guide-01"
+    const imageRoot = writeImageSet(root, imageId, 220_000)
+    const boundaryFiles = [
+      { file: "hero.avif", max: 220_000, build: (size: number) => avif(1600, 900, size) },
+      { file: "hero.webp", max: 320_000, build: (size: number) => webp(1600, 900, size) },
+      { file: "hero.jpg", max: 320_000, build: (size: number) => jpeg(1600, 900, size) },
+      { file: "og.jpg", max: 350_000, build: (size: number) => jpeg(1200, 630, size) },
+      {
+        file: "social-portrait.jpg",
+        max: 350_000,
+        build: (size: number) => jpeg(1080, 1350, size),
+      },
+    ]
+    for (const boundary of boundaryFiles) {
+      writeFileSync(join(imageRoot, boundary.file), boundary.build(boundary.max))
+    }
+    const catalog = { [imageId]: catalogEntry(imageId, "authority") }
+    const manifests = [
+      { release: "authority", entries: [manifestEntry("authority", imageId, 1, "authority")] },
+    ]
+
+    expect(validateImageLibrary(catalog, manifests, root)).toEqual([])
+    for (const boundary of boundaryFiles) {
+      writeFileSync(join(imageRoot, boundary.file), boundary.build(boundary.max + 1))
+      expect(validateImageLibrary(catalog, manifests, root)).toContain(
+        `${imageId} ${boundary.file} exceeds ${boundary.max} bytes`
+      )
+      writeFileSync(join(imageRoot, boundary.file), boundary.build(boundary.max))
+    }
+  })
+
+  it("accepts the complete authority plus 29x3 and 6x2 image library", () => {
+    const root = mkdtempSync(join(tmpdir(), "blog-validation-final-"))
+    const catalog: Record<string, ReturnType<typeof catalogEntry>> = {}
+    const authorityId = "authority-guide-01"
+    catalog[authorityId] = catalogEntry(authorityId, "authority")
+    writeImageSet(root, authorityId)
+
+    const sharedIds = [...Array(35)].map((_, index) => `verification-${index + 1}`)
+    const tripleIds = new Set(sharedIds.slice(0, 29))
+    for (const imageId of sharedIds) {
+      catalog[imageId] = catalogEntry(imageId)
+      writeImageSet(root, imageId)
+    }
+    const assignments = [
+      ...sharedIds,
+      ...sharedIds,
+      ...sharedIds.filter((imageId) => tripleIds.has(imageId)),
+    ]
+    const counts = new Map(sharedIds.map((imageId) => [imageId, tripleIds.has(imageId) ? 3 : 2]))
+    const manifests = [
+      {
+        release: "authority",
+        entries: [manifestEntry("authority", authorityId, 1, "authority")],
+      },
+      {
+        release: "batch-1",
+        entries: assignments.map((imageId, index) =>
+          manifestEntry(`article-${index + 1}`, imageId, counts.get(imageId)!)
+        ),
+      },
+    ]
+
+    expect(validateImageLibrary(catalog, manifests, root, { finalDistribution: true })).toEqual([])
+  })
+
+  it("rejects malformed manifest roots, orphan catalog entries, and unexpected library files", () => {
+    const root = mkdtempSync(join(tmpdir(), "blog-validation-shape-"))
+    const imageId = "verification-01"
+    const imageRoot = writeImageSet(root, imageId)
+    writeFileSync(join(imageRoot, "unexpected.txt"), "unexpected")
+    mkdirSync(join(root, "public/images/blog/library/orphan-directory"), { recursive: true })
+    const catalog = {
+      [imageId]: catalogEntry(imageId),
+      "orphan-catalog": catalogEntry("orphan-catalog"),
+    }
+    const manifests = [
+      { release: "batch-1", entries: [manifestEntry("one", imageId, 1)] },
+      { release: "authority", entries: { images: [] } },
+    ]
+    const errors = validateImageLibrary(catalog, manifests, root)
+
+    expect(errors).toContain("authority: image manifest must be a top-level array")
+    expect(errors).toContain("orphan image catalog entry: orphan-catalog")
+    expect(errors).toContain(`${imageId}: unexpected image library file unexpected.txt`)
+    expect(errors).toContain("unexpected image library directory: orphan-directory")
+  })
+
+  it("rejects malformed program roots and missing --release values deterministically", () => {
+    expect(validateProgramRoot(program)).toEqual([])
+    expect(validateProgramRoot({ entries: [] })).toEqual(["blog program must be a top-level array"])
+    expect(validateProgramRoot([{ slug: "", batch: "authority" }])).toContain(
+      "blog program entry 1 has an invalid slug"
+    )
+
+    for (const script of scripts) {
+      const result = spawnSync(process.execPath, [script, "--release"], { encoding: "utf8" })
+      expect(result.status, script).toBe(1)
+      expect(result.stderr, script).toContain("--release requires a value")
+    }
   })
 
   it("checks HTTPS links once, falls back to a ranged GET, and redacts queries", async () => {

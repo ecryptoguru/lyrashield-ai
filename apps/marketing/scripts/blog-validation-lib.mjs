@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { resolve, sep } from "node:path"
 
 export const STABLE_TAGS = new Set([
@@ -9,6 +9,88 @@ export const STABLE_TAGS = new Set([
   "agent-security",
   "verification",
 ])
+
+export const PROGRAM_RELEASES = Object.freeze([
+  "authority",
+  "batch-1",
+  "batch-2",
+  "batch-3",
+  "batch-4",
+  "batch-5",
+  "batch-6",
+])
+
+const ALL_FREE_TOOL_ROUTES = Object.freeze([
+  "/tools/ai-app-security-checklist",
+  "/tools/security-headers-checker",
+  "/tools/secret-exposure-scanner",
+  "/tools/supabase-rls-checker",
+  "/tools/jwt-session-inspector",
+])
+
+export const CTA_LINK_REQUIREMENTS = Object.freeze({
+  "Links to all clusters and tools": ALL_FREE_TOOL_ROUTES,
+  "Pillar + RLS Checker": Object.freeze(["/tools/supabase-rls-checker"]),
+  "Pillar + Launch Checklist": Object.freeze(["/tools/ai-app-security-checklist"]),
+  "Pillar + Secret Scanner": Object.freeze(["/tools/secret-exposure-scanner"]),
+  "Pillar + JWT Inspector": Object.freeze(["/tools/jwt-session-inspector"]),
+  "Pillar + Headers Checker": Object.freeze(["/tools/security-headers-checker"]),
+  "Pillar + full app scan CTA": Object.freeze(["/scan"]),
+  "Pillar + product audit trail": Object.freeze(["/scan"]),
+  "Pillar + schedules/notifications": Object.freeze(["/scan"]),
+  "Pillar + product SCA": Object.freeze(["/scan"]),
+  "Pillar + MCP security": Object.freeze(["/scan"]),
+  "Pillar + product MCP": Object.freeze(["/scan"]),
+  "Pillar + product approval model": Object.freeze(["/scan"]),
+  "Pillar + approvals/audit": Object.freeze(["/scan"]),
+  "Pillar + verified findings": Object.freeze(["/scan"]),
+  "Pillar + GitHub diff gate": Object.freeze(["/scan"]),
+  "Pillar + retest workflow": Object.freeze(["/scan"]),
+  "Pillar + product retest": Object.freeze(["/scan"]),
+  "Pillar + product SARIF": Object.freeze(["/scan"]),
+  "Pillar + launch readiness": Object.freeze(["/tools/ai-app-security-checklist"]),
+  "Pillar + product reports": Object.freeze(["/scan"]),
+  "Pillar + fix/retest": Object.freeze(["/scan"]),
+  "Pillar + LyraShield Score methodology": Object.freeze(["/scan"]),
+  "Pillar + findings workflow": Object.freeze(["/scan"]),
+  "Pillar + scorecards/reports": Object.freeze(["/scan"]),
+})
+
+const RELATED_CLUSTER_COMPATIBILITY = Object.freeze({
+  Access: new Set(["Access", "Auth", "Secrets", "Data", "Verification"]),
+  Secrets: new Set(["Secrets", "Access", "Agent", "Supply chain", "Verification", "Decision"]),
+  Auth: new Set(["Auth", "Access", "Web", "Verification"]),
+  Input: new Set(["Input", "Web", "Agent", "Verification"]),
+  Web: new Set(["Web", "Auth", "Input", "Workflow", "Stack"]),
+  Agent: new Set([
+    "Agent",
+    "Input",
+    "Secrets",
+    "Supply chain",
+    "Operations",
+    "Workflow",
+    "Stack",
+    "Verification",
+    "Decision",
+  ]),
+  Payments: new Set(["Payments", "Stack", "Verification"]),
+  Data: new Set(["Data", "Access", "Operations", "Verification"]),
+  "Supply chain": new Set(["Supply chain", "Agent", "Stack", "Verification"]),
+  Operations: new Set(["Operations", "Data", "Agent", "Verification", "Decision", "Audience"]),
+  Verification: new Set([
+    "Verification",
+    "Operations",
+    "Access",
+    "Secrets",
+    "Agent",
+    "Decision",
+    "Workflow",
+  ]),
+  Workflow: new Set(["Workflow", "Agent", "Stack", "Web", "Verification"]),
+  Stack: new Set(["Stack", "Workflow", "Agent", "Payments", "Web"]),
+  Decision: new Set(["Decision", "Verification", "Agent", "Operations", "Audience"]),
+  Audience: new Set(["Audience", "Decision", "Verification", "Operations"]),
+})
 
 const PLACEHOLDERS = [
   ["TBD", /\bTBD\b/i],
@@ -101,15 +183,15 @@ const PRIMARY_HOSTS = [
 ]
 
 const IMAGE_FIELDS = {
-  avif: { file: "hero.avif", width: 1600, height: 900, maxBytes: 220 * 1024, format: "avif" },
-  webp: { file: "hero.webp", width: 1600, height: 900, maxBytes: 320 * 1024, format: "webp" },
-  jpeg: { file: "hero.jpg", width: 1600, height: 900, maxBytes: 320 * 1024, format: "jpeg" },
-  og: { file: "og.jpg", width: 1200, height: 630, maxBytes: 350 * 1024, format: "jpeg" },
+  avif: { file: "hero.avif", width: 1600, height: 900, maxBytes: 220_000, format: "avif" },
+  webp: { file: "hero.webp", width: 1600, height: 900, maxBytes: 320_000, format: "webp" },
+  jpeg: { file: "hero.jpg", width: 1600, height: 900, maxBytes: 320_000, format: "jpeg" },
+  og: { file: "og.jpg", width: 1200, height: 630, maxBytes: 350_000, format: "jpeg" },
   socialPortrait: {
     file: "social-portrait.jpg",
     width: 1080,
     height: 1350,
-    maxBytes: 350 * 1024,
+    maxBytes: 350_000,
     format: "jpeg",
   },
 }
@@ -301,6 +383,48 @@ export function classifySource(rawUrl) {
   }
 }
 
+export function validateProgramRoot(program) {
+  if (!Array.isArray(program)) return ["blog program must be a top-level array"]
+
+  const errors = []
+  const slugs = new Set()
+  for (const [index, entry] of program.entries()) {
+    const position = index + 1
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      errors.push(`blog program entry ${position} must be an object`)
+      continue
+    }
+    if (!Number.isInteger(entry.index) || entry.index < 1) {
+      errors.push(`blog program entry ${position} has an invalid index`)
+    }
+    if (typeof entry.slug !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.slug)) {
+      errors.push(`blog program entry ${position} has an invalid slug`)
+    } else if (slugs.has(entry.slug)) {
+      errors.push(`blog program contains duplicate slug: ${entry.slug}`)
+    } else {
+      slugs.add(entry.slug)
+    }
+    if (!PROGRAM_RELEASES.includes(entry.batch)) {
+      errors.push(`blog program entry ${position} has an invalid batch`)
+    }
+    if (typeof entry.cluster !== "string" || !entry.cluster.trim()) {
+      errors.push(`blog program entry ${position} has an invalid cluster`)
+    }
+    if (!Object.hasOwn(CTA_LINK_REQUIREMENTS, entry.cta)) {
+      errors.push(`blog program entry ${position} has an unapproved CTA`)
+    }
+  }
+  return errors
+}
+
+export function isCompatibleRelatedEntry(programEntry, candidate) {
+  if (!programEntry || !candidate || !Number.isInteger(candidate.index) || candidate.index <= 1) {
+    return false
+  }
+  if (!programEntry.cluster || !candidate.cluster) return false
+  return RELATED_CLUSTER_COMPATIBILITY[programEntry.cluster]?.has(candidate.cluster) === true
+}
+
 export function validateArticle(article, programEntry, context = {}) {
   const errors = [...validateArticleText(`${JSON.stringify(article.data)}\n${article.body}`)]
   const { data = {}, body = "", slug = programEntry?.slug ?? "unknown" } = article
@@ -365,8 +489,21 @@ export function validateArticle(article, programEntry, context = {}) {
       errors.push("authority link must appear in the first third")
   }
 
-  const toolLinks = links.filter((link) => link.startsWith("/tools/"))
-  if (toolLinks.length === 0) errors.push("missing relevant free-tool link")
+  const normalizedInternalLinks = new Set(
+    links
+      .filter((link) => link.startsWith("/"))
+      .map((link) => link.split(/[?#]/, 1)[0].replace(/\/$/, "") || "/")
+  )
+  const requiredCtaLinks = CTA_LINK_REQUIREMENTS[programEntry?.cta]
+  if (!requiredCtaLinks) {
+    errors.push(`unapproved program CTA: ${programEntry?.cta ?? "missing"}`)
+  } else {
+    for (const requiredLink of requiredCtaLinks) {
+      if (!normalizedInternalLinks.has(requiredLink)) {
+        errors.push(`missing approved CTA link for ${programEntry.cta}: ${requiredLink}`)
+      }
+    }
+  }
   const relatedLinks = links.filter((link) => {
     if (!link.startsWith("/blog/")) return false
     const linkedSlug = link.slice(6).split(/[?#]/, 1)[0].replace(/\/$/, "")
@@ -377,7 +514,14 @@ export function validateArticle(article, programEntry, context = {}) {
       linkedSlug !== "editorial-policy"
     )
   })
-  if (!isAuthority && relatedLinks.length === 0) errors.push("missing related-article link")
+  const programBySlug = context.programBySlug
+  const hasCompatibleRelatedLink = relatedLinks.some((link) => {
+    const linkedSlug = link.slice(6).split(/[?#]/, 1)[0].replace(/\/$/, "")
+    return isCompatibleRelatedEntry(programEntry, programBySlug?.get(linkedSlug))
+  })
+  if (!isAuthority && !hasCompatibleRelatedLink) {
+    errors.push("missing mapped topically related article link")
+  }
 
   const externalSources = [...new Set(links.filter((link) => /^https?:\/\//i.test(link)))]
   const classified = externalSources.map(classifySource)
@@ -517,7 +661,10 @@ function detectImage(buffer) {
 function normalizeManifests(manifests) {
   return manifests.map((manifest, index) => {
     if (Array.isArray(manifest)) return { release: `manifest-${index + 1}`, entries: manifest }
-    return { release: manifest.release ?? `manifest-${index + 1}`, entries: manifest.entries ?? [] }
+    return {
+      release: manifest?.release ?? `manifest-${index + 1}`,
+      entries: manifest?.entries,
+    }
   })
 }
 
@@ -547,8 +694,8 @@ export function validateImageLibrary(catalog, manifests, root, options = {}) {
         errors.push(`${release}: adjacent articles reuse image ${entry.imageId}`)
       }
       usage.set(entry.imageId, (usage.get(entry.imageId) ?? 0) + 1)
-      if (!/^[a-f0-9]{64}$/.test(entry.sourceHash ?? "")) {
-        errors.push(`${entry.slug}: sourceHash must be a SHA-256 hex digest`)
+      if (!/^sha256:[a-f0-9]{64}$/.test(entry.sourceHash ?? "")) {
+        errors.push(`${entry.slug}: sourceHash must be sha256:<64 lowercase hex>`)
       } else if (hashes.has(entry.imageId) && hashes.get(entry.imageId) !== entry.sourceHash) {
         errors.push(`${entry.slug}: sourceHash differs for reused image ${entry.imageId}`)
       } else {
@@ -566,6 +713,7 @@ export function validateImageLibrary(catalog, manifests, root, options = {}) {
   }
 
   for (const { entries } of normalized) {
+    if (!Array.isArray(entries)) continue
     for (const entry of entries) {
       if (!entry?.imageId) continue
       const actual = usage.get(entry.imageId)
@@ -584,7 +732,7 @@ export function validateImageLibrary(catalog, manifests, root, options = {}) {
 
   const authorityIds = new Set(
     normalized
-      .filter(({ release }) => release === "authority")
+      .filter(({ release, entries }) => release === "authority" && Array.isArray(entries))
       .flatMap(({ entries }) => entries.map((entry) => entry.imageId))
   )
   for (const imageId of authorityIds) {
@@ -595,7 +743,35 @@ export function validateImageLibrary(catalog, manifests, root, options = {}) {
     .map(([, count]) => count)
   errors.push(...validateUsageCounts(sharedCounts, options.finalDistribution === true))
 
+  if (options.validateCatalogCompleteness !== false) {
+    const catalogReferences = options.knownImageIds ?? usage
+    for (const imageId of Object.keys(catalog)) {
+      if (!catalogReferences.has(imageId)) errors.push(`orphan image catalog entry: ${imageId}`)
+    }
+  }
+
   const publicRoot = resolve(root, "public")
+  const libraryRoot = resolve(publicRoot, "images/blog/library")
+  if (existsSync(libraryRoot)) {
+    for (const directoryEntry of readdirSync(libraryRoot, { withFileTypes: true })) {
+      if (!directoryEntry.isDirectory()) {
+        errors.push(`unexpected image library file: ${directoryEntry.name}`)
+        continue
+      }
+      if (!catalog[directoryEntry.name]) {
+        errors.push(`unexpected image library directory: ${directoryEntry.name}`)
+        continue
+      }
+      const expectedFiles = new Set(Object.values(IMAGE_FIELDS).map(({ file }) => file))
+      const imageDirectory = resolve(libraryRoot, directoryEntry.name)
+      for (const fileEntry of readdirSync(imageDirectory, { withFileTypes: true })) {
+        if (!fileEntry.isFile() || !expectedFiles.has(fileEntry.name)) {
+          const kind = fileEntry.isFile() ? "file" : "entry"
+          errors.push(`${directoryEntry.name}: unexpected image library ${kind} ${fileEntry.name}`)
+        }
+      }
+    }
+  }
   for (const imageId of usage.keys()) {
     const item = catalog[imageId]
     if (!item) continue

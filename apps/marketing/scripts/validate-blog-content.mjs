@@ -4,17 +4,26 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { parseArticle, validateArticle } from "./blog-validation-lib.mjs"
+import {
+  PROGRAM_RELEASES,
+  parseArticle,
+  validateArticle,
+  validateProgramRoot,
+} from "./blog-validation-lib.mjs"
 
 const marketingRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const repositoryRoot = resolve(marketingRoot, "../..")
 const contentRoot = join(marketingRoot, "src/content")
 const manifestRoot = join(repositoryRoot, "docs/editorial/blog-image-manifests")
-const releaseOrder = ["authority", "batch-1", "batch-2", "batch-3", "batch-4", "batch-5", "batch-6"]
+const releaseOrder = PROGRAM_RELEASES
 
 function releaseArgument(argv) {
   const index = argv.indexOf("--release")
-  return index === -1 ? "all" : argv[index + 1]
+  if (index === -1) return { value: "all" }
+  if (!argv[index + 1] || argv[index + 1].startsWith("--")) {
+    return { error: "--release requires a value" }
+  }
+  return { value: argv[index + 1] }
 }
 
 function readJson(path, label, errors) {
@@ -55,9 +64,14 @@ function printResult(release, errors) {
 
 function main() {
   const errors = []
-  const release = releaseArgument(process.argv.slice(2))
-  if (!release || (release !== "all" && !releaseOrder.includes(release))) {
-    printResult(release ?? "unknown", [`unknown release: ${release ?? "missing"}`])
+  const releaseOption = releaseArgument(process.argv.slice(2))
+  if (releaseOption.error) {
+    printResult("unknown", [releaseOption.error])
+    return
+  }
+  const release = releaseOption.value
+  if (release !== "all" && !releaseOrder.includes(release)) {
+    printResult(release, [`unknown release: ${release}`])
     return
   }
 
@@ -67,11 +81,15 @@ function main() {
     "blog image catalog",
     errors
   )
-  if (!Array.isArray(program)) errors.push("blog program must be a top-level array")
+  errors.push(...validateProgramRoot(program))
   if (!catalog || Array.isArray(catalog) || typeof catalog !== "object") {
     errors.push("blog image catalog must be a top-level object")
   }
-  if (!Array.isArray(program) || !catalog || Array.isArray(catalog)) {
+  if (
+    errors.some((error) => error.startsWith("blog program")) ||
+    !catalog ||
+    Array.isArray(catalog)
+  ) {
     printResult(release, errors)
     return
   }
@@ -79,6 +97,7 @@ function main() {
   const releases = release === "all" ? releaseOrder : [release]
   const selectedEntries = program.filter((entry) => releases.includes(entry.batch))
   const selectedSlugs = new Set(selectedEntries.map((entry) => entry.slug))
+  const programBySlug = new Map(program.map((entry) => [entry.slug, entry]))
   const selectedManifestEntries = new Map()
 
   for (const name of releases) {
@@ -166,6 +185,7 @@ function main() {
       availableSlugs,
       catalog,
       manifestEntry,
+      programBySlug,
       titles,
       descriptions,
     })) {
