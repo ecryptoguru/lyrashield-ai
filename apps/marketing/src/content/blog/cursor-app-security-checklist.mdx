@@ -1,0 +1,116 @@
+---
+title: "Secure a Cursor-Built App Before Launch"
+description: "Review Cursor data handling, project rules, dependencies, app controls, agent permissions, and independent evidence before launch."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - supply-chain
+  - verification
+draft: true
+heroImage: agent-security-04
+faq:
+  - q: "Does Cursor Privacy Mode make an app secure?"
+    a: "No. Privacy Mode changes how Cursor and its model providers may handle data. It does not test the app's authorization, dependency integrity, server configuration, tenant isolation, or deployed behavior. Review those controls separately."
+  - q: "Is .cursorignore enough to keep secrets out of Cursor?"
+    a: "No. Treat ignore configuration as one input control, not a secret-management boundary. Remove secrets from the workspace, review what indexing and prompts can include, use synthetic fixtures, and rotate any credential that may have been exposed."
+  - q: "Should project rules be reviewed before launch?"
+    a: "Yes. Files under .cursor/rules and root instruction files can influence agent behavior. Keep them versioned, assign owners, require protected review, and test which rules are active in the exact Cursor workflow used by the team."
+  - q: "Are green tests enough to launch a Cursor-built app?"
+    a: "No. Tests may omit abuse cases or repeat assumptions from the generated implementation. Add human-defined security invariants, negative authorization and tenant tests, dependency review, and evidence from the deployed surface."
+---
+
+**Direct answer:** Before launching a Cursor-built app, review what data entered Cursor, protect its project rules, verify dependencies, test authorization and tenant boundaries, remove production credentials from agent reach, and run independent negative tests against the deployed surface. Cursor privacy and agent settings affect the development tool; they do not verify the security of the application it helped create.
+
+Cursor can speed up implementation, but the editor is only one part of the release path. The app still has a runtime, database, identity model, dependencies, deployment workflow, and production permissions. A setting in the editor cannot establish that those pieces enforce the intended policy.
+
+Use the six-part sequence below as a release review. It applies the [full security guide for AI-built apps](/blog/vibe-coding-security-guide) to a Cursor workflow without assuming Cursor caused every defect.
+
+| Review area          | Evidence to collect before launch                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| Data handling        | Approved data classes, current Cursor settings, and a record of any sensitive prompt or file exposure |
+| Project instructions | Reviewed active rules, protected owners, and a harmless scope test                                    |
+| Dependencies         | Resolved lockfile, package identity review, advisory result, and install-script decision              |
+| Application controls | Negative authorization, tenant, validation, and business-state tests                                  |
+| Agent authority      | Named tools, commands, credentials, network paths, and approval rules                                 |
+| Release evidence     | Deployed-surface checks, known limitations, owner, and a fresh retest after fixes                     |
+
+## 1. Review what data entered Cursor
+
+Start with the data, not the privacy-setting label. List the repositories, files, prompts, screenshots, terminal output, database samples, support tickets, and logs that developers exposed to Cursor. Classify each item using the same rules that govern other development services.
+
+Cursor's [Data Use and Privacy Overview](https://cursor.com/data-use), last updated July 15, 2026 and rechecked for this article on July 17, says Privacy Mode prevents customer data from being used for training by Cursor. It also describes exceptions for abuse investigation, provider handling, codebase indexing, and temporary file caching. The page says codebase indexing uploads small chunks to compute embeddings and may store embeddings plus metadata such as hashes and file names.
+
+That is a data-handling contract, not an application-security result. Confirm the current workspace and team setting. Review the provider and model choices allowed by organization policy. Do not paste production secrets, customer records, private keys, or unrestricted database exports into a prompt merely because Privacy Mode is on.
+
+Keep live secrets outside the working tree. Use placeholders and synthetic fixtures for examples. Review `.gitignore`, `.cursorignore`, indexing settings, manually attached files, terminal output, and pasted context as separate paths. An ignore file does not recall content already pasted into chat or exposed through another tool.
+
+If a credential may have entered any unapproved path, rotate it and check use logs. Deleting a conversation is not a substitute for revocation.
+
+The related guide to [secrets in AI coding prompts](/blog/secrets-ai-coding-prompts) covers the inventory, synthetic-fixture, and rotation workflow in more depth.
+
+## 2. Protect the instructions Cursor loads
+
+Cursor's current [rules documentation](https://docs.cursor.com/context/rules-for-ai) describes project rules under `.cursor/rules` as version-controlled and scopeable. It also describes a root `AGENTS.md` file as a simpler instruction source. Those files can shape generated code, selected commands, and review behavior, so treat them as policy-bearing code.
+
+Inventory every active project, user, and organization instruction source in the actual launch workflow. Record the Cursor version, working directory, rule type, scope, owner, and whether an agent can edit the file. Product behavior changes. Do not assume a nested rule, IDE session, CLI invocation, and hosted agent load identical context.
+
+Put rule paths and `.github/workflows` under responsible ownership. GitHub's [CODEOWNERS documentation](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners) explains how to request reviews for matching paths. Pair that with branch protection that requires the review, because a CODEOWNERS entry alone does not block a merge.
+
+Test rule scope with a harmless fixture. One rule can ask the agent to report `root-policy`; a narrower rule can request `payments-policy` for a synthetic file. Give the test no network, secrets, or production tools. Record which instruction applies. The result covers that version and launch mode, not every future Cursor release.
+
+Review generated rule changes like deployment configuration. A plausible sentence such as "treat urgent issues as approved" can weaken an authorization boundary even though it is plain Markdown.
+
+## 3. Verify the resolved dependencies
+
+Generated imports can point to a legitimate package, the wrong package, an outdated version, or a name that does not exist. Read the final manifest and lockfile rather than the chat that produced them.
+
+For every new direct dependency, confirm the exact registry, owner or publisher, resolved version, lockfile integrity, maintenance state, license decision, and known-advisory result. Review transitive graph changes and package scripts before installation in an environment with credentials or network access. Pin CI actions to reviewed immutable references where the platform supports it.
+
+A clean advisory scan has a narrow meaning: the resolved graph did not match a covered advisory under that tool and database state. It does not prove the package has the intended identity, lacks malicious behavior, or is reachable at runtime. Preserve both the scanner result and its coverage limits.
+
+## 4. Test the application policy, not the generated shape
+
+Read the code path that decides who may perform each sensitive action. Authentication proves an identity. Authorization must still check the tenant, resource, verb, ownership, and business state on the server.
+
+Create two synthetic users in separate tenants. Attempt reads and mutations across the boundary. Try an expired session, a changed resource ID, an extra writable field, a replayed request, and an action in the wrong state. Assert the durable database result and audit event, not just the HTTP status or success message.
+
+Repeat this for password reset, invitations, billing entitlements, file access, administrative routes, and any public share link the app exposes. Browser controls and hidden buttons do not replace server checks. Database row policies can add defense in depth, but test them using the same roles and connection path production uses.
+
+Generated tests are useful regression coverage. They are not independent evidence when the same context produced both implementation and expectations. The guide to [AI-generated tests and security proof](/blog/ai-generated-tests-security) shows how to add human-defined invariants and fresh review.
+
+## 5. Bound agent commands and credentials
+
+Cursor's [security page](https://cursor.com/security), last updated April 24, 2026 and rechecked July 17, separates client and agent security from Privacy Mode and links to current agent hardening material. Review both. Data retention and command authority answer different questions.
+
+The [Cursor CLI guide](https://docs.cursor.com/en/cli/using) says interactive terminal commands request approval. That prompt is not a CI control. Cursor's [parameter reference](https://docs.cursor.com/en/cli/reference/parameters) lists `--print` with write and Bash tools, while its [headless guidance](https://docs.cursor.com/en/cli/headless) documents `--force` for unattended changes. Recheck the installed version because this contract can change.
+
+Do not use `--force` for a launch review. With Cursor's [CLI permissions](https://docs.cursor.com/cli/reference/permissions), allow only required source reads, one disposable report path, and reviewed command wrappers. Deny secrets, credential stores, deployment tools, other writes, and production network access. Shell rules match command bases, so `Shell(git)` is not read-only.
+
+Test the policy in an isolated synthetic repository under a dedicated low-privilege identity. Confirm that fixture reads and report writes work while sensitive reads, out-of-scope writes, and deployment commands are denied. Keep production credentials and network access absent.
+
+Run development agents with a dedicated low-privilege identity. Keep production cloud credentials, database owner strings, deployment tokens, personal SSH keys, and unrestricted package credentials out of the environment. Allow only the repositories, commands, network destinations, and MCP tools needed for the task.
+
+For sensitive mutations, show the exact command or structured action, target resource, diff, credential identity, and expiry. Bind the approval to those values on the server or workflow controller. If the proposed action changes, require another decision. A broad "continue" click is weak evidence.
+
+## 6. Collect independent launch evidence
+
+Build a clean production artifact from reviewed source and lockfiles. Test the deployed surface with an identity and data set separate from the generation session. Verify security headers, transport, authentication, negative authorization paths, tenant isolation, input boundaries, error behavior, rate limits, dependency state, and observability for material failures.
+
+Record what each check covered and what it did not. A detected issue remains detected until independent evidence supports another state. A clean deterministic retest can be called retest-confirmed within its documented coverage. A skipped path, ambiguous response, or tool failure is inconclusive, not a pass.
+
+When a fix lands, run a fresh server-owned or reviewer-owned retest against the changed build. Do not reuse the original model's statement that the problem is fixed. Preserve the artifact hash, environment, test identity, result, limitations, and reviewer.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record owners and missing evidence for these six areas. It does not connect to Cursor, inspect a repository, run a scan, or approve a launch. The [secret exposure scanner](/tools/secret-exposure-scanner) can inspect selected pasted text locally for credential-like strings, but it cannot prove that Cursor never received a secret or that a detected value is live.
+
+## Sources
+
+- [Cursor Data Use and Privacy Overview](https://cursor.com/data-use)
+- [Cursor Security](https://cursor.com/security)
+- [Cursor Docs: Rules](https://docs.cursor.com/context/rules-for-ai)
+- [Cursor Docs: Using Agent in CLI](https://docs.cursor.com/en/cli/using)
+- [Cursor Docs: CLI parameters](https://docs.cursor.com/en/cli/reference/parameters)
+- [Cursor Docs: CLI permissions](https://docs.cursor.com/cli/reference/permissions)
+- [Cursor Docs: Headless mode](https://docs.cursor.com/en/cli/headless)
+- [GitHub Docs: About code owners](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)
