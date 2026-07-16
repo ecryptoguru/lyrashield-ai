@@ -11,7 +11,7 @@ draft: true
 heroImage: access-boundary-05
 faq:
   - q: "Does decoding a JWT verify it?"
-    a: "No. Base64URL decoding only reveals the header and claims. Acceptance requires cryptographic verification plus issuer, audience, time, token-type, and application-session checks."
+    a: "No. Base64URL decoding only reveals the header and claims. Acceptance requires cryptographic verification plus issuer, audience, time, and token-type checks, along with any session or revocation check the application's policy actually uses."
   - q: "Should an API accept alg none?"
     a: "A signed-token consumer should reject unsecured tokens and allow only the algorithms configured for that trust relationship. The token header must not choose an unapproved algorithm."
   - q: "Why validate both issuer and audience?"
@@ -76,7 +76,7 @@ A corrected pattern passes the policy to a maintained verification library.
 
 ```ts
 const claims = await verifyJwt(token, {
-  issuer: "https://identity.test.local/",
+  issuer: "https://identity.example/",
   audience: "urn:test-api",
   algorithms: ["RS256"],
   keySet: trustedKeySet,

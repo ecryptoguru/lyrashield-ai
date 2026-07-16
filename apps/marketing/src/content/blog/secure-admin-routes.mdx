@@ -29,10 +29,17 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates thi
 **Vulnerable pattern. Keep this example in a local fixture.**
 
 ```ts
-app.post("/api/internal/users/:id/disable", requireSession, async (req, res) => {
-  await disableUser(req.params.id)
-  return res.sendStatus(204)
-})
+app.post(
+  "/api/internal/workspaces/:workspaceId/members/:userId/suspend",
+  requireSession,
+  async (req, res) => {
+    await suspendWorkspaceMember({
+      workspaceId: req.params.workspaceId,
+      userId: req.params.userId,
+    })
+    return res.sendStatus(204)
+  }
+)
 ```
 
 The frontend shows this action only to admins, and the path includes `internal`. The server checks only that the caller has a session. Any ordinary account that learns the route can invoke the function directly.
@@ -55,7 +62,7 @@ A compact inventory might include:
 
 | Action               | Allowed principal | Scope             | Entry points          |
 | -------------------- | ----------------- | ----------------- | --------------------- |
-| `user.disable`       | workspace owner   | same workspace    | REST, support console |
+| `member.suspend`     | workspace owner   | same workspace    | REST, support console |
 | `member.role.change` | workspace owner   | same workspace    | REST, server action   |
 | `audit.export`       | compliance admin  | same workspace    | REST, background job  |
 | `queue.retry`        | operator          | named environment | maintenance API       |
@@ -67,31 +74,42 @@ Do not infer privilege from route names. Search controllers, OpenAPI files, Grap
 Resolve the principal and tenant on the server. Name the action and pass only the resource facts the policy needs.
 
 ```ts
-app.post("/api/internal/users/:id/disable", requireSession, async (req, res) => {
-  const context = await loadWorkspaceContext(req.user.id, req.params.id)
+app.post(
+  "/api/internal/workspaces/:workspaceId/members/:userId/suspend",
+  requireSession,
+  async (req, res) => {
+    const context = await loadWorkspaceMemberContext({
+      actorId: req.user.id,
+      workspaceId: req.params.workspaceId,
+      targetUserId: req.params.userId,
+    })
 
-  const allowed = canPerform({
-    principal: context.principal,
-    action: "user.disable",
-    resource: {
-      workspaceId: context.target.workspaceId,
-      targetUserId: context.target.id,
-    },
-  })
+    const allowed = canPerform({
+      principal: context.principal,
+      action: "workspace.member.suspend",
+      resource: {
+        workspaceId: context.workspace.id,
+        targetUserId: context.member.userId,
+      },
+    })
 
-  if (!allowed) return res.sendStatus(403)
+    if (!allowed) return res.sendStatus(403)
 
-  await disableUser(context.target.id)
-  await recordAuditEvent({
-    actorId: context.principal.userId,
-    workspaceId: context.target.workspaceId,
-    action: "user.disable",
-  })
-  return res.sendStatus(204)
-})
+    await suspendWorkspaceMember({
+      workspaceId: context.workspace.id,
+      userId: context.member.userId,
+    })
+    await recordAuditEvent({
+      actorId: context.principal.userId,
+      workspaceId: context.workspace.id,
+      action: "workspace.member.suspend",
+    })
+    return res.sendStatus(204)
+  }
+)
 ```
 
-The service should require authorization context too, or expose a narrow function that cannot be called without it. Otherwise a queue worker or new controller can invoke `disableUser` without the route check.
+The service should require authorization context too, or expose a narrow function that cannot be called without it. Otherwise a queue worker or new controller can invoke `suspendWorkspaceMember` without the route check. The mutation affects one membership inside one workspace. Disabling the person's platform account would be a different action reserved for a platform-level principal and policy.
 
 Default deny matters. When a new privileged action has no rule, it should fail. A broad `admin` bypass hides missing decisions and makes later tenant scoping difficult.
 

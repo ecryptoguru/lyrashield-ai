@@ -86,14 +86,22 @@ const sortDirections = {
   descending: "desc",
 } as const
 
-const column = sortColumns[request.sort]
-const direction = sortDirections[request.direction]
-if (!column || !direction) throw new InvalidInputError()
+const sortInput = object({
+  sort: enumValue(["created", "email"]),
+  direction: enumValue(["ascending", "descending"]),
+})
+  .strict()
+  .parse(request)
+
+const column = sortColumns[sortInput.sort]
+const direction = sortDirections[sortInput.direction]
 
 const query = `select id, email from users order by ${column} ${direction}`
 ```
 
-The SQL text still uses interpolation, but both inserted fragments come from fixed application constants. The request selects a mapping key and never becomes SQL text.
+The SQL text still uses interpolation, but both inserted fragments come from fixed application constants. The request first passes through an explicit enum and never indexes the map with an arbitrary property such as `constructor` or `__proto__`.
+
+In plain JavaScript without a schema enum, check membership with `Object.hasOwn()` before indexing or use a null-prototype map. A truthy lookup alone is not an own-key check.
 
 Prefer a query builder's safe identifier API when available. Confirm that the API quotes identifiers rather than treating them as values. Do not accept a raw field name and merely wrap it in quotation marks.
 
