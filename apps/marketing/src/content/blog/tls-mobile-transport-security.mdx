@@ -1,0 +1,129 @@
+---
+title: "TLS and Mobile Transport Security"
+description: "Remove cleartext exceptions from mobile releases, test the real networking stack, and verify certificates, redirects, and backend TLS."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: true
+heroImage: web-execution-03
+faq:
+  - q: "Does every mobile app need certificate pinning?"
+    a: "No. Platform trust with correct certificate and hostname validation is the baseline for many apps. Pinning adds operational cost and can cause outages during certificate or key changes, so use it only with a managed recovery design."
+  - q: "Does Apple ATS cover every networking API?"
+    a: "No. ATS protects standard URL loading behavior, but lower-level or custom networking paths can fall outside its enforcement. Test the actual libraries and code paths used by the release build."
+  - q: "How do I keep debug cleartext exceptions out of production?"
+    a: "Put exceptions in debug-specific configuration, use named test destinations, inspect the final signed artifact, and add a release test that fails when broad cleartext or trust overrides appear."
+---
+
+**Direct answer:** Require HTTPS for every production mobile endpoint, remove broad cleartext and trust exceptions from release configuration, and test the actual networking library against owned endpoints. Verify certificate and hostname failures, redirects, proxy behavior, and backend TLS independently. Apple ATS and Android Network Security Configuration help enforce policy, but neither covers every custom stack.
+
+Mobile transport failures often begin as development conveniences. A local HTTP API, self-signed certificate, debugging proxy, or broad trust callback gets a temporary exception. The release risk appears when the exception applies to production destinations or bypasses validation for every host.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats transport as one boundary. TLS protects data in transit between validated endpoints. It does not authorize the API request or make data safe after either endpoint receives it.
+
+## A trust callback that defeats the platform
+
+**Vulnerable pattern. Never ship a universal trust callback.**
+
+```swift
+func urlSession(
+  _ session: URLSession,
+  didReceive challenge: URLAuthenticationChallenge,
+  completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+) {
+  completionHandler(
+    .useCredential,
+    URLCredential(trust: challenge.protectionSpace.serverTrust!)
+  )
+}
+```
+
+This code accepts the presented trust object without applying the intended server trust evaluation or constraining a development host. An active network attacker who can present another certificate may gain the application's confidence, depending on the surrounding stack.
+
+An Android manifest with broad cleartext enabled creates a different failure. Requests can leave the device without TLS, exposing content to observation and modification on the network.
+
+## Trace development exceptions into the release
+
+Generated fixes optimize for making the request complete. When a certificate error blocks development, accepting the challenge removes the symptom. When a local HTTP server fails, a global cleartext flag makes it reachable. The code rarely has enough deployment context to scope the exception correctly.
+
+Platform policy can create another false assumption. A developer enables ATS or Android Network Security Configuration and assumes every network path now follows it. Custom sockets, lower-level APIs, embedded runtimes, native extensions, and some third-party behavior need their own review.
+
+Redirects matter too. An HTTPS starting URL can redirect to HTTP or to an unexpected host. Test the complete chain and decide whether the client follows cross-origin or downgrade redirects.
+
+Inventory SDK traffic instead of reviewing only first-party API code. Analytics, crash reporting, advertising, feature flags, remote configuration, media, and customer support libraries can open their own connections. Record their destinations and transport behavior from the release build, then remove SDKs whose network contract cannot be reviewed.
+
+## Use Apple ATS as a release policy
+
+Apple's current [guidance for preventing insecure network connections](https://developer.apple.com/documentation/security/preventing-insecure-network-connections) describes App Transport Security for standard URL loading APIs and explicit exceptions where necessary. Keep exceptions narrow, named, and justified.
+
+Do not set a broad arbitrary-load allowance for the production app merely because one development service uses HTTP. Prefer HTTPS for the development service. If an exception remains necessary, isolate it in debug configuration and a controlled test domain.
+
+ATS does not remove the need to inspect custom challenge handlers. Default platform certificate and hostname validation is safer than a callback that returns success for every challenge. If the app uses lower-level networking interfaces, document their trust configuration and test them separately.
+
+Review the final built application's information property list rather than only the source template. Build settings, generated files, plugins, and environment substitutions can change the release artifact.
+
+## Configure Android cleartext rules narrowly
+
+Android's current [cleartext communications guidance](https://developer.android.com/privacy-and-security/risks/cleartext-communications) recommends avoiding cleartext and using Network Security Configuration to opt out where supported. Put production defaults and debug overrides in separate resources.
+
+```xml
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false" />
+  <debug-overrides>
+    <trust-anchors>
+      <certificates src="user" />
+    </trust-anchors>
+  </debug-overrides>
+</network-security-config>
+```
+
+This sketch blocks cleartext by default and keeps user-installed debugging trust inside `debug-overrides`. Confirm the actual Android version behavior and networking library. Do not add a production domain exception for a local host or broad wildcard.
+
+Inspect the merged release manifest and packaged network-security resource. Library manifests can contribute settings, and product flavors can select a different file than expected.
+
+Custom WebView content needs a separate pass. A native network policy does not automatically make mixed content, JavaScript bridges, file URLs, or browser-style navigation safe. Restrict the origins and capabilities the WebView needs, and do not use it as a fallback path around a blocked native TLS request.
+
+## Validate certificates and hostnames
+
+Use platform or maintained library TLS implementations. Android's guidance warns against custom implementations of established protocols because they are difficult to implement and update safely.
+
+The client should reject expired certificates, certificates issued by an untrusted authority, and certificates whose names do not match the destination. Do not disable hostname verification after certificate-chain validation. Treat user-added trust anchors according to the application's audience and device-management model.
+
+Certificate pinning is an optional additional constraint, not a universal requirement. It can reduce reliance on the broader trust store, but a lost key or unplanned certificate rotation can break every installed client until an update reaches users. If pinning is justified, pin with backups, define overlap and expiry, monitor failures, and retain an emergency recovery path that does not silently trust everything.
+
+Enterprise interception and user-installed certificate authorities require a product decision. A consumer app and a managed workforce app may choose different trust behavior. Do not add a global bypass after one support report. Reproduce the device policy, document the supported trust model, and keep any managed exception scoped.
+
+## Verify the backend TLS separately
+
+Mobile policy cannot repair a server that offers weak protocols, sends an incomplete certificate chain, or redirects to cleartext. [NIST SP 800-52 Rev. 2](https://csrc.nist.gov/pubs/sp/800/52/r2/final) provides government TLS selection and configuration guidance. Apply a current server policy appropriate to the product and client population.
+
+Inventory API, upload, authentication, analytics, feature flag, update, and content endpoints. Test every owned host the app contacts. Remove obsolete endpoints from configuration so a forgotten fallback cannot reappear.
+
+Test certificate-chain completeness and hostname coverage from networks that do not have the operator's cached intermediates. Verify renewals before deployment and monitor expiry. A server that works in a desktop browser can still fail on older supported devices with a different trust store.
+
+HSTS is an HTTP user-agent policy, and native networking support varies by stack. It does not configure ATS, Android Network Security Configuration, or a custom native client. The related [security headers guide](/blog/security-headers-ai-built-apps) explains how browsers apply it. A native app must request HTTPS and enforce its own platform transport rules.
+
+## Test the signed release build
+
+Use an authorized test environment and a physical device or release-equivalent emulator. Capture the destinations contacted by the signed release build without weakening production trust. Confirm that no expected request uses cleartext.
+
+Point a test hostname at controlled endpoints with an expired certificate, wrong hostname, and untrusted test authority. Each connection should fail without offering a user bypass. Test an HTTPS endpoint that redirects to HTTP and confirm the client rejects or stops according to policy.
+
+Exercise every networking library, background transfer, web view, native extension, and embedded SDK in scope. Verify that debug trust roots and proxy exceptions are absent from the release artifact. Test offline and captive-portal behavior so error recovery does not fall back to insecure transport.
+
+The browser-local [security headers checker](/tools/security-headers-checker) reviews pasted web response headers. It cannot inspect an iOS property list, Android Network Security Configuration, native certificate validation, or the signed mobile artifact.
+
+## Scope the transport evidence
+
+Configuration checks can detect broad exceptions. Controlled connection tests can establish how one build reacts to known certificate and redirect failures. Server scanners can describe the TLS endpoint they reached.
+
+Those results do not prove every library follows the same path or that data is authorized and protected at rest. Record the app version, platform, network stack, endpoint set, configuration, and observed failure. Recheck after adding SDKs, hosts, certificate policy, or build variants.
+
+## Sources
+
+- [Apple: Preventing Insecure Network Connections](https://developer.apple.com/documentation/security/preventing-insecure-network-connections)
+- [Android Developers: Cleartext communications](https://developer.android.com/privacy-and-security/risks/cleartext-communications)
+- [NIST SP 800-52 Rev. 2: TLS Implementation Guidelines](https://csrc.nist.gov/pubs/sp/800/52/r2/final)

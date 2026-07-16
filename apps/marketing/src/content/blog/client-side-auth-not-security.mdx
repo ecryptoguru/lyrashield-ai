@@ -103,6 +103,8 @@ app.delete("/api/workspaces/:id", requireSession, async (req, res) => {
 
 The frontend can call the same policy through a safe capability endpoint or use server-provided permissions to decide which buttons to render. That keeps the interface honest. The API must still repeat the check because client state can be stale or manipulated.
 
+State-dependent rules need an atomic boundary too. Suppose deletion is allowed only while the workspace is empty and the caller remains its owner. A policy check followed by a separate delete leaves time for membership or resource state to change. Enforce the relevant owner, version, or empty-state predicate inside the transaction that performs the mutation, then verify the affected-row count. If the predicate no longer matches, deny or retry the decision from fresh state. A correct page guard cannot close this server-side race.
+
 Default deny helps when a new action appears. If no policy grants `workspace.delete`, the request fails. A rule that starts with broad access and lists exceptions tends to miss newly added paths.
 
 ## Edge cases beyond the page guard

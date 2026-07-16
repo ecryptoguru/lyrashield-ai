@@ -113,6 +113,8 @@ The exact query depends on the product. Shared objects, support access, delegate
 
 Nested resources need their own boundary. A comment ID may be globally unique, but the server still needs to confirm that its parent project belongs to the active tenant. Bulk endpoints should authorize every selected object, not only the first one.
 
+Bind parent and child identifiers in the same scoped lookup. Checking only `attachmentId` can load a file from another project, while checking only `projectId` can let a foreign child ride through an authorized parent route. The query should constrain the child ID, parent ID, active tenant, and caller relationship together. Add two negative cases to the fixture: Account A supplies A's project ID with B's attachment ID, then B's project ID with A's attachment ID. Both requests must fail without returning metadata or creating a download. This catches mismatched route parameters that ordinary owner and non-owner tests can miss.
+
 Creation paths can contain the same flaw without an existing object ID. If the browser supplies `workspaceId`, `ownerId`, or `accountId`, the server must confirm that the principal may create a record in that scope. Prefer deriving ownership from trusted request context. Otherwise Account A may create a child record attached to Account B's project and later gain an indirect path to it.
 
 Downloads deserve a separate check. A metadata endpoint may enforce ownership while a file route accepts a storage key directly. Test signed links, thumbnails, exports, and attachment previews with the same crossed-account fixture. A long unguessable storage path is still an object reference.

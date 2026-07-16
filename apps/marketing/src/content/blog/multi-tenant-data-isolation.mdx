@@ -94,6 +94,8 @@ function listReports(context: TenantContext) {
 
 For high-risk paths, add database-enforced row security or a scoped database client. PostgreSQL RLS can provide another boundary when normal application roles are used. Server code with table-owner, superuser, `BYPASSRLS`, or Supabase `service_role` privileges needs its own strict predicates because those roles can bypass policy.
 
+Relational constraints can prevent crossed-tenant references even when application code makes a mistake. A tenant-owned child table can carry `workspaceId` and reference its parent with a composite foreign key such as `(workspaceId, projectId)`. That stops a row in Tenant A from pointing at a project in Tenant B. Use tenant-scoped composite uniqueness for names or external identifiers that only need to be unique inside one workspace. Add these columns and constraints through a reviewed migration: backfill the tenant from a trusted parent, reject ambiguous rows, then validate the constraint. Keep a negative database test that attempts a crossed-tenant insert so a later schema change cannot silently weaken the boundary.
+
 ## Trace scope through every surface
 
 Database records are only the first stop. Review where tenant-owned data travels.
