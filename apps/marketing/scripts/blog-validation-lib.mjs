@@ -696,6 +696,7 @@ export function validateImageLibrary(catalog, manifests, root, options = {}) {
   const usage = new Map()
   const hashes = new Map()
   const clusters = new Map()
+  let previousImageId
 
   for (const { release, entries } of normalized) {
     if (!Array.isArray(entries)) {
@@ -712,9 +713,10 @@ export function validateImageLibrary(catalog, manifests, root, options = {}) {
         errors.push(`${entry.slug}: imageId is required`)
         continue
       }
-      if (index > 0 && entries[index - 1]?.imageId === entry.imageId) {
+      if (previousImageId === entry.imageId) {
         errors.push(`${release}: adjacent articles reuse image ${entry.imageId}`)
       }
+      previousImageId = entry.imageId
       usage.set(entry.imageId, (usage.get(entry.imageId) ?? 0) + 1)
       if (!/^sha256:[a-f0-9]{64}$/.test(entry.sourceHash ?? "")) {
         errors.push(`${entry.slug}: sourceHash must be sha256:<64 lowercase hex>`)

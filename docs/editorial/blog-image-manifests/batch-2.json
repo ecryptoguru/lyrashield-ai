@@ -1,14 +1,14 @@
 [
   {
     "slug": "path-traversal-generated-code",
-    "imageId": "web-execution-05",
+    "imageId": "web-execution-04",
     "cluster": "web-execution",
-    "concept": "A file and path handling channel isolated from executable space",
-    "prompt": "Text-free square cinematic technical artwork, a file artifact moving through quarantine and canonical path gates while executable space remains sealed, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "A file artifact passing through quarantine and path gates",
+    "concept": "A server request or path corridor with input, authorization, and destination-boundary rechecks",
+    "prompt": "Text-free square cinematic technical artwork, an untrusted server request or path corridor passing through gates for input validation and authorization before a destination-boundary chamber, with translucent checkpoint rings rechecking resolved destinations and redirects for request paths while sealed private and executable spaces remain off-path, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "A server request or path corridor crossing input, authorization, and destination-boundary rechecks",
     "sourceHash": null,
-    "cropNotes": "Center the file artifact and both gates; keep executable space outside the accepted path",
-    "usageCount": 2,
+    "cropNotes": "Keep the input and authorization gates plus the destination-boundary checkpoint visible; retain a redirect recheck for request-path crops",
+    "usageCount": 3,
     "approved": false
   },
   {
@@ -157,13 +157,13 @@
   },
   {
     "slug": "debug-routes-error-leaks",
-    "imageId": "supply-chain-02",
-    "cluster": "supply-chain",
-    "concept": "A deployment artifact sealed from source to production",
-    "prompt": "Text-free square cinematic technical artwork, a sealed build artifact traveling from a source chamber through a controlled deployment corridor, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
-    "alt": "A sealed build artifact moving through a controlled deployment corridor",
+    "imageId": "web-execution-05",
+    "cluster": "web-execution",
+    "concept": "An untrusted file or diagnostic channel isolated from executable and public-response space",
+    "prompt": "Text-free square cinematic technical artwork, an untrusted file artifact or protected diagnostic stream passing through a controlled handling boundary into a sealed internal channel while executable space and the public-response plane remain isolated, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "An untrusted file or diagnostic channel isolated from executable and public-response space",
     "sourceHash": null,
-    "cropNotes": "Keep source, artifact, and destination aligned through the central safe area",
+    "cropNotes": "Keep the untrusted input, controlled internal channel, executable boundary, and public-response plane visible in every crop",
     "usageCount": 2,
     "approved": false
   },

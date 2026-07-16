@@ -527,6 +527,34 @@ ${filler}
     )
   })
 
+  it("rejects adjacent image reuse across ordered manifest boundaries", () => {
+    const root = mkdtempSync(join(tmpdir(), "blog-validation-global-adjacency-"))
+    const catalog = {
+      "verification-01": catalogEntry("verification-01"),
+      "verification-02": catalogEntry("verification-02"),
+    }
+    writeImageSet(root, "verification-01")
+    writeImageSet(root, "verification-02")
+
+    const manifests = [
+      {
+        release: "batch-1",
+        entries: [manifestEntry("batch-one-last", "verification-01", 2)],
+      },
+      {
+        release: "batch-2",
+        entries: [
+          manifestEntry("batch-two-first", "verification-01", 2),
+          manifestEntry("batch-two-second", "verification-02", 1),
+        ],
+      },
+    ]
+
+    expect(validateImageLibrary(catalog, manifests, root)).toEqual([
+      "batch-2: adjacent articles reuse image verification-01",
+    ])
+  })
+
   it("accepts valid five-format images exactly at the byte budget and rejects one byte over", () => {
     const root = mkdtempSync(join(tmpdir(), "blog-validation-boundary-"))
     const imageId = "authority-guide-01"
