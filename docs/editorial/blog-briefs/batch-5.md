@@ -68,9 +68,10 @@ Open with a 40 to 80 word answer: give agent-triggered workflows read-only permi
 ### Required links and conversion
 
 - Authority link: `/blog/vibe-coding-security-guide`, in the first third with anchor text about the full AI-built application security model
-- Free tool: `/tools/secret-exposure-scanner`, as a local preflight for selected workflow and configuration files
+- Free tool: `/tools/ai-app-security-checklist`, as a browser-local way to record whether agent, dependency, secret, testing, and operational controls have owners; state that it does not inspect repository settings, action pins, token permissions, workflow execution, or cloud trust policy
+- Optional secondary tool: `/tools/secret-exposure-scanner` only when discussing common credential patterns in selected workflow or configuration text; state that it does not inspect repository settings or workflow authority
 - Related dependency: `/blog/cicd-agent-confused-deputy`
-- Contextual LyraShield link: `/methodology`; describe the repository diff-gate and SARIF workflow as implemented code, not a public hosted service
+- Contextual LyraShield link: `/methodology`; describe the repository GitHub Actions workflow as review-stage code, not a public hosted service or production proof
 
 ### FAQ decision
 
@@ -164,9 +165,10 @@ Open with a 40 to 80 word answer: keep Stripe secret keys server-side, verify we
 ### Required links and conversion
 
 - Authority link: `/blog/vibe-coding-security-guide`
-- Free tool: `/tools/secret-exposure-scanner`
+- Free tool: `/tools/ai-app-security-checklist`, to record whether server-owned authorization, secret handling, testing, monitoring, and recovery controls have owners; state that it does not connect to Stripe or inspect billing state
+- Relevant secondary tool: `/tools/secret-exposure-scanner`, limited to common credential patterns in selected text files and not Stripe configuration, webhook destinations, Git history, or access logs
 - Related dependencies: `/blog/stripe-webhook-signature-security`, `/blog/payment-entitlement-server-source-truth`, and `/blog/idempotency-replay-protection`
-- Contextual LyraShield link: `/scan` only as a passive public-surface check, with an explicit statement that it does not inspect private Stripe configuration or billing state
+- Do not add a passive public-surface conversion; it is unrelated to the private Stripe state machine
 
 ### FAQ decision
 
@@ -310,7 +312,7 @@ Open with a 40 to 80 word answer: scan staged changes locally for fast feedback,
 - Authority link: `/blog/vibe-coding-security-guide`
 - Free tool: `/tools/secret-exposure-scanner`, explicitly limited to selected local text files and not Git history
 - Related dependencies: `/blog/api-keys-frontend-ai-apps` and `/blog/secrets-ai-coding-prompts`
-- Contextual LyraShield link: `/scan` only for the separate public-surface boundary
+- Do not add a separate public-surface conversion; keep the free-tool conversion on the browser-local secret scanner and its stated limits
 
 ### FAQ decision
 
