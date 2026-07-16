@@ -39,7 +39,7 @@ Choose a meaningful action such as inviting a member, changing a plan, deleting 
 
 This trace prevents a common review error: checking the button state while missing the callable server entry. Next.js documents Server Actions as public HTTP endpoints once they are exposed by the application. Route Handlers are APIs by definition. Both need the same distrust of request arguments.
 
-## The risky pattern: trusting a hidden project ID
+## Where a hidden project ID becomes authority
 
 **Vulnerable pattern. The interface supplies the project ID, and the action checks only that a user exists.**
 
@@ -58,9 +58,9 @@ The generated screen may render the delete button only for an owner. That is not
 
 AI-generated code often misses this because generation follows the visible happy path. The model sees a project card, an owner-only button, and a delete operation. It may not invent Account B, a guessed identifier, a removed membership, or a replayed request unless the task explicitly includes those cases.
 
-## Put the decision beside the data operation
+## Bind deletion to the authorized owner in one operation
 
-Use a server-only data access function that loads the target under the caller's allowed scope. Return a small result rather than a raw database record.
+Use a server-only data access function that keeps the authorization predicate in the final mutation. Return a small result rather than a raw database record.
 
 ```ts
 import "server-only"
@@ -72,19 +72,17 @@ export async function removeProject(input: unknown) {
   const { projectId } = inputSchema.parse(input)
   const user = await requireUser()
 
-  const project = await db.project.findFirst({
+  const result = await db.project.deleteMany({
     where: { id: projectId, ownerId: user.id },
-    select: { id: true },
   })
 
-  if (!project) throw new Error("Not found")
-  await db.project.delete({ where: { id: project.id } })
+  if (result.count !== 1) throw new Error("Not found")
 
   return { removed: true }
 }
 ```
 
-This example narrows one owner-only deletion. It still needs a deliberate answer for organization roles, ownership transfer, recent reauthentication, concurrent deletion, audit records, and dependent data. A generic `isAdmin` value from form data is not a replacement for loading the caller's current role on the server.
+This example narrows one owner-only deletion and keeps ownership in the database predicate used by the mutation. It still needs a deliberate answer for organization roles, ownership transfer, recent reauthentication, concurrent last-owner decisions, audit records, and dependent data. A generic `isAdmin` value from form data is not a replacement for loading the caller's current role on the server.
 
 The `server-only` package helps prevent accidental import into a Client Component. It does not authenticate a request or authorize a record. Keep those as separate checks.
 
@@ -110,7 +108,7 @@ Preview deployments often contain current code, test data, unfinished admin rout
 
 Protection at the deployment edge is useful, but application authorization still matters. OAuth callbacks, webhooks, and automated tests may need carefully scoped access. Do not solve a blocked callback by disabling all protection or removing authorization from the underlying application route.
 
-## Run safe negative tests on the deployment
+## Challenge the live deployment with negative cases
 
 Use disposable accounts and fake records that you are authorized to test. Avoid destructive tests on customer data.
 
@@ -125,7 +123,7 @@ Do not run broad automated attacks against infrastructure you do not own. A focu
 
 The deeper [Next.js security guide](/blog/nextjs-ai-app-security) covers Server Actions, Route Handlers, data access layers, and environment boundaries. The [Vercel deployment security guide](/blog/vercel-deployment-security) covers preview and production controls in more detail.
 
-## Know what remains outside this check
+## Draw the boundary of the result
 
 This review cannot prove the behavior of a closed third-party service, production IAM you cannot inspect, undiscovered routes, or business rules that were never specified. It also cannot establish that a generated remediation is correct simply because it compiles.
 

@@ -20,7 +20,7 @@ faq:
 
 **Direct answer:** Treat all React state, props, storage, route guards, and outgoing requests as attacker-controlled. Keep secrets and sensitive decisions on a server, authorize every API action there, return only necessary data, use ordinary JSX for untrusted text, allow raw HTML only through a reviewed sanitizer policy, and verify security by calling APIs directly outside the interface.
 
-_React 19.2 common DOM and Server Function guidance was reviewed against official documentation on July 17, 2026. The server examples are architectural patterns and must be adapted to the backend framework actually in use._
+_React 19.2 common DOM, Server Function, and current React Server Components security guidance was reviewed against official documentation on July 17, 2026. The server examples are architectural patterns and must be adapted to the backend framework actually in use._
 
 React makes safe rendering easier, but it does not make the browser trusted. Users can edit state, call functions from developer tools, change network requests, read shipped JavaScript, and construct API calls without rendering the interface. A perfect component cannot compensate for a server that accepts another user's record ID.
 
@@ -39,7 +39,7 @@ Do not rely on an environment-variable name to create secrecy. Build tools expos
 
 Treat client-side feature flags the same way. They can shape presentation, but they cannot protect an unreleased endpoint, paid capability, or administrative action.
 
-## The risky pattern: a hidden control as authorization
+## A hidden admin control is still callable
 
 **Vulnerable pattern. The component trusts `isAdmin` and sends any supplied ID.**
 
@@ -57,25 +57,36 @@ Hiding the button improves the interface. It does not protect the endpoint. A us
 
 AI-generated frontends often miss this because the prompt describes roles as visual behavior: "Admins see a delete button." The generated component fulfills that request. Unless the backend contract is also specified and tested, the security decision never leaves the browser.
 
-## Enforce the action on the server
+## Make the server own the decision
 
-The server should derive identity from a verified session, load current authorization state, validate the target identifier, and perform the action under that constraint.
+The server should derive identity from a verified session, parse runtime input, load authorization for the named workspace, and perform the action under that scope. TypeScript annotations do not validate a request at runtime.
 
 ```ts
-export async function deleteUser(request: Request, targetId: string) {
+import { z } from "zod"
+
+const deleteUserSchema = z.object({
+  workspaceId: z.string().uuid(),
+  targetId: z.string().uuid(),
+})
+
+export async function deleteUser(request: Request, input: unknown) {
+  const { workspaceId, targetId } = deleteUserSchema.parse(input)
   const actor = await requireVerifiedUser(request)
-  const membership = await loadMembership(actor.id)
+  const membership = await loadMembership({
+    userId: actor.id,
+    workspaceId,
+  })
 
   if (!membership || membership.role !== "ADMIN") {
     return new Response("Not found", { status: 404 })
   }
 
-  if (targetId === actor.id || (await isLastOwner(targetId))) {
+  if (targetId === actor.id || (await isLastOwner({ userId: targetId, workspaceId }))) {
     return new Response("Action not allowed", { status: 409 })
   }
 
   await removeWorkspaceUser({
-    workspaceId: membership.workspaceId,
+    workspaceId,
     targetId,
     actorId: actor.id,
   })
@@ -84,9 +95,11 @@ export async function deleteUser(request: Request, targetId: string) {
 }
 ```
 
-This example adds two common edge cases, but it is not complete. Real deletion may require recent authentication, audit evidence, invitation cleanup, object ownership transfer, notification, concurrency protection, and privacy retention rules. The key is that no browser flag proves the role.
+This example adds runtime validation and binds the role lookup and mutation to one workspace, but it is not complete. `removeWorkspaceUser` must reject a target outside that same workspace and protect last-owner checks against concurrent changes. Real deletion may also require recent authentication, audit evidence, invitation cleanup, object ownership transfer, notification, and privacy retention rules. The key is that no browser flag or unscoped membership proves the action is allowed.
 
 If the application uses React Server Functions, React's documentation makes the same point: arguments are untrusted and mutation authorization must occur inside each Server Function. Running code on the server changes where it executes, not whether the caller is allowed.
+
+React's current security advisory adds a separate dependency boundary. Vulnerable React Server Components packages allowed unauthenticated remote code execution, denial of service, or Server Function source exposure. For the React 19.2 release line, `react-server-dom-webpack`, `react-server-dom-parcel`, and `react-server-dom-turbopack` 19.2.4 contain the complete published fixes as of January 26, 2026. An app can be affected when its framework or bundler supports React Server Components even if the app defines no Server Function itself. Follow the framework-specific upgrade instructions and do not treat hosting-provider mitigations as a substitute for updating.
 
 ## Use JSX escaping without overstating it
 
@@ -138,7 +151,7 @@ Avoid storing access tokens or sensitive records in local storage when a safer s
 
 The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) can flag credential-like strings in text you provide. It cannot inspect a built React bundle, source maps, browser storage, network traffic, or deployed environment configuration.
 
-## Test the server without trusting the interface
+## Prove denial outside the interface
 
 Use an authorized test environment and fake data. Keep Account A and Account B in separate browser profiles.
 
@@ -154,7 +167,7 @@ Test rendering separately with harmless strings that contain markup characters, 
 
 The [Next.js security guide](/blog/nextjs-ai-app-security) applies this model to Server Actions, Route Handlers, and Server Components. For another backend, preserve the same boundary while following that framework's session and routing documentation.
 
-## State what the review establishes
+## Describe the result precisely
 
 A clean React review can show that selected components render input safely and selected APIs reject unauthorized test requests. It cannot prove that every third-party widget, dependency, server route, session configuration, CSP, or future build is safe.
 
@@ -164,6 +177,7 @@ Record the frontend build, backend deployment, identities, endpoints, data field
 
 - [React: Common components and props](https://react.dev/reference/react-dom/components/common)
 - [React: use server](https://react.dev/reference/rsc/use-server)
+- [React: Denial of Service and Source Code Exposure in React Server Components](https://react.dev/blog/2025/12/11/denial-of-service-and-source-code-exposure-in-react-server-components)
 - [OWASP: Cross Site Scripting Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)
 - [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)
 - [OWASP: Content Security Policy Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)

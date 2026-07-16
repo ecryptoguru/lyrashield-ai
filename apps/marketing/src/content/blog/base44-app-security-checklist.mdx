@@ -15,7 +15,7 @@ faq:
   - q: "Is a Base44 administrator the same as an editor?"
     a: "No. App roles such as Admin and User affect runtime permissions, while editor collaborators can modify the app in the workspace. Do not use editor access as proof of an in-app role."
   - q: "Can Base44 permissions protect individual fields?"
-    a: "Current Base44 documentation says entity permissions operate at the table level and do not provide field-level permissions. Separate sensitive fields into a restricted entity or return them through an authorized backend function."
+    a: "It depends on the Base44 surface. The app-builder Security UI documents entity-level CRUD rules, while the developer backend supports field-level security in entity schemas. If your workflow cannot define and deploy those schema rules, separate sensitive fields into a restricted entity or return them through an authorized backend function."
   - q: "What does a Base44 security scan not prove?"
     a: "It does not prove complete business authorization, field confidentiality, third-party configuration, or correct deployed behavior. It reports covered checks for a project state and must be followed by review and negative testing."
 ---
@@ -24,7 +24,7 @@ faq:
 
 _Base44 visibility, role, permission, and scan behavior was reviewed against official documentation on July 17, 2026. Recheck the current Security and access settings before release._
 
-Base44 has several access boundaries that look similar in the editor but answer different questions. App visibility controls who can reach the app. Authentication establishes identity. The Admin and User roles can participate in entity permissions. Editor collaborators can change the project itself. None of these automatically decides which fields a runtime user may see.
+Base44 has several access boundaries that look similar in the editor but answer different questions. App visibility controls who can reach the app. Authentication establishes identity. The Admin and User roles can participate in entity permissions. Editor collaborators can change the project itself. None of these automatically decides which fields a runtime user may see. Base44's app-builder controls and developer backend also expose different security capabilities, so identify which project surface you are actually deploying before choosing a field-confidentiality design.
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) recommends writing these boundaries down before testing. For Base44, a small access matrix is more useful than a broad request to "make it secure."
 
@@ -40,7 +40,7 @@ List each sensitive entity and operation. Then mark the expected result for four
 
 Do not assume that an editor is an Admin inside the published app. Base44 documents editor access and app roles as different concepts. Test runtime behavior with actual accounts assigned the intended roles.
 
-## The risky pattern: a public app with broad table reads
+## Why a filtered screen can still expose a table
 
 Suppose an AI-generated support app stores customer contact details, private notes, and status in one `Tickets` entity. The interface filters tickets to the current user, but the entity permission allows all authenticated users to read the table.
 
@@ -56,11 +56,13 @@ The filter makes the expected screen look correct. It does not repair a broader 
 
 AI code commonly misses this boundary because the prompt describes the page, not the adversarial request. Generated logic optimizes for "show my tickets" and stops when the list appears correct. It may not ask whether another authenticated account can query the same entity without that client filter.
 
-## Enforce table permissions, then split confidential fields
+## Match field protection to the Base44 surface
 
 Use Base44's entity permissions to define which roles and ownership relationships may create, read, update, or delete records. Prefer the narrowest rule that supports the workflow. Verify that the published app uses the current rule set, not an earlier state.
 
-Current Base44 documentation states that permissions apply at the table level, not per field. If a user may read a ticket row, do not assume one property inside that row remains hidden because the component does not render it.
+The app-builder Security UI currently documents entity-level create, read, update, and delete rules. It does not expose a field-level rule editor in that workflow. Base44's separate developer backend documentation does support field-level security inside entity schemas, using per-field `read` and `write` rules that are deployed with the schema.
+
+Do not collapse those two surfaces into a blanket claim that Base44 either always has or never has field-level security. If you use the developer backend, review and deploy the field rules, then test the resulting reads and writes with distinct roles. If you work only through the builder UI, or cannot verify that the deployed schema includes those rules, split confidential data into a more restricted entity or expose a minimal result through an authorized backend function.
 
 Split data by confidentiality:
 
@@ -108,7 +110,7 @@ Inspect each proposal before applying it. A broad permission restriction can bre
 
 For each accepted change, rerun the specific negative test that originally failed. Record whether the result is detected, fixed in source, or confirmed by a fresh deployed test. Keep those states distinct.
 
-## Verify with three runtime identities
+## Let distinct runtime identities challenge the policy
 
 Use a disposable app copy or authorized test environment with fake data.
 
@@ -123,7 +125,7 @@ The browser-local [AI app security checklist](/tools/ai-app-security-checklist) 
 
 The [IDOR guide for AI-built apps](/blog/idor-ai-built-apps) provides a focused method for cross-user checks. The [server-side authorization guide](/blog/server-side-authorization-ai-apis) covers how to design a permission matrix when roles and ownership overlap. The [Lovable launch review](/blog/lovable-app-security-checklist) offers a useful comparison for another generated-app workflow without assuming its controls map directly to Base44.
 
-## State the result without overstating it
+## Write a bounded release note
 
 A useful release note names the version, deployed URL, visibility, identities, entity operations, and observed denials. It does not say "Base44 security passed" as if one scan covered all business behavior.
 
@@ -133,6 +135,7 @@ This process cannot prove undiscovered routes, field confidentiality inside a br
 
 - [Base44: Security overview](https://docs.base44.com/Setting-up-your-app/security-overview)
 - [Base44: Managing security settings](https://docs.base44.com/Setting-up-your-app/Managing-security-settings)
+- [Base44 developer backend: Entity security](https://docs.base44.com/developers/backend/resources/entities/security)
 - [Base44: Running a security scan](https://docs.base44.com/Setting-up-your-app/running-a-security-scan)
 - [Base44: Managing access](https://docs.base44.com/Setting-up-your-app/Managing-access)
 - [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)
