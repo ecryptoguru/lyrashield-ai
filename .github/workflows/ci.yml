@@ -189,6 +189,8 @@ jobs:
 
       - name: Build production marketing Worker
         if: steps.changes.outputs.changed == 'true'
+        env:
+          PUBLIC_POSTHOG_KEY: ${{ secrets.PUBLIC_POSTHOG_KEY }}
         run: pnpm --filter @lyrashield/marketing build
 
       - name: Apply D1 migrations and deploy

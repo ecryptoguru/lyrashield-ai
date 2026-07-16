@@ -116,7 +116,7 @@ export default defineConfig({
       PUBLIC_POSTHOG_HOST: envField.string({
         context: "client",
         access: "public",
-        default: "https://eu.i.posthog.com",
+        default: "https://us.i.posthog.com",
       }),
       PUBLIC_TURNSTILE_SITE_KEY: envField.string({
         context: "client",
