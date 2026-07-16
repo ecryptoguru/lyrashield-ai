@@ -2,14 +2,10 @@ const RATE_LIMIT_MAX = 5
 const RATE_LIMIT_WINDOW_MS = 60_000
 
 export function getClientIp(request: Request): string {
+  // Cloudflare writes this header at the Worker boundary. Do not fall back to
+  // caller-controlled forwarding headers on previews or local deployments.
   const cf = request.headers.get("cf-connecting-ip")
-  if (cf) return cf
-  const forwarded = request.headers.get("x-forwarded-for")
-  if (forwarded) {
-    // Use the last address in the chain (closest proxy) instead of the spoofable first address.
-    return forwarded.split(",").at(-1)?.trim() || "unknown"
-  }
-  return "unknown"
+  return cf?.trim() || "unknown"
 }
 
 /** Atomic D1 fallback used when the Workers rate-limiting binding is unavailable. */

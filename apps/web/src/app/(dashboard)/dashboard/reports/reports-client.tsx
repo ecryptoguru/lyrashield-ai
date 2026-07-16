@@ -46,6 +46,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
   const [loading, setLoading] = useState(true)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [sharedReportId, setSharedReportId] = useState<string | null>(null)
   const [copied, setCopied] = useState<"link" | "handoff" | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -145,6 +146,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
       }>(`/api/reports/${reportId}`, { workspaceId, action: "share" })
       const fullUrl = `${window.location.origin}${res.shareUrl}`
       setShareUrl(fullUrl)
+      setSharedReportId(reportId)
       setCopied(null)
       setReports((prev) =>
         prev.map((r) =>
@@ -174,6 +176,11 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
       setReports((prev) =>
         prev.map((r) => (r.id === reportId ? { ...r, revokedAt: result.revokedAt } : r))
       )
+      if (sharedReportId === reportId) {
+        setShareUrl(null)
+        setSharedReportId(null)
+        setCopied(null)
+      }
     } catch {
       setError("Failed to revoke share link.")
     }

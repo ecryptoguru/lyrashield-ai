@@ -8,6 +8,13 @@ describe("waitlist fallback rate limit", () => {
     expect(source).toMatch(/INSERT INTO waitlist_rate_limit[\s\S]+SELECT \?, \?[\s\S]+COUNT\(\*\)/)
   })
 
+  it("trusts only Cloudflare's Worker-boundary client IP header", () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const source = readFileSync(new URL("../lib/waitlist-rate-limit.ts", import.meta.url), "utf8")
+    expect(source).toContain('request.headers.get("cf-connecting-ip")')
+    expect(source).not.toContain('request.headers.get("x-forwarded-for")')
+  })
+
   it("rate limits waitlist position lookups", () => {
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const source = readFileSync(

@@ -6,6 +6,7 @@ import { Radar, Play, X, RefreshCw, ChevronRight } from "lucide-react"
 import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@lyrashield/ui"
 import { apiPost, apiGetPaginated } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
+import { mergePolledScans } from "./scans-client.utils"
 
 interface ScanItem {
   id: string
@@ -78,6 +79,7 @@ export function ScansClient({
   const [scans, setScans] = useState<ScanItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [hasLoadedMore, setHasLoadedMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [selectedTarget, setSelectedTarget] = useState("")
@@ -142,6 +144,7 @@ export function ScansClient({
       })
       setScans((prev) => [...prev, ...result.items])
       setNextCursor(result.nextCursor)
+      setHasLoadedMore(true)
     } catch {
       setError("Failed to load more scans")
     } finally {
@@ -156,6 +159,7 @@ export function ScansClient({
       const result = await apiGetPaginated<ScanItem>("/api/scans", { workspaceId })
       setScans(result.items)
       setNextCursor(result.nextCursor)
+      setHasLoadedMore(false)
     } catch {
       setError("Failed to refresh scans")
     } finally {
@@ -172,15 +176,17 @@ export function ScansClient({
     const interval = window.setInterval(() => {
       void apiGetPaginated<ScanItem>("/api/scans", { workspaceId })
         .then((result) => {
-          setScans(result.items)
-          setNextCursor(result.nextCursor)
+          setScans((current) =>
+            hasLoadedMore ? mergePolledScans(current, result.items) : result.items
+          )
+          if (!hasLoadedMore) setNextCursor(result.nextCursor)
         })
         .catch(() => {
           // Keep the current list visible; the manual refresh action reports errors.
         })
     }, 10_000)
     return () => window.clearInterval(interval)
-  }, [hasActiveScans, workspaceId])
+  }, [hasActiveScans, hasLoadedMore, workspaceId])
 
   return (
     <div>
