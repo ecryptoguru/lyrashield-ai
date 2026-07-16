@@ -1,0 +1,135 @@
+---
+title: "Secure a Claude Code Project"
+description: "Constrain Claude Code permissions, sandbox access, MCP tools, and release actions while keeping the coding workflow useful."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+draft: true
+heroImage: agent-security-05
+faq:
+  - q: "Is Claude Code plan mode a sandbox?"
+    a: "No. Plan mode controls whether Claude edits source, while the Bash sandbox enforces filesystem and network boundaries for shell commands. Use both when the task involves untrusted content or sensitive local resources."
+  - q: "When is bypass permissions mode acceptable?"
+    a: "Only inside a disposable container or virtual machine with no production credentials, narrow mounts, and restricted network access. It should not be the default on a developer workstation."
+  - q: "Does a trusted MCP server still need scoped permissions?"
+    a: "Yes. Trusting the publisher does not make every tool or credential appropriate for every repository. Enable only the tools and resource scope that the current task needs."
+---
+
+**Direct answer:** Start Claude Code in plan or default mode, keep the writable project root narrow, enable a fail-closed Bash sandbox, and deny release or credential operations in project policy. Review repository settings and MCP servers before trusting the folder. After changes, inspect the diff and run focused tests. Keep deployment as a separate human decision.
+
+_Product behavior and control names were reviewed against Anthropic documentation on July 17, 2026. Recheck them when upgrading Claude Code._
+
+Claude Code can read a repository, edit files, run commands, and call connected tools. Those capabilities are useful because they remove handoffs. They also mean a broad approval can reach farther than the code change that prompted it.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. The same distinction applies to the coding agent. A prompt such as "do not deploy" states intent. A permission deny rule, sandbox boundary, or missing production credential enforces it.
+
+## Map the effective capability before starting
+
+Claude Code's practical reach comes from several controls used together:
+
+- The directory where the session starts and any additional directories it can access.
+- The selected permission mode and project permission rules.
+- The Bash sandbox's filesystem and network limits.
+- Environment variables inherited by commands.
+- MCP servers, individual MCP tools, and the credentials behind them.
+- The Git branch and deployment permissions available outside Claude Code.
+
+Anthropic currently documents `default`, `acceptEdits`, `plan`, `auto`, `dontAsk`, and `bypassPermissions` modes. Their behavior is not interchangeable. Plan mode lets Claude investigate without editing source. It does not replace OS-enforced sandboxing. Auto mode uses background checks but remains a research preview. Bypass mode skips the permission layer and belongs only in an isolated container or virtual machine.
+
+## The risky pattern: a trusted folder with broad standing permission
+
+**Vulnerable pattern. This example is intentionally overbroad.**
+
+```json
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": ["Bash(*)", "WebFetch(*)"]
+  }
+}
+```
+
+Once saved as project configuration, this policy follows the repository. A later session may read an issue, generated fixture, package script, or tool response containing hostile instructions. A broad Bash rule removes a useful pause exactly when the requested command has changed.
+
+The problem is not that Claude Code ignores the prompt. The problem is that natural-language instructions and executable authority solve different problems. Repository instructions can be changed in a pull request. An MCP tool can expose a write action under an innocent-looking server name. A package script can change while the saved approval still matches it.
+
+## Build a narrow project policy
+
+Begin with `plan` or `default`. Add permission rules for repeatable, low-impact operations only after reviewing the exact match. Deny production, credential, and repository-policy changes even if similar development commands are allowed.
+
+```json
+{
+  "permissions": {
+    "defaultMode": "default",
+    "deny": [
+      "Read(.env)",
+      "Edit(.github/workflows/**)",
+      "Bash(npm run deploy:*)",
+      "Bash(terraform apply:*)"
+    ]
+  },
+  "sandbox": {
+    "failIfUnavailable": true
+  }
+}
+```
+
+Treat this as an illustrative fragment, then confirm the current matcher syntax in Anthropic's permission documentation. Bash patterns have security limitations, and a slightly different command form may not match the rule you expected. Hard separation is stronger: leave cloud credentials out of the process, remove production network reach, and use an account that cannot deploy.
+
+Set `sandbox.failIfUnavailable` when sandboxing is a release requirement. Anthropic documents that sandbox startup can otherwise warn and continue without the sandbox on an unsupported or incomplete system. A visible warning is useful during exploration. It is not a reliable CI gate.
+
+## Review repository configuration as executable policy
+
+Trusting a directory allows project-scoped Claude configuration to take effect. Review `.claude/settings.json`, hooks, skills, plugins, `CLAUDE.md`, and MCP configuration before accepting trust. Include those files in normal code review and branch protection.
+
+Check both the addition and the expansion of authority. A harmless-looking rule change can turn a prompt into a persistent allow. A hook can run code before or after a tool call. A plugin can add more than a written instruction. If a repository accepts outside contributions, require a security owner for changes to agent configuration.
+
+Use a clean worktree for unfamiliar branches. This prevents generated changes from mixing with unrelated local edits and makes `git diff` easier to interpret. It does not prevent shell access outside the worktree unless the sandbox does.
+
+## Scope MCP servers by tool and credential
+
+Claude Code supports permissions for MCP tools, and Anthropic warns that it does not security-audit or manage every MCP server. Review the server package or endpoint, transport, tool list, data destination, and credential scope.
+
+A GitHub server with read-only issue access is a different capability from one that can merge, change repository settings, or read every private repository available to a personal token. Disable unused tools. Prefer a repository-scoped app credential over a broad personal token. Keep production databases and messaging tools disconnected from ordinary code-editing sessions.
+
+For a deeper capability review, read [least privilege for MCP tools](/blog/least-privilege-mcp-tools). The server must enforce authorization even when the client asks politely and the model appears to understand the boundary.
+
+## Handle monorepos and generated files deliberately
+
+A narrow working directory can be awkward in a monorepo. Tests may need a sibling package, a shared lockfile, or generated types above the app folder. Add those paths one at a time instead of moving the session to the repository root by habit. Keep unrelated customer fixtures, infrastructure state, and local credential folders outside the readable set.
+
+Generated output deserves a separate check. A formatter or code generator can touch hundreds of files and hide a small policy change inside mechanical noise. Run generators in their own commit when practical. Compare the generator version and command, then review unexpected files before accepting the bulk output.
+
+For CI, use `dontAsk` only with a predeclared tool set and an isolated runner. Anthropic documents that unapproved actions are denied in this mode. Make a denied operation fail the job visibly, and do not fall back to bypass mode just to keep the pipeline moving.
+
+## Verify the change without granting release authority
+
+Use a non-production repository or disposable branch for the first pass. Ask Claude to explain the intended files and tests in plan mode. Then switch to an editing mode that fits the sensitivity of the task.
+
+After the edit:
+
+1. Inspect `git status` and the complete diff, including lockfiles and agent configuration.
+2. Run focused unit, type, lint, and security checks in the sandbox.
+3. Search the diff for secrets, disabled checks, broad CORS, authorization removal, and new network destinations.
+4. Exercise a negative case, such as a second user being denied access to the first user's resource.
+5. Commit to a branch and let CI run with a credential set designed for CI, not a developer's shell.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help track these boundaries. It records what you can show is in place. It does not inspect the Claude Code session, execute tests, or prove that a deployment is secure.
+
+## What automation cannot settle
+
+A clean diff and passing tests show that the checked behavior matched the test environment. They do not prove that every authorization branch was exercised, an MCP server behaved honestly, or production configuration matches local configuration. An agent's report that a task is complete is a claim to verify, not independent evidence.
+
+Record the permission mode, sandbox state, MCP servers, branch, tests, and known exclusions when the change affects sensitive code. If a scanner reports a candidate issue, keep it in a detected state until a person or independent verifier confirms the behavior. After a fix, run a fresh test rather than treating the edit itself as proof.
+
+## Sources
+
+- [Anthropic: Claude Code security](https://code.claude.com/docs/en/security)
+- [Anthropic: Configure permissions](https://code.claude.com/docs/en/permissions)
+- [Anthropic: Permission modes](https://code.claude.com/docs/en/permission-modes)
+- [Anthropic: Sandboxing](https://code.claude.com/docs/en/sandboxing)
+- [OWASP: LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
+- [GitHub: About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)

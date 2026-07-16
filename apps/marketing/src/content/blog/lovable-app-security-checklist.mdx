@@ -1,0 +1,139 @@
+---
+title: "Secure a Lovable App Before Launch"
+description: "Review a Lovable app across its public frontend, Edge Functions, database RLS, authentication, scans, and publish settings."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - web-security
+  - verification
+draft: true
+heroImage: agent-security-06
+faq:
+  - q: "Is frontend validation enough for a Lovable app?"
+    a: "No. Frontend validation improves feedback, but users can bypass browser code. Edge Functions must authenticate, authorize, and validate sensitive requests, while database RLS enforces row access."
+  - q: "What does a clean Lovable security scan prove?"
+    a: "It shows that the enabled scanners did not report a covered pattern for the scanned project version. It does not prove complete authorization, business-logic, integration, or production-configuration coverage."
+  - q: "Why test Lovable RLS with two accounts?"
+    a: "An owner account can make an ownership policy look correct even when another authenticated user can read or change the row. A second account exercises the tenant boundary directly."
+---
+
+**Direct answer:** Treat a Lovable app as three separate trust zones: a public browser frontend, server-side Edge Functions, and PostgreSQL protected by row-level security. Keep secrets and privileged decisions out of the browser, authenticate sensitive functions, test RLS with two accounts, refresh all current security scanners, and review the published snapshot before launch.
+
+_Lovable control names and scan behavior were reviewed against current documentation on July 17, 2026. Recheck the Security view and workspace publishing policy before launch._
+
+Lovable's own security guidance divides an app into a frontend, Edge Functions, and a database with RLS. That is a useful launch model because each layer has a different failure mode. A polished interface can hide an unauthenticated function. A valid session can still cross a tenant boundary. A correct policy can be absent from the deployed database.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats these as evidence questions, not prompt questions. "Add secure authentication" is a request. A rejected unauthenticated call and a denied second-account query are evidence about the resulting system.
+
+## Start with the three Lovable trust zones
+
+List the browser routes, Edge Functions, database tables, storage buckets, external APIs, and authentication providers. For every sensitive operation, write down where the final decision occurs.
+
+The browser may hide buttons and validate form shape, but it is public and modifiable. Edge Functions should verify the caller, authorize the resource, validate input, and hold privileged integration secrets. RLS should constrain direct database access even when a client sends a valid Supabase session.
+
+If a decision appears only in React state, a route guard, or a disabled button, it is not enforced. If an Edge Function uses a privileged database client without repeating the user's resource authorization, RLS may no longer protect that code path.
+
+## The risky pattern: ownership checked only in the interface
+
+**Vulnerable pattern. The browser decides which project ID to send.**
+
+```ts
+async function deleteProject(projectId: string) {
+  if (!currentUser) return
+
+  await supabase.from("projects").delete().eq("id", projectId)
+}
+```
+
+The hidden delete button is not the problem by itself. The missing enforcement is. A user can call the client directly with another project ID. If the database table lacks an effective delete policy, the request may succeed.
+
+Generated apps often miss this because the happy-path account owns every test row. The interface passes the expected ID, the deletion works, and no test asks what happens when another authenticated account supplies that ID. The code looks complete because it matches the screen flow.
+
+## Enforce ownership in RLS
+
+Use a policy that derives the caller from the verified database session. The exact policy should match the schema and role model.
+
+```sql
+alter table public.projects enable row level security;
+
+create policy "owners can delete projects"
+on public.projects
+for delete
+to authenticated
+using ((select auth.uid()) = owner_id);
+```
+
+This minimal policy covers deletion by the row owner. It does not cover shared projects, organization roles, service jobs, invitations, or ownership transfer. Add those cases explicitly rather than widening the predicate until the current test passes.
+
+Check grants as well as policies. RLS and SQL privileges work together. Verify that unauthenticated roles cannot perform the operation, authenticated owners can, and authenticated non-owners cannot. For tables exposed through the data API, enable RLS before adding real data.
+
+The [Supabase security guide](/blog/supabase-security-guide) covers policy design, privileged keys, and service boundaries in more depth. Lovable's database view can help surface policy problems, but the deployed policy is the enforcement point.
+
+## Move sensitive integrations into Edge Functions
+
+Do not place provider secrets, administrative database keys, or trusted business rules in frontend code. A build-time environment variable can still be bundled if the framework exposes it to the client.
+
+An Edge Function should verify the authenticated user with the supported server-side flow, parse a bounded request schema, load the target resource, authorize the action, and then call the external service. Return only the fields the frontend needs.
+
+```ts
+const user = await requireVerifiedUser(req)
+const input = inviteSchema.parse(await req.json())
+const project = await loadProject(input.projectId)
+
+if (!canInvite(user, project)) {
+  return new Response("Forbidden", { status: 403 })
+}
+
+await sendInvite(project.id, input.email)
+return Response.json({ accepted: true }, { status: 202 })
+```
+
+This example still needs rate limits, duplicate handling, expiration, logging, and safe provider errors. If the function uses a service credential that bypasses RLS, its authorization check becomes mandatory. Do not accept a user ID or role from the request body as proof of identity.
+
+## Use Lovable scans with their actual coverage
+
+Current Lovable documentation describes four automated scanners in the Project security view: RLS analysis, a database security check, a code security review, and a dependency audit. Some run when relevant files change or when the publish dialog opens. The code security review runs when you select Update rather than automatically.
+
+Before publishing, refresh outdated scanners and record the project version they cover. Review findings, inspect any generated fix, and rerun the affected negative test. Lovable currently warns about critical findings and workspace administrators can configure publishing controls, but documentation also describes configurations where a user can continue. Treat the release decision separately from the scan action.
+
+A finding is a detected issue until review establishes the behavior. A generated remediation is a proposal until the diff and tests support it. A fresh clean test is retest evidence for that path, not a guarantee that the whole app is secure.
+
+## Cover shared access and storage beyond owner rows
+
+Ownership is the simplest RLS case. Real apps often add organization members, invitations, support roles, and file storage. Each addition changes the policy model. Decide whether access comes from an active membership row, an accepted invitation, a signed storage path, or a server-only administrative action.
+
+Test membership removal and role downgrade as well as creation. A user who loses access should be denied on the next server and database request. If cached application state still shows the project, the backend must refuse the data.
+
+Storage needs the same tenant test as tables. Use two accounts and attempt to list, read, replace, and delete an object outside the caller's allowed prefix or bucket policy. A database policy does not automatically protect a separate storage service. Record which layer enforces each object operation and which privileged Edge Functions can bypass that layer.
+
+## Run a two-account launch check
+
+Use a disposable project and fake data. Create Account A and Account B. For each sensitive table and function:
+
+1. Confirm a signed-out request is rejected.
+2. Confirm Account A can perform the allowed action on its own row.
+3. Send the same request as Account B with Account A's row ID and expect denial.
+4. Try missing, malformed, oversized, and duplicated inputs.
+5. Verify the browser receives no service key, private provider error, or other user's data.
+6. Repeat on the published URL because publishing deploys a snapshot and later editor changes are not automatically live.
+
+The browser-local [Supabase RLS checker](/tools/supabase-rls-checker) can flag missing statements and risky SQL patterns in text you provide. It does not connect to the database, inspect grants, evaluate policy semantics, or run the two-account test.
+
+## Check visibility and authentication after publishing
+
+Lovable documents project access and published website access as separate settings. A restricted editor does not make a published site private. Review both settings, then open the published URL in a signed-out browser.
+
+Test sign-up, sign-in, password reset, callback URLs, session expiry, and sign-out against the published host. Check external webhooks and OAuth callbacks separately because workspace-only access can block service-to-service requests. Never weaken application authorization merely to make a callback pass.
+
+Finally, confirm that the deployed snapshot matches the reviewed commit or project version. A scan can be current while the public site still serves an older snapshot, or the reverse. Record both.
+
+## Sources
+
+- [Lovable: Security best practices for Lovable apps](https://docs.lovable.dev/tips-tricks/security-best-practices)
+- [Lovable: Security overview](https://docs.lovable.dev/features/security)
+- [Lovable: Project security view](https://docs.lovable.dev/features/security-view)
+- [Lovable: Publish your project](https://docs.lovable.dev/features/publish)
+- [Supabase: Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
+- [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)

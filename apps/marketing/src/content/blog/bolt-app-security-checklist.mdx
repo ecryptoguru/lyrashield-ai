@@ -1,0 +1,137 @@
+---
+title: "Secure a Bolt App Before Launch"
+description: "Identify the Bolt backend, protect server functions and webhooks, test database policy, and verify the published deployment."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - web-security
+  - verification
+draft: true
+heroImage: agent-security-04
+faq:
+  - q: "Does a Bolt app use Bolt Database or Supabase?"
+    a: "It can use either. Many newer projects default to Bolt Database, while existing and explicitly configured projects may use Supabase. Inspect the project settings and deployed environment before choosing the security checks."
+  - q: "Is sharing a Bolt project the same as publishing its site?"
+    a: "No. Editor or project collaboration and public deployment are different boundaries. Review who can edit the project, who can visit the deployed URL, and which snapshot is live."
+  - q: "How should a Bolt webhook work without the app JWT?"
+    a: "Disable app-JWT enforcement only for the webhook route, then verify the provider's documented signature over the raw request body, reject stale or replayed messages, and use a separate endpoint from user APIs."
+---
+
+**Direct answer:** First identify whether the project uses Bolt Database or Supabase. Keep privileged credentials in server-side secrets, enforce row or table access at the database, authenticate every server function, and verify external webhook signatures. Review Bolt's Security Audit, then test the deployed URL because editor preview, project sharing, and publication are different boundaries.
+
+_Bolt Database, Supabase integration, and security surfaces were reviewed against official documentation on July 17, 2026. Recheck the active backend and publishing controls for the project under review._
+
+A Bolt launch review can go wrong before the first test if the reviewer assumes the wrong backend. Current Bolt documentation says many projects created with Claude Agent use Bolt Database by default, while Supabase remains supported and older projects may continue using it. The table policy, secret location, authentication settings, and recovery limits depend on that choice.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) starts with an inventory for the same reason. Security claims need a named target. "The database is protected" is too vague when the editor, server function, hosted database, and public site can each use different configuration.
+
+## Identify the backend and deployed environment
+
+Open the database settings and record the provider, project or database identifier, authentication mode, tables, server functions, secrets, storage, and deployment URL. Do not infer the backend from generated source alone. A copied client library or stale environment variable can survive a migration attempt.
+
+Check whether version history includes database state. Bolt's current documentation says project version history does not restore the database when you restore source. That matters for rollback planning: a code rollback can run against the newer schema and data.
+
+Map Preview and production separately. List callback URLs, CORS origins, webhook endpoints, and secrets for each. Verify which project snapshot is published and whether the live data store is the one you intended.
+
+## The risky pattern: accepting a webhook after disabling JWT checks
+
+Bolt's integration guidance notes that external services such as GitHub or Stripe do not send your application's JWT. Disabling JWT verification can be necessary for that route. It is not the complete fix.
+
+**Vulnerable pattern. This endpoint accepts any caller.**
+
+```ts
+export default async function webhook(req: Request) {
+  const event = await req.json()
+  await applyEvent(event)
+  return new Response("ok")
+}
+```
+
+An agent may generate this after seeing repeated authorization failures. The webhook starts working, but the caller is no longer authenticated. A browser, script, or replayed request can reach the same business logic.
+
+The corrected pattern depends on the provider. Verify the provider's signature over the exact raw body, use constant-time comparison or the provider SDK, enforce any timestamp window, and deduplicate the event ID before changing state.
+
+```ts
+export default async function webhook(req: Request) {
+  const rawBody = await readBoundedBody(req, 256_000)
+  const signature = req.headers.get("x-provider-signature")
+
+  const event = verifyProviderWebhook({
+    rawBody,
+    signature,
+    secret: Deno.env.get("WEBHOOK_SECRET"),
+  })
+
+  if (await alreadyProcessed(event.id)) {
+    return new Response("ok")
+  }
+
+  await applyEventAtomically(event)
+  return new Response("accepted", { status: 202 })
+}
+```
+
+Keep this endpoint separate from browser-authenticated functions. A source IP or domain string is not usually enough because request sources can be proxied and DNS names are not proof of a signed message. Follow the provider's current verification procedure.
+
+## Keep secrets behind server functions
+
+Bolt provides a Secrets surface for server functions. Use it for provider keys and webhook secrets instead of literal source or public build variables. A secret store prevents accidental check-in. It cannot stop application code from returning, logging, or forwarding the value.
+
+Inspect generated server functions for debug responses and logs. Confirm the client receives a generic error rather than a provider stack trace or configuration object. Scope production keys at the provider, and use different credentials for Preview and production.
+
+If a server function uses a privileged database credential, it may bypass row-level policy. Authenticate the user and authorize the target resource inside the function. Do not accept `userId`, `role`, or `accountId` from the JSON body as proof.
+
+## Test table policy with a negative account
+
+Bolt's Security Audit can report missing RLS policies and other database findings. Review it, but run a direct access test too. Create two disposable accounts and one row owned by Account A. Verify that Account B cannot read, update, or delete it by changing the ID in the request.
+
+For Supabase projects, confirm RLS is enabled on every exposed table and that policy predicates derive the caller from the verified session. For Bolt Database, inspect the current table policy and authentication surfaces in the project. Do not paste Supabase SQL into a Bolt Database project simply because the generated frontend uses similar terminology.
+
+Read the [Supabase security guide](/blog/supabase-security-guide) when the project actually uses Supabase. Its policy and service-key advice should not be presented as a universal Bolt Database configuration.
+
+## Configure CORS for the deployed origin
+
+Bolt troubleshooting examples may use `Access-Control-Allow-Origin: *` to diagnose a browser call. That is not a safe default for credentialed production traffic. Allow the exact application origins that need the function, return `Vary: Origin` when responses differ, and handle preflight requests without bypassing authentication on the main method.
+
+CORS is a browser policy, not endpoint authentication. A script outside the browser can call an endpoint even when its origin would fail a browser CORS check. Keep session validation, webhook signatures, and resource authorization in place.
+
+Test the actual published hostname, including a custom domain if one is used. Preview success does not show that the production origin, cookie settings, and callback URLs match.
+
+## Design webhook failure and replay behavior
+
+Signature verification is only the first webhook decision. Providers retry when a handler times out or returns an error. Store a provider event ID before applying a non-idempotent change, and make duplicate delivery safe. If processing is slow, authenticate and persist the event, return the provider's expected success response, then handle it through a bounded queue.
+
+Decide what happens when the database is unavailable. Do not acknowledge an event that was neither applied nor durably recorded. Do not retry forever inside one request. Keep the raw body only as long as the verification and audit need requires, and avoid logging customer payloads by default.
+
+Test a valid signature, altered body, missing signature, stale timestamp, duplicate event, oversized body, and storage failure with fake fixtures. A successful vendor test button may cover the happy path but not these failure cases.
+
+Keep webhook secrets separate from general application credentials. Rotation should accept the old and new signing secret only for a short, recorded overlap when the provider supports that procedure. After the change, send a signed test event and confirm that the retired secret no longer validates.
+
+## Review generated findings without outsourcing the release decision
+
+Open the current Security Audit and resolve applicable findings. Inspect every generated fix as a code or policy change. Re-run the affected test after the fix. A scan may detect an unsafe configuration pattern, but it does not prove exploitability or complete coverage.
+
+Use the browser-local [AI app security checklist](/tools/ai-app-security-checklist) to record the release controls you have checked. It does not connect to Bolt, read the database policy, or validate the live webhook.
+
+Before publishing:
+
+1. Confirm the backend and production environment.
+2. Test signed-out, owner, and non-owner requests.
+3. Send valid, invalid, stale, duplicate, and oversized webhook fixtures locally.
+4. Search the client bundle, HTML, logs, and responses for secrets.
+5. Review CORS, cookie, callback, and visibility settings on the live host.
+6. Record scan status, tests, limitations, and the published project version.
+
+Passing these checks supports a release decision for the tested paths. It does not prove that every function, third-party integration, or future generated change is secure. Keep the unresolved boundaries visible in the release record.
+
+## Sources
+
+- [Bolt: Database overview](https://support.bolt.new/cloud/database)
+- [Bolt: Database security settings](https://support.bolt.new/cloud/database/security)
+- [Bolt: Database secrets](https://support.bolt.new/cloud/database/secrets)
+- [Bolt: Integration troubleshooting](https://support.bolt.new/troubleshooting/integrations-issues)
+- [Bolt: Supabase integration](https://support.bolt.new/integrations/supabase)
+- [Supabase: Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
+- [GitHub: Validating webhook deliveries](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)

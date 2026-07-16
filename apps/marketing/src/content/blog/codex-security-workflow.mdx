@@ -1,0 +1,128 @@
+---
+title: "Secure an OpenAI Codex Project"
+description: "Set Codex sandbox, approval, network, environment, and MCP boundaries, then verify code changes before any release action."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+draft: true
+heroImage: agent-security-04
+faq:
+  - q: "What is the difference between Codex sandbox mode and approval policy?"
+    a: "Sandbox mode limits what a command can do technically. Approval policy decides when Codex pauses for review. A permissive sandbox stays permissive even if prompts require approval, so configure both."
+  - q: "When should Codex have network access?"
+    a: "Enable it only when the task needs a named external service, such as fetching a documented dependency. Keep it off for local refactors and tests, and avoid exposing unrelated credentials to the same session."
+  - q: "Is the never approval policy safer than interactive review?"
+    a: "Not by itself. Never is useful for a tightly constrained non-interactive job, but it removes a human pause. Its safety depends on a narrow sandbox, restricted tools, limited credentials, and deterministic checks."
+---
+
+**Direct answer:** Run Codex with read-only or workspace-scoped filesystem access, network disabled unless the task needs a named origin, and an interactive approval policy for sensitive work. Restrict inherited environment variables and MCP tools. Review the complete diff, run focused negative tests, and keep merge or deployment authority outside the coding session.
+
+_Configuration names and documented behavior were reviewed against OpenAI documentation on July 17, 2026. Codex surfaces evolve, so verify the active profile before relying on this example._
+
+Codex has two separate security controls that are easy to collapse into one mental model. The sandbox limits what generated commands can reach. The approval policy decides when execution pauses and who reviews the request. A prompt is not either control.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) recommends verifying the boundary that enforces a claim. For a Codex task, that means recording the sandbox, approval policy, network state, environment exposure, connected tools, and Git boundary. "Codex asked before running it" is useful evidence. It does not show that the approved command had a narrow capability.
+
+## The risky pattern: prompts around an unrestricted process
+
+**Vulnerable pattern. Do not use this for a routine repository task.**
+
+```toml
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+
+[sandbox_workspace_write]
+network_access = true
+
+[shell_environment_policy]
+inherit = "all"
+```
+
+This combines unrestricted command execution, no approval pauses, broad network reach, and the developer's inherited shell environment. A generated install command, package script, or repository instruction can now interact with resources that the feature change never needed.
+
+The configuration is especially misleading because `approval_policy = "never"` sounds strict. It means prompts do not surface. It does not narrow filesystem, network, app, or MCP access. Likewise, `workspace-write` limits writes but does not make everything inside the workspace trustworthy.
+
+## Start with a production-shaped narrow profile
+
+For a normal code-editing task, use workspace-only writes, keep outbound network disabled, and retain an interactive review path. Reduce environment inheritance so common credential names do not automatically enter subprocesses.
+
+```toml
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+network_access = false
+
+[shell_environment_policy]
+inherit = "none"
+include_only = ["PATH", "HOME", "TMPDIR", "LANG"]
+```
+
+The current Codex reference documents `read-only`, `workspace-write`, and `danger-full-access` sandbox modes. It also documents `untrusted`, `on-request`, `never`, and granular approval behavior. Use the values supported by the surface and version you are running. Desktop, CLI, IDE, and cloud sessions may apply different environment boundaries.
+
+If the task is inspection only, prefer read-only. If a build needs a package registry, add the smallest network path that supports the build rather than leaving general internet access available. Codex cloud separates setup from the agent phase and keeps agent internet access off by default unless enabled for the environment. Local workflows should apply the same principle even though the mechanism differs.
+
+## Treat project trust as a configuration decision
+
+An untrusted project can contain local Codex configuration, hooks, skills, and instructions. OpenAI documents that untrusted projects skip project-scoped `.codex` layers. Inspect those files before changing the project to trusted.
+
+Review `AGENTS.md` too. It is guidance for the agent, not an OS boundary, but a malicious edit can redirect the task or ask for a broader action. Protect changes to agent policy with ordinary review, ownership, and branch rules. Do not accept a generated policy change as housekeeping without reading the exact effect.
+
+Use a clean branch or worktree. A small diff is easier to audit, and a worktree prevents accidental overlap with the developer's unfinished changes. The sandbox still needs to restrict paths outside that worktree.
+
+## Restrict apps and MCP tools separately
+
+Apps and MCP servers can cross the local repository boundary. A file-search tool, issue tracker, cloud console, and messaging tool have different data and mutation risks. Enable only the server and tools needed for the current task.
+
+Codex configuration supports per-server MCP tool allowlists and denylists, timeouts, approval settings, and environment-backed bearer tokens. Use a read-only tool where possible. Give it a credential scoped to the intended repository or workspace. A tool named `search` may still send query text to a remote service, so review the destination as well as the verb.
+
+Keep production apps disconnected from routine coding. If production access is unavoidable for diagnosis, use read-only credentials, record the request, and run it in a separate task with a narrow objective. The guide to [least privilege for MCP tools](/blog/least-privilege-mcp-tools) explains how to split capabilities by resource, action, environment, and approval.
+
+## Broaden access for one task, not for the whole profile
+
+Some work genuinely needs a sibling directory, package registry, or remote test service. Make that exception visible and temporary. Start a separate task with the added writable root or network destination, use a token limited to the test environment, and remove the exception when the task ends.
+
+Do not turn a one-off need into the default profile. A broad default becomes invisible after a few successful sessions. The next repository may contain different scripts, hooks, or untrusted fixtures while inheriting the same authority.
+
+When the task uses generated files, keep their mechanical diff separate from policy and application changes. Confirm the generator version, review the command that ran it, and inspect unexpected files. If the generator needs network access, pin the input or dependency where possible so another reviewer can repeat the result.
+
+## Keep network and credentials aligned
+
+Network access and credential inheritance should be reviewed together. Network without credentials can still leak source or prompts. Credentials without a route can still appear in logs, test snapshots, or generated output. The safest ordinary setup has neither unless the task requires them.
+
+When network access is needed, name the expected domains and data. Prefer package-manager lockfile installs over arbitrary download-and-run commands. Review redirects and post-install scripts. Do not add a cloud token to the environment merely because the deployment CLI is installed.
+
+Environment filtering reduces accidental exposure, but it cannot make a credential safe after you deliberately pass it to a command. Use a task-specific token with narrow permissions and short lifetime where the provider supports that model.
+
+## Verify code completion separately from release approval
+
+Codex can implement and test a change without receiving merge or deployment authority. A practical review sequence is:
+
+1. Ask for a read-only analysis and list of files likely to change.
+2. Switch to workspace writes only after the scope makes sense.
+3. Inspect `git status`, the diff, new files, and deleted files.
+4. Run focused tests and at least one denied or malformed-input case.
+5. Scan the diff for secrets, weakened authorization, disabled checks, broad CORS, and added external destinations.
+6. Commit to a branch. Let a protected pull request and CI own the release boundary.
+
+Use the browser-local [AI app security checklist](/tools/ai-app-security-checklist) to record the controls you can demonstrate. It cannot inspect your Codex profile, validate an MCP server, or decide whether a generated authorization rule matches the product requirement.
+
+Do not treat Codex Security scan output as independent verification of the application's runtime behavior. A result can identify a candidate or support review. Exploitability, coverage, and successful remediation require their own evidence. After a fix, run a fresh test against the corrected behavior and retain the limitation when the test cannot cover production configuration.
+
+## What automation cannot prove
+
+Sandboxing can limit command execution. It does not prove that generated business logic enforces tenant boundaries. An approval shows that someone permitted an action. It does not show that the action was safe. Passing CI covers the cases in CI, under CI's configuration.
+
+Record enough context to repeat the review: Codex surface and version, sandbox or permission profile, approval behavior, network state, enabled apps and MCP tools, tests, and excluded paths. That record turns "the agent checked it" into a claim another reviewer can examine.
+
+## Sources
+
+- [OpenAI: Agent approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security)
+- [OpenAI: Configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+- [OpenAI: Model Context Protocol](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
+- [OpenAI: Agent internet access for Codex cloud](https://learn.chatgpt.com/docs/cloud/internet-access)
+- [OWASP: LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
+- [GitHub: About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
