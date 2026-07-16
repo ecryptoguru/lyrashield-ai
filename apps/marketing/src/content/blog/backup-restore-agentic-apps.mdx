@@ -86,25 +86,73 @@ A safer production gate can require a recent successful drill and a narrowly sco
 
 ```ts
 type DestructiveApproval = {
+  id: string
   action: "apply-reviewed-migration"
   artifactHash: string
   environment: "production"
   restoreEvidenceId: string
   expiresAt: string
+  consumedAt: string | null
 }
 
-function mayExecute(approval: DestructiveApproval, evidence: RestoreEvidence) {
-  return (
-    approval.action === "apply-reviewed-migration" &&
-    approval.artifactHash === evidence.reviewedArtifactHash &&
-    evidence.status === "passed" &&
-    evidence.environmentClass === "isolated-restore" &&
-    new Date(approval.expiresAt) > new Date()
-  )
+type RestoreEvidence = {
+  id: string
+  status: "passed" | "partial" | "failed"
+  backupId: string
+  applicationVersion: string
+  schemaVersion: string
+  restoredEnvironment: "isolated-restore"
+  assertions: readonly { name: string; passed: boolean }[]
+  completedAt: string
+}
+
+async function authorizeMigration(input: {
+  approvalId: string
+  action: DestructiveApproval["action"]
+  artifactHash: string // computed from the server-owned artifact
+  environment: DestructiveApproval["environment"]
+  restoreEvidenceId: string
+}) {
+  return db.$transaction(async (tx) => {
+    const approval = await tx.approval.findUnique({ where: { id: input.approvalId } })
+    if (!approval || approval.consumedAt || new Date(approval.expiresAt) <= new Date()) {
+      throw new Error("approval unavailable")
+    }
+    if (
+      approval.action !== input.action ||
+      approval.environment !== input.environment ||
+      approval.artifactHash !== input.artifactHash ||
+      approval.restoreEvidenceId !== input.restoreEvidenceId
+    ) {
+      throw new Error("approval binding mismatch")
+    }
+
+    const evidence = await tx.restoreEvidence.findUnique({
+      where: { id: approval.restoreEvidenceId },
+    })
+    if (
+      !evidence ||
+      evidence.id !== input.restoreEvidenceId ||
+      evidence.status !== "passed" ||
+      evidence.restoredEnvironment !== "isolated-restore" ||
+      evidence.assertions.some((assertion) => !assertion.passed)
+    ) {
+      throw new Error("restore evidence unavailable")
+    }
+
+    const consumed = await tx.approval.updateMany({
+      where: { id: approval.id, consumedAt: null },
+      data: { consumedAt: new Date().toISOString() },
+    })
+    if (consumed.count !== 1) throw new Error("approval already consumed")
+    return { approval, evidence }
+  })
 }
 ```
 
-This example does not grant a generic database administrator role. It binds an exact reviewed artifact, environment, expiry, and evidence record. The real implementation must validate all fields on a trusted server and consume the approval once. An agent must not be able to invent or alter the restore evidence it cites.
+The caller supplies an approval identifier, while the server computes the artifact hash and loads both records from trusted storage. The transaction compares the action, environment, artifact, and restore evidence identifier before atomically consuming the approval. Two concurrent requests cannot both consume the same approval because only one conditional update can change `consumedAt` from null.
+
+The returned restore proof is limited to the named backup, application and schema versions, isolated environment, and recorded assertions. It says nothing about a newer backup, a changed application version, an untested production restore path, or data outside those assertions.
 
 Restore proof does not make destructive access safe. It lowers recovery uncertainty. Least privilege, reviewed migrations, transaction boundaries, rate limits, canary rollout, and an emergency stop still matter. Some external side effects cannot be rolled back from a database backup at all.
 

@@ -1,7 +1,7 @@
 # Batch 3 research and claim map
 
 Research date: 2026-07-17
-Status: source review complete, public drafting not started
+Status: source review complete, drafting and review in progress
 Scope: topics 36 through 52
 
 ## Method
@@ -45,7 +45,7 @@ Evidence labels used in the claim maps:
 
 - **S20. SEC03-BP02 Grant least privilege access.** AWS Well-Architected Framework, current page accessed 2026-07-17. https://docs.aws.amazon.com/wellarchitected/latest/framework/sec_permissions_least_privileges.html
 - **S21. Secrets Management Cheat Sheet.** OWASP Cheat Sheet Series. Current page, no publication date shown; accessed 2026-07-17. https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html
-- **S22. Data Use and Privacy Overview.** Cursor, last updated June 9, 2026. https://cursor.com/data-use
+- **S22. Data Use and Privacy Overview.** Cursor, last updated July 15, 2026. https://cursor.com/data-use
 - **S23. Security.** Cursor, last updated April 24, 2026. https://cursor.com/security
 - **S24. Data controls in the OpenAI platform.** OpenAI API documentation, current page accessed 2026-07-17. https://platform.openai.com/docs/guides/your-data
 - **S25. NIST Privacy Framework.** NIST, version 1.0 published January 16, 2020; current project page accessed 2026-07-17. https://www.nist.gov/privacy-framework
@@ -148,10 +148,11 @@ Evidence labels used in the claim maps:
 ### 41. `secrets-ai-coding-prompts`
 
 1. **Official control:** Secrets should be inventoried, stored outside source, rotated, and kept out of inappropriate logging or sharing paths. Source: S21.
-2. **Official vendor behavior, dated:** Cursor states that Privacy Mode, indexing, temporary caching, and provider handling affect how code data is processed. Use the June 9, 2026 and April 24, 2026 wording only after final recheck. Sources: S22, S23.
+2. **Official vendor behavior, dated:** Cursor states that Privacy Mode, indexing, temporary caching, and provider handling affect how code data is processed. Use the July 15, 2026 and April 24, 2026 wording only after final recheck. Sources: S22, S23.
 3. **Official vendor behavior, dated:** OpenAI documents endpoint-specific retention and data-control behavior. Do not generalize API terms to every consumer or third-party product. Source: S24.
 4. **Architecture-dependent inference:** Connected tools, indexing, and retrieved context can expose more data than the literal prompt. The actual set depends on product configuration and enabled integrations. Sources: S22, S23.
-5. **Limit statement:** `.cursorignore` and redaction are risk-reduction measures, not proof that a secret never left the device. Sources: S22, S23.
+5. **Control boundary:** Live credentials and bearer tokens remain prohibited. Customer records, regulated personal data, and production logs require a formally approved, minimized workflow whose contractual and technical controls permit that data class. Sources: S21, S24, S25.
+6. **Limit statement:** `.cursorignore` and redaction are risk-reduction measures, not proof that a secret never left the device. Sources: S22, S23.
 
 ### 42. `indirect-prompt-injection-coding-agents`
 
@@ -233,7 +234,7 @@ Evidence labels used in the claim maps:
 
 ### 52. `cursor-app-security-checklist`
 
-1. **Official vendor behavior, dated:** Cursor's June 9, 2026 data-use page describes Privacy Mode, provider handling, indexing, and temporary caching. Recheck before publication. Source: S22.
+1. **Official vendor behavior, dated:** Cursor's July 15, 2026 data-use page describes Privacy Mode, provider handling, indexing, and temporary caching. Recheck before publication. Source: S22.
 2. **Official vendor behavior, dated:** Cursor's April 24, 2026 security page describes client and agent security boundaries and points to current hardening documentation. Source: S23.
 3. **Official vendor behavior:** Cursor project rules and root instruction files can affect agent context. Source: S40.
 4. **Official vendor behavior:** Cursor CLI can read project rules and root instruction files and asks for command approval in interactive use; non-interactive mode has different behavior. Source: S59.

@@ -1,7 +1,7 @@
 # Batch 3 editorial briefs
 
 Date: 2026-07-17
-Status: research complete, drafting not started
+Status: research complete, drafting and review in progress
 Owner: LyraShield Team
 Scope: topics 36 through 52 from the approved 100-article program
 
@@ -25,7 +25,7 @@ All public drafts must link to `/blog/vibe-coding-security-guide` in the first t
 - Required sources: S01, S02, S03, S04.
 - Authority link: Link from the opening control inventory to `/blog/vibe-coding-security-guide` with anchor `the six-layer vibe coding security guide`.
 - Tool CTA: `/tools/ai-app-security-checklist`, positioned as a local documentation check, not evidence that alerts work.
-- Related dependency: `/blog/security-logging-ai-apps` from Batch 2 for event-field design. If that post is not yet public, keep this post private.
+- Related dependency: `/blog/sensitive-data-logging` from Batch 2 for event-field design. If that post is not yet public, keep this post private.
 - FAQ decision: Include three questions on events to alert, secrets in logs, and whether cloud-provider logs are sufficient.
 - Image cluster concept: Decision and operations. A sparse event stream entering a single amber decision gate, with one red signal routed to a raised response plane.
 
@@ -109,13 +109,13 @@ All public drafts must link to `/blog/vibe-coding-security-guide` in the first t
 - Target length: 1,300 words
 - Reader problem: Developers paste `.env` files, credentials, customer data, proprietary code, or production logs into a coding assistant without checking the provider, workspace, retention, and sharing settings.
 - Unique angle: Give a data-classification decision before the prompt is sent. Explain that vendor privacy mode and API retention controls vary and can change, so the reader must verify the policy for the exact product and workspace.
-- Direct-answer thesis: Never paste live credentials, private keys, session tokens, regulated personal data, customer secrets, or unrestricted production logs into a coding tool. Redact or synthesize the smallest useful sample, confirm the exact workspace data policy, and assume connected tools or indexing can widen the context beyond the text you typed.
+- Direct-answer thesis: Never paste live credentials, private keys, session tokens, or customer secrets into a coding tool. Default to synthetic data for customer records, regulated personal data, and production logs. Use real, minimized content only through a formally approved workflow with verified contractual and technical controls for that data class.
 - Entities: `.env`, secret, personal data, model context, data retention, abuse monitoring, Privacy Mode, codebase indexing, `.cursorignore`, data minimization.
 - Cannibalization check: Topic 41 owns pre-prompt data handling. Topic 17 owns secrets in source and environment files. Topic 95 owns broader AI assistant privacy governance. Topic 100 owns credential incident response. Avoid a full provider comparison and rotation runbook.
 - Required sources: S21, S22, S23, S24, S25.
 - Authority link: Link from the sensitive-data inventory to `/blog/vibe-coding-security-guide` with anchor `data and secret boundaries in the security guide`.
 - Tool CTA: `/tools/secret-exposure-scanner`, explicitly browser-local and limited to selected text files.
-- Related dependency: `/blog/prevent-env-files-production` from Batch 1.
+- Related dependency: `/blog/api-keys-frontend-ai-apps` from Batch 1.
 - FAQ decision: Include four questions on `.env`, customer logs, privacy mode, and redacted examples.
 - Image cluster concept: Agent security. A translucent context window stops at a sealed secret compartment while a small sanitized sample passes through.
 
