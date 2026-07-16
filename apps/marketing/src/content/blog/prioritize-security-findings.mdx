@@ -1,0 +1,125 @@
+---
+title: "How to prioritize security findings"
+description: "Prioritize security findings with exploitation, reachability, impact, asset context, confidence, and accountable remediation decisions."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["verification"]
+draft: true
+heroImage: decision-operations-01
+faq:
+  - q: "Is a CVSS score the same as remediation priority?"
+    a: "No. CVSS describes severity under stated conditions. Priority also depends on whether the issue applies, whether the path is reachable, exploitation evidence, asset importance, existing controls, and the cost or risk of the response."
+  - q: "Can a low-severity issue become urgent?"
+    a: "Yes. A lower-severity weakness on an internet-exposed authentication or payment path can deserve earlier action than a higher-severity issue in an isolated, unused component. Document the environmental evidence behind that decision."
+  - q: "What should an accepted-risk record contain?"
+    a: "Record the finding, evidence, affected scope, rationale, compensating controls, owner, approver, expiry or review date, and triggers for reconsideration. Acceptance does not mean the weakness was fixed."
+---
+
+Contain credible active exploitation and exposed credentials first. For the remaining applicable findings, rank work using reachability, known exploitation, technical and business impact, asset importance, evidence confidence, existing controls, and remediation risk. Keep severity, exploitation probability, and business priority as separate inputs. Do not add CVSS, EPSS, or other scores into a homemade risk number.
+
+## Decide what needs action now
+
+A scanner queue sorted by severity is a useful starting view, not a remediation plan. The first question is whether any result requires immediate containment. Look for observed exploitation, an exposed live credential, unauthorized access, public data exposure, or a weakness on a critical path with credible imminent abuse.
+
+The [LyraShield AI guide to security for vibe-coded applications](/blog/vibe-coding-security-guide) distinguishes detected candidates from verified, retest-confirmed, and inconclusive states. Use that distinction before assigning work. A critical alert against an absent package should not displace a verified access-control flaw on a live customer route.
+
+[CISA's Stakeholder-Specific Vulnerability Categorization guide](https://www.cisa.gov/sites/default/files/publications/cisa-ssvc-guide%20508c.pdf) models vulnerability decisions with context such as exploitation status, technical impact, mission prevalence, and public or safety impact. The important operational lesson is that priority is a decision, not an automatic restatement of scanner severity.
+
+When active abuse is credible, follow the incident plan and preserve evidence in parallel when safe. The [critical security finding response guide](/blog/critical-security-finding-response) covers that path. Do not wait for a perfect scorecard before revoking a leaked credential or isolating a demonstrably compromised route.
+
+## Confirm applicability before ranking
+
+Prioritization starts after basic triage. Confirm the affected component and version, deployed configuration, reachable path, required privileges, and relevant controls. Mark uncertainty instead of converting it into false precision.
+
+For each result, record:
+
+- immutable target revision and environment;
+- applicable, inapplicable, or still unknown status;
+- evidence for reachability and exposure;
+- known exploitation evidence and its source;
+- affected data, function, tenant boundary, or safety property;
+- current containment and compensating controls;
+- confidence in the evidence, not just scanner confidence.
+
+This step can change the order dramatically. A medium-rated authorization bypass reachable by every authenticated tenant may outrank a critical memory-corruption issue in tooling that never runs in production. That does not change either issue's technical severity. It changes the team's response priority.
+
+## Use CVSS, EPSS, KEV, and SSVC for their intended jobs
+
+[FIRST's CVSS v4.0 implementation guide](https://www.first.org/cvss/v4.0/implementation-guide) helps organizations describe vulnerability severity through base, threat, environmental, and supplemental metrics. A base score is designed to be broadly reusable. Your environment still determines exposure, asset value, and the effect of local controls.
+
+[FIRST's EPSS user guide](https://www.first.org/epss/user-guide) describes a probability estimate that a published CVE will be exploited in the wild in the next 30 days. EPSS is not a business-impact score, a guarantee, or a measure for findings without a relevant CVE.
+
+The [CISA Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) identifies vulnerabilities with evidence of active exploitation. If your deployed product and version are affected, catalog presence is a strong urgency signal. Absence does not prove that a vulnerability is safe or unexploited.
+
+SSVC supports a documented decision path. CVSS describes severity. EPSS estimates a defined exploitation probability for published CVEs. KEV records known exploitation under its criteria. Use them together as labeled evidence, not interchangeable numbers. Adding a 9.8 CVSS score to an EPSS percentage produces no meaningful unit.
+
+## Build a decision queue, not a magic score
+
+A practical queue can use ordered questions instead of a single formula:
+
+1. Is active exploitation or credential misuse observed or credible?
+2. Does the issue apply to the deployed asset and current version?
+3. Can an untrusted actor reach the vulnerable path?
+4. What data, authority, money, availability, or safety property is at risk?
+5. How important is this asset to customers and operations?
+6. Which controls reduce likelihood or impact today?
+7. How strong is the underlying evidence?
+8. What new risk could containment or remediation introduce?
+
+Group the result into an action band such as contain now, remediate next, schedule with a date, investigate, or accept temporarily. Define the criteria for each band in your own policy. Require a named owner and due date for every applicable result.
+
+Avoid burying nuance in decimals. A short written rationale makes disagreements visible:
+
+```yaml
+decision: remediate-next
+reason: internet-reachable-account-recovery-path
+exploitation: no-observed-evidence
+impact: account-takeover
+controls: rate-limit-only
+evidence: verified-in-authorized-test
+owner: identity-team
+review_by: policy-defined-date
+```
+
+## Consider remediation cost without rewarding delay
+
+Remediation risk belongs in the decision. A rushed database migration or emergency dependency upgrade can create outages, data loss, or a new authorization gap. That does not make the original finding unimportant. It may justify immediate containment followed by a staged durable fix.
+
+Separate three choices:
+
+- **Mitigate:** reduce exposure while the weakness remains.
+- **Remediate:** remove the underlying weakness.
+- **Accept:** knowingly retain the documented risk for a defined period.
+
+An accepted result needs an accountable approver, rationale, compensating controls, expiry or review date, and triggers such as internet exposure, exploit publication, asset changes, or control failure. Keep it open as accepted risk, not fixed.
+
+Do not let easy fixes consume the queue simply because they improve a chart. A dependency bump with low impact may be worth bundling, but it should not delay a harder authorization defect on the revenue or identity path.
+
+## Reprioritize when evidence changes
+
+Priority is not permanent. Reassess after deployment changes, new exploit evidence, a control failure, a scope expansion, or a retest. Subscribe to the provider and vulnerability sources relevant to your assets rather than relying on a quarterly spreadsheet.
+
+Run a fresh retest after remediation. A deterministic clean retest supports a retest-confirmed outcome only when the relevant path was covered. If the scanner skipped the path or the test environment differed materially, preserve the result as inconclusive.
+
+LyraShield AI can organize findings, evidence state, and score detail for review. It cannot make a universal risk decision for your organization. Asset importance, safety consequences, regulatory duties, and response ownership remain local decisions.
+
+Use the browser-local [AI app security checklist](/tools/ai-app-security-checklist) to inventory ownership, deployment controls, logging, and recovery gaps that affect priority. It does not inspect the running service or replace verification.
+
+## Review the queue as an operating system
+
+Hold a short recurring review with engineering, product, and the relevant risk owner. Look at overdue containment, changing evidence, accepted-risk expiries, and findings whose scope remains unknown. Track why priorities changed. A queue that never changes is probably not incorporating new evidence.
+
+Keep separate queues or views for incident containment, planned remediation, verification work, and accepted risk. Mixing them into one severity list hides blocked investigations and expired decisions. Limit work in progress so owners finish containment and retests instead of opening dozens of patches. When two items compete, write down which user, data, revenue, availability, or safety consequence drove the choice.
+
+Do not penalize teams for discovering more applicable findings. A rising count can reflect improved coverage rather than declining security. Review throughput together with finding age, evidence state, reopen rate, and overdue action. Use trend data to improve staffing and controls, not to pressure reviewers into suppressing difficult results.
+
+Report counts by evidence state and action band, with definitions. Avoid claims such as "all critical issues fixed" when some were suppressed, accepted, or never applicable. Honest status is more useful than a cleaner number.
+
+Revisit the policy after real incidents and difficult remediation decisions. Evidence from operations should refine the queue, not merely confirm it.
+
+### Sources
+
+- [CISA, Stakeholder-Specific Vulnerability Categorization Guide](https://www.cisa.gov/sites/default/files/publications/cisa-ssvc-guide%20508c.pdf)
+- [CISA, Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)
+- [FIRST, CVSS v4.0 Implementation Guide](https://www.first.org/cvss/v4.0/implementation-guide)
+- [FIRST, Exploit Prediction Scoring System User Guide](https://www.first.org/epss/user-guide)

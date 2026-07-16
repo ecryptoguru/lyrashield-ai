@@ -1,0 +1,102 @@
+---
+title: "How to share a security report without leaking details"
+description: "Share security reports safely with audience-specific copies, data minimization, verified redaction, controlled delivery, expiry, and revocation."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["verification", "vibe-coding-security"]
+draft: true
+heroImage: decision-operations-04
+faq:
+  - q: "Is a password-protected PDF safe enough for a security report?"
+    a: "Not by itself. A password does not define who may receive the file, remove hidden data, prevent forwarding, or provide reliable revocation. Minimize and verify the document first, then use access-controlled delivery when available."
+  - q: "Does a TLP label encrypt or authorize access to a report?"
+    a: "No. FIRST's Traffic Light Protocol communicates sharing boundaries. It does not encrypt content, authenticate recipients, replace a disclosure agreement, or override applicable law and contract terms."
+  - q: "What can document redaction miss?"
+    a: "Visual black boxes can leave underlying text, comments, metadata, attachments, revision history, hyperlinks, or accessible text intact. Export a clean derivative, remove hidden content, and inspect the rendered and extracted result."
+---
+
+Create a separate report for each audience from a stable source record. Include only the evidence and context that recipient needs, remove secrets and unnecessary targets, verify the final rendered file for hidden data, and deliver it through access-controlled storage with expiry. Record approval and provide a way to revoke or supersede the shared copy.
+
+## Treat sharing as a disclosure decision
+
+A security report can help a customer, executive, engineer, insurer, or regulator make a decision. The same report can expose internal hosts, credentials, personal data, vulnerable paths, and exploit-ready steps if it is copied without an audience review.
+
+The [LyraShield AI guide to security for vibe-coded applications](/blog/vibe-coding-security-guide) keeps findings tied to evidence, scope, and limitations. Preserve that truth while reducing disclosure. Redaction should remove information the recipient does not need, not make the remaining claim sound more certain.
+
+[FIRST's Traffic Light Protocol 2.0](https://www.first.org/tlp/) provides labels for communicating how sensitive information may be shared. TLP is a handling signal. It does not encrypt a document, authenticate a recipient, or replace legal, contractual, privacy, or regulatory requirements.
+
+Before exporting anything, name the audience, purpose, permitted recipients, required detail, sharing boundary, and expiry. If those answers are unclear, pause the share rather than sending the full internal report "for context."
+
+## Keep one stable source, create scoped derivatives
+
+The source report should preserve the finding as it was understood at creation: target scope, revision, evidence state, coverage, limitations, and timestamps. Do not edit that record differently for each recipient. Create audience-specific derivatives from it.
+
+An executive copy may need affected capability, decision impact, status, ownership, and remaining uncertainty. An engineering copy may need exact component versions, safe reproduction details, code locations, and retest evidence. A customer copy may need the affected service, observed impact, containment, and next update without internal topology or unrelated findings.
+
+This separation reduces accidental disclosure and improves comprehension. It also prevents one redacted PDF from trying to serve every audience poorly. The guide to [what an app security score can and cannot mean](/blog/app-security-score-explained) shows why a compact public summary still needs scope, method, and limitations.
+
+Do not generate a new conclusion while producing the derivative. If the source says detected, the shared version must not say verified. If a retest was incomplete, retain the limitation. If a finding was later corrected, issue a superseding version rather than silently altering an already shared artifact.
+
+## Decide what the recipient actually needs
+
+Classify each field before inclusion:
+
+- **Necessary:** supports the recipient's decision or required action.
+- **Helpful but sensitive:** include only with a justified need and suitable channel.
+- **Unnecessary:** remove from this derivative.
+- **Prohibited:** must not leave the restricted source system.
+
+Full credentials, tokens, session cookies, personal data, private repository URLs, internal hostnames, raw customer records, and exploit-ready commands rarely belong in a broadly shared report. Replace a credential with a type and masked identifier. Describe an internal target by service role unless the recipient needs the exact name. Reduce screenshots to the smallest relevant region and inspect them for browser tabs, account names, paths, notifications, and metadata.
+
+Keep enough context to prevent misreading: report date, scope, environment, evidence state, finding impact, known limitations, actions taken, and next step. "No findings" without coverage and limitations is not a safe summary because it can create unwarranted assurance.
+
+Use the browser-local [AI app security checklist](/tools/ai-app-security-checklist) to review reporting ownership, access, retention, and recovery controls. It does not redact a report or decide which disclosure duties apply.
+
+## Redact the content, not just the pixels
+
+Drawing a black rectangle over text is not reliable redaction. The underlying text may remain searchable or selectable. Comments, revision history, embedded files, document properties, image EXIF data, accessible text, and hyperlinks can preserve what the page appears to hide.
+
+Create a clean derivative instead of editing the only source. Remove content in the authoring format, flatten or export through an approved process, and inspect the exported file from a separate account or clean device. Check:
+
+1. visible pages at normal and high zoom;
+2. copied and extracted text;
+3. document properties, comments, attachments, and layers;
+4. link targets and query parameters;
+5. images, filenames, and alternate text;
+6. access granted to the storage item and its parent folder.
+
+Ask a second authorized reviewer to compare the derivative against the audience brief. They should look for both leaks and misleading omissions. Record what they approved and which source revision it came from.
+
+## Choose delivery controls that match the sensitivity
+
+Prefer an authenticated portal or access-controlled file with named recipients, least privilege, expiry, and audit events. Verify access using a recipient-like account. Folder inheritance and link-sharing defaults often expose more than the sender expects.
+
+If email is required, minimize the attachment, confirm recipients out of band for sensitive deliveries, and send the access link separately from any password or activation factor. A password-protected PDF may add friction, but it cannot prevent forwarding or provide dependable revocation once downloaded.
+
+[NIST SP 800-61 Rev. 3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) places incident communications within broader risk management and response planning. Use the organization's incident, legal, privacy, and communications owners when a report concerns a confirmed compromise or regulated information. A scanner export is not a substitute for that review.
+
+For vulnerability reports sent to another organization, follow its published channel and safe-harbor terms where available. The [OWASP Vulnerability Disclosure Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Vulnerability_Disclosure_Cheat_Sheet.html) recommends clear scope, secure contact methods, coordinated timelines, and defined handling. Do not test beyond authorization or disclose exploit details publicly to force a response.
+
+## Make public sharing an explicit opt-in
+
+A public scorecard should be a purpose-built, minimized artifact, not an internal report with a public link. Omit private targets, raw evidence, finding descriptions that enable exploitation, and personal or customer data. Include the date, bounded scope, summary basis, and limitations so readers understand what the card does not prove.
+
+Search indexing is another disclosure choice. `noindex` can reduce discovery but does not provide access control. Anyone with the URL may still retrieve the page, archive it, or share it. Use authentication for confidential material.
+
+LyraShield AI public scorecards are opt-in and revocable, and report data can be derived from an immutable creation-time snapshot. Public payloads are deliberately narrower than private findings. Revocation stops future access through the service, but it cannot recall copies already downloaded or cached elsewhere.
+
+## Plan expiry, correction, and revocation before sending
+
+Every shared artifact should have an owner and lifecycle. Record recipients, purpose, source revision, approver, delivery method, issue time, expiry, and revocation path. Avoid recording the sensitive report body in a general ticket.
+
+If the evidence changes, publish a clearly dated correction or superseding report. State what changed and whether earlier decisions should be revisited. Revoke the old link when appropriate, while preserving the source and approval trail according to the retention policy.
+
+Test revocation from outside the owner account. Confirm the link no longer resolves, inherited access is removed, and cached application views do not continue to expose the file. Then notify recipients who need the correction. A quiet link replacement can leave people acting on an obsolete report.
+
+The safest report is not the shortest one. It is the smallest truthful artifact that lets a named audience make its decision, delivered through controls that match the consequences of disclosure.
+
+### Sources
+
+- [FIRST, Traffic Light Protocol 2.0](https://www.first.org/tlp/)
+- [NIST SP 800-61 Rev. 3, Incident Response Recommendations and Considerations](https://csrc.nist.gov/pubs/sp/800/61/r3/final)
+- [OWASP, Vulnerability Disclosure Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Vulnerability_Disclosure_Cheat_Sheet.html)

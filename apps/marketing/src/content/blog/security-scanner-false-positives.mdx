@@ -1,0 +1,114 @@
+---
+title: "How to reduce security scanner false positives"
+description: "Reduce security scanner false positives with context, verification, narrow tuning, recorded suppressions, baselines, and fresh retests."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["verification"]
+draft: true
+heroImage: verification-06
+faq:
+  - q: "What is an acceptable security scanner false positive rate?"
+    a: "There is no universal acceptable rate. Measure precision by rule, repository, and workflow, then track the review time and serious findings missed. A low displayed alert count is not useful if broad exclusions hide real weaknesses."
+  - q: "Is suppressing a false positive the same as fixing it?"
+    a: "No. A suppression records why a result does not require action in a defined scope. A fix changes the underlying code or configuration. Keep those states distinct so later reviewers can see what happened."
+  - q: "Can reducing alert noise increase false negatives?"
+    a: "Yes. Disabling rules, excluding directories, or trusting weak fingerprints can hide applicable findings. Prefer narrow, reviewed tuning and retest the changed scope against known positive and negative examples."
+---
+
+Reduce false positives by checking the reported source, sink, data path, configuration, and runtime preconditions before changing the scanner. Verify the result with an independent test, tune only the narrow rule or scope that is wrong, and record every suppression with an owner and reason. Revisit it when the code, rule, dependency, or environment changes.
+
+## Start with the finding, not the alert count
+
+A busy results page does not tell you whether a scanner is inaccurate. It may contain duplicate paths, findings against unreachable code, deliberate test fixtures, or several valid observations caused by one defect. Closing alerts until the queue looks manageable improves the display, not necessarily the detection process.
+
+The [LyraShield AI guide to security for vibe-coded applications](/blog/vibe-coding-security-guide) separates detection from independent verification. That distinction matters here. A candidate can be plausible and still not apply to the running system. It can also look harmless in one file while becoming exploitable through configuration or another call path.
+
+[NIST IR 8165](https://doi.org/10.6028/NIST.IR.8165) describes software verification tools as having different strengths, weaknesses, and classes of results. Treating one scanner verdict as complete proof ignores that basic limitation. Your goal is not zero alerts. It is a review process that keeps applicable findings visible and makes inapplicable results explainable.
+
+## Reconstruct what the rule claims
+
+Read the complete finding before opening a suppression menu. Write the claim in one sentence: untrusted input from this source can reach this sensitive operation through this path under these conditions. Then check each part.
+
+For a reported injection issue, identify where the value originates, which transformations occur, where validation or encoding runs, and the exact sink. For a dependency finding, confirm the installed version and whether the affected function is present and reachable. For an exposed secret, determine whether the match is a live credential, a revoked test value, an inert example, or random text with the same shape. Never paste the candidate secret into an online checker.
+
+Record the evidence you inspected:
+
+- repository and immutable revision;
+- file, line, symbol, and rule identifier;
+- source, sink, and intermediate calls;
+- build flags, environment settings, and deployment differences;
+- authentication, network, and privilege preconditions;
+- safe reproduction steps and observed result.
+
+This is also how you find true positives that initially look noisy. A sanitizer may run on one route but not another. A development file may be copied into a production image. A package may be unreachable today but loaded by a feature flag tomorrow.
+
+## Verify with a different kind of evidence
+
+Do not call a second model's agreement independent verification. Use evidence that tests the underlying claim: a focused unit or integration test, a data-flow review, a safe request against an authorized test environment, a package inventory, or a provider check that does not disclose the secret.
+
+The [critical finding response guide](/blog/critical-security-finding-response) shows how to preserve the original candidate while confirming applicability. The short version is to state the precondition, perform a bounded check, retain the result, and describe what the check could not establish.
+
+Confidence is useful for triage, but it cannot verify itself. A rule with high historical precision can still be wrong for this revision. A result with weak confidence can still identify a real exposed path. Keep the tool's confidence separate from the evidence state.
+
+You can use the browser-local [secret exposure scanner](/tools/secret-exposure-scanner) to inspect text you are authorized to review without uploading it. It cannot determine whether a credential is active, search repository history, or prove that a matched value was used.
+
+For a broader review, use the browser-local [AI app security checklist](/tools/ai-app-security-checklist) to inventory ownership, deployment boundaries, logging, and retest readiness. It does not inspect the application or validate a scanner result.
+
+## Tune the smallest wrong assumption
+
+Once evidence shows that a result is inapplicable, identify why. The rule may misunderstand a framework sanitizer, scan a generated directory that never ships, fingerprint a test value, or duplicate a result already tracked elsewhere. Fix that specific assumption.
+
+Prefer, in order:
+
+1. Improve the code or configuration so the safe property is explicit and testable.
+2. Add a precise rule condition or framework model.
+3. Exclude the smallest generated artifact or fixture path.
+4. Suppress one result with a documented reason and expiry or review trigger.
+
+Avoid repository-wide exclusions such as ignoring all test files, all generated code, or an entire vulnerability class. Tests can contain active credentials. Generated code can ship. A broad rule disablement can turn a noisy detector into a silent blind spot.
+
+Test the tuning against a known positive example and the inapplicable example. If the positive result disappears, the tuning is not safe. If the duplicate returns under a new fingerprint every run, fix the result identity rather than teaching reviewers to dismiss it repeatedly.
+
+## Make suppressions reviewable data
+
+The [SARIF 2.1.0 specification](https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html) provides fields for result identity, baselines, and suppressions. Those structures are useful only when the reason is specific. "False positive" alone tells the next reviewer nothing.
+
+A useful suppression record includes:
+
+```yaml
+rule: scanner-rule-id
+revision: immutable-commit
+scope: exact-result-or-path
+reason: framework-encoder-runs-before-the-reported-sink
+evidence: focused-test-and-code-review
+owner: security-reviewer
+review_when: encoder-rule-or-route-changes
+```
+
+GitHub's guidance for [resolving code scanning alerts](https://docs.github.com/en/enterprise-cloud@latest/code-security/how-tos/manage-security-alerts/manage-code-scanning-alerts/resolve-alerts) likewise distinguishes reasons for dismissal and warns that a previously dismissed alert can reappear when the relevant code changes. Preserve that context instead of deleting the record.
+
+Keep a stable fingerprint when the format supports it, but do not trust fingerprints across meaningful data-flow changes. A matching location does not prove the finding is semantically unchanged.
+
+## Baseline carefully
+
+A baseline lets a team focus on new results while it works through existing debt. It is not a declaration that old findings are safe. Store the baseline revision, scanner version, rule configuration, and scope. Track unresolved applicable findings separately with owners and deadlines.
+
+Rebuild or review the baseline when you change scanner rules, language versions, build steps, deployment packaging, or major framework behavior. Compare the new run with the previous one and investigate unexpected disappearances as seriously as unexpected additions. A finding can vanish because a rule stopped seeing the path, not because the weakness was fixed.
+
+Measure more than total alerts. Useful operating measures include reviewed findings per rule, confirmed applicable results, suppression reasons, reopened suppressions, review time, and known issues missed by the current configuration. Report these with their definitions and sampling limits. Do not turn them into an unsupported universal accuracy claim.
+
+Review a sample of closed and suppressed results periodically, including results closed by experienced reviewers. This catches shared assumptions that have become stale. Include rules with very low alert volume as well as noisy rules, because a silent misconfiguration may look efficient. When a missed issue is found through testing, an incident, or another tool, add it to the evaluation set and ask why the current pipeline did not retain it.
+
+## Retest the original condition
+
+After a fix or tuning change, run a fresh scan from a clean checkout with the intended configuration. Also rerun the independent check that established whether the candidate applied. Preserve both the before and after evidence.
+
+A clean deterministic retest can support a retest-confirmed outcome when the relevant scanner completed its intended coverage. If the path was excluded, the build failed, or the environment did not match, record the result as inconclusive. Absence from an incomplete run is not proof of absence.
+
+LyraShield AI can preserve finding evidence, limitations, and a fresh retest state. It does not make confidence self-verifying, and it does not make a broad suppression safe. The reviewer still owns the scope and decision.
+
+### Sources
+
+- [NIST IR 8165, Static Analysis Tool Exposition](https://doi.org/10.6028/NIST.IR.8165)
+- [OASIS, Static Analysis Results Interchange Format 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html)
+- [GitHub Docs, Resolving code scanning alerts](https://docs.github.com/en/enterprise-cloud@latest/code-security/how-tos/manage-security-alerts/manage-code-scanning-alerts/resolve-alerts)
