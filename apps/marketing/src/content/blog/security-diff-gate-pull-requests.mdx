@@ -1,0 +1,142 @@
+---
+title: "Add a Security Diff Gate to Pull Requests"
+description: "Build a pull-request security gate around immutable commits, explicit coverage, scanner failures, reviewable results, and one required decision."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - supply-chain
+draft: true
+heroImage: verification-03
+faq:
+  - q: "Should a pull-request gate scan only changed lines?"
+    a: "Use the diff to make a focused decision, but give analyzers enough surrounding and dependency context to understand the change. A diff gate complements scheduled or release baseline scans; it cannot detect every pre-existing or indirectly affected condition."
+  - q: "How should the gate handle existing findings?"
+    a: "Maintain a reviewed baseline with stable identities and explicit exceptions, then block new or worsened findings according to policy. Do not hide the backlog. Track it separately with owners and expiry dates."
+  - q: "What should happen when a required scanner crashes?"
+    a: "The final decision should fail closed and report a scanner infrastructure error, not a security finding and not a clean result. Preserve diagnostics without secrets, then rerun the required check against the same candidate."
+  - q: "Can a skipped required check still allow a merge?"
+    a: "GitHub documents different behavior for skipped workflows and skipped jobs, and some neutral or skipped conclusions can satisfy status-check contexts. Design one always-running decision job, require that exact check, and test every path-filter and dependency condition."
+---
+
+**Direct answer:** Resolve the pull request's immutable base and head commit SHAs, scan the intended change under explicit coverage rules, and distinguish findings from scanner failures. Publish reviewable results, then make one always-running decision job encode the severity and completeness policy. Require that check against the latest candidate commit, and test clean, finding, failure, skipped, and updated-head paths.
+
+Security jobs do not form a gate merely because they appear in a pull request. The gate is the final, enforceable decision contract: which commit pair was checked, which scanners had to complete, which findings block, and what happens when any input is missing.
+
+This is a narrow layer within the [security model for AI-built applications](/blog/vibe-coding-security-guide). It prevents a known class of unreviewed changes from merging. It does not replace baseline assessment, runtime testing, threat modeling, or release review.
+
+## Define the decision contract first
+
+Write the inputs before writing YAML:
+
+- immutable base and head commit SHAs;
+- required scanners and their pinned versions;
+- changed-path rules and analysis context;
+- severity or rule policy;
+- baseline and exception behavior;
+- result-publication channels;
+- final required-check name;
+- allowed bypass actors and audit expectations.
+
+The base answers "relative to what?" The head answers "which proposed change?" Branch names can move. A pull request can receive another push while a previous job is running. Record the resolved SHAs in logs and artifacts, and make branch protection evaluate the latest candidate required by the platform.
+
+The risky workflow trusts mutable names and lets each scanner decide merge status:
+
+```yaml
+# RISKY: ambiguous refs, independent conclusions, and no completeness decision.
+- run: scanner --diff main..HEAD
+- run: dependency-check || true
+- uses: result-uploader
+```
+
+An upload can succeed after the analyzer fails. A path filter can skip the workflow entirely. A stale run can remain green after the head changes.
+
+## Resolve and verify the exact boundary
+
+For a GitHub pull-request event, read the platform-provided base and head SHAs through environment variables, then verify that both resolve to commits. Keep GitHub expressions out of shell source. Caller-controlled reusable-workflow inputs require the same validation.
+
+```sh
+BASE="$(git rev-parse --verify --end-of-options "${BASE_CANDIDATE}^{commit}")"
+HEAD="$(git rev-parse --verify --end-of-options "${HEAD_CANDIDATE}^{commit}")"
+git diff --name-only "$BASE" "$HEAD" > changed_files.txt
+```
+
+Pass candidates through environment variables and quote them. Fetch enough history for both objects. Fail if either commit is unavailable. A fallback such as `HEAD~1` can be reasonable for a documented push workflow, but it is not equivalent to a pull-request base and must be labeled separately.
+
+The diff itself is a scope selector, not complete analysis context. A changed controller may rely on unchanged middleware. A lockfile change represents a graph beyond the added lines. Let each analyzer read enough code or artifact context to evaluate the changed risk, then associate its result with the exact commit pair.
+
+## Run complementary checks
+
+Use the changed paths to choose relevant checks without turning file extensions into a guarantee.
+
+- Scan the exact commit range for newly introduced secrets.
+- When supported lockfiles change, inspect resolved dependencies and known advisories.
+- Analyze changed first-party code with rules suitable for its language and framework.
+- Run focused tests for affected authorization, validation, and agent boundaries.
+- Record excluded paths, unsupported ecosystems, and scanner diagnostics.
+
+Generated code can change configuration, dependencies, and application logic in one pull request. A single regex job cannot understand all three. Keep categories separate so a dependency advisory does not look like a verified first-party bug.
+
+The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) can inspect selected local text files before commit. It does not read repository history, run in CI, prove a credential is valid, or replace a shared secret gate.
+
+## Separate findings, failures, and publication
+
+Every required scanner needs at least three outcomes:
+
+1. completed with no policy-relevant finding;
+2. completed with one or more findings;
+3. did not complete because of configuration or infrastructure failure.
+
+Do not map a timeout to "zero findings." Do not map every nonzero exit to a vulnerability either. Many scanners use nonzero exits for both findings and operational errors, so parse their documented result format and exit contract.
+
+Publish all reviewable findings, even those below the blocking threshold. SARIF, annotations, summaries, and artifacts are reporting channels. The final decision consumes normalized outcomes and applies policy. Optional publication can fail independently when the underlying scanner evidence remains available.
+
+A gate does not require SARIF. It can consume typed job outputs, signed artifacts, or a small JSON result. If you use SARIF, remember that pull-request display is limited by the reported diff location. An alert absent from the PR annotation view may still exist on the branch.
+
+## Build one always-running decision
+
+Create a dedicated final job or step that runs with an `always()` condition and reads every required outcome. It should fail when:
+
+- a required scanner is missing, skipped unexpectedly, cancelled, or failed;
+- the analyzed head does not match the candidate being evaluated;
+- a finding meets the configured rule or severity threshold;
+- the required coverage contract was not met.
+
+It should report the reason without leaking result contents. Keep the decision name stable, then require that exact status check in the target branch ruleset. GitHub's [ruleset documentation](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets) describes required checks, code-scanning merge protection, and bypass actors. Availability depends on repository settings and plan.
+
+Avoid workflow-level path filters on a required workflow unless you have designed the skipped behavior. GitHub's [required-check troubleshooting guidance](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks) notes that a skipped workflow can leave a check pending, while a skipped job may report success. A dedicated decision must convert your intended policy into an explicit conclusion.
+
+## Keep baseline debt visible
+
+Scanning only changed lines makes the first rollout manageable, but it does not erase existing risk. Maintain a full baseline scan on a schedule or release boundary. Use stable finding identities to distinguish new, unchanged, fixed, and resurfaced results.
+
+Exceptions need a reason, owner, scope, and expiry. A broad suppression such as "legacy code" turns the baseline into permanent blindness. Let the pull-request gate block new or worsened issues while a separate backlog tracks accepted existing findings.
+
+When a change modifies shared middleware, build configuration, or dependency resolution, expand the affected scope. A path-based rule that treats only the edited file as relevant can miss downstream services. Encode these relationships explicitly and review them as architecture changes.
+
+## Test the gate as a product
+
+Use an owned test branch with inert fixtures. Verify:
+
+1. a clean change produces a successful decision for the current head;
+2. an above-threshold inert pattern fails but still publishes review data;
+3. a required scanner crash fails as infrastructure error;
+4. an optional uploader failure does not erase the decision evidence;
+5. an irrelevant-path change still produces the expected final status;
+6. a new push invalidates the older candidate result;
+7. a documented bypass is restricted and auditable.
+
+Also review the workflow's own permissions. A gate that checks out untrusted code with write authority creates a stronger attack path than the issue it is meant to catch. The [CI agent confused-deputy guide](/blog/cicd-agent-confused-deputy) covers that privilege boundary, while [AI dependency audits](/blog/ai-dependency-vulnerability-audit) cover lockfile review.
+
+The LyraShield AI repository contains a review-stage workflow that now resolves base and head commits, binds Gitleaks to that exact range, scopes dependency and changed-code checks to the resolved commits, generates and archives SARIF, attempts optional upload, and applies a separate threshold decision. The range wiring and regression test were rechecked after the latest correction. This is repository implementation, not a hosted public gate or production assurance. Its `DEEP` input currently uses SAFE-equivalent file coverage. The [methodology](/methodology) keeps those limits attached to the result.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign owners for pull-request, dependency, secret, and retest controls. It does not inspect Git history, run CI, configure a ruleset, or decide whether a pull request may merge.
+
+## Sources
+
+- [GitHub Docs: Secure use reference for GitHub Actions](https://docs.github.com/en/actions/reference/security/secure-use)
+- [GitHub Docs: SARIF support for code scanning](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support)
+- [GitHub Docs: Available rules for rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)
+- [GitHub Docs: Troubleshooting required status checks](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks)
+- [OWASP: CI/CD Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html)

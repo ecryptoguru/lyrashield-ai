@@ -1,0 +1,164 @@
+---
+title: "SARIF for AI Coding Workflows"
+description: "Structure security results as SARIF 2.1.0 with stable rules, locations, fingerprints, redaction, validation, and honest evidence limits."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - supply-chain
+draft: true
+heroImage: verification-02
+faq:
+  - q: "Is SARIF only for static application security testing?"
+    a: "SARIF was designed for static analysis results, but tools can represent other location-based analysis results when the schema fits. A consumer may support only part of SARIF, so verify its documented subset before relying on a field or workflow."
+  - q: "Does converting a result to SARIF verify the finding?"
+    a: "No. SARIF transports the tool identity, rule, message, location, fingerprints, and related metadata. It does not prove that the underlying condition exists, is exploitable, or has the stated impact. Verification needs separate evidence."
+  - q: "Why do duplicate code-scanning alerts appear?"
+    a: "Duplicates can appear when a tool changes rule IDs, paths, categories, or fingerprints between runs. Emit stable identities from the producer and keep upload categories consistent. There is no universal fingerprint formula for every analyzer."
+  - q: "Can a SARIF file contain secrets?"
+    a: "Yes. Messages, snippets, command lines, URIs, properties, and captured output can contain credentials, personal data, or internal paths. Redact before writing the file, restrict artifact access, and apply a short retention policy appropriate to the evidence."
+---
+
+**Direct answer:** Emit SARIF 2.1.0 with a stable tool identity, rule definitions, results, repository-relative locations, and producer-generated fingerprints. Validate the JSON and supported SARIF subset, retain the file as a protected build artifact, and upload it with a stable category when the review surface supports it. Treat each result as a reported observation until separate evidence verifies the finding.
+
+AI coding workflows often combine secret detection, dependency checks, static rules, and custom review scripts. Their outputs disagree about field names and locations. SARIF gives those results a shared transport shape, but normalization does not improve the truth of the underlying claim.
+
+That distinction belongs in the [security model for AI-built applications](/blog/vibe-coding-security-guide). A polished alert from an AI review can be wrong before conversion and equally wrong after conversion. The value of SARIF is traceability, interoperability, and stable review context.
+
+## What SARIF standardizes
+
+The [OASIS SARIF 2.1.0 standard](https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html) defines a JSON object model for static analysis results. A log contains one or more `runs`. Each run identifies its tool and can declare rules, artifacts, invocation details, taxonomies, and results.
+
+For a useful code result, preserve:
+
+- a stable tool name, semantic version, and information URI;
+- a stable rule ID and human-readable rule description;
+- a result level and concise message;
+- a repository-relative artifact URI and precise region;
+- a fingerprint generated consistently by the producing tool;
+- analysis context such as the commit, configuration, and category;
+- limitations outside the file when the review surface cannot show them.
+
+SARIF does not establish coverage, exploitability, business impact, or independent verification. It also does not require every consumer to display every property. GitHub documents a supported subset of SARIF 2.1.0, so write for the standard and test against the actual consumer.
+
+## Start with a small, valid result
+
+This inert example reports a placeholder pattern in a local file. It contains no real secret or exploit detail.
+
+```json
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Example Review Tool",
+          "semanticVersion": "1.4.0",
+          "rules": [
+            {
+              "id": "auth/server-scope",
+              "shortDescription": {
+                "text": "Server query may lack tenant scope"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "auth/server-scope",
+          "level": "warning",
+          "message": {
+            "text": "Review server-derived tenant scope for this query."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/reports/query.ts" },
+                "region": { "startLine": 24, "startColumn": 3 }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primaryLocationLineHash": "producer-generated-stable-value"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Replace the fingerprint value with one generated by the analyzer. Do not copy the literal placeholder. Fingerprinting must remain stable when irrelevant lines move, while still distinguishing separate results. The correct inputs depend on the analyzer, so avoid inventing one universal algorithm in a workflow adapter.
+
+Keep rule IDs stable across releases. Renaming `auth/server-scope` every time the message improves makes historical comparison and suppression review harder. Put display text in descriptions and messages instead of encoding mutable prose in the ID.
+
+Define severity mapping in the producer and test it. SARIF levels such as `error`, `warning`, `note`, and `none` are presentation fields, not a universal risk scale. If one scanner calls a finding critical and another emits an error, normalization must not pretend those labels are equivalent. Preserve the original severity scheme in a safe property or adjacent evidence record, then apply one documented policy at the decision layer.
+
+AI-generated adapters often fail here because they optimize for a valid-looking file. They may omit the `rules` array, invent a line number, use the message as a rule ID, or copy detector output verbatim. Add contract tests that parse the emitted file and assert stable IDs, relative URIs, allowed levels, fingerprints, redaction, and the exact analyzed commit. Run those tests against empty and malformed detector input as well as the happy path.
+
+Do not merge results from separate tools by message similarity alone. Two scanners can describe the same root cause differently, while two identical messages can refer to different code paths. Keep provenance intact and perform deduplication as a review decision supported by stable locations and evidence.
+
+## Use locations the consumer can resolve
+
+Repository-relative URIs make a result portable between runners. Avoid absolute checkout paths such as `/home/runner/work/...`, local usernames, or URL query strings. Normalize path separators and confirm that the file exists in the analyzed commit.
+
+Regions should identify the smallest useful area. A line and column are better than a whole file when the tool has that precision. Do not fabricate a line merely to obtain a pull-request annotation. If a dependency result applies to a lockfile or artifact without a safe precise region, retain that limitation and link the raw evidence in a protected system.
+
+GitHub's [SARIF support documentation](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support) explains that pull-request annotations are limited to results whose reported lines fall within the diff. An absent annotation does not mean the analysis found no baseline result. Review the branch alert set and retained artifact as well as the diff view.
+
+## Keep identities stable across analyses
+
+Use a separate `run` or a stable upload category when multiple tools analyze the same commit. A category can distinguish a frontend analysis from an API analysis, or a secrets run from a static-code run. Changing categories between runs can create parallel alert histories rather than updating the intended analysis.
+
+Stable fingerprints help a consumer recognize the same result after nearby edits. Missing or unstable fingerprint data can create duplicates. A fingerprint is an identity aid, not a confidence score and not proof that two alerts share one root cause.
+
+Preserve the commit SHA, tool version, rule configuration, and build identity outside or within supported SARIF properties. An AI workflow should also record which files were in context and which were omitted. That coverage statement may not fit cleanly into a code-scanning alert, but it remains necessary evidence.
+
+## Redact before serialization
+
+The risky adapter copies raw detector output into the result message:
+
+```ts
+// RISKY: raw output may contain a credential, customer value, or absolute path.
+result.message.text = detector.stdout
+```
+
+Create a narrow allowlist instead:
+
+```ts
+const result = {
+  ruleId: finding.ruleId,
+  level: mapLevel(finding.severity),
+  message: { text: finding.safeSummary },
+  locations: [toRepositoryLocation(finding.location)],
+  partialFingerprints: finding.stableFingerprints,
+}
+```
+
+Validate every field before serialization. Remove secret values, personal data, target coordinates, untrusted markdown, terminal control characters, absolute paths, and unnecessary request bodies. Treat scanner output as untrusted input. A generated message can contain misleading links or text designed to influence a reviewer.
+
+Keep rich reproduction evidence in a separate access-controlled store when SARIF cannot carry it safely. Link by an opaque internal evidence ID, not a public credential-bearing URL. Apply artifact permissions and retention deliberately because workflow artifacts can outlive logs.
+
+## Validate and publish independently
+
+First run a JSON parser, then validate against the SARIF 2.1.0 schema and the chosen consumer's limits. Test an empty result set, several rules, unusual repository paths, large output, and redacted detector messages. Reject invalid files rather than uploading a partial log that reviewers may mistake for complete analysis.
+
+Schema validity is only the first check. Confirm that every referenced rule exists, every location belongs to the target commit, and every producer-required fingerprint is present. A schema-valid log can still point at the wrong repository or silently omit half the analyzers.
+
+Archive the validated SARIF with the build even when upload is optional. Upload it with the exact commit and stable category supported by the platform. GitHub documents action, CLI, and API upload paths, each with permission and configuration requirements.
+
+Keep publication separate from the merge decision. A code-scanning feature may be unavailable or reject a supported-standard field. That should not silently turn required scanner failures into a clean gate. Conversely, an optional upload failure does not prove the scanner itself failed.
+
+The LyraShield AI repository currently generates a SARIF 2.1.0 artifact, archives it, and attempts an optional GitHub Code Scanning upload. Its separate workflow decision applies the configured threshold. This is repository code, not a generally available hosted SARIF service. The current output is intentionally limited, and the workflow's `DEEP` input still has SAFE-equivalent file coverage. The [methodology](/methodology) explains why transported results remain detected until separate evidence supports verification.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign owners for analysis, review, and retest controls. It does not read SARIF, validate a file, upload results, or verify an alert. Continue with [AI dependency vulnerability audits](/blog/ai-dependency-vulnerability-audit) for one common producer, or [CI agent confused-deputy controls](/blog/cicd-agent-confused-deputy) for the authority surrounding publication.
+
+## Sources
+
+- [OASIS: Static Analysis Results Interchange Format 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html)
+- [GitHub Docs: SARIF support for code scanning](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support)
+- [GitHub Docs: About SARIF files for code scanning](https://docs.github.com/en/code-security/concepts/code-scanning/sarif-files)
+- [GitHub Docs: Uploading a SARIF file](https://docs.github.com/en/code-security/how-tos/find-and-fix-code-vulnerabilities/integrate-with-existing-tools/upload-sarif-file)
