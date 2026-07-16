@@ -1,7 +1,9 @@
 {
   "lyrashield-team": {
     "name": "LyraShield Team",
+    "kind": "Organization",
     "role": "Security + Engineering",
+    "profileUrl": "/blog/editorial-policy",
     "bio": "Maintains LyraShield AI's release-assurance methodology, security controls, and evidence-state guidance for AI-built apps."
   }
 }
