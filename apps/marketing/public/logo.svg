@@ -16,6 +16,7 @@
       <path d="M32 3 53 14v16c0 14-8.7 25-21 31-12.3-6-21-17-21-31V14L32 3Z"/>
     </clipPath>
   </defs>
+  <!-- ponytail: old-logo character returns as quiet facets, not another competing monogram. -->
   <path d="M32 3 53 14v16c0 14-8.7 25-21 31-12.3-6-21-17-21-31V14L32 3Z" fill="#07111F"/>
   <g clip-path="url(#shield)">
     <path d="M32 3 11 14v18l17 9 4-38Z" fill="#142B3C"/>
