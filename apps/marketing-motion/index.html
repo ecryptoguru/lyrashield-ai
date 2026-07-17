@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=%VITE_COMP_WIDTH%, height=%VITE_COMP_HEIGHT%" />
+    <title>LyraShield AI assurance world</title>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="%VITE_COMP_ID%"
+      data-start="0"
+      data-duration="42"
+      data-width="%VITE_COMP_WIDTH%"
+      data-height="%VITE_COMP_HEIGHT%"
+    >
+      <canvas id="world" aria-hidden="true" data-layout-ignore></canvas>
+      <div id="focus-transition" aria-hidden="true" data-layout-ignore></div>
+
+      <div id="scene-gateway" class="clip scene scene-left" data-start="0" data-duration="6" data-track-index="1">
+        <div class="scene-content">
+          <p class="scene-index">00 / GATEWAY</p>
+          <h1>Evidence begins with scope.</h1>
+          <p>One authorized target enters a review path that preserves what ran, what it found, and what it could not establish.</p>
+          <div class="scene-rule"></div>
+        </div>
+      </div>
+
+      <div id="scene-target" class="clip scene scene-right" data-start="6" data-duration="6" data-track-index="1">
+        <div class="scene-content">
+          <p class="scene-index">01 / TARGET</p>
+          <h2>Define what is authorized and in scope.</h2>
+          <p>Repository and URL reviews stay bound to the selected target, mode, and stated limitations.</p>
+          <div class="scene-rule"></div>
+        </div>
+      </div>
+
+      <div id="scene-scan" class="clip scene scene-left" data-start="12" data-duration="6" data-track-index="1">
+        <div class="scene-content">
+          <p class="scene-index">02 / SCAN</p>
+          <h2>Run the checks that match the target.</h2>
+          <p>Deterministic scanners and AI-assisted review remain separate coverage layers, never a universal guarantee.</p>
+          <div class="scene-rule"></div>
+        </div>
+      </div>
+
+      <div id="scene-evidence" class="clip scene scene-right" data-start="18" data-duration="6" data-track-index="1">
+        <div class="scene-content">
+          <p class="scene-index">03 / EVIDENCE STATE</p>
+          <h2>Keep detection separate from proof.</h2>
+          <ul class="state-list">
+            <li><span class="state-dot detected"></span>Detected</li>
+            <li><span class="state-dot verified"></span>Independently verified</li>
+            <li><span class="state-dot confirmed"></span>Retest-confirmed</li>
+            <li><span class="state-dot inconclusive"></span>Inconclusive</li>
+          </ul>
+        </div>
+      </div>
+
+      <div id="scene-proposal" class="clip scene scene-left" data-start="24" data-duration="6" data-track-index="1">
+        <div class="scene-content">
+          <p class="scene-index">04 / FIX PROPOSAL</p>
+          <h2>Prepare the change. Keep execution approval-bound.</h2>
+          <p>A proposal can explain and stage a fix. PR execution remains blocked until a server-generated patch is bound to exact approval.</p>
+          <div class="scene-rule"></div>
+        </div>
+      </div>
+
+      <div id="scene-retest" class="clip scene scene-right" data-start="30" data-duration="6" data-track-index="1">
+        <div class="scene-content">
+          <p class="scene-index">05 / RETEST</p>
+          <h2>Retest from a fresh server-owned scan.</h2>
+          <p>Complete deterministic coverage can validate a clean retest. Engine-only absence remains inconclusive.</p>
+          <div class="scene-rule"></div>
+        </div>
+      </div>
+
+      <div id="scene-report" class="clip scene scene-left" data-start="36" data-duration="6" data-track-index="1">
+        <div class="scene-content">
+          <p class="scene-index">06 / ASSURANCE REPORT</p>
+          <h2>Ship the evidence record.</h2>
+          <p>Coverage, findings, evidence states, retest outcomes, and limitations assemble into one reviewable report.</p>
+          <div class="report-status"><span></span>Scope stated · limitations retained</div>
+        </div>
+      </div>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {}
+      window.__timelines["%VITE_COMP_ID%"] = window.__timelines["%VITE_COMP_ID%"] || null
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

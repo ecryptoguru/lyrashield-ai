@@ -14,6 +14,8 @@ describe("Cloudflare marketing security headers", () => {
     expect(headers).toContain("https://us-assets.i.posthog.com")
     expect(headers).toContain("https://static.cloudflareinsights.com")
     expect(headers).toContain("https://cloudflareinsights.com")
+    expect(headers).toContain("media-src 'self' blob: https://media.lyrashieldai.com")
+    expect(headers).toContain("https://media.lyrashieldai.com")
     expect(headers).toContain("frame-ancestors 'none'")
     expect(headers).toContain("Strict-Transport-Security:")
     expect(headers).toContain("X-Content-Type-Options: nosniff")

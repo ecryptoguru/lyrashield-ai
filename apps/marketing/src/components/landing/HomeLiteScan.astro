@@ -29,6 +29,8 @@ const scannerAvailable = Boolean(appOrigin)
 </section>
 
 <script>
+  import { normalizePublicHttpUrl } from "../../lib/public-url"
+
   const form = document.querySelector<HTMLFormElement>("#home-lite-scan-form")
   form?.addEventListener("submit", (event) => {
     event.preventDefault()
@@ -36,11 +38,9 @@ const scannerAvailable = Boolean(appOrigin)
     const error = document.querySelector<HTMLElement>("#home-scan-error")
     if (!input || !error) return
     error.classList.add("hidden")
-    const value = input.value.trim()
-    const target = /^https?:\/\//i.test(value) ? value : `https://${value}`
+    let target = ""
     try {
-      const url = new URL(target)
-      if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password) throw new Error()
+      target = normalizePublicHttpUrl(input.value)
     } catch {
       error.textContent = "Enter a valid public HTTP or HTTPS URL without credentials."
       error.classList.remove("hidden")

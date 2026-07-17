@@ -1,0 +1,542 @@
+---
+import type { MotionMediaManifest } from "../../lib/motion-manifest"
+
+interface Props {
+  manifest: MotionMediaManifest
+}
+
+const { manifest } = Astro.props
+---
+
+<evidence-world id="assurance-world" data-manifest={JSON.stringify(manifest)}>
+  <div class="evidence-world__stage" aria-hidden="true">
+    <div class="evidence-world__media">
+      {
+        manifest.chapters.map((chapter, index) => (
+          <picture class:list={["evidence-world__poster", { "is-active": index === 0 }]} data-poster-index={index}>
+            <source media="(max-width: 767px)" srcset={chapter.portrait.poster} />
+            <img src={chapter.desktop.poster} data-poster-chapter={chapter.id} alt="" width="1600" height="900" loading={index === 0 ? "eager" : "lazy"} decoding="async" />
+          </picture>
+        ))
+      }
+      <video class="evidence-world__video is-front" muted playsinline preload="none" tabindex="-1"></video>
+      <video class="evidence-world__video" muted playsinline preload="none" tabindex="-1"></video>
+      <div class="evidence-world__media-veil"></div>
+    </div>
+    <div class="evidence-world__chrome">
+      <span data-progress-label>01 / 07</span>
+      <i><b data-progress-bar></b></i>
+      <span>ASSURANCE WORLD</span>
+    </div>
+  </div>
+
+  <div class="evidence-world__chapters">
+    {
+      manifest.chapters.map((chapter, index) => (
+        <section class="evidence-world__chapter" data-chapter-index={index} aria-labelledby={`chapter-${chapter.id}`}>
+          <div class="evidence-world__copy">
+            <p>{chapter.eyebrow}</p>
+            <h2 id={`chapter-${chapter.id}`}>{chapter.title}</h2>
+            <div class="evidence-world__rule"></div>
+            <p>{chapter.body}</p>
+            {chapter.id === "evidence-state" && (
+              <ul>
+                <li><i class="state-detected" />Detected</li>
+                <li><i class="state-verified" />Independently verified</li>
+                <li><i class="state-confirmed" />Retest-confirmed</li>
+                <li><i class="state-inconclusive" />Inconclusive</li>
+              </ul>
+            )}
+            {chapter.id === "report" && <span class="evidence-world__status">Scope stated · limitations retained</span>}
+          </div>
+        </section>
+      ))
+    }
+  </div>
+</evidence-world>
+
+<script>
+  import type { EvidenceChapterId, MotionMediaManifest, MotionVariant } from "../../lib/motion-manifest"
+
+  type IdleWindow = Window & typeof globalThis & {
+    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
+    cancelIdleCallback?: (handle: number) => void
+  }
+
+  class EvidenceWorldElement extends HTMLElement {
+    private manifest!: MotionMediaManifest
+    private posters: HTMLElement[] = []
+    private videos: HTMLVideoElement[] = []
+    private activeIndex = 0
+    private frontVideo = 0
+    private frame = 0
+    private idleHandle = 0
+    private initialized = false
+    private motionEnabled = true
+    private observer?: IntersectionObserver
+    private fetchController?: AbortController
+    private objectUrls = new Map<number, string>()
+    private videoIndexes = new Map<number, number>()
+    private mediaErrors = new Set<string>()
+    private viewed = new Set<string>()
+
+    connectedCallback() {
+      const raw = this.dataset.manifest
+      if (!raw) return
+      this.manifest = JSON.parse(raw) as MotionMediaManifest
+      this.posters = Array.from(this.querySelectorAll<HTMLElement>("[data-poster-index]"))
+      this.videos = Array.from(this.querySelectorAll<HTMLVideoElement>("video"))
+
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
+      const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true
+      this.motionEnabled = !reduced && !saveData
+      if (!this.motionEnabled) this.captureView(0, "poster")
+      this.updatePosters(0)
+      this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) => image.addEventListener("error", this.handlePosterError))
+
+      if (this.motionEnabled) {
+        this.observer = new IntersectionObserver(this.handleIntent, { rootMargin: "50% 0px" })
+        this.observer.observe(this)
+      }
+    }
+
+    disconnectedCallback() {
+      this.observer?.disconnect()
+      this.fetchController?.abort()
+      cancelAnimationFrame(this.frame)
+      const idleWindow = window as IdleWindow
+      if (this.idleHandle) idleWindow.cancelIdleCallback?.(this.idleHandle)
+      removeEventListener("scroll", this.queueUpdate)
+      removeEventListener("resize", this.handleResize)
+      removeEventListener("orientationchange", this.handleResize)
+      removeEventListener("pointerdown", this.primeIos)
+      removeEventListener("touchstart", this.primeIos)
+      this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) => image.removeEventListener("error", this.handlePosterError))
+      this.objectUrls.forEach((url) => URL.revokeObjectURL(url))
+      this.objectUrls.clear()
+      this.videos.forEach((video) => {
+        video.removeAttribute("src")
+        video.load()
+      })
+    }
+
+    private handleIntent = (entries: IntersectionObserverEntry[]) => {
+      if (!entries.some((entry) => entry.isIntersecting) || this.initialized) return
+      this.observer?.disconnect()
+      const idleWindow = window as IdleWindow
+      const begin = () => this.initializeMotion()
+      if (document.readyState === "complete") {
+        this.idleHandle = idleWindow.requestIdleCallback?.(begin, { timeout: 1200 }) ?? window.setTimeout(begin, 250)
+      } else {
+        addEventListener("load", () => {
+          this.idleHandle = idleWindow.requestIdleCallback?.(begin, { timeout: 1200 }) ?? window.setTimeout(begin, 250)
+        }, { once: true })
+      }
+    }
+
+    private initializeMotion() {
+      if (this.initialized || !this.isConnected) return
+      this.initialized = true
+      addEventListener("scroll", this.queueUpdate, { passive: true })
+      addEventListener("resize", this.handleResize, { passive: true })
+      addEventListener("orientationchange", this.handleResize, { passive: true })
+      addEventListener("pointerdown", this.primeIos, { once: true, passive: true })
+      addEventListener("touchstart", this.primeIos, { once: true, passive: true })
+      this.loadPair(0)
+      this.queueUpdate()
+    }
+
+    private primeIos = () => {
+      this.videos.forEach((video) => {
+        const attempt = video.play()
+        if (attempt) attempt.then(() => video.pause()).catch(() => undefined)
+      })
+    }
+
+    private handleResize = () => {
+      this.fetchController?.abort()
+      this.videoIndexes.clear()
+      this.objectUrls.forEach((url) => URL.revokeObjectURL(url))
+      this.objectUrls.clear()
+      this.videos.forEach((video) => {
+        video.removeAttribute("src")
+        video.load()
+      })
+      this.loadPair(this.activeIndex)
+      this.queueUpdate()
+    }
+
+    private queueUpdate = () => {
+      if (this.frame) return
+      this.frame = requestAnimationFrame(() => {
+        this.frame = 0
+        this.updateFromScroll()
+      })
+    }
+
+    private updateFromScroll() {
+      const rect = this.getBoundingClientRect()
+      const scrollable = Math.max(this.offsetHeight - innerHeight, 1)
+      const progress = Math.min(1, Math.max(0, -rect.top / scrollable))
+      const scaled = progress * this.manifest.chapters.length
+      const nextIndex = Math.min(this.manifest.chapters.length - 1, Math.floor(scaled))
+      const chapterProgress = Math.min(1, Math.max(0, scaled - nextIndex))
+
+      if (nextIndex !== this.activeIndex) {
+        this.activeIndex = nextIndex
+        this.frontVideo = 1 - this.frontVideo
+        if (this.motionEnabled) this.loadPair(nextIndex)
+        this.updatePosters(nextIndex)
+        if (!this.motionEnabled) this.captureView(nextIndex, "poster")
+      }
+
+      const video = this.videos[this.frontVideo]
+      if (this.videoIndexes.get(this.frontVideo) === nextIndex && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+        const desired = Math.min(Math.max(video.duration - 1 / 30, 0), chapterProgress * 6)
+        if (Number.isFinite(desired) && Math.abs(video.currentTime - desired) > 1 / 30) video.currentTime = desired
+      }
+
+      const label = this.querySelector<HTMLElement>("[data-progress-label]")
+      const bar = this.querySelector<HTMLElement>("[data-progress-bar]")
+      if (label) label.textContent = `${String(nextIndex + 1).padStart(2, "0")} / 07`
+      if (bar) bar.style.transform = `scaleX(${Math.max(0.02, progress)})`
+    }
+
+    private updatePosters(index: number) {
+      this.posters.forEach((poster, posterIndex) => poster.classList.toggle("is-active", posterIndex === index))
+    }
+
+    private getVariant(index: number): MotionVariant {
+      const chapter = this.manifest.chapters[index]
+      return matchMedia("(max-width: 767px)").matches ? chapter.portrait : chapter.desktop
+    }
+
+    private async loadPair(index: number) {
+      this.fetchController?.abort()
+      this.fetchController = new AbortController()
+      const currentSlot = this.frontVideo
+      const nextSlot = 1 - currentSlot
+      const nextIndex = Math.min(index + 1, this.manifest.chapters.length - 1)
+
+      await Promise.all([
+        this.loadVideo(index, currentSlot, this.fetchController.signal),
+        nextIndex === index ? Promise.resolve() : this.loadVideo(nextIndex, nextSlot, this.fetchController.signal),
+      ])
+
+      const allowed = new Set([index, nextIndex])
+      for (const [cachedIndex, url] of this.objectUrls) {
+        if (!allowed.has(cachedIndex)) {
+          URL.revokeObjectURL(url)
+          this.objectUrls.delete(cachedIndex)
+        }
+      }
+    }
+
+    private async loadVideo(index: number, slot: number, signal: AbortSignal) {
+      const video = this.videos[slot]
+      const chapter = this.manifest.chapters[index]
+      try {
+        let objectUrl = this.objectUrls.get(index)
+        if (!objectUrl) {
+          const variant = this.getVariant(index)
+          const asset = video.canPlayType("video/webm; codecs=vp9") ? variant.webm : variant.mp4
+          const response = await fetch(asset, { signal })
+          if (!response.ok) throw new Error("media response failed")
+          objectUrl = URL.createObjectURL(await response.blob())
+          this.objectUrls.set(index, objectUrl)
+        }
+        if (signal.aborted) return
+        video.src = objectUrl
+        video.load()
+        this.videoIndexes.set(slot, index)
+        await new Promise<void>((resolve, reject) => {
+          if (video.readyState >= HTMLMediaElement.HAVE_METADATA) return resolve()
+          video.addEventListener("loadedmetadata", () => resolve(), { once: true })
+          video.addEventListener("error", () => reject(new Error("decode failed")), { once: true })
+        })
+        video.classList.toggle("is-front", slot === this.frontVideo)
+        if (index === this.activeIndex) this.captureView(index, "motion")
+      } catch (error) {
+        if ((error as DOMException).name === "AbortError") return
+        this.motionEnabled = false
+        this.videos.forEach((item) => item.classList.remove("is-front"))
+        this.captureError(chapter.id, "video")
+        this.captureView(this.activeIndex, "poster")
+      }
+    }
+
+    private handlePosterError = (event: Event) => {
+      const chapterId = (event.currentTarget as HTMLImageElement).dataset.posterChapter as EvidenceChapterId | undefined
+      if (chapterId) this.captureError(chapterId, "poster")
+    }
+
+    private captureView(index: number, mode: "poster" | "motion") {
+      const chapterId = this.manifest.chapters[index]?.id
+      const key = `${chapterId}:${mode}`
+      if (!chapterId || this.viewed.has(key)) return
+      this.viewed.add(key)
+      window.posthog?.capture("cinematic_chapter_view", { chapter_id: chapterId, mode })
+    }
+
+    private captureError(chapterId: EvidenceChapterId, assetType: "video" | "poster") {
+      const key = `${chapterId}:${assetType}`
+      if (this.mediaErrors.has(key)) return
+      this.mediaErrors.add(key)
+      window.posthog?.capture("cinematic_media_error", { chapter_id: chapterId, asset_type: assetType })
+    }
+  }
+
+  if (!customElements.get("evidence-world")) customElements.define("evidence-world", EvidenceWorldElement)
+</script>
+
+<style>
+  evidence-world {
+    --world-cyan: #54d6df;
+    position: relative;
+    display: block;
+    color: #edf6fb;
+    background: #08111c;
+  }
+
+  .evidence-world__stage {
+    position: sticky;
+    top: 0;
+    z-index: 0;
+    height: 100svh;
+    overflow: hidden;
+  }
+
+  .evidence-world__media,
+  .evidence-world__poster,
+  .evidence-world__poster img,
+  .evidence-world__video,
+  .evidence-world__media-veil {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .evidence-world__poster,
+  .evidence-world__video {
+    opacity: 0;
+    transition: opacity 220ms ease;
+  }
+
+  .evidence-world__poster.is-active,
+  .evidence-world__video.is-front {
+    opacity: 1;
+  }
+
+  .evidence-world__poster img,
+  .evidence-world__video {
+    object-fit: cover;
+  }
+
+  .evidence-world__video {
+    z-index: 2;
+  }
+
+  .evidence-world__poster {
+    z-index: 1;
+  }
+
+  .evidence-world__media-veil {
+    z-index: 3;
+    background:
+      radial-gradient(circle at 50% 42%, transparent 30%, rgba(8, 17, 28, 0.46) 100%),
+      linear-gradient(180deg, rgba(8, 17, 28, 0.12), rgba(8, 17, 28, 0.7));
+  }
+
+  .evidence-world__chrome {
+    position: absolute;
+    right: clamp(1rem, 4vw, 4rem);
+    bottom: 2rem;
+    left: clamp(1rem, 4vw, 4rem);
+    z-index: 4;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 1rem;
+    color: #91a7b8;
+    font: 600 0.68rem/1 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.1em;
+  }
+
+  .evidence-world__chrome i {
+    height: 1px;
+    overflow: hidden;
+    background: rgba(145, 167, 184, 0.28);
+  }
+
+  .evidence-world__chrome b {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(0.02);
+    transform-origin: left;
+    background: var(--world-cyan);
+  }
+
+  .evidence-world__chapters {
+    position: relative;
+    z-index: 1;
+    margin-top: -100svh;
+  }
+
+  .evidence-world__chapter {
+    display: grid;
+    min-height: 115svh;
+    align-items: center;
+    padding: 6rem max(1rem, calc((100% - 1280px) / 2));
+  }
+
+  .evidence-world__chapter:nth-child(even) .evidence-world__copy {
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .evidence-world__copy {
+    width: min(46rem, 54%);
+    padding: clamp(1.25rem, 3vw, 2.5rem);
+    border: 1px solid rgba(84, 214, 223, 0.18);
+    border-radius: 0.35rem;
+    background: rgba(8, 17, 28, 0.78);
+    box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.24);
+    backdrop-filter: blur(18px);
+  }
+
+  .evidence-world__copy > p:first-child,
+  .evidence-world__copy > p:last-of-type,
+  .evidence-world__status,
+  .evidence-world__copy ul {
+    font-family: "JetBrains Mono Variable", monospace;
+  }
+
+  .evidence-world__copy > p:first-child {
+    margin: 0 0 1rem;
+    color: var(--world-cyan);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .evidence-world__copy h2 {
+    margin: 0;
+    font-family: "Bricolage Grotesque Variable", sans-serif;
+    font-size: clamp(2.6rem, 5.4vw, 5.8rem);
+    font-weight: 800;
+    line-height: 0.94;
+    letter-spacing: -0.05em;
+    text-wrap: balance;
+  }
+
+  .evidence-world__copy > p:last-of-type {
+    max-width: 44rem;
+    margin: 1.25rem 0 0;
+    color: #b7cad8;
+    font-size: clamp(0.92rem, 1.25vw, 1.08rem);
+    line-height: 1.7;
+  }
+
+  .evidence-world__rule {
+    width: 7rem;
+    height: 2px;
+    margin-top: 1.5rem;
+    background: var(--world-cyan);
+    box-shadow: 0 0 24px rgba(84, 214, 223, 0.5);
+  }
+
+  .evidence-world__chapter:nth-child(even) .evidence-world__rule {
+    margin-left: auto;
+  }
+
+  .evidence-world__copy ul {
+    display: grid;
+    gap: 0.65rem;
+    margin: 1.35rem 0 0;
+    padding: 0;
+    color: #d9e7ef;
+    font-size: 0.82rem;
+    list-style: none;
+  }
+
+  .evidence-world__copy li {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+  }
+
+  .evidence-world__copy li i,
+  .evidence-world__status::before {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    content: "";
+    box-shadow: 0 0 14px currentColor;
+  }
+
+  .state-detected { color: #54d6df; background: #54d6df; }
+  .state-verified { color: #5cdb95; background: #5cdb95; }
+  .state-confirmed { color: #f5b84b; background: #f5b84b; }
+  .state-inconclusive { color: #ff7168; background: #ff7168; }
+
+  .evidence-world__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1.35rem;
+    color: #b7cad8;
+    font-size: 0.75rem;
+  }
+
+  .evidence-world__status::before {
+    color: #5cdb95;
+    background: #5cdb95;
+  }
+
+  @media (max-width: 767px) {
+    .evidence-world__chapter {
+      min-height: 122svh;
+      align-items: end;
+      padding-block: 6rem 5.5rem;
+    }
+
+    .evidence-world__chapter .evidence-world__copy,
+    .evidence-world__chapter:nth-child(even) .evidence-world__copy {
+      width: 100%;
+      margin: 0;
+      text-align: left;
+      background: rgba(8, 17, 28, 0.86);
+    }
+
+    .evidence-world__chapter:nth-child(even) .evidence-world__rule {
+      margin-left: 0;
+    }
+
+    .evidence-world__copy h2 {
+      font-size: clamp(2.55rem, 13vw, 4.3rem);
+    }
+
+    .evidence-world__copy li {
+      justify-content: flex-start;
+    }
+
+    .evidence-world__chrome span:last-child {
+      display: none;
+    }
+
+    .evidence-world__chrome {
+      grid-template-columns: auto 1fr;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .evidence-world__poster,
+    .evidence-world__video {
+      transition: none;
+    }
+  }
+</style>

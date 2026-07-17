@@ -11,7 +11,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       <span>LyraShield AI</span>
     </a>
     <nav aria-label="Main" class="flex items-center gap-1 sm:gap-2">
-      <ul class="hidden items-center gap-1 sm:flex sm:gap-2">
+      <ul class="hidden items-center gap-1 md:flex md:gap-2">
         <li>
           <a href="/methodology" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             Methodology
@@ -32,6 +32,11 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
             Tools
           </a>
         </li>
+        <li>
+          <a href="/blog" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            Resources
+          </a>
+        </li>
         {appUrl && (
           <li>
             <a href={`${appUrl}/sign-in`} class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
@@ -40,7 +45,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
           </li>
         )}
       </ul>
-      <details class="group relative sm:hidden">
+      <details class="group relative md:hidden">
         <summary class="inline-flex size-11 cursor-pointer list-none items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
           <span class="sr-only">Open navigation menu</span>
           <svg viewBox="0 0 24 24" class="size-5 group-open:hidden" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -51,6 +56,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
           <a href="/#how-it-works" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">How it works</a>
           <a href="/#free-scan" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
           <a href="/tools" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Tools</a>
+          <a href="/blog" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Resources</a>
           {appUrl && (
             <a href={`${appUrl}/sign-in`} class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Sign in</a>
           )}

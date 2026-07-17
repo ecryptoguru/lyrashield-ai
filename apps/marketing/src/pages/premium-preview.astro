@@ -1,0 +1,64 @@
+---
+import Base from "@layouts/Base.astro"
+import PremiumHero from "@components/landing/PremiumHero.astro"
+import HomeLiteScan from "@components/landing/HomeLiteScan.astro"
+import EvidenceWorld from "@components/landing/EvidenceWorld.astro"
+import AssuranceRecord from "@components/landing/AssuranceRecord.astro"
+import TwoDepths from "@components/landing/TwoDepths.astro"
+import FreeToolsPreview from "@components/landing/FreeToolsPreview.astro"
+import WhereYouWork from "@components/landing/WhereYouWork.astro"
+import Faq from "@components/landing/Faq.astro"
+import FinalCta from "@components/landing/FinalCta.astro"
+import { createMotionMediaManifest } from "../lib/motion-manifest"
+import "@fontsource-variable/bricolage-grotesque/index.css"
+
+const mediaUrl = import.meta.env.PUBLIC_MEDIA_URL || "/media-local"
+const manifest = createMotionMediaManifest(mediaUrl)
+const canonical = new URL("/premium-preview", Astro.site || "http://localhost:4321").toString()
+const description =
+  "A local-only preview of LyraShield AI's evidence-backed assurance world for AI-built application releases."
+
+const faqItems = [
+  {
+    q: "What is release assurance for an AI-built app?",
+    a: "It is a review record that states which authorized checks ran, what they covered, the evidence behind each result, and what a retest established before a release ships.",
+  },
+  {
+    q: "Is this live today?",
+    a: "The passive Lite Check and five browser-local tools are live. The full release-assurance platform is in active development; the waitlist gets first invites and early design-partner access.",
+  },
+  {
+    q: "What does a LyraShield result actually prove?",
+    a: "Only what the retained evidence supports. New scans distinguish detected candidates, independently verified findings, validated fixes, inconclusive retests, and checks that were limited or not applicable.",
+  },
+  {
+    q: "Does LyraShield open Fix PRs today?",
+    a: "Not yet. LyraShield creates approval-gated fix proposals, but PR execution stays blocked until the patch is generated server-side and bound to the exact approval.",
+  },
+  {
+    q: "Does it replace my existing tools?",
+    a: "No. SCA, secret scanning, URL checks, and repository review are coverage layers inside a wider assurance workflow. Specialist tools may still provide deeper coverage in their category.",
+  },
+  {
+    q: "What does it cost?",
+    a: "Pricing lands with early access.",
+  },
+]
+---
+
+<Base
+  title="Premium assurance world preview — LyraShield AI"
+  description={description}
+  canonical={canonical}
+  noindex={true}
+>
+  <PremiumHero />
+  <HomeLiteScan />
+  <EvidenceWorld manifest={manifest} />
+  <AssuranceRecord />
+  <TwoDepths />
+  <FreeToolsPreview />
+  <WhereYouWork />
+  <Faq items={faqItems} />
+  <FinalCta />
+</Base>

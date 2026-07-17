@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
+import { normalizePublicHttpUrl } from "../lib/public-url"
 
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const page = readFileSync(new URL("../pages/scan.astro", import.meta.url), "utf8")
@@ -86,9 +87,24 @@ describe("Lite Check marketing surface", () => {
 
   it("accepts bare domains and normalizes them to HTTPS before scanning", () => {
     expect(page).toContain('id="scan-url" name="url" type="text" inputmode="url"')
-    expect(page).toContain("return /^https?:\\/\\//i.test(value) ? value : `https://${value}`")
+    expect(page).toContain("normalizePublicHttpUrl(input.value)")
     expect(page).toContain("lyrashieldai.com or https://your-app.com")
     expect(homeScan).toContain("lyrashieldai.com or https://your-app.com")
+  })
+
+  it("rejects malformed and local homepage targets before handoff", () => {
+    expect(normalizePublicHttpUrl("lyrashieldai.com")).toBe("https://lyrashieldai.com/")
+    expect(normalizePublicHttpUrl("https://example.com/path?q=1")).toBe(
+      "https://example.com/path?q=1"
+    )
+    for (const target of [
+      "not a url",
+      "localhost",
+      "http://app.local",
+      "https://user:pass@example.com",
+    ]) {
+      expect(() => normalizePublicHttpUrl(target)).toThrow()
+    }
   })
 
   it("distinguishes the live URL scan from browser-local analyzers", () => {
