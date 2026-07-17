@@ -1,6 +1,7 @@
 ---
 import { getEntry, type CollectionEntry } from "astro:content"
 import { readingMinutes } from "../lib/blog-content"
+import { categoryHref, getCategoryLabel } from "../lib/blog-categories"
 
 interface Props {
   post: CollectionEntry<"blog">
@@ -49,11 +50,11 @@ const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
     {post.data.tags.length > 0 && (
       <ul aria-label="Topics">
         {post.data.tags.map((tag) => (
-          <li><a href={`/blog/tags/${tag.toLowerCase().replace(/\s+/g, "-")}`}>{tag}</a></li>
+          <li><a href={categoryHref(tag)}>{getCategoryLabel(tag)}</a></li>
         ))}
       </ul>
     )}
-    <a class="blog-card__read" href={`/blog/${post.id}`} aria-label={`Read ${post.data.title}`}>
+    <a class="blog-card__read link-underline" href={`/blog/${post.id}`} aria-label={`Read ${post.data.title}`}>
       Read article <span aria-hidden="true">→</span>
     </a>
   </div>
