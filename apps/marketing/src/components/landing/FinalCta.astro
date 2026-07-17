@@ -3,15 +3,15 @@ import WaitlistForm from "@components/WaitlistForm.astro"
 ---
 
 <section id="waitlist" aria-labelledby="waitlist-heading" class="px-4 py-24 sm:px-6 lg:px-8">
-  <div class="mx-auto max-w-3xl text-center">
-    <h2 id="waitlist-heading" class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
+  <div class="mx-auto max-w-3xl text-center" data-reveal-group>
+    <h2 id="waitlist-heading" data-reveal class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
       Bring one real release to the design-partner program.
     </h2>
-    <p class="mt-5 text-lg leading-8 text-text-muted">
+    <p data-reveal class="mt-5 text-lg leading-8 text-text-muted">
       Help shape the assurance workflow around an authorized AI-built app, an honest coverage record, and a client-ready handoff.
     </p>
   </div>
-  <div class="mt-12">
+  <div class="mt-12" data-reveal>
     <WaitlistForm />
   </div>
 </section>
