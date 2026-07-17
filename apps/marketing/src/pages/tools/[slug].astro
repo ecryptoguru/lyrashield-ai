@@ -79,25 +79,24 @@ const labelClass = "block text-sm font-medium text-text"
 <script>
   import { checkHeaders, checkRlsSql, checkSetCookie, inspectJwt, scanTextForSecrets } from "../../lib/tool-checks"
 
-  type Severity = "attention" | "ok" | "info"
+  type Severity = "attention" | "info"
 
-  // Presentational severity hinting only — the result copy itself carries the
-  // honest wording. Colors aid scannability; they never assert "secure".
+  // Presentational hinting only — the result copy itself carries the honest
+  // wording. We deliberately use just two tiers: an "attention" accent for
+  // clear action items, and a neutral tier for everything else. We never show
+  // a green "pass" glyph, since a local check cannot establish that anything
+  // is secure (e.g. "No ... protection found" is an absence to fix, not a win).
   const ATTENTION =
-    /\b(missing|unsafe|must never|expired|rotate|exposed|wildcard|permissive|not set|without|insecure|risky|disable[ds]?|no (?:secure|httponly|samesite))\b/i
-  const OK = /^(?:no\b.*(?:found|detected|pattern)|good\b|looks\b|.*\bpresent\b)/i
+    /\b(missing|unsafe|must never|expired|rotate|exposed|wildcard|permissive|not set|insecure|without|disable[ds]?)\b|\bno\b[^.]*\bprotection\b/i
 
   const COLOR: Record<Severity, string> = {
     attention: "var(--danger)",
-    ok: "var(--accent)",
     info: "var(--border)",
   }
-  const GLYPH: Record<Severity, string> = { attention: "!", ok: "✓", info: "•" }
+  const GLYPH: Record<Severity, string> = { attention: "!", info: "•" }
 
   function severityOf(text: string): Severity {
-    if (ATTENTION.test(text)) return "attention"
-    if (OK.test(text)) return "ok"
-    return "info"
+    return ATTENTION.test(text) ? "attention" : "info"
   }
 
   function renderHint(output: Element) {
