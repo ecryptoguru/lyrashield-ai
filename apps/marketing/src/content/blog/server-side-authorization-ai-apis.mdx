@@ -1,0 +1,186 @@
+---
+title: "Server-Side Authorization for AI-Generated APIs"
+description: "Create one deny-by-default authorization seam for API actions, resources, and tenants, then test every sensitive path."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - verification
+draft: false
+heroImage: access-boundary-03
+faq:
+  - q: "Is authorization middleware enough?"
+    a: "Middleware can authenticate users and enforce broad route policy, but resource ownership and business state often become clear only inside the handler or service. Keep the decisive check close to the operation."
+  - q: "Are role checks sufficient for API authorization?"
+    a: "Roles are one policy input. The decision may also depend on the resource, tenant, action, ownership, sharing, and current state. A global role check can grant too much."
+  - q: "What is the difference between 401 and 403?"
+    a: "A 401 response means valid authentication is required. A 403 response means the server recognized the caller but denies the action. A 404 can be used when revealing resource existence would disclose information."
+---
+
+**Direct answer:** Put API authorization on the server at a consistent enforcement seam. For every sensitive request, resolve the authenticated principal and server-owned tenant, name the action, load only the necessary resource facts, and call a deny-by-default policy. Constrain the operation with that decision, then keep negative tests for anonymous, ordinary, wrong-tenant, and privileged identities.
+
+Authentication is necessary input to authorization. It is not the decision. A session can prove that a request belongs to User A while saying nothing about whether User A may update Project B, invite a workspace member, or read an administrative report.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats this policy seam as a core release boundary. It should remain visible in code and test output, not be inferred from a collection of hidden buttons and scattered role comparisons.
+
+## The vulnerable pattern: authentication everywhere, authorization somewhere
+
+**Vulnerable pattern. Keep it in a local fixture.**
+
+```ts
+app.post("/api/workspaces/:id/invitations", requireSession, async (req, res) => {
+  const invitation = await createInvitation({
+    workspaceId: req.params.id,
+    email: req.body.email,
+    role: req.body.role,
+  })
+
+  return res.status(201).json(invitation)
+})
+```
+
+The handler knows who the caller is, but it does not ask whether that caller belongs to the workspace or may invite the requested role. An ordinary user can call a function intended for workspace owners. OWASP describes this class as broken function-level authorization.
+
+Object-level authorization is a separate failure. A user may be allowed to call `projects.update` in their own workspace but not against every project ID. Both checks need coverage.
+
+Scattered checks make the problem harder to see:
+
+```ts
+if (user.role !== "member") {
+  await createInvitation(input)
+}
+```
+
+What does `user.role` mean across multiple workspaces? Does every non-member role have invite permission? Can an owner invite another owner? The condition hides several product decisions in one negative comparison.
+
+## Why generated APIs omit consistent policy
+
+AI coding tools tend to build endpoints one at a time. Each handler gets enough logic to satisfy its immediate prompt. The first uses middleware, the second checks a role string, and the third trusts a tenant ID from the request body. All three may pass happy-path tests.
+
+The generator usually lacks a complete permission model. It cannot infer whether billing admins may read findings, whether support access needs approval, or whether a project becomes immutable after release. When policy is implicit, generated code fills the gap with a plausible check.
+
+Framework middleware can add false comfort. It runs early and is easy to apply to a route group, but it may know only the path and session. Resource ownership and business state often appear after data is loaded. A single middleware flag cannot safely replace that decision.
+
+## Define a small authorization contract
+
+A useful policy input names the principal, action, resource facts, and tenant. Avoid passing an entire request object. Narrow input keeps HTTP details out of policy code and makes tests easier to read.
+
+```ts
+type AuthorizationRequest = {
+  principal: {
+    userId: string
+    memberships: Array<{ workspaceId: string; role: string }>
+  }
+  action: "workspace.invitation.create"
+  resource: {
+    workspaceId: string
+    invitedRole: "member" | "admin"
+  }
+}
+
+function canCreateInvitation(input: AuthorizationRequest): boolean {
+  const membership = input.principal.memberships.find(
+    (item) => item.workspaceId === input.resource.workspaceId
+  )
+
+  if (!membership) return false
+  if (membership.role !== "owner") return false
+  if (input.resource.invitedRole === "admin") return false
+  return true
+}
+```
+
+This example denies admin invitations to show that role is not the only input. A real product may allow them behind stronger review. The important part is that the rule has a name and a testable branch.
+
+Use the policy before the operation:
+
+```ts
+app.post("/api/workspaces/:id/invitations", requireSession, async (req, res) => {
+  const input = invitationSchema.parse(req.body)
+  const context = await loadAuthorizationContext(req.user.id, req.params.id)
+
+  if (
+    !canCreateInvitation({
+      principal: context.principal,
+      action: "workspace.invitation.create",
+      resource: {
+        workspaceId: context.workspace.id,
+        invitedRole: input.role,
+      },
+    })
+  ) {
+    return res.sendStatus(403)
+  }
+
+  const invitation = await createInvitation({
+    workspaceId: context.workspace.id,
+    email: input.email,
+    role: input.role,
+  })
+
+  const publicInvitation = {
+    id: invitation.id,
+    email: invitation.email,
+    role: invitation.role,
+    expiresAt: invitation.expiresAt,
+  }
+
+  return res.status(201).json(publicInvitation)
+})
+```
+
+The server resolves the workspace instead of trusting a tenant field in the body. It also returns an explicit public projection. Internal state, audit fields, and any invitation token stay out of the response. The service can accept the authorization context so a future non-HTTP caller cannot bypass the handler and invoke the operation without policy.
+
+Define that projection through a response schema when the framework supports one. The persistence record may contain a token hash, creator metadata, delivery attempts, provider identifiers, or internal timestamps that the browser never needs. Returning the complete ORM object makes each future database column public by accident. A named response type reverses that default: adding a private column does not change the API. Test the serialized body so a refactor cannot reintroduce the raw record. If the interface does not need the invited email address after submission, omit that field too and return only the invitation ID, role, and expiry.
+
+Keep the projection separate from logs and audit events. An audit record may need the actor and workspace, while the HTTP response may not. Neither surface should contain the invitation token. The delivery service is the only component that should receive the one-time value needed to construct an invitation link.
+
+## Deny by default and constrain data access
+
+New actions should fail until a policy explicitly permits them. A default allow strategy puts every new endpoint one forgotten exception away from exposure.
+
+For object access, enforce scope in the query where practical. A policy may determine that the principal can read projects in Workspace A, and the database query should include `workspaceId: A`. Do not fetch an arbitrary project first and hope every later branch remembers the result is unauthorized.
+
+Separate broad function policy from object policy. `report.export` might require an owner role. The chosen report must also belong to the active workspace. One condition does not imply the other.
+
+Write audit events for sensitive decisions and completed operations. Keep them privacy bounded. Record stable identifiers, action, decision, and policy version where useful, but avoid raw tokens, request bodies, or protected report content.
+
+## Build the negative test matrix
+
+For each sensitive action, list the identities and resource relationships that must pass or fail. A basic invitation matrix may include:
+
+- No session, denied
+- Ordinary member in the correct workspace, denied
+- Owner in another workspace, denied
+- Owner in the correct workspace inviting a member, allowed
+- Owner in the correct workspace inviting a disallowed role, denied
+
+Run the tests through the public API boundary and, when policy code is shared, at the policy-function level. Verify the database state after a denial. A failed response is not sufficient if the invitation row was already created.
+
+Test alternate methods and route versions. A protected `POST` endpoint does not protect a legacy `PUT` handler. Background jobs, webhooks, GraphQL resolvers, and internal service calls need the same enforcement contract where they can trigger the action.
+
+The [IDOR testing guide](/blog/idor-ai-built-apps) provides a two-account procedure for object references. Pair it with function-level tests so the API cannot expose either the wrong resource or the wrong operation.
+
+## Edge cases in real policy systems
+
+Membership can change during a request. High-impact operations may need a transaction that verifies current membership and performs the mutation against the same database state. A policy decision cached for too long can outlive a role revocation.
+
+Support access and impersonation need explicit purpose, scope, expiry, approval, and audit behavior. Do not hide them behind a permanent super-admin role that bypasses tenant boundaries.
+
+Batch operations must authorize every object. Checking the first ID and applying the action to the entire submitted list creates an object-level gap inside an otherwise protected function.
+
+Error behavior should be consistent. Use 401 when authentication is missing or invalid, 403 when a known principal lacks permission, and 404 when the product deliberately conceals resource existence. Never include the protected resource in the denial response.
+
+## What automated checks can and cannot prove
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) helps teams document enforcement points and negative cases. It does not inspect deployed middleware or execute permission tests.
+
+Static analysis can flag handlers without an obvious policy call. Dynamic tests can show a forbidden identity receiving a successful response. Neither can infer every business rule or prove that no alternate entry point exists. Treat automated output as bounded evidence and retain the policy matrix, test results, and known limitations with the release.
+
+## Sources
+
+- [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)
+- [OWASP API Security: Broken Function Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/)
+- [MITRE CWE-862: Missing Authorization](https://cwe.mitre.org/data/definitions/862.html)
+- [OWASP WSTG: API Broken Function Level Authorization](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-API_Testing/04-API_Broken_Function_Level_Authorization)

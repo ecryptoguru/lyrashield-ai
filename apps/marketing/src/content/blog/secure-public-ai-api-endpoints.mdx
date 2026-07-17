@@ -1,0 +1,140 @@
+---
+title: "Secure public AI API endpoints"
+description: "Protect public AI APIs with object authorization, bounded work, cost controls, constrained tools, safe output handling, and tested failure paths."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["web-security", "agent-security", "access-control"]
+draft: false
+heroImage: access-boundary-03
+faq:
+  - q: "Is an API key enough to secure an AI endpoint?"
+    a: "No. A key may identify a client or project, but the server still needs user or workload identity where relevant, object and function authorization, quotas, rotation, and abuse monitoring."
+  - q: "How should an AI API secure streaming responses?"
+    a: "Authorize before streaming, bound generation time and output size, stop work after disconnect where possible, avoid secrets in partial errors, and treat every streamed chunk as untrusted output at the client."
+  - q: "Does rate limiting control model cost?"
+    a: "Not by itself. Cost also depends on input size, output limits, model choice, tool calls, retries, concurrency, and downstream work. Enforce a budget across the whole request."
+---
+
+Secure the ordinary API boundary and the AI action boundary separately. Authenticate the caller, authorize every object and function, validate bounded input, and enforce per-identity rate, concurrency, and cost limits. Restrict model tools and outbound destinations, treat model output as untrusted, minimize retained data, return safe errors, and test denial, replay, timeout, and budget-exhaustion paths.
+
+## One endpoint crosses two control planes
+
+A public AI endpoint receives internet traffic like any other API. It may also send data to a model, execute tools, fetch remote content, or trigger a consequential action. An API key and a prompt filter do not cover that combined path.
+
+The [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) separates deterministic API controls from AI-assisted review and agent permissions. Authentication, authorization, schemas, quotas, and network policy should not depend on a model deciding to behave.
+
+The [OWASP API Security Top 10 2023](https://owasp.org/API-Security/editions/2023/en/0x00-header/) includes broken object authorization, broken function authorization, unrestricted resource consumption, inventory problems, and unsafe consumption of third-party APIs. AI endpoints inherit those risks and add expensive or tool-capable processing.
+
+## Do not forward a request directly to an agent
+
+This route is compact and dangerous:
+
+```ts
+// UNSAFE: identity, work, tools, and outbound access are unbounded
+app.post("/api/assistant", async (req, res) => {
+  const result = await agent.run(req.body.prompt, {
+    tools: allTools,
+    fetch: globalThis.fetch,
+  })
+  res.json(result)
+})
+```
+
+Any caller can submit a large prompt, select an expensive path indirectly, invoke every registered tool, or persuade the agent to fetch an arbitrary URL. The response may contain unsafe markup, private tool output, or internal errors.
+
+Generated code misses this because the prompt asks for a working AI route. The easiest proof is one successful request. Negative authorization, token cost, disconnect behavior, tool scope, and hostile output are separate product requirements.
+
+A safer shape makes those decisions before model execution:
+
+```ts
+app.post("/api/workspaces/:id/assistant", requireSession, async (req, res) => {
+  const input = assistantRequestSchema.parse(await readBoundedJson(req, 32_000))
+  const access = await authorizeWorkspaceAction(req.user.id, req.params.id, "assistant:use")
+  if (!access) return res.sendStatus(404)
+
+  const budget = await reserveRequestBudget({
+    principal: req.user.id,
+    workspaceId: req.params.id,
+    maxInputTokens: 8_000,
+    maxOutputTokens: 2_000,
+    maxToolCalls: 3,
+  })
+
+  const result = await runBoundedAssistant(input, {
+    signal: AbortSignal.timeout(30_000),
+    tools: toolsForRole(access.role),
+    outboundPolicy: configuredDestinationPolicy,
+    budget,
+  })
+
+  return res.json(publicAssistantResponse.parse(result))
+})
+```
+
+The numbers are examples, not universal limits. A real implementation also needs safe error mapping, concurrency control, cancellation, idempotency for mutations, provider retry handling, audit events, and tests for the selected model and tools.
+
+## Authenticate principals, then authorize resources
+
+An API key can identify a client application, meter a project, or authorize a machine workload. It does not prove which end user is acting unless the application has designed that identity binding.
+
+For every route, name the principal, function, object, tenant, and condition. Derive user and workspace identity from verified server-side credentials. Do not accept `userId`, `role`, `accountId`, or `plan` from JSON as proof.
+
+Test with two owned accounts and known synthetic objects. A valid Account B token should not read Account A's conversation, file, vector collection, run, tool result, or billing record. Repeat the test for list, export, update, delete, and retry routes.
+
+Administrative model changes, tool enablement, prompt-template updates, and quota overrides need function-level authorization. Hiding those controls in an internal UI does not protect the endpoint.
+
+## Bound the whole unit of work
+
+Requests should have limits on body bytes, field counts, string lengths, file size, input tokens, output tokens, tool calls, recursion, elapsed time, concurrency, queue depth, and retries. Apply limits per principal and workspace where shared accounts could hide one abusive user.
+
+Reserve budget atomically before expensive work. Reconcile actual usage after completion according to provider-reported values without allowing an approved cap to grow silently. Decide what happens when usage reporting is late or unavailable.
+
+Cancel provider and tool work when the request times out or the client disconnects where the runtime supports propagation. A closed browser should not leave a costly agent running for ten minutes without an owner.
+
+The related guide to [rate limiting AI-built apps](/blog/rate-limiting-ai-apps) covers limiter design. Rate limits are one input. A single allowed request can still be expensive when its prompt, output, tools, and retries are unbounded.
+
+Maintain an inventory of public and partner endpoints, versions, authentication schemes, owners, models, tools, and retirement dates. Remove old routes rather than leaving an undocumented version online. The [AI app prelaunch security checklist](/blog/ai-app-prelaunch-security-checklist) provides a compatible release inventory for the surrounding application.
+
+## Constrain model tools and downstream URLs
+
+Use an allowlist of tools for the exact route and role. Split read tools from mutations. Validate every tool argument against a strict schema, reauthorize the target resource inside the tool, and return only the fields the model needs.
+
+Consequential actions such as deleting data, sending money, changing access, publishing content, or deploying code should use an explicit approval or business workflow outside free-form model judgment. Bind approval to the exact action, resource, environment, parameters, and expiry.
+
+For outbound fetches, prefer configured resource identifiers or named destinations. If users can supply URLs, parse them on the server, allow only required schemes, reject credentials, resolve and validate addresses, block private and special ranges, limit redirects, revalidate each hop, and pin the transport according to the threat model. Application checks do not replace network egress policy.
+
+The [NCSC Guidelines for Secure AI System Development](https://www.ncsc.gov.uk/files/Guidelines-for-secure-AI-system-development.pdf) recommends protecting data, checking inputs, restricting actions, and designing fail-safes across AI development and operation. The exact implementation remains application-specific.
+
+## Treat output as untrusted data
+
+Model output can contain HTML, Markdown, URLs, code, SQL, shell text, false citations, or instructions copied from untrusted context. Render plain text when rich output is unnecessary. For rich content, use a reviewed parser and sanitizer, restrict links, and apply a suitable Content Security Policy.
+
+Never pass model text directly into `eval`, a shell, a database query, a template sink, or an unrestricted fetch. Structured output still needs schema validation because models can omit fields, exceed lengths, or produce values outside the business rule.
+
+For streaming, authorize and reserve budget first. Bound duration and bytes, stop upstream work after disconnect, and avoid exposing stack traces or provider payloads in partial frames. The client must insert chunks through safe sinks.
+
+## Minimize logs and retained prompts
+
+Decide whether prompts, uploads, embeddings, tool traces, and output need storage. Keep a purpose, access policy, retention period, deletion path, and provider record for each retained data class.
+
+Log safe security events such as principal reference, route, model family, usage buckets, tool name, policy outcome, request correlation, and error category. Avoid raw prompts, credentials, authorization headers, signed URLs, private tool results, and full model responses by default.
+
+[OWASP ASVS 5.0.0](https://owasp.org/www-project-application-security-verification-standard/) can provide scoped requirements for API authentication, access control, input handling, files, cryptography, logging, and configuration. It does not certify an endpoint unless the selected requirements are actually verified.
+
+## Test abuse without harming a live system
+
+Use an isolated environment, synthetic accounts, inert files, and stubbed mutation tools. Test missing and expired credentials, cross-tenant IDs, forbidden functions, oversized bodies, long prompts, concurrent requests, repeated tool calls, stale approvals, provider timeout, malformed model output, hostile Markdown, blocked URLs, disconnect, and budget exhaustion.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record release controls. The public [LyraShield Lite Check](/scan) is passive and read-only. It cannot authenticate to an API, execute destructive requests, inspect model tools, or prove resource authorization.
+
+## What automated review cannot decide
+
+Static analysis can flag missing schemas or dangerous sinks. Dynamic tests can exercise the cases you provide. A model can critique another model's output. None can infer every business permission, accept the consequence of a blocked request, or prove that an untested tool and provider behave safely.
+
+Keep the API inventory, tool list, budgets, data flows, and test limitations versioned with the service. A new tool changes the endpoint's authority even when its URL stays the same.
+
+### Sources
+
+- [OWASP API Security Top 10 2023](https://owasp.org/API-Security/editions/2023/en/0x00-header/)
+- [NCSC, Guidelines for Secure AI System Development](https://www.ncsc.gov.uk/files/Guidelines-for-secure-AI-system-development.pdf)
+- [OWASP Application Security Verification Standard 5.0.0](https://owasp.org/www-project-application-security-verification-standard/)

@@ -1,0 +1,132 @@
+---
+title: "Rate Limiting for AI Apps"
+description: "Design endpoint-specific rate, concurrency, payload, queue, and cost limits for AI APIs without trusting a single weak identifier."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: false
+heroImage: web-execution-03
+faq:
+  - q: "Is an IP-only rate limit enough?"
+    a: "Usually not. Many legitimate users can share an IP, while one actor can rotate addresses. Use a trusted authenticated principal where available and combine it with IP, session, device, tenant, or provider controls according to the endpoint."
+  - q: "Should a limited API return 429 or 503?"
+    a: "Use 429 when this client has exceeded an applicable request policy. Use 503 when the service is generally unavailable or overloaded. Either response can include a useful Retry-After value when the server can estimate one."
+  - q: "Should an app fail open if the limiter is unavailable?"
+    a: "Choose per endpoint. A costly generation or sensitive mutation may need to fail closed or enter a bounded queue. A low-risk read may use a conservative local fallback. Document and test the degraded behavior."
+---
+
+**Direct answer:** Rate-limit an AI app according to the resource each endpoint can consume. Set separate request, concurrency, payload, token or cost, and queue limits. Count against a trustworthy principal when possible, distribute counters consistently, and define what happens when the limiter fails. Return 429 for client-specific excess with Retry-After when useful.
+
+A single rule such as "100 requests per minute per IP" rarely matches an AI product. One request might read cached metadata. Another can upload a large file, reserve a worker for several minutes, or trigger paid model tokens. Rate is only one dimension of resource consumption.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats limits as part of an application's execution boundary and release evidence. A limiter reduces an identified abuse path. It does not prove the endpoint is authorized, correct, or inexpensive under every input.
+
+## The vulnerable pattern: one counter for every route
+
+**Vulnerable pattern. Do not use a spoofable header as the only key.**
+
+```ts
+app.use(
+  rateLimit({
+    key: (req) => req.headers["x-user-id"] || req.ip,
+    requests: 100,
+    windowSeconds: 60,
+  })
+)
+```
+
+The caller can set `x-user-id` unless a trusted gateway removes and rewrites it. The same threshold covers cheap reads, logins, uploads, webhooks, and model generation. A client can also start many slow requests just below the per-minute count and exhaust concurrency.
+
+[OWASP API4:2023](https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/) covers missing or inappropriate limits on execution time, memory, file size, records, operations, and paid downstream services. The control should follow the scarce resource, not a convenient middleware default.
+
+## Why generated apps inherit arbitrary numbers
+
+Rate-limiter packages need a number in their setup example, so generated code supplies one. That value may have no relationship to worker capacity, model cost, expected user behavior, or provider quota. It is configuration that looks like policy.
+
+AI-generated code also tends to equate rate limiting with an IP counter. `req.ip` can be useful only when proxy trust is configured correctly. If the application accepts `X-Forwarded-For` directly from the internet, a caller may choose the counted value. If the app trusts no proxy, every user behind the ingress may appear to share one address.
+
+Finally, a request counter cannot bound the work inside each request. A prompt with a large context, a high output cap, or multiple agent tool calls can consume far more than a small prompt. Upload bytes, records returned, execution time, and downstream spend need their own limits.
+
+## Start with an endpoint budget
+
+For each endpoint, write down the unit that creates risk and the principal responsible for it. Avoid one global threshold.
+
+| Endpoint      | Resources to bound                                                 | Useful counting keys                                       |
+| ------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| Cached read   | request rate and response bytes                                    | session, principal, IP fallback                            |
+| File upload   | request rate, bytes, file count, processing concurrency            | principal and workspace                                    |
+| AI generation | concurrent jobs, input tokens, output cap, daily cost, queue depth | principal, workspace, plan policy                          |
+| Webhook       | body size, signature failures, processing queue                    | verified endpoint or provider context, plus IP as a signal |
+| Login         | attempts and recovery actions                                      | account and network signals                                |
+
+The authentication row needs special treatment. The related guide on [brute force and account enumeration](/blog/brute-force-account-enumeration) covers generic responses, MFA, lockout tradeoffs, and account-aware throttling. A general API limit is not a complete login defense.
+
+Derive initial values from a measured capacity test and a realistic user journey. Leave headroom for bursts. Record why each limit exists, who owns it, and what evidence would justify changing it. Do not copy a competitor's numbers or treat a provider maximum as your safe operating point.
+
+## Choose a trustworthy key
+
+After authentication, a server-verified user or service principal is usually stronger than an IP address. Expensive shared resources may also need a workspace or organization key so many accounts cannot bypass a common budget. Keep an IP or network signal as another dimension when it helps with anonymous abuse.
+
+Before authentication, use a combination appropriate to the privacy and abuse model: trusted client IP, short-lived browser session, proof-of-work or challenge result, and endpoint-specific identifiers. Do not collect a durable fingerprint merely because it is available. Document retention and privacy consequences.
+
+Cloudflare's current [rate-limiting guidance](https://developers.cloudflare.com/waf/rate-limiting-rules/best-practices/) supports different counting characteristics, including headers, tokens, cookies, and request fields, depending on plan and configuration. Those examples do not make a client-supplied header trustworthy. The origin or an authenticated gateway must establish the value.
+
+## Combine rate with concurrency and cost
+
+A token bucket can permit short bursts while enforcing an average rate. It is a useful request control, not the whole design. Add a semaphore or job lease for concurrent expensive work. Bound the queue so accepted requests cannot accumulate without limit.
+
+Validate body size before parsing. Limit collection lengths and model input tokens. Set server-owned output caps and timeouts. If an agent can call tools repeatedly, bound the number and cost of steps within the job. Enforce a workspace budget before reserving downstream capacity, then reconcile provider-reported usage without allowing the approved cap to expand after the request starts.
+
+```ts
+const decision = await limits.reserve({
+  principalId: session.userId,
+  workspaceId: session.workspaceId,
+  operation: "generate-report",
+  maxConcurrent: policy.concurrentReports,
+  estimatedCostUnits: estimateCost(request),
+})
+
+if (!decision.allowed) {
+  response.setHeader("Retry-After", String(decision.retryAfterSeconds))
+  return response.status(429).json({ error: "Request limit reached" })
+}
+
+try {
+  return await runBoundedGeneration(request, decision.lease)
+} finally {
+  await decision.lease.release()
+}
+```
+
+Reservations need atomic storage in a distributed deployment. A read followed by an increment can oversubscribe the limit under concurrency. Use the datastore's atomic operation or a reviewed rate-limiting service. Give leases an expiry so a crashed worker does not reserve capacity forever.
+
+## Return useful and honest failures
+
+[RFC 6585](https://www.rfc-editor.org/rfc/rfc6585.html) defines 429 as too many requests in a given amount of time and permits a `Retry-After` header. It deliberately does not dictate how the server identifies or counts a user. Return 429 when this caller or scope exceeded a policy. Use 503 when the service as a whole cannot accept work.
+
+Do not reveal another user's quota or internal provider spend in the response. A stable error code, retry guidance, and the relevant scope are usually enough. For asynchronous work, consider accepting the job only after capacity is reserved rather than returning a queue ID that cannot be serviced.
+
+Decide how each route behaves if the central counter is unavailable. Sensitive mutations and expensive generation often fail closed or use a small local emergency budget. Low-risk reads may degrade with a conservative in-process limiter. A silent fail-open path can convert a datastore outage into a cost or availability incident.
+
+## Verify limits in a controlled environment
+
+Use a test deployment with fake provider calls or strict spend caps. Exercise normal bursts, sustained traffic, concurrent slow jobs, oversized bodies, and different authenticated principals. Confirm that the counter cannot be reset by changing an untrusted header.
+
+Run the same tests across multiple application instances. Check atomicity at the threshold and lease recovery after a worker exits. Verify the HTTP status, `Retry-After` behavior, response body, logs, and metrics without storing prompts or sensitive target data.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help teams record which limits exist. It cannot generate load, inspect distributed counters, or verify provider quotas.
+
+## What automation can and cannot prove
+
+Load tests can show how a particular build behaves under defined traffic. Unit tests can prove counter and fallback logic. Configuration checks can detect missing payload caps or overly broad proxy trust.
+
+No automated result identifies a universally safe threshold. Capacity, user behavior, provider pricing, and abuse patterns change. A passing test is evidence for the tested workload and configuration, not a guarantee that the service cannot be exhausted. Monitor denials, queue depth, latency, and spend, then revise limits through review.
+
+## Sources
+
+- [OWASP API4:2023: Unrestricted Resource Consumption](https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/)
+- [IETF RFC 6585: Additional HTTP Status Codes](https://www.rfc-editor.org/rfc/rfc6585.html)
+- [Cloudflare: Rate limiting best practices](https://developers.cloudflare.com/waf/rate-limiting-rules/best-practices/)

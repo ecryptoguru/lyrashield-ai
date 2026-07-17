@@ -1,0 +1,132 @@
+---
+title: "Build a Secure MCP Server"
+description: "Secure an MCP server with deliberate transport choices, audience-bound tokens, per-tool authorization, session isolation, and execution-time approval."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - access-control
+  - verification
+draft: false
+heroImage: agent-security-02
+faq:
+  - q: "Does a local stdio MCP server need authorization?"
+    a: "A direct stdio server does not use the remote HTTP authorization flow, but it still runs with the client's operating-system privileges. Restrict which client can launch it, minimize filesystem and network access, validate inputs, and sandbox consequential tools."
+  - q: "Does OAuth provide application authorization for every MCP tool?"
+    a: "No. OAuth can authenticate a caller and grant scopes to the MCP resource. The server must still authorize each resource and tool against the current user, tenant, object, operation, and current policy."
+  - q: "Can an MCP server trust tool annotations?"
+    a: "No. Tool names, descriptions, annotations, arguments, and outputs can be wrong or malicious. Hosts may use annotations for presentation, but the server must enforce authorization and the host should seek consent for consequential operations."
+  - q: "When should an MCP tool require human approval?"
+    a: "Require execution-time approval when a tool can mutate important state, spend money, publish data, change permissions, access sensitive systems, or execute code. Bind approval to the exact arguments and expire it after that operation."
+---
+
+**Direct answer:** Use stdio for one trusted local client or authenticated HTTPS for remote MCP. Validate audience-bound access tokens on every HTTP request, never pass the client's token to a downstream API, authorize every resource and tool, isolate sessions by user, minimize scopes, and require execution-time approval for mutations, external side effects, or code execution.
+
+Model Context Protocol makes tools and resources available to capable clients. It does not decide which user may read a record, whether a tool should mutate production, or how a child process should be contained. Those remain application and operating-system responsibilities.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) places an MCP server inside the wider application boundary. The same rules for identity, object authorization, input validation, secrets, isolation, and evidence still apply. Protocol conformance is necessary, but it is not a security verdict.
+
+## Draw the actual trust boundaries
+
+Before choosing middleware, draw six actors: the user, MCP host, MCP client, MCP server, authorization server, and any downstream API. Add the data stores and operating-system resources the server can reach.
+
+Then answer concrete questions. Who starts the server? Which process owns its credentials? Does one server instance handle multiple users? Can a tool read files, run commands, call a paid API, or update a database? Which identity does a downstream service see? Where are tokens and session identifiers logged?
+
+This diagram usually reveals that "the MCP client is trusted" is too broad. A legitimate client can carry malicious prompt content, invoke a tool with an unauthorized object ID, or connect on behalf of more than one user.
+
+## Choose stdio or HTTP deliberately
+
+Direct stdio is suitable for a local server launched by one trusted host. It narrows network exposure, but the child process inherits the permissions and environment that the host gives it. Limit filesystem roots, environment variables, subprocesses, and outbound network access. Do not assume a local process is harmless because it has no listening port.
+
+A remote MCP server needs authenticated HTTPS. Follow the versioned [MCP authorization specification for 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization), including protected-resource discovery and authorization-server metadata. Clients use the `resource` parameter when requesting tokens. The server validates that each token was issued for this MCP resource as its intended audience.
+
+The authorization-code flow must use PKCE. Redirect URIs need exact registration and comparison, and state must be checked. Short-lived tokens reduce the window after theft, but token lifetime is not a substitute for audience, scope, issuer, signature, and expiry validation.
+
+Do not expose a local stdio proxy over a broad unauthenticated HTTP listener. An MCP security issue in that proxy can turn a web-origin bug into local process execution. If a proxy must spawn child servers, authenticate the proxy, allowlist executable definitions, avoid shell construction, and sandbox each child.
+
+## The risky token-passthrough pattern
+
+This simplified example is intentionally unsafe.
+
+```ts
+// VULNERABLE: accepts any bearer value and forwards it unchanged
+app.post("/mcp", async (req, res) => {
+  const token = req.headers.authorization?.replace("Bearer ", "")
+  const result = await downstream.fetch(req.body.path, { token })
+  res.json(result)
+})
+```
+
+The server has not verified issuer, signature, expiry, audience, user, scope, or tenant. It also passes the inbound token to a different resource. MCP security guidance calls token passthrough an anti-pattern, and the current authorization specification forbids it.
+
+Generated server code can miss this boundary because a generic bearer-token example proves only that a header exists, while a downstream SDK example accepts any token string. Neither snippet carries the MCP resource audience, the application's tenant model, or the separate downstream OAuth role. Those requirements have to be stated and tested.
+
+If the server needs a downstream API, treat the MCP server as a separate OAuth client for that API. Obtain a downstream token intended for the downstream audience. Bind it to the current user or a narrowly scoped service operation as the architecture requires. Do not exchange identities silently or let one user's cached downstream token reach another session.
+
+## Validate identity, then authorize the operation
+
+Token validation answers whether the presented credential is valid for this MCP server. Application authorization answers whether that caller may perform this operation on this object now.
+
+```ts
+app.post("/mcp", requireMcpToken, async (req, res) => {
+  const call = toolCallSchema.parse(req.body)
+  const principal = req.auth.principal
+
+  const allowed = await policy.canInvoke({
+    principal,
+    tenantId: principal.tenantId,
+    tool: call.name,
+    resourceId: call.arguments.resourceId,
+  })
+
+  if (!allowed) return res.sendStatus(403)
+  return res.json(await runApprovedTool(call, principal))
+})
+```
+
+Keep schemas strict. Reject unknown tool arguments when they could change behavior. Resolve tenant and owner scope on the server instead of trusting a client-supplied tenant ID. Apply the same checks to resources, prompts, completion helpers, subscriptions, and any alternate route that reaches the underlying service.
+
+Scopes should describe useful, understandable capabilities. Avoid one `admin` scope that covers reading private data, changing permissions, and executing tools. The server still checks object ownership and current policy after a scope check.
+
+Tool descriptions and annotations are untrusted metadata. A `readOnlyHint` can help a host explain an operation, but it does not constrain the implementation. Server-side policy controls the effect.
+
+## Isolate sessions and logs
+
+Bind each session to the authenticated principal. Do not accept a session identifier as proof of identity. Generate identifiers with a cryptographically secure source, expire them, rotate them after privilege changes, and reject a session presented by a different user.
+
+Avoid global variables such as `currentUser` in a server that handles concurrent clients. Keep principal and tenant context attached to the request or connection. Partition caches by identity and policy scope. Cancel subscriptions when the authenticated session ends.
+
+Logs should record tool name, decision, principal identifier, tenant identifier, request correlation ID, and outcome. Redact tokens, secrets, raw prompts, file contents, and sensitive tool output. A log that captures every argument may become a second copy of the data the authorization layer was designed to protect.
+
+## Gate consequential tools at execution time
+
+Consent at initial connection is not sufficient for a tool that later deletes data, sends a message, deploys code, spends funds, or runs a command. Show the exact operation immediately before execution. Bind the approval to the tool name, normalized arguments, principal, target, and expiry. Consume it once.
+
+For code execution, use an isolated process or container with a read-only base, bounded CPU and memory, a narrow writable directory, no ambient credentials, and denied outbound network access unless a named destination is required. Prompt filtering may reduce obvious misuse, but it cannot replace authorization or containment.
+
+LyraShield AI's repository MCP package separates read-only findings and launch-readiness tools from scan and report mutations. Mutations use an approval gate and fail closed by default when no gate is configured. This describes implemented code, not general production availability. The [LyraShield evidence methodology](/methodology) explains the approval and evidence boundaries.
+
+## Test negative cases with harmless fixtures
+
+Use synthetic users, synthetic tenants, and tools that write only to a disposable test store.
+
+1. Present an expired token, wrong-audience token, and insufficient-scope token. Each should fail before tool dispatch.
+2. Give user B the identifier of user A's test resource. Read and mutation calls should fail without revealing A's data.
+3. Reuse a session identifier under another user. The server should reject it.
+4. Attempt a mutation without approval, with changed arguments, and with an expired approval.
+5. Pass malformed and oversized arguments. Verify bounded rejection and redacted logs.
+6. For a sandboxed tool, attempt access outside its test directory and to an unapproved network destination.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record whether these boundaries have owners and tests. It does not connect to an MCP server, validate OAuth metadata, execute a tool, or inspect a sandbox.
+
+Automated checks can confirm schemas, token-validation branches, denied cross-user cases, and approval binding. They cannot infer whether a business operation should exist, whether every downstream route was modeled, or whether an approval screen gives a human enough context.
+
+For narrower tool design, continue with [least-privilege MCP tools](/blog/least-privilege-mcp-tools). For local execution containment, see [sandboxing and egress controls for coding agents](/blog/coding-agent-sandbox-egress).
+
+## Sources
+
+- [Model Context Protocol: Security Best Practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices)
+- [Model Context Protocol 2025-11-25: Authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
+- [Model Context Protocol: Understanding Authorization](https://modelcontextprotocol.io/docs/tutorials/security/authorization)
+- [Model Context Protocol 2025-11-25: Specification](https://modelcontextprotocol.io/specification/2025-11-25)

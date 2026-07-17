@@ -1,0 +1,137 @@
+---
+title: "What to do with a critical security finding"
+description: "Treat critical severity as a triage input: confirm scope and exposure, contain credible risk, preserve evidence, fix, and run a fresh retest."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["verification", "vibe-coding-security"]
+draft: false
+heroImage: decision-operations-03
+faq:
+  - q: "Should we shut down the service after a critical finding?"
+    a: "Shut down or isolate an affected path when credible active exploitation or unacceptable exposure makes continued operation riskier. Consider safety, availability, and containment alternatives instead of applying a universal shutdown rule."
+  - q: "Does a critical rating mean the issue is exploitable in our system?"
+    a: "No. Severity describes potential impact under stated assumptions. You still need to confirm the affected component, reachable path, configuration, privileges, and available exploitation evidence."
+  - q: "When is a temporary mitigation acceptable?"
+    a: "A mitigation can be appropriate when it quickly removes exposure and is monitored, time-bounded, assigned to an owner, and followed by a durable fix plus a fresh retest."
+---
+
+Assign one incident owner and contain credible active risk without waiting for perfect evidence. Preserve the finding and relevant logs in parallel when safe, then confirm the affected asset, version, path, and exposure. Choose a fix or mitigation from the verified context, test it independently, and run a fresh retest. Escalate notification duties through the applicable response plan.
+
+## What a critical label tells you
+
+A scanner's severity rating is useful, but it does not prove that the condition applies, is reachable, or has been exploited. Before anyone announces an incident or merges an emergency patch, establish what the tool observed and what remains an assumption.
+
+The [LyraShield AI security guide for vibe-coded applications](/blog/vibe-coding-security-guide) separates a detected candidate from an independently verified finding, a retest-confirmed outcome, and an inconclusive result. That vocabulary keeps the response tied to the available evidence.
+
+[NIST SP 800-61 Rev. 3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) integrates incident response with risk management and treats detection, response, recovery, and later improvement as connected work. [CISA's SSVC guide](https://www.cisa.gov/sites/default/files/publications/cisa-ssvc-guide%20508c.pdf) adds decision context such as exploitation status, technical impact, mission prevalence, and public or safety impact. Neither approach says to sort solely by a severity number.
+
+[CVSS](https://www.first.org/cvss/v4-0/) describes technical severity under stated conditions. It does not establish that the affected component is present, the path is exposed, exploitation has occurred, or the resulting business and safety impact is acceptable. Applicability and exposure establish whether the scenario can exist in this environment. Exploitation evidence changes urgency. Business impact shapes the response, while risk acceptance is a separate, accountable decision with an owner, rationale, compensating controls, and review date.
+
+## The dangerous pattern: patch first, understand later
+
+Pressure can produce an operating rule like this:
+
+```yaml
+# VULNERABLE OPERATING PATTERN: do not automate this decision
+when: finding.severity == "critical"
+action:
+  generate_patch: true
+  merge_without_review: true
+  close_finding: true
+```
+
+This loses evidence, assumes the generated change is correct, and marks the issue resolved before a fresh test. The patch may change an unrelated path or create an availability problem while leaving the exposed condition intact.
+
+AI-generated remediation is especially prone to this mistake because a model sees the reported code fragment, not necessarily the production routing, identity provider, feature flags, reverse proxy, customer obligations, or safety impact of taking the system down. A plausible diff is still a proposal.
+
+## First 30 minutes: establish control
+
+Name one decision owner and one technical lead. Open a restricted record with the original alert, detection time, target revision, affected asset, reporter, and current evidence state. Preserve relevant logs and configuration before rotation, rollback, or redeployment overwrites them when that can be done without delaying urgent containment. If exploitation is active, contain it first, then record which evidence could not be retained and why.
+
+Then answer four questions:
+
+1. Does the named component and version exist in the affected environment?
+2. Can an untrusted or compromised actor reach the path under current controls?
+3. Is there evidence of attempted or successful exploitation?
+4. What immediate action reduces exposure without creating greater harm?
+
+If active exploitation is credible, isolate the affected function, revoke exposed credentials, disable a vulnerable feature, restrict ingress, or roll back to a known reviewed state as appropriate. A full shutdown is one option, not a default. For a safety-sensitive or availability-critical service, an improvised shutdown may have serious consequences of its own.
+
+## Confirm scope without attacking production
+
+Reproduce the condition in an isolated environment using the same affected version and relevant configuration. Use a minimal, non-destructive check that demonstrates the precondition without extracting real data or targeting another organization's system.
+
+Review:
+
+- the exact package, route, permission, or configuration named by the finding;
+- deployment differences between the scanned revision and the running system;
+- network reachability and authentication requirements;
+- tenant and role boundaries;
+- logs for the affected action, using approved access and retention procedures;
+- adjacent systems that share the same component or credential.
+
+The related guide to [verifying a security finding](/blog/verify-security-finding) covers this evidence step in more depth. A second model repeating the alert is not independent verification.
+
+Check the [CISA Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) when the issue involves a published CVE. Presence in KEV raises urgency only if the affected product and version apply. Absence from KEV does not show that exploitation is impossible.
+
+## Choose containment, mitigation, or remediation
+
+Containment reduces immediate exposure. Mitigation changes the conditions that make exploitation practical. Remediation removes the underlying weakness. Teams often need all three, but not in one hurried change.
+
+A temporary access rule may contain a vulnerable endpoint while engineers prepare a validated upgrade. Credential rotation may stop use of an exposed key while code and deployment changes remove the leak. A feature flag may buy time, provided someone owns its removal and monitors bypass paths.
+
+Write the decision down:
+
+```yaml
+# REVIEWED RESPONSE RECORD
+owner: incident-lead
+scope: affected-service-and-version
+evidence_state: detected
+containment: restricted-ingress
+durable_fix: tracked-change
+retest: required
+expires_at: time-bounded-mitigation
+```
+
+Do not put secrets, personal data, or exploit-ready details in a broadly visible ticket. Use the team's restricted incident channel and disclosure process.
+
+## Test the change and retest the condition
+
+Review a proposed fix like any other security-sensitive change. Inspect authorization, error paths, dependency updates, migrations, rollback behavior, and tests. Run normal regression checks plus an independent test derived from the original precondition.
+
+After deployment to an authorized test environment, run a fresh server-owned retest against the original condition. Preserve both results. A clean deterministic retest supports a retest-confirmed outcome only when the relevant scanner coverage was complete. If the affected path was skipped or the environment did not match, record the result as inconclusive.
+
+LyraShield AI can represent a finding workflow, approval-bound fix proposal, and retest record. It does not automatically execute a fix pull request. Human approval and the repository's own merge controls remain required.
+
+Use the browser-local [AI app security checklist](/tools/ai-app-security-checklist) to document incident ownership, logging, recovery, and retest readiness. It cannot assess the finding or replace an incident plan.
+
+## Notify from the applicable plan
+
+A confirmed compromise can trigger contractual, privacy, regulatory, insurer, customer, or provider duties. The technical lead should not improvise those notices from a scanner screen. Escalate through the organization's incident-response, legal, privacy, and communications owners.
+
+Keep statements scoped to confirmed facts: affected asset, known time window, observed activity, action taken, and remaining uncertainty. Update them when evidence changes.
+
+## Preserve the decision trail
+
+Emergency work is easy to remember incorrectly after the service stabilizes. Keep a time-ordered record of who made each containment decision, which evidence supported it, what changed in production, and when credentials or artifacts were replaced. Link each action to an immutable commit, deployment, configuration revision, or provider event where possible.
+
+After recovery, compare the actual sequence with the response plan. Did the alert reach the right person? Could the team identify the running version? Did logs survive containment? Was the rollback usable? Turn specific gaps into owned changes with dates. Avoid rewriting the original finding to match what the team later learned. Add the new evidence beside it so a reviewer can see how the state changed.
+
+If the candidate proves inapplicable, record why, including the observed version, configuration, and reachability. A reasoned closure is useful. A one-word "false positive" dismissal is not.
+
+Emergency patches can widen the incident if they bypass ordinary review or deployment controls. Keep the change as small as the containment goal permits, but still inspect adjacent authorization, migration, dependency, and rollback effects. Test from a clean checkout so an engineer's local state does not hide a missing file or unrecorded setting.
+
+If several services share the vulnerable component, use one coordinated scope list rather than opening disconnected fixes with conflicting assumptions. Track which instances are contained, patched, retested, or still unknown. Do not close the parent response because the first visible service recovered.
+
+## Close the incident with evidence
+
+Automation can preserve alert data, page an owner, collect bounded logs, open a restricted case, and require a retest. It cannot decide the safety impact of shutdown, the credibility of incomplete exploitation evidence, or the organization's notification duties.
+
+The response closes only when containment is stable, the durable change has passed review, recovery is monitored, and the result record says what was and was not verified. Severity may start the clock. Evidence determines the next action.
+
+### Sources
+
+- [NIST SP 800-61 Rev. 3, Incident Response Recommendations and Considerations](https://csrc.nist.gov/pubs/sp/800/61/r3/final)
+- [CISA, Stakeholder-Specific Vulnerability Categorization Guide](https://www.cisa.gov/sites/default/files/publications/cisa-ssvc-guide%20508c.pdf)
+- [CISA, Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)
+- [FIRST, Common Vulnerability Scoring System version 4.0](https://www.first.org/cvss/v4-0/)

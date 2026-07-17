@@ -1,0 +1,98 @@
+---
+title: "Public-by-Default Deployments and Storage"
+description: "Find exposed previews, app origins, database APIs, and storage before launch, then prove each access boundary with logged-out and second-account tests."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - verification
+draft: false
+heroImage: access-boundary-04
+faq:
+  - q: "Does noindex make an AI app private?"
+    a: "No. A noindex directive asks cooperative search engines not to index a page. Anyone who has or discovers the URL can still request it unless an authentication or network boundary denies access."
+  - q: "Is an unguessable preview URL access control?"
+    a: "No. A long deployment URL may reduce casual discovery, but it is still a bearer-like location that can leak through messages, logs, browser history, analytics, or referrers. Protect the deployment with an enforced identity or network check."
+  - q: "How can I test a bucket without exposing private data?"
+    a: "Create a synthetic object with no customer or operational data, test anonymous and authorized reads against that object, then inspect the bucket, account, access point, and identity policies. Delete the object after recording the result."
+  - q: "Does passing a logged-out test prove the deployment is private?"
+    a: "It proves only the route and method you tested from that location. Review alternate domains, old deployments, storage endpoints, APIs, HTTP methods, cached responses, and provider policy. Repeat the test after configuration changes."
+---
+
+**Direct answer:** Inventory every deployment URL, custom domain, API origin, database endpoint, and storage surface your AI-built app creates. Decide which ones should be public. Protect the rest with authentication or a network boundary, then test them logged out and as a second account. Treat `noindex` and hard-to-guess URLs as discoverability controls, not authorization.
+
+An app can have a private-looking interface while its preview, generated deployment URL, database API, or object store remains reachable. This happens when a team reviews the main production domain but never writes down the other origins produced by its hosting and data services.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) starts with an explicit target and scope. That habit is especially useful here. You cannot verify an access boundary around an origin that nobody remembered to include.
+
+## Start with an exposure inventory
+
+List the surfaces that exist, their intended audience, and the control that should enforce that decision. Include production and preview domains, branch deployments, provider-generated URLs, API gateways, storage endpoints, database APIs, admin consoles, webhook receivers, and old deployments that still resolve.
+
+Do not use labels such as "internal" or "staging" as evidence. Record a concrete rule instead: members of one identity group may open the preview; anonymous users may read public product images; signed-in users may read only rows belonging to their workspace.
+
+This table can stay small:
+
+| Surface                 | Intended audience           | Enforced control                  | Proof to retain                      |
+| ----------------------- | --------------------------- | --------------------------------- | ------------------------------------ |
+| Branch preview          | Project members             | Deployment authentication         | Logged-out denial and member success |
+| Customer API            | Signed-in customers         | Session plus server authorization | Cross-account denial                 |
+| Public image bucket     | Everyone, named prefix only | Narrow storage policy             | Anonymous synthetic-object read      |
+| Private evidence bucket | Workload identity only      | Block public access plus IAM      | Anonymous denial and role success    |
+
+The audience column prevents a common overcorrection. Some surfaces are meant to be public. The goal is not to hide every asset. It is to make public access intentional and keep private content behind an enforceable boundary.
+
+## Discoverability is not authorization
+
+`noindex` is useful for controlling search appearance. It does not require a visitor to authenticate, and it does not stop direct requests. The same distinction applies to an unlinked page and a long preview URL. URLs appear in chat, issue trackers, screenshots, logs, referrer data, browser history, and copied configuration.
+
+Robots directives can also be ignored by a crawler. More importantly, a legitimate collaborator may forward a URL to somebody outside the intended group. If possession of the URL is enough to enter, the deployment has no user-level access decision.
+
+Use the hosting platform's deployment protection, an identity-aware proxy, a private network, or application authentication that runs before protected content is returned. Verify that static assets and framework data endpoints receive the same protection. A polished login page is irrelevant if an alternate route serves the underlying data anonymously.
+
+Vercel's current [Deployment Protection documentation](https://vercel.com/docs/deployment-protection) illustrates why scope needs review. It documents several methods and distinguishes Standard Protection from protection that includes production domains. Available methods and scope depend on the plan and selected configuration. Check the effective project settings instead of assuming every deployment inherits the same rule.
+
+## Check storage at every policy level
+
+AWS states that new S3 buckets, access points, and objects do not allow public access by default. Users can still change policies or permissions. [S3 Block Public Access](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html) supplies controls at organization, account, bucket, and access-point levels, and S3 applies the most restrictive applicable combination.
+
+That does not make a single green toggle a complete storage review. Block Public Access settings do not rewrite existing policies and access control lists. AWS also tells operators to inspect identity-based policies and related resource policies. A private bucket may still be too broadly available to accounts, roles, or workloads inside an organization.
+
+For content that must be public, separate it from private data where practical. A dedicated bucket or origin makes the policy easier to understand than exceptions spread through one mixed store. Limit public reads to the intended action and resources. Do not make upload, list, delete, or metadata access public because one image needs anonymous download.
+
+Test with an inert object such as `exposure-check.txt` containing a random test marker. Never use a real invoice, report, user export, token, or production backup as the test object. Request the synthetic object anonymously, with the intended role, and with an unrelated role. Review the provider's policy view after the request tests.
+
+## Treat the Supabase Data API as an access boundary
+
+Supabase supports browser access through its Data API. Its [Securing your data guidance](https://supabase.com/docs/guides/database/secure-data) says exposed tables should use Row Level Security and least-privilege grants. A publishable key identifies the project but relies on RLS policies and the user's JWT for row access.
+
+Never put a service-role or secret key in frontend code. Supabase warns that these keys bypass RLS. Moving such a key into a client environment variable does not hide it; the build can place the value in browser-delivered JavaScript.
+
+Test policy behavior with two synthetic users in separate workspaces. User A should receive only A's test row. User B should not read or modify it. A logged-out request should match the product's stated anonymous policy. Test selection, insertion, update, and deletion separately because policy coverage can differ by operation.
+
+The related [Supabase RLS guide](/blog/supabase-rls-vibe-coded-apps) goes deeper into row-policy design. RLS is one part of this broader inventory. It does not protect a separate preview URL, public bucket, or backend route that uses a privileged key without checking the caller.
+
+## Prove access from outside the trusted session
+
+An ordinary browser tab often carries cookies, single sign-on state, cached responses, and service-worker data. Use a clean browser profile or a separate browser to test anonymous access. Confirm the response status, headers, body, redirects, and any assets fetched after the first document.
+
+Then use a second account that is valid but belongs to another workspace or project. Cross-account tests catch broken object-level authorization that a logged-out check cannot see. Use synthetic records created for the review and remove them afterward.
+
+Test known alternate paths and methods, not random internet targets. Include provider-generated domains, previous deployments, API routes used by the browser, object URLs, download links, and cached copies. Obtain authorization before testing infrastructure you do not own.
+
+Record the time, environment, principal, route, method, expected result, observed result, and relevant configuration revision. A screenshot of a denial is useful, but a repeatable request and policy snapshot are stronger evidence.
+
+## What the evidence cannot prove
+
+A successful logged-out denial covers the tested route, method, identity state, and moment. It does not prove that an alternate hostname, stale deployment, permissive object prefix, cached response, or untested API action is protected. Provider configuration can also change after the test.
+
+Likewise, S3 Block Public Access can prevent public grants without proving least privilege among authenticated roles. A passing RLS test does not prove that every table and operation has the intended policy. Deployment authentication does not repair authorization inside the application.
+
+Re-run the inventory after adding a domain, storage store, database table, preview provider, integration, or new deployment environment. The [AI app security checklist](/tools/ai-app-security-checklist) can help capture those URLs and the access proof expected for each one. It is a browser-local planning aid, not a network scanner or proof that a provider policy is correct.
+
+## Sources
+
+- [AWS: Blocking public access to Amazon S3 storage](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html)
+- [Supabase: Securing your data](https://supabase.com/docs/guides/database/secure-data)
+- [Vercel: Deployment Protection](https://vercel.com/docs/deployment-protection)

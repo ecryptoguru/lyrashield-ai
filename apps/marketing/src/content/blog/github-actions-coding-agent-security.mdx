@@ -1,0 +1,138 @@
+---
+title: "Secure GitHub Actions Used by Coding Agents"
+description: "Harden coding-agent workflows with untrusted-input separation, minimal token permissions, pinned actions, constrained OIDC, and approval gates."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - supply-chain
+  - verification
+draft: false
+heroImage: supply-chain-03
+faq:
+  - q: "Is pull_request_target always unsafe?"
+    a: "No. It can be appropriate for trusted metadata operations, but a privileged pull_request_target job must not check out or execute untrusted pull-request code. Use it only when the privileged context is necessary and keep its inputs narrow."
+  - q: "Does OIDC remove every credential risk in GitHub Actions?"
+    a: "No. OIDC avoids storing a long-lived cloud credential, but the cloud trust policy still has to restrict repository, workflow, branch or environment, and audience claims. An overbroad trust rule can issue short-lived credentials to the wrong job."
+  - q: "Does a GitHub-hosted runner make untrusted code safe?"
+    a: "It reduces persistence between jobs because hosted runners are generally ephemeral, but untrusted code can still read credentials, alter outputs, poison artifacts, or use permissions available during its own job. Privilege separation is still required."
+---
+
+**Direct answer:** Give coding-agent workflows read-only permissions by default. Never let a privileged trigger check out or execute untrusted pull-request code. Pin third-party actions to reviewed full commit SHAs, constrain OIDC trust by repository and workflow context, isolate runners and artifacts, and require review before workflow edits, deployments, or any job that gains write access.
+
+A coding agent can write a useful workflow in seconds. It cannot decide how much authority that workflow should inherit. The event, token, runner, cache, artifacts, environment, and cloud identity are all security boundaries, even when the generated YAML looks ordinary.
+
+Generated workflows often copy the shortest vendor example that runs the requested test. The prompt rarely includes repository trust settings, fork behavior, cloud-role conditions, or the contents of a persistent runner. Reviewers have to supply that missing context and test the effective permissions.
+
+This is one part of the [full security model for AI-built applications](/blog/vibe-coding-security-guide). A safe pipeline can still deliver an application with broken authorization. Conversely, good application code can be undermined by a workflow that lets untrusted input reach repository or deployment credentials.
+
+## Start with the workflow's authority
+
+Read the workflow as a privileged program, not as configuration. For every job, write down:
+
+- which event can start it and who controls that event;
+- whether pull-request code, issue text, branch names, artifacts, or caches are inputs;
+- the effective `GITHUB_TOKEN` permissions;
+- every repository, environment, package, and cloud credential it can reach;
+- whether the runner is shared, persistent, or connected to an internal network;
+- what a later privileged job trusts from an earlier unprivileged job.
+
+Coding agents often edit `.github/workflows` alongside application code. Protect that directory with a designated reviewer. Review action pins and permission changes separately from the feature diff. A one-line change from `contents: read` to `contents: write` deserves more attention than its size suggests.
+
+## The risky privileged-checkout pattern
+
+The following example is intentionally unsafe. Do not copy it.
+
+```yaml
+# VULNERABLE: privileged event plus checkout of untrusted pull-request code
+name: agent-review
+on: pull_request_target
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm install
+      - run: npm test
+```
+
+`pull_request_target` runs in the context of the base repository. GitHub warns that combining privileged triggers such as `pull_request_target` or `workflow_run` with checkout or execution of untrusted pull-request content can compromise the repository. The pull request controls the package scripts in this example. A generated test command that looks harmless does not make those scripts trusted.
+
+The same problem can cross job boundaries. An unprivileged job may upload an executable artifact, a cache entry, a test report with active content, or a filename that a privileged job later interprets. Treat every value produced by untrusted code as untrusted data, even when the producing workflow completed successfully and the artifact came from the expected repository.
+
+## Separate review from privileged action
+
+Run build and test work under the ordinary `pull_request` event with no secrets and a minimal token. Put deployment or write operations in a different workflow that uses a protected environment or an explicit, reviewed dispatch.
+
+```yaml
+name: untrusted-pr-check
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the proposed commit
+        uses: actions/checkout@0123456789abcdef0123456789abcdef01234567
+      - run: npm ci --ignore-scripts
+      - run: npm test
+```
+
+Replace the illustrative SHA with a full commit SHA that you verified in the action's official repository. GitHub describes a full-length commit SHA as the immutable way to reference an action. Pinning reduces reference-mutation risk. It does not prove that the pinned code is safe, that its dependencies are sound, or that the maintainer account was uncompromised when the commit was created.
+
+Set `permissions` at the workflow level and narrow them again for jobs that need something different. Do not rely on a repository default that another administrator can change. If one job must write a check result, grant only the specific permission to that job. Keep the job that executes pull-request code read-only.
+
+Deployment should consume reviewed source or a reproducibly identified artifact, not an arbitrary file uploaded by an untrusted job. Bind the operation to the exact approved commit. Use environment reviewers for production credentials and make the approval screen show the commit and environment that will be used.
+
+## Use OIDC with a restrictive trust policy
+
+OpenID Connect lets a workflow request a short-lived cloud credential instead of storing a long-lived key in GitHub. That is useful, but it moves the authorization decision into the cloud trust policy.
+
+Restrict the accepted issuer and audience. Match the expected organization, repository, workflow file, branch, tag, or protected environment using the claims supported by the provider. A trust policy that accepts any repository in an organization, or any branch in one repository, may grant deployment authority to a workflow the approver never reviewed.
+
+Grant `id-token: write` only to the job that exchanges the token. That permission lets the job request an OIDC token; it does not itself grant cloud access. The cloud role should also have the smallest resource and action scope needed. Record the resulting cloud identity and approved commit in deployment logs without recording the token.
+
+## Isolate runners, caches, and artifacts
+
+Do not run untrusted pull requests on a persistent self-hosted runner that has production network access or reusable credentials. A cleanup script after the job is weaker than disposal of the environment. If self-hosting is unavoidable, use an ephemeral runner image, isolate its network, deny access to metadata services, and destroy it after one job.
+
+GitHub-hosted runners reduce persistent-host concerns, but the active job still has its assigned token, network, and artifacts. Keep privileged credentials out of that job.
+
+Cache keys should include trusted dependency and platform inputs. Never let a privileged job restore a cache created by untrusted code unless the contents are treated as hostile. For artifacts, verify the producing workflow, repository, commit, expected name, size, and digest. Parsing an artifact is still processing attacker-controlled input.
+
+## Verify the boundary safely
+
+Use an owned test repository with fake credentials and a non-production cloud role that cannot change anything important.
+
+1. Open a pull request from a fork and confirm that the untrusted job receives no repository secrets.
+2. Inspect the job's effective token permissions in the workflow and repository settings.
+3. Add a harmless failing package script and confirm it cannot trigger a privileged follow-up action.
+4. Attempt the approved deployment from an unapproved branch and confirm the cloud trust policy rejects it.
+5. Change a workflow file and confirm the required reviewer blocks it.
+6. Verify that artifacts are bound to the expected commit and that logs contain no credential values.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record whether agent, dependency, secret, testing, and operational controls have owners before release. It does not read repository settings, resolve action pins, inspect token permissions, run a workflow, or test a cloud trust policy.
+
+## What automation can and cannot establish
+
+Static checks can flag mutable action tags, broad token permissions, dangerous trigger and checkout combinations, or unreviewed workflow changes. A repository rule can require those checks before merge. None of that proves the generated application is secure, and a green job does not prove that every privileged path was modeled.
+
+The LyraShield AI repository contains a review-stage GitHub Actions workflow for secret and dependency checks plus SARIF output. It is repository code, not a generally available hosted service or production proof. Its current `DEEP` input has SAFE-equivalent coverage and must not be described as a deeper scan. The [evidence methodology](/methodology) explains why coverage and limitations stay attached to a result.
+
+For the adjacent confused-deputy problem, read [how coding agents can misuse CI/CD authority](/blog/cicd-agent-confused-deputy). That guide focuses on delegated identity. This one focuses on making the workflow itself a defensible boundary.
+
+## Sources
+
+- [GitHub Docs: Secure use reference](https://docs.github.com/en/actions/reference/security/secure-use)
+- [GitHub Docs: Use GITHUB_TOKEN for authentication in workflows](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)
+- [GitHub Docs: OpenID Connect reference](https://docs.github.com/en/actions/reference/security/oidc)
+- [OWASP: CI/CD Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html)

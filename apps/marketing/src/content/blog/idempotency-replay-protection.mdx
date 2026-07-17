@@ -1,0 +1,167 @@
+---
+title: "Idempotency and Replay Protection for SaaS"
+description: "Make retries and duplicate webhooks safe with durable operation keys, canonical request binding, atomic state changes, and stored results."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: false
+heroImage: verification-02
+faq:
+  - q: "How long should an idempotency key be stored?"
+    a: "Keep it for the longest retry or replay window the operation must absorb, plus operational margin. Payment and webhook requirements may justify longer retention than an ordinary form submission. Document what happens after pruning."
+  - q: "Do idempotent HTTP methods prevent duplicate webhook effects?"
+    a: "No. HTTP method semantics describe the intended effect of repeated requests. A webhook POST still needs a durable uniqueness boundary and an atomic business mutation in the receiving application."
+  - q: "How do I stop one key from being reused with different input?"
+    a: "Store a canonical hash of the operation type, authenticated scope, and validated request beside the key. Reject any later request whose hash differs instead of returning the first result."
+---
+
+**Direct answer:** Make a side effect idempotent by binding a caller-supplied or provider operation key to one canonical request, enforcing uniqueness in durable storage, and committing the business mutation with the stored result in one transaction. Retries return that result. Reuse with different input is rejected. Handle event ordering separately from duplicate delivery.
+
+Retries are normal. Browsers resend after a timeout, queues redeliver after a worker crash, providers retry webhooks, and users double-click. The dangerous case is uncertainty: the first request may have committed even though the caller never received the response.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats repeatability as release evidence for one operation. A signature proves who signed a message. Authorization proves whether the operation is allowed. Idempotency controls what repeated delivery does.
+
+## The failure starts between commit and response
+
+**Vulnerable pattern. An in-memory set is neither atomic nor durable.**
+
+```ts
+const processed = new Set<string>()
+
+app.post("/webhooks/credits", async (req, res) => {
+  if (processed.has(req.body.eventId)) return res.sendStatus(200)
+
+  await db.credit.increment({
+    where: { workspaceId: req.body.workspaceId },
+    by: req.body.amount,
+  })
+
+  processed.add(req.body.eventId)
+  return res.sendStatus(200)
+})
+```
+
+Two workers can pass the check before either adds the key. A process restart forgets every event. If the database update succeeds and the process exits before `processed.add`, the retry applies the credit again.
+
+Signature verification would not fix this. A provider can validly deliver the same signed event more than once. Stripe's current [webhook documentation](https://docs.stripe.com/webhooks) says endpoints might occasionally receive the same event more than once.
+
+## Atomicity is the missing boundary
+
+Generated handlers often implement idempotency as a preliminary lookup followed by ordinary business code. The steps look correct in sequence, but concurrency occurs between them. A cache lock can have the same gap if it expires before the database commit or covers only one application instance.
+
+Another shortcut stores only the key. If the caller accidentally reuses that key with a different amount, workspace, or operation, the server may return an unrelated result or silently apply the wrong intent.
+
+Idempotency also gets confused with ordering. Ignoring a duplicate does not stop an older subscription event from overwriting a newer state. The system needs a separate version, timestamp, or state-transition rule for out-of-order events.
+
+## Define the operation identity
+
+For a user request, require a high-entropy idempotency key and scope it to the authenticated account and operation. Do not use email addresses or other personal data as keys. A caller should generate the key from at least 128 random bits. The server can enforce a bounded format, but length alone cannot prove that the caller used a secure random generator. For a provider event, use its stable event identifier or the documented object and event-type tuple when the provider recommends that distinction.
+
+Parse and authorize the request before computing a canonical request hash. Include every value that changes the intended effect:
+
+```ts
+function requireIdempotencyKey(request: Request) {
+  const value = request.headers.get("Idempotency-Key")
+
+  if (!value || !/^[A-Za-z0-9_-]{22,255}$/.test(value)) {
+    throw new BadRequestError("A valid Idempotency-Key is required")
+  }
+
+  return value
+}
+
+const idempotencyKey = requireIdempotencyKey(request)
+
+const requestIdentity = canonicalHash({
+  operation: "create-export",
+  workspaceId: session.workspaceId,
+  requestedFormat: input.format,
+  dateRange: input.dateRange,
+})
+```
+
+Canonicalization must be deterministic. Define key ordering, number representation, omitted versus null values, and any normalized identifiers. Better still, hash a small validated command object rather than arbitrary raw JSON.
+
+Stripe's current [idempotent request documentation](https://docs.stripe.com/api/idempotent_requests) stores the first result for a key and compares later parameters with the original. Stripe documents its own retention and pruning behavior. Your application should choose storage duration from its retry, dispute, and replay model rather than copying the provider's minimum.
+
+## Commit the key and mutation together
+
+Use a database unique constraint on the operation scope and key. Perform the idempotency insert, business mutation, and stored response in one transaction or another atomic unit supported by the storage system.
+
+```ts
+await db.transaction(async (tx) => {
+  const operation = await tx.idempotentOperation.create({
+    data: {
+      workspaceId: session.workspaceId,
+      kind: "create-export",
+      key: idempotencyKey,
+      requestHash: requestIdentity,
+      state: "PROCESSING",
+    },
+  })
+
+  const job = await tx.exportJob.create({
+    data: buildAuthorizedExport(input, session),
+  })
+
+  await tx.idempotentOperation.update({
+    where: { id: operation.id },
+    data: {
+      state: "COMPLETED",
+      responseStatus: 202,
+      responseBody: { id: job.id },
+    },
+  })
+})
+```
+
+Place a unique constraint on `(workspaceId, kind, key)`. If insertion conflicts, load the existing operation. Reject it if the request hash differs. Return the stored response if completed. If it remains processing, return a stable in-progress response or wait through a bounded coordination mechanism.
+
+Define terminal and recoverable states. `COMPLETED` can return its stored result. `FAILED` needs a rule about whether the same key returns the failure or permits a reviewed retry. A stale `PROCESSING` record should not be deleted blindly because the side effect may have committed elsewhere. Reconcile the business record or downstream provider before deciding whether to resume.
+
+Store only the response fields needed for a consistent retry. A full body can contain personal or short-lived data that should not remain for the entire key-retention period. If the original response includes a temporary download URL, store the durable artifact ID and mint a fresh authorized URL when returning the retry result.
+
+The example assumes the business mutation fits the same database transaction. External API calls do not roll back with a database. Use an outbox, provider idempotency key, or state machine that records intent before dispatch and reconciles uncertain results. Do not hold a database transaction open across a slow network call.
+
+## Handle webhook duplication after authenticity
+
+First verify the provider signature over the exact body. The [Stripe webhook signature guide](/blog/stripe-webhook-signature-security) covers that boundary. Then insert the provider event ID under a unique constraint and apply its local transition atomically.
+
+Return success for a completed duplicate so the provider can stop retrying. Do not return success for a new event until its durable acceptance is complete. If work continues asynchronously, the queue insertion or outbox record must exist before the response.
+
+Scope provider event keys to the provider account and environment. A test event ID should not collide with a live event, and two connected accounts should not share one global key unless the provider guarantees global uniqueness. Retain the verified account context beside the key so a valid event from one account cannot satisfy another account's operation record.
+
+Out-of-order events need a version-aware rule. Compare provider object versions, effective timestamps, or retrieve current provider state when an older event conflicts with newer local state. Avoid a blanket "last event processed wins" policy when arrival order is not guaranteed.
+
+## HTTP semantics are not database atomicity
+
+[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html) defines an idempotent method as one where multiple identical requests have the same intended effect as one. GET, PUT, and DELETE have idempotent semantics, but application bugs can still create duplicate side effects. POST can be made repeatable through an application idempotency contract.
+
+Do not send analytics, email, or queue messages outside the transaction and assume the database rollback covers them. Use a transactional outbox and make each consumer idempotent too.
+
+Client behavior should be predictable. Generate one key when the user begins the operation and reuse it only for retries of that exact intent. Do not generate a new key after every timeout, which defeats the contract. Do not reuse a page-load identifier for several different actions. Return a conflict for mismatched input rather than guessing what the caller meant.
+
+## Verify concurrency and recovery
+
+Use a local or authorized environment with disposable records. Send the same valid request concurrently from several workers. Expect one business mutation and identical stored results. Reuse the key with changed input and expect a conflict without any second mutation.
+
+Stop a worker after durable acceptance but before response, then retry. Restart the application and retry again. Advance beyond the documented retention window and verify the stated pruning behavior.
+
+For webhooks, send the same signed test event twice and deliver two related events in reverse order. Confirm duplicate and ordering rules separately.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help inventory non-repeatable side effects. It cannot create concurrent requests, inspect unique constraints, or prove transaction boundaries.
+
+## Limits of automated evidence
+
+Tests can establish behavior for known crash points and concurrency levels. Schema inspection can confirm a unique constraint. Logs can show replay decisions without storing sensitive request bodies.
+
+Automation cannot choose the correct business operation identity or retention window. It may also miss side effects in external systems. Document every committed system, the key passed to each one, and how uncertain outcomes are reconciled.
+
+## Sources
+
+- [Stripe: Idempotent requests](https://docs.stripe.com/api/idempotent_requests)
+- [Stripe: Receive events in your webhook endpoint](https://docs.stripe.com/webhooks)
+- [IETF RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)

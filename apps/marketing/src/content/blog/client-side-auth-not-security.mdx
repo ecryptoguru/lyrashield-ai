@@ -1,0 +1,139 @@
+---
+title: "Why Client-Side Auth Is Not Access Control"
+description: "Understand why route guards and hidden controls cannot enforce access, then place authorization at the server operation that needs it."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+draft: false
+heroImage: access-boundary-02
+faq:
+  - q: "Do frontend route guards provide any security?"
+    a: "They improve navigation and reduce accidental access, but users control the browser and can call the API directly. The server must enforce the same policy for every protected operation."
+  - q: "Is localStorage safe for session tokens?"
+    a: "Web Storage is readable by scripts running in the same origin, so an XSS flaw can expose stored tokens. Token storage is a separate design choice from authorization, which still belongs on the server."
+  - q: "Does hiding an admin button have any security value?"
+    a: "It is useful interface behavior because ordinary users should not see actions they cannot take. It is not an enforcement control and must match a server-side authorization decision."
+---
+
+**Direct answer:** Client-side authentication state can guide the interface, but it cannot enforce access to data or actions. Users control the browser, can change local state, and can call API endpoints without clicking your UI. Resolve the session on the server and authorize the requested action and resource before reading data or making any change.
+
+A frontend needs to know enough about the current user to render useful navigation. It may hide an admin link, redirect a signed-out visitor, or disable a button. Those are interface decisions. The server still receives requests from clients that can be modified, scripted, or replaced entirely.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) separates authentication from authorization for this reason. A valid session identifies a caller. Each sensitive operation still needs a policy decision.
+
+## The vulnerable pattern: trust a browser role
+
+**Vulnerable pattern. Use only with a local fixture.**
+
+```ts
+const role = localStorage.getItem("role")
+
+if (role === "admin") {
+  showDeleteWorkspaceButton()
+}
+```
+
+The display logic is harmless by itself. The failure appears when the API assumes the UI prevented ordinary users from sending the request.
+
+```ts
+app.delete("/api/workspaces/:id", requireSession, async (req, res) => {
+  await db.workspace.delete({ where: { id: req.params.id } })
+  return res.sendStatus(204)
+})
+```
+
+Any authenticated account can call this route with an HTTP client or a changed frontend. The hidden button never participates in the server request. A client-side route guard has the same limitation: it controls which component renders, not which server operation runs.
+
+MITRE classifies this failure as client-side enforcement of server-side security. The client may duplicate a security check for usability, but a trusted component must perform the decisive check.
+
+## Why generated apps confuse interface state with policy
+
+AI-generated apps often begin with a complete-looking frontend and a thin data layer. A prompt such as "make this page admin only" naturally produces a route wrapper or conditional component. If the prompt does not describe the server policy, the API may remain unchanged.
+
+Framework examples reinforce the confusion. Route middleware and client hooks are visible, easy to demonstrate, and close to the page being built. Authorization rules may depend on a workspace membership table, an object owner, or a business state that the generator cannot see.
+
+The result can look convincing during manual testing. An ordinary account never sees the admin control, so nobody clicks it. A direct request exposes the missing boundary.
+
+Local browser state adds another layer of false certainty. `localStorage` and `sessionStorage` belong to the origin and hold strings chosen or changed by client code. They are useful storage mechanisms, not proof that a server issued a role. Even a genuine signed token must be validated by the server before its claims influence access.
+
+## Verify the real boundary safely
+
+Run the check in a local or approved test environment with disposable data. Create an ordinary account and, if the product supports it, an administrative test account.
+
+First, use the ordinary account through the UI. Record which protected actions are hidden or disabled. Then inspect the browser's network request when the administrative account performs one harmless test action.
+
+Repeat that request as the ordinary account using the browser's developer tools or a local test client. Do not change a real production record. Prefer a fixture operation such as renaming a disposable workspace or requesting a preview response.
+
+Check the final state, not only the status code. The request should be denied before the operation. The response should avoid leaking protected data or internal policy details. The audit record should identify the denied action without storing secrets or unnecessary request content.
+
+Test several identities:
+
+- No session
+- An ordinary member of the correct tenant
+- An ordinary member of another tenant
+- A role that is allowed to perform the action
+
+That list is a starting point, not a universal role model. Products with delegated access, support staff, or resource-specific sharing need corresponding cases.
+
+## Enforce authorization at the operation
+
+Resolve the session from a server-validated cookie or token. Resolve the tenant from trusted membership data. Then ask one policy function whether the principal may perform the action on the resource.
+
+```ts
+app.delete("/api/workspaces/:id", requireSession, async (req, res) => {
+  const workspace = await db.workspace.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, ownerId: true },
+  })
+
+  if (!workspace) return res.sendStatus(404)
+
+  const allowed = await canDeleteWorkspace({
+    principal: req.user,
+    workspace,
+  })
+  if (!allowed) return res.sendStatus(403)
+
+  await db.workspace.delete({ where: { id: workspace.id } })
+  return res.sendStatus(204)
+})
+```
+
+The frontend can call the same policy through a safe capability endpoint or use server-provided permissions to decide which buttons to render. That keeps the interface honest. The API must still repeat the check because client state can be stale or manipulated.
+
+State-dependent rules need an atomic boundary too. Suppose deletion is allowed only while the workspace is empty and the caller remains its owner. A policy check followed by a separate delete leaves time for membership or resource state to change. Enforce the relevant owner, version, or empty-state predicate inside the transaction that performs the mutation, then verify the affected-row count. If the predicate no longer matches, deny or retry the decision from fresh state. A correct page guard cannot close this server-side race.
+
+Default deny helps when a new action appears. If no policy grants `workspace.delete`, the request fails. A rule that starts with broad access and lists exceptions tends to miss newly added paths.
+
+## Edge cases beyond the page guard
+
+Server-rendered pages are not automatically authorized. A server component or loader that fetches protected data still needs a principal and resource policy. Rendering on the server changes execution location, not the need for a decision.
+
+Middleware can be useful, but path matching is fragile. Alternate HTTP methods, nested routers, API versions, background handlers, and direct service calls may bypass route middleware. Keep critical authorization close to the business operation or data access, and test every entry point.
+
+Cached responses need the same care. If the cache key omits the tenant or principal scope, a correctly authorized request can populate data later returned to someone else. Static generation and edge caching deserve explicit review before they touch private pages.
+
+WebSockets, server actions, and RPC procedures are server operations too. A connection authenticated at startup still needs authorization for each subscribed channel or message type. A server action invoked from a hidden form still needs a policy check. Naming a function "internal" does not stop a client from reaching it if the framework exposes a transport route.
+
+Batch endpoints can hide a second mistake. The server may authorize the first selected record and then apply the change to every submitted ID. Check each resource or constrain the whole update query to the authorized tenant and verify that the affected row count matches the approved set.
+
+Token storage is related but separate. Storing a bearer token in localStorage can increase exposure to scripts running in the origin. An HttpOnly cookie changes script access and introduces CSRF considerations. Neither storage choice replaces server authorization.
+
+## What automation can and cannot establish
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can prompt a team to identify its server enforcement points and negative tests. It cannot discover every endpoint, inspect a deployed session, or prove that policy calls occur before each operation.
+
+Static analysis may flag a dangerous database call without a nearby check. Dynamic testing may show that an ordinary account receives a successful response. Custom policy correctness still requires product context: who may do what, to which resource, in which tenant, and under which business state.
+
+Keep frontend permission data intentionally narrow. The browser may need capability flags such as `canInviteMembers`, but it rarely needs the full policy document or sensitive reasons for a denial. Treat those flags as display hints and refresh them after role changes. The server remains authoritative when stale UI state disagrees.
+
+The implementation pattern in [server-side authorization for AI-generated APIs](/blog/server-side-authorization-ai-apis) turns that context into one explicit policy seam and a repeatable test matrix.
+
+## Sources
+
+- [MITRE CWE-602: Client-Side Enforcement of Server-Side Security](https://cwe.mitre.org/data/definitions/602.html)
+- [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)
+- [MDN: Web Storage API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API)
+- [MITRE CWE-862: Missing Authorization](https://cwe.mitre.org/data/definitions/862.html)

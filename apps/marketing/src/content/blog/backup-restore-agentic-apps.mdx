@@ -1,0 +1,195 @@
+---
+title: "Test Backup Restore Before Agents Touch Production"
+description: "Prove backup recoverability in an isolated restore drill before a coding agent receives destructive production access."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+draft: false
+heroImage: decision-operations-06
+faq:
+  - q: "How often should an application create backups?"
+    a: "Set the interval from the maximum acceptable data-loss window, not a generic schedule. A service with a one-hour recovery point objective needs a process capable of preserving data within that window."
+  - q: "How often should a restore be tested?"
+    a: "Test before granting destructive automation, after material storage or schema changes, and on a recurring schedule based on risk. Record the result, duration, restored point, and failed assertions."
+  - q: "Can a restore drill use production customer data?"
+    a: "Prefer synthetic or approved sanitized data. If production data is necessary, use an isolated environment with equivalent access controls, encryption, retention, and deletion rules."
+  - q: "Does a provider snapshot count as restore proof?"
+    a: "No. A snapshot is an input to recovery. Restore proof requires recovering it, opening the data through the application or a defined integrity process, and checking the result against expected assertions."
+---
+
+**Direct answer:** A backup is useful only after a restore drill proves that an isolated copy can be recovered, opened by the application, checked for integrity, and returned within the team's recovery time and data-loss limits. Run that drill before a coding agent receives production credentials or any tool that can delete or rewrite durable data.
+
+"Backups enabled" is a configuration statement. It says nothing about missing encryption keys, incomplete snapshots, incompatible schemas, broken restore permissions, or how long recovery takes. Agentic automation raises the cost of leaving those questions unanswered because one approved command can change many records quickly.
+
+The operational layer in [release assurance for AI-built applications](/blog/vibe-coding-security-guide) asks for evidence that a control works in the environment where it matters. A successful restore record is that kind of evidence. The existence of a scheduled backup job is not.
+
+## The vulnerable pattern: destructive access before restore proof
+
+**Vulnerable policy pattern. Do not apply this to production.**
+
+```json
+{
+  "agentRole": "deployment-agent",
+  "allowedActions": ["database:migrate", "database:delete", "storage:purge"],
+  "conditions": {
+    "humanApproval": true,
+    "latestRestoreTest": null
+  }
+}
+```
+
+Human approval is useful, but the reviewer has no recovery evidence. They cannot know whether a mistaken migration or over-broad delete can be reversed within the required time. Audit logs may explain what happened later; they do not restore data.
+
+Generated deployment code often treats backup as an infrastructure toggle. A coding assistant can add a snapshot schedule and conclude the task is complete because the provider accepted the configuration. It does not see the application-level assertions needed to tell a usable database from a merely mounted one.
+
+## Define recovery objectives in plain language
+
+A recovery point objective, or RPO, is the maximum acceptable data loss measured in time. If the RPO is one hour, the recovery design needs a recoverable point no more than one hour before the incident under the stated conditions.
+
+A recovery time objective, or RTO, is the target time to restore the service or defined capability. It should include acquiring the backup, provisioning the destination, restoring data, applying required keys or configuration, validating integrity, and making the recovered system available to its intended operator.
+
+Choose objectives from business impact. A small internal tool may accept a longer gap than an order system. Write down which data stores, object buckets, queues, search indexes, and external records are inside the objective. A database restore cannot reconstruct files that were stored elsewhere or actions already sent to a third party.
+
+[NIST SP 800-34 Rev. 1](https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final) covers contingency planning, recovery strategies, plan testing, and maintenance. A small team's written plan still has to survive an exercise.
+
+## Run an isolated restore drill
+
+Do not overwrite the production environment to prove recovery. Create an isolated destination with no outbound integrations, email delivery, payment callbacks, or production credentials. Use synthetic data when possible. If production data is required for fidelity, apply the same access, encryption, retention, and deletion controls as production.
+
+Record these inputs before the drill:
+
+- the backup identifier and creation time
+- the systems and data classes in scope
+- the expected RPO and RTO
+- the person authorized to start and end the drill
+- the application version and schema expected to open the data
+- a short set of integrity assertions
+
+Integrity assertions should be specific enough to fail. Confirm that required tables exist, foreign-key checks pass, a known synthetic account can authenticate in the isolated app, expected records and objects agree, and a recent business transaction is present or absent according to the RPO. Aggregate counts alone can hide corruption.
+
+The [AWS Well-Architected backup guidance](https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_planning_for_recovery_backup.html) recommends testing recovery to verify that backup processes meet recovery objectives. Its product examples are AWS-specific, but the distinction between taking and recovering a backup applies across providers.
+
+## Protect the recovery path itself
+
+Backups need separation from the system they protect. If the same broad credential can delete production data and every backup, one compromised or mistaken action can remove both. Use a separate identity, narrow permissions, retention protections, and offline or otherwise isolated copies where the risk calls for them.
+
+The joint [CISA StopRansomware Guide](https://www.cisa.gov/stopransomware/ransomware-guide) recommends protected backups and regular testing. That guidance is written for ransomware resilience, but the control also reduces the recovery impact of an authorized automation that performs the wrong destructive action.
+
+Encryption introduces its own dependency. Record how the restore environment receives the required keys without copying unrestricted production credentials into an agent workspace. Test key availability during the drill. A perfectly preserved ciphertext backup is unusable if its key path was lost.
+
+## Bind agent authority to restore evidence
+
+A safer production gate can require a recent successful drill and a narrowly scoped approval.
+
+```ts
+type DestructiveApproval = {
+  id: string
+  action: "apply-reviewed-migration"
+  artifactHash: string
+  environment: "production"
+  restoreEvidenceId: string
+  expiresAt: string
+  consumedAt: string | null
+}
+
+type RestoreEvidence = {
+  id: string
+  status: "passed" | "partial" | "failed"
+  backupId: string
+  applicationVersion: string
+  schemaVersion: string
+  restoredEnvironment: "isolated-restore"
+  assertions: readonly { name: string; passed: boolean }[]
+  completedAt: string
+}
+
+const MAX_RESTORE_EVIDENCE_AGE_MS = 30 * 24 * 60 * 60 * 1000
+
+async function authorizeMigration(
+  input: {
+    approvalId: string
+    action: DestructiveApproval["action"]
+    environment: DestructiveApproval["environment"]
+    restoreEvidenceId: string
+  },
+  baseline: {
+    artifactHash: string // computed from the server-owned migration
+    applicationVersion: string // read from deployment metadata
+    schemaVersion: string // exact pre-migration schema expected by the artifact
+  }
+) {
+  return db.$transaction(async (tx) => {
+    const now = new Date()
+    const approval = await tx.approval.findUnique({ where: { id: input.approvalId } })
+    if (!approval || approval.consumedAt || new Date(approval.expiresAt) <= now) {
+      throw new Error("approval unavailable")
+    }
+    if (
+      approval.action !== input.action ||
+      approval.environment !== input.environment ||
+      approval.artifactHash !== baseline.artifactHash ||
+      approval.restoreEvidenceId !== input.restoreEvidenceId
+    ) {
+      throw new Error("approval binding mismatch")
+    }
+
+    const evidence = await tx.restoreEvidence.findUnique({
+      where: { id: approval.restoreEvidenceId },
+    })
+    if (
+      !evidence ||
+      evidence.id !== input.restoreEvidenceId ||
+      evidence.status !== "passed" ||
+      evidence.restoredEnvironment !== "isolated-restore" ||
+      evidence.applicationVersion !== baseline.applicationVersion ||
+      evidence.schemaVersion !== baseline.schemaVersion ||
+      !Number.isFinite(Date.parse(evidence.completedAt)) ||
+      Date.parse(evidence.completedAt) < now.getTime() - MAX_RESTORE_EVIDENCE_AGE_MS ||
+      evidence.assertions.some((assertion) => !assertion.passed)
+    ) {
+      throw new Error("restore evidence unavailable")
+    }
+
+    const consumed = await tx.approval.updateMany({
+      where: { id: approval.id, consumedAt: null },
+      data: { consumedAt: now.toISOString() },
+    })
+    if (consumed.count !== 1) throw new Error("approval already consumed")
+    return { approval, evidence }
+  })
+}
+```
+
+The caller supplies an approval identifier, action, environment, and evidence identifier. The server computes the migration artifact hash and reads the current application and pre-migration schema versions from deployment metadata. The transaction loads both records from trusted storage, checks every binding, and requires a passing drill completed within the illustrative 30-day window. Two concurrent requests cannot both consume the same approval because only one conditional update can change `consumedAt` from null.
+
+The returned restore proof is limited to the named backup, exact application and pre-migration schema versions, isolated environment, completion window, and recorded assertions. It says nothing about a newer backup, a changed application version, an untested production restore path, or data outside those assertions. Choose the maximum age from the system's change rate and recovery policy rather than copying 30 days without review.
+
+Restore proof does not make destructive access safe. It lowers recovery uncertainty. Least privilege, reviewed migrations, transaction boundaries, rate limits, canary rollout, and an emergency stop still matter. Some external side effects cannot be rolled back from a database backup at all.
+
+## Make the evidence useful at approval time
+
+A screenshot of a green provider status is weak restore evidence. Keep a structured record that another reviewer can examine without repeating the whole drill. It should name the backup, restored point, isolated destination, application and schema versions, start and completion times, RPO and RTO result, assertions, operator, and any missing systems.
+
+Store failed assertions as well as passed ones. If database rows recovered but object storage did not, the record should say "partial" rather than compressing the drill into a green check. If the application opened only after an undocumented manual repair, add that step to the recovery procedure and run the drill again.
+
+Give evidence a review period based on change. A restore performed before a database migration, encryption-key rotation, storage-provider move, or major application upgrade may no longer support the current system. Calendar age matters, but system drift matters more.
+
+The approval service should read this record from a trusted store. A coding agent can cite the evidence identifier, but it should not be able to mark the drill passed, alter its assertions, or extend its validity. That separation makes restore evidence a real condition on authority rather than another field in an agent-authored plan.
+
+## Verify the failure paths too
+
+Run at least one drill where a necessary input is unavailable. Revoke the test restore role, remove a non-production encryption-key binding, or provide an incompatible application version. Confirm that the process stops clearly, records the failed assertion, and does not fall back to production credentials.
+
+Measure the full elapsed time. If restoration takes four hours against a one-hour RTO, the backup may be intact and the recovery design still fails. Record what consumed the time rather than quietly changing the objective after the test.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can prompt you to record backup ownership, isolation, and restore evidence. It does not connect to a provider or validate any backup. Pair this drill with [least-privilege production access for coding agents](/blog/agent-production-permissions) before granting an agent a destructive tool.
+
+## Sources
+
+- [NIST SP 800-34 Rev. 1: Contingency Planning Guide](https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final)
+- [CISA StopRansomware Guide](https://www.cisa.gov/stopransomware/ransomware-guide)
+- [AWS Well-Architected: Back up data](https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_planning_for_recovery_backup.html)
+- [AWS Well-Architected: Grant least privilege access](https://docs.aws.amazon.com/wellarchitected/latest/framework/sec_permissions_least_privileges.html)

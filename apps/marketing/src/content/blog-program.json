@@ -1,0 +1,1002 @@
+[
+  {
+    "index": 1,
+    "title": "Vibe Coding Security: The Complete Guide",
+    "slug": "vibe-coding-security-guide",
+    "query": "vibe coding security - definitive guide",
+    "cluster": "Authority",
+    "targetWords": 2800,
+    "batch": "authority",
+    "cta": "Links to all clusters and tools"
+  },
+  {
+    "index": 2,
+    "title": "Supabase RLS for Vibe-Coded Apps",
+    "slug": "supabase-rls-vibe-coded-apps",
+    "query": "supabase rls security - fix",
+    "cluster": "Access",
+    "targetWords": 1400,
+    "batch": "batch-1",
+    "cta": "Pillar + RLS Checker"
+  },
+  {
+    "index": 3,
+    "title": "How to Find IDOR in an AI-Built App",
+    "slug": "idor-ai-built-apps",
+    "query": "idor vulnerability test - how-to",
+    "cluster": "Access",
+    "targetWords": 1350,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 4,
+    "title": "Stop Exposing API Keys in Frontend Code",
+    "slug": "api-keys-frontend-ai-apps",
+    "query": "exposed api key frontend - fix",
+    "cluster": "Secrets",
+    "targetWords": 1300,
+    "batch": "batch-1",
+    "cta": "Pillar + Secret Scanner"
+  },
+  {
+    "index": 5,
+    "title": "Why Client-Side Auth Is Not Access Control",
+    "slug": "client-side-auth-not-security",
+    "query": "client side authentication security - explainer",
+    "cluster": "Access",
+    "targetWords": 1300,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 6,
+    "title": "Server-Side Authorization for AI-Generated APIs",
+    "slug": "server-side-authorization-ai-apis",
+    "query": "backend authorization - implementation",
+    "cluster": "Access",
+    "targetWords": 1400,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 7,
+    "title": "Prevent Cross-Tenant Data Leaks",
+    "slug": "multi-tenant-data-isolation",
+    "query": "multi tenant data isolation - fix",
+    "cluster": "Access",
+    "targetWords": 1450,
+    "batch": "batch-1",
+    "cta": "Pillar + RLS Checker"
+  },
+  {
+    "index": 8,
+    "title": "Secure Admin Routes in AI-Built Apps",
+    "slug": "secure-admin-routes",
+    "query": "secure admin routes - how-to",
+    "cluster": "Access",
+    "targetWords": 1300,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 9,
+    "title": "JWT Validation Mistakes AI Tools Generate",
+    "slug": "jwt-validation-mistakes",
+    "query": "jwt security best practices - fix",
+    "cluster": "Auth",
+    "targetWords": 1400,
+    "batch": "batch-1",
+    "cta": "Pillar + JWT Inspector"
+  },
+  {
+    "index": 10,
+    "title": "Secure Password Reset and Email Verification",
+    "slug": "password-reset-email-verification-security",
+    "query": "password reset security - how-to",
+    "cluster": "Auth",
+    "targetWords": 1400,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 11,
+    "title": "Password Hashing for Vibe Coders",
+    "slug": "password-hashing-vibe-coders",
+    "query": "how to store passwords securely - explainer",
+    "cluster": "Auth",
+    "targetWords": 1300,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 12,
+    "title": "SQL Injection in AI-Generated Code",
+    "slug": "sql-injection-ai-generated-code",
+    "query": "ai generated sql injection - fix",
+    "cluster": "Input",
+    "targetWords": 1400,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 13,
+    "title": "XSS in AI Apps That Render Markdown or Model Output",
+    "slug": "xss-ai-app-markdown-output",
+    "query": "ai app xss markdown - fix",
+    "cluster": "Input",
+    "targetWords": 1450,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 14,
+    "title": "Input Validation for AI-Generated APIs",
+    "slug": "input-validation-ai-generated-api",
+    "query": "api input validation - how-to",
+    "cluster": "Input",
+    "targetWords": 1350,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 15,
+    "title": "CORS for Vibe-Coded Apps",
+    "slug": "cors-vibe-coded-apps",
+    "query": "cors configuration security - fix",
+    "cluster": "Web",
+    "targetWords": 1300,
+    "batch": "batch-1",
+    "cta": "Pillar + Headers Checker"
+  },
+  {
+    "index": 16,
+    "title": "CSRF Protection for Cookie-Based AI Apps",
+    "slug": "csrf-cookie-auth-ai-apps",
+    "query": "csrf protection cookie auth - how-to",
+    "cluster": "Web",
+    "targetWords": 1350,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 17,
+    "title": "SSRF Protection That Resolves DNS",
+    "slug": "ssrf-protection-dns-redirects",
+    "query": "ssrf prevention dns rebinding - technical",
+    "cluster": "Input",
+    "targetWords": 1500,
+    "batch": "batch-1",
+    "cta": "Pillar + full app scan CTA"
+  },
+  {
+    "index": 18,
+    "title": "Secure File Uploads in AI-Built Apps",
+    "slug": "secure-file-uploads-ai-apps",
+    "query": "secure file upload - how-to",
+    "cluster": "Input",
+    "targetWords": 1400,
+    "batch": "batch-1",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 19,
+    "title": "Prevent Path Traversal in Generated File Code",
+    "slug": "path-traversal-generated-code",
+    "query": "path traversal prevention - fix",
+    "cluster": "Input",
+    "targetWords": 1300,
+    "batch": "batch-2",
+    "cta": "Pillar + full app scan CTA"
+  },
+  {
+    "index": 20,
+    "title": "Command Injection in Agentic App Workflows",
+    "slug": "command-injection-agentic-apps",
+    "query": "command injection prevention - fix",
+    "cluster": "Agent",
+    "targetWords": 1400,
+    "batch": "batch-2",
+    "cta": "Pillar + full app scan CTA"
+  },
+  {
+    "index": 21,
+    "title": "Secure OAuth Redirects and Callbacks",
+    "slug": "oauth-redirect-callback-security",
+    "query": "oauth redirect uri security - how-to",
+    "cluster": "Auth",
+    "targetWords": 1350,
+    "batch": "batch-2",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 22,
+    "title": "Rate Limiting for AI Apps",
+    "slug": "rate-limiting-ai-apps",
+    "query": "ai api rate limiting - how-to",
+    "cluster": "Web",
+    "targetWords": 1400,
+    "batch": "batch-2",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 23,
+    "title": "Stop Brute Force and Account Enumeration",
+    "slug": "brute-force-account-enumeration",
+    "query": "prevent account enumeration - fix",
+    "cluster": "Auth",
+    "targetWords": 1300,
+    "batch": "batch-2",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 24,
+    "title": "Verify Stripe Webhook Signatures",
+    "slug": "stripe-webhook-signature-security",
+    "query": "stripe webhook signature verification - how-to",
+    "cluster": "Payments",
+    "targetWords": 1350,
+    "batch": "batch-2",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 25,
+    "title": "Keep Pricing and Entitlements Off the Client",
+    "slug": "payment-entitlement-server-source-truth",
+    "query": "saas entitlement security - explainer",
+    "cluster": "Payments",
+    "targetWords": 1400,
+    "batch": "batch-2",
+    "cta": "Pillar + full app scan CTA"
+  },
+  {
+    "index": 26,
+    "title": "Prevent Mass Assignment in CRUD APIs",
+    "slug": "mass-assignment-crud-api",
+    "query": "mass assignment vulnerability - fix",
+    "cluster": "Input",
+    "targetWords": 1300,
+    "batch": "batch-2",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 27,
+    "title": "Idempotency and Replay Protection for SaaS",
+    "slug": "idempotency-replay-protection",
+    "query": "webhook idempotency security - how-to",
+    "cluster": "Payments",
+    "targetWords": 1400,
+    "batch": "batch-2",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 28,
+    "title": "Security Headers Every AI-Built App Needs",
+    "slug": "security-headers-ai-built-apps",
+    "query": "security headers checker - tool-led",
+    "cluster": "Web",
+    "targetWords": 1300,
+    "batch": "batch-2",
+    "cta": "Pillar + Headers Checker"
+  },
+  {
+    "index": 29,
+    "title": "Secure Session Cookies",
+    "slug": "secure-session-cookie-settings",
+    "query": "secure cookie settings - how-to",
+    "cluster": "Auth",
+    "targetWords": 1300,
+    "batch": "batch-2",
+    "cta": "Pillar + JWT Inspector"
+  },
+  {
+    "index": 30,
+    "title": "TLS and Mobile Transport Security",
+    "slug": "tls-mobile-transport-security",
+    "query": "mobile app transport security - explainer",
+    "cluster": "Web",
+    "targetWords": 1350,
+    "batch": "batch-2",
+    "cta": "Pillar + Headers Checker"
+  },
+  {
+    "index": 31,
+    "title": "Public-by-Default Deployments and Storage",
+    "slug": "public-by-default-ai-apps",
+    "query": "ai app exposed data - prevention",
+    "cluster": "Data",
+    "targetWords": 1400,
+    "batch": "batch-2",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 32,
+    "title": "Remove Debug Routes and Verbose Errors",
+    "slug": "debug-routes-error-leaks",
+    "query": "stack trace information disclosure - fix",
+    "cluster": "Data",
+    "targetWords": 1300,
+    "batch": "batch-2",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 33,
+    "title": "Stop Shipping Source Maps and Private Build Artifacts",
+    "slug": "source-map-build-artifact-security",
+    "query": "source map security production - fix",
+    "cluster": "Supply chain",
+    "targetWords": 1350,
+    "batch": "batch-2",
+    "cta": "Pillar + Secret Scanner"
+  },
+  {
+    "index": 34,
+    "title": "Keep PII and Secrets Out of Logs",
+    "slug": "sensitive-data-logging",
+    "query": "pii in logs security - prevention",
+    "cluster": "Data",
+    "targetWords": 1350,
+    "batch": "batch-2",
+    "cta": "Pillar + Secret Scanner"
+  },
+  {
+    "index": 35,
+    "title": "Audit Logs for Security-Sensitive Actions",
+    "slug": "security-audit-log-design",
+    "query": "security audit log best practices - how-to",
+    "cluster": "Operations",
+    "targetWords": 1400,
+    "batch": "batch-2",
+    "cta": "Pillar + product audit trail"
+  },
+  {
+    "index": 36,
+    "title": "Monitoring and Alerts Before Launch",
+    "slug": "security-monitoring-ai-apps",
+    "query": "app security monitoring checklist - how-to",
+    "cluster": "Operations",
+    "targetWords": 1350,
+    "batch": "batch-3",
+    "cta": "Pillar + schedules/notifications"
+  },
+  {
+    "index": 37,
+    "title": "Prove Backup and Restore Before Agents Touch Production",
+    "slug": "backup-restore-agentic-apps",
+    "query": "backup restore test - how-to",
+    "cluster": "Operations",
+    "targetWords": 1400,
+    "batch": "batch-3",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 38,
+    "title": "Audit AI-Suggested Dependencies for CVEs",
+    "slug": "ai-dependency-vulnerability-audit",
+    "query": "ai generated dependencies security - how-to",
+    "cluster": "Supply chain",
+    "targetWords": 1400,
+    "batch": "batch-3",
+    "cta": "Pillar + product SCA"
+  },
+  {
+    "index": 39,
+    "title": "Hallucinated Packages and Slopsquatting",
+    "slug": "hallucinated-packages-slopsquatting",
+    "query": "ai hallucinated package security - explainer",
+    "cluster": "Supply chain",
+    "targetWords": 1350,
+    "batch": "batch-3",
+    "cta": "Pillar + product SCA"
+  },
+  {
+    "index": 40,
+    "title": "Secure Install Scripts and Transitive Dependencies",
+    "slug": "install-script-supply-chain-security",
+    "query": "npm postinstall security - how-to",
+    "cluster": "Supply chain",
+    "targetWords": 1400,
+    "batch": "batch-3",
+    "cta": "Pillar + product SCA"
+  },
+  {
+    "index": 41,
+    "title": "What Never to Paste Into an AI Coding Tool",
+    "slug": "secrets-ai-coding-prompts",
+    "query": "ai coding assistant privacy secrets - checklist",
+    "cluster": "Agent",
+    "targetWords": 1300,
+    "batch": "batch-3",
+    "cta": "Pillar + Secret Scanner"
+  },
+  {
+    "index": 42,
+    "title": "Indirect Prompt Injection in Repositories and Web Pages",
+    "slug": "indirect-prompt-injection-coding-agents",
+    "query": "coding agent prompt injection - explainer",
+    "cluster": "Agent",
+    "targetWords": 1450,
+    "batch": "batch-3",
+    "cta": "Pillar + MCP security"
+  },
+  {
+    "index": 43,
+    "title": "Least-Privilege MCP Tools",
+    "slug": "least-privilege-mcp-tools",
+    "query": "mcp security permissions - how-to",
+    "cluster": "Agent",
+    "targetWords": 1400,
+    "batch": "batch-3",
+    "cta": "Pillar + product MCP"
+  },
+  {
+    "index": 44,
+    "title": "Sandboxing and Egress Control for Coding Agents",
+    "slug": "coding-agent-sandbox-egress",
+    "query": "coding agent sandbox security - guide",
+    "cluster": "Agent",
+    "targetWords": 1500,
+    "batch": "batch-3",
+    "cta": "Pillar + product approval model"
+  },
+  {
+    "index": 45,
+    "title": "Keep AI Agents Away From Production Deletes",
+    "slug": "agent-production-permissions",
+    "query": "ai agent database deletion prevention - guide",
+    "cluster": "Agent",
+    "targetWords": 1400,
+    "batch": "batch-3",
+    "cta": "Pillar + approvals/audit"
+  },
+  {
+    "index": 46,
+    "title": "Protect AGENTS.md and Rules Files From Poisoning",
+    "slug": "agent-rules-file-security",
+    "query": "ai coding rules prompt injection - guide",
+    "cluster": "Agent",
+    "targetWords": 1400,
+    "batch": "batch-3",
+    "cta": "Pillar + MCP security"
+  },
+  {
+    "index": 47,
+    "title": "Why AI-Generated Tests Are Not Security Proof",
+    "slug": "ai-generated-tests-security",
+    "query": "ai generated tests security - explainer",
+    "cluster": "Verification",
+    "targetWords": 1350,
+    "batch": "batch-3",
+    "cta": "Pillar + verified findings"
+  },
+  {
+    "index": 48,
+    "title": "Prevent CI/CD Agents From Becoming a Confused Deputy",
+    "slug": "cicd-agent-confused-deputy",
+    "query": "agentic ci security - guide",
+    "cluster": "Agent",
+    "targetWords": 1450,
+    "batch": "batch-3",
+    "cta": "Pillar + GitHub diff gate"
+  },
+  {
+    "index": 49,
+    "title": "Stop Prompt Injection From Spreading Across Agents",
+    "slug": "multi-agent-prompt-injection",
+    "query": "multi agent security - guide",
+    "cluster": "Agent",
+    "targetWords": 1400,
+    "batch": "batch-3",
+    "cta": "Pillar + MCP security"
+  },
+  {
+    "index": 50,
+    "title": "Find Placeholder Logic and Silent Failures",
+    "slug": "placeholder-logic-silent-failures",
+    "query": "ai generated code silent failure - guide",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-3",
+    "cta": "Pillar + retest workflow"
+  },
+  {
+    "index": 51,
+    "title": "Human Review and Threat Modeling for Vibe Coding",
+    "slug": "human-review-threat-model-vibe-coding",
+    "query": "vibe coding threat model - guide",
+    "cluster": "Verification",
+    "targetWords": 1450,
+    "batch": "batch-3",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 52,
+    "title": "Secure a Cursor-Built App Before Launch",
+    "slug": "cursor-app-security-checklist",
+    "query": "cursor app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-3",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 53,
+    "title": "Secure a Claude Code Project",
+    "slug": "claude-code-security-workflow",
+    "query": "claude code security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-4",
+    "cta": "Pillar + product MCP"
+  },
+  {
+    "index": 54,
+    "title": "Secure an OpenAI Codex Project",
+    "slug": "codex-security-workflow",
+    "query": "codex security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-4",
+    "cta": "Pillar + product MCP"
+  },
+  {
+    "index": 55,
+    "title": "Secure a Windsurf Project",
+    "slug": "windsurf-security-workflow",
+    "query": "windsurf security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-4",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 56,
+    "title": "Secure a Lovable App Before Launch",
+    "slug": "lovable-app-security-checklist",
+    "query": "lovable app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-4",
+    "cta": "Pillar + RLS Checker"
+  },
+  {
+    "index": 57,
+    "title": "Secure a Bolt App Before Launch",
+    "slug": "bolt-app-security-checklist",
+    "query": "bolt app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-4",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 58,
+    "title": "Secure a Replit App Before Launch",
+    "slug": "replit-app-security-checklist",
+    "query": "replit app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-4",
+    "cta": "Pillar + Headers Checker"
+  },
+  {
+    "index": 59,
+    "title": "Secure a v0-Generated App",
+    "slug": "v0-app-security-checklist",
+    "query": "v0 app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1350,
+    "batch": "batch-4",
+    "cta": "Pillar + Secret Scanner"
+  },
+  {
+    "index": 60,
+    "title": "Secure a Base44 App Before Launch",
+    "slug": "base44-app-security-checklist",
+    "query": "base44 security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-4",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 61,
+    "title": "Secure Supabase Auth, RLS, and Service Keys",
+    "slug": "supabase-security-guide",
+    "query": "supabase security checklist - guide",
+    "cluster": "Stack",
+    "targetWords": 1500,
+    "batch": "batch-4",
+    "cta": "Pillar + RLS Checker"
+  },
+  {
+    "index": 62,
+    "title": "Secure Firebase Rules and Storage",
+    "slug": "firebase-security-guide",
+    "query": "firebase security rules checklist - guide",
+    "cluster": "Stack",
+    "targetWords": 1450,
+    "batch": "batch-4",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 63,
+    "title": "Secure a Next.js App Generated by AI",
+    "slug": "nextjs-ai-app-security",
+    "query": "nextjs security checklist - guide",
+    "cluster": "Stack",
+    "targetWords": 1450,
+    "batch": "batch-4",
+    "cta": "Pillar + Headers Checker"
+  },
+  {
+    "index": 64,
+    "title": "Secure React Frontends Without Trusting the Browser",
+    "slug": "react-frontend-security-ai-code",
+    "query": "react frontend security - guide",
+    "cluster": "Stack",
+    "targetWords": 1400,
+    "batch": "batch-4",
+    "cta": "Pillar + Secret Scanner"
+  },
+  {
+    "index": 65,
+    "title": "Secure Node and Express APIs Generated by AI",
+    "slug": "node-express-ai-api-security",
+    "query": "express api security checklist - guide",
+    "cluster": "Stack",
+    "targetWords": 1450,
+    "batch": "batch-4",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 66,
+    "title": "Secure FastAPI Code Generated by AI",
+    "slug": "fastapi-ai-generated-security",
+    "query": "fastapi security checklist - guide",
+    "cluster": "Stack",
+    "targetWords": 1450,
+    "batch": "batch-4",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 67,
+    "title": "Secure Vercel Deployments and Preview URLs",
+    "slug": "vercel-deployment-security",
+    "query": "vercel security checklist - guide",
+    "cluster": "Stack",
+    "targetWords": 1350,
+    "batch": "batch-4",
+    "cta": "Pillar + Headers Checker"
+  },
+  {
+    "index": 68,
+    "title": "Secure Cloudflare Workers Built With AI",
+    "slug": "cloudflare-workers-ai-security",
+    "query": "cloudflare workers security - guide",
+    "cluster": "Stack",
+    "targetWords": 1450,
+    "batch": "batch-4",
+    "cta": "Pillar + Headers Checker"
+  },
+  {
+    "index": 69,
+    "title": "Secure GitHub Actions Used by Coding Agents",
+    "slug": "github-actions-coding-agent-security",
+    "query": "github actions ai agent security - guide",
+    "cluster": "Stack",
+    "targetWords": 1450,
+    "batch": "batch-5",
+    "cta": "Pillar + GitHub diff gate"
+  },
+  {
+    "index": 70,
+    "title": "Build a Secure MCP Server",
+    "slug": "secure-mcp-server-guide",
+    "query": "mcp server security - guide",
+    "cluster": "Stack",
+    "targetWords": 1500,
+    "batch": "batch-5",
+    "cta": "Pillar + product MCP"
+  },
+  {
+    "index": 71,
+    "title": "Secure an AI SaaS With Stripe",
+    "slug": "ai-saas-stripe-security",
+    "query": "ai saas stripe security - guide",
+    "cluster": "Stack",
+    "targetWords": 1500,
+    "batch": "batch-5",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 72,
+    "title": "AI App Pre-Launch Security Checklist",
+    "slug": "ai-app-prelaunch-security-checklist",
+    "query": "ai app security checklist - checklist",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-5",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 73,
+    "title": "The Two-Account Test for Data Isolation",
+    "slug": "two-account-idor-test",
+    "query": "test app authorization two accounts - how-to",
+    "cluster": "Verification",
+    "targetWords": 1250,
+    "batch": "batch-5",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 74,
+    "title": "Secret Scanning Before Every Commit",
+    "slug": "secret-scanning-before-commit",
+    "query": "secret scanning git - how-to",
+    "cluster": "Verification",
+    "targetWords": 1300,
+    "batch": "batch-5",
+    "cta": "Pillar + Secret Scanner"
+  },
+  {
+    "index": 75,
+    "title": "Dependency Scanning With OSV and Lockfiles",
+    "slug": "osv-dependency-scanning",
+    "query": "osv dependency scanner - how-to",
+    "cluster": "Verification",
+    "targetWords": 1350,
+    "batch": "batch-5",
+    "cta": "Pillar + product SCA"
+  },
+  {
+    "index": 76,
+    "title": "SAST vs DAST vs SCA for AI-Built Apps",
+    "slug": "sast-dast-sca-ai-apps",
+    "query": "sast vs dast vs sca - comparison intent",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-5",
+    "cta": "Pillar + full app scan CTA"
+  },
+  {
+    "index": 77,
+    "title": "A Security Review Prompt That Does Not Replace Testing",
+    "slug": "ai-security-review-prompt",
+    "query": "security review prompt for ai code - template",
+    "cluster": "Verification",
+    "targetWords": 1300,
+    "batch": "batch-5",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 78,
+    "title": "Threat Modeling for Non-Security Founders",
+    "slug": "threat-model-ai-startup",
+    "query": "startup threat model template - guide",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-5",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 79,
+    "title": "Why Every Security Fix Needs a Retest",
+    "slug": "security-fix-retest-workflow",
+    "query": "security retesting - explainer",
+    "cluster": "Verification",
+    "targetWords": 1350,
+    "batch": "batch-5",
+    "cta": "Pillar + product retest"
+  },
+  {
+    "index": 80,
+    "title": "How to Verify a Security Finding",
+    "slug": "verify-security-finding",
+    "query": "verify vulnerability finding - guide",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-5",
+    "cta": "Pillar + verified findings"
+  },
+  {
+    "index": 81,
+    "title": "SARIF for AI Coding Workflows",
+    "slug": "sarif-ai-coding-workflow",
+    "query": "sarif security results - guide",
+    "cluster": "Verification",
+    "targetWords": 1350,
+    "batch": "batch-5",
+    "cta": "Pillar + product SARIF"
+  },
+  {
+    "index": 82,
+    "title": "Add a Security Diff Gate to Pull Requests",
+    "slug": "security-diff-gate-pull-requests",
+    "query": "pull request security gate - how-to",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-5",
+    "cta": "Pillar + GitHub diff gate"
+  },
+  {
+    "index": 83,
+    "title": "Build a Go / No-Go Security Launch Gate",
+    "slug": "security-launch-readiness-gate",
+    "query": "security launch readiness checklist - guide",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-5",
+    "cta": "Pillar + launch readiness"
+  },
+  {
+    "index": 84,
+    "title": "Create a Security Report for a Client Handoff",
+    "slug": "client-security-report-handoff",
+    "query": "client security report template - guide",
+    "cluster": "Verification",
+    "targetWords": 1350,
+    "batch": "batch-5",
+    "cta": "Pillar + product reports"
+  },
+  {
+    "index": 85,
+    "title": "Schedule Weekly Security Checks",
+    "slug": "weekly-security-scan-workflow",
+    "query": "scheduled security scan - guide",
+    "cluster": "Operations",
+    "targetWords": 1300,
+    "batch": "batch-6",
+    "cta": "Pillar + schedules/notifications"
+  },
+  {
+    "index": 86,
+    "title": "What to Do With a Critical Finding",
+    "slug": "critical-security-finding-response",
+    "query": "critical vulnerability remediation - guide",
+    "cluster": "Operations",
+    "targetWords": 1350,
+    "batch": "batch-6",
+    "cta": "Pillar + fix/retest"
+  },
+  {
+    "index": 87,
+    "title": "Is AI-Generated Code Safe for Production?",
+    "slug": "ai-generated-code-production-safety",
+    "query": "is ai generated code safe - answer",
+    "cluster": "Decision",
+    "targetWords": 1400,
+    "batch": "batch-6",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 88,
+    "title": "When a Vibe-Coded Prototype Becomes Production",
+    "slug": "prototype-to-production-security",
+    "query": "prototype production security checklist - guide",
+    "cluster": "Decision",
+    "targetWords": 1400,
+    "batch": "batch-6",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 89,
+    "title": "What Not to Share With AI Coding Assistants",
+    "slug": "ai-coding-assistant-data-privacy",
+    "query": "ai coding assistant privacy - checklist",
+    "cluster": "Decision",
+    "targetWords": 1350,
+    "batch": "batch-6",
+    "cta": "Pillar + Secret Scanner"
+  },
+  {
+    "index": 90,
+    "title": "How to Review an AI-Generated Pull Request",
+    "slug": "review-ai-generated-pull-request",
+    "query": "ai code review checklist - guide",
+    "cluster": "Decision",
+    "targetWords": 1450,
+    "batch": "batch-6",
+    "cta": "Pillar + GitHub diff gate"
+  },
+  {
+    "index": 91,
+    "title": "Privacy Checklist for AI-Built Apps",
+    "slug": "ai-app-privacy-checklist",
+    "query": "ai app privacy checklist - checklist",
+    "cluster": "Decision",
+    "targetWords": 1400,
+    "batch": "batch-6",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 92,
+    "title": "Security Reviews for Agencies Shipping Client Apps",
+    "slug": "agency-client-app-security-review",
+    "query": "agency app security review - commercial",
+    "cluster": "Audience",
+    "targetWords": 1400,
+    "batch": "batch-6",
+    "cta": "Pillar + product reports"
+  },
+  {
+    "index": 93,
+    "title": "Security for Solo Founders Who Vibe Code",
+    "slug": "solo-founder-vibe-coding-security",
+    "query": "vibe coding security for founders - guide",
+    "cluster": "Audience",
+    "targetWords": 1400,
+    "batch": "batch-6",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 94,
+    "title": "Secure Internal Tools Built by Non-Developers",
+    "slug": "secure-ai-built-internal-tools",
+    "query": "ai built internal tool security - guide",
+    "cluster": "Audience",
+    "targetWords": 1450,
+    "batch": "batch-6",
+    "cta": "Pillar + full app scan CTA"
+  },
+  {
+    "index": 95,
+    "title": "Secure Public AI API Endpoints",
+    "slug": "secure-public-ai-api-endpoints",
+    "query": "ai api security checklist - guide",
+    "cluster": "Decision",
+    "targetWords": 1450,
+    "batch": "batch-6",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 96,
+    "title": "What an App Security Score Can and Cannot Mean",
+    "slug": "app-security-score-explained",
+    "query": "app security score - explainer",
+    "cluster": "Decision",
+    "targetWords": 1350,
+    "batch": "batch-6",
+    "cta": "Pillar + LyraShield Score methodology"
+  },
+  {
+    "index": 97,
+    "title": "Reduce Security Scanner False Positives",
+    "slug": "security-scanner-false-positives",
+    "query": "security false positives - guide",
+    "cluster": "Decision",
+    "targetWords": 1400,
+    "batch": "batch-6",
+    "cta": "Pillar + verified findings"
+  },
+  {
+    "index": 98,
+    "title": "How to Prioritize Security Findings",
+    "slug": "prioritize-security-findings",
+    "query": "vulnerability prioritization - guide",
+    "cluster": "Decision",
+    "targetWords": 1400,
+    "batch": "batch-6",
+    "cta": "Pillar + findings workflow"
+  },
+  {
+    "index": 99,
+    "title": "Share a Security Report Without Leaking Details",
+    "slug": "share-security-report-safely",
+    "query": "share security report safely - guide",
+    "cluster": "Decision",
+    "targetWords": 1350,
+    "batch": "batch-6",
+    "cta": "Pillar + scorecards/reports"
+  },
+  {
+    "index": 100,
+    "title": "Rotate and Recover From an Exposed API Key",
+    "slug": "exposed-api-key-incident-response",
+    "query": "exposed api key what to do - urgent how-to",
+    "cluster": "Operations",
+    "targetWords": 1350,
+    "batch": "batch-6",
+    "cta": "Pillar + Secret Scanner"
+  }
+]

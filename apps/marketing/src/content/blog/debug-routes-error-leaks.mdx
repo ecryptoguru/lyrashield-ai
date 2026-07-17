@@ -1,0 +1,114 @@
+---
+title: "Remove Debug Routes and Verbose Errors"
+description: "Stop production errors from exposing stack traces, paths, queries, and framework internals while preserving useful, access-controlled diagnostics."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: false
+heroImage: web-execution-05
+faq:
+  - q: "Is a correlation ID safe to return to a user?"
+    a: "Usually, if it is random or otherwise opaque and reveals no user, tenant, host, timestamp, or infrastructure data. Treat it as a lookup handle, apply rate limits to support tooling, and never make it an authorization credential."
+  - q: "Does hiding a stack trace fix the underlying error?"
+    a: "No. A generic response reduces information disclosure. The team still needs protected diagnostics, alerting, triage, and a fix for the exception or vulnerable code path that caused the error."
+  - q: "How can production diagnostics stay useful?"
+    a: "Log a structured event with an opaque correlation ID, error class, safe request context, release version, and stack trace inside access-controlled storage. Redact secrets and personal data before export, set retention, and test that public responses stay generic."
+  - q: "Should every application error return HTTP 500?"
+    a: "No. Map expected failures to stable, appropriate status codes such as 400, 401, 403, 404, or 409. Reserve 500-class responses for server failures and keep the public body free of internal details."
+---
+
+**Direct answer:** Disable development debuggers in production, remove or authenticate convenience routes, and send every unexpected exception through a central mapper. Return a stable public message with an opaque correlation ID. Keep stack traces and request context in access-controlled logs after redaction. Generic errors reduce disclosure, but they do not fix the underlying fault or replace monitoring.
+
+A failed request should tell the caller enough to recover without teaching them how the service is assembled. Raw stack traces do the opposite. They can reveal framework versions, source paths, table names, query structure, hostnames, and fragments of data that happened to be present when the exception was raised.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) separates detection from verification. Finding `debug=True` is a useful signal. A production request that receives only the intended public error is stronger evidence, though it remains scoped to the route and failure tested.
+
+## Remove executable and convenience debug surfaces
+
+Debug mode can change more than formatting. Flask's current [debugging documentation](https://flask.palletsprojects.com/en/stable/debugging/) warns that its built-in debugger can execute arbitrary Python code from the browser. A PIN does not make it suitable for production. The development server and debugger should not run there.
+
+Search production startup commands, framework settings, environment variables, and container entrypoints for debug switches. Inspect the built deployment configuration as well as source defaults. A safe default in code can be reversed by an environment setting at runtime.
+
+Inventory convenience routes created during development: `/debug`, `/env`, `/config`, `/routes`, `/health/details`, test email previews, queue inspectors, GraphQL explorers, profiling endpoints, and framework consoles. Do not probe systems without authorization. On your own service, request each known route from outside the trusted network and without a session.
+
+Remove routes that have no production purpose. If operators genuinely need one, put it behind server-side authorization, a narrow role, a network control where appropriate, and audit logging. A hidden path or unusual name is not a permission check.
+
+Health endpoints need a deliberate split. A public liveness response can say that the process is available without returning dependency addresses, build paths, credentials, configuration values, queue names, or recent exceptions. Put richer readiness and diagnostic detail behind an operator boundary.
+
+## Map exceptions once
+
+Scattered `try` blocks tend to produce inconsistent responses. One route returns a friendly message, another serializes the exception, and a third relies on the framework's development page. Use a global error boundary or exception mapper so unexpected failures have one public contract.
+
+This pseudocode keeps the public and internal records separate:
+
+```ts
+function handleUnexpected(error: unknown, request: Request) {
+  const correlationId = crypto.randomUUID()
+
+  secureLogger.error({
+    correlationId,
+    error: redactError(error),
+    routeTemplate: matchedRouteTemplate(request),
+    release: RELEASE_ID,
+  })
+
+  return json({ error: "Request could not be completed", correlationId }, { status: 500 })
+}
+```
+
+The example deliberately logs a route template rather than the complete URL. Query strings can contain search terms, email addresses, invite codes, tokens, or other user data. `redactError` must be a tested implementation, not a reassuring function name. Do not log raw request bodies or headers by default.
+
+Expected errors still deserve explicit mappings. A malformed request can return a stable 400 response. Missing authentication can return 401, and an authenticated caller who lacks permission can receive 403. Be careful when different responses could reveal whether an account or private object exists. MITRE's [CWE-209 guidance](https://cwe.mitre.org/data/definitions/209.html) specifically warns about inconsistent messages that expose internal state.
+
+## Keep the public response boring
+
+The [OWASP Error Handling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html) recommends returning a generic response for unexpected errors while logging details on the server. The public body should not contain the exception message, stack, SQL statement, filesystem path, dependency hostname, framework banner, or configuration dump.
+
+A useful response can still be specific about what the caller should do. Tell them whether input was invalid, authentication is required, a conflict occurred, or the service could not complete the request. Do not include the internal reason when it adds exposure without helping recovery.
+
+An opaque correlation ID lets support staff locate the matching event. Generate it randomly or with another non-sensitive scheme. Do not encode a user ID, tenant, server name, timestamp, database shard, or sequential event count. The identifier should not grant access to logs or support records.
+
+Set consistent response content types and status codes. Test HTML routes, JSON APIs, server-rendered pages, background action endpoints, and streaming responses. Framework defaults can differ across these paths.
+
+## Redact before diagnostics leave the process
+
+Moving a stack trace into logs changes the audience, but logs can still leak. CWE-209 advises against storing highly sensitive values such as passwords. Apply allowlisted structured fields where possible, then redact known credential formats, authorization headers, cookies, connection strings, and sensitive request data before an event reaches a collector.
+
+Restrict who can search diagnostics. Set retention according to operational and legal needs. Record access to production logs. Separate customer-facing support tools from raw observability storage so a correlation ID does not become a shortcut into unrestricted event data.
+
+Keep enough context to debug: release identifier, error class, safe route template, component, and a protected stack trace are often useful. Add user or tenant references only if the investigation requires them, and prefer an internal pseudonymous identifier. Document which fields the logger accepts.
+
+Redaction has limits. A novel secret format, arbitrary user content, or value embedded in an exception message can evade pattern filters. Reduce what enters exceptions and logs before relying on a scrubber. Tests should use inert canary values, never real credentials or personal data.
+
+## Test failures safely in the production-shaped build
+
+Create controlled test routes or inputs that raise known synthetic exceptions in a local production build or an authorized staging environment. The test exception can contain inert markers shaped like a path, table name, and fake token. Confirm none of those markers appears in the public status line, headers, body, or framework error page.
+
+Verify that the protected log contains the correlation ID and enough sanitized context to investigate. Confirm a user without the operator role cannot retrieve that event. Exercise missing routes, invalid JSON, dependency timeouts, authorization failures, template errors, and unhandled exceptions because each may use a different handler.
+
+For a live production check, use a harmless invalid request against a route designed to reject it. Do not trigger resource exhaustion, database faults, or destructive code merely to obtain an error. If a synthetic exception hook exists, require strong operator authorization and remove or disable it after the test.
+
+Scan known debug routes from the authorized inventory rather than guessing sensitive paths on third-party systems. Check both authenticated and logged-out sessions. A route protected in the browser can still be exposed through a direct API request if enforcement lives only in client code.
+
+## Keep runtime and artifact leakage separate
+
+Generic runtime errors do not remove files already published with the application. A source map, package archive, build manifest, or copied environment file may remain directly downloadable even when every request handler returns a safe error.
+
+The related [build artifact security guide](/blog/source-map-build-artifact-security) covers generated files and source maps. Treat artifact inspection as a separate release check. This article covers dynamic routes, exception mapping, and runtime responses.
+
+The [public exposure review](/blog/public-by-default-ai-apps) covers the adjacent deployment boundary: an old origin or unprotected preview can reveal a route that the main domain no longer exposes. Keep that origin inventory separate from the error-response test so each result has a clear scope.
+
+## What a clean test can establish
+
+A controlled test can show that one production-shaped build mapped a specific failure to the expected public response and wrote a protected diagnostic event. It cannot prove every route, framework fallback, proxy, dependency, or future exception follows the same path. It also says nothing about whether the underlying fault was repaired.
+
+Repeat the review when the framework, runtime, proxy, logging pipeline, or route set changes. Monitor error volume and failed redaction tests. Use the [AI app security checklist](/tools/ai-app-security-checklist) to record the production route inventory and expected error evidence. The checklist runs in the browser and cannot inspect a deployed response or private log system for you.
+
+## Sources
+
+- [OWASP: Error Handling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html)
+- [MITRE: CWE-209, Generation of Error Message Containing Sensitive Information](https://cwe.mitre.org/data/definitions/209.html)
+- [Flask: Debugging Application Errors](https://flask.palletsprojects.com/en/stable/debugging/)

@@ -1,0 +1,210 @@
+---
+import Base from "@layouts/Base.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/blog/editorial-policy", origin).toString()
+const title = "Editorial Policy for Security Guidance | LyraShield AI"
+const description =
+  "How LyraShield AI researches, reviews, corrects, illustrates, and publishes practical security guidance for builders of AI-built applications."
+const reviewedDate = "2026-07-17"
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": canonical,
+    name: "How LyraShield AI publishes security guidance",
+    description,
+    url: canonical,
+    dateModified: reviewedDate,
+    reviewedBy: { "@id": `${origin}/#organization` },
+    isPartOf: { "@id": `${origin}/blog#collection` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Blog", item: `${origin}/blog` },
+      { "@type": "ListItem", position: 3, name: "Editorial policy", item: canonical },
+    ],
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <article class="editorial-policy">
+    <header class="editorial-policy__header">
+      <h1>How LyraShield AI publishes security guidance</h1>
+      <p>
+        This policy explains how the LyraShield Team researches, reviews, illustrates, updates, and
+        corrects public security guidance. A polished article is not evidence that a security claim
+        is true. The sources, technical review, stated scope, and retained limitations carry that
+        responsibility.
+      </p>
+      <p class="editorial-policy__reviewed">
+        Last reviewed: <time datetime={reviewedDate}>July 17, 2026</time>
+      </p>
+    </header>
+
+    <div class="editorial-policy__body">
+      <section aria-labelledby="assistance-heading">
+        <h2 id="assistance-heading">AI assistance</h2>
+        <p>
+          AI tools may help organize research, compare an article against its brief, prepare an
+          early draft, check internal links, or develop image concepts. They do not approve a
+          source, establish a product fact, perform the final technical review, or decide that an
+          article is ready to publish.
+        </p>
+      </section>
+
+      <section aria-labelledby="accountability-heading">
+        <h2 id="accountability-heading">Human accountability</h2>
+        <p>
+          The LyraShield Team remains accountable for every published claim. A reviewer checks the
+          cited source, the current repository behavior behind product statements, safe wording,
+          examples, limitations, links, metadata, and the final release candidate. Organization
+          authorship means the team owns corrections; it is not a claim that one unnamed person has
+          tested every system described.
+        </p>
+      </section>
+
+      <section aria-labelledby="sources-heading">
+        <h2 id="sources-heading">Primary sources</h2>
+        <p>
+          Material technical claims should use standards bodies, government guidance, official
+          vulnerability taxonomies, RFCs, vendor documentation, security advisories, or original
+          research. Community discussion can reveal reader questions, but it does not establish
+          prevalence, product performance, or a security outcome. Editorial inferences are labeled
+          as inferences and kept separate from what a source directly establishes.
+        </p>
+      </section>
+
+      <section aria-labelledby="examples-heading">
+        <h2 id="examples-heading">Safe examples and automated-check limits</h2>
+        <p>
+          Examples use inert code, synthetic accounts, placeholder credentials, and systems the
+          tester owns or has permission to assess. We do not publish working exploits against named
+          targets. Automated checks are described by the surface and evidence they actually cover.
+          A clean result is never presented as proof that an application has no vulnerabilities.
+        </p>
+      </section>
+
+      <section aria-labelledby="corrections-heading">
+        <h2 id="corrections-heading">Corrections and material updates</h2>
+        <p>
+          We correct factual, technical, and product-boundary errors when they are found. A material
+          correction receives a visible update date and an explanatory note when readers need that
+          context. Stable URLs and stable heading anchors are preserved whenever possible so cited
+          links continue to reach the intended guidance. Editorial cleanup that does not change the
+          guidance does not receive a misleading material-update claim.
+        </p>
+      </section>
+
+      <section aria-labelledby="images-heading">
+        <h2 id="images-heading">Image review</h2>
+        <p>
+          Blog artwork may be generated with Codex Imagegen, then cropped and compressed through a
+          deterministic production pipeline. A person reviews the source, central crop, alternate
+          text, derivative dimensions, file size, and article fit before approval. Images remain
+          text-free and cannot imply customers, certifications, live findings, or security guarantees.
+        </p>
+      </section>
+    </div>
+
+    <footer class="editorial-policy__footer">
+      <p>
+        Product-specific evidence terms are defined on the <a href="/methodology">methodology page</a>.
+        The <a href="/sample-report">sample assurance report</a> is illustrative, not a customer result.
+      </p>
+    </footer>
+  </article>
+</Base>
+
+<style>
+  .editorial-policy {
+    width: min(100% - 2rem, 68rem);
+    margin-inline: auto;
+    padding-block: clamp(4rem, 9vw, 8rem);
+  }
+
+  .editorial-policy__header {
+    max-width: 58rem;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: clamp(3rem, 7vw, 5rem);
+  }
+
+  .editorial-policy h1 {
+    max-width: 56rem;
+    margin: 0;
+    font-family: "Bricolage Grotesque Variable", sans-serif;
+    font-size: clamp(3rem, 7vw, 6.5rem);
+    font-weight: 800;
+    line-height: 0.92;
+    letter-spacing: -0.055em;
+  }
+
+  .editorial-policy__header > p:not(.editorial-policy__reviewed) {
+    max-width: 48rem;
+    margin: 2rem 0 0;
+    color: var(--color-text-muted);
+    font-size: clamp(1.08rem, 2vw, 1.25rem);
+    line-height: 1.75;
+  }
+
+  .editorial-policy__reviewed {
+    margin: 1.5rem 0 0;
+    color: var(--color-text-muted);
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .editorial-policy__body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: clamp(2rem, 7vw, 6rem);
+  }
+
+  .editorial-policy__body section {
+    border-bottom: 1px solid var(--color-border);
+    padding-block: clamp(2.5rem, 5vw, 4rem);
+  }
+
+  .editorial-policy h2 {
+    margin: 0;
+    font-family: "Bricolage Grotesque Variable", sans-serif;
+    font-size: clamp(1.6rem, 3vw, 2.25rem);
+    letter-spacing: -0.035em;
+  }
+
+  .editorial-policy__body p,
+  .editorial-policy__footer p {
+    margin: 1rem 0 0;
+    color: var(--color-text-muted);
+    line-height: 1.75;
+  }
+
+  .editorial-policy a {
+    color: var(--color-accent);
+    text-underline-offset: 0.2em;
+  }
+
+  .editorial-policy a:focus-visible {
+    border-radius: 0.2rem;
+    outline: 2px solid var(--color-accent);
+    outline-offset: 4px;
+  }
+
+  .editorial-policy__footer {
+    max-width: 48rem;
+    padding-top: clamp(2.5rem, 5vw, 4rem);
+  }
+
+  @media (max-width: 720px) {
+    .editorial-policy__body {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

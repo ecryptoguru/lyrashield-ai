@@ -1,0 +1,128 @@
+---
+title: "Secure a Windsurf Project"
+description: "Control Cascade terminal actions, MCP tools, credentials, shared rules, and branch review as Windsurf moves into Devin Desktop."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+draft: false
+heroImage: agent-security-01
+faq:
+  - q: "Did Windsurf become Devin Desktop?"
+    a: "Current Cascade and MCP documentation is published under Devin Desktop, while Windsurf plugin documentation still exists. Check the documentation for the surface your team actually runs before applying a setting."
+  - q: "Does an official MCP marketplace badge mean the server passed a security audit?"
+    a: "No. The current documentation says the badge identifies that the parent service company made the server. It does not describe the badge as a complete security audit."
+  - q: "When should terminal auto-execution be disabled?"
+    a: "Disable or tightly constrain it when a repository is unfamiliar, content is untrusted, commands can reach credentials, or the task touches release infrastructure. Review exact controls in the installed client version."
+---
+
+**Direct answer:** Review Windsurf and Cascade as a combined terminal, repository, MCP, and credential boundary. Keep command execution interactive for unfamiliar code, allowlist MCP servers and individual tools, interpolate secrets instead of checking them into configuration, work on a branch or worktree, and make CI plus human review the release decision.
+
+_Current naming and MCP controls were reviewed in Devin documentation on July 17, 2026. The Windsurf to Devin Desktop transition is active, so confirm labels in the installed client before publication or rollout._
+
+Windsurf guidance now spans two product labels. Current Cascade documentation appears under Devin Desktop, while Windsurf plugin and administrator pages remain available. That documentation move is not itself a security change. It is a reason to stop copying settings from an old screenshot and verify the control on the surface the team runs.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) asks where each sensitive action is enforced. For a Cascade session, the answer may sit in terminal behavior, an MCP registry, a tool toggle, `mcp_config.json`, an environment variable, or repository review policy. The editor window alone is not the boundary.
+
+## The risky pattern: one agent session can edit, execute, and publish
+
+**Vulnerable pattern. This configuration exposes more authority than a code-editing task needs.**
+
+```json
+{
+  "mcpServers": {
+    "operations": {
+      "serverUrl": "https://mcp.example.invalid/mcp",
+      "headers": {
+        "Authorization": "Bearer production-token-here"
+      }
+    }
+  }
+}
+```
+
+The example checks a token into a local configuration file and gives the session every tool the remote server advertises. If terminal commands can also run without a meaningful pause, repository text or tool output can influence both local execution and remote actions.
+
+Generated workflows miss this because each part looks ordinary in isolation. A remote MCP connection is a supported feature. An environment variable is a normal configuration mechanism. A terminal command may be a valid build step. Security depends on their combined reach, not on whether each feature works as documented.
+
+## Inventory the surface you actually use
+
+Record the client, version, team policy, repository root, terminal execution setting, MCP servers, enabled tools, and credentials. Check whether the team uses the full Devin Desktop Cascade surface, a Windsurf plugin, or both. The available controls and labels may differ.
+
+Do not assume a renamed document means an old configuration file stopped loading. Current Devin documentation still describes `~/.codeium/windsurf/mcp_config.json`, supports stdio, Streamable HTTP, and SSE transports, and uses a `windsurf://` deep link for MCP registry pages. These compatibility details are exactly why an inventory beats a product-name shortcut.
+
+For unfamiliar repositories, begin with planning and review rather than terminal automation. Treat repository rules, memories, workflows, and agent instructions as policy-bearing code. Require review for changes that expand tool access or relax command prompts.
+
+## Allowlist MCP servers, then trim their tools
+
+Devin Desktop currently lets users toggle individual tools for each MCP server. Team administrators can replace the default marketplace with custom registries or allowlist server configurations. Once a team allowlists at least one server, the documentation says non-allowlisted servers are blocked.
+
+An allowlisted server can still expose more tools than a task needs. Disable write, delete, merge, deploy, messaging, and administrative tools unless the workflow explicitly requires them. Use separate server entries or credentials for read-only review and mutation.
+
+The blue check shown for some marketplace entries identifies an MCP made by the parent service company. The documentation does not call it a full security audit. Review the server's package or endpoint, data destination, authentication, update path, and tool schemas. A legitimate publisher can still offer a capability that is too broad for the current repository.
+
+For server-side authorization and input handling, use [least privilege for MCP tools](/blog/least-privilege-mcp-tools). Client tool toggles reduce accidental use. The server must still reject unauthorized actions.
+
+## Test team allowlists against the real configuration
+
+The current admin documentation contains details that are easy to miss. Server IDs are case sensitive. Allowlist configuration uses anchored regular expressions for commands and arguments. Argument counts must match. The `env` section is not regex-matched, and disabled tools are handled separately.
+
+That means an allowlist entry can approve the intended executable while still leaving users free to supply a different credential value. It can also block a safe update because one argument changed. Test the exact user configuration on a non-production team before rollout. Review regex metacharacters, server IDs, command paths, arguments, enabled tools, and credential scope as separate fields.
+
+Prefer an exact configuration for sensitive servers. A flexible pattern needs a written reason and negative tests for paths or arguments it should reject. Keep the admin policy under review, since a marketplace or client update can change the generated configuration without changing the server's display name.
+
+## Keep credentials out of checked-in configuration
+
+Current Cascade MCP configuration supports `${env:VAR_NAME}` and `${file:/path/to/file}` interpolation in command, argument, environment, URL, and header fields. Use interpolation rather than a literal token.
+
+```json
+{
+  "mcpServers": {
+    "issues-readonly": {
+      "serverUrl": "https://mcp.example.invalid/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:ISSUES_READ_TOKEN}"
+      },
+      "disabledTools": ["create_issue", "delete_issue", "merge_change"]
+    }
+  }
+}
+```
+
+This is a safer shape, not a complete policy. Environment interpolation prevents the literal value from entering the JSON file. It does not stop the MCP process or agent from using the credential. Scope the token at the provider, keep it read-only, and restrict it to the intended organization or repository.
+
+Be careful with file interpolation. A readable file can still be copied by a process that has access. Use an operating-system secret store or short-lived credential where the integration supports one. Never paste a real token into a prompt, screenshot, or support request.
+
+## Separate terminal work from release work
+
+Use a branch or worktree for generated edits. A worktree keeps parallel tasks from overwriting each other and gives review a clean base. It does not sandbox terminal commands, network calls, or MCP actions.
+
+Before allowing a command, read the complete command and the script it invokes. Package scripts can change in the same branch. Avoid download-and-execute pipelines. Keep production deployment credentials outside the editor process, and protect the default branch at the repository host.
+
+After Cascade edits the project:
+
+1. Inspect all changed and untracked files, including agent rules and MCP configuration.
+2. Review dependency and lockfile changes separately from application code.
+3. Run focused tests plus a negative authorization or invalid-input case.
+4. Search for secrets, disabled checks, wildcard CORS, new network calls, and release-script changes.
+5. Push only to a review branch and let CI use its own scoped identity.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) provides a compact release inventory. It cannot inspect Cascade, validate a registry, or establish that a remote MCP tool enforced its advertised scope.
+
+## What the workflow can and cannot prove
+
+A branch review can show exactly what entered the repository. It cannot show every action a remote MCP server took unless the provider exposes reliable audit evidence. Passing tests show behavior in the test environment, not the installed desktop client's policy or the production deployment.
+
+Record unresolved limits. If the team cannot confirm terminal execution behavior on a plugin version, keep sensitive credentials unavailable and require command review. If a tool's publisher or data handling is unclear, leave it disabled. Those are ordinary engineering decisions, not verdicts about the vendor.
+
+Scan results and agent summaries should remain detected claims until a reviewer confirms the relevant path. A clean retest can support a retest-confirmed outcome for the case it covers. It does not prove that an MCP server, untested branch, or production environment is secure.
+
+## Sources
+
+- [Devin: Cascade Model Context Protocol integration](https://docs.devin.ai/desktop/cascade/mcp)
+- [Devin: Windsurf guide for administrators](https://docs.devin.ai/windsurf/plugins/guide-for-admins)
+- [Model Context Protocol: Security best practices](https://modelcontextprotocol.io/specification/latest/basic/security_best_practices)
+- [OWASP: LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
+- [GitHub: About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)

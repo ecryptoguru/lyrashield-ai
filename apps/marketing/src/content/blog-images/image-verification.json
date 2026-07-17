@@ -1,0 +1,1987 @@
+{
+  "version": 1,
+  "imageCount": 36,
+  "outputCount": 180,
+  "images": {
+    "access-boundary-01": {
+      "sourceHash": "sha256:459342e0ef23056f353abf43590a30e92f11e219a032a3ac6ad22a5566934b57",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/access-boundary-01/hero.avif",
+          "bytes": 19767,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:0f60b447ab51e2c734cecdabe4cfb5548e19c566e83260e40ab6889eed37d45c"
+        },
+        "webp": {
+          "path": "/images/blog/library/access-boundary-01/hero.webp",
+          "bytes": 24334,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:f5c783ad39d47f2c0b4b33df4b886f155dd23d3d4e231d5fe286805829d7d76c"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/access-boundary-01/hero.jpg",
+          "bytes": 84434,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:af9007d19df9a352c05424089e7285522df3f56b4886a708439c5b0dc1d651c7"
+        },
+        "og": {
+          "path": "/images/blog/library/access-boundary-01/og.jpg",
+          "bytes": 49766,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:e72b13c6525f7124e5da89c40df694fd8c03005719bb5eb07fa06339542cdeea"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/access-boundary-01/social-portrait.jpg",
+          "bytes": 73248,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:f8c4ca2e996a965a169e0159c7480ffd22234895db35b6ef1bfe74368f4ce578"
+        }
+      }
+    },
+    "access-boundary-02": {
+      "sourceHash": "sha256:da4d4e7ffbb858f5fdece5d2d79453206736422bd551cb056c4506ace33a6cc1",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/access-boundary-02/hero.avif",
+          "bytes": 33027,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:a9ee340274e113aa563c4cff157dba6be3aed83b6e11bca3a24f61bec4fe20f6"
+        },
+        "webp": {
+          "path": "/images/blog/library/access-boundary-02/hero.webp",
+          "bytes": 40166,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:c55e1b32f973305d6ac38612efe9e2bb3f0b80962d94244869d6584c37c8e255"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/access-boundary-02/hero.jpg",
+          "bytes": 98418,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:f11eb3047ad0b356314b32828cedda4b3af140e259bc12f7feb1dea1186a0fd1"
+        },
+        "og": {
+          "path": "/images/blog/library/access-boundary-02/og.jpg",
+          "bytes": 60259,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:07b36af12cfd42a076dce27b6fcf0a338908fe8fccf7ec2599eb8a3aa53b253c"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/access-boundary-02/social-portrait.jpg",
+          "bytes": 81567,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:7c9244eff3a5d4b779da985b1d6d553151bd0f6d011da11b379a0e1f11890597"
+        }
+      }
+    },
+    "access-boundary-03": {
+      "sourceHash": "sha256:07b2904f9436279c07196a90221d9408ef379698fba0e49f0c8d14604fa47dda",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/access-boundary-03/hero.avif",
+          "bytes": 27865,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:9831ce05dfa506e16cda3365b2b4a61fa412d8fdddb4f64c53ef39c113e3547d"
+        },
+        "webp": {
+          "path": "/images/blog/library/access-boundary-03/hero.webp",
+          "bytes": 33748,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:82dacb9a744fdecc76fab095a299f4432eca4fcfacdd5eeefc8219725f7de0b6"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/access-boundary-03/hero.jpg",
+          "bytes": 92463,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:d7ca28645c3f43c4ceb4421cfc89e5812459e4870b5149fb8b717cb23b1a81b1"
+        },
+        "og": {
+          "path": "/images/blog/library/access-boundary-03/og.jpg",
+          "bytes": 55671,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:babeb3c1ce4f0442fb5ee5dd71a0c97d296f2d98897bd192c6737cb68f68af58"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/access-boundary-03/social-portrait.jpg",
+          "bytes": 81822,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:3c1f855108eb8e022a85288f58050df60f730b190fafb30dd499fd3a929c122c"
+        }
+      }
+    },
+    "access-boundary-04": {
+      "sourceHash": "sha256:276cecb89f2e2151a2c184e0fcb446eb3ffd8c3a3ff9553b63a14de8e8b836c5",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/access-boundary-04/hero.avif",
+          "bytes": 13270,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:b274572bfdffc89b3a05decf5f19f79858c072a7ce52340c2928195cbadd2b41"
+        },
+        "webp": {
+          "path": "/images/blog/library/access-boundary-04/hero.webp",
+          "bytes": 20486,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:a6d5d985256795c61ae2185c945bcd8006b3711ab7ae2492f2b1147a6a83ad2f"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/access-boundary-04/hero.jpg",
+          "bytes": 55137,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:dd56a5f5bfc0124bec2586eae99af3afb68311960b8263ee7062879a591e7835"
+        },
+        "og": {
+          "path": "/images/blog/library/access-boundary-04/og.jpg",
+          "bytes": 34590,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:bb6035c9c0a83e8788614b81c98c92aba6b118da566195c48b610ee3681a35bb"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/access-boundary-04/social-portrait.jpg",
+          "bytes": 46628,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:a76adeac19d30c1747d42c650ac2a729bb07627187ea7fd58eee2bcc3dd7bca4"
+        }
+      }
+    },
+    "access-boundary-05": {
+      "sourceHash": "sha256:ba4d9d6e87a5d42930e801a3656580f207166c2d4cc64eb8240100a3d9e64595",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/access-boundary-05/hero.avif",
+          "bytes": 11597,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:8c59c0b6ce743144886481cfd250271806c12b721f088abe51b86fb3310c557e"
+        },
+        "webp": {
+          "path": "/images/blog/library/access-boundary-05/hero.webp",
+          "bytes": 14670,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:ae0e7d8b7e21a68f3a3f1d84ff9615353bd37c54e0ccdc398b27cf0b8bd01b86"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/access-boundary-05/hero.jpg",
+          "bytes": 43657,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:675822c5754414d56c5e74af34fe0f2b79c136c6da7a9b380834657917e3907e"
+        },
+        "og": {
+          "path": "/images/blog/library/access-boundary-05/og.jpg",
+          "bytes": 26245,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:b3a9fff07c78b239b0a710950a6c5c4f0f7c16074aea9d5787cdbd8bd66defc5"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/access-boundary-05/social-portrait.jpg",
+          "bytes": 36429,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:69dd1e6f117e4b6f2ef60c17d1221528f48cad2d764281cdecceae97078a523e"
+        }
+      }
+    },
+    "access-boundary-06": {
+      "sourceHash": "sha256:759b2d11526f1f75a5d4c012e437977c9934da27d412c0dd190da92c687fcec1",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/access-boundary-06/hero.avif",
+          "bytes": 9187,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:71b24689522537a8112f08a0870ab9d9724ea3404a0a00e14e0517f812e8865b"
+        },
+        "webp": {
+          "path": "/images/blog/library/access-boundary-06/hero.webp",
+          "bytes": 15810,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:1848422c5b641b978836738bc4cea16f80aa27d5cd8d738cd30f22c66c485afd"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/access-boundary-06/hero.jpg",
+          "bytes": 44042,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:9fb082fce6966badb05901faf093fb29ed9e456b2aca6a0376de064f7c3f9101"
+        },
+        "og": {
+          "path": "/images/blog/library/access-boundary-06/og.jpg",
+          "bytes": 25988,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:df797f64a214de518fa414283fcafc3ac2e9b6337747f6285127ec867846735c"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/access-boundary-06/social-portrait.jpg",
+          "bytes": 37403,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:e489aa1954626267b9079e88e5c2c1aa5a2c8ac134177fa44b211801f256eccd"
+        }
+      }
+    },
+    "agent-security-01": {
+      "sourceHash": "sha256:a9b30153ef63291a96cebec1bd1b8cb468748e6e051a003ebf26d1128c0f06d2",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/agent-security-01/hero.avif",
+          "bytes": 5792,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:1e8d3060daf40395fde16b352d8c7d63176b7dc14fdc10d8cda1598c3db4013a"
+        },
+        "webp": {
+          "path": "/images/blog/library/agent-security-01/hero.webp",
+          "bytes": 9160,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:f334279fc9c009b1297da7a6a1f72b495561b86b0660bf5e2f65f6faabdcc11c"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/agent-security-01/hero.jpg",
+          "bytes": 35359,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:4d8d2b36d36b401b3cf98beedadac1c756a798bcd090ecca3b83525396692293"
+        },
+        "og": {
+          "path": "/images/blog/library/agent-security-01/og.jpg",
+          "bytes": 20978,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:37624c9f4f21662d2e2c4c3b648802727454688e9852f8d7471a2b7d9d159233"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/agent-security-01/social-portrait.jpg",
+          "bytes": 31741,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:669577e04a5606563ba1c676e33f6117d45ebf74f29184b77e46177438b164ad"
+        }
+      }
+    },
+    "agent-security-02": {
+      "sourceHash": "sha256:6dc710fe9435ab06c5859725328ad237aceef2a4bdc3e827bfcef35704e02169",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/agent-security-02/hero.avif",
+          "bytes": 5862,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:d5b8754b467aa7092524a034b5d32c88547347d21e6dc332541cca20c87a554f"
+        },
+        "webp": {
+          "path": "/images/blog/library/agent-security-02/hero.webp",
+          "bytes": 9470,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:89f006b760f422cf751c15771c29a96cc3798d077700b687f16c835705f4310f"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/agent-security-02/hero.jpg",
+          "bytes": 32182,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:51c610bbb26dd7a6f4dc0854d6881fe5329f7e2a236f939eecdaa8bd6d40d9bf"
+        },
+        "og": {
+          "path": "/images/blog/library/agent-security-02/og.jpg",
+          "bytes": 17715,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:9548428a894d0bdee89279fb252bff6bdfec380384cd8abe8b037fa32c58e0a4"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/agent-security-02/social-portrait.jpg",
+          "bytes": 27873,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:3c0d2f38c044c1136a429d13a903727f83ef6c5c78516098808975fcd7464d86"
+        }
+      }
+    },
+    "agent-security-03": {
+      "sourceHash": "sha256:c667e5ff3f91dc397e0bdcdbc43c94770bc100e3575e3ba16c0d7892bfe53f30",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/agent-security-03/hero.avif",
+          "bytes": 5178,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:5d7bc5e33eb518e86085d38669cb2545aef221b8bb67da1afe475d2751a1f5ab"
+        },
+        "webp": {
+          "path": "/images/blog/library/agent-security-03/hero.webp",
+          "bytes": 8132,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:55e4c5c6ed1329096882eb4cc046f3a6380c9f3f3a9ca2f0dc2b8cb934664403"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/agent-security-03/hero.jpg",
+          "bytes": 31181,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:c8030a0bdd605c2b82ad35876c0f5b199e566d36c8130c99a27573672fa8f455"
+        },
+        "og": {
+          "path": "/images/blog/library/agent-security-03/og.jpg",
+          "bytes": 16838,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:546feab7b5e46ca24d4d348fdec0e2f9ca53f969d9c369beccd4045def3f5383"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/agent-security-03/social-portrait.jpg",
+          "bytes": 27077,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:867b851549e82222dbc20ecdf99ee3004feae804e2098fc9272943a1eb4b7ec9"
+        }
+      }
+    },
+    "agent-security-04": {
+      "sourceHash": "sha256:deb4f3a3e8738b1f2abc379ab633a2b7c16f5130912b02c9471b52188b47c4fb",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/agent-security-04/hero.avif",
+          "bytes": 13609,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:239417fd84a2766692f7bbb8e7b65d99fcfbf4430c46edc12aa711c6cc06e8dd"
+        },
+        "webp": {
+          "path": "/images/blog/library/agent-security-04/hero.webp",
+          "bytes": 19350,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:51e699327cd39a9ead42631a7682edc551b2ca13b88dbef3e28cb0e0bfd2c0c0"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/agent-security-04/hero.jpg",
+          "bytes": 57328,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:b88d7b16387c11427ba1c2d000d7d9a7b1634cf2e4661b6af9944e08f63eb70a"
+        },
+        "og": {
+          "path": "/images/blog/library/agent-security-04/og.jpg",
+          "bytes": 34853,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:fbed9beb6e842bbd089522f6bae74b71b3cbf71b2260cfdd83d9048b3cb991fd"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/agent-security-04/social-portrait.jpg",
+          "bytes": 47563,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:eb190dd3ed2c4f6d3d7f4331a900815dfd934d7ac042ee544c36602ac9ee7198"
+        }
+      }
+    },
+    "agent-security-05": {
+      "sourceHash": "sha256:584d666e229ef12e007eff486c80490fd9ba8eca806365952531de8a603a0fc8",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/agent-security-05/hero.avif",
+          "bytes": 4079,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:d409cc2a9ab5afa267930617642f63ddd5b6dc2929a2b55c07106c2ef1b82d43"
+        },
+        "webp": {
+          "path": "/images/blog/library/agent-security-05/hero.webp",
+          "bytes": 7460,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:3e6d7a17118300af387dd2d4adac0e3a659cb39c0958c8bc02628138e13c0ae2"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/agent-security-05/hero.jpg",
+          "bytes": 26340,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:cc6c10ed055cf092b96037f2e256e61409dc5229521d735b95bc2aee86b51d50"
+        },
+        "og": {
+          "path": "/images/blog/library/agent-security-05/og.jpg",
+          "bytes": 14742,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:554065e7d5a651a790c4bcdfb42b8ae6734b33d2df7f9f766b2afa7c46c8a370"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/agent-security-05/social-portrait.jpg",
+          "bytes": 23313,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:0a05d06ccf7db04cf386a9d772199d38b544531ba11668fdfe7b006cb9f2edb1"
+        }
+      }
+    },
+    "agent-security-06": {
+      "sourceHash": "sha256:d4e070a2021276fc97fbf54b6befd9aa7caeff2491ec9c18f8abb04c52b39b92",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/agent-security-06/hero.avif",
+          "bytes": 6061,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:ca04d49d197ffb10dc98753efce3fa5ab569171865e654d6ead3908f3ea1fb4a"
+        },
+        "webp": {
+          "path": "/images/blog/library/agent-security-06/hero.webp",
+          "bytes": 10218,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:a840fe4ee2c0584edc58d33b17fd8ec52d3d746a67185bf5bee8b9bc536571b8"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/agent-security-06/hero.jpg",
+          "bytes": 35765,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:7a984cb1504382f2460acb45c710efef5fe74cbb499f68e4390651e042ec9235"
+        },
+        "og": {
+          "path": "/images/blog/library/agent-security-06/og.jpg",
+          "bytes": 21340,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:e4ee939c8d990dd35cbb5de81714ad060a8f90df41bcbab1c35a2f00b127ec4c"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/agent-security-06/social-portrait.jpg",
+          "bytes": 30952,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:58e3996fbc7adab3186a351e0f616ebffe11b0031a821e59470cfe5b1919c3dd"
+        }
+      }
+    },
+    "authority-guide-01": {
+      "sourceHash": "sha256:8bcf9d4fd8457a0ae0347f2029978ac595048156bfd13012e9183d9a57c9feb6",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/authority-guide-01/hero.avif",
+          "bytes": 19649,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:de1183e8b61a83759e5e2592e21e889c99f30eeb4eb0a6dfbd9ba6229081d020"
+        },
+        "webp": {
+          "path": "/images/blog/library/authority-guide-01/hero.webp",
+          "bytes": 25802,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:6696c87ec6a9d6a9c013dd9a3091dd69aeeae00f3cb655539d68978e8585ed26"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/authority-guide-01/hero.jpg",
+          "bytes": 73379,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:4d0c962f3658fdbae8e75225de779b0d961cfd91b163f0718dafe7c547e0c0f3"
+        },
+        "og": {
+          "path": "/images/blog/library/authority-guide-01/og.jpg",
+          "bytes": 45865,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:fce1c1ae17f95fccf979ac5620f2a4c701c8f48e4b6fbd368359b32e4a3a566e"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/authority-guide-01/social-portrait.jpg",
+          "bytes": 60322,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:dc6c2352dec332a8c472f7ecba27e5d93a003c0da7a71292f040ff3080b29cd0"
+        }
+      }
+    },
+    "decision-operations-01": {
+      "sourceHash": "sha256:ab0ad05d49c4d9372d1334a7296621714e86b9139a7e7d993abd7a75596bce72",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/decision-operations-01/hero.avif",
+          "bytes": 13510,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:e805e99768b424653c493efb97684fda351460653ff7589c7c351bf5dad2b859"
+        },
+        "webp": {
+          "path": "/images/blog/library/decision-operations-01/hero.webp",
+          "bytes": 16510,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:84bbf0012628ccd458aac948635af90587b84f7638f88d31dd6665238161627b"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/decision-operations-01/hero.jpg",
+          "bytes": 48423,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:f34a83f9f3c6cc3142ef7e6484f1a0b5e8505219f18010792d5a7a012c751465"
+        },
+        "og": {
+          "path": "/images/blog/library/decision-operations-01/og.jpg",
+          "bytes": 29325,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:2e51c89e8a8cf8bdd09869d477dab6513c11f2360ada362d518f3c1f0db871c3"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/decision-operations-01/social-portrait.jpg",
+          "bytes": 39959,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:39a8323c4d4a24edcedcec4f8d5738f85187c377e231f01d2bbc826c6c79f081"
+        }
+      }
+    },
+    "decision-operations-02": {
+      "sourceHash": "sha256:8222cb1fcb4097fcf17ec9f8ff5076f87b188fb373d0aa874513b4f3dfabb729",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/decision-operations-02/hero.avif",
+          "bytes": 5278,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:ca66bd2aa4ca6fb0cc9ba8e7c68760d0920e413954f309a17b102f120917566a"
+        },
+        "webp": {
+          "path": "/images/blog/library/decision-operations-02/hero.webp",
+          "bytes": 9274,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:696d516280ec366f660cbedddf88617a04a73138f1a3bb96fe890a019b565529"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/decision-operations-02/hero.jpg",
+          "bytes": 33881,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:257ea9e1a998550fbe24fa5ab308f5c087cf838622252ded2a463190ad4c26b5"
+        },
+        "og": {
+          "path": "/images/blog/library/decision-operations-02/og.jpg",
+          "bytes": 17539,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:07c2bfc29d9f988a4ea45e82120a99da4c18a58e4205eaf4f81979719cd7a1e9"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/decision-operations-02/social-portrait.jpg",
+          "bytes": 29405,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:fd55ad6a0a8986b100471184f4461e80cef8d3d329b0c9710171d6f9c6e82a90"
+        }
+      }
+    },
+    "decision-operations-03": {
+      "sourceHash": "sha256:88fadac28eb1897950c4bc810a2360d340dfd49fb802612c0b17d620fc59a006",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/decision-operations-03/hero.avif",
+          "bytes": 10695,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:a21a90cb2b1b99e4f42d99ace99b0001dd13faa8ac70833208c760daf5af9d6f"
+        },
+        "webp": {
+          "path": "/images/blog/library/decision-operations-03/hero.webp",
+          "bytes": 13978,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:a03c26cc77d0e6ce919b2c1fbc7d8607ec28619fe43c4ac48a3b1714f1bee342"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/decision-operations-03/hero.jpg",
+          "bytes": 43584,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:183e93d6cb27cb5443c0738da638e9ae0e4d1dcdb0893b61e8047ebf2c0ddd9a"
+        },
+        "og": {
+          "path": "/images/blog/library/decision-operations-03/og.jpg",
+          "bytes": 25364,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:064e429fcd29e9ea0602ba94e3ed010ab6ae7a7193cc295b239e792e69373715"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/decision-operations-03/social-portrait.jpg",
+          "bytes": 36991,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:39d4c887e4b0b00bc39924f7ba72870e938704107a38ba0a4e5c3e19d4682a31"
+        }
+      }
+    },
+    "decision-operations-04": {
+      "sourceHash": "sha256:9f0a7f1a55599cb10a27f887515e6826d74eda85c4f939aaffbda06e492343b8",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/decision-operations-04/hero.avif",
+          "bytes": 6120,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:86c2024ef3341b765ae71d1e69e22f6f0d9970bcd2e737bf3ce4f5f3354daac7"
+        },
+        "webp": {
+          "path": "/images/blog/library/decision-operations-04/hero.webp",
+          "bytes": 9742,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:9375cc2796813efba6d4d7ac6f4ba4d761cbd5bcccdd94b04f33267c785dcc5f"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/decision-operations-04/hero.jpg",
+          "bytes": 42186,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:cebd25c82f9cded77abc2a19467d63cb210ff4fae416f5e171f443f5b30e7aea"
+        },
+        "og": {
+          "path": "/images/blog/library/decision-operations-04/og.jpg",
+          "bytes": 22709,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:7a1534385f840069924f7bcbe0cd45dfc30ab962d1ed5e7199275951f95abb8a"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/decision-operations-04/social-portrait.jpg",
+          "bytes": 36547,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:27bcb17541746c6af3158ccb03e2ba774ba049857d42422d6e4391c25eb924ff"
+        }
+      }
+    },
+    "decision-operations-05": {
+      "sourceHash": "sha256:26ede8bd9c893f44b12dd6c3879cf1c25f775a9955caa6914cdafe567dbfb022",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/decision-operations-05/hero.avif",
+          "bytes": 11899,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:48dac2de90521b0b5d9ea1f37c84abb9142253546c8f106057511fb5b080a64d"
+        },
+        "webp": {
+          "path": "/images/blog/library/decision-operations-05/hero.webp",
+          "bytes": 16402,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:e18f0ed0ab5a849fa9cddb8e34a6b6aad9b9cce66c8f53823bf9d61a0af72443"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/decision-operations-05/hero.jpg",
+          "bytes": 46950,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:d10f3fb9b6d7d3e30bf636c41be42ec99caa5633abbbcae777d6d6ee5e870858"
+        },
+        "og": {
+          "path": "/images/blog/library/decision-operations-05/og.jpg",
+          "bytes": 27154,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:826e0e3aa68105195f6ef1e55d6dbc18f8b21d73ae429ab120266a9b2b4c166c"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/decision-operations-05/social-portrait.jpg",
+          "bytes": 40004,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:6288e3ab3494156d550a32301dd1e18d70fdeecf14900ae0890ba27baa7a2ac4"
+        }
+      }
+    },
+    "decision-operations-06": {
+      "sourceHash": "sha256:6fd8119b21a108ad8d615a825086c7455eb9a2d355b8bd74ce0a845c7fe5b3f0",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/decision-operations-06/hero.avif",
+          "bytes": 4131,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:763838e83ca50fc7b40c252e2e54b07edd79a784c5526b53bdd916ebb192f55d"
+        },
+        "webp": {
+          "path": "/images/blog/library/decision-operations-06/hero.webp",
+          "bytes": 7706,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:029b8e73919f1d1d04bab682d1022a7b96c2d830716cdc50550b2cf3b68fa6da"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/decision-operations-06/hero.jpg",
+          "bytes": 28220,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:6addad339b0f0b9e66e051d2432d18d09c51ef819a6ddc499e2c82caa104904b"
+        },
+        "og": {
+          "path": "/images/blog/library/decision-operations-06/og.jpg",
+          "bytes": 15392,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:d16eee91bb560e3f9763b5663421bb008453dc5e4e36cc605cb695d39b1b4f1d"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/decision-operations-06/social-portrait.jpg",
+          "bytes": 24793,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:b3dbc48a0594b36bdf97cb43c2559e4402a3aa7cbbaf0e029433980dfe64dd7c"
+        }
+      }
+    },
+    "supply-chain-01": {
+      "sourceHash": "sha256:d7d74c4097d0ebbe6de5be29a4fe974fe67608305f6199e12fa410b8c3184d90",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/supply-chain-01/hero.avif",
+          "bytes": 11070,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:37eca86253004cf15d09faaf71ef1fde1a4907f68c382cefa27fcbc2e9964249"
+        },
+        "webp": {
+          "path": "/images/blog/library/supply-chain-01/hero.webp",
+          "bytes": 16190,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:57b4a8a2c46371db46858016265d8a490e66644be84f9b813178c581cada18dd"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/supply-chain-01/hero.jpg",
+          "bytes": 49666,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:1e2ba0f35aa27f7653c9bf9b5c7ca5a78be1eb9a5329e7703e0bb7b611530164"
+        },
+        "og": {
+          "path": "/images/blog/library/supply-chain-01/og.jpg",
+          "bytes": 29153,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:3ed32c67227100bd3131a87ec36ea3e0c18bbd809083b3556ffbc260b6267938"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/supply-chain-01/social-portrait.jpg",
+          "bytes": 42595,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:4bc5e9a447d08bc798497d6522795d260f9680df1122a2b0193659486034a81d"
+        }
+      }
+    },
+    "supply-chain-02": {
+      "sourceHash": "sha256:6bda72a9d9e8949a9f39df7ccf8552baa4685d56f9c56b5cd2d86bd7bad62e78",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/supply-chain-02/hero.avif",
+          "bytes": 7120,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:ab23361487c65420ac884ad5db89e81a6d27bddbc1ef2ab3f029fd223f8c6626"
+        },
+        "webp": {
+          "path": "/images/blog/library/supply-chain-02/hero.webp",
+          "bytes": 10632,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:20ff5caa546bf62b28059053e4b76de3a2ba551981451671d52a2a0f8bcb9ac1"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/supply-chain-02/hero.jpg",
+          "bytes": 35292,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:e433ae2acf3a51737c3ee15610bbab1a3c5a506c724658c35695ad0a109349c3"
+        },
+        "og": {
+          "path": "/images/blog/library/supply-chain-02/og.jpg",
+          "bytes": 20949,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:6d8814f8b5f59451942c4ca7a7e890a9791207e56b21cbcef6bd5bbe81a12779"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/supply-chain-02/social-portrait.jpg",
+          "bytes": 30922,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:6979e4eb0afd3472a5989043b2196564da309669f05a7466c2f0973f3638962b"
+        }
+      }
+    },
+    "supply-chain-03": {
+      "sourceHash": "sha256:93f4cb5556fe80f40a27a038ba9d9edd74248f1fca70efb28701f4988b257839",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/supply-chain-03/hero.avif",
+          "bytes": 4996,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:64ba8d45cc2e76cbbb5902d6266384f35f43e91f4f4e6038bb145b3c9752bf9d"
+        },
+        "webp": {
+          "path": "/images/blog/library/supply-chain-03/hero.webp",
+          "bytes": 8382,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:6263a4dd75f2dc3521dfea507c62d51323f30768861fbfa7b66788de0c8b740a"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/supply-chain-03/hero.jpg",
+          "bytes": 26539,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:2afc211b455958fe123bc16dce55630be1644262d6e8c5a4f4a7dbef2e41f5fd"
+        },
+        "og": {
+          "path": "/images/blog/library/supply-chain-03/og.jpg",
+          "bytes": 15638,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:65f0ad0e17e73745c9069d9f110a79f4482011a4c8b18e2ed0c92757cbd33707"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/supply-chain-03/social-portrait.jpg",
+          "bytes": 24083,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:9a24e92dfa47e697505bfbcfbe29515313cc3f17b931d1d607e642c01ad66dd7"
+        }
+      }
+    },
+    "supply-chain-04": {
+      "sourceHash": "sha256:6dc329d09fd6d80e9a71fda7ffe63668c9a207d53701398aef1a716a02f94f24",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/supply-chain-04/hero.avif",
+          "bytes": 9082,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:af685826a1a0a9db6b8e6b4874786cdec55bb24987da319b5a8b3cedded529c1"
+        },
+        "webp": {
+          "path": "/images/blog/library/supply-chain-04/hero.webp",
+          "bytes": 13232,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:3300a1a4ae8cddec4896d11b689f269ea2cd4b53738d9831a330c8fe47a1c6fc"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/supply-chain-04/hero.jpg",
+          "bytes": 44143,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:654152442208b5ce2c19029926af9ce6a229d144570f2e210e934ad30559ff5c"
+        },
+        "og": {
+          "path": "/images/blog/library/supply-chain-04/og.jpg",
+          "bytes": 27613,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:42f852bfae1a35f76ec06dd3e07de8645bb6a7ab8300aec7f71644873ad37ef7"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/supply-chain-04/social-portrait.jpg",
+          "bytes": 37929,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:2217c60be37a0d53a5e2944f2ddf5f0ce27e2bbb4757a101143ead45306ff298"
+        }
+      }
+    },
+    "supply-chain-05": {
+      "sourceHash": "sha256:2c550e280d97e509ebd952b0485cd084ca441bed7e70de677ef2d6f7bbf90271",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/supply-chain-05/hero.avif",
+          "bytes": 9467,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:c391dbb46177e2c43da0ebe113e2fe10a63a4199c170a3ae367eccb4d1e1cdbf"
+        },
+        "webp": {
+          "path": "/images/blog/library/supply-chain-05/hero.webp",
+          "bytes": 15694,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:ac12444d404a85c3df9785c95593419ed2bfdf149b148f5b25dcfc7227d27815"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/supply-chain-05/hero.jpg",
+          "bytes": 46659,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:7818603628a15e5a40cf0a4831ec4e01048cdb8393a5c034f738c31c7385dbbc"
+        },
+        "og": {
+          "path": "/images/blog/library/supply-chain-05/og.jpg",
+          "bytes": 27770,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:8f9b59ecfdae7405868055cef0632c91d9f6e4db38dc353d0bf1cd7bdb4f2201"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/supply-chain-05/social-portrait.jpg",
+          "bytes": 40208,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:7a79721cf7190115b46b80f4384cf06a60b9866fd7b2845cbba76901c951e876"
+        }
+      }
+    },
+    "verification-01": {
+      "sourceHash": "sha256:a95da43ba55b43c63c246f56a03676bd21b4c289b65bd211a533bc51e965eab6",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/verification-01/hero.avif",
+          "bytes": 15112,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:8d6d6015db2e1de48fbc06aea67f77046de2a02cec320a4e667953e0226f4a40"
+        },
+        "webp": {
+          "path": "/images/blog/library/verification-01/hero.webp",
+          "bytes": 19616,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:ac52f57601c52a2ce2128632b5b75257da9e3da3f2db33fc767aabf44a76d33b"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/verification-01/hero.jpg",
+          "bytes": 58245,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:aa41cf7df40160e6e538b085b7e825a8caae1733e512515f93031cdb3d6b9fd5"
+        },
+        "og": {
+          "path": "/images/blog/library/verification-01/og.jpg",
+          "bytes": 34449,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:9365c0dc116341adb671a99ca53132888ed5b18356ad05ee7f04364fb64dfb2e"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/verification-01/social-portrait.jpg",
+          "bytes": 48023,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:328736e236863776e6c4febb0255396428c0bbe66b3918bd17f8dbe7645d8a7d"
+        }
+      }
+    },
+    "verification-02": {
+      "sourceHash": "sha256:1f85467c2b00d9b0a22808ebd73db1fd09ce0a1d492e3e042df26a1afff852c1",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/verification-02/hero.avif",
+          "bytes": 23852,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:583784779a6fb4a0c7385df016911a151091de386b8dc0f7dba9c081ba075d10"
+        },
+        "webp": {
+          "path": "/images/blog/library/verification-02/hero.webp",
+          "bytes": 28346,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:3ab687d6b35bdf3545bf9a4b887f3f70d5253ef5313ffb4f83f72417f7a5308b"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/verification-02/hero.jpg",
+          "bytes": 81144,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:43f95463530854cc8f9c58355512cb4608b86d60175a373acdc32829c1668f19"
+        },
+        "og": {
+          "path": "/images/blog/library/verification-02/og.jpg",
+          "bytes": 48555,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:eb74b44a2c50118363155601873de49bf0e2d877c0b4516aade7e01cc8a35f02"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/verification-02/social-portrait.jpg",
+          "bytes": 68620,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:008ef753fa3acbed2e0fed7679a94a9fc61dd24b411a324c4b31209b815501f7"
+        }
+      }
+    },
+    "verification-03": {
+      "sourceHash": "sha256:24bfbb6a132ae105a24b997ab607f31f9d1eb9331ae723a3110f05e6e16b2c80",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/verification-03/hero.avif",
+          "bytes": 25631,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:6ad4b6c506bed65ca0f10df8478cbacf763c65a83cb2664e8f706546c229ba7d"
+        },
+        "webp": {
+          "path": "/images/blog/library/verification-03/hero.webp",
+          "bytes": 31048,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:6b6804e940c877744368b7b89c6c0741303875a5104fc52a6bec8417c08d3ebd"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/verification-03/hero.jpg",
+          "bytes": 74625,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:5988c0a157f2b0fae43447cfd67efb02edcabbb76c08a6b60382a15a80f875c8"
+        },
+        "og": {
+          "path": "/images/blog/library/verification-03/og.jpg",
+          "bytes": 44527,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:20a768220880a36690888193cee7776be52bb773e1a7d6f9a349e77cdddbcf5c"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/verification-03/social-portrait.jpg",
+          "bytes": 62228,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:95ccdba66b3ffb718bacf9ec74eadd62b8b3b3f59cd7c784b3cc2a0b71315acc"
+        }
+      }
+    },
+    "verification-04": {
+      "sourceHash": "sha256:9e600271d077708528c8785527c6ad9091c73385a0ec05bd8c60d6f9d2e0b2ec",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/verification-04/hero.avif",
+          "bytes": 26018,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:76dd3a36864a36fd9ca942ab964850a1c5b8ff0ca0b9dd05564d199b3e45b23c"
+        },
+        "webp": {
+          "path": "/images/blog/library/verification-04/hero.webp",
+          "bytes": 32022,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:e2da5aab996f169f39f62156a60db8c1f6544d6332fc8e36cbe51755e2714ebd"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/verification-04/hero.jpg",
+          "bytes": 77078,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:111864f2a1ed20417a554ddd57077859a4e5a5315abb966756299792331f1a8b"
+        },
+        "og": {
+          "path": "/images/blog/library/verification-04/og.jpg",
+          "bytes": 47708,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:388395c2c347eba3adf1ff4355828f4ffc14047fc8317a8cd13e92d8bb54f7fd"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/verification-04/social-portrait.jpg",
+          "bytes": 63737,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:ea3bba7d4ba5d3f8fbcebac6e9fbdfeb4489503064cfbd96b2048560bcec1c4a"
+        }
+      }
+    },
+    "verification-05": {
+      "sourceHash": "sha256:752280b7b827084899399d847d62e5165e63e132925a2275e79fb4e907a5bf9a",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/verification-05/hero.avif",
+          "bytes": 22874,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:06bf15231d3729ee8e291e550575e827a0afeddf868bc2acbecd327f2da7d111"
+        },
+        "webp": {
+          "path": "/images/blog/library/verification-05/hero.webp",
+          "bytes": 27842,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:ce8b6d9fd2428da1dfabeed201c3d199c5b8c487f8a466dfe5e1a3730a61f9b6"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/verification-05/hero.jpg",
+          "bytes": 70251,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:a2e8c07e638cd794dd4f6d43ac4d21432e6cb26221f4f81f81c8d6ac3157c15d"
+        },
+        "og": {
+          "path": "/images/blog/library/verification-05/og.jpg",
+          "bytes": 43713,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:3e59574622a5189a0e7de3ad576c34f7cb0865cdd19aaa0da02fb57f2582b625"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/verification-05/social-portrait.jpg",
+          "bytes": 57359,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:fd74383572f8345dc0d6842a02288c7256257c84dbc75620f489b8174dcd23a8"
+        }
+      }
+    },
+    "verification-06": {
+      "sourceHash": "sha256:1f0376de2d0e6b3642d397ab3fa62318590d10fec3b1ffe3a5106bbc9ba88fa9",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/verification-06/hero.avif",
+          "bytes": 39390,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:784bd9c59ca56b74e3a8b653db2d36cf52f3a151d9acb1afd3efeeb8bbf59002"
+        },
+        "webp": {
+          "path": "/images/blog/library/verification-06/hero.webp",
+          "bytes": 46316,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:fa691cb797ade7d962df7b405c4232e732d1fd49132d4d6f9538b57e52a43084"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/verification-06/hero.jpg",
+          "bytes": 104541,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:7e051139400fe9be3b28afe62fc3caf8b62b3aa262fd0583a6ac3acfdc663fad"
+        },
+        "og": {
+          "path": "/images/blog/library/verification-06/og.jpg",
+          "bytes": 65367,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:dbfaea22aad1ae85cfc226986b4ed7b6c9d4e9d855623d06617e30eba8330ae8"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/verification-06/social-portrait.jpg",
+          "bytes": 85745,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:6ba96a2277b8221063b67712c15915d29dc583f0a5364b728df283974cc64457"
+        }
+      }
+    },
+    "web-execution-01": {
+      "sourceHash": "sha256:072f0d1b06a5abde17cb4e52c3ec74030f9bffa9aed298765de46afd69f58d24",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/web-execution-01/hero.avif",
+          "bytes": 10412,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:aa36a028b8cf6991c06d3f1d262afef248ce845f6212a2b402ddfbb59896d772"
+        },
+        "webp": {
+          "path": "/images/blog/library/web-execution-01/hero.webp",
+          "bytes": 14216,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:3212c9a53a514844f17d0b07a4a769416b46e7112837422ac4e35118e7a6d768"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/web-execution-01/hero.jpg",
+          "bytes": 43677,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:1a99dc26c35513c1e7cb213410d4c615090c6293fded610cadb036883adb3f86"
+        },
+        "og": {
+          "path": "/images/blog/library/web-execution-01/og.jpg",
+          "bytes": 25261,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:ff3789fa6b2b35d9e3261be892174c82af7543a3ab4737c1bd73e6d958b11d1a"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/web-execution-01/social-portrait.jpg",
+          "bytes": 36914,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:5d574420ee8072914ce18caff31a332ad04da23a5efe349595c442ccba5e3e59"
+        }
+      }
+    },
+    "web-execution-02": {
+      "sourceHash": "sha256:c6c80af88c70afc3c1a5c9139bfa3a887a42049f616703315677fd8266a54d9d",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/web-execution-02/hero.avif",
+          "bytes": 22012,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:cdb7009a77156c21d4a06944234e1c61d2e3a1283cf066854ff9dba46340dcf0"
+        },
+        "webp": {
+          "path": "/images/blog/library/web-execution-02/hero.webp",
+          "bytes": 25974,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:00e2682c50cedfd6db73734f2595a4530cc043ac4221cc19f7d3417bee07b9de"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/web-execution-02/hero.jpg",
+          "bytes": 71412,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:de11e71e6a53d72308006a3c5e9d0588097cb8535fd45f34437ff07208ac2fda"
+        },
+        "og": {
+          "path": "/images/blog/library/web-execution-02/og.jpg",
+          "bytes": 41406,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:1a3d43766b1b8387f427d01d42b7342d202d6ec713d5569bf86414054267c584"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/web-execution-02/social-portrait.jpg",
+          "bytes": 56193,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:a4162fa5d57c7985edac8bbb9f009385d7efdea281efd0fdbb150fc4489a23a2"
+        }
+      }
+    },
+    "web-execution-03": {
+      "sourceHash": "sha256:669d6586098e718d1b0d5277d7c9614476a925848351110563570e49b0e12122",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/web-execution-03/hero.avif",
+          "bytes": 14301,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:e71f053359014189ebc973cc03293b1cd92fc1041e895096d9dbbbd767aad2d5"
+        },
+        "webp": {
+          "path": "/images/blog/library/web-execution-03/hero.webp",
+          "bytes": 20926,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:396fb13a2d8d73ee5a02a9a6609109eaed66eb7de136b16567cb2f4b5b8162e9"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/web-execution-03/hero.jpg",
+          "bytes": 52338,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:8209f4d44ea08c2fbd11b3d9a6aa99864305b5d8e4e293935c39788c9ea0849f"
+        },
+        "og": {
+          "path": "/images/blog/library/web-execution-03/og.jpg",
+          "bytes": 32505,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:b796a32799625e9b1a8b1336afc364dfbb368c0af76d3e4c426fc331741359b3"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/web-execution-03/social-portrait.jpg",
+          "bytes": 43897,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:a556c14d58c9be4a7091924619427e80ebf45b36e7f464f8cdd08b053cb8e8f8"
+        }
+      }
+    },
+    "web-execution-04": {
+      "sourceHash": "sha256:0a5ab74215cb26b7119a1d70e84811c32b5b5c7149b8895ceac40b5c74aabd6a",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/web-execution-04/hero.avif",
+          "bytes": 16997,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:e746a06fb23a4a7162472965aece33da93086d610bb5fb2b010edb4b75cfc598"
+        },
+        "webp": {
+          "path": "/images/blog/library/web-execution-04/hero.webp",
+          "bytes": 22970,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:7667bca1fdca93438edd86458bbcbd487e7ddd1e074a1995cfcc1e291bda9366"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/web-execution-04/hero.jpg",
+          "bytes": 58147,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:50873c261d24b5698a2cb514ef9defb8d86ebb48d027cb6402d985a77f4ccd2e"
+        },
+        "og": {
+          "path": "/images/blog/library/web-execution-04/og.jpg",
+          "bytes": 36512,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:5271eb61e6e8aac45400f9654ac08f1b457d304054e06abc6850bf869385e0d8"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/web-execution-04/social-portrait.jpg",
+          "bytes": 49220,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:9c25c0a055c105d5958ac23a2e169a7e78faa14f9a23a9e3c216c755fa98d0a2"
+        }
+      }
+    },
+    "web-execution-05": {
+      "sourceHash": "sha256:88d116c8658d46175ffcef46451b6c3370fd0c2ab9736d8be8bbeedb92c6b4ea",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/web-execution-05/hero.avif",
+          "bytes": 15157,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:2b2779c8771b69bafdedfd61d9ff29a6281d5b24fcc646601c3c465243d6fcb6"
+        },
+        "webp": {
+          "path": "/images/blog/library/web-execution-05/hero.webp",
+          "bytes": 20544,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:85f16a121946c8f9687480806e8b90ded1c81015498796bbf3c9acc164505080"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/web-execution-05/hero.jpg",
+          "bytes": 50780,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:4085f96bb07d423463d5d160d41916f58b9e656455710be97d8222ce3ce092a1"
+        },
+        "og": {
+          "path": "/images/blog/library/web-execution-05/og.jpg",
+          "bytes": 30728,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:a6957c58468f1ca27b98196a3576a34ecf74930ce5604a2882eba481646c31f6"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/web-execution-05/social-portrait.jpg",
+          "bytes": 43341,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:797eddcfa4ff81e2ad91af7bd14a294168407b2914a3ab1cdc61bf6cf0f6d928"
+        }
+      }
+    },
+    "web-execution-06": {
+      "sourceHash": "sha256:48b9b4192f11109a15327d2ebd2f8d1558a02a048ea7cc9ac178388b723a3128",
+      "outputs": {
+        "avif": {
+          "path": "/images/blog/library/web-execution-06/hero.avif",
+          "bytes": 29734,
+          "budgetBytes": 220000,
+          "quality": 58,
+          "width": 1600,
+          "height": 900,
+          "format": "avif",
+          "sha256": "sha256:e70b31f826f6a98ab583d753680e7615cb798c14fa04912ea1b55c6350fb2e6e"
+        },
+        "webp": {
+          "path": "/images/blog/library/web-execution-06/hero.webp",
+          "bytes": 34876,
+          "budgetBytes": 320000,
+          "quality": 76,
+          "width": 1600,
+          "height": 900,
+          "format": "webp",
+          "sha256": "sha256:15086f69b85e425ccdc7f29af510d38750ac3ff6d53a79593777506fddbf7530"
+        },
+        "jpeg": {
+          "path": "/images/blog/library/web-execution-06/hero.jpg",
+          "bytes": 72982,
+          "budgetBytes": 320000,
+          "quality": 80,
+          "width": 1600,
+          "height": 900,
+          "format": "jpeg",
+          "sha256": "sha256:aa65f360cc7378a1091cdd7da100490e7eb0148eb4d18634b1dc4018201aad58"
+        },
+        "og": {
+          "path": "/images/blog/library/web-execution-06/og.jpg",
+          "bytes": 44892,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1200,
+          "height": 630,
+          "format": "jpeg",
+          "sha256": "sha256:e0064b570894e5e16a42f0114216f9084cac465db80d52b3b0b0cd92a88437bc"
+        },
+        "socialPortrait": {
+          "path": "/images/blog/library/web-execution-06/social-portrait.jpg",
+          "bytes": 57937,
+          "budgetBytes": 350000,
+          "quality": 80,
+          "width": 1080,
+          "height": 1350,
+          "format": "jpeg",
+          "sha256": "sha256:fdedc55dfec47efb61253688d1fc18e5cc7607297559e7a6fd0b436be953d5c9"
+        }
+      }
+    }
+  }
+}

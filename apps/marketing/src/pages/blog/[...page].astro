@@ -1,11 +1,11 @@
 ---
 import Base from "@layouts/Base.astro"
-import { getCollection } from "astro:content"
+import BlogCard from "@components/BlogCard.astro"
+import { getCollection, getEntry } from "astro:content"
 import type { GetStaticPathsOptions } from "astro"
 
 export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
-  // ponytail: localhost previews include drafts; production keeps the existing publish gate.
-  const posts = await getCollection("blog", (entry) => import.meta.env.DEV || !entry.data.draft)
+  const posts = await getCollection("blog", (entry) => !entry.data.draft)
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
   return paginate(sortedPosts, { pageSize: 10 })
 }
@@ -19,61 +19,112 @@ const title =
     ? "AI App Security Resources | LyraShield AI"
     : `AI App Security Resources — Page ${page.currentPage} | LyraShield AI`
 const description = "Read LyraShield AI research and practical guidance on securing AI-built apps, interpreting security evidence, verifying findings, and retesting fixes."
+const featuredPost = page.currentPage === 1 ? page.data[0] : undefined
+const remainingPosts = featuredPost ? page.data.slice(1) : page.data
+const topics = [...new Set(page.data.flatMap((post) => post.data.tags))].sort()
+const imageEntries = await Promise.all(
+  page.data.map(async (post) => [post.id, await getEntry(post.data.heroImage)] as const)
+)
+const imagesByPost = new Map(imageEntries)
 const jsonLd = [
-  { "@context": "https://schema.org", "@type": "CollectionPage", name: "AI app security resources", description, url: canonical, isPartOf: { "@id": `${origin}/#website` } },
+  { "@context": "https://schema.org", "@type": "CollectionPage", "@id": `${canonical}#collection`, name: "AI app security resources", description, url: canonical, inLanguage: "en-US", isPartOf: { "@id": `${origin}/#website` }, mainEntity: { "@type": "ItemList", numberOfItems: page.data.length, itemListElement: page.data.map((post, index) => ({ "@type": "ListItem", position: (page.currentPage - 1) * page.size + index + 1, url: new URL(`/blog/${post.id}`, origin).toString(), name: post.data.title, ...(imagesByPost.get(post.id) ? { image: new URL(imagesByPost.get(post.id)!.data.og, origin).toString() } : {}) })) }, },
   { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` }, { "@type": "ListItem", position: 2, name: "Resources", item: new URL("/blog", origin).toString() }] },
 ]
 ---
 
 <Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
-  <section class="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
-    <h1 class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">AI app security resources</h1>
-    <p class="mt-4 text-lg text-text-muted">{description}</p>
+  <section class="blog-index">
+    <header class="blog-index__hero">
+      <div>
+        <h1>Security guidance for AI-built apps.</h1>
+        <p>{description}</p>
+      </div>
+      <a href="/rss.xml">Follow via RSS <span aria-hidden="true">↗</span></a>
+    </header>
 
-    {import.meta.env.DEV && (
-      <p class="mt-3 text-sm text-text-muted">Local preview includes unpublished drafts.</p>
+    {topics.length > 0 && (
+      <nav class="blog-index__topics" aria-label="Resource topics">
+        <span>Browse by topic</span>
+        <ul>
+          {topics.map((topic) => (
+            <li><a href={`/blog/tags/${topic.toLowerCase().replace(/\s+/g, "-")}`}>{topic}</a></li>
+          ))}
+        </ul>
+      </nav>
+    )}
+
+    {featuredPost && (
+      <section aria-labelledby="featured-heading" class="blog-index__featured">
+        <p id="featured-heading">Latest resource</p>
+        <BlogCard post={featuredPost} heroImage={imagesByPost.get(featuredPost.id)} featured />
+      </section>
     )}
 
     {page.data.length === 0 && (
-      <section aria-labelledby="start-heading" class="mt-12 border-y border-border py-10">
-        <h2 id="start-heading" class="text-2xl font-semibold text-text">Start with the published resources</h2>
-        <p class="mt-4 max-w-2xl leading-7 text-text-muted">The first long-form articles are still in editorial review. In the meantime, inspect the evidence model or run a focused browser-local check.</p>
-        <div class="mt-8 grid gap-5 sm:grid-cols-2">
-          <a href="/methodology" class="rounded-xl border border-border bg-bg-raised p-5 hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"><span class="font-semibold text-text">Evidence methodology</span><span class="mt-2 block text-sm leading-6 text-text-muted">How scope, coverage, verification, retest state, and limitations are recorded.</span></a>
-          <a href="/tools" class="rounded-xl border border-border bg-bg-raised p-5 hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"><span class="font-semibold text-text">Free security tools</span><span class="mt-2 block text-sm leading-6 text-text-muted">Five private checks for launch controls, headers, secrets, RLS, and sessions.</span></a>
+      <section aria-labelledby="start-heading" class="blog-index__empty">
+        <div>
+          <h2 id="start-heading">The article library is in editorial review.</h2>
+          <p>Until the first founder-approved guides publish, start with the evidence methodology or use a focused browser-local check. Draft articles never enter the sitemap or RSS feed.</p>
+        </div>
+        <div class="blog-index__starting-points">
+          <a href="/methodology"><span>Evidence methodology</span><span>How scope, coverage, verification, retest state, and limitations are recorded.</span></a>
+          <a href="/tools"><span>Free security tools</span><span>Private checks for launch controls, headers, secrets, RLS, and sessions.</span></a>
         </div>
       </section>
     )}
 
-    <ul class="mt-12 space-y-8">
-      {page.data.map((post) => (
-        <li class="rounded-lg border border-border bg-bg-raised p-6">
-          <a href={`/blog/${post.id}`} class="text-xl font-semibold tracking-tight text-text hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            {post.data.title}
-          </a>
-          <p class="mt-2 text-text-muted">{post.data.description}</p>
-          <p class="mt-4 text-sm text-text-muted">
-            <time datetime={post.data.pubDate.toISOString()}>
-              {post.data.pubDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-            </time>
-            {post.data.tags.length > 0 && (
-              <span class="ml-2">· {post.data.tags.join(", ")}</span>
-            )}
-          </p>
-        </li>
-      ))}
-    </ul>
+    {remainingPosts.length > 0 && (
+      <section class="blog-index__latest" aria-labelledby="latest-heading">
+        <div class="blog-index__section-heading">
+          <h2 id="latest-heading">More practical guidance</h2>
+          <span>{page.total} {page.total === 1 ? "article" : "articles"}</span>
+        </div>
+        {remainingPosts.map((post) => <BlogCard post={post} heroImage={imagesByPost.get(post.id)} headingLevel="h3" />)}
+      </section>
+    )}
 
     {(page.url.prev || page.url.next) && (
-      <nav aria-label="Blog pagination" class="mt-12 flex items-center justify-between border-t border-border pt-6">
+      <nav aria-label="Blog pagination" class="blog-index__pagination">
         {page.url.prev ? (
-          <a href={page.url.prev} class="text-sm font-medium text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">← Newer posts</a>
+          <a href={page.url.prev} rel="prev">← Newer posts</a>
         ) : <span aria-hidden="true" />}
-        <span class="text-sm text-text-muted">Page {page.currentPage} of {page.lastPage}</span>
+        <span>Page {page.currentPage} of {page.lastPage}</span>
         {page.url.next ? (
-          <a href={page.url.next} class="text-sm font-medium text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Older posts →</a>
+          <a href={page.url.next} rel="next">Older posts →</a>
         ) : <span aria-hidden="true" />}
       </nav>
     )}
   </section>
 </Base>
+
+<style>
+  .blog-index { width: min(100% - 2rem, 76rem); margin-inline: auto; padding-block: clamp(4rem, 9vw, 8rem); }
+  .blog-index__hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3rem; align-items: end; padding-bottom: clamp(3rem, 7vw, 6rem); }
+  .blog-index__hero h1 { max-width: 58rem; margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(3.25rem, 8vw, 7.25rem); font-weight: 800; line-height: .88; letter-spacing: -.06em; }
+  .blog-index__hero p { max-width: 48rem; margin: 2rem 0 0; color: var(--color-text-muted); font-size: clamp(1.05rem, 2vw, 1.25rem); line-height: 1.7; }
+  .blog-index__hero > a { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; color: var(--color-accent); font-size: .9rem; font-weight: 700; text-decoration: none; }
+  .blog-index__hero a:focus-visible, .blog-index__topics a:focus-visible, .blog-index__starting-points a:focus-visible, .blog-index__pagination a:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
+  .blog-index__notice, .blog-index__featured > p, .blog-index__topics > span { margin: 0; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; }
+  .blog-index__notice { border-left: 2px solid var(--color-accent); padding-left: .75rem; }
+  .blog-index__topics { display: flex; gap: 1.5rem; align-items: baseline; border-block: 1px solid var(--color-border); padding-block: 1.1rem; margin-top: 2rem; }
+  .blog-index__topics ul { display: flex; flex-wrap: wrap; gap: .45rem 1rem; margin: 0; padding: 0; list-style: none; }
+  .blog-index__topics a { color: var(--color-text); font-size: .88rem; text-decoration: none; }
+  .blog-index__topics a:hover { color: var(--color-accent); }
+  .blog-index__featured { margin-top: clamp(3rem, 7vw, 6rem); }
+  .blog-index__featured > p { margin-bottom: 1rem; }
+  .blog-index__latest { margin-top: clamp(4rem, 9vw, 8rem); }
+  .blog-index__section-heading { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 1rem; }
+  .blog-index__section-heading h2, .blog-index__empty h2 { margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing: -.04em; }
+  .blog-index__section-heading span { color: var(--color-text-muted); font-size: .85rem; }
+  .blog-index__empty { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, .75fr); gap: clamp(2rem, 6vw, 6rem); align-items: start; border-block: 1px solid var(--color-border); padding-block: clamp(3rem, 7vw, 6rem); }
+  .blog-index__empty p { max-width: 43rem; color: var(--color-text-muted); line-height: 1.75; }
+  .blog-index__starting-points { display: grid; }
+  .blog-index__starting-points a { display: grid; gap: .45rem; border-top: 1px solid var(--color-border); padding-block: 1.35rem; color: var(--color-text); text-decoration: none; }
+  .blog-index__starting-points a:last-child { border-bottom: 1px solid var(--color-border); }
+  .blog-index__starting-points a:hover span:first-child { color: var(--color-accent); }
+  .blog-index__starting-points span:first-child { font-weight: 750; }
+  .blog-index__starting-points span:last-child { color: var(--color-text-muted); font-size: .88rem; line-height: 1.55; }
+  .blog-index__pagination { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--color-border); padding-top: 2rem; margin-top: 4rem; color: var(--color-text-muted); font-size: .85rem; }
+  .blog-index__pagination a { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--color-accent); font-weight: 700; text-decoration: none; }
+  @media (max-width: 720px) { .blog-index__hero, .blog-index__empty { grid-template-columns: 1fr; } .blog-index__hero { gap: 1rem; } .blog-index__topics { align-items: flex-start; flex-direction: column; } }
+</style>

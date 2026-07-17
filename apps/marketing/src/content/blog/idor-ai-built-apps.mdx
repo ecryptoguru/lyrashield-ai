@@ -1,0 +1,145 @@
+---
+title: "How to Find IDOR in an AI-Built App"
+description: "Use a safe two-account test to find object authorization flaws, then fix the resource lookup instead of hiding identifiers."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - verification
+draft: false
+heroImage: access-boundary-02
+faq:
+  - q: "Do UUIDs prevent IDOR?"
+    a: "No. UUIDs can make identifiers harder to guess, but a user who obtains another valid UUID still needs to be denied. The server must authorize every requested object."
+  - q: "Should a denied object return 403 or 404?"
+    a: "Either can be appropriate. A 404 can avoid confirming that an object exists, while a 403 is explicit about authorization. Use one documented policy consistently and do not leak object details in either response."
+  - q: "Can an automated scanner prove ownership rules are correct?"
+    a: "A scanner can compare responses after changing identifiers, but it rarely knows valid delegation, sharing, or tenant rules. Two-account negative tests and code review are still needed."
+---
+
+**Direct answer:** Find IDOR by creating two test accounts with one owned object each, then ask each account to read and change the other's object in an authorized test environment. A secure server denies every cross-account request. Fix failures by including the current user or tenant in the resource lookup, not by making IDs harder to guess.
+
+IDOR means insecure direct object reference. OWASP's API guidance uses the broader term broken object level authorization, or BOLA. Both describe the same boundary failure: a request supplies an object identifier, and the server uses it without deciding whether the current principal may access that object.
+
+This is one concrete layer in the [vibe coding security guide](/blog/vibe-coding-security-guide). Authentication establishes who sent the request. It does not establish ownership of the invoice, project, upload, or message named in that request.
+
+## The vulnerable pattern: lookup by ID alone
+
+**Vulnerable pattern. Use only in a local test fixture.**
+
+```ts
+app.get("/api/projects/:id", requireSession, async (req, res) => {
+  const project = await db.project.findUnique({
+    where: { id: req.params.id },
+  })
+
+  if (!project) return res.sendStatus(404)
+  return res.json(project)
+})
+```
+
+The route requires a valid session, which protects it from anonymous callers. It still returns any project with a valid ID. The query never uses the authenticated user's identity, tenant, role, or sharing relationship.
+
+A UUID does not repair this. It may reduce casual enumeration, but identifiers leak through links, logs, analytics, browser history, exports, screenshots, and related API responses. Once Account A learns Account B's UUID, the same unauthorized lookup succeeds.
+
+Mutation routes are often worse. A read response may expose data, while an update or delete can change another user's record. Test each method separately because an app can protect `GET` and forget `PATCH`.
+
+## Why generated code misses object authorization
+
+Code generators are good at connecting route parameters to ORM queries. That is the obvious path from a prompt like "add an endpoint to fetch a project by ID." The ownership rule may live in a product note, a different service, or nowhere at all.
+
+Authentication middleware can create false confidence. The handler looks protected because `requireSession` appears above it. Route guards, a hidden UI button, and an authenticated database client reinforce that impression, yet none answers the object-level question.
+
+Generated code may also perform a late check:
+
+```ts
+const project = await db.project.findUnique({ where: { id } })
+if (project.ownerId !== user.id) return res.sendStatus(403)
+```
+
+That check can be correct if every field remains inside trusted server memory and every branch handles the denial. A scoped lookup is usually safer. It prevents the application from loading an unauthorized object in the first place and reduces the chance that a later refactor uses it before the comparison.
+
+## Build a safe two-account test
+
+Run this only in a local, staging, or otherwise authorized environment. Create Account A and Account B. Under each account, create one harmless fixture such as an empty project named `authorization-test-a` and `authorization-test-b`.
+
+Capture each object's ID through the normal UI or API. Then test a small matrix:
+
+1. Account A reads A's object. Expect success.
+2. Account A reads B's object. Expect denial.
+3. Account A updates B's object with a harmless field. Expect denial and no database change.
+4. Account A deletes B's object only if the fixture is disposable. Expect denial.
+5. Repeat as Account B against A's object.
+6. Test child resources such as comments or files, not only the parent project.
+
+Check the stored record after every denied mutation. A generic error response is not enough if the update happened anyway. Also inspect response bodies, headers, timing, and audit logs for leaked object titles or tenant identifiers.
+
+Use the expected denial that matches the product's policy. A 404 can conceal whether the foreign object exists. A 403 can state that access is forbidden. Either choice can work if it is consistent and does not include unauthorized data. Do not turn status-code preference into the authorization control itself.
+
+## Fix the lookup at the ownership boundary
+
+A direct owner model can scope the query to both the object and the current user.
+
+```ts
+app.get("/api/projects/:id", requireSession, async (req, res) => {
+  const project = await db.project.findFirst({
+    where: {
+      id: req.params.id,
+      ownerId: req.user.id,
+    },
+  })
+
+  if (!project) return res.sendStatus(404)
+  return res.json(project)
+})
+```
+
+For a multi-tenant app, use a server-resolved tenant and a membership rule. Do not trust a workspace ID merely because the browser sent it.
+
+```ts
+const project = await db.project.findFirst({
+  where: {
+    id: request.params.id,
+    workspaceId: context.workspace.id,
+    workspace: {
+      members: { some: { userId: context.user.id } },
+    },
+  },
+})
+```
+
+The exact query depends on the product. Shared objects, support access, delegated administration, and public links need explicit policy branches. Keep those branches named and testable. Avoid a catch-all `isAdmin` escape hatch unless the role, tenant scope, purpose, and audit behavior are defined.
+
+Nested resources need their own boundary. A comment ID may be globally unique, but the server still needs to confirm that its parent project belongs to the active tenant. Bulk endpoints should authorize every selected object, not only the first one.
+
+Bind parent and child identifiers in the same scoped lookup. Checking only `attachmentId` can load a file from another project, while checking only `projectId` can let a foreign child ride through an authorized parent route. The query should constrain the child ID, parent ID, active tenant, and caller relationship together. Add two negative cases to the fixture: Account A supplies A's project ID with B's attachment ID, then B's project ID with A's attachment ID. Both requests must fail without returning metadata or creating a download. This catches mismatched route parameters that ordinary owner and non-owner tests can miss.
+
+Creation paths can contain the same flaw without an existing object ID. If the browser supplies `workspaceId`, `ownerId`, or `accountId`, the server must confirm that the principal may create a record in that scope. Prefer deriving ownership from trusted request context. Otherwise Account A may create a child record attached to Account B's project and later gain an indirect path to it.
+
+Downloads deserve a separate check. A metadata endpoint may enforce ownership while a file route accepts a storage key directly. Test signed links, thumbnails, exports, and attachment previews with the same crossed-account fixture. A long unguessable storage path is still an object reference.
+
+## Test the policy, not just the route
+
+Keep negative tests beside normal endpoint tests so a later handler rewrite cannot drop the ownership predicate unnoticed. Each sensitive operation should cover an anonymous caller, the owner, an authenticated non-owner, and any supported delegated role.
+
+If the app has a central policy service, test that service and the route's enforcement call. A perfect policy function does not help when one endpoint forgets to call it. Database RLS can add defense in depth, but server code running with an elevated role may bypass it.
+
+The [server-side authorization guide](/blog/server-side-authorization-ai-apis) shows how to make those checks consistent across handlers. Object-level tests then exercise that common seam with real resource relationships.
+
+## What automation can and cannot prove
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help you record whether object ownership tests exist before launch. It does not send requests or verify an endpoint.
+
+Dynamic tools can change IDs and compare responses, which is useful for finding suspicious differences. Static tools can flag a route that fetches by ID without an obvious principal. Neither tool automatically understands valid sharing, support impersonation, inherited access, or tenant delegation. A finding is detected evidence, not proof of exploitability, and a clean automated run is not proof that every ownership path is correct.
+
+Retain the two-account fixtures and rerun them after authorization changes. That is repeatable evidence tied to the behavior your app intends to enforce.
+
+Keep the test data small and obvious. Two empty projects and one harmless attachment usually expose the boundary more clearly than a copied production dataset. If the test depends on real customer records, the test itself has created a privacy problem.
+
+## Sources
+
+- [OWASP API Security: Broken Object Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
+- [MITRE CWE-639: Authorization Bypass Through User-Controlled Key](https://cwe.mitre.org/data/definitions/639.html)
+- [OWASP WSTG: Testing for Insecure Direct Object References](https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/05-Authorization_Testing/04-Testing_for_Insecure_Direct_Object_References)
+- [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)

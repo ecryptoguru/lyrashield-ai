@@ -1,0 +1,134 @@
+---
+title: "Stop Exposing API Keys in Frontend Code"
+description: "Identify secrets shipped in browser bundles, move privileged calls behind a server boundary, and rotate exposed credentials safely."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - verification
+draft: false
+heroImage: access-boundary-03
+faq:
+  - q: "Is a Supabase publishable key safe in frontend code?"
+    a: "Yes, it is designed for public client use when grants and row-level security enforce access. Supabase secret keys and the legacy service_role key must stay on trusted servers."
+  - q: "Does putting a key in an environment file keep it out of the browser?"
+    a: "Only if the build system keeps that variable server-side. Vite variables prefixed with VITE_ and Next.js variables prefixed with NEXT_PUBLIC_ are deliberately included in client code."
+  - q: "Do source maps expose frontend secrets?"
+    a: "They can make bundled code easier to read, but the secret is already recoverable from client code or network requests without a source map. The fix is to remove the privileged credential from the browser architecture."
+  - q: "Is deleting a leaked key from Git enough?"
+    a: "No. Deletion does not invalidate copies in Git history, build artifacts, logs, or developer machines. Revoke or rotate the credential and review provider activity."
+---
+
+**Direct answer:** Any value delivered to a browser can be recovered by the user. Keep only deliberately public identifiers in frontend code. Move privileged provider calls to a trusted server, store scoped credentials there, and authenticate each browser request. If a secret reached a bundle or repository, revoke or rotate it before cleaning up the code and history.
+
+Environment variables feel private because they live in a file named `.env`. A frontend build changes that. Vite replaces `VITE_` variables in client code. Next.js inlines `NEXT_PUBLIC_` variables into JavaScript sent to the browser. Minification changes readability, not access.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats secret handling as one boundary among authorization, input processing, dependencies, and release verification. Removing a key from a component matters, but it does not repair an endpoint that still exposes the same privilege.
+
+## The vulnerable pattern: a privileged key in client code
+
+**Vulnerable pattern. Use a fake test value only.**
+
+```ts
+const provider = new ProviderClient({
+  apiKey: import.meta.env.VITE_PROVIDER_SECRET,
+})
+
+export async function generateReport(input: string) {
+  return provider.createReport({ input })
+}
+```
+
+The browser receives `VITE_PROVIDER_SECRET` as part of the built application. A user can inspect the JavaScript, pause execution, read a source map, or observe the outgoing provider request. Renaming the variable, splitting the string, or hiding the button does not change that.
+
+This does not mean every browser key is a secret. Analytics write keys, payment publishable keys, Supabase publishable keys, and similar identifiers may be designed for public use. Their provider documentation should say so, and the server-side policy must limit what they can do.
+
+Supabase's current [API-key documentation](https://supabase.com/docs/guides/getting-started/api-keys) makes the distinction explicit. Publishable keys and the legacy `anon` key can be used by public clients when database grants and RLS policies enforce access. Secret keys and the legacy `service_role` key are privileged. They bypass the same client boundary and stay on trusted servers.
+
+Creating a new Supabase key does not revoke a legacy key. Disable the old credential explicitly after every component has moved to its replacement.
+
+## Why generated apps leak credentials
+
+A generated feature often starts as a direct SDK call because that is the shortest route to a working demo. The model sees provider documentation that begins with `new Client({ apiKey })`, then places it in the file where the button lives. It may not distinguish a Node.js example from a browser example.
+
+Build-tool naming creates another trap. A developer moves a secret to `.env`, adds `VITE_` or `NEXT_PUBLIC_` because the UI cannot read it, and the build succeeds. The prefix is doing exactly what it promises: making the value public to client code.
+
+Generated code can also confuse a public project identifier with an administrative key. The right response is not to ban every key-looking value. Classify each credential by provider, privilege, allowed origin, lifetime, and intended execution environment.
+
+## Confirm exposure without spreading the value
+
+Use a local build or an authorized staging deployment. Never paste a live credential into a public scanner, issue tracker, chat room, or screenshot.
+
+Search the source tree for known variable prefixes and provider key formats. Then build the frontend and search the output. Inspect browser network requests to see whether the browser sends the credential directly to a provider. Check source maps if they are published, but remember that a missing source map does not make the bundle secret.
+
+If the value is privileged, treat it as exposed even when provider logs show no obvious misuse. The absence of a recorded request does not prove that no copy exists.
+
+Create a small incident record:
+
+- Which credential and provider are affected?
+- What permissions and environments can it reach?
+- Where did it appear, including Git history and build artifacts?
+- When was it first present and when was it revoked?
+- Which provider audit records were reviewed?
+
+Do not put the secret itself in that record. Use the provider's key ID or a short non-sensitive fingerprint.
+
+## Move the privileged operation behind the server
+
+The browser should call an application endpoint. The server authenticates the user, authorizes the action, validates the input, applies limits, and then uses the provider credential.
+
+```ts
+app.post("/api/reports", requireSession, async (req, res) => {
+  const input = reportInputSchema.parse(req.body)
+
+  const allowed = await canCreateReport({
+    userId: req.user.id,
+    workspaceId: req.context.workspaceId,
+  })
+  if (!allowed) return res.sendStatus(403)
+
+  const report = await provider.createReport({ input }, { apiKey: process.env.PROVIDER_SECRET })
+
+  return res.status(201).json(publicReportFields(report))
+})
+```
+
+This boundary needs more than a proxy. Without authentication, authorization, input limits, and rate controls, an attacker can spend the server's provider quota through your endpoint. Return only the fields the browser needs. Keep provider errors and request identifiers out of public responses unless they are reviewed for disclosure.
+
+Scope the server credential where the provider permits it. Restrict APIs, projects, environments, origins, IP ranges, spend, or actions according to the provider's model. Use separate credentials for development and production so a local leak cannot reach production data.
+
+CORS is not a secret store. A provider may restrict browser requests to approved origins, which can reduce casual misuse, but non-browser clients do not have to obey a browser's CORS checks. A privileged credential needs provider-side scope and a trusted execution boundary even when an origin allowlist exists.
+
+Serverless platforms may expose environment variables to build logs or preview environments if configured carelessly. Review who can read deployment settings and which branches receive production secrets.
+
+## Revoke first, then clean up
+
+Deleting a line does not invalidate a credential. Rotate or revoke the affected key through the provider. Update the trusted server deployment, verify that it uses the replacement, and disable the old key.
+
+Review provider audit data for the exposure window. Look for unfamiliar origins, projects, actions, or volume. The available evidence differs by provider, so state what the logs cover and what they do not.
+
+Clean the current branch and any generated artifacts. Removing a secret from Git history can be disruptive and does not erase existing clones. Follow the repository host's documented process, coordinate with collaborators, and still assume the old value is compromised.
+
+Plan the deployment order before rotation. Add the replacement to the trusted server, deploy it, confirm the expected provider call succeeds, then revoke the old value. If immediate revocation is required because the privilege is severe, accept the temporary outage and state that choice in the incident record. Never leave both credentials active indefinitely as an accidental fallback.
+
+GitHub push protection and repository secret scanning can block or flag supported credential patterns before they spread. They do not recognize every private token, and they cannot determine whether a key was intentionally public.
+
+## What local scanning can and cannot prove
+
+The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) reviews text files you select without uploading them. It can find high-risk patterns and client-variable prefixes. It does not read Git history, inspect deployed bundles, call provider APIs, or revoke anything.
+
+A pattern match is a detected candidate. Verify the provider and key type before labeling it a secret. A clean scan is also limited: unusual formats, split strings, runtime injection, and credentials in binary artifacts may remain unseen.
+
+Add a build-output check to continuous integration for known private prefixes and provider patterns. Keep the rule precise enough that developers do not learn to ignore it. A failing check should name the file and credential type without printing the full matched value into a public log.
+
+For a practical example of public identifiers backed by database policy, read [Supabase RLS for vibe-coded apps](/blog/supabase-rls-vibe-coded-apps). Public client access is safe only when the service was designed for it and the enforcement layer is intact.
+
+## Sources
+
+- [Vite: Env Variables and Modes](https://vite.dev/guide/env-and-mode)
+- [Next.js: Environment Variables](https://nextjs.org/docs/pages/guides/environment-variables)
+- [OWASP: Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html)
+- [GitHub: Push protection](https://docs.github.com/en/code-security/concepts/secret-security/push-protection)
+- [Supabase: Understanding API keys](https://supabase.com/docs/guides/getting-started/api-keys)
+- [Supabase: Securing your API](https://supabase.com/docs/guides/api/securing-your-api)

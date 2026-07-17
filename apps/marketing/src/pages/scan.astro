@@ -256,6 +256,8 @@ const jsonLd = [
 
   {turnstileSiteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer is:inline></script>}
   <script>
+    import { normalizePublicHttpUrl } from "../lib/public-url"
+
     type LiteCheck = { category: string; severity: "needs_attention" | "worth_reviewing" | "ok"; title: string; whatItIs: string; whyItMatters: string; learnMoreUrl: string }
     type LiteResult = { target: string; scannedAt: string; checks: LiteCheck[]; liteResultSummary: { needsAttention: number; worthReviewing: number; looksOk: number; findingCount: number }; disclaimers: string[] }
     type TurnstileWindow = Window & { turnstile?: { render: (element: string | HTMLElement, options: Record<string, unknown>) => string; reset: (id: string) => void } }
@@ -293,10 +295,6 @@ const jsonLd = [
       const host = new URL(url).hostname.toLowerCase()
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(host))
       return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("")
-    }
-
-    function normalizeUrl(value: string): string {
-      return /^https?:\/\//i.test(value) ? value : `https://${value}`
     }
 
     function animateSteps() {
@@ -401,7 +399,19 @@ const jsonLd = [
     scanForm?.addEventListener("submit", async (event) => {
       event.preventDefault(); errorBox?.classList.add("hidden")
       if (!appOrigin) return
-      const input = document.querySelector<HTMLInputElement>("#scan-url")!; const url = normalizeUrl(input.value.trim()); input.value = url
+      const input = document.querySelector<HTMLInputElement>("#scan-url")!
+      let url = ""
+      try {
+        url = normalizePublicHttpUrl(input.value)
+        input.value = url
+      } catch {
+        if (errorBox) {
+          errorBox.textContent = "Enter a valid public HTTP or HTTPS URL without credentials."
+          errorBox.classList.remove("hidden")
+        }
+        input.focus()
+        return
+      }
       let domainHash = ""; try { domainHash = await hashDomain(url) } catch { if (errorBox) { errorBox.textContent = "Enter a valid public URL."; errorBox.classList.remove("hidden") }; return }
       capture("scan_started", { target_domain_hash: domainHash, device: matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop", ...attribution })
       scanButton!.disabled = true; scanButton!.textContent = "Scanning…"; results?.classList.add("hidden"); scanning?.classList.remove("hidden"); scanning?.setAttribute("aria-busy", "true"); scanning?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); const progress = animateSteps()

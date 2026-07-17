@@ -21,7 +21,8 @@ function wranglerVar(name) {
 
 const configuredSiteUrl = process.env.PUBLIC_SITE_URL || wranglerVar("PUBLIC_SITE_URL")
 const siteUrl = configuredSiteUrl || "http://localhost:4321"
-const indexable = (process.env.PUBLIC_INDEXABLE || wranglerVar("PUBLIC_INDEXABLE") || "false") === "true"
+const indexable =
+  (process.env.PUBLIC_INDEXABLE || wranglerVar("PUBLIC_INDEXABLE") || "false") === "true"
 const xUrl = process.env.PUBLIC_X_URL || wranglerVar("PUBLIC_X_URL") || ""
 const configuredAppUrl = process.env.PUBLIC_APP_URL || wranglerVar("PUBLIC_APP_URL")
 const configuredScannerUrl = process.env.PUBLIC_SCANNER_URL || wranglerVar("PUBLIC_SCANNER_URL")
@@ -32,7 +33,8 @@ const abuseEmail = process.env.PUBLIC_ABUSE_EMAIL || wranglerVar("PUBLIC_ABUSE_E
 if (indexable) {
   try {
     const url = new URL(configuredSiteUrl)
-    if (url.protocol !== "https:" || url.hostname === "localhost") throw new Error("not a public HTTPS URL")
+    if (url.protocol !== "https:" || url.hostname === "localhost")
+      throw new Error("not a public HTTPS URL")
   } catch {
     throw new Error("PUBLIC_SITE_URL must be a public HTTPS URL when PUBLIC_INDEXABLE=true")
   }
@@ -68,6 +70,9 @@ export default defineConfig({
   site: siteUrl,
   output: "static",
   trailingSlash: "never",
+  build: {
+    inlineStylesheets: "always",
+  },
   adapter: cloudflare({
     imageService: "passthrough",
   }),
@@ -76,7 +81,10 @@ export default defineConfig({
     sitemap({
       filter: (page) => {
         const pathname = new URL(page).pathname
-        return pathname !== "/terms" && (Boolean(configuredScannerUrl) || pathname !== "/scan")
+        return (
+          pathname !== "/terms" &&
+          (Boolean(configuredScannerUrl) || pathname !== "/scan")
+        )
       },
     }),
   ],
@@ -97,6 +105,16 @@ export default defineConfig({
         context: "client",
         access: "public",
         optional: true,
+      }),
+      PUBLIC_MEDIA_URL: envField.string({
+        context: "client",
+        access: "public",
+        default: "/media-local",
+      }),
+      PUBLIC_MOTION_RENDER_HASH: envField.string({
+        context: "client",
+        access: "public",
+        default: "local",
       }),
       PUBLIC_X_URL: envField.string({
         context: "client",

@@ -1,0 +1,153 @@
+---
+title: "Prevent Cross-Tenant Data Leaks"
+description: "Carry a server-owned tenant context through APIs, jobs, caches, storage, and database queries, then verify it with two tenants."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - verification
+draft: false
+heroImage: access-boundary-01
+faq:
+  - q: "Can the server trust a tenant ID sent by the client?"
+    a: "It can use the value as a selection hint, but it must resolve the authenticated user's membership and create trusted tenant context before accessing data. A request field alone is not authorization."
+  - q: "Is database RLS enough for tenant isolation?"
+    a: "RLS can enforce row boundaries in the database. It does not cover cache keys, queues, object storage, search indexes, external providers, or server code using a role that bypasses RLS."
+  - q: "Can tenants safely share one database?"
+    a: "Yes, a pooled database can be part of a sound design when every access path carries and enforces tenant scope. The isolation model and its limits need explicit tests and operational controls."
+  - q: "How should background jobs preserve tenant isolation?"
+    a: "Place a server-validated tenant identifier in the job payload, recheck that tenant and relevant authorization when the job runs, and scope every cache, storage, and database operation to it."
+---
+
+**Direct answer:** Prevent cross-tenant leaks by creating tenant context on the server from authenticated membership, then carrying that context through every data path. Scope database queries, cache keys, queue jobs, file prefixes, search documents, and provider calls to the same tenant. Verify the design with two test tenants across synchronous requests and background work.
+
+A signed-in user can still reach the wrong tenant. Authentication proves identity. Ordinary authorization may prove that the user can perform an action somewhere. Tenant isolation proves that every execution and storage surface confines that action to the selected tenant.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) places tenant isolation inside a wider release review. This article follows the context beyond the database because many leaks occur after a correctly scoped API query.
+
+## The vulnerable pattern: trust a workspace ID everywhere
+
+**Vulnerable pattern. Use only with test data.**
+
+```ts
+app.get("/api/reports", requireSession, async (req, res) => {
+  const workspaceId = String(req.query.workspaceId)
+  const reports = await db.report.findMany({ where: { workspaceId } })
+  return res.json(reports)
+})
+```
+
+The browser chooses `workspaceId`, and the server uses it without confirming membership. Changing one query parameter can select another tenant's records.
+
+A partial fix checks membership in the route but loses scope later:
+
+```ts
+const cacheKey = `reports:recent`
+const exportPath = `exports/latest.csv`
+```
+
+The database query may be correct while the cache returns Tenant A's response to Tenant B, or both tenants' export jobs write the same object. Tenant context must survive every boundary.
+
+## Why generated systems lose tenant context
+
+AI coding tools usually build one feature surface at a time. An API handler receives `workspaceId`, an ORM query adds it, and the feature appears complete. The generator may not see the queue worker, cache helper, object-storage wrapper, or external search index used later.
+
+Convenient global state makes the gap worse. A module-level `currentWorkspace` can bleed across concurrent requests. A client-selected workspace stored in a cookie can become trusted without membership validation. A background job can contain only `reportId`, leaving the worker to fetch a global record with no tenant guard.
+
+Tenant scope is also easy to confuse with a role. A user can be an owner in Workspace A and an ordinary member in Workspace B. A global `role: owner` claim does not grant owner actions across both.
+
+## Create server-owned tenant context
+
+Accept a tenant identifier as a hint when the user must choose a workspace, then resolve it against current membership on the server. Store only the trusted result in request context.
+
+```ts
+async function resolveTenantContext(userId: string, requestedId: string) {
+  const membership = await db.workspaceMember.findUnique({
+    where: {
+      workspaceId_userId: {
+        workspaceId: requestedId,
+        userId,
+      },
+    },
+    select: { workspaceId: true, role: true },
+  })
+
+  if (!membership) throw new ForbiddenError()
+
+  return {
+    workspaceId: membership.workspaceId,
+    role: membership.role,
+  }
+}
+```
+
+Pass that context explicitly to services. Do not let data-access functions accept an optional workspace ID for tenant-owned models. Optional scope tends to become a global query when a caller forgets the argument.
+
+```ts
+function listReports(context: TenantContext) {
+  return db.report.findMany({
+    where: { workspaceId: context.workspaceId },
+  })
+}
+```
+
+For high-risk paths, add database-enforced row security or a scoped database client. PostgreSQL RLS can provide another boundary when normal application roles are used. Server code with table-owner, superuser, `BYPASSRLS`, or Supabase `service_role` privileges needs its own strict predicates because those roles can bypass policy.
+
+Relational constraints can prevent crossed-tenant references even when application code makes a mistake. A tenant-owned child table can carry `workspaceId` and reference its parent with a composite foreign key such as `(workspaceId, projectId)`. That stops a row in Tenant A from pointing at a project in Tenant B. Use tenant-scoped composite uniqueness for names or external identifiers that only need to be unique inside one workspace. Add these columns and constraints through a reviewed migration: backfill the tenant from a trusted parent, reject ambiguous rows, then validate the constraint. Keep a negative database test that attempts a crossed-tenant insert so a later schema change cannot silently weaken the boundary.
+
+## Trace scope through every surface
+
+Database records are only the first stop. Review where tenant-owned data travels.
+
+Cache keys should contain a canonical tenant identifier and any user or permission dimension that changes the response. Invalidate them within the same scope. A key such as `workspace:${workspaceId}:reports:recent` is safer than a global label, though the value still needs review for mixed-tenant data.
+
+Queue payloads should carry a server-validated tenant ID, the initiating principal where needed, and the resource ID. When the worker runs, it should verify the resource belongs to that tenant and recheck time-sensitive permission before a high-impact action.
+
+Object storage needs tenant-scoped prefixes or separate buckets, plus authorization on upload and download. Do not build a path directly from a client filename. Signed URLs must be short-lived and bound to the correct object.
+
+Search indexes and vector stores need a tenant attribute that every query filters. A filtered application response cannot undo a global similarity search that already selected another tenant's private document.
+
+External provider calls can leak context through reused threads, file IDs, webhooks, or metadata. Store the tenant relationship locally and validate it when processing callbacks.
+
+## Test with two tenants and crossed identifiers
+
+Use a local or authorized environment. Create Tenant A and Tenant B, each with distinct users and unmistakable fixture data. Use synthetic names such as `tenant-a-private-marker` so a leak is easy to spot without exposing real information.
+
+Run normal and crossed cases:
+
+1. A member of Tenant A reads, changes, exports, and searches Tenant A's fixture.
+2. The same account submits Tenant B's workspace and resource IDs. Every request is denied or returns no object.
+3. Warm the relevant cache as Tenant A, then make the same request as Tenant B.
+4. Queue one export for each tenant and confirm separate payload context and output paths.
+5. Revoke a membership before a delayed job runs and confirm the documented policy for that job.
+6. Exercise object downloads, webhooks, and search paths in addition to ordinary database pages.
+
+Inspect database rows, stored objects, job logs, and audit events after each denial. A clean HTTP body does not prove that a background artifact was not written under the wrong prefix.
+
+Pooled and siloed architectures use different physical boundaries, but both need tests. A separate database per tenant can reduce some blast radius. Shared caches, queues, deployment credentials, or provider accounts can still cross the silo if their keys omit scope.
+
+## Edge cases that break otherwise sound designs
+
+Cross-tenant administrative tools need an explicit operating model. Support access should be narrow, time-bounded where possible, attributable, and reviewed. A permanent global bypass turns every support endpoint into a high-value boundary.
+
+Resource transfers between tenants should be a dedicated operation. Updating `workspaceId` directly can leave children, files, cache entries, and audit records behind. Define whether transfer is allowed and move the complete resource graph transactionally where practical.
+
+Aggregates can leak small facts. Counts, autocomplete suggestions, uniqueness errors, and timing may reveal that another tenant has a record. Decide whether such disclosure matters for the product and test it.
+
+Concurrency matters too. Never keep current tenant in mutable module-level state. Use request-scoped context and pass it into asynchronous work so two simultaneous requests cannot overwrite each other's scope.
+
+## What automated checks can and cannot prove
+
+The browser-local [Supabase RLS checker](/tools/supabase-rls-checker) can review pasted SQL for policy smells. It cannot inspect deployed grants or follow tenant context through a queue, cache, object store, search service, or elevated backend role.
+
+Static checks can find queries missing `workspaceId` and cache helpers with global keys. Negative integration tests can exercise known paths. Neither proves that every runtime integration preserves scope. Keep an inventory of tenant-owned surfaces and update it when the architecture changes.
+
+For precise Supabase policy mechanics, read [Supabase RLS for vibe-coded apps](/blog/supabase-rls-vibe-coded-apps). Its two-account database tests complement the system-wide tenant checks here.
+
+## Sources
+
+- [AWS: Tenant isolation](https://docs.aws.amazon.com/whitepapers/latest/saas-architecture-fundamentals/tenant-isolation.html)
+- [AWS: Multi-tenant SaaS authorization and API access control](https://docs.aws.amazon.com/prescriptive-guidance/latest/saas-multitenant-api-access-authorization/introduction.html)
+- [PostgreSQL: Row Security Policies](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
+- [OWASP API Security: Broken Object Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)

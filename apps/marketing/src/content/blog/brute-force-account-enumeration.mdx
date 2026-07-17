@@ -1,0 +1,149 @@
+---
+title: "Stop Brute Force and Account Enumeration"
+description: "Make authentication responses uniform, throttle online guessing by account and network signals, and test recovery flows safely."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - web-security
+  - verification
+draft: false
+heroImage: access-boundary-06
+faq:
+  - q: "Is a generic login message enough to stop account enumeration?"
+    a: "No. The status code, response shape, timing, headers, recovery flow, and support behavior can still reveal whether an account exists. Keep the externally observable path comparable while retaining detailed internal telemetry."
+  - q: "Is account lockout a safe brute-force defense?"
+    a: "A hard lockout can let an attacker deny access to a known account. Prefer layered throttling, increasing delays, MFA, bot controls, and risk signals. If a policy disables an authenticator, provide a secure recovery path."
+  - q: "How can I test account enumeration safely?"
+    a: "Use two accounts you own and one synthetic nonexistent identity in a local or authorized test environment. Compare responses and timing without testing third-party email addresses or attempting real password guesses."
+---
+
+**Direct answer:** Resist brute force and account enumeration with two coordinated controls. Return comparable external responses for existing and nonexistent accounts across login, signup, and recovery. At the same time, limit failed attempts using account and network signals, add increasing delay or challenge steps, support MFA, and preserve detailed internal telemetry without exposing identity existence.
+
+Authentication endpoints fail in two different ways that often get bundled together. Online guessing lets repeated attempts test passwords or one-time codes. Account enumeration lets an observer learn whether an email address, username, or phone number is registered. A rate limit can slow guesses while a response still discloses every account.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats login as one part of a larger identity boundary. A secure response does not make password storage, session handling, recovery tokens, or downstream authorization correct.
+
+## The vulnerable pattern: different answers for different identities
+
+**Vulnerable pattern. Test only with synthetic identities you control.**
+
+```ts
+app.post("/login", async (req, res) => {
+  const user = await db.user.findUnique({ where: { email: req.body.email } })
+  if (!user) return res.status(404).json({ error: "Account not found" })
+
+  if (!(await verifyPassword(req.body.password, user.passwordHash))) {
+    return res.status(401).json({ error: "Incorrect password" })
+  }
+
+  return createSessionResponse(user, res)
+})
+```
+
+The message reveals account existence directly. Even if both branches say "Invalid email or password," the status code, response size, header set, or processing time can differ. Password hashing usually makes the existing-account branch slower than the immediate database miss.
+
+MITRE describes this class as [CWE-204, Observable Response Discrepancy](https://cwe.mitre.org/data/definitions/204.html). The discrepancy may be content, timing, or another measurable behavior. Signup, password recovery, email verification, invitation, and support channels can disclose the same identity after login has been fixed.
+
+## Why generated authentication leaks identity
+
+Generated code often optimizes for helpful errors. "Account not found" appears better for a real user than a generic denial, and it simplifies frontend state. That usability choice also gives an unauthenticated caller a reliable identity lookup.
+
+A second generated fix adds a global IP limit. It may slow one script but fails to address distributed guessing, shared networks, or attacks against one known account from rotating addresses. A hard account lock after a small number of failures creates the opposite problem: anyone who knows the identifier can deny the legitimate user access.
+
+Authentication systems need an internal distinction and an external similarity. Internally, the service should know whether the account exists, which control fired, and whether a recovery event should be sent. Externally, it should avoid confirming that identity.
+
+## Make the externally visible path comparable
+
+Use one public error such as "Email or password was not accepted." Return the same status code and response shape for nonexistent accounts and incorrect passwords. Do not include a user ID, provider status, or branch-specific error code.
+
+Keep cookies comparable too. One branch should not set a tracking or recovery cookie while the other does nothing. Redirect destinations, cache headers, and localization keys can all become identity signals. If a frontend translates internal errors into different screens, the API's generic message has not solved the observable difference.
+
+For login, perform a password-hash verification in both branches. Keep a fixed dummy hash created with the current password algorithm and cost parameters. Do not generate that hash per request because doing so adds unnecessary work and may create another timing profile.
+
+```ts
+const DUMMY_PASSWORD_HASH = process.env.DUMMY_PASSWORD_HASH!
+
+assertPasswordHashMatchesPolicy(DUMMY_PASSWORD_HASH, ACTIVE_PASSWORD_HASH_POLICY)
+
+app.post("/login", async (req, res) => {
+  const input = loginSchema.parse(req.body)
+  const normalizedEmail = normalizeEmailForLookup(input.email)
+  const user = await db.user.findUnique({ where: { email: normalizedEmail } })
+
+  const attempt = await loginAttemptLimiter.begin({
+    accountId: user?.id,
+    networkKey: trustedClientNetworkKey(req),
+    sessionId: req.session.id,
+  })
+
+  const hash = user?.passwordHash ?? DUMMY_PASSWORD_HASH
+  const passwordAccepted = await verifyPassword(input.password, hash)
+  const credentialMatched = Boolean(user && passwordAccepted)
+  const allowed = credentialMatched && attempt.allowed
+
+  await attempt.finish({ credentialMatched })
+
+  if (!allowed) {
+    await recordInternalLoginFailure({
+      userId: user?.id,
+      limitReason: attempt.reason,
+      request: req,
+    })
+    return res.status(401).json({ error: "Email or password was not accepted" })
+  }
+
+  return rotateAndCreateSession(user, res)
+})
+```
+
+Validate the dummy hash when the process starts. Its algorithm and work parameters must match the active password policy, and an invalid value should stop startup rather than create a fast nonexistent-account branch. The limiter begins for every request before password verification. It uses trusted network and session signals plus an internal account ID when one exists, then records the credential result without changing the public denial.
+
+This sketch omits many product details, but it shows the boundary. Normalize identifiers according to a documented product policy. Do not invent provider-specific email canonicalization such as removing dots or tags unless the provider guarantees it.
+
+Exact timing equality is not realistic on a network, and adding a fixed sleep can create new denial-of-service capacity. Aim for comparable code paths, then measure distributions. Keep database indexes and external calls consistent where possible. Do not claim that one local timing check proves resistance to statistical analysis.
+
+Be careful with telemetry labels. Security logs can record an internal user ID for a known account, but analytics and client-visible traces should not receive that distinction. Protect the logs from ordinary support access and limit retention. A uniform public response loses much of its value if a browser monitoring payload reports `unknown_user` to a third party.
+
+## Treat recovery and signup as authentication surfaces
+
+A recovery endpoint should return the same message whether or not the account exists: "If an eligible account matches, recovery instructions will be sent." Only the existing-account branch sends the message. Apply comparable rate and abuse controls to both branches so an observer cannot infer identity from the response.
+
+Email delivery itself can leak through side channels. A tester who controls both addresses can observe that one inbox receives a message, which is intended. The public HTTP response should not reveal the difference to someone who does not control the address. Support agents should follow a policy that avoids confirming accounts to unauthenticated requesters.
+
+Signup needs a product decision. If duplicate registration is reported explicitly, enumeration may be an accepted tradeoff. Alternatives include sending an email to the address with next steps that work safely for both new and existing users. Document the choice instead of allowing one route to disclose identity accidentally.
+
+The [password reset and email verification guide](/blog/password-reset-email-verification-security) covers token entropy, expiry, storage, and one-time use. Uniform responses do not repair weak recovery tokens.
+
+## Limit guessing without handing attackers a lockout button
+
+NIST [SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html) requires verifiers to implement rate limiting for failed authentication attempts. Its stated maximum for certain authenticator policies is an upper bound, not a recommended default for every application. Lower limits may be appropriate.
+
+Count against the account when it exists, but avoid revealing that decision. Combine it with trusted network and session signals to slow distributed and targeted attacks. Apply increasing delays, bot challenges, or step-up verification according to risk. Offer phishing-resistant MFA where the application's assurance needs justify it.
+
+The [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) distinguishes brute force, credential stuffing, and password spraying. They stress different counters. One account with many passwords, many accounts with one common password, and reused credentials across services should not look identical in telemetry.
+
+Avoid a permanent hard lock that an unauthenticated actor can trigger. If the authenticator must be disabled, notify the user through an established channel and provide a secure recovery or rebind process. Rate-limit outbound notifications too, or the defense becomes a message-flooding tool.
+
+## Verify with owned identities
+
+Create two test accounts and one synthetic nonexistent address in a local or approved staging environment. Send the same invalid password to each. Compare status, body fields, headers, cookies, redirect behavior, and response-size ranges. Collect enough timings to see broad differences, but do not interpret tiny network variation as proof of a weakness.
+
+Repeat the comparison for signup, password recovery, email verification, invitation acceptance, and support-facing lookup behavior. Confirm that the nonexistent path does not create a user, enqueue sensitive data, or send mail to an unrelated address.
+
+Exercise throttling with harmless failed attempts. Check account, session, network, and distributed-node behavior. Verify that a legitimate user can recover and that one source cannot repeatedly trigger user notifications. Never test third-party identities or real passwords.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record these cases without uploading them. It does not send authentication requests or measure your response paths.
+
+## What automation can and cannot prove
+
+Integration tests can assert matching status and schemas. Load tests can exercise counters. Statistical timing tools can identify a difference worth review in an authorized environment.
+
+Automation cannot prove that every external channel is uniform. Email delivery, federated login, customer support, and new product routes may expose a separate signal. A clean test is evidence for the covered paths and identities only. Retain the test matrix and rerun it when authentication behavior changes.
+
+## Sources
+
+- [NIST SP 800-63B: Authentication and Authenticator Management](https://pages.nist.gov/800-63-4/sp800-63b.html)
+- [OWASP: Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
+- [MITRE CWE-204: Observable Response Discrepancy](https://cwe.mitre.org/data/definitions/204.html)

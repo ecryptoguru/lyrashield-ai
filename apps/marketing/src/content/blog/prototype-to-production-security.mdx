@@ -1,0 +1,144 @@
+---
+title: "When a vibe-coded prototype becomes production"
+description: "A prototype becomes production when failure or misuse can affect real people, data, money, access, obligations, or business operations."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["vibe-coding-security", "verification"]
+draft: false
+heroImage: supply-chain-02
+faq:
+  - q: "Do a few beta users make a prototype production?"
+    a: "They can. If beta users provide real identities, data, payments, or reliance, the application has production consequences even when access is limited and the product is still changing quickly."
+  - q: "Is an internal-only prototype production?"
+    a: "Treat it as production when it can expose company data, grant privileged access, trigger business actions, or disrupt work. Internal network location does not remove those consequences."
+  - q: "Are a hosting provider's security defaults enough?"
+    a: "No. Managed defaults can reduce infrastructure work, but the application still owns authorization, data handling, secrets, integrations, monitoring, recovery, and configuration choices."
+---
+
+A vibe-coded prototype becomes production when failure, misuse, or disclosure can materially affect someone. Real identities, sensitive data, payments, privileged actions, public traffic, contractual duties, or business-critical availability all cross that line. The hosting label does not matter. Pause expansion until ownership, access control, secrets, monitoring, recovery, and rollback have evidence.
+
+## Recognize production by its consequences
+
+Teams rarely hold a ceremony where a prototype becomes a system of record. A demo gains a login, then a shared database, then a payment link or internal admin action. Real use arrives before the architecture gets a production review.
+
+The [LyraShield AI guide to securing vibe-coded applications](/blog/vibe-coding-security-guide) describes six layers that prototypes often leave implicit. Requirements, trust boundaries, verification, release decisions, and operations become unavoidable once people can be harmed by a mistake.
+
+[NIST's Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) treats security requirements, protected development, secure production, and vulnerability response as life-cycle work. [NIST Cybersecurity Framework 2.0](https://www.nist.gov/publications/nist-cybersecurity-framework-csf-20) adds governance, protection, detection, response, and recovery outcomes. Neither framework defines production by a cloud provider's environment name.
+
+## The gradual-promotion failure pattern
+
+Prototype configuration often survives longer than intended:
+
+```yaml
+# VULNERABLE: prototype defaults exposed to real use
+environment: demo
+public_signup: true
+admin_role: first_registered_user
+debug_errors: true
+shared_database: true
+backup_restore_tested: false
+```
+
+No single line necessarily creates an incident. Together they show that a convenience build now has public identity, privileged access, information disclosure, shared state, and no proven recovery path.
+
+AI tools miss the transition because the repository does not contain the social facts. They cannot infer that a test account now belongs to a customer, an internal URL is in an onboarding document, or a prototype's spreadsheet export drives payroll. They keep optimizing for the last prompt.
+
+## Six signals that the line has been crossed
+
+Treat the application as production when any of these conditions is true.
+
+### Real identities or access
+
+The app authenticates employees, customers, partners, students, patients, or other real users. Session handling, account recovery, role changes, and account deletion now have consequences. A single shared password does not become acceptable because the user list is small.
+
+### Sensitive or regulated data
+
+The system receives personal data, confidential source code, health or financial records, secrets, or unreleased business information. Data classification, retention, deletion, export, and access logging need owners.
+
+### Money or privileged actions
+
+The app can charge, refund, transfer, provision, delete, publish, deploy, or change another system. Require server-side authorization, approval for high-impact actions, idempotency, and auditable outcomes.
+
+### Public or partner traffic
+
+An internet route, webhook, API key, share link, or partner integration creates an external boundary. Validate input, constrain resource use, inventory endpoints, and prepare abuse handling.
+
+### Contractual or legal reliance
+
+A customer agreement, privacy notice, internal policy, or regulatory duty may apply before a public launch. Route these decisions to the appropriate owner instead of guessing from a technical checklist.
+
+### Operational dependence
+
+If a failed deployment stops sales, support, payroll, reporting, or customer work, the service needs monitoring, recovery ownership, and a tested rollback even when only ten people use it.
+
+## Build a promotion gate
+
+Move the application through an explicit review instead of renaming an environment variable.
+
+```yaml
+# REVIEWED PROMOTION RECORD
+service_owner: named-person-or-team
+data_classification: recorded
+identity_and_roles: reviewed
+secrets: managed-and-rotatable
+production_artifact: immutable-reference
+monitoring_owner: named-person-or-rotation
+backup_restore: tested
+rollback: rehearsed
+open_limitations: recorded
+```
+
+Use [OWASP ASVS 5.0.0](https://owasp.org/www-project-application-security-verification-standard/) as a source of technical verification requirements, then select scope according to the application's risk. An ASVS checklist is not a certificate that the application is secure. It is a structured way to avoid inventing requirements from memory.
+
+Start with the parts that carry the most consequence:
+
+1. Replace shared or self-assigned administrative access with managed identity and server-enforced authorization.
+2. Separate development, test, and production credentials and data. Remove live secrets from repositories, prompts, browser bundles, and logs.
+3. Review every external integration, webhook, background job, and agent tool for permissions and failure behavior.
+4. Create an immutable build and a reviewed deployment path rather than building ad hoc on the production host.
+5. Add health signals, security-relevant logging, alert ownership, backups, restore tests, and rollback instructions.
+6. Record remaining limitations and decide who may accept them.
+
+Keep development and production separate in ways the team can verify. Use different credentials, data, callback URLs, storage, and deployment permissions. Prevent a local tool or preview build from reaching production records by default. Give developers a supported way to create synthetic data so copying a production database does not become the easiest debugging path.
+
+Environment separation is incomplete when the same unrestricted credential can cross every boundary. Scope each service identity to the resources and actions it needs, rotate inherited prototype secrets, and remove old accounts. Test that a development deployment fails when it tries to use a production-only action.
+
+## Verify the transition safely
+
+Use a staging environment with synthetic users and non-sensitive data. Test access across roles and tenants, expired sessions, revoked access, malformed inputs, retry behavior, integration failure, migration rollback, and backup restore.
+
+Review production configuration separately. A correct staging test does not detect a public debug flag, different identity callback, overly broad production credential, or missing egress rule.
+
+Run authorized code, dependency, secret, configuration, and endpoint checks. Preserve the target and coverage of each result. A finding is detected until the required independent evidence exists; a clean retest can remain inconclusive when the relevant path was skipped.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can expose missing launch decisions. The broader [pre-launch security checklist for AI-built apps](/blog/ai-app-prelaunch-security-checklist) covers the release review after you recognize that the prototype has crossed the line.
+
+## Set a minimum evidence packet
+
+Keep one short record that a new engineer can follow without reading months of chat. It should name the service owner, repository and deployed artifact, production data class, identity provider, privileged roles, external integrations, secret stores, monitoring route, incident contact, backup location, restore-test date, and rollback procedure.
+
+Attach the results of the promotion checks with their targets and limitations. A screenshot of a green dashboard is weak evidence because it may omit the commit, configuration, and skipped coverage. Prefer reproducible commands, immutable run records, and links to reviewed changes.
+
+Review open exceptions separately. Give each one a consequence, temporary control, owner, and expiry. If the team cannot explain which data exists, who can administer the service, or how to restore it, keep real use narrow while those answers are produced.
+
+Store the packet with the service, review it after material changes, and remove stale access as people leave. Documentation that nobody tests becomes another prototype assumption.
+
+## Edge cases that fool small teams
+
+An invitation-only beta still handles real people. "Internal only" can include contractors, compromised accounts, and privileged business data. A managed database protects infrastructure but cannot infer which user may read which row. A serverless platform operates the runtime but does not write the application's authorization policy.
+
+Local-first tools reduce data exposure only when the workflow actually stays local. A desktop wrapper that forwards prompts, telemetry, crash dumps, or repository context to a cloud service still has an external data path.
+
+Temporary production use also counts. If a demo supports a live event for one afternoon, its availability and data effects are real for that window.
+
+## What automation cannot approve
+
+Automated checks can find selected weaknesses, compare configuration, exercise test cases, and record a release artifact. They cannot discover every undocumented way the business depends on the service or decide whether a contractual obligation applies.
+
+Assign a human release owner who can stop expansion. If required evidence is missing, narrow the prototype's data, permissions, audience, and integrations until the team can operate it responsibly. Calling it a beta does not reduce the blast radius.
+
+### Sources
+
+- [NIST SP 800-218, Secure Software Development Framework 1.1](https://csrc.nist.gov/pubs/sp/800/218/final)
+- [OWASP Application Security Verification Standard 5.0.0](https://owasp.org/www-project-application-security-verification-standard/)
+- [NIST Cybersecurity Framework 2.0](https://www.nist.gov/publications/nist-cybersecurity-framework-csf-20)

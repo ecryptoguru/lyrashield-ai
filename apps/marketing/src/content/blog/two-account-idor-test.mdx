@@ -1,0 +1,133 @@
+---
+title: "The Two-Account Test for Data Isolation"
+description: "Use two owned accounts and synthetic records to test object-level authorization across reads, writes, deletes, exports, files, and nested resources."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - verification
+draft: false
+heroImage: access-boundary-02
+faq:
+  - q: "Do UUIDs prevent IDOR or BOLA?"
+    a: "No. UUIDs make casual guessing harder, but identifiers still leak through links, logs, exports, browser history, and related API responses. The server must authorize the current caller for the referenced object on every operation."
+  - q: "Must an unauthorized object request return 404 instead of 403?"
+    a: "Either can be correct. A 404 can reduce object-existence disclosure, while a 403 can be clearer for an object the caller is allowed to know exists. Choose a consistent policy and ensure neither response body nor related metadata leaks private data."
+  - q: "Does a two-account test cover administrator boundaries?"
+    a: "No. Two equal-role accounts test horizontal isolation. Administrator, support, billing, and service identities need separate role-boundary cases because their permissions and data paths differ."
+---
+
+**Direct answer:** In an owned local or staging environment, create two ordinary accounts and separate synthetic records. Capture Account B's legitimate request, replace only its object identifier with Account A's test object, and confirm every read, update, delete, export, file, bulk, and nested-resource path denies access without returning private data. Keep the case as a negative regression test.
+
+This small test finds a common gap: the route requires a valid session, but the database query trusts an object ID from the URL. Authentication answers who made the request. It does not answer whether that person owns the requested object.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats object authorization as a server boundary, not a user-interface feature. The two-account method produces evidence for a defined set of routes. It does not certify every tenant or role boundary in the application.
+
+## Set up an authorized test
+
+Run this only against a system you own or have explicit permission to test. Prefer local or isolated staging. Use synthetic data that has no customer, employee, or production identifiers.
+
+Create Account A and Account B with the same ordinary role. Give each account one distinct project and a few related objects, such as a comment, file, export, and API token record that contains fake values. Record the IDs and expected owner for the test only.
+
+Equal roles matter. If A is an administrator and B is a normal user, a denial does not tell you whether ordinary users are isolated from each other. Test elevated roles later with a separate matrix.
+
+Start with Account B performing a legitimate action on B's own object. Capture the request using your test client or browser developer tools. Change only the object reference to A's synthetic object while preserving B's valid session, method, body shape, and other headers. Avoid bulk enumeration. One known owned identifier is enough.
+
+## Build a route matrix before testing
+
+List every route family that can touch the object. A compact matrix might look like this:
+
+| Operation | Example path                     | Expected result for B using A's ID   |
+| --------- | -------------------------------- | ------------------------------------ |
+| Read      | `GET /api/projects/:id`          | deny, no project fields              |
+| Update    | `PATCH /api/projects/:id`        | deny, no state change                |
+| Delete    | `DELETE /api/projects/:id`       | deny, object remains                 |
+| Export    | `POST /api/projects/:id/export`  | deny, no job or download             |
+| File      | `GET /api/files/:id`             | deny, no redirect or signed URL      |
+| Nested    | `GET /api/projects/:id/comments` | deny, no child metadata              |
+| Bulk      | `POST /api/projects/bulk`        | deny or filter every unauthorized ID |
+
+Add alternate HTTP methods, GraphQL resolvers, mobile endpoints, websocket subscriptions, background-job creation, and direct object-storage paths when the application has them. Generated apps sometimes protect the page route while leaving an export or download handler with a separate global lookup.
+
+## The vulnerable global lookup
+
+This example is intentionally vulnerable.
+
+```ts
+// VULNERABLE: any authenticated user can fetch any known project ID
+app.get("/api/projects/:id", requireSession, async (req, res) => {
+  const project = await db.project.findUnique({
+    where: { id: req.params.id },
+  })
+
+  if (!project) return res.sendStatus(404)
+  return res.json(project)
+})
+```
+
+The session middleware proves identity, then the query ignores it. A UUID does not fix the missing predicate. OWASP calls the API form Broken Object Level Authorization, and CWE-639 describes authorization bypass through a user-controlled key.
+
+AI-generated code misses this because `findUnique({ id })` is a short, valid ORM example. The authorization requirement lives in product context: which user, tenant, workspace, or relationship is allowed to reach this row? Unless that requirement appears in the prompt and tests, the generated handler may stop after authentication.
+
+Client-side route guards also create false confidence. Hiding Account A's link from Account B does not protect the API. The browser is an untrusted caller and can send its own identifier.
+
+## Run the test without turning it into an exploit
+
+For each matrix row, use B's valid session and A's one known synthetic ID. Record the request name, method, target object type, response status, response field names, and whether any state changed. Do not store session tokens or full private payloads in the report.
+
+A denial is more than a `403` or `404` status. Check that the response body contains no title, owner, filename, signed download URL, child count, billing field, or internal storage key. Confirm that an update did not happen despite an error response. Verify that an export job was not queued and that a notification did not reveal object details.
+
+Compare response timing cautiously. Large, repeatable differences can reveal object existence, but one slow request proves little. Fix obvious existence leaks without building a high-volume timing probe.
+
+Look beyond the immediate JSON response. A denied file request must not return a redirect that contains a usable signed URL. A search endpoint must not include A's record title or snippet in B's result set. Cache keys need the same user or tenant boundary as the database query, or B may receive a response generated for A even when the origin query is correct. Check audit and notification events for the same accidental disclosure.
+
+For bulk routes, submit one B-owned ID and one A-owned ID. The server should either reject the whole operation or apply a documented policy that safely processes only authorized objects. It must not authorize the first item and then update the rest globally.
+
+## Scope the query to the caller
+
+Constrain the data access itself, then return only reviewed public fields.
+
+```ts
+app.get("/api/projects/:id", requireSession, async (req, res) => {
+  const project = await db.project.findFirst({
+    where: {
+      id: req.params.id,
+      workspaceId: req.session.workspaceId,
+      members: { some: { userId: req.session.userId } },
+    },
+    select: { id: true, name: true, status: true },
+  })
+
+  if (!project) return res.sendStatus(404)
+  return res.json(project)
+})
+```
+
+The exact predicate depends on the product. Direct ownership may use `ownerId`. Shared workspaces need current membership and perhaps a role or attribute policy. Parent-child resources should verify the parent boundary in the same query or a policy decision tied to both IDs.
+
+Database row-level security can provide another enforcement layer, but the application must set the correct user or tenant context and avoid privileged roles that bypass the policy. Service processes and background jobs need explicit tenant context too.
+
+Do not fetch the global record first and check ownership later if another branch can use it before the check. Central policy helpers are useful when they stay server-side, deny by default, and receive the full subject, resource, action, and context.
+
+## Turn the result into a regression test
+
+Write a negative integration test that creates both accounts and records through supported setup paths. Authenticate as B, request A's object, and assert both the denial and absence of state change.
+
+Keep separate tests for reads and mutations. A route can correctly hide a record while a background export still queues. Add file and nested-resource assertions when those handlers use different storage or query code.
+
+Repeat the test after changes to shared middleware, ORM helpers, tenant context, caching, GraphQL loaders, or service-role configuration. A single manual pass becomes stale as routes multiply.
+
+The browser-local [Supabase RLS policy checker](/tools/supabase-rls-checker) can flag some risky patterns in SQL you paste. It cannot inspect deployed policies, grants, service roles, or API behavior. The general [AI app security checklist](/tools/ai-app-security-checklist) can record whether negative authorization tests exist, but it does not send them.
+
+Automated two-account cases establish only the routes, roles, methods, and data paths they cover. They do not prove administrator boundaries, asynchronous workers, caches, exports, search indexes, or every new endpoint. The [LyraShield evidence methodology](/methodology) keeps that coverage attached to the result.
+
+For the broader weakness and discovery process, read [how to find IDOR in an AI-built app](/blog/idor-ai-built-apps). The guides on [server-side authorization for AI APIs](/blog/server-side-authorization-ai-apis) and [multi-tenant data isolation](/blog/multi-tenant-data-isolation) cover policy placement and non-database surfaces.
+
+## Sources
+
+- [OWASP API Security Top 10: Broken Object Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
+- [MITRE CWE-639: Authorization Bypass Through User-Controlled Key](https://cwe.mitre.org/data/definitions/639.html)
+- [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)
+- [OWASP WSTG: API Broken Object Level Authorization](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-API_Testing/02-API_Broken_Object_Level_Authorization)
+- [NIST SP 800-115: Technical Guide to Information Security Testing and Assessment](https://csrc.nist.gov/pubs/sp/800/115/final)

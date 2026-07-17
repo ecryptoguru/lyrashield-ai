@@ -1,0 +1,153 @@
+---
+title: "Create a Security Report for a Client Handoff"
+description: "Build a client security handoff with executive context, technical evidence, coverage limits, finding states, retests, owners, and secure delivery."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+draft: false
+heroImage: decision-operations-05
+faq:
+  - q: "Is raw scanner output enough for a client handoff?"
+    a: "No. Raw output usually lacks business context, authorized scope, coverage limits, deduplication, finding states, ownership, remediation decisions, and retest results. Retain raw evidence, but interpret it in a reviewable report."
+  - q: "Should the client report include proof-of-concept details?"
+    a: "Include the minimum safe detail needed for an authorized engineer to understand and reproduce the condition. Move sensitive requests, credentials, personal data, destructive steps, or target coordinates into a more restricted evidence channel."
+  - q: "How should retest status appear?"
+    a: "Name the fixed target, method, applicable coverage, date, result, and limitations. Keep retest-confirmed separate from independently verified, and show an incomplete or blocked retest as inconclusive rather than fixed."
+  - q: "How should a security handoff report be shared?"
+    a: "Use an access-controlled channel with named recipients, appropriate retention, version history, and a revocation path. Avoid public links and ordinary email attachments for reports containing sensitive architecture or vulnerability evidence."
+---
+
+**Direct answer:** Identify the exact release and authorized scope, summarize the decision and material risks, list each finding with evidence and status, show what was not tested, record fixes and retests, and assign owners and dates. Redact credentials, personal data, and unnecessary exploit detail. Deliver the versioned report and restricted evidence through an access-controlled channel with a correction process.
+
+A client handoff must work for two readers. An executive needs to understand the decision, material residual risk, and ownership transfer. An engineer needs enough target, evidence, and reproduction context to act without guessing.
+
+Raw scanner output serves neither reader well. It is one evidence input within the [security model for AI-built applications](/blog/vibe-coding-security-guide). A useful report preserves what was tested, what was observed, what remains uncertain, and who owns the next action.
+
+## Bind the report to the engagement
+
+Open with the facts that make the report interpretable:
+
+- client and authorized testing contact;
+- application, repository, release, commit, image, and environment;
+- assessment dates and report creation date;
+- written authorization and relevant restrictions;
+- in-scope services, roles, data flows, and integrations;
+- explicitly out-of-scope systems and tests;
+- tools, versions, configurations, and test accounts;
+- changes between testing and handoff.
+
+Do not call a staging assessment a production assessment. Do not imply that a repository scan covered the deployed network configuration. If a client changes the candidate after testing, record that the report applies to the earlier version until the relevant checks run again.
+
+OWASP's [Web Security Testing Guide reporting chapter](https://owasp.org/www-project-web-security-testing-guide/v42/5-Reporting/README) recommends a report structure that covers scope, limitations, executive context, findings, remediation, and retest information. Tailor the detail to the actual engagement instead of borrowing a penetration-test label the work did not earn.
+
+## Write a one-page decision summary
+
+The executive section should answer:
+
+1. What release and business workflow were assessed?
+2. What methods and critical trust boundaries were covered?
+3. What material risks remain?
+4. What was fixed and retested?
+5. What was not tested or remained inconclusive?
+6. What decision was made, by whom, and under which conditions?
+7. What responsibilities transfer to the client?
+
+Use plain language. "A workspace member could retrieve another workspace's report under the tested conditions" is clearer than a weakness code alone. Label inferred impact and avoid guarantees such as "secure for launch."
+
+The risky summary hides uncertainty behind a grade:
+
+```text
+Security score: 92. All critical risks resolved. Application certified secure.
+```
+
+Unless a defined engagement supports every part of that statement, it creates false confidence. A score cannot show an untested administrator path, a failed dependency scan, or a retest that never completed. Do not call a report a certificate, warranty, or compliance attestation without the corresponding contract and evidence.
+
+## Add a coverage matrix
+
+Give each important control area a status and evidence reference.
+
+| Area                 | Target             | Coverage   | Evidence            | Limitation                      |
+| -------------------- | ------------------ | ---------- | ------------------- | ------------------------------- |
+| Tenant authorization | Report API         | Completed  | Test set AUTH-02    | Support impersonation excluded  |
+| Dependency review    | Locked build       | Completed  | SCA artifact DEP-04 | Vendored library not identified |
+| Recovery             | Database restore   | Limited    | Exercise OPS-03     | Regional failover not tested    |
+| Mobile client        | Native application | Not tested | None                | Separate engagement required    |
+
+Use `Completed`, `Limited`, `Not applicable`, and `Not tested` consistently. A blank cell invites optimistic interpretation. "Not applicable" requires a reason, while "Not tested" states that no evidence exists.
+
+The matrix should include authorization, input and output handling, secrets, dependencies, runtime configuration, agents and external actions, data protection, logging, recovery, and incident ownership when those areas apply. It does not need every generic category if the engagement is narrower.
+
+## Give every finding a stable record
+
+A technical finding should include:
+
+- stable ID and concise title;
+- affected target and version;
+- finding state and original detector;
+- root cause and exact code or request path;
+- prerequisites and safe reproduction;
+- observed impact, with inferred impact labeled;
+- technical severity and application context;
+- evidence reference and redaction note;
+- remediation, owner, and due date;
+- fix target and retest result;
+- residual risk and limitations.
+
+Keep evidence states precise:
+
+- **Detected:** a credible observation exists, but independent evidence is incomplete.
+- **Independently verified:** separate evidence supports the condition under recorded prerequisites.
+- **Retest-confirmed:** a fresh applicable check against the changed target did not observe the original condition.
+- **Inconclusive:** coverage or evidence was insufficient to decide.
+
+Accepted risk is a treatment decision, not a finding-verification state. Record who accepted it, why, its compensating controls, and when it expires. A false positive also needs rationale. Never delete the original record merely because its workflow state changed.
+
+The [security fix retest workflow](/blog/security-fix-retest-workflow) explains how to bind a retest to a fresh target and preserve equivalent coverage.
+
+## Protect sensitive evidence
+
+Reports can expose architecture, internal paths, tenant identifiers, personal data, credentials, request bodies, and exploit conditions. Redact before report generation, not only before final delivery. A hidden layer in a PDF or black rectangle over selectable text may not remove the underlying content.
+
+Use synthetic examples where they preserve the finding. Replace tokens with typed placeholders. Crop screenshots to the relevant interface and remove unrelated customer data. Keep destructive or highly reusable reproduction details in a separate evidence package with tighter access.
+
+NIST's [digital evidence preservation guidance](https://www.nist.gov/publications/digital-evidence-preservation-considerations-evidence-handlers) discusses integrity, provenance, storage, and handling decisions. A routine software handoff does not need to claim formal forensic chain of custody. It does need enough provenance to show which tool or person created an artifact, when, from which target, and whether the file changed.
+
+Store report and evidence versions immutably when practical. Record a digest for transferred artifacts. Limit recipients, set retention, and define who can revoke access. Do not embed long-lived public evidence links or credentials in the report.
+
+## End with ownership transfer
+
+The final section should list:
+
+- release decision and decision owner;
+- open findings and accepted risks;
+- conditional-release tasks and deadlines;
+- monitoring signals and incident contacts;
+- rollback and recovery owner;
+- scheduled retests and future checks;
+- client responsibilities after handoff;
+- agency access that will be revoked;
+- report correction and dispute process.
+
+Hold a short handoff review with both audiences present. Walk the decision summary, then demonstrate how an engineer locates one finding, its restricted evidence, its fix owner, and its retest state. Ask the client to confirm incident contacts, evidence access, and responsibility dates. Record unresolved questions instead of resolving them through optimistic wording.
+
+Corrections should create a new version with a change note. Do not silently replace a delivered report. If new evidence changes a finding state, preserve the earlier state and explain the transition.
+
+Define a channel for corrections and new evidence after delivery. A client may discover that the tested configuration differed from production or that a sensitive screenshot was included accidentally. The process should support rapid access revocation, corrected artifacts, recipient notification, and an audit entry without rewriting the original history.
+
+Audit the handoff itself. Record who received access, which artifact version was delivered, when access expires, and whether temporary agency credentials were removed. The [security audit-log design guide](/blog/security-audit-log-design) covers event structure without encouraging sensitive payload capture.
+
+## Use the sample honestly
+
+The LyraShield AI [sample assurance report](/sample-report) is a sanitized mock labeled in active development. It contains no customer data, production assessment, benchmark, or claim that the full workflow is currently available. Repository report code freezes creation-time snapshots and includes findings, retest summary, methodology, and limitations, but that implementation is not a public hosted client-report service.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign owners before handoff. It does not inspect a client system, generate assessment evidence, verify findings, or create a security report.
+
+## Sources
+
+- [OWASP Web Security Testing Guide v4.2: Reporting](https://owasp.org/www-project-web-security-testing-guide/v42/5-Reporting/README)
+- [OWASP Web Security Testing Guide v4.2: Introduction](https://owasp.org/www-project-web-security-testing-guide/v42/2-Introduction/README)
+- [OWASP: Vulnerability Disclosure Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Vulnerability_Disclosure_Cheat_Sheet.html)
+- [NIST: Digital Evidence Preservation](https://www.nist.gov/publications/digital-evidence-preservation-considerations-evidence-handlers)
+- [OWASP Autonomous Penetration Testing Standard: Reporting](https://owasp.org/APTS/standard/8_Reporting/)

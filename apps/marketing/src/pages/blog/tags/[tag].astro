@@ -1,6 +1,7 @@
 ---
 import Base from "@layouts/Base.astro"
-import { getCollection } from "astro:content"
+import BlogCard from "@components/BlogCard.astro"
+import { getCollection, getEntry } from "astro:content"
 
 export async function getStaticPaths() {
   const posts = await getCollection("blog", (entry) => !entry.data.draft)
@@ -14,34 +15,76 @@ export async function getStaticPaths() {
 
 const { tag, posts } = Astro.props
 const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
+const imageEntries = await Promise.all(
+  sortedPosts.map(async (post) => [post.id, await getEntry(post.data.heroImage)] as const)
+)
+const imagesByPost = new Map(imageEntries)
 
 const title = `Tag: ${tag} — LyraShield AI Blog`
 const description = `Read LyraShield AI articles tagged ${tag}, with practical guidance for securing AI-built apps, interpreting evidence, and verifying fixes.`
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL(Astro.url.pathname, origin).toString()
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "@id": `${canonical}#collection`,
+    name: `${tag} security resources`,
+    description,
+    url: canonical,
+    inLanguage: "en-US",
+    isPartOf: { "@id": `${origin}/#website` },
+    mainEntity: {
+      "@type": "ItemList",
+      numberOfItems: sortedPosts.length,
+      itemListElement: sortedPosts.map((post, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        url: new URL(`/blog/${post.id}`, origin).toString(),
+        name: post.data.title,
+        ...(imagesByPost.get(post.id)
+          ? { image: new URL(imagesByPost.get(post.id)!.data.og, origin).toString() }
+          : {}),
+      })),
+    },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Resources", item: `${origin}/blog` },
+      { "@type": "ListItem", position: 3, name: tag, item: canonical },
+    ],
+  },
+]
 ---
 
-<Base title={title} description={description}>
-  <section class="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
-    <h1 class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">Tag: {tag}</h1>
-    <p class="mt-4 text-lg text-text-muted">{description}</p>
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="tag-index">
+    <header>
+      <a href="/blog">← All resources</a>
+      <h1>{tag}</h1>
+      <p>{description}</p>
+    </header>
 
     {sortedPosts.length === 0 && (
-      <p class="mt-12 text-text-muted">No published posts for this tag.</p>
+      <p class="tag-index__empty">No published posts for this topic.</p>
     )}
 
-    <ul class="mt-12 space-y-8">
-      {sortedPosts.map((post) => (
-        <li class="rounded-lg border border-border bg-bg-raised p-6">
-          <a href={`/blog/${post.id}`} class="text-xl font-semibold tracking-tight text-text hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            {post.data.title}
-          </a>
-          <p class="mt-2 text-text-muted">{post.data.description}</p>
-          <p class="mt-4 text-sm text-text-muted">
-            <time datetime={post.data.pubDate.toISOString()}>
-              {post.data.pubDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-            </time>
-          </p>
-        </li>
-      ))}
-    </ul>
+    <div class="tag-index__posts">
+      {sortedPosts.map((post) => <BlogCard post={post} heroImage={imagesByPost.get(post.id)} />)}
+    </div>
   </section>
 </Base>
+
+<style>
+  .tag-index { width: min(100% - 2rem, 64rem); margin-inline: auto; padding-block: clamp(4rem, 9vw, 8rem); }
+  .tag-index header { border-bottom: 1px solid var(--color-border); padding-bottom: clamp(2.5rem, 6vw, 5rem); }
+  .tag-index header > a { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--color-accent); font-size: .85rem; font-weight: 700; text-decoration: none; }
+  .tag-index h1 { margin: 1rem 0 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(3.5rem, 9vw, 7rem); font-weight: 800; line-height: .92; letter-spacing: -.055em; text-transform: capitalize; }
+  .tag-index header p { max-width: 45rem; margin: 1.5rem 0 0; color: var(--color-text-muted); font-size: 1.08rem; line-height: 1.7; }
+  .tag-index__posts { margin-top: 1rem; }
+  .tag-index__empty { margin-top: 3rem; color: var(--color-text-muted); }
+  .tag-index a:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
+</style>

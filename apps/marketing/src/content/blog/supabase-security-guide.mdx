@@ -1,0 +1,147 @@
+---
+title: "Secure Supabase Auth, RLS, and Service Keys"
+description: "Secure the Supabase access chain from API grants and row-level security through user JWTs, server-only privileged keys, views, and functions."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - access-control
+  - web-security
+  - verification
+draft: false
+heroImage: access-boundary-01
+faq:
+  - q: "Is a Supabase anon or publishable key safe in the browser?"
+    a: "It is designed for public clients, but it is not an access control. Browser requests still need least-privilege grants and effective RLS policies for the anon and authenticated roles."
+  - q: "Do Supabase tables created with SQL automatically have RLS enabled?"
+    a: "Do not assume so. Supabase documentation says tables created in the Dashboard have RLS enabled by default, while tables created through SQL require you to enable it yourself. Verify every exposed table."
+  - q: "Should authorization use Supabase user metadata?"
+    a: "Do not authorize with raw_user_meta_data because users can update it. raw_app_meta_data is more suitable for server-assigned claims, but JWT claims can remain stale until the token refreshes. Database membership is often safer for immediate revocation."
+  - q: "Can a Supabase service role or secret key be used in frontend code?"
+    a: "No. Secret keys and the legacy service_role key provide elevated access and bypass RLS. Keep them in a controlled backend that performs its own authentication and authorization before every privileged operation."
+---
+
+**Direct answer:** Secure Supabase as an access chain. Enable RLS on every table exposed through the Data API, review SQL grants and policies for `anon` and `authenticated`, derive identity from verified sessions, keep secret and legacy `service_role` keys out of every browser, and run signed-out plus two-account tests against tables, views, storage, and privileged server routes.
+
+_Supabase key, RLS, Auth, view, and function guidance was reviewed against official documentation on July 17, 2026. Supabase is migrating from legacy anon and service role keys to publishable and secret keys, so check the current project settings before release._
+
+Supabase security is not one switch. A request passes through an API key, a user session when present, PostgreSQL role grants, Row Level Security policies, and sometimes a server function or privileged client. If any link is broader than intended, a correct check elsewhere may not save the request.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats this as an evidence chain. A generated policy is only a proposal. A rejected cross-user query on the deployed schema is evidence for that row and operation.
+
+## Map the four parts of the access chain
+
+For every public schema table, view, function, and storage bucket, record:
+
+1. which API or server route exposes it;
+2. whether the caller is `anon`, `authenticated`, or a privileged server role;
+3. which SQL grants allow the operation;
+4. which RLS policy limits rows;
+5. where business authorization is enforced;
+6. which response fields leave the server.
+
+RLS does not replace SQL privileges, and privileges do not restrict rows. A policy that covers `select` says nothing about `update`. A server using a secret key or legacy `service_role` key bypasses RLS, so the route's own authorization becomes the boundary.
+
+## The risky pattern: membership inferred from request data
+
+**Vulnerable pattern. The frontend sends the user ID used to select rows.**
+
+```ts
+const { data } = await supabase.from("documents").select("*").eq("owner_id", formData.userId)
+```
+
+The filter produces the right screen when `formData.userId` matches the current user. It does not prove the caller owns that value. Another authenticated user can change the request.
+
+AI-generated apps often miss this because sample data belongs to one account and the visible UI supplies the expected ID. The code appears to implement "my documents" without testing whether the database derives "my" from the verified session.
+
+## Enforce the row boundary in PostgreSQL
+
+Enable RLS and define operation-specific policies using `auth.uid()`. The exact schema, indexing, role model, and null handling still need review.
+
+```sql
+alter table public.documents enable row level security;
+
+revoke all on table public.documents from anon;
+grant select, insert, update, delete
+  on table public.documents to authenticated;
+
+create policy "members can read workspace documents"
+on public.documents
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.workspace_members m
+    where m.workspace_id = documents.workspace_id
+      and m.user_id = (select auth.uid())
+      and m.status = 'active'
+  )
+);
+```
+
+Add separate policies for insert, update, and delete. For writes, `with check` constrains the new row while `using` constrains the existing row. An update policy that checks only the old row can allow a user to move it to a workspace they do not belong to. Confirm the policy's behavior for a null `auth.uid()`, removed memberships, ownership transfer, and administrators.
+
+Index columns used in policy predicates, such as `workspace_id` and `user_id`, after reviewing the query plan. Performance problems in authorization can become availability problems, but an optimization must not weaken the predicate.
+
+## Verify RLS on every exposed object
+
+Supabase documentation says Dashboard-created tables have RLS enabled by default. Tables created with raw SQL or migrations require explicit attention. Inventory the schemas exposed by the Data API and check every table after migrations.
+
+Views need their own review. Supabase notes that views can bypass RLS by default because PostgreSQL commonly creates them with `security definer` behavior. On PostgreSQL 15 or later, use `security_invoker = true` when the intended behavior is to apply the caller's policies. Otherwise keep the view out of exposed schemas or revoke public access.
+
+Review database functions too. A `security definer` function runs with its owner's privileges. Set a safe `search_path`, qualify object names, restrict execute grants, and keep privileged functions out of exposed schemas unless they are intentionally callable. A helpful generated function can silently become an RLS bypass.
+
+The browser-local [Supabase RLS checker](/tools/supabase-rls-checker) can flag missing statements and risky SQL in text you provide. It does not connect to the project, inspect grants, evaluate policy results, or discover server-side bypass clients.
+
+## Use current API key terminology correctly
+
+Supabase now documents four key types during its migration:
+
+| Key                   | Intended location       | Database posture                                                  |
+| --------------------- | ----------------------- | ----------------------------------------------------------------- |
+| Publishable           | Public clients          | Uses `anon` or `authenticated` role and relies on grants plus RLS |
+| Legacy `anon`         | Public clients          | Same low-privilege role model                                     |
+| Secret                | Controlled backend only | Elevated access through `service_role`, bypasses RLS              |
+| Legacy `service_role` | Controlled backend only | Elevated access and bypasses RLS                                  |
+
+A publishable or anon key identifies the project and is expected to be recoverable from a browser. Calling it "hidden" creates false confidence. Protect data with RLS and least-privilege grants.
+
+A secret or service role key is different. Never place it in frontend source, a public environment variable, a mobile binary, a URL, or a browser request. Use a separate server client that does not inherit an end-user session accidentally. Before a privileged query, authenticate the caller and authorize the resource in server code.
+
+## Treat JWT claims as cached authorization input
+
+Supabase exposes `auth.uid()` and `auth.jwt()` to policies. Do not use `raw_user_meta_data` for authorization because the authenticated user can modify it. `raw_app_meta_data` is a better location for server-controlled claims, but the claim in an existing JWT may be stale until refresh.
+
+For permissions that must revoke immediately, query a database membership row in the policy or server path. Test what happens when a role changes while a browser still holds an older token. Decide whether the application refreshes the session, rejects on the next database request, or requires reauthentication for high-risk changes.
+
+Session existence alone is not business authorization. A valid user may still lack membership in a workspace, permission to edit a report, or authority to invoke an administrative function.
+
+## Run a safe two-account policy test
+
+Use local Supabase or an authorized test project with fake records. Create Account A and Account B in separate browser profiles.
+
+1. As signed out, test each table operation expected to require authentication.
+2. As A, create a row through the same client path the application uses.
+3. As B, attempt to select, update, delete, and reference A's row by its real test identifier. Expect denial or an empty result.
+4. Try changing `owner_id` or `workspace_id` during insert and update.
+5. Remove B from a shared workspace and repeat with the existing session.
+6. Exercise views, RPC functions, storage objects, exports, and server routes separately.
+7. Search client bundles and logs for secret or service role key material.
+
+Test through the deployed application and directly through the supported Supabase client. A UI that hides another user's row may still sit over a permissive API. Do not test projects or records you do not own.
+
+The [RLS guide for vibe-coded apps](/blog/supabase-rls-vibe-coded-apps) goes deeper on policy testing. If privileged credentials may have reached the browser or repository, use the [frontend API key guide](/blog/api-keys-frontend-ai-apps) to contain and rotate them rather than merely deleting the visible string. The [Next.js security guide](/blog/nextjs-ai-app-security) shows how to keep a privileged Supabase client behind that framework's server boundary.
+
+## Keep conclusions scoped
+
+A passing two-account test supports the operations, roles, schema version, and environment you exercised. It does not prove all policies, grants, triggers, functions, storage rules, third-party integrations, or future migrations are correct.
+
+Record the migration identifier, API key type, accounts, operations, and observed denials. Recheck after schema, grants, policies, Auth settings, JWT claims, views, functions, storage, or server clients change.
+
+## Sources
+
+- [Supabase: Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
+- [Supabase: Securing your API](https://supabase.com/docs/guides/api/securing-your-api)
+- [Supabase: Understanding API keys](https://supabase.com/docs/guides/getting-started/api-keys)
+- [Supabase: User sessions](https://supabase.com/docs/guides/auth/sessions)
+- [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)

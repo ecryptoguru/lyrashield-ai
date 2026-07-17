@@ -1,0 +1,133 @@
+---
+title: "Dependency Scanning With OSV and Lockfiles"
+description: "Scan resolved dependencies with OSV Scanner v2, interpret advisory matches, manage exceptions, update safely, and verify the result."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - supply-chain
+  - verification
+draft: false
+heroImage: supply-chain-01
+faq:
+  - q: "Does OSV Scanner scan source code for application bugs?"
+    a: "No. Source scanning means OSV Scanner extracts packages from supported lockfiles and manifests in a source tree, then matches those packages to known vulnerability records. It is not a general static analyzer for first-party application logic."
+  - q: "Is scanning a dependency manifest enough?"
+    a: "Usually not when the manifest contains ranges rather than the exact versions selected by the build. Prefer a committed lockfile or an installed artifact that represents what you actually build and deploy, and confirm that OSV Scanner supports that format."
+  - q: "Is every OSV match exploitable in my application?"
+    a: "No. A match shows that a resolved package version falls within a recorded affected range. Reachability, configuration, data flow, and deployment exposure still determine whether the vulnerable behavior can occur in your application."
+  - q: "Does an ignored advisory disappear permanently?"
+    a: "No. An ignore suppresses reporting under the configured conditions. Keep a reason, an owner, and an expiry date so the team must review the decision again. Aliases of the ignored vulnerability may also be ignored."
+---
+
+**Direct answer:** Commit the lockfiles that represent your resolved build, then run OSV Scanner v2 against the source tree or explicit lockfile. Confirm the ecosystem and affected version range for each match. Update deliberately in a branch, reinstall from a clean state, run application tests, and rescan. Treat a match as dependency evidence, not automatic proof that your application reaches the vulnerable code.
+
+Dependency scanning is easy to start and easy to misread. A command can produce a clean report while missing an unsupported artifact, or a long alert list that says nothing about actual runtime exposure. The useful result is a traceable chain from the build input to the resolved package, the advisory range, the update, and the fresh scan.
+
+This workflow belongs inside a [broader security approach for AI-built applications](/blog/vibe-coding-security-guide). AI coding tools can add a package, change a version range, or regenerate a lockfile without explaining which transitive versions moved. The lockfile is often the best record of that decision.
+
+## Know what you are scanning
+
+A manifest expresses what a project may install. For example, a `package.json` entry can allow a range of versions. A lockfile records the versions and dependency graph selected for a particular install. An installed artifact, such as a container image, records what actually ended up in that build.
+
+Those are different targets. OSV Scanner v2 separates source scanning from image scanning. Source scanning extracts packages from supported lockfiles and manifests. Image scanning inspects supported installed artifacts such as operating-system package databases, Java archives, Node modules, Python wheels, and certain auditable binaries.
+
+Do not assume a filename is supported because it looks like a lockfile. Check the [current supported artifacts and manifests](https://google.github.io/osv-scanner/supported-languages-and-lockfiles/) for the scanner version you pin. The list includes common npm, pnpm, Yarn, Cargo, Composer, Poetry, Go, and other formats, but coverage differs by ecosystem. Some manifest formats require resolution, and some categories have explicit gaps. Record which files the scan found and which parts of the build remained outside scope.
+
+This risky CI pattern scans only a broad manifest and throws away the result:
+
+```sh
+# RISKY: no pinned scanner version, no retained output, and no proof that
+# the selected file represents the versions deployed by the application.
+osv-scanner scan -L package.json
+```
+
+A green result here may say more about the chosen input than the dependency graph.
+
+## Run an inert OSV Scanner v2 scan
+
+Install or invoke a reviewed, pinned OSV Scanner v2 release using the official instructions. From a trusted checkout, scan a specific lockfile and save structured output:
+
+```sh
+osv-scanner scan -L package-lock.json --format json --output-file osv-results.json
+```
+
+To inspect supported dependency files recursively in a trusted project tree:
+
+```sh
+osv-scanner scan source --recursive . --format json --output-file osv-results.json
+```
+
+These commands extract package metadata and query vulnerability data. They do not install packages or execute the application. Still, treat the repository and output as sensitive. Dependency names and versions can reveal technology choices. Store reports with the same care as other internal build evidence.
+
+Before accepting the run, inspect its package inventory and diagnostics. Record the scanner release, command, target commit, files discovered, files intentionally excluded, and whether network-backed resolution completed. A scan that found no supported dependency input is not equivalent to a scan that found supported inputs and returned no matches.
+
+OSV Scanner also has a guided remediation command. Its own documentation warns that remediation on an untrusted project may cause package-manager scripts to run or external registries to be contacted. Do not point experimental fix automation at an unknown repository. Make changes in a branch, use the package manager you already trust, and review every lockfile diff.
+
+## Read the advisory as a range, not a verdict
+
+Start with the OSV ID, aliases, package name, ecosystem, and affected range. The [OSV schema](https://ossf.github.io/osv-schema/) can represent version and Git ranges with events such as `introduced`, `fixed`, `last_affected`, and `limit`. Those fields have ecosystem semantics. Do not apply generic semantic-version assumptions to an ecosystem that uses a different ordering scheme.
+
+Aliases connect identifiers for the same vulnerability across databases. They help with deduplication, but they do not make two vaguely related weaknesses identical. Follow the record's references and modification date, and verify that the affected package name and ecosystem match your dependency.
+
+Then answer four practical questions:
+
+1. Which lockfile or artifact produced the package record?
+2. Is the package direct or transitive, and what path introduced it?
+3. Does the resolved version fall inside the affected range for that ecosystem?
+4. Does your application use the affected feature under reachable deployment conditions?
+
+The first three support known-vulnerable-version detection. The fourth requires application context. A matching version can be present without the vulnerable path being reachable. The opposite problem also matters: a clean database match cannot exclude unknown vulnerabilities or dependencies the extraction step missed.
+
+## Handle transitive paths and exceptions honestly
+
+For a direct dependency, you can often update the declared range. For a transitive dependency, the safe change may be an upstream package update, a package-manager override, or removal of the parent dependency. Avoid an override that creates an unsupported combination merely to silence the scanner.
+
+When an update cannot ship immediately, record a narrow exception in `osv-scanner.toml`. The [OSV Scanner configuration](https://google.github.io/osv-scanner/configuration/) supports a vulnerability ID, reason, and optional expiry date. Place a local config beside the scanned lockfile or manifest because it does not propagate into child directories. Use an explicit `--config=/path/to/config.toml` override when one reviewed config must apply to every parsed file.
+
+```toml
+[[IgnoredVulns]]
+id = "OSV-ID-FROM-REVIEW"
+ignoreUntil = 2026-08-15
+reason = "Affected feature is disabled; owner SEC-142 tracks the supported update"
+```
+
+Use the real reviewed ID and a real near-term date. The example is intentionally inert. An ignore is a temporary risk decision, not deletion of the advisory. Give it an owner, link the evidence for the claimed non-reachability, and alert before expiry. Remember that ignoring a vulnerability also ignores its aliases in OSV Scanner.
+
+Broad package overrides are more dangerous because they can hide every vulnerability for a matching package. Keep the match exact, explain the reason, and use `effectiveUntil` when an override is unavoidable.
+
+## Update, reinstall, and rescan
+
+Make the remediation auditable:
+
+1. Create a branch from the exact commit that produced the finding.
+2. Update the smallest appropriate direct dependency or override.
+3. Review manifest and lockfile changes, including new registries and install scripts.
+4. Reinstall in a clean, isolated environment using the locked dependency mode for that ecosystem.
+5. Run unit, integration, and security regression tests relevant to the package.
+6. Build the deployable artifact and scan that artifact when the format is supported.
+7. Rerun the same source or lockfile scan and retain both reports.
+
+Do not close the finding merely because the advisory ID disappeared. Confirm that the scanner completed the same applicable extraction and that the fixed build contains the intended version. If package extraction failed, the lockfile was skipped, or the registry was unavailable, the result is inconclusive.
+
+Also test normal behavior. A forced transitive override can break the application while producing a clean vulnerability report. The goal is a supported dependency graph with evidence that the application still works, not an empty alert list at any cost.
+
+## Put SCA in its proper place
+
+Software composition analysis answers a narrow and valuable question: which known vulnerability records match the third-party components the scanner identified? It does not review first-party authorization, secrets, request validation, business logic, runtime configuration, or whether every affected function is reachable.
+
+The LyraShield AI [methodology](/methodology) treats SCA as one coverage layer alongside other checks. Publicly available tools do not promise complete repository dependency coverage. The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign owners for dependency, secret, authorization, and retest controls. It does not read a repository, inspect a lockfile, query OSV, or run a package manager.
+
+For the decision before scanning, read [how to audit AI-suggested dependencies](/blog/ai-dependency-vulnerability-audit). If the package introduces install-time execution, continue with [install-script supply-chain security](/blog/install-script-supply-chain-security).
+
+When an advisory looks suspicious or incomplete, use the [security scanner false-positive workflow](/blog/security-scanner-false-positives) to preserve the candidate while you verify package identity, target version, and application context.
+
+## Sources
+
+- [OSV Scanner: Usage](https://google.github.io/osv-scanner/usage/)
+- [OSV Scanner: Supported artifacts and manifests](https://google.github.io/osv-scanner/supported-languages-and-lockfiles/)
+- [OSV Scanner: Configuration](https://google.github.io/osv-scanner/configuration/)
+- [OSV.dev API](https://google.github.io/osv.dev/api/)
+- [OSV.dev documentation](https://osv.dev/docs/)
+- [Google OSV Scanner repository](https://github.com/google/osv-scanner)
+- [OpenSSF: OSV schema](https://ossf.github.io/osv-schema/)

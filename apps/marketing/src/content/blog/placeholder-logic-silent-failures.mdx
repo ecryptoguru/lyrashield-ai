@@ -1,0 +1,121 @@
+---
+title: "Find Placeholder Logic and Silent Failures"
+description: "Find generated code that reports success without completing the promised work, then verify durable state, failure behavior, and a fresh retest."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - web-security
+draft: false
+heroImage: verification-04
+faq:
+  - q: "Can static analysis find every silent failure?"
+    a: "No. Static checks can flag empty catches, constant returns, unreachable code, and some unchecked errors. They usually cannot decide whether a plausible calculation, database write, or business transition matches the product contract."
+  - q: "Is searching for unfinished-work comments enough?"
+    a: "No. A marker scan finds explicit notes, but placeholder behavior can look complete: a fixed success response, an invented default, an in-memory write, or a catch block that converts failure into success."
+  - q: "Why can mocked tests miss fake success?"
+    a: "A mock can reproduce the same assumption as the implementation and bypass the real database, queue, provider, or transaction boundary. Keep focused unit tests, then cross the real boundary with synthetic data."
+  - q: "What counts as retest evidence?"
+    a: "Record the changed commit, clean environment, command or request, expected invariant, observed response, durable state, and limitations. A passing retest supports only the behavior and boundaries it exercised."
+---
+
+**Direct answer:** Search generated code for stubs, constant success values, empty catch blocks, invented defaults, and calculations without boundary tests. Then perform the real state change and inspect its durable result rather than stopping at its response. Pattern checks help, but silent business failures usually need domain assertions, controlled failures, and fresh runtime evidence.
+
+A route can return `200`, display a green toast, and still do nothing useful. The write may never reach storage. A queue call may be skipped. A calculation may quietly use a made-up default. Generated code often looks polished enough that reviewers follow the visible success path and miss the broken contract underneath it.
+
+The review target is the gap between claimed success and actual outcome. [Evidence states for generated code](/blog/vibe-coding-security-guide) help keep that conclusion precise: a suspicious pattern is detected, a runtime check supplies evidence, and a clean retest supports only the workflow and conditions it covered.
+
+## Start with the user-visible promise
+
+Write the workflow as a concrete contract before reading the implementation. If the screen says "Invitation sent," define what must be true afterward. Perhaps the database must contain an invitation with the correct tenant and expiry, the delivery job must exist once, and a provider failure must produce an error rather than a success message.
+
+This step needs product knowledge. A scanner can see that a function returns `ok: true`; it cannot know whether the business promised a durable reservation, a reversible draft, or an immediate payment capture. Name the durable state, side effects, and failure behavior that make the message honest.
+
+Use a small table for critical workflows:
+
+| Visible claim    | Durable result                                  | Required side effect                   | Honest failure                        |
+| ---------------- | ----------------------------------------------- | -------------------------------------- | ------------------------------------- |
+| Profile saved    | New value survives a fresh read                 | Audit event records the change         | Save error with no false confirmation |
+| Export ready     | Export record points to a complete artifact     | Completion notification is queued once | Pending or failed status              |
+| Refund requested | Refund request has the correct amount and owner | Provider job has an idempotency key    | No refund confirmation                |
+
+The table is not evidence. It gives reviewers an assertion they can test.
+
+## Inspect plausible-looking shortcuts
+
+Search for explicit unfinished-work markers, `FIXME`, `throw new Error("not implemented")`, empty functions, and test-only adapters. Then search for quieter variants: fixed identifiers, hard-coded totals, default objects returned after an exception, writes to process memory, promises that are not awaited, and branches that always end in the same response.
+
+This inert example reports a success that never happened:
+
+```ts
+type SaveResult = { ok: boolean; receiptId?: string }
+
+async function savePreferences(input: Preferences): Promise<SaveResult> {
+  try {
+    await writePreferences(input)
+  } catch {
+    return { ok: true, receiptId: "pending" }
+  }
+
+  return { ok: true, receiptId: "pending" }
+}
+```
+
+No sensitive data or external system is involved in the example. The defect is semantic: the catch block converts a failed write into success, and the receipt is an invented constant. A shallow test that mocks `writePreferences` as resolved will pass.
+
+Review catch blocks that log and continue, return an empty collection, or substitute zero. Sometimes degradation is intentional. If so, the API and interface must describe the degraded state, and monitoring must make the underlying failure visible to its owner.
+
+[CWE-754](https://cwe.mitre.org/data/definitions/754.html) covers improper handling of unusual or exceptional conditions. It is a useful weakness model, not a verdict on a specific function. The expected response still depends on the application's contract.
+
+Trace each success value backward. Find the line that constructs it, then follow every branch that can reach that line. Mark the actual commit point for the promised work: a completed transaction, accepted queue job, provider receipt, or validated artifact. If a branch reaches success before that point, ask what observable state makes the response true.
+
+Next, trace the commit point forward. A database call can resolve even when later work fails. Check whether subsequent failures change the response, compensate safely, or leave a documented recoverable state. This two-direction pass is slower than a marker search, but it catches code that looks finished because every branch returns a tidy object.
+
+## Test the state behind the response
+
+Run the workflow with synthetic records in a disposable environment. After the request succeeds, use a separate read path to inspect the state that matters. Restart the process if the code might be hiding state in memory. For queued work, inspect the job record and the eventual result. For a file or artifact, reopen it and validate its content rather than checking only that a path was returned.
+
+Avoid reusing the same helper for both the write and verification. If `saveOrder()` and the test assertion both call a shared mapper with the same error, they can agree on the wrong value. A direct database query, provider test environment, or independent API read can reduce that shared assumption.
+
+Check that the state belongs to the correct user and tenant. A row existing somewhere is not enough. Confirm identifiers, amount, status, timestamps, and idempotency behavior that the contract requires. Then repeat the action where duplication matters.
+
+## Force safe failures at each boundary
+
+Silent failures often appear only when a dependency refuses the operation. In a controlled test environment, make the repository adapter return an error, let the synthetic queue reject a job, or supply an amount exactly at a documented boundary. Do not disrupt production services or use customer records.
+
+For each controlled failure, inspect four things:
+
+1. The caller receives the documented failure or pending state.
+2. The interface does not display a false completion message.
+3. No partial durable state violates the business invariant.
+4. Logs and alerts contain enough non-sensitive context for the owner to act.
+
+Transactions need special attention. A function may write the primary record, fail to create its dependent record, and still return success. Decide whether the operation should roll back, resume idempotently, or expose a recoverable partial state. Test that policy rather than assuming the framework supplies it.
+
+Boundary values deserve named assertions. A calculation that works for ordinary inputs may fail at zero, a maximum, a rounding boundary, or a currency conversion. The 2026 construction-safety study, [Is Vibe Coding the Future?](https://arxiv.org/abs/2604.12311), reported silent calculation failures in its selected domain, prompts, and models. That finding illustrates the class. It does not estimate failure rates for other software or models.
+
+## Review tests for shared fiction
+
+Generated tests can preserve placeholder behavior by asserting the implementation's current output. A test for the example above might check only `ok === true`, making the false response look intentional. Read test names and assertions against the workflow contract, not against the function body.
+
+Look for mocks that always resolve, fixtures that omit tenant ownership, snapshots that bless unstable output, and assertions that never reopen storage. Ask which test would fail if the write were deleted. If the answer is none, the suite does not prove the claimed state change.
+
+The companion guide on [security review of AI-generated tests](/blog/ai-generated-tests-security) covers human-defined invariants, controlled mutation, and independence in more depth. Here, use those techniques to answer one narrow question: can this workflow claim completion while its durable outcome is absent or wrong?
+
+A 2026 taxonomy of [verification-evasion patterns in AI-assisted software development](https://doi.org/10.1016/j.infsof.2026.108251) reports placeholder and verification-avoidance behavior in the interactions it studied. Treat it as scoped research, not proof that a particular assistant or codebase contains these patterns.
+
+## Retest from a clean state
+
+After the fix, start with a clean checkout and fresh test data. Run the original success case, each controlled failure, and the boundary that exposed the defect. Confirm the visible response and the durable result through separate paths. Preserve the commit, environment, command, selected cases, observations, and any skipped dependency.
+
+A clean result is retest evidence for those assertions. It does not establish that adjacent workflows, untested providers, production configuration, or every exceptional condition is correct. [NIST SSDF 1.1](https://csrc.nist.gov/pubs/sp/800/218/final) places code review, analysis, and executable testing within secure development; no single technique replaces the others.
+
+Use the browser-local [AI app security checklist](/tools/ai-app-security-checklist) to record whether critical workflows have explicit success evidence, failure evidence, an owner, and a fresh retest. The checklist does not execute the workflow or verify the stored result.
+
+## Sources
+
+- [LLM verification-evasion patterns in AI-assisted software development](https://doi.org/10.1016/j.infsof.2026.108251)
+- [Is Vibe Coding the Future? An Empirical Assessment of LLM Generated Codes for Construction Safety](https://arxiv.org/abs/2604.12311)
+- [CWE-754: Improper Check for Unusual or Exceptional Conditions](https://cwe.mitre.org/data/definitions/754.html)
+- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final)

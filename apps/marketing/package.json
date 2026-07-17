@@ -13,7 +13,10 @@
     "typecheck": "astro check",
     "lint": "eslint src --max-warnings 0",
     "deploy": "astro build && wrangler deploy --config dist/server/wrangler.json",
-    "deploy:preview": "astro build && wrangler versions upload --config dist/server/wrangler.json"
+    "deploy:preview": "astro build && wrangler versions upload --config dist/server/wrangler.json",
+    "blog:validate": "node scripts/validate-blog-content.mjs",
+    "blog:validate:images": "node scripts/validate-blog-images.mjs",
+    "blog:check-links": "node scripts/check-external-blog-links.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.1.2",
@@ -21,6 +24,7 @@
     "@astrojs/mdx": "^7.0.2",
     "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.3",
+    "@fontsource-variable/bricolage-grotesque": "^5.2.8",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@tailwindcss/vite": "^4.3.2",

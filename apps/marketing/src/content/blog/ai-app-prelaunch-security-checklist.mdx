@@ -1,0 +1,119 @@
+---
+title: "AI App Pre-Launch Security Checklist"
+description: "Run an evidence-based pre-launch review across authorization, secrets, inputs, dependencies, deployment, agents, monitoring, recovery, and retests."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - access-control
+  - web-security
+  - supply-chain
+draft: false
+heroImage: verification-06
+faq:
+  - q: "How long should an AI app pre-launch security review take?"
+    a: "There is no safe universal duration. A small static site has a different scope from a multi-tenant app with payments and coding agents. Estimate from the number of trust boundaries, roles, data stores, integrations, and untested controls, then record any deferred coverage."
+  - q: "Is a clean vulnerability scan enough to launch?"
+    a: "No. A scan covers only its configured target, checks, credentials, and execution paths. Launch review also needs authorization tests, business-logic review, dependency and secret checks, deployment controls, monitoring, recovery evidence, and explicit limitations."
+  - q: "Which security findings should block launch?"
+    a: "Block when the plausible impact, exposure, and lack of mitigation exceed the team's written release policy. Examples often include unauthorized cross-tenant access, exposed production credentials, or a reachable critical execution path, but the accountable owner must decide from verified evidence."
+  - q: "How should an untestable control be handled?"
+    a: "Mark it untested, name why, identify the risk owner, add compensating evidence if any, and set a review date. Do not convert missing evidence into a pass because a deadline is close."
+---
+
+**Direct answer:** Freeze the release target and test scope. Use separate accounts to test authorization, inspect secrets and dependencies, exercise server-side validation and session controls, review agent and deployment permissions, prove monitoring and restore paths, retest changed controls, and record what was not covered. A completed checklist organizes evidence; it does not prove that the app is secure.
+
+Pre-launch review works when each item names a target, a test, an owner, and retained evidence. "Authorization checked" is too vague. "Account B cannot read or update Account A's project through six named API paths at commit X" can be reviewed and repeated.
+
+The [complete vibe coding security guide](/blog/vibe-coding-security-guide) explains the layers behind this checklist. Use this page as the operational pass before release, then carry its evidence and open limits into an accountable go, conditional-go, or no-go decision.
+
+## Freeze the thing you are reviewing
+
+Record the release commit or immutable artifact, environment, public origins, data classification, expected users, and named owner. List the APIs, workers, databases, object stores, identity providers, payment systems, AI providers, agents, and deployment pipelines inside scope.
+
+Define authorization for the test. Use local, staging, or a production-safe plan approved by the system owner. Use synthetic records and test accounts. State whether destructive tests, load tests, external callbacks, or production credentials are excluded.
+
+Capture the limits before testing starts. An unauthenticated public scan cannot see a private admin route. A source review cannot observe a production proxy rule. An agent configuration file does not prove the runtime egress policy.
+
+## Avoid the green-scan release rule
+
+The following policy is intentionally weak.
+
+```ts
+// VULNERABLE PROCESS: one scanner exit code decides release readiness
+const result = await runScanner(releaseUrl)
+if (result.exitCode === 0) await deployToProduction()
+```
+
+The code does not bind the scan to the release artifact, define coverage, distinguish scanner failure from a clean result, or include private authorization and business-logic paths. An AI assistant may generate it because an exit code is easy to automate and looks objective.
+
+A better release record keeps separate fields for target, commit, check, outcome, evidence, limitation, owner, and retest. The final decision evaluates those records under a written policy. It does not flatten them into one reassuring boolean.
+
+## Test identity and data boundaries
+
+Create two ordinary accounts with equal roles and separate synthetic data. Try each account's read, update, delete, export, file, nested-resource, and bulk paths against the other account's objects. Test tenant switching and invitations. Repeat the relevant cases for support and administrator roles instead of assuming the ordinary-user result covers elevated access.
+
+Confirm that the server derives the active user and tenant from a validated session. Queries should include the ownership or tenant boundary, or call a centralized policy that checks it. Hidden buttons, client route guards, UUIDs, and disabled fields are not server authorization.
+
+Review account creation, sign-in, password reset, email change, session rotation, logout, and account deletion. Check cookie attributes and session expiry. If the app uses tokens, validate issuer, audience, signature, lifetime, and revocation behavior on the server.
+
+## Inspect secrets, input paths, and outputs
+
+Search source, staged changes, generated build output, deployment configuration, logs, prompts, and repository history according to the tools available. Classify detected values before acting. If a real credential was exposed, rotate or revoke it before optional history cleanup.
+
+Trace every public input to its server-side parser and sink. Cover JSON bodies, query parameters, headers, filenames, URLs, webhook payloads, imported files, and model-generated tool arguments. Enforce type, length, format, allowed values, and resource limits near the boundary.
+
+Review output contexts. HTML, SQL, shell commands, file paths, redirects, and logs need different handling. Do not rely on one generic `sanitize()` helper. For model output, treat the text and proposed tool arguments as untrusted until policy and schemas accept them.
+
+Test rate and resource limits on sign-in, reset, uploads, webhooks, exports, and costly AI or background jobs. A per-IP request count may not constrain authenticated abuse, concurrent work, bytes, or provider spend.
+
+## Resolve dependency and deployment evidence
+
+Install from the committed lockfile in a clean environment. Review new direct dependencies, package ownership, lifecycle scripts, resolved versions, advisories, and license or provenance requirements relevant to the product. A matched advisory needs reachability and deployment context; a clear advisory scan does not prove the dependency is safe.
+
+Check security headers, CORS, TLS termination, production error handling, debug flags, source maps, storage permissions, database roles, and network exposure. Verify that preview deployments do not inherit production secrets or data.
+
+Inspect the delivery pipeline separately. Pin third-party actions, minimize workflow token permissions, protect workflow changes, constrain cloud OIDC trust, and keep untrusted pull-request code away from privileged jobs and persistent runners.
+
+## Review agents as privileged software
+
+List every tool an AI agent can call and the identity used at execution. Separate read operations from mutations. Limit filesystem roots, subprocesses, database scope, cloud permissions, and network destinations. Require exact, single-use approval for consequential actions rather than a broad approval granted at session start.
+
+Test with harmless adversarial inputs. Confirm that prompt content cannot override server authorization, expand a tenant, reveal a secret, or change approved arguments. Prompt-injection filters may catch known patterns, but the hard boundary is policy enforcement plus containment.
+
+Keep an audit record that identifies the tool, principal, target, decision, and outcome without recording secrets or unnecessary user content.
+
+## Prove detection and recovery paths
+
+Generate a safe synthetic event for each critical alert. Confirm that it reaches the named channel, contains enough context to investigate, and has an owner. A configured alert with no delivery test is only configuration evidence.
+
+Restore a representative backup into an isolated environment. Verify integrity and application usability, not just provider status. Record recovery time, missing data, key dependencies, and who can authorize a production restore. Exercise rollback for the exact release mechanism when practical.
+
+Confirm that incident contacts, credential-revocation steps, provider escalation paths, and customer-communication ownership are current. Avoid copying secrets or private findings into a broadly readable runbook.
+
+## Retest changes and preserve limits
+
+When a finding is fixed, run a fresh check against the changed target. A code diff can show an intended repair, but it does not show the deployed behavior. Preserve the original condition, the fix commit, the retest method, applicable coverage, outcome, and limitations.
+
+Do not call a missing result independently verified. A deterministic check that fully covered the original condition may support a retest-confirmed outcome. If the check was incomplete or the relevant path was not exercised, the honest result is inconclusive.
+
+The free browser-local [AI app security checklist](/tools/ai-app-security-checklist) helps document 11 launch controls and identify gaps. It does not inspect code, configuration, infrastructure, or a live app. Checking a box does not verify implementation.
+
+LyraShield AI publicly documents the Vibe Security 50 as 43 machine-testable controls and 7 evidence-required controls. That split does not mean one run finds or fixes the entire set. Evidence-required items need accountable human or operational proof.
+
+The [evidence methodology](/methodology) shows how target, coverage, evidence state, retest, and limitations remain distinct. The [sample assurance report](/sample-report) is illustrative and describes a product in active development; it is not a real assessment or proof of complete coverage.
+
+## Build the release packet
+
+The release packet should contain the immutable target, test scope, control results, detected and unresolved findings, accepted risks, retest records, deployment and rollback evidence, monitoring and restore evidence, and every known limitation. Assign each open item an owner and review date.
+
+Automated checks can reproduce many narrow assertions. They cannot decide whether the scope matches the product's real risk, whether a policy exception is acceptable, or whether a reviewer misunderstood the business logic. For the human design pass, use [threat modeling and human review for vibe-coded apps](/blog/human-review-threat-model-vibe-coding). For operational proof, continue with [security monitoring for AI-built apps](/blog/security-monitoring-ai-apps).
+
+## Sources
+
+- [OWASP: Application Security Verification Standard](https://owasp.org/www-project-application-security-verification-standard/)
+- [NISTIR 8397: Minimum Standards for Developer Verification of Software](https://www.nist.gov/publications/guidelines-minimum-standards-developer-verification-software)
+- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final)
+- [NIST SP 800-115: Technical Guide to Information Security Testing and Assessment](https://csrc.nist.gov/pubs/sp/800/115/final)
+- [OWASP: Web Security Testing Guide v4.2](https://owasp.org/www-project-web-security-testing-guide/v42/)

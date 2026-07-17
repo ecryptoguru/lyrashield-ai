@@ -32,6 +32,52 @@ describe("marketing SEO metadata", () => {
     expect(seoHead).toContain(
       'content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"'
     )
+    expect(seoHead).toContain('type="application/rss+xml"')
+    expect(seoHead).toContain('href="/llms.txt"')
+    expect(seoHead).toContain('property="og:image:alt"')
+  })
+
+  it("publishes citation-ready homepage entities and current evidence definitions", () => {
+    const home = source("../pages/index.astro")
+    const methodology = source("../pages/methodology.astro")
+    const llms = source("../pages/llms.txt.ts")
+
+    expect(home).toContain('"@type": "WebPage"')
+    expect(home).toContain('"@id": `${pageUrl}#application`')
+    expect(home).toContain('"@id": `${pageUrl}#faq`')
+    expect(home).toContain('inLanguage: "en-US"')
+    expect(methodology).toContain('dateModified: "2026-07-17"')
+    expect(llms).toContain("43 controls are machine-testable and 7 require retained human evidence")
+    expect(llms).toContain("`${origin}/scan`")
+  })
+
+  it("keeps the 100-post blog surface crawlable, attributable, and draft-gated", () => {
+    const index = source("../pages/blog/[...page].astro")
+    const post = source("../layouts/BlogPost.astro")
+    const tag = source("../pages/blog/tags/[tag].astro")
+    const card = source("../components/BlogCard.astro")
+    const header = source("../components/Header.astro")
+
+    expect(index).toContain('"@type": "CollectionPage"')
+    expect(index).toContain('"@type": "ItemList"')
+    expect(index).toContain("!entry.data.draft")
+    expect(index).not.toContain("import.meta.env.DEV || !entry.data.draft")
+    expect(index).toContain('rel="prev"')
+    expect(index).toContain('rel="next"')
+    expect(tag).toContain('"@type": "BreadcrumbList"')
+    expect(tag).toContain('"@type": "ItemList"')
+    expect(post).toContain('"@type": "BlogPosting"')
+    expect(post).toContain("wordCount")
+    expect(post).toContain("timeRequired")
+    expect(post).toContain('"@type": author.data.kind')
+    expect(post).toContain("author.data.bio")
+    expect(post).toContain("author.data.profileUrl")
+    expect(post).toContain("heroImage.data.og")
+    expect(post).toContain('class="blog-post__mobile-toc"')
+    expect(card).toContain("<picture")
+    expect(card).toContain('loading="lazy"')
+    expect(card).toContain('aria-label="Topics"')
+    expect(header).toContain('href="/blog"')
   })
 
   it("keeps Cloudflare asset URLs aligned with no-trailing-slash canonicals", () => {

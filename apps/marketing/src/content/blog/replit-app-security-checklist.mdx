@@ -1,0 +1,152 @@
+---
+title: "Secure a Replit App Before Launch"
+description: "Separate Replit Preview from production, choose the right deployment, protect secrets and APIs, and inspect live response headers."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - access-control
+  - verification
+draft: false
+heroImage: agent-security-03
+faq:
+  - q: "Is a Replit Preview URL private?"
+    a: "By default, Replit development URLs are public to the web. You can enable the Private development URL control, and Enterprise administrators can require it for every project. Verify the active setting from a signed-out browser."
+  - q: "Can a Replit Static Deployment host API routes?"
+    a: "No. Replit documents Static Deployment for browser-only sites. Apps with server routes, authentication callbacks, server-side database calls, or long-running logic need a server-capable deployment such as Autoscale or Reserved VM."
+  - q: "Can application code expose a Replit Secret?"
+    a: "Yes. Replit encrypts stored secret values, but code with environment access can print, return, log, or transmit them. Review collaborators, generated code, logs, and client responses."
+---
+
+**Direct answer:** Treat Replit Preview and the published app as different environments. Choose a deployment type that supports the server behavior, store secrets outside source and client code, authenticate and authorize every sensitive API route, and retest callbacks, persistence, visibility, and response headers on the published URL. Never infer production safety from a working Preview.
+
+_Replit deployment names, Secrets behavior, and launch guidance were reviewed against official documentation on July 17, 2026. Confirm the current project and workspace policy before publishing._
+
+Replit makes it easy to move from editor to a public URL, but Preview and publication do not run under one identical boundary. Development URLs are public to the web by default. You can enable the Private development URL control, and Enterprise workspace administrators can require it for every project. Replit also documents separate development and deployment domains, snapshot-based publishing, deployment-specific secrets, and several compute types. A route that works in Preview can disappear, use the wrong callback, or reach a different data store after publication.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) calls for production-shaped verification. For a Replit app, that means checking the published host rather than relying on the editor iframe or `replit.dev` URL.
+
+## Choose the deployment before reviewing the app
+
+Record whether the app uses Static, Autoscale, Reserved VM, or Scheduled Deployment. The choice changes what can run.
+
+Static Deployment fits browser-only output. Replit's troubleshooting documentation says apps with API routes, authentication callbacks, server-side database calls, or long-running backend logic are not good Static candidates. Use a server-capable deployment for those features.
+
+Autoscale suits request-driven web applications. Reserved VM suits always-on processes and persistent connections. Scheduled Deployment runs a task on a schedule. The deployment type does not decide application authorization. It tells you which runtime behavior is available and which tests make sense.
+
+Replit publishes a snapshot of files and dependencies as a separate instance. Publishing again creates a new snapshot. Do not rely on writes to the published filesystem for durable data; Replit documents that the filesystem resets on publication. Use the intended database or storage service and test it under production configuration.
+
+## The risky pattern: Preview identity trusted by an API route
+
+**Vulnerable pattern. The route trusts a client-provided user ID.**
+
+```ts
+app.get("/api/documents/:id", async (req, res) => {
+  const document = await db.documents.findFirst({
+    where: {
+      id: req.params.id,
+      ownerId: req.query.userId as string,
+    },
+  })
+
+  res.json(document)
+})
+```
+
+The generated frontend may always pass the signed-in user's ID, so the Preview demo works. Another caller can change both the path and query string. The endpoint never verifies a session or derives the owner from it.
+
+Generated apps miss this when authentication is implemented as an interface state rather than a server control. A hidden route, local-storage flag, or user ID in a request body is not proof of identity.
+
+## Authenticate and authorize on the server
+
+Use Replit Auth or another established server-side authentication library. Verify the session on every sensitive route, then use the verified subject in the database query.
+
+```ts
+app.get("/api/documents/:id", requireSession, async (req, res) => {
+  const document = await db.documents.findFirst({
+    where: {
+      id: req.params.id,
+      ownerId: req.user.id,
+    },
+    select: { id: true, title: true, body: true },
+  })
+
+  if (!document) return res.sendStatus(404)
+  return res.json(document)
+})
+```
+
+This pattern still needs bounded identifiers, rate limits, logging, and rules for shared documents or administrators. Returning 404 for an inaccessible object can reduce identifier disclosure, but the authorization check is the substantive control.
+
+Test with two accounts. Account A should read its own document. Account B should receive denial when it requests the same ID. Repeat the test on the published host with the production database and cookie configuration.
+
+## Keep Secrets away from the browser and logs
+
+Replit Secrets stores encrypted values and exposes them to application code as environment variables. Current documentation says Secrets are available for deployment types other than Static. It also notes that collaborators with execution access can cause an environment value to be printed.
+
+That distinction matters. Encryption at rest protects the stored value. It cannot protect a secret that application code returns in JSON, embeds in a client bundle, writes to a log, or sends to an untrusted origin.
+
+Search source and built assets for provider tokens and public variable prefixes. Inspect API responses and error pages. Review publication logs after a test deployment. Use different values for development and production, scope them at the provider, and rotate any value that entered source, output, or an untrusted session.
+
+Do not store privileged tokens in local storage, session storage, or browser-readable cookies. Replit's current security checklist makes the same server-side distinction.
+
+## Compare Preview and production explicitly
+
+Build a small environment matrix before launch:
+
+| Boundary      | Preview                                | Published app                                              |
+| ------------- | -------------------------------------- | ---------------------------------------------------------- |
+| Host          | `replit.dev` development URL           | `replit.app` or custom domain                              |
+| Secrets       | Project editor values                  | Deployment values selected at publish time                 |
+| Auth callback | Development callback                   | Production callback                                        |
+| Data          | Development database                   | Intended production database                               |
+| Filesystem    | Editor workspace                       | Snapshot runtime, not durable storage                      |
+| Visibility    | Public by default; can be made private | Public, password protected, workspace only, or invite only |
+
+Verify every cell rather than assuming the publishing tool copied the intended value. Open the final URL in a private browser. Test sign-in, sign-out, session expiry, password recovery, OAuth redirects, and denied API calls.
+
+Private Deployments are currently available on all plans. The publishing controls offer Public, Password protected, Workspace only, and Invite only access, but workspace membership, administrator access, invitations, and organization policy still determine who can enter. Enterprise administrators can also require new published apps and development URLs to be private. Describe the behavior you verified. Application authentication and resource authorization still matter inside a private deployment.
+
+## Inspect headers on the published response
+
+Security headers belong on the actual HTTP response. A meta tag cannot set every policy, and a Preview proxy may add or remove headers compared with production.
+
+Inspect the main document and sensitive API responses on the published URL. Check Content Security Policy, `X-Content-Type-Options`, framing policy, `Referrer-Policy`, HSTS on the final HTTPS host, cache behavior for private data, and cookie attributes. Build CSP from the resources the app really loads rather than pasting a strict policy that breaks authentication or then falling back to wildcards.
+
+The browser-local [security headers checker](/tools/security-headers-checker) reviews header text you paste into it. It does not fetch the site, confirm browser enforcement, inspect every route, or prove that application authorization works. For policy construction and rollout, use [security headers for AI-built apps](/blog/security-headers-ai-built-apps).
+
+## Handle custom domains and callbacks as a migration
+
+Adding a custom domain changes more than the address bar. Update OAuth redirect allowlists, cookie domain and secure settings, CORS origins, webhook destinations, email links, CSP sources, and canonical URLs. Keep the old host only where the transition requires it, then remove stale callbacks.
+
+Test both an existing session and a new sign-in after the domain change. A cookie scoped to the development or default deployment host will not automatically follow the user. Avoid widening cookie domains across unrelated subdomains to make the test pass.
+
+Static deployments add another edge case: Replit Secrets are not available there, and server routes do not run. A generated app that expects a runtime secret or auth callback needs a server-capable deployment. Do not work around that mismatch by moving the secret into frontend code.
+
+## Run a production-shaped release check
+
+Before publishing the reviewed snapshot:
+
+1. Confirm the deployment type supports every server feature.
+2. Verify production secret names without printing their values.
+3. Test signed-out, owner, and non-owner API requests.
+4. Exercise callback URLs, cookies, CORS, and CSRF behavior on the final host.
+5. Restart or republish and confirm required data persists outside the filesystem.
+6. Inspect response headers, logs, and browser console.
+7. Record the snapshot, tests, and any path the review did not cover.
+
+A platform security scan or agent review can find candidates. It cannot prove that every production route, business rule, integration, or workspace setting is correct. After fixing a finding, rerun the exact failed request against the new published snapshot and keep the result scoped to that path.
+
+## Sources
+
+- [Replit: Secrets](https://docs.replit.com/core-concepts/project-editor/app-setup/secrets)
+- [Replit: Development URLs](https://docs.replit.com/core-concepts/project-editor/app-setup/development-urls)
+- [Replit: Security checklist](https://docs.replit.com/learn/security-checklist)
+- [Replit: Publishing](https://docs.replit.com/learn/projects-and-artifacts/replit-deployments)
+- [Replit: Private Deployments](https://docs.replit.com/references/publishing/private-deployments)
+- [Replit: May 2026 private publishing update](https://docs.replit.com/updates/2026/05/08/changelog)
+- [Replit: Publishing troubleshooting](https://docs.replit.com/build/troubleshooting)
+- [Replit: Reserved VM deployments](https://docs.replit.com/references/publishing/reserved-vm-deployments)
+- [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)
+- [MDN: Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP)

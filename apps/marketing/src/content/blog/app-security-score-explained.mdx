@@ -1,0 +1,135 @@
+---
+title: "What an app security score can and cannot mean"
+description: "Read an app security score as a versioned summary of scoped evidence, not a breach prediction, universal benchmark, or guarantee of safety."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["verification", "vibe-coding-security"]
+draft: false
+heroImage: decision-operations-05
+faq:
+  - q: "Can app security scores compare different products?"
+    a: "Only when target, scope, controls, evidence states, coverage, weighting, versions, and observation time have a documented mapping. Numbers from unrelated methods are not directly comparable."
+  - q: "Does a security score of 100 mean an app is safe?"
+    a: "No. It means the method applied no deduction within its recorded scope and evidence at that time. Untested paths, unknown weaknesses, configuration, and later changes remain outside that claim."
+  - q: "Why can a security score change when code did not?"
+    a: "Advisories, scanner rules, evidence state, environment, scope, or the scoring model can change. A new snapshot should state those differences rather than rewrite the old result."
+---
+
+An app security score can summarize defined observations consistently within one versioned method. Read its target, scan mode, evidence states, coverage, limitations, weighting, and timestamp before the number. The method version matters. It cannot prove the absence of vulnerabilities, predict a breach, compare unlike scopes, replace finding evidence, or remain current after the application, environment, threat information, or method changes.
+
+## Read the receipt before the number
+
+A score compresses information. Compression is useful when the reader can still inspect what went in. Without scope and coverage, 92 is merely a number with a security label.
+
+The [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) keeps detected candidates, independent verification, clean retests, and inconclusive results separate. Those evidence states matter more than an aggregate because they explain what supports each finding.
+
+The [LyraShield AI evidence methodology](/methodology) tells readers to inspect the authorized target and mode, completed and limited coverage, evidence provenance, retest receipt, and retained limitations. It explicitly does not turn scanner confidence or missing evidence into a universal verdict.
+
+## A score cannot release the app by itself
+
+A score becomes dangerous when it replaces the decision record:
+
+```ts
+// UNSAFE: one aggregate automatically approves release
+if (securityScore >= 90) {
+  await deployToProduction()
+  markApplicationSecure()
+}
+```
+
+The rule does not know which target was scored, whether the scan completed, which paths were skipped, whether a critical business rule was outside coverage, or whether production matches the scanned environment.
+
+Generated dashboards often encourage this shortcut because a single progress number is easy to display and test. The UI can turn green while the underlying report still contains an inconclusive retest or an excluded authentication path.
+
+A safer release record keeps the aggregate subordinate to evidence:
+
+```ts
+const decision = releaseDecisionSchema.parse({
+  artifact: immutableArtifactId,
+  scoreSnapshotId,
+  methodologyVersion,
+  requiredChecks,
+  incompleteCoverage,
+  openFindings,
+  acceptedRisks,
+  rollbackEvidenceId,
+  approver,
+})
+
+await requireReleasePolicy(decision)
+```
+
+This record can still use a score as one input. It does not allow the score to invent missing coverage or approve business risk.
+
+## Distinguish framework levels, severity, and scores
+
+Security numbers often describe different things.
+
+[NIST Cybersecurity Framework 2.0](https://www.nist.gov/publications/nist-cybersecurity-framework-csf-20) describes cybersecurity outcomes, organizational Profiles, and Tiers. It does not prescribe a universal application score or breach probability.
+
+[OWASP ASVS 5.0.0](https://owasp.org/www-project-application-security-verification-standard/) provides versioned application-security requirements and verification levels. A level describes a selected verification target and rigor. It is not a letter grade for product safety.
+
+[CVSS v4.0](https://www.first.org/cvss/v4.0/implementation-guide) scores the severity of a vulnerability under defined metrics. FIRST's consumer guidance distinguishes Base metrics from Threat and Environmental context. A CVSS score is not an application-wide score, and it does not decide local remediation priority by itself.
+
+Before comparing any two values, ask what unit each measures. A framework tier, verification level, vulnerability severity, finding confidence, and application aggregate are not interchangeable.
+
+## What a defensible score snapshot contains
+
+A score snapshot should retain enough context for another reader to reproduce its meaning:
+
+- immutable target and source or artifact identity;
+- scan mode, environment, and observation time;
+- methodology and rule versions;
+- included findings and their evidence states;
+- scoring weights, grade bands, caps, and rounding behavior;
+- completed, skipped, limited, failed, and inapplicable coverage;
+- accepted risks and suppression decisions;
+- expiry or supersession behavior.
+
+The snapshot itself should not change when a new scan arrives. Create a new snapshot and mark the older public artifact as superseded where appropriate. That preserves what was known at each decision point.
+
+A score can drop without a code change when a new advisory applies, a scanner adds a rule, an earlier candidate gains independent verification, or a broader mode reaches more code. It can rise after a validated fix and complete retest. A methodology update can also produce a different result. Show the changed input rather than presenting the movement as unexplained progress or decline.
+
+Failed and missing checks need an explicit policy. A scoring method should not reward a target merely because analysis could not build, authenticate, resolve a dependency, or reach a language. Depending on the method, the result may be withheld, capped, or published with a prominent limitation. The chosen behavior must be documented and applied consistently. Silence is the unsafe option because readers will interpret a complete-looking number as complete analysis.
+
+## How the current LyraShield Score is bounded
+
+Current application code computes a deterministic, versioned LyraShield Score after a completed scan and stores one immutable `ScoreSnapshot` for that scan. The record includes the model version, numeric score, grade, breakdown, scan mode, computation time, expiry, and links to its target and scan.
+
+The scoring function uses finding severity, status, verification state, and a narrow active-secret condition within its published model. It is an aggregate over that method, not an accuracy claim or risk prediction. A public scorecard exposes only an allowlisted subset and can show that a newer scan supersedes it without disclosing the newer result.
+
+This authenticated score layer is separate from the public Lite Check. The passive [LyraShield Lite Check](/scan) does not produce the official LyraShield Score and is not a penetration test, certification, warranty, or guarantee. The full platform remains in active development.
+
+Do not infer that a higher score means every finding was fixed. The current model can treat evidence states and accepted risk differently, and grade caps can preserve the effect of certain open verified findings. Read the breakdown and finding records.
+
+## Compare scores only inside a declared method
+
+Trend comparison is most useful for the same target, compatible scope, stable methodology, and known environment. Even then, inspect what changed between snapshots.
+
+Comparing two vendors' 85 scores is usually meaningless without a mapping of controls, scope, evidence, weights, failed checks, and time. One method may score only dependencies. Another may include server authorization and human evidence. A larger number does not repair the mismatch.
+
+Avoid publishing an industry benchmark without a representative sample, stable method, statistical design, and clear limitations. A score distribution from self-selected scans does not automatically describe the market.
+
+## Use aggregates for navigation, not closure
+
+A score can help a reviewer notice movement, choose where to inspect, or communicate a versioned result. The release owner should still read open high-impact findings, coverage gaps, accepted risks, and recovery evidence.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) produces a checklist result based on the answers entered in that browser. It is not a LyraShield Score, scan, security grade, or verification of the application.
+
+The related guide to [verifying a security finding](/blog/verify-security-finding) explains why confidence and repetition are not independent evidence.
+
+## Edge cases a score cannot flatten safely
+
+One verified credential leak may justify urgent containment even when many low-impact checks pass. An unavailable scanner may leave the numeric result unchanged while reducing confidence in current coverage. A clean retest can remain inconclusive if the affected path was skipped. A formally accepted risk still exists and needs an owner and review date.
+
+An aggregate also cannot express every consequence. A finding affecting a safety function, payment instruction, tenant boundary, or irreversible deletion may need a release stop even if its mathematical deduction is small.
+
+## What automation cannot infer
+
+Code can apply a published formula consistently and preserve immutable snapshots. It cannot decide whether the selected scope matches the buyer's question, whether a missing control is acceptable, whether two methodologies are comparable, or whether the business can tolerate the remaining risk. Any score-based decision should trace back to the finding, coverage, and limitation records that produced it.
+
+### Sources
+
+- [NIST Cybersecurity Framework 2.0](https://www.nist.gov/publications/nist-cybersecurity-framework-csf-20)
+- [OWASP Application Security Verification Standard 5.0.0](https://owasp.org/www-project-application-security-verification-standard/)
+- [FIRST, CVSS v4.0 Consumer Implementation Guide](https://www.first.org/cvss/v4.0/implementation-guide)

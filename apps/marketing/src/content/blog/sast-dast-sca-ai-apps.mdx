@@ -1,0 +1,120 @@
+---
+title: "SAST vs DAST vs SCA for AI-Built Apps"
+description: "Compare the evidence, timing, targets, and blind spots of SAST, DAST, and SCA, then combine them into a practical release workflow."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - supply-chain
+  - web-security
+draft: false
+heroImage: verification-06
+faq:
+  - q: "Does SAST need a running application?"
+    a: "No. Static analysis examines source code or compiled representations without running the application. It still needs the right language, build, framework, generated-code, and configuration context to produce useful coverage."
+  - q: "Can DAST see source code?"
+    a: "Not in its normal black-box role. DAST sends requests to a running target and observes responses and behavior. Some programs correlate dynamic results with source data, but the dynamic test itself does not establish full source-code coverage."
+  - q: "Does SCA find application bugs?"
+    a: "SCA primarily identifies third-party components and matches them to known vulnerability records. It does not generally find first-party business-logic or authorization defects, though a dependency finding can still be relevant to application risk."
+  - q: "Which checks belong in pull requests and which belong in staging?"
+    a: "SAST and lockfile-focused SCA often fit pull requests because they can inspect the proposed code and dependency graph. DAST usually needs an isolated running target, test accounts, and seeded data, so a controlled preview or staging environment is a better fit."
+---
+
+**Direct answer:** SAST inspects code without running the app, DAST exercises a running target from the outside, and SCA matches identified third-party components to known advisories. Use SAST and SCA on changes, controlled DAST on a representative environment, then add threat modeling, secrets checks, targeted manual tests, and retests. No one category establishes overall application security.
+
+The names sound interchangeable when a tool produces one combined report. They are not. Each category starts with a different target and creates a different kind of evidence. Choosing between them as if there must be one winner leaves predictable gaps.
+
+For AI-built applications, those gaps matter because generated code can span first-party logic, copied configuration, newly introduced packages, and runtime integrations in one change. The [security guide for AI-built applications](/blog/vibe-coding-security-guide) explains the wider control model. Here, the focus is how three common testing categories fit together.
+
+## SAST inspects code representations
+
+Static application security testing analyzes source code or compiled representations without executing the application. A SAST rule may trace untrusted input into a query, flag a dangerous API, or identify an authorization check that is absent on one code path.
+
+SAST is well positioned to find a first-party injection path such as string concatenation into a database query. It can point to the source location and data flow, which makes review faster. It may also report a candidate that is neutralized by a framework, unreachable in the build, or protected by context the analyzer cannot model.
+
+Generated code creates extra ambiguity. A tool may not understand a new framework helper, generated client, custom sanitizer, or convention-based route. Build failures and excluded directories can quietly reduce coverage. Record which languages, projects, and rules ran. A result without that scope is hard to interpret.
+
+## DAST observes a running target
+
+Dynamic application security testing sends requests to a running application and observes behavior. It can reveal runtime headers, exposed error details, injection behavior, or a route that fails under a crafted input. Authentication, seeded data, feature flags, and workflow navigation determine which paths it can reach.
+
+DAST is well positioned to detect a missing security header or a runtime input-handling problem visible through an HTTP response. It can miss a privileged route when the scanner has no suitable account, a multi-step workflow when navigation is incomplete, or a dormant feature that is disabled in the test environment.
+
+Run DAST only against an owned, authorized target. Use synthetic data, rate limits, and non-production integrations. An aggressive test can create records, send messages, trigger payments, or consume quotas. The [OWASP DevSecOps guidance on DAST](https://owasp.org/www-project-devsecops-guideline/latest/02b-Dynamic-Application-Security-Testing) emphasizes the running-application context. That context is exactly why staging design matters.
+
+## SCA identifies third-party component risk
+
+Software composition analysis extracts third-party package or artifact identities and matches them to known vulnerability records. Lockfiles often provide exact resolved versions. Container or artifact scanning may show what was actually installed.
+
+SCA is well positioned to detect that a resolved transitive dependency falls inside an OSV affected range. It can miss an unsupported lockfile, a vendored component with no usable identity, or a new vulnerability that has not reached the data source. A match does not by itself prove that the application calls the vulnerable function.
+
+SCA should not be reduced to SBOM generation. An SBOM is an inventory format. Matching, advisory interpretation, exception governance, and retesting are additional steps. Conversely, an SCA report is not first-party source review. It will not prove that tenant authorization is correct.
+
+## Compare the evidence, not the labels
+
+| Question                 | SAST                                  | DAST                                           | SCA                                           |
+| ------------------------ | ------------------------------------- | ---------------------------------------------- | --------------------------------------------- |
+| Primary target           | Source or compiled code               | Running application                            | Lockfiles, manifests, images, or artifacts    |
+| Typical timing           | Editor, commit, pull request, build   | Preview, staging, controlled production checks | Commit, pull request, build, image release    |
+| Strong example           | First-party tainted data flow         | Observable runtime misconfiguration            | Known advisory matching a resolved package    |
+| Important blind spot     | Runtime state and business context    | Unreached routes and source internals          | First-party logic and unknown vulnerabilities |
+| Useful retained evidence | Rule, location, trace, analyzed scope | Request, safe response, account, environment   | Package, version, path, advisory, artifact    |
+
+These are tendencies, not guarantees. Product features can cross category boundaries, and labels alone do not prove how a specific tool works. Evaluate the actual target, configuration, rules, authentication, and output.
+
+The risky pattern is to accept any one green result as a release verdict:
+
+```yaml
+# RISKY: a single check becomes a universal security gate.
+release:
+  if: sast.result == "clean"
+  conclusion: "application secure"
+```
+
+The corrected workflow retains several scoped results and their limitations:
+
+```yaml
+release_evidence:
+  sast: { scope: "changed services", result: "completed" }
+  sca: { scope: "resolved lockfiles", result: "completed" }
+  dast: { scope: "authorized staging routes", result: "completed" }
+  manual: { scope: "tenant authorization cases", result: "completed" }
+limitations:
+  - "administrative export flow not exercised"
+```
+
+This is illustrative data, not a universal schema. Its value is that the omitted path stays visible.
+
+## Build a small, defensible pipeline
+
+Start in the pull request. Run SAST against the changed services and any shared security-sensitive modules. Run SCA against committed lockfiles, then scan the built artifact if supported. Add secret detection before credentials reach the repository. Fail closed when a required scanner crashes or skips its target, but do not confuse a tool failure with a vulnerability finding.
+
+Make generated code visible to the same gates as handwritten code. If a build step creates routes, clients, or configuration that the source scan cannot inspect, analyze the generated representation or record it as a limitation. If a monorepo filter skips an affected package, the pipeline should report incomplete coverage rather than silently reusing a green result from another project.
+
+Next, deploy the exact candidate commit to an isolated environment. Give DAST test accounts for relevant roles, seed synthetic records, disable real outbound side effects, and constrain request rate. Exercise critical flows that a crawler will not discover, such as cross-tenant object access, account recovery, approval gates, and webhook replay.
+
+Use the threat model to choose manual tests. A model that identifies an administrator-to-agent trust boundary should produce a test for that boundary. A generic scanner cannot infer the business decision behind every privileged action.
+
+Finally, triage results by evidence. Deduplicate reports that describe the same root cause without erasing their separate observations. Preserve the originating method, target commit, location or request, prerequisites, and coverage. After remediation, rerun the technique capable of observing the original condition. A SAST fix needs a fresh static result and relevant tests. A DAST finding needs a fresh build and controlled runtime retest. A dependency update needs a fresh resolved graph and artifact check.
+
+## What the layers still cannot prove
+
+Even all three categories can miss business-logic authorization, subtle race conditions, unsafe operational procedures, or an integration that behaves differently in production. Tests are samples of behavior under stated conditions. Their credibility comes from scope, repeatability, and honest limitations.
+
+NIST's [minimum standards for developer verification](https://www.nist.gov/publications/guidelines-minimum-standards-developer-verification-software) recommends multiple techniques rather than a single test. OWASP's secure development guidance likewise places testing inside a broader lifecycle. The point is not to accumulate tool logos. It is to obtain complementary evidence for the risks that matter.
+
+The LyraShield AI [methodology](/methodology) describes SCA, secrets, URL checks, and repository review as layers, not universal verification. The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign owners across those layers. It does not scan source code, contact a running target, inspect dependencies, or certify a release.
+
+For deeper testing design, continue with [security tests for AI-generated code](/blog/ai-generated-tests-security). For the dependency layer, use the [AI dependency vulnerability audit](/blog/ai-dependency-vulnerability-audit).
+
+## Sources
+
+- [NIST: Static code analyzer glossary](https://csrc.nist.gov/glossary/term/static_code_analyzer)
+- [NIST SP 800-115: Technical Guide to Information Security Testing and Assessment](https://csrc.nist.gov/pubs/sp/800/115/final)
+- [NIST: Guidelines on Minimum Standards for Developer Verification of Software](https://www.nist.gov/publications/guidelines-minimum-standards-developer-verification-software)
+- [OWASP: Dynamic Application Security Testing](https://owasp.org/www-project-devsecops-guideline/latest/02b-Dynamic-Application-Security-Testing)
+- [OWASP: Secure Development](https://devguide.owasp.org/en/02-foundations/02-secure-development/)
+- [OWASP Web Security Testing Guide v4.2](https://owasp.org/www-project-web-security-testing-guide/v42/)
+- [OSV Scanner: Supported artifacts and manifests](https://google.github.io/osv-scanner/supported-languages-and-lockfiles/)
+- [OpenSSF: OSV schema](https://ossf.github.io/osv-schema/)

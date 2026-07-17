@@ -1,0 +1,14 @@
+[
+  {
+    "slug": "vibe-coding-security-guide",
+    "imageId": "authority-guide-01",
+    "cluster": "authority",
+    "concept": "A controlled evidence path joining six distinct security layers before one release gate",
+    "prompt": "Text-free square cinematic technical artwork, six distinct graphite security paths converging through translucent evidence planes into one controlled release gate, matte graphite geometry, translucent evidence planes, deep navy atmosphere, restrained cyan green amber and red signals, controlled depth, sparse haze, meaningful subject protected inside the central 60 percent, no people, no logos, no dashboards, no words, no letters, no numbers",
+    "alt": "Six layered security paths joining at a translucent evidence gate",
+    "sourceHash": "sha256:8bcf9d4fd8457a0ae0347f2029978ac595048156bfd13012e9183d9a57c9feb6",
+    "cropNotes": "Keep the convergence point and all six incoming paths inside the central 60 percent safe area",
+    "usageCount": 1,
+    "approved": true
+  }
+]

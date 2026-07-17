@@ -1,0 +1,100 @@
+---
+title: "How to rotate and recover from an exposed API key"
+description: "Respond to an exposed API key: contain access, rotate safely, verify rejection, investigate misuse, clean reachable copies, and document recovery."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags: ["supply-chain", "verification", "vibe-coding-security"]
+draft: false
+heroImage: decision-operations-03
+faq:
+  - q: "Does deleting an API key from Git history make it safe again?"
+    a: "No. Once exposed, treat the key as compromised and revoke or rotate it at the provider. History cleanup may reduce future discovery, but forks, clones, caches, build logs, and messages can retain copies."
+  - q: "How can we rotate an API key without downtime?"
+    a: "Use a provider-supported overlap only when availability requires it: create a least-privilege replacement, update every deployment, verify new-key traffic, then disable the old key and confirm rejection. If active abuse is credible, revoke first."
+  - q: "How do we know whether an exposed key was misused?"
+    a: "Review provider usage, request, billing, audit, and application logs for the exposure window and affected scope. Missing events or last-used data may be incomplete, so document retention limits and continue monitoring."
+---
+
+Treat a live exposed API key as compromised. Restrict or revoke it immediately when abuse is active or impact is unacceptable. Otherwise create a least-privilege replacement through the provider's supported rotation flow, update every secret store and deployment, disable the old key, and verify that it is rejected. Then investigate usage, charges, data access, and the leak path.
+
+## Contain the credential before cleaning the repository
+
+Do not start with a history rewrite. A secret copied from a commit, log, screenshot, package, message, browser bundle, or build artifact may already exist elsewhere. Removing one copy cannot make the credential trustworthy again.
+
+[GitHub secret scanning documentation](https://docs.github.com/en/code-security/concepts/secret-security/secret-scanning) tells users to rotate an affected credential immediately when a leak is detected. The [LyraShield AI security guide for vibe-coded applications](/blog/vibe-coding-security-guide) applies the same evidence discipline: record what was detected, contain the live capability, and keep later verification separate from the alert.
+
+Assign an incident owner. Record the provider, key identifier without the full secret, discovery time, earliest possible exposure, known locations, affected environment, permissions, and current action. Preserve relevant logs when that can happen without delaying containment. Never paste, print, email, or hash the live secret in a third-party checker.
+
+Use the browser-local [secret exposure scanner](/tools/secret-exposure-scanner) to inspect authorized text without uploading it. It cannot revoke a key, scan Git history, check provider status, or prove whether the credential was used.
+
+## Choose immediate revocation or controlled overlap
+
+Revoke or disable first when there is evidence of abuse, public exposure of a high-privilege key, access to sensitive data or money, or an unacceptable ongoing threat. Restore service with a new credential after containment.
+
+When there is no sign of active abuse and abrupt revocation would cause serious availability harm, use only the provider's supported overlap process. Create a replacement with the minimum permissions and environmental restrictions needed. Update secret stores, CI variables, deployment platforms, scheduled jobs, local operations tooling, and third-party integrations. Deploy, confirm new-key traffic, disable the old key, and test that old-key requests fail.
+
+Keep the overlap short. Do not invent a grace period for providers that do not document one. If the exposure scope is unclear because a secret manager, workstation, or deployment system was compromised, rotate related credentials according to that system's incident plan rather than assuming only one value leaked.
+
+## Follow the provider's exact credential model
+
+Rotation details differ. Confirm the credential type and current provider documentation before acting.
+
+### AWS IAM user access keys
+
+For an IAM user's long-term access key, AWS documents a no-interruption sequence in [Update access keys](https://docs.aws.amazon.com/IAM/latest/UserGuide/id-credentials-access-keys-update.html): create a second key, update applications, check use of the old key, deactivate it, validate the applications, and later delete it. If abuse is active, deactivate the exposed key first instead of preserving availability for the attacker.
+
+`GetAccessKeyLastUsed` can show the most recently recorded date, Region, and service. It is useful for migration and investigation, but it is not proof that no misuse occurred. Review CloudTrail and the account's other audit, billing, and security signals for the relevant retention window. This sequence applies to IAM user access keys, not every AWS credential type. Prefer temporary role credentials where the workload supports them.
+
+### Google Cloud API keys
+
+Google Cloud's [API key management guide](https://docs.cloud.google.com/docs/authentication/api-keys) says rotation creates a new key with the old key's intended restrictions, then requires applications to be updated before the old key is deleted. Confirm both application and API restrictions on the replacement. Review Cloud Logging, quota, and billing signals that cover the affected API and project.
+
+Do not confuse a Google Cloud API key with a service account key or an OAuth client secret. Each has a different management flow. If the credential type is uncertain, identify it before deleting or recreating resources.
+
+### Stripe secret and restricted keys
+
+[Stripe's API key documentation](https://docs.stripe.com/keys) supports immediate rotation or a scheduled expiration for the old key. Its [compromised-key guidance](https://docs.stripe.com/keys-best-practices) says to rotate an exposed key immediately and keep any delayed expiration as short as possible. Use immediate expiration when suspicious requests are occurring.
+
+Review the request logs for the affected key for unfamiliar calls, IP addresses, volume, and resources. Check charges, refunds, payouts, customer access, and configuration changes that the key's permissions allowed. Contact Stripe support if activity is unrecognized. Prefer a restricted key and IP restriction when the integration can operate with them.
+
+### OpenAI API keys
+
+OpenAI's current [API key safety guidance](https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety) says to rotate a leaked key immediately, update production key values, review usage, and contact support when misuse is suspected. Create the replacement with the narrowest available project and key permissions, update backend deployments, then delete the exposed key. Never ship an OpenAI key in a browser or mobile application.
+
+Review usage by project and key, unexpected model or endpoint activity, spend changes, and application logs. OpenAI also advises contacting support promptly about suspected compromise. A replacement-before-delete sequence is appropriate only when your controls support it and active abuse is not continuing.
+
+## Verify the old key is dead
+
+After deployment, perform a harmless, provider-approved authentication check with the old key from an authorized environment. The expected result is an authentication or authorization failure. Do not use a destructive request merely to test revocation.
+
+Also verify that each production, staging, scheduled, and recovery workload uses the replacement. Watch error rates and provider usage by key. Search secret stores and configuration references by identifier or variable name, not by spraying the full secret through terminals and logs.
+
+Record the disable and deletion event, test result, affected deployments, and any service interruption. A successful new-key request does not prove that the old key was disabled. Check both sides.
+
+## Investigate what the credential could do
+
+Build the exposure window from the earliest reachable copy, not only the discovery time. Review provider audit, request, usage, billing, and security logs plus application and deployment logs. Compare observed actions with the key's permissions and normal workload.
+
+Look for unusual source locations, times, endpoints, resources, spending, data reads, configuration changes, new credentials, and attempts after revocation. Preserve evidence and document gaps caused by retention, sampling, clock differences, or unavailable logs.
+
+[NIST SP 800-61 Rev. 3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) frames incident response as connected detection, response, recovery, and improvement work. Escalate confirmed or suspected misuse through the applicable legal, privacy, finance, insurer, provider, and customer-notification processes. Do not infer "no impact" solely from an empty dashboard.
+
+## Remove reachable copies and prevent recurrence
+
+Once containment is complete, remove the secret from code, configuration, artifacts, logs, documentation, tickets, and messages where policy permits. Rewrite Git history only when the repository owner determines it is necessary and coordinates the force-push impact on forks, clones, open pull requests, releases, and deployment references. The [pre-commit secret scanning guide](/blog/secret-scanning-before-commit) explains prevention controls.
+
+Replace hardcoded credentials with a secret manager or protected deployment variable. Give each environment and workload a distinct, least-privilege key so one leak has a bounded impact and provider logs identify the caller. Add server-side secret scanning to commits and CI, but keep human review for ambiguous matches.
+
+LyraShield AI can detect supported secret patterns in authorized repository scans and retain bounded finding evidence. It should never retain or display a full credential. Detection cannot revoke the key or establish whether it was used.
+
+Close the incident only after the old credential is rejected, affected workloads use the replacement, suspicious activity has been assessed within known logging limits, reachable copies have been addressed, and the leak path has an owned corrective action.
+
+### Sources
+
+- [NIST SP 800-61 Rev. 3, Incident Response Recommendations and Considerations](https://csrc.nist.gov/pubs/sp/800/61/r3/final)
+- [GitHub Docs, Secret scanning](https://docs.github.com/en/code-security/concepts/secret-security/secret-scanning)
+- [AWS IAM, Update access keys](https://docs.aws.amazon.com/IAM/latest/UserGuide/id-credentials-access-keys-update.html)
+- [Google Cloud, Manage API keys](https://docs.cloud.google.com/docs/authentication/api-keys)
+- [Stripe Docs, API keys](https://docs.stripe.com/keys)
+- [Stripe Docs, Best practices for managing secret API keys](https://docs.stripe.com/keys-best-practices)
+- [OpenAI, Best practices for API key safety](https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety)

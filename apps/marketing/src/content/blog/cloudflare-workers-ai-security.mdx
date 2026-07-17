@@ -1,0 +1,154 @@
+---
+title: "Secure Cloudflare Workers Built With AI"
+description: "Treat Worker bindings as capabilities, keep secrets encrypted, constrain outbound fetch and caching, and verify routes with production-shaped Wrangler config."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - access-control
+  - verification
+draft: false
+heroImage: supply-chain-04
+faq:
+  - q: "Do Cloudflare Workers isolates secure application logic?"
+    a: "The isolate model protects the runtime's tenant boundary. It does not authenticate application users, authorize records, validate outbound destinations, prevent unsafe caching, or stop code from returning a secret in a response."
+  - q: "Is a Worker binding the same as an API token?"
+    a: "A binding grants the Worker a specific Cloudflare resource capability and can avoid exposing an underlying API credential. It is still permission, so bind only required resources and enforce business authorization before using it."
+  - q: "Can a Worker follow redirects while forwarding Authorization?"
+    a: "It can, but Cloudflare warns that followed redirects may forward all headers to another hostname. Use manual redirect handling when sensitive headers exist, revalidate every destination, and attach credentials only to the intended origin."
+  - q: "Should a security-critical Worker route fail open?"
+    a: "No. Cloudflare documents that fail-open routes bypass the Worker during a limit failure. Use fail closed for Workers that enforce authentication, authorization, filtering, or another security-critical decision."
+---
+
+**Direct answer:** Secure an AI-built Worker by inventorying every binding, route, secret, cache, and outbound destination as a capability. Bind only required resources, use Workers secrets instead of plaintext vars, authenticate and authorize each route, bound bodies and subrequests, follow redirects manually when credentials exist, prevent personalized cache mixing, choose fail closed for security-critical routes, and test the deployed Wrangler configuration.
+
+_Cloudflare Workers secrets, bindings, Request behavior, service bindings, routes, limits, and security-model guidance was reviewed against official documentation on July 17, 2026. Recheck compatibility dates and account limits before release._
+
+Cloudflare's V8 isolate model protects the platform boundary between Worker tenants. It does not know whether a signed-in user belongs to Workspace A, whether an upstream URL is safe, or whether a cached response contains another customer's data. Generated Worker code can be short enough to hide these application decisions inside a few calls to `fetch()` and `env.DB`.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) recommends mapping capabilities before reviewing code. For Workers, the Wrangler configuration is part of the application because it grants routes, resources, secrets, and environment-specific behavior.
+
+## Inventory capabilities, not variable names
+
+For every Worker environment, list:
+
+1. public routes, custom domains, and the `workers.dev` route state;
+2. D1, KV, R2, Durable Object, Queue, service, analytics, and rate-limit bindings;
+3. plaintext vars, encrypted secrets, and required secret declarations;
+4. external hosts, redirect behavior, and attached credentials;
+5. request-body, subrequest, memory, and time budgets;
+6. cache keys, cacheable response classes, and purge behavior;
+7. route fail mode and operational owner.
+
+Cloudflare describes a binding as a permission and API in one. A D1 binding may read and write a database. An R2 binding may manipulate a bucket. A service binding may call a Worker that is not public. Remove unused bindings and separate environments so a preview Worker cannot reach production resources by default.
+
+## The risky pattern: proxy any URL and follow redirects
+
+**Vulnerable pattern. The caller chooses the upstream and the Worker forwards its bearer token.**
+
+```ts
+export default {
+  async fetch(request: Request, env: Env) {
+    const target = new URL(request.url).searchParams.get("url")
+    if (!target) return new Response("Missing url", { status: 400 })
+
+    return fetch(target, {
+      headers: { Authorization: `Bearer ${env.UPSTREAM_TOKEN}` },
+    })
+  },
+}
+```
+
+This is an SSRF and credential-forwarding boundary. A caller can select an unexpected host. Cloudflare's Request documentation says a new Request defaults to following redirects, and followed redirects can forward all headers even when the destination hostname changes.
+
+AI-generated proxy code often checks only that a string begins with `https://` or contains an approved domain. That does not establish the parsed hostname, port, redirect chain, DNS result, or final destination. The happy path works while the security-sensitive branches remain untested.
+
+## Prefer fixed services or exact destination policy
+
+If the upstream is another Worker, a service binding can remove the public URL and underlying token from this path:
+
+```ts
+export default {
+  async fetch(request: Request, env: Env) {
+    const principal = await requirePrincipal(request, env)
+    if (!principal.canReadReports) {
+      return new Response("Not found", { status: 404 })
+    }
+
+    const input = await readBoundedJson(request, 32_000)
+    return env.REPORT_SERVICE.fetch(
+      new Request("https://internal/reports", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reportId: input.reportId, tenantId: principal.tenantId }),
+      })
+    )
+  },
+}
+```
+
+The binding limits which Worker can be called, but the caller still needs application authorization and a bounded payload. The receiving Worker should validate the request and tenant context rather than assuming every bound caller is correct.
+
+For a fixed external provider, store the exact HTTPS origin in server configuration, construct allowed paths yourself, set `redirect: "manual"`, and attach the provider credential only after the destination matches. If a redirect is required, resolve `Location` against the current URL, reject unsupported schemes and ports, enforce a small hop count, revalidate the new host and resolved address, and remove sensitive headers before any cross-origin request.
+
+A hostname allowlist alone is not enough when user-controlled hosts can resolve to loopback, link-local, private, or metadata addresses. The [DNS-aware SSRF guide](/blog/ssrf-protection-dns-redirects) covers resolution, redirects, and rebinding in depth. Prefer a closed set of provider origins over accepting arbitrary user URLs.
+
+## Keep secrets out of plaintext vars and output
+
+Cloudflare documents Workers secrets and Secrets Store bindings for sensitive values. Do not put credentials in Wrangler `vars`. Keep local `.dev.vars` or `.env` files out of Git and use one local-secret mechanism consistently.
+
+Current Workers configuration can declare required secret names. Use that feature so local work and deployment report missing secrets instead of starting with partial configuration. Generate types from the production-shaped config when the project uses Wrangler type generation.
+
+Secrets are available to Worker code at runtime, so the code can still leak them. Never return them in diagnostics, include them in cache keys, interpolate them into URLs, or log full request headers and environment objects. Build provider clients per request when they capture a secret, because Cloudflare warns that global-scope derivatives may outlive a binding change in a reused isolate.
+
+Rotate a secret that reached source control, a response, or logs. Removing it from Wrangler does not invalidate the provider credential or erase old history.
+
+## Authorize before using a binding
+
+A user who can reach the Worker does not automatically have permission to use every bound resource. Authenticate from a verified session or token, load current tenant membership, authorize the requested action, then include the tenant boundary in D1 queries, Durable Object IDs, R2 keys, or service calls.
+
+Do not derive trusted roles from request JSON or an unsigned header. Keep administrative bindings in a separate Worker when possible. A service binding can expose that internal Worker only to declared callers, but each public caller still needs its own policy check.
+
+Set explicit body limits before buffering JSON or uploads. Treat missing or untrusted `Content-Length` as a reason to count bytes while streaming, not as permission to read without a ceiling. Bound arrays, strings, redirects, retries, parallel work, and response size. Every outbound fetch and binding call consumes finite runtime resources.
+
+## Configure CORS and caching per route
+
+CORS is a browser policy, not API authorization. For credentialed routes, return an allowlisted origin only when it exactly matches, include `Vary: Origin`, and restrict methods and headers. Reject untrusted requests even when they omit `Origin`. The [CORS guide for vibe-coded apps](/blog/cors-vibe-coded-apps) covers preflight and credential behavior.
+
+Do not cache authenticated or personalized responses under a public URL alone. Prefer `Cache-Control: private, no-store` for sensitive responses. If a product intentionally caches tenant data, design a complete cache key that includes every authorization dimension and test eviction, role changes, and error responses. Never cache `Set-Cookie`, authorization errors with private details, or upstream responses without reviewing their headers.
+
+The browser-local [security headers checker](/tools/security-headers-checker) can inspect a public Worker's response headers. It cannot see bindings, secrets, cache-key construction, redirect policy, authenticated routes, or the Wrangler environment.
+
+## Choose routes and failure behavior deliberately
+
+Review every route pattern and custom domain. Disable an unused `workers.dev` route for production services. Confirm excluded paths do not bypass a Worker that is supposed to authenticate or filter them.
+
+Cloudflare documents two limit-failure modes for routes. Fail open bypasses the Worker and sends the request as though it were not configured. Fail closed returns an error. Use fail closed when the Worker provides authentication, authorization, request filtering, tenant routing, or another security decision. Availability planning should add monitoring, capacity, and fallback architecture without silently removing the control.
+
+Subrequests and redirect hops count against limits. Decide what the Worker returns when a provider times out, a binding throws, a body is too large, or a limit is reached. Security-sensitive paths should deny safely with a bounded response and a privacy-aware log event.
+
+## Verify with production-shaped configuration
+
+Use fake tenants and authorized hosts.
+
+1. Run local tests with the same compatibility date, binding names, routes, and environment shape intended for release.
+2. Call every sensitive route signed out and as a second tenant using the first tenant's test IDs.
+3. Try an unapproved host, deceptive hostname, private address, and redirect from an approved host to a denied host.
+4. Confirm credentials are absent from cross-origin redirect requests, errors, logs, URLs, and cached responses.
+5. Send missing, malformed, oversized, duplicated, and retry-triggering requests.
+6. Verify CORS for allowed, denied, deceptive, and absent origins.
+7. Exercise route failures and confirm a security-critical route does not bypass the Worker.
+8. Deploy to a non-production Worker and repeat representative tests on the real Cloudflare route before promotion.
+
+A passing set supports the named Worker version, route, bindings, environment, and cases. It does not prove every platform configuration, dependency, upstream, DNS change, or future deployment is safe.
+
+## Sources
+
+- [Cloudflare: Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+- [Cloudflare: Bindings](https://developers.cloudflare.com/workers/runtime-apis/bindings/)
+- [Cloudflare: Service bindings](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/)
+- [Cloudflare: Request API](https://developers.cloudflare.com/workers/runtime-apis/request/)
+- [Cloudflare: Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
+- [Cloudflare: Security model](https://developers.cloudflare.com/workers/reference/security-model/)
+- [OWASP: SSRF Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)

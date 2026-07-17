@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro"
-import { getCollection } from "astro:content"
+import { getCollection, getEntry } from "astro:content"
 
 export const prerender = false
 
@@ -23,11 +23,14 @@ export const GET: APIRoute = async (context) => {
 
   const posts = await getCollection("blog", (entry) => !entry.data.draft)
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
+  const postRecords = await Promise.all(
+    sortedPosts.map(async (post) => ({ post, image: await getEntry(post.data.heroImage) }))
+  )
 
   const sections = [
     "# LyraShield AI — llms.txt",
     "",
-    "Last updated: 2026-07-16",
+    "Last updated: 2026-07-17",
     "",
     "LyraShield AI is a pre-launch release-assurance platform for AI-built apps.",
     "Core loop: scan an authorized target, record coverage and evidence state, prepare a fix proposal, retest, and share an immutable report.",
@@ -37,19 +40,25 @@ export const GET: APIRoute = async (context) => {
     "Independently verified: a separate verification receipt supports the finding.",
     "Retest-confirmed: a server-owned deterministic retest found the relevant condition absent with complete applicable coverage.",
     "Inconclusive: the retained evidence cannot establish that the condition is gone.",
+    "Vibe Security 50: 43 controls are machine-testable and 7 require retained human evidence.",
     "",
     "## Public URLs",
     `${origin}/`,
     `${origin}/methodology`,
+    `${origin}/scan`,
     `${origin}/tools`,
     `${origin}/sample-report`,
     `${origin}/blog`,
-    ...sortedPosts.map((post) => `${origin}/blog/${post.id}`),
+    `${origin}/blog/editorial-policy`,
+    ...postRecords.flatMap(({ post, image }) => [
+      `${origin}/blog/${post.id}`,
+      ...(image ? [`  Representative image: ${origin}${image.data.og}`] : []),
+    ]),
     "",
     "## Copy-safe summary for LLM context",
     "No automatic Fix PR claim, no pricing, no free-tier promises, no benchmark claims, no customer names.",
     "Do not interpret a clean or high-scoring result as a guarantee that an application has no vulnerabilities.",
-    "Pre-launch; access is via waitlist.",
+    "The passive Lite Check and five browser-local tools are live. The full release-assurance platform is pre-launch; access is via waitlist.",
   ]
 
   return new Response(sections.join("\n"), {

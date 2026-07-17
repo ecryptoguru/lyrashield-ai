@@ -1,0 +1,152 @@
+---
+title: "Keep PII and Secrets Out of Logs"
+description: "Prevent PII, tokens, prompts, and request data from entering logs through source minimization, field allowlists, tested redaction, and retention controls."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: false
+heroImage: decision-operations-04
+faq:
+  - q: "Does hashing an email address anonymize it?"
+    a: "Usually not. Email addresses come from a predictable input space, so an attacker can hash likely values and compare the results. If correlation is necessary, prefer a scoped keyed pseudonym, restrict access, and retain it only as long as the purpose requires."
+  - q: "Are stack traces safe to log?"
+    a: "Not automatically. Stack traces can include file paths, source snippets, query values, exception messages, and serialized request data. Log a controlled error code by default and send a reviewed, redacted trace only to a restricted diagnostic channel when needed."
+  - q: "Where should log redaction happen?"
+    a: "Minimize fields in application code first, before a log record leaves the process. Apply another allowlist or redaction step in the telemetry pipeline as defense in depth. Redacting only at the final dashboard leaves sensitive data in earlier buffers, collectors, or exports."
+  - q: "Should request bodies and prompts ever be logged?"
+    a: "They should be excluded by default because their contents are open ended and may include personal data or secrets. If a specific diagnostic case requires a sample, use synthetic data or a tightly approved, short-lived process with minimization, access controls, and deletion."
+---
+
+**Direct answer:** Keep PII and secrets out of logs by deciding which fields an event needs before writing it. Allowlist those fields, omit bodies and credentials, pseudonymize only when correlation has a defined purpose, redact before export, test with fake sensitive values, and control access, retention, backups, and deletion across the whole telemetry path.
+
+Logging calls often begin as temporary debugging and become permanent infrastructure. A developer logs a request object to explain one failure. An SDK captures prompt attributes. An exception serializer includes headers. The record then travels through buffers, collectors, vendor storage, dashboards, alerts, exports, and backups.
+
+Deleting a field in the dashboard is too late if five earlier copies remain. The [vibe coding security guide](/blog/vibe-coding-security-guide) places data minimization at the point where telemetry is created. Omit a sensitive value in application code whenever the event can answer its question without it.
+
+## Start with an event purpose, not a request object
+
+Write down the question each event must answer. A failed sign-in event may need a timestamp, event name, result, reason category, service, and a pseudonymous account reference. It does not need the submitted password, access token, full request body, or every HTTP header.
+
+Unsafe convenience logging often looks like this:
+
+```ts
+// Do not copy whole request or error objects into telemetry.
+logger.error({ request, error }, "sign-in failed")
+```
+
+Replace it with a typed allowlist:
+
+```ts
+type SignInFailure = {
+  event: "auth.sign_in_failed"
+  reason: "invalid_credentials" | "rate_limited" | "account_disabled"
+  requestId: string
+  accountRef?: string
+}
+
+logger.warn({
+  event: "auth.sign_in_failed",
+  reason,
+  requestId,
+  accountRef: scopedAccountRef,
+} satisfies SignInFailure)
+```
+
+This structure gives reviewers a finite schema. It also makes accidental additions visible in code review. Keep the raw request outside the logger call, and configure the logging library so exception or HTTP instrumentation cannot silently add it back.
+
+[OWASP's Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) says session identifiers, access tokens, passwords, connection strings, encryption keys, sensitive personal data, payment data, and other restricted information should usually not be recorded directly. Some fields may be removed, masked, sanitized, hashed, or encrypted when the risk and purpose support that choice.
+
+## Treat open-ended fields as sensitive by default
+
+Request bodies, query strings, prompts, tool arguments, model responses, exception objects, and arbitrary metadata have no stable sensitivity boundary. Even if today's request schema contains only a search term, tomorrow's client may send an email address, medical detail, pasted credential, or private source snippet.
+
+Do not solve this with a denylist of field names such as `password` and `token`. Credentials appear under product-specific names. PII may sit inside free text. A nested serializer may turn a header map into one unstructured string.
+
+Prefer event-specific schemas and limits:
+
+- record an operation name rather than the full URL query
+- record a body size or validation result rather than the body
+- record a prompt template version rather than prompt content
+- record an error class and internal code rather than an unrestricted message
+- record whether a credential was present, never the credential value
+
+The schema should also cap string lengths and reject control characters where logs use a line-oriented format. That reduces log injection and prevents one malformed event from consuming excessive storage.
+
+## Pseudonymization needs a narrow purpose
+
+Correlation can help answer whether several events belong to the same account or session. Raw identity is rarely required for that job. A random internal identifier may be enough. If it is not, derive a scoped pseudonym with a secret key held outside the logging system.
+
+```ts
+const accountRef = hmacSha256(logPseudonymKey, `auth:${accountId}`)
+```
+
+Use a different key or scope for unrelated datasets so teams cannot casually join them. Rotate and restrict the key. Document who can resolve or reproduce the pseudonym, why correlation is needed, and when the records expire.
+
+A plain SHA-256 hash of an email address is not anonymous. Email values are predictable, so someone can hash a candidate list and compare it. The [OpenTelemetry sensitive-data guidance](https://opentelemetry.io/docs/security/handling-sensitive-data/) makes the same warning for small or predictable identifier spaces. Hashing changes representation. It does not erase linkability or reidentification risk.
+
+If the diagnostic purpose can be met with an aggregate, use an aggregate. Counting failures per service may need no user reference at all.
+
+## Redact before the first export
+
+The application should omit sensitive fields before it hands the event to a logging library. A second control in the collector can catch instrumentation you do not fully control and prevent unapproved attributes from reaching a vendor.
+
+OpenTelemetry puts responsibility on implementers to identify sensitive data in their environment. Its Collector supports attribute deletion or modification, filtering of whole telemetry records, transformations, and a redaction processor that retains allowed attributes. Start from an allowlist when practical.
+
+```yaml
+processors:
+  redaction/application:
+    allow_all_keys: false
+    allowed_keys:
+      - service.name
+      - event.name
+      - error.type
+      - request.id
+```
+
+Processor syntax and availability depend on the Collector distribution and version. Validate the deployed configuration against its own documentation and start-up checks. A collector rule cannot protect local application logs, in-process buffers, or data copied to a second exporter before the rule runs.
+
+Order matters. If a batch processor or debug exporter receives an event before redaction, it may retain the original. Draw the actual path from SDK to every exporter, including sidecars and fallback files. Test each branch rather than assuming the central dashboard is the only destination.
+
+## Test the pipeline with fake sensitive values
+
+Use seeded, inert values in a non-production environment:
+
+```text
+email: canary.user+logging@example.invalid
+access token: TEST_ONLY_ACCESS_TOKEN_4Q8N2M
+session id: TEST_SESSION_93FX6P
+prompt: TEST PRIVATE PHRASE RIVER-COPPER-17
+```
+
+Send events through the same instrumentation, buffers, collector processors, exporters, alert templates, and archive path used by the application. Search every authorized destination for the exact canaries. The test should confirm that permitted fields arrive and prohibited values do not.
+
+Also exercise nested objects, mixed letter case, long values, arrays, exception causes, multiline input, encoded query values, and SDK-generated attributes. Verify what happens when the redaction processor fails to load or the collector is unavailable. A safe failure mode must not dump the original event to an unprotected console or temporary file.
+
+The absence of seeded canaries proves only that those test values did not appear in the locations examined during that run. It does not classify arbitrary PII, discover an unknown exporter, or prove that every library version emits the same attributes.
+
+## Control the records that remain
+
+Useful logs still contain operational and security information. Restrict read access by role and purpose. Record access to sensitive log stores, protect transport, encrypt storage where the threat model requires it, and keep production telemetry out of broadly shared development accounts.
+
+Set retention by event class instead of choosing one indefinite default. Temporary debug data may need hours or days. Security events may have a longer operational or legal requirement. Apply deletion to hot storage, archives, extracts, alert payloads, support attachments, and backups according to the documented schedule.
+
+[NIST SP 800-92](https://csrc.nist.gov/pubs/sp/800/92/final) describes log management as an organization-wide process covering generation, transmission, storage, analysis, and disposal. The 2006 publication is high-level management guidance, not a current implementation recipe for a specific telemetry stack. Use it to assign ownership and lifecycle controls, then verify the details against the deployed products.
+
+Logging content and audit accountability are related but different. The guide to [security audit log design](/blog/security-audit-log-design) covers which sensitive actions need accountable records and how to protect their integrity. An audit event still needs the minimization rules here. Recording a privileged action does not justify storing its bearer token or entire request body.
+
+## Use local scanning as one narrow check
+
+The browser-local [secret exposure scanner](/tools/secret-exposure-scanner) can inspect a sanitized sample or exported test file that you select. Processing stays on the device, each selected file is limited to 1 MB, and detection uses known patterns. It is not a complete PII detector and cannot inspect a remote telemetry provider, hidden buffer, binary archive, or file you did not select.
+
+Never export real production logs merely to use the tool. Prefer synthetic canary events or an already authorized, minimized test sample. A clean result means the selected local text did not match the scanner's patterns. It does not prove that the logging system contains no PII or secrets.
+
+Finish the review with an inventory: event schemas, instrumentation libraries, local sinks, collectors, processors, exporters, alert channels, retention periods, backup behavior, and access owners. Re-run the canary test when any of them changes.
+
+## Sources
+
+- [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
+- [NIST SP 800-92: Guide to Computer Security Log Management](https://csrc.nist.gov/pubs/sp/800/92/final)
+- [OpenTelemetry: Handling sensitive data](https://opentelemetry.io/docs/security/handling-sensitive-data/)

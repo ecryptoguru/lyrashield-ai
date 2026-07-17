@@ -1,0 +1,149 @@
+---
+title: "Secure OAuth Redirects and Callbacks"
+description: "Secure OAuth redirects with exact registration, transaction-bound callback state, PKCE, issuer checks, and a strict code exchange."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - web-security
+  - verification
+draft: false
+heroImage: access-boundary-05
+faq:
+  - q: "Can an OAuth redirect URI use a wildcard?"
+    a: "Current OAuth security guidance requires exact string matching for registered redirect URIs. The narrow exception permits the port to vary on a native app's loopback IP redirect URI. Register every other callback explicitly and do not use prefix matching."
+  - q: "Does state replace PKCE?"
+    a: "Not in every flow. State can bind a browser callback to a transaction for CSRF protection. PKCE binds the authorization code exchange to a verifier. RFC 9700 explains when PKCE can provide CSRF protection, but the client must follow the provider's complete contract."
+  - q: "Why can a native loopback callback use a changing port?"
+    a: "RFC 8252 permits native apps to use a loopback IP redirect URI and requires authorization servers to allow any port for that URI. The loopback IP literal and path still need the correct registration and validation."
+---
+
+**Direct answer:** Secure an OAuth callback as a bound transaction. Register exact redirect URIs, create one-time state on the server, use PKCE, verify the callback belongs to the initiating browser and expected issuer, then exchange the short-lived code using the same redirect URI. Reject mismatches before creating a session or following any post-login destination.
+
+An OAuth callback is not secure merely because it receives a code from a familiar-looking URL. The browser passes through another security domain, then returns with values that must be tied back to one local login attempt. Redirect registration, callback transaction validation, and code exchange are separate checks.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) places this flow between authentication and server-side authorization. A correct callback can establish an identity. It does not decide which workspace or object that identity may access.
+
+## The vulnerable pattern: loose redirect and callback handling
+
+**Vulnerable pattern. Do not use this callback design.**
+
+```ts
+app.get("/auth/callback", async (req, res) => {
+  const redirectTo = String(req.query.next || "/dashboard")
+  const tokens = await oauth.exchange(String(req.query.code))
+  await createSession(tokens)
+  return res.redirect(redirectTo)
+})
+```
+
+This handler accepts any code delivered to the route, does not bind it to a local transaction, and follows a destination from the query string. Even if the provider validates its own registered redirect, the client has exposed an open redirector after login. It also lacks a way to distinguish which authorization server produced the response when multiple issuers are supported.
+
+[RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html), the current OAuth 2.0 security best current practice, requires exact string matching for registered redirect URIs. Its narrow exception allows the port to vary for a native app's loopback IP redirect URI. It also says clients and authorization servers must not expose open redirectors. A check such as `url.startsWith("https://client.invalid")` is not exact matching and can accept unintended hosts or paths.
+
+## Why generated OAuth code looks complete too early
+
+Provider quick starts optimize for a successful round trip. Generated code often copies the visible pieces, an authorization URL and a callback, while leaving transaction storage to the developer. The flow works in a happy-path browser test, so missing state or PKCE is easy to overlook.
+
+Framework helpers can hide important choices. A library may generate state, store a PKCE verifier, and validate issuer metadata, or it may expect the application to do some of that work. Do not infer behavior from a method name. Read the provider and library contract, then write tests for the protections you depend on.
+
+Post-login navigation creates another trap. A `next` value is useful, but it should be recorded before redirecting to the provider, stored with the transaction, and reduced to a safe local path. Passing an arbitrary URL through the OAuth round trip turns the client into an open redirector.
+
+## Register exact redirect URIs
+
+Register the complete callback for each environment. Production, preview, development, web, and native clients should not share one wildcard. Keep preview clients and credentials separate if the provider supports it.
+
+For a web app, a registered URI might be:
+
+```text
+https://client.invalid/auth/callback/provider
+```
+
+Scheme, host, port, path, and trailing slash all matter under exact comparison. Query components require special care and are best avoided in the registered callback when a stable path works.
+
+Native apps follow different redirect patterns. [RFC 8252](https://www.rfc-editor.org/rfc/rfc8252.html) describes claimed HTTPS redirects, reverse-domain private-use schemes, and loopback IP redirects. A desktop app can bind an ephemeral port on `127.0.0.1` or `[::1]`, then include that variable port in its authorization request. Authorization servers must allow any port for this native loopback pattern. The IP literal and path remain part of the registered redirect, and the exception does not permit arbitrary web callback ports or wildcard paths.
+
+Custom URI schemes need a reverse-domain name controlled by the app publisher, and claimed HTTPS links need operating-system association with the app. A callback URI alone does not prove which installed application received it. PKCE remains necessary for public native clients because they cannot keep a shared client secret confidential.
+
+Do not build a provider redirect URI from the incoming `Host` header unless a trusted proxy and explicit origin allowlist constrain it. Deployment misconfiguration or a spoofed host can otherwise influence the callback registered in an authorization request.
+
+## Bind the callback to one transaction
+
+Create a server-side transaction before sending the browser away. Store a random one-time state value, PKCE verifier, expected issuer, exact redirect URI, creation time, and a safe local destination. Bind it to the browser with a secure session cookie or another protected mechanism.
+
+```ts
+const transaction = await oauthTransactions.create({
+  state: randomUrlSafeValue(),
+  pkceVerifier: randomPkceVerifier(),
+  browserSessionId: request.session.id,
+  issuer: EXPECTED_ISSUER,
+  redirectUri: OAUTH_CALLBACK,
+  returnPath: allowLocalReturnPath(request.query.next),
+  expiresAt: new Date(Date.now() + 10 * 60_000),
+})
+
+const authorizationUrl = provider.authorizationUrl({
+  redirect_uri: transaction.redirectUri,
+  state: transaction.state,
+  code_challenge: sha256Base64Url(transaction.pkceVerifier),
+  code_challenge_method: "S256",
+})
+```
+
+At the callback, locate and atomically consume the transaction. Compare state without leaking it to logs. Reject expired, missing, reused, or browser-mismatched records. If the client supports multiple authorization servers, validate the issuer response according to the provider's metadata and the mix-up defenses in RFC 9700.
+
+State, PKCE, nonce, and issuer are not interchangeable labels. RFC 9700 requires public clients to use PKCE and recommends it for confidential clients. It says `S256` is the current challenge method that does not expose the verifier in the authorization request. For OpenID Connect, a transaction-specific nonce can bind the ID token. State commonly provides CSRF protection, although RFC 9700 permits reliance on PKCE for CSRF protection when the client has ensured provider support. Follow the precise protocol profile in use.
+
+## Exchange the code before creating a session
+
+The callback should send the authorization code, stored PKCE verifier, client information, and the same redirect URI to the token endpoint. [RFC 6749](https://www.rfc-editor.org/rfc/rfc6749.html) binds the code to the client identifier and redirect URI. Authorization codes must expire shortly and must not be used more than once.
+
+```ts
+const transaction = await consumeTransaction({
+  state: request.query.state,
+  browserSessionId: request.session.id,
+})
+
+if (!transaction) return response.status(400).send("Login could not be completed")
+
+const tokens = await provider.exchangeCode({
+  code: request.query.code,
+  redirect_uri: transaction.redirectUri,
+  code_verifier: transaction.pkceVerifier,
+})
+
+const identity = await validateProviderIdentity(tokens, {
+  issuer: transaction.issuer,
+  clientId: OAUTH_CLIENT_ID,
+})
+
+await rotateSessionAndSignIn(identity)
+return response.redirect(transaction.returnPath)
+```
+
+Validate downstream tokens according to their type. Signature, issuer, audience, expiry, and nonce checks belong in the provider or OpenID Connect validation layer, not in ad hoc payload decoding. The related [JWT validation guide](/blog/jwt-validation-mistakes) covers that boundary.
+
+Rotate the local session identifier when login completes. Do not place authorization codes, tokens, state values, or provider error details in analytics. Callback error pages should be useful to the user without reflecting arbitrary provider text.
+
+## Verify with owned test clients
+
+Use a dedicated development client and test accounts. Confirm that the exact registered callback succeeds. Then alter the scheme, host, path, trailing slash, and port where the profile does not permit a dynamic port. The provider should refuse unintended redirect URIs before sending the browser away.
+
+Start two login attempts in separate browser sessions. Swap their state and code values. Each callback should fail. Repeat a completed callback and confirm that the consumed transaction and authorization code cannot create another session. Test an expired transaction and a callback with a missing PKCE verifier.
+
+If multiple issuers are supported, initiate with one issuer and send a response that identifies another in a controlled fixture. Confirm that the callback rejects the mix-up. Test the post-login destination with an external URL, scheme-relative value, encoded backslash, and newline. Only allow known local paths.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help document registered callbacks, transaction fields, and production settings. It does not contact the provider or prove the live callback behavior.
+
+## What automation can and cannot prove
+
+Tests can prove that known mismatch cases fail in the configured provider and application build. Static review can detect unchecked `next` parameters or missing state comparisons. Provider conformance suites can exercise protocol behavior.
+
+Automation cannot infer every setting in a provider dashboard or prove that a production secret belongs to the intended client. It also cannot turn a successful OAuth exchange into application authorization evidence. Keep the callback result scoped: it verifies the tested transaction and identity contract, not the user's permission to perform every action.
+
+## Sources
+
+- [IETF RFC 9700: Best Current Practice for OAuth 2.0 Security](https://www.rfc-editor.org/rfc/rfc9700.html)
+- [IETF RFC 6749: The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749.html)
+- [IETF RFC 8252: OAuth 2.0 for Native Apps](https://www.rfc-editor.org/rfc/rfc8252.html)

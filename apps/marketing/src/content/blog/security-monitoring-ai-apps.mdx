@@ -1,0 +1,142 @@
+---
+title: "Security Monitoring and Alerts Before Launch"
+description: "Define security events, route actionable alerts to an owner, and test the complete monitoring path before an AI-built app launches."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - web-security
+draft: false
+heroImage: decision-operations-02
+faq:
+  - q: "Which security events should trigger an alert?"
+    a: "Start with events that may require prompt action: repeated authentication failures, denied privileged actions, access-control denials that spike unexpectedly, administrative changes, secret or key-management failures, and monitoring outages. Tune thresholds against normal traffic before launch."
+  - q: "Should application logs ever contain secrets?"
+    a: "No. Do not record access tokens, session identifiers, passwords, private keys, database connection strings, or full payment data. Store a non-secret event identifier and the minimum context needed to investigate."
+  - q: "Are cloud-provider logs enough for an application?"
+    a: "Provider logs help with infrastructure and service activity, but they rarely understand application roles, tenant boundaries, approval decisions, or sensitive business actions. Add application events for the decisions only your code can see."
+---
+
+**Direct answer:** Before launch, choose a small set of security events, record enough context to investigate without storing secrets, send high-severity alerts to a named owner, and test the route from event creation to human receipt. Logs alone are not monitoring. The control works only when a meaningful signal reaches someone who can act.
+
+An application can produce thousands of log lines while giving its operators no useful warning. Generic request logs show traffic. Error trackers show crashes. Neither necessarily records that a workspace owner was changed, a privileged action was denied, or the alert pipeline stopped accepting events.
+
+The control inventory in [the six-layer vibe coding security guide](/blog/vibe-coding-security-guide) puts monitoring beside authorization, dependency review, and release evidence. Monitoring does not repair those controls. It helps a team notice when they fail or behave differently from the reviewed design.
+
+## The vulnerable pattern: logs without an operating decision
+
+**Vulnerable pattern. Use only with synthetic test data.**
+
+```ts
+app.post("/api/workspaces/:id/owners", async (req, res) => {
+  logger.info("owner update", {
+    body: req.body,
+    authorization: req.headers.authorization,
+  })
+
+  await updateOwner(req.params.id, req.body.userId)
+  return res.sendStatus(204)
+})
+```
+
+This code records too much and decides too little. The request body may contain personal data. The authorization header may contain a bearer token. The event has no actor, outcome, reason, severity, or stable identifier. Nothing says whether a successful ownership change should alert anyone. If log delivery fails, the route continues silently.
+
+An AI coding assistant can generate this pattern because `logger.info()` satisfies a request to "add logging." It sees the handler and its inputs, but it may not know the team's incident roles, expected traffic, retention policy, or which business actions deserve attention. Those decisions live outside the function.
+
+## Choose events that represent security decisions
+
+Begin with actions the application understands better than the infrastructure does. A small launch set might include:
+
+- repeated authentication failures grouped by account or privacy-safe request identifier
+- authorization denials for sensitive resources
+- creation, use, and revocation of privileged roles or credentials
+- changes to authentication, recovery, integration, or webhook settings
+- approval and rejection of destructive or externally visible actions
+- secret-storage, signature-validation, or audit-chain failures
+- monitoring pipeline failures and unexpected gaps in event volume
+
+Do not alert on every denial. Ordinary users mistype passwords, expired sessions fail, and automated clients retry. Pick thresholds with a time window and a documented reason. A single attempt to disable audit logging may justify an immediate page. Ten failed sign-ins from one account may warrant a lower-severity investigation. The right threshold depends on the app and its normal use.
+
+[OWASP's Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) recommends recording security-relevant events while excluding or masking sensitive data. It also calls for testing logging failures and protection against log injection. That last point matters when event fields contain user-controlled text. Keep fields structured, normalize line breaks, bound their length, and let the logging library serialize them.
+
+## Record enough context, not the whole request
+
+A useful event answers a few concrete questions: what happened, when, which authenticated actor initiated it, which tenant or resource class was involved, what the server decided, and which request or trace can connect the event to other records.
+
+Avoid raw secrets and unrestricted payloads. Tokens, passwords, private keys, session cookies, connection strings, and full payment details do not belong in logs. Email addresses and IP addresses also deserve an explicit purpose, access rule, and retention period rather than automatic collection.
+
+Security events and product analytics have different purposes. Do not use a security label to bypass DNT or GPC choices for behavioral analytics. Record only the operational information needed to protect the service, keep it separate from marketing analytics, and document the retention and access boundary.
+
+## Route alerts to a person and a fallback
+
+An alert definition needs an owner before it needs a polished dashboard. For each high-severity condition, write down:
+
+1. the event and threshold
+2. the primary recipient or rotation
+3. the expected acknowledgement time
+4. the safe first check
+5. the fallback if nobody acknowledges
+
+Avoid sending raw event bodies into chat or email. Link an authorized operator to the protected investigation view by event ID. That keeps secrets and customer data out of notification systems with wider membership or longer retention.
+
+The [NIST log-management guide](https://csrc.nist.gov/pubs/sp/800/92/final) treats collection, storage, analysis, and response as a managed process. The [NIST Cybersecurity Framework 2.0](https://www.nist.gov/cyberframework) likewise separates detection from response and recovery. A log file that nobody reviews covers only the collection step.
+
+## A minimal corrected event and alert rule
+
+```ts
+const eventId = crypto.randomUUID()
+
+await securityEvents.write({
+  eventId,
+  type: "workspace.owner.change",
+  occurredAt: new Date().toISOString(),
+  actorId: session.user.id,
+  workspaceId: session.workspace.id,
+  targetId: req.params.id,
+  outcome: "allowed",
+  requestId: req.id,
+  severity: "high",
+})
+
+await alerts.enqueue({
+  ruleId: "owner-change-v1",
+  eventId,
+  route: "security-on-call",
+})
+```
+
+This pattern still needs server-side authorization before the event is written. It also needs bounded fields, durable delivery, access controls on the event store, retention, and duplicate handling. If the business operation commits but alert enqueueing fails, record that failure through a separate protected path and surface a health signal. Do not roll back a valid ownership change merely because a notification provider is unavailable unless the product has deliberately chosen that policy.
+
+## Monitor the monitoring path
+
+An event pipeline can fail quietly. A token expires, a queue consumer crashes, a schema change rejects new records, or a notification rule is disabled during testing and never restored. Application requests keep succeeding, so a normal uptime check stays green.
+
+Add a synthetic heartbeat that travels through the same collection and routing path without looking like a real incident. Record its expected interval. Alert through an independent channel when the heartbeat is late, when queue age crosses a bound, or when rejected-event counts rise. A heartbeat sent directly to the notification provider skips the event store and proves less than it appears to prove.
+
+Watch both absence and excess. A sudden drop in authentication events can mean the collector failed. A sudden surge can mean abuse, a retry bug, or a bad threshold. Compare rates only within a documented window and avoid turning personal identifiers into monitoring dimensions.
+
+Test retention too. Confirm that events remain available for the investigation period, that access is limited to the operating role, and that expired records are removed. Long retention is not automatically safer. It increases the amount of sensitive operational data available after an account or storage compromise.
+
+## Test the complete path safely
+
+Use a local or dedicated test environment with synthetic accounts. Trigger each alert condition through the same application path used in production. Confirm that the event arrives with the expected type and redaction, the rule fires once, the notification reaches the named owner, and acknowledgement is recorded.
+
+Then test failure cases:
+
+- stop the event consumer and confirm that queue depth or delivery age alerts
+- reject writes at the event store and confirm the application exposes the monitoring fault
+- include newline characters and oversized text in a safe input field and confirm serialization stays structured
+- replay the same event identifier and confirm retries do not create an alert storm
+- remove the primary recipient and confirm the fallback route works
+
+These checks test plumbing and ownership. They do not prove that every important event has been identified or that a reported condition is exploitable. An alert is a detected signal, not independent verification. Closing an alert also does not prove the underlying condition was fixed.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help document whether monitoring, retention, and ownership have been considered. It cannot connect to your event pipeline or prove that an alert reaches anyone. For event-field design, continue with [keeping sensitive data out of application logs](/blog/sensitive-data-logging).
+
+## Sources
+
+- [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
+- [OWASP Developer Guide: Implement Security Logging and Monitoring](https://devguide.owasp.org/en/04-design/02-web-app-checklist/09-logging-monitoring/)
+- [NIST SP 800-92: Guide to Computer Security Log Management](https://csrc.nist.gov/pubs/sp/800/92/final)
+- [NIST Cybersecurity Framework 2.0](https://www.nist.gov/cyberframework)

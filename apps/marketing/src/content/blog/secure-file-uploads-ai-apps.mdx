@@ -1,0 +1,164 @@
+---
+title: "Secure File Uploads in AI-Built Apps"
+description: "Build a staged upload pipeline with early size limits, server-generated names, content checks, quarantine, and private delivery."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: false
+heroImage: web-execution-05
+faq:
+  - q: "Can an upload trust the browser MIME type?"
+    a: "No. The multipart Content-Type and filename come from the client. Compare the extension, declared type, detected content, and parser result against a narrow allowlist."
+  - q: "Does antivirus make an uploaded file safe?"
+    a: "No. Malware scanning can catch known threats, but results depend on signatures, file support, archive handling, and timing. Keep other validation, isolation, and delivery controls."
+  - q: "Can uploads live in a public object-storage bucket?"
+    a: "Only when every accepted file is intentionally public and the delivery policy is reviewed. Private or tenant-owned uploads should use private storage and authorized, bounded delivery."
+  - q: "Are image uploads safe after checking dimensions?"
+    a: "Not by themselves. Decode with a maintained image library, enforce pixel and byte limits, rewrite to an approved format where appropriate, and remove unnecessary metadata."
+---
+
+**Direct answer:** Secure uploads through a staged acceptance pipeline. Limit request and file size before parsing, allow only required extensions, inspect detected content instead of trusting browser metadata, generate storage names on the server, and quarantine files before release. Store accepted objects outside executable web roots, authorize every download, and use safe content type and disposition headers.
+
+An upload endpoint accepts more than a filename. It accepts bytes that later reach parsers, image libraries, document tools, storage paths, browsers, search systems, and AI ingestion pipelines. Every later consumer changes the risk.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats file handling as a staged boundary. A single extension check cannot represent the whole path.
+
+## The vulnerable pattern: trust filename and MIME type
+
+**Vulnerable pattern. Use only tiny inert test files.**
+
+```ts
+app.post("/api/uploads", upload.single("file"), async (req, res) => {
+  const path = `public/uploads/${req.file.originalname}`
+  await writeFile(path, req.file.buffer)
+
+  return res.json({ url: `/uploads/${req.file.originalname}` })
+})
+```
+
+The browser chooses the original filename and declared MIME type. The server buffers the complete file, writes a user-controlled name beneath a public web root, and serves it directly. Duplicate names can overwrite data, path-like names can escape naive joins, and active content may execute or render under the application's origin.
+
+Changing the extension allowlist alone does not repair memory use, content mismatch, storage authorization, or downstream parsing.
+
+## Why generated upload code optimizes for success
+
+AI coding tools often start from framework middleware that makes one uploaded file available as a buffer. The shortest next step is to preserve its original name and move it to a public directory so the UI can display it.
+
+The prompt may say "accept images" without defining byte size, pixel size, formats, animation, metadata, or whether images become public. A generated `startsWith("image/")` check trusts metadata supplied by the same client.
+
+Malware scanning can become a decorative call. Code may publish the object first and scan asynchronously, or treat a scanner timeout as clean so the upload flow does not fail.
+
+## Define the acceptance policy
+
+List why the product needs uploads and the smallest file set that meets that need. A profile-photo endpoint may accept a few raster formats. A document-analysis feature may need PDF and no office macros. Avoid a general "any file" endpoint.
+
+For each type, define:
+
+- Maximum request and file bytes
+- Maximum file count
+- Allowed extensions and detected media types
+- Content parser and its resource limits
+- Whether content is rewritten or scanned
+- Storage visibility and retention
+- Download authorization and response headers
+- Downstream consumers and their own limits
+
+Keep the policy versioned. A new parser or AI ingestion step is a new consumer and deserves review.
+
+## Reject size early
+
+Apply a request-size limit at ingress and in the framework before buffering multipart data. Stream to a bounded temporary area when the platform supports it. Track the bytes actually received rather than trusting `Content-Length`.
+
+Set per-file and aggregate limits. A request with many small files can exceed the intended memory or storage budget even when each file passes.
+
+For compressed files, the upload byte count does not represent extracted size. If archives are allowed, limit entry count, expanded bytes, nesting, paths, and compression ratio before extraction. The next batch's path-traversal guidance owns detailed archive containment, but the upload policy must decide whether archives are accepted at all.
+
+Abort slow or stalled uploads through server timeouts. Clean partial temporary files after errors and process termination.
+
+## Compare extension, detection, and parser result
+
+Treat `originalname`, extension, multipart `Content-Type`, and browser MIME values as untrusted signals. Parse the extension after stripping path components and normalizing according to the platform. Reject double-extension ambiguity rather than trying to guess intent.
+
+Inspect magic bytes or content signatures with a maintained library, but do not treat one signature as complete validation. Then decode or parse through the intended content library under strict limits. A file can have a valid header and malformed later structure.
+
+Require agreement between the allowed extension, detected format, and successful parser. If the endpoint accepts JPEG and PNG, reject a valid PDF renamed to `.png` even when both formats are acceptable elsewhere.
+
+For images, decode and rewrite to a known output format where product requirements permit. Enforce pixel dimensions and frame count as well as compressed bytes. Strip unnecessary metadata. Rewriting reduces ambiguity but does not prove the original file harmless for every other parser.
+
+## Generate names and isolate storage
+
+Generate an opaque identifier on the server and select the final extension from the verified content type. Keep the original filename only as bounded display metadata if the product needs it.
+
+```ts
+const accepted = await inspectUpload(stream, uploadPolicy)
+
+const objectKey = `workspace/${context.workspaceId}/${randomObjectId()}.${accepted.extension}`
+
+await quarantine.put(objectKey, accepted.stream, {
+  contentType: accepted.contentType,
+  metadata: { policyVersion: uploadPolicy.version },
+})
+```
+
+The server-owned tenant context and generated ID control the path. The code is architectural pseudocode; the implementation must handle stream failure and cleanup.
+
+Keep files outside an executable web root. Private object storage is a good default for tenant-owned content. Do not return a permanent public URL merely because it is convenient for the frontend.
+
+Separate quarantine from accepted storage or use an explicit state that delivery refuses. A file is not available until all required checks complete successfully.
+
+## Scan, rewrite, and fail closed
+
+Antivirus and content-disarm tools can reduce risk for supported formats. Record the engine, signature or rules version, result, time, and any limitation needed for operations. A timeout, unsupported format, or unavailable scanner is not a clean result.
+
+Decide whether the upload waits, remains quarantined for asynchronous processing, or fails. Never publish first and rely on later deletion.
+
+Run parsers and scanners in a constrained process or service with limited CPU, memory, time, filesystem, and network access. Assume the uploaded bytes are hostile to the parser itself.
+
+AI document ingestion should consume only accepted objects and still enforce text, page, token, and retrieval limits. Malware scanning does not detect prompt injection or sensitive data in a document.
+
+## Deliver through a controlled path
+
+Authorize downloads against the current principal, tenant, and object. Use short-lived signed URLs only after authorization, with a lifetime and response behavior suited to the data.
+
+Return the verified `Content-Type`, not the browser declaration. Use `X-Content-Type-Options: nosniff` where appropriate. For content intended as a download, use `Content-Disposition: attachment` and a sanitized display filename. The filename parameter must never become the server storage path.
+
+Active content such as HTML or SVG needs particular care under the main application origin. Prefer download disposition or a separate untrusted content origin if the product must accept it.
+
+Set cache headers according to sensitivity. A revoked private object should not remain in a public intermediary cache.
+
+## Verify with inert fixtures
+
+Use a local or authorized environment. Create tiny non-executable fixtures; do not use web shells, destructive archives, or real malware.
+
+Test:
+
+1. Files at the lower and upper byte boundaries.
+2. An oversized request rejected before full buffering.
+3. Mismatched extension, declared MIME, magic bytes, and parser result.
+4. Duplicate and path-like original names stored under separate server IDs.
+5. Excessive image dimensions in a small compressed file.
+6. Scanner clean, detected, unsupported, timeout, and unavailable outcomes.
+7. Quarantined files denied by every download path.
+8. Cross-tenant object IDs denied after an otherwise valid upload.
+9. Download headers use verified type and safe disposition.
+10. Partial uploads and failed parsing leave no public object or orphaned temporary file.
+
+Inspect storage state after each failure. A safe error response does not prove the object was not written.
+
+## What automation can and cannot prove
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help inventory upload types, limits, quarantine, and delivery rules. It does not accept or analyze a file.
+
+Static review can flag original filenames used as paths or public-directory writes. Integration tests can exercise known fixtures. Antivirus can identify supported known threats. None proves a file is harmless, every parser is safe, or downstream AI processing cannot be manipulated.
+
+The related [API input validation guide](/blog/input-validation-ai-generated-api) covers the structured fields around multipart requests. File bytes need the specialized pipeline described here.
+
+## Sources
+
+- [OWASP: File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)
+- [MITRE CWE-434: Unrestricted Upload of File with Dangerous Type](https://cwe.mitre.org/data/definitions/434.html)
+- [OWASP ASVS 5.0: File Upload and Content](https://cornucopia.owasp.org/taxonomy/asvs-5.0/05-file-handling/02-file-upload-and-content)
+- [MDN: Content-Disposition](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Disposition)

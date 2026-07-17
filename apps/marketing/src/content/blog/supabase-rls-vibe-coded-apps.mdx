@@ -1,0 +1,145 @@
+---
+title: "Supabase RLS for Vibe-Coded Apps"
+description: "Build and test Supabase row-level security with precise grants, command policies, and two-account checks before release."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - verification
+draft: false
+heroImage: access-boundary-01
+faq:
+  - q: "Does every Supabase table need RLS?"
+    a: "Every table exposed through the Supabase Data API needs RLS. Exposed views must preserve the underlying RLS boundary. If data is intentionally public, grant it through an explicit public policy. Otherwise remove the table or view from the exposed API schema."
+  - q: "Is a Supabase publishable key a secret?"
+    a: "No. Publishable keys, and the legacy anon key, are designed for client use. Their safety depends on grants and row-level policies. Secret keys and the legacy service_role key belong only on trusted servers."
+  - q: "Why does service_role bypass RLS?"
+    a: "Supabase gives the service_role elevated database privileges for trusted backend work. Requests made with that role can bypass row-level policies, so exposing it to a browser defeats the boundary those policies provide."
+---
+
+**Direct answer:** Secure a Supabase-backed app by treating grants and row-level security as separate controls. Enable RLS on every exposed table, grant only the commands each role needs, write command-specific policies, and test each operation with two ordinary accounts. Keep secret and legacy `service_role` keys on trusted servers because they can bypass RLS.
+
+Supabase makes browser-to-database access convenient. That convenience changes where authorization must live. A publishable key identifies the project, but it does not decide which rows a signed-in user may read or change. PostgreSQL grants decide whether a role may attempt an operation. Row-level security decides which rows that operation may touch.
+
+The broader [vibe coding security guide](/blog/vibe-coding-security-guide) puts this database boundary beside authentication, server authorization, dependency review, and release evidence. RLS matters, but it is one part of the system.
+
+## The vulnerable pattern: RLS as a checkbox
+
+**Vulnerable pattern. Do not ship this policy.**
+
+```sql
+alter table public.projects enable row level security;
+
+create policy "authenticated users can update projects"
+on public.projects
+for update
+to authenticated
+using (true)
+with check (true);
+```
+
+RLS is enabled, yet the policy allows any authenticated user to update every project row. The policy has converted PostgreSQL's default deny into broad access. A similar failure happens when a table has a sensible `SELECT` policy but an unrestricted `UPDATE` or `DELETE` policy.
+
+Another common gap sits outside the policy itself. A migration may grant `INSERT`, `UPDATE`, and `DELETE` to `authenticated` even when the app only needs reads. RLS can narrow those commands, but an unnecessary grant creates more policy surface and more ways to make a mistake later.
+
+## Why generated code misses the enforcement chain
+
+An AI coding tool can produce a plausible policy from a short request such as "users should access their own projects." It usually sees the table definition and the happy-path query. It may not know that membership is stored in another table, that workspace ownership can change, or that a background process uses an elevated role.
+
+Generated migrations also tend to optimize for a successful demo. `USING (true)` makes an update work immediately. A broad policy can look like a fix when the visible symptom is a denied request. The app begins working, while the tenant boundary quietly disappears.
+
+The full chain is easy to blur:
+
+- Data API exposure determines whether a schema is reachable through Supabase's API.
+- PostgreSQL grants determine which commands the `anon` and `authenticated` roles may invoke.
+- RLS policies filter rows for each command.
+- Trusted server credentials may bypass those policies.
+
+Review all four. Checking only the dashboard's RLS badge is not enough.
+
+## Write policies around ownership and command
+
+Suppose each project has an immutable `owner_id` that matches the authenticated Supabase user. A minimal ownership design can be explicit about reads and updates.
+
+```sql
+alter table public.projects enable row level security;
+
+revoke all on public.projects from anon;
+grant select, update on public.projects to authenticated;
+
+create policy "owners can read projects"
+on public.projects
+for select
+to authenticated
+using (
+  auth.uid() is not null
+  and auth.uid() = owner_id
+);
+
+create policy "owners can update projects"
+on public.projects
+for update
+to authenticated
+using (
+  auth.uid() is not null
+  and auth.uid() = owner_id
+)
+with check (
+  auth.uid() is not null
+  and auth.uid() = owner_id
+);
+```
+
+`USING` controls which existing rows are visible or eligible for the command. `WITH CHECK` controls whether a row produced by an insert or update satisfies the policy. Both matter on an update. Without the second condition, a policy may let a user move a row into an ownership state they should not control.
+
+This example is deliberately narrow. Real membership models usually need a join against a membership table, a stable server-defined tenant claim, or a security-definer function designed with care. PostgreSQL policies are permissive by default, so multiple applicable permissive policies combine with `OR`. Adding a second broad policy can expand access beyond the first one.
+
+Table owners normally bypass RLS. Superusers and roles with `BYPASSRLS` do too. `FORCE ROW LEVEL SECURITY` changes owner behavior, but it does not constrain superusers or `BYPASSRLS` roles. Test through the same ordinary roles used by the application, not only through an administrative SQL console.
+
+## Test with two ordinary accounts
+
+Use a local or dedicated test project. Create Account A and Account B, then create one project row for each. Do not run these checks against another person's system or an unapproved production environment.
+
+For both accounts, exercise every supported command:
+
+1. Account A can read its row and cannot read Account B's row.
+2. Account A cannot insert a row owned by Account B.
+3. Account A cannot update Account B's row.
+4. Account A cannot change its own row's `owner_id` to Account B.
+5. Account A cannot delete Account B's row if deletes are supported.
+6. An anonymous request receives only the deliberately public data, if any.
+
+Test through the Data API with a publishable key and each user's access token. Then test server jobs separately. A job using a secret key or legacy `service_role` credential may bypass RLS, so its queries need a server-owned tenant predicate and their own negative tests.
+
+Record the role, operation, expected outcome, and observed outcome. A passing read test says nothing about update behavior. PostgreSQL requires a matching `SELECT` policy for updates to work as expected, which can otherwise make a broken test look like a secure denial.
+
+## Edge cases that deserve a separate test
+
+Views need attention because their execution context can bypass underlying table policies. Supabase documents options for security-invoker views in supported PostgreSQL versions. Review every view exposed through the API rather than assuming the base table policy carries through.
+
+Intentionally public data still needs an explicit boundary. For a table that anyone may read, create a narrowly named `SELECT` policy for the `anon` role and do not grant write commands unless the product requires them. If a table or view exists only for trusted backend work, remove it from the exposed API schema instead of leaving public access ambiguous. For an exposed view, verify that its execution mode preserves the underlying table policies and test it through the same public role used by the client. A public read policy on one object says nothing about related tables or functions.
+
+Functions can create a similar boundary. A security-definer function runs with its owner's privileges. Keep its search path controlled, expose only the intended arguments, and authorize inside the function where needed.
+
+Membership changes are another sharp edge. If a user loses workspace membership, their next request should lose access. Long-lived claims, cached membership, and background jobs can delay that effect unless the design has an explicit revocation path.
+
+Finally, distinguish Supabase key types. Supabase's current [API-key documentation](https://supabase.com/docs/guides/getting-started/api-keys) uses publishable and secret keys while still supporting legacy `anon` and `service_role` JWT keys. Publishable and `anon` keys may appear in a browser. Secret and `service_role` keys must not.
+
+Review delete behavior even when the interface has no delete button. An old API client or direct request can still invoke a granted command. If the product never deletes projects through the Data API, revoke that grant instead of relying on the UI to keep the route quiet.
+
+## What automated review can and cannot prove
+
+The browser-local [Supabase RLS checker](/tools/supabase-rls-checker) can flag risky patterns in SQL you choose to paste, such as an exposed table without an obvious policy or a policy with a broad condition. It does not upload the SQL.
+
+That review cannot inspect the policies currently deployed in Supabase, effective grants, view behavior, function privileges, runtime identity claims, or the results of two-account requests. It also cannot prove that every application path uses the expected role. Treat its output as a review prompt, not a security verdict.
+
+For a stack-wide boundary, continue with [preventing cross-tenant data leaks](/blog/multi-tenant-data-isolation). That guide covers queues, caches, object storage, and server context that PostgreSQL RLS cannot reach.
+
+## Sources
+
+- [Supabase: Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
+- [Supabase: Securing your API](https://supabase.com/docs/guides/api/securing-your-api)
+- [Supabase: Understanding API keys](https://supabase.com/docs/guides/getting-started/api-keys)
+- [PostgreSQL: Row Security Policies](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
+- [OWASP API Security: Broken Object Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)

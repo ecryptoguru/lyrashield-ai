@@ -1,0 +1,171 @@
+---
+title: "SQL Injection in AI-Generated Code"
+description: "Replace interpolated SQL values with bound parameters, map dynamic identifiers from allowlists, and test query builders safely."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: false
+heroImage: web-execution-01
+faq:
+  - q: "Does using an ORM prevent SQL injection?"
+    a: "ORM query builders usually bind values safely, but raw-query escapes, string-built filters, and unsafe identifier helpers can reintroduce injection. Review every path that constructs SQL text."
+  - q: "Are stored procedures immune to SQL injection?"
+    a: "No. A stored procedure that concatenates untrusted input into dynamic SQL has the same interpreter boundary. Use bound parameters and allowlisted identifiers inside procedures too."
+  - q: "How should an API handle dynamic sort columns?"
+    a: "Map a small public sort name to a fixed SQL identifier in code. Do not paste the request value into SQL or assume a normal value-binding placeholder can represent a column name."
+---
+
+**Direct answer:** Prevent SQL injection by keeping SQL structure fixed and passing untrusted values through bound parameters. ORM query builders are safe only when used through their parameterized APIs. When a request chooses a column, table, or sort direction, map that choice to a small allowlist of fixed identifiers instead of inserting request text into SQL.
+
+SQL injection appears when data crosses into SQL syntax. A database cannot preserve the distinction if application code builds one text string from trusted commands and untrusted values.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats this as an interpreter boundary. Request validation helps reject malformed input, but parameterization is the control that keeps ordinary values from becoming SQL structure.
+
+## The vulnerable pattern: raw interpolation
+
+**Vulnerable pattern. Use only an isolated test database.**
+
+```ts
+const query = `select id, email from users where email = '${request.email}'`
+const rows = await database.raw(query)
+```
+
+The request value becomes part of the SQL source. Quoting or escaping by hand is fragile because database dialects, encodings, and execution context differ.
+
+An ORM does not repair the raw string. Many ORMs offer safe builders and clearly marked raw-query methods. Generated code often drops to raw SQL for search, reporting, or performance and forgets the binding API.
+
+## Why generated code falls back to strings
+
+AI tools optimize for recognizable snippets. Template literals are concise and can express a complete query without learning a library's parameter syntax. A happy-path input works, so the result looks finished.
+
+Dynamic identifiers make the problem harder. A prompt such as "allow sorting by any visible column" cannot be solved by binding the column name as an ordinary value. The generator may interpolate it because the prepared-statement placeholder produces a syntax error.
+
+Partial fixes can mislead. Sanitizing quotes, applying a regular expression, or validating that an input is an email does not make string-built SQL safe. A future accepted format can reopen the path. The query API should preserve structure independently of the value's shape.
+
+Second-order injection is another blind spot. An application safely stores a value, then later concatenates that stored value into an administrative query. The first write is parameterized, while the later interpreter boundary is not.
+
+## Bind every ordinary value
+
+Use the database driver's prepared or parameterized execution API. PostgreSQL's libpq documentation describes sending parameter values separately from command text. Most maintained drivers and ORMs expose the same distinction.
+
+```ts
+const rows = await database.query("select id, email from users where email = $1", [request.email])
+```
+
+The placeholder syntax varies by driver. Use its documented API rather than inventing substitution. Bind values for equality, ranges, search terms, pagination, tenant IDs, and values used in inserts or updates.
+
+Query builders can provide the boundary without raw SQL:
+
+```ts
+const user = await db.user.findFirst({
+  where: {
+    email: request.email,
+    workspaceId: context.workspaceId,
+  },
+  select: { id: true, email: true },
+})
+```
+
+Keep authorization predicates such as `workspaceId` in the same scoped query. Parameterization prevents injection, but it does not decide which rows a valid caller may access.
+
+## Map dynamic identifiers
+
+SQL parameters represent values, not arbitrary grammar. Column names, table names, operators, and sort directions often need a fixed mapping.
+
+```ts
+const sortColumns = {
+  created: "created_at",
+  email: "email",
+} as const
+
+const sortDirections = {
+  ascending: "asc",
+  descending: "desc",
+} as const
+
+const sortInput = object({
+  sort: enumValue(["created", "email"]),
+  direction: enumValue(["ascending", "descending"]),
+})
+  .strict()
+  .parse(request)
+
+const column = sortColumns[sortInput.sort]
+const direction = sortDirections[sortInput.direction]
+
+const query = `select id, email from users order by ${column} ${direction}`
+```
+
+The SQL text still uses interpolation, but both inserted fragments come from fixed application constants. The request first passes through an explicit enum and never indexes the map with an arbitrary property such as `constructor` or `__proto__`.
+
+In plain JavaScript without a schema enum, check membership with `Object.hasOwn()` before indexing or use a null-prototype map. A truthy lookup alone is not an own-key check.
+
+Prefer a query builder's safe identifier API when available. Confirm that the API quotes identifiers rather than treating them as values. Do not accept a raw field name and merely wrap it in quotation marks.
+
+If the product supports user-defined reports, build a constrained query model instead of accepting SQL. Map every field, operator, aggregation, and relation to a reviewed internal representation.
+
+## Stored procedures and raw helpers
+
+Stored procedures can reduce exposed operations and centralize privilege, but they are not automatically safe. A procedure that constructs dynamic SQL from concatenated arguments can be injectable. Bind values inside dynamic execution and map identifiers from fixed choices.
+
+Review migrations and administrative scripts too. They often process imported filenames, tenant labels, or configuration values and run with broader database privileges than the web application. A one-time script can still cross the interpreter boundary. Keep command structure fixed, bind values through the migration tool where possible, and reject any identifier that is not selected from trusted configuration.
+
+Review ORM methods whose names include `raw`, `unsafe`, `literal`, or similar escape hatches. Tagged-template APIs may bind interpolated values safely, while a nearly identical untagged string does not. Confirm the specific library contract.
+
+Avoid exposing a general raw-query endpoint for debugging. A role check does not make arbitrary SQL safe, and a compromised admin credential would inherit broad database capability.
+
+## Add least-privilege database roles
+
+The application connection should have only the commands and schemas it needs. A read-only reporting worker does not need table creation or user administration. Separate migration credentials from runtime credentials.
+
+Least privilege limits impact when query construction fails, but it does not replace parameterization. An injected read-only query can still disclose every row the role may read. Row-level policy and tenant predicates remain separate access controls.
+
+Do not include database errors in public responses. Detailed syntax messages can expose table and column names. Log a bounded diagnostic identifier and keep full server errors in restricted operational logs with sensitive values redacted.
+
+## Verify safely with an isolated database
+
+Use a local database populated only with synthetic fixtures. Test the query-building function without sending payloads to a real or unpatched system.
+
+Include:
+
+1. Normal values containing apostrophes and Unicode data return the intended record through binding.
+2. Empty, long, and unexpected values follow the request schema without changing SQL structure.
+3. Unknown sort keys and directions are rejected before query execution.
+4. Every raw-query call uses the driver's binding or safe identifier API.
+5. A stored value containing SQL punctuation remains data when reused in later queries.
+6. Runtime roles cannot perform migration or administrative commands.
+7. Public errors omit SQL text, schema names, and bound values.
+
+Inspect query logs in the test environment carefully. Some drivers log interpolated values, which can leak passwords, tokens, or personal data even when the query itself is parameterized.
+
+Keep regression tests close to each query helper. A broad scanner can find obvious interpolation, but a local test documents which fragments are fixed and which are bound.
+
+Test transaction helpers that assemble several statements. Parameterization applies to each statement independently, and a safe first query does not protect a later concatenated update. Avoid accepting a semicolon-separated query string from application input. If the driver supports multi-statement execution, disable it unless the runtime genuinely needs it and the reviewed query remains fixed.
+
+## Edge cases beyond a single statement
+
+Bulk filters can create unsafe comma-separated lists. Use the driver's array binding or generate a fixed number of placeholders while keeping each item separate.
+
+Full-text search and pattern matching still need bound values. Escaping wildcard characters may be required for product semantics, but it is not a substitute for binding.
+
+Database names selected for multi-tenant routing are identifiers. Resolve them from trusted tenant configuration, never from a request value. Prefer connection pools keyed by server-owned configuration.
+
+Search filters may treat `%` and `_` as wildcards even when they are safely bound. Escape or expose that behavior according to product semantics. This is not SQL injection, but tests should distinguish an unexpectedly broad match from a change in SQL structure.
+
+The related [API input validation guide](/blog/input-validation-ai-generated-api) covers request shapes, lengths, unknown fields, and business invariants. Those checks work beside parameterization rather than replacing it.
+
+## What automation can and cannot prove
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can prompt a review of raw queries and database roles. It does not inspect a repository or execute SQL.
+
+Static analysis can find string interpolation near query calls. Runtime tests can observe known builders. Neither proves that every stored procedure, generated report path, plugin, or future raw-query escape is safe. A clean scan is bounded evidence, not a database-security verdict.
+
+## Sources
+
+- [OWASP: SQL Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html)
+- [MITRE CWE-89: SQL Injection](https://cwe.mitre.org/data/definitions/89.html)
+- [PostgreSQL: Parameterized command execution](https://www.postgresql.org/docs/current/libpq-exec.html#LIBPQ-PQEXECPARAMS)
+- [OWASP: Query Parameterization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html)

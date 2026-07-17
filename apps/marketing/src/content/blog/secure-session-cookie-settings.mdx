@@ -1,0 +1,118 @@
+---
+title: "Secure Session Cookies"
+description: "Configure host-scoped session cookies, choose SameSite deliberately, rotate identifiers, and test server-side expiry and revocation."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - web-security
+  - verification
+draft: false
+heroImage: access-boundary-05
+faq:
+  - q: "Should a session cookie use SameSite=Lax or Strict?"
+    a: "Strict sends less cross-site traffic but can interrupt legitimate entry flows. Lax often supports ordinary top-level navigation while reducing many cross-site requests. Choose from the product flow and keep explicit CSRF defenses where needed."
+  - q: "Should a session cookie set Domain?"
+    a: "Omit Domain unless sibling subdomains genuinely need the cookie. Omission creates a host-only cookie. A __Host- cookie also requires Secure, Path=/, and no Domain attribute."
+  - q: "Do JWT session cookies remove the need for server-side controls?"
+    a: "No. The server still needs signature and claim validation, rotation, logout behavior, key rollover, privilege-change handling, and a revocation or short-expiry strategy appropriate to the risk."
+---
+
+**Direct answer:** Set a session cookie over HTTPS with `Secure`, `HttpOnly`, the narrowest useful host and path scope, and a deliberate `SameSite` value. Prefer a `__Host-` name for host-bound sessions. Keep the identifier opaque, rotate it after authentication and privilege changes, expire it both in the browser and on the server, and support immediate invalidation.
+
+A cookie is a transport container for session state. Its attributes control when a browser stores, exposes, and sends it. They do not decide whether the server accepts the session or whether the account still has the same privileges.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats session handling as a chain: cookie scope, server validation, rotation, revocation, and authorization all matter.
+
+## The vulnerable pattern: a broad, script-readable session
+
+**Vulnerable pattern. Do not ship a long-lived session with broad scope.**
+
+```http
+Set-Cookie: session=user-42-admin; Domain=.invalid.test; Path=/; Max-Age=31536000
+```
+
+The value exposes identity and role, JavaScript can read it because `HttpOnly` is absent, and every subdomain receives it. The browser may send it over cleartext HTTP because `Secure` is absent. A one-year browser lifetime says nothing about server-side expiry.
+
+Even a random value needs a protected server record. If the database treats it as valid forever, adding cookie attributes does not create revocation.
+
+## Why generated cookie settings drift
+
+Generated authentication code often starts in local HTTP development. `Secure` is disabled to make the cookie appear, then the setting survives production. A cross-origin frontend leads to `SameSite=None` without checking whether that architecture is necessary or whether `Secure` accompanies it.
+
+Another shortcut sets `Domain` to make several subdomains work. That expands where the browser sends the credential and allows a weaker sibling application to affect the session boundary. Broad path scope and long expiry are chosen for convenience rather than from a threat model.
+
+Cookie flags can also create false confidence. `HttpOnly` prevents ordinary script APIs from reading the cookie, but an XSS flaw can still issue authenticated requests from the user's browser. `SameSite` reduces selected cross-site requests; it is not a universal replacement for CSRF tokens, origin checks, or reauthentication.
+
+## Start with a host-bound cookie
+
+A typical server-side session can use a cookie like this:
+
+```http
+Set-Cookie: __Host-session=<opaque-random-id>; Secure; HttpOnly; Path=/; SameSite=Lax; Max-Age=28800
+```
+
+The current [MDN Set-Cookie reference](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie) documents that `__Host-` cookies require `Secure`, require `Path=/`, and cannot include a `Domain` attribute. Supporting browsers therefore enforce a host-only combination.
+
+Use a cryptographically random opaque identifier with enough entropy. Do not put role, email, workspace, provider token, or personal data in the value. Store only a keyed hash of the identifier server-side when practical, so a direct database read does not immediately expose live bearer tokens.
+
+`Secure` restricts sending to secure channels, subject to browser handling for local development. `HttpOnly` withholds the cookie from JavaScript cookie APIs. [RFC 6265](https://www.rfc-editor.org/rfc/rfc6265.html) defines these core attributes and their processing, while also making clear that Path is not an integrity boundary between applications on one host.
+
+## Choose SameSite from the actual flow
+
+`SameSite=Strict` provides the narrowest cross-site sending behavior but can make a user appear signed out when arriving from an external link. `Lax` commonly permits top-level safe navigation while withholding the cookie from many cross-site subrequests and unsafe methods. Browser defaults can change, so set the intended value explicitly.
+
+Use `SameSite=None` only when the session must be sent in a cross-site context, such as a reviewed embedded application. MDN documents that `None` requires `Secure`. That setting increases the importance of explicit CSRF controls and a narrow allowed-origin design.
+
+OAuth redirects and federated login need testing under the chosen value. Do not weaken every session cookie because one callback is misconfigured. State and PKCE protect the login transaction, while the application session can often remain Lax.
+
+The [CSRF guide](/blog/csrf-cookie-auth-ai-apps) covers state-changing request defenses. SameSite is one layer in that design.
+
+## Align browser and server lifetime
+
+`Max-Age` or `Expires` controls how long the browser retains the cookie. The server must separately enforce idle and absolute expiry. If the browser retains a token for eight hours but the database accepts it for thirty days, the server has chosen thirty days.
+
+Prefer `Max-Age` when the framework supports it consistently, and still test the emitted header. Browser and server clocks can differ, proxies can rewrite dates, and old clients may interpret expiry differently. The server's own timestamps remain the authority for acceptance.
+
+Record creation, last-used time where policy requires it, absolute expiry, account, and current authorization context. Avoid extending the absolute lifetime indefinitely on every request. Clean up expired server records.
+
+Rotate the session identifier after login, MFA completion, password change, privilege elevation, tenant switch where relevant, and account recovery. Destroy the old identifier atomically. Rotation prevents a pre-authentication token from surviving into a higher-privilege session.
+
+Logout should invalidate the server record before expiring the browser cookie. Account disablement, membership removal, credential reset, and incident response need a revocation path across active sessions. A stolen cookie may still be presented after the browser user logs out elsewhere.
+
+Expire the exact cookie variant that was set. The deletion response needs the same name, Domain choice, and Path scope, with an immediate expiry. Otherwise the browser can retain a duplicate that the server continues receiving. Test migrations from old names and scopes rather than assuming one empty `Set-Cookie` removes them all.
+
+For signed JWT cookies, keep algorithms, issuer, audience, expiry, and key selection strict. Decide how privilege removal reaches tokens that have not expired. Short lifetimes and a server-side revocation or session-version check are common tradeoffs, not automatic guarantees.
+
+## Scope Domain and Path narrowly
+
+Omit `Domain` for a host-only cookie. If multiple subdomains need shared authentication, review every participating host, its deployment ownership, and its ability to set or receive related cookies. A separate token exchange may be safer than one domain-wide bearer credential.
+
+Use the narrowest workable `Path`, although `__Host-` requires `/`. Path controls sending, not strong isolation from other code on the same host. Do not host an untrusted application beside an authentication service and rely on cookie Path for separation.
+
+Avoid duplicate cookies with the same name at different domain or path scopes. Server frameworks can select an unexpected value. During migration, expire old variants explicitly.
+
+Set cache policy around authentication responses. Shared caches should not store pages or redirects containing a user's `Set-Cookie` or private content unless the architecture has a reviewed cache key and privacy model. Confirm the CDN does not strip, combine, or replay session headers across users.
+
+## Verify cookie and server behavior
+
+Use a production-shaped HTTPS environment and owned accounts. Inspect every `Set-Cookie` response after login, renewal, MFA, role change, and logout. Confirm `Secure`, `HttpOnly`, `SameSite`, Domain omission, Path, and lifetime.
+
+Try the old session identifier after rotation and logout. Expire the server record while leaving the browser cookie intact and expect denial. Remove workspace membership and confirm the next protected operation rechecks authorization.
+
+Test cross-site navigation and state-changing requests from a controlled second origin. Verify subdomain and path behavior without targeting unrelated systems.
+
+The browser-local [JWT and session inspector](/tools/jwt-session-inspector) decodes pasted JWT structure and reviews pasted `Set-Cookie` attributes without uploading them. It cannot verify signatures, query session storage, test rotation, or prove server invalidation.
+
+## What the attributes cannot prove
+
+Header inspection can detect missing attributes and broad scope. Browser tests can show when one build sends a cookie. Server tests can establish selected expiry and revocation behavior.
+
+None proves that every session path rotates correctly or that a stolen active cookie cannot be abused. Record the account state, cookie scope, server expiry, revocation event, and tested authorization operation. Recheck after authentication or domain changes.
+
+## Sources
+
+- [IETF RFC 6265: HTTP State Management Mechanism](https://www.rfc-editor.org/rfc/rfc6265.html)
+- [OWASP: Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
+- [MDN: Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie)

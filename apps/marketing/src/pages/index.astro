@@ -1,20 +1,24 @@
 ---
 import Base from "@layouts/Base.astro"
-import Hero from "@components/landing/Hero.astro"
+import PremiumHero from "@components/landing/PremiumHero.astro"
 import HomeLiteScan from "@components/landing/HomeLiteScan.astro"
-import Problem from "@components/landing/Problem.astro"
 import AssuranceRecord from "@components/landing/AssuranceRecord.astro"
-import Loop from "@components/landing/Loop.astro"
+import EvidenceWorld from "@components/landing/EvidenceWorld.astro"
 import WhereYouWork from "@components/landing/WhereYouWork.astro"
 import TwoDepths from "@components/landing/TwoDepths.astro"
 import FreeToolsPreview from "@components/landing/FreeToolsPreview.astro"
 import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
+import { createMotionMediaManifest } from "../lib/motion-manifest"
+import "@fontsource-variable/bricolage-grotesque/index.css"
 
 const siteUrl = Astro.site?.toString() || "http://localhost:4321"
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const pageUrl = new URL("/", siteOrigin).toString()
 const xUrl = __MARKETING_X_URL__ || undefined
+const mediaUrl = import.meta.env.PUBLIC_MEDIA_URL || "/media-local"
+const renderHash = import.meta.env.PUBLIC_MOTION_RENDER_HASH || "local"
+const motionManifest = createMotionMediaManifest(mediaUrl, renderHash)
 
 const description =
   "LyraShield AI records what was tested, separates detected risks from retest-confirmed fixes, and creates an assurance report for AI-built apps."
@@ -54,6 +58,14 @@ const jsonLd = [
     name: "LyraShield AI",
     url: siteUrl,
     logo: new URL("/favicon.svg", siteOrigin).toString(),
+    description,
+    knowsAbout: [
+      "AI application security",
+      "release assurance",
+      "security evidence",
+      "independent finding verification",
+      "security retesting",
+    ],
     ...(xUrl ? { sameAs: [xUrl] } : {}),
   },
   {
@@ -62,21 +74,38 @@ const jsonLd = [
     "@id": `${siteOrigin}/#website`,
     name: "LyraShield AI",
     url: siteUrl,
+    inLanguage: "en-US",
     publisher: { "@id": `${siteOrigin}/#organization` },
   },
   {
     "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": `${pageUrl}#webpage`,
+    name: "Release assurance for AI-built apps",
+    description,
+    url: pageUrl,
+    inLanguage: "en-US",
+    dateModified: "2026-07-17",
+    isPartOf: { "@id": `${siteOrigin}/#website` },
+    about: { "@id": `${pageUrl}#application` },
+    mainEntity: { "@id": `${pageUrl}#faq` },
+  },
+  {
+    "@context": "https://schema.org",
     "@type": "SoftwareApplication",
+    "@id": `${pageUrl}#application`,
     name: "LyraShield AI",
     applicationCategory: "SecurityApplication",
     operatingSystem: "Web",
     description,
     url: pageUrl,
     provider: { "@id": `${siteOrigin}/#organization` },
+    isPartOf: { "@id": `${siteOrigin}/#website` },
   },
   {
     "@context": "https://schema.org",
     "@type": "FAQPage",
+    "@id": `${pageUrl}#faq`,
     mainEntity: faqItems.map((item) => ({
       "@type": "Question",
       name: item.q,
@@ -95,11 +124,10 @@ const jsonLd = [
   canonical={pageUrl}
   jsonLd={jsonLd}
 >
-  <Hero />
+  <PremiumHero />
   <HomeLiteScan />
-  <Problem />
+  <EvidenceWorld manifest={motionManifest} />
   <AssuranceRecord />
-  <Loop />
   <TwoDepths />
   <FreeToolsPreview />
   <WhereYouWork />

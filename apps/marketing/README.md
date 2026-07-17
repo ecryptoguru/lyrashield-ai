@@ -62,6 +62,35 @@ docker compose --profile marketing down
 
 This Docker target proves the generated static pages and assets. The Worker-backed preview above separately proves Wrangler routing, D1 migrations, and waitlist API behavior because Astro's Cloudflare prerender subprocess is not reliable inside Docker Desktop's VM.
 
+## Authority blog local release candidate
+
+The current authority-blog work is local branch state only. The release manifest maps exactly 100 locally approved articles and a 36-image source-artwork library; all entries are `draft: false` for local release testing. These routes and assets are not production truth, and this work does not authorize a Cloudflare change or deployment.
+
+Validate one planned release at a time:
+
+```bash
+pnpm --filter @lyrashield/marketing blog:validate -- --release batch-1
+pnpm --filter @lyrashield/marketing blog:validate:images -- --release batch-1
+pnpm --filter @lyrashield/marketing blog:check-links -- --release batch-1
+```
+
+The program-completeness test requires all 100 mapped articles to be published. It must pass before the local release candidate can be presented for final approval.
+
+To inspect the built release candidate, build and start the production-shaped Worker preview in one terminal:
+
+```bash
+pnpm --filter @lyrashield/marketing build
+pnpm --filter @lyrashield/marketing preview
+```
+
+Then crawl it from another terminal:
+
+```bash
+node apps/marketing/scripts/crawl-built-blog.mjs --origin http://localhost:8787
+```
+
+The crawler validates local blog URLs and sitemap membership, 200 responses, unique canonicals, titles and descriptions, one H1 and main landmark, internal anchors, images, parseable JSON-LD, draft exclusion, RSS membership, and tag-archive membership. Error reports strip query strings and fragments. The complete release gate, final local approval, a focused PR, green CI, guarded deployment, and live verification are still required before any production claim.
+
 ## Manual deploy (Cloudflare Workers)
 
 1. Run migrations to create the D1 database:

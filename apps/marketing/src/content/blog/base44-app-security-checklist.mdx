@@ -1,0 +1,141 @@
+---
+title: "Secure a Base44 App Before Launch"
+description: "Separate Base44 app visibility from data permissions, review table access and backend secrets, then verify the deployed app with distinct accounts."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - access-control
+  - verification
+draft: false
+heroImage: supply-chain-04
+faq:
+  - q: "Is Base44 app visibility the same as data permission?"
+    a: "No. Visibility determines who can open the app, while data permissions determine what an allowed user can read, create, update, or delete. Review and test both boundaries."
+  - q: "Is a Base44 administrator the same as an editor?"
+    a: "No. App roles such as Admin and User affect runtime permissions, while editor collaborators can modify the app in the workspace. Do not use editor access as proof of an in-app role."
+  - q: "Can Base44 permissions protect individual fields?"
+    a: "It depends on the Base44 surface. The app-builder Security UI documents entity-level CRUD rules, while the developer backend supports field-level security in entity schemas. If your workflow cannot define and deploy those schema rules, separate sensitive fields into a restricted entity or return them through an authorized backend function."
+  - q: "What does a Base44 security scan not prove?"
+    a: "It does not prove complete business authorization, field confidentiality, third-party configuration, or correct deployed behavior. It reports covered checks for a project state and must be followed by review and negative testing."
+---
+
+**Direct answer:** Before launching a Base44 app, narrow who can open it, decide whether login is required, review create, read, update, and delete permissions for every entity, move secrets and privileged operations into backend functions, refresh the security scan, and test the deployed app with signed-out, ordinary-user, and administrator accounts using separate fake records.
+
+_Base44 visibility, role, permission, and scan behavior was reviewed against official documentation on July 17, 2026. Recheck the current Security and access settings before release._
+
+Base44 has several access boundaries that look similar in the editor but answer different questions. App visibility controls who can reach the app. Authentication establishes identity. The Admin and User roles can participate in entity permissions. Editor collaborators can change the project itself. None of these automatically decides which fields a runtime user may see. Base44's app-builder controls and developer backend also expose different security capabilities, so identify which project surface you are actually deploying before choosing a field-confidentiality design.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) recommends writing these boundaries down before testing. For Base44, a small access matrix is more useful than a broad request to "make it secure."
+
+## Build an access matrix from actual app roles
+
+List each sensitive entity and operation. Then mark the expected result for four identities: signed out, ordinary User, Admin, and editor collaborator acting as a runtime user.
+
+| Entity and action | Signed out | User on own record  | User on another record | Admin                 |
+| ----------------- | ---------- | ------------------- | ---------------------- | --------------------- |
+| Read profile      | Deny       | Allow               | Deny                   | Defined by policy     |
+| Update invoice    | Deny       | Defined by workflow | Deny                   | Defined by policy     |
+| Delete workspace  | Deny       | Deny                | Deny                   | Allow with safeguards |
+
+Do not assume that an editor is an Admin inside the published app. Base44 documents editor access and app roles as different concepts. Test runtime behavior with actual accounts assigned the intended roles.
+
+## Why a filtered screen can still expose a table
+
+Suppose an AI-generated support app stores customer contact details, private notes, and status in one `Tickets` entity. The interface filters tickets to the current user, but the entity permission allows all authenticated users to read the table.
+
+**Vulnerable pattern. The UI filter is mistaken for data authorization.**
+
+```ts
+const tickets = await base44.entities.Tickets.filter({
+  created_by: currentUser.email,
+})
+```
+
+The filter makes the expected screen look correct. It does not repair a broader entity permission. A user may call the entity API differently or reach a second generated view that omits the filter.
+
+AI code commonly misses this boundary because the prompt describes the page, not the adversarial request. Generated logic optimizes for "show my tickets" and stops when the list appears correct. It may not ask whether another authenticated account can query the same entity without that client filter.
+
+## Match field protection to the Base44 surface
+
+Use Base44's entity permissions to define which roles and ownership relationships may create, read, update, or delete records. Prefer the narrowest rule that supports the workflow. Verify that the published app uses the current rule set, not an earlier state.
+
+The app-builder Security UI currently documents entity-level create, read, update, and delete rules. It does not expose a field-level rule editor in that workflow. Base44's separate developer backend documentation does support field-level security inside entity schemas, using per-field `read` and `write` rules that are deployed with the schema.
+
+Do not collapse those two surfaces into a blanket claim that Base44 either always has or never has field-level security. If you use the developer backend, review and deploy the field rules, then test the resulting reads and writes with distinct roles. If you work only through the builder UI, or cannot verify that the deployed schema includes those rules, split confidential data into a more restricted entity or expose a minimal result through an authorized backend function.
+
+Split data by confidentiality:
+
+```text
+TicketPublic
+  id, requester_id, subject, status
+
+TicketInternal
+  ticket_id, risk_notes, escalation_owner, provider_reference
+```
+
+Give ordinary users access only to `TicketPublic` rows they are allowed to see. Keep `TicketInternal` restricted, and expose a minimal authorized backend function when the UI needs a derived result. This pattern needs transaction handling and deletion rules so the two entities do not drift. It also needs a deliberate decision about administrators, support staff, exports, and audit retention.
+
+Do not copy a role or owner identifier from request input and treat it as truth. The backend should derive the caller from the authenticated Base44 context and load current permissions before returning protected data.
+
+## Treat visibility and login as separate controls
+
+Base44 currently documents Private, Workspace, and Public visibility options, with some availability depending on the plan. A public app can still require users to log in. Conversely, a page that asks for login can still expose overly broad data after authentication.
+
+Choose the narrowest visibility that fits the release. If the app is for a team or controlled pilot, do not make it public merely to simplify testing. If it must be public, decide which routes are intentionally anonymous and which require authentication.
+
+Test the deployed URL in a fresh signed-out browser. Check the landing route, direct deep links, downloadable files, API calls, and error messages. Then sign in as an ordinary user and repeat direct access to an administrator route. A hidden navigation item is not a denial.
+
+## Keep privileged work in backend functions
+
+Provider keys, email secrets, administrative database access, and trusted decisions belong in backend functions or platform secret storage, not generated frontend code. A browser request can be changed before it reaches the backend.
+
+A sensitive function should:
+
+1. require a verified caller or a provider-specific signature;
+2. parse a bounded input shape;
+3. load the current record and runtime role;
+4. authorize the exact action;
+5. perform the smallest privileged operation;
+6. return only necessary fields;
+7. record a useful audit event without secrets.
+
+For example, an ordinary user may submit a request to change a billing email, but the backend function should load the user's account membership and reject changes to any other account. An Admin path may also require recent authentication or a second approval. Do not put a universal administrative function behind a boolean supplied by the client.
+
+## Use Base44's security scan as a review queue
+
+Base44 provides a security scan in the editor and documents proposed fixes for detected issues. Review the scan after permission, entity, backend function, or visibility changes. If the scan is marked stale, run it again against the current project state.
+
+Inspect each proposal before applying it. A broad permission restriction can break a valid workflow. A generated backend function can preserve the same missing authorization under a different name. Current documentation also describes a Fix All flow, but proposed changes are not proof that the resulting application enforces the intended business rule.
+
+For each accepted change, rerun the specific negative test that originally failed. Record whether the result is detected, fixed in source, or confirmed by a fresh deployed test. Keep those states distinct.
+
+## Let distinct runtime identities challenge the policy
+
+Use a disposable app copy or authorized test environment with fake data.
+
+1. **Signed out:** open every public and copied deep link. Attempt entity reads and backend calls without a session.
+2. **Ordinary User A:** create records and exercise the intended workflow.
+3. **Ordinary User B:** reuse A's record identifiers in read, update, delete, attachment, and export requests. Expect denial.
+4. **Admin:** confirm only the documented administrative actions work. Check that admin responses do not leak secrets or unrelated fields.
+5. **Role change:** downgrade or remove an account, then retry from its existing browser session.
+6. **Visibility change:** verify the exact deployed URL after changing Public, Workspace, Private, or login requirements.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help organize this review. It cannot inspect Base44 permissions, run the platform scan, or verify the live app for you.
+
+The [IDOR guide for AI-built apps](/blog/idor-ai-built-apps) provides a focused method for cross-user checks. The [server-side authorization guide](/blog/server-side-authorization-ai-apis) covers how to design a permission matrix when roles and ownership overlap. The [Lovable launch review](/blog/lovable-app-security-checklist) offers a useful comparison for another generated-app workflow without assuming its controls map directly to Base44.
+
+## Write a bounded release note
+
+A useful release note names the version, deployed URL, visibility, identities, entity operations, and observed denials. It does not say "Base44 security passed" as if one scan covered all business behavior.
+
+This process cannot prove undiscovered routes, field confidentiality inside a broadly readable entity, correct third-party IAM, or behavior after later project changes. Recheck whenever entities, permissions, roles, backend functions, visibility, or integrations change.
+
+## Sources
+
+- [Base44: Security overview](https://docs.base44.com/Setting-up-your-app/security-overview)
+- [Base44: Managing security settings](https://docs.base44.com/Setting-up-your-app/Managing-security-settings)
+- [Base44 developer backend: Entity security](https://docs.base44.com/developers/backend/resources/entities/security)
+- [Base44: Running a security scan](https://docs.base44.com/Setting-up-your-app/running-a-security-scan)
+- [Base44: Managing access](https://docs.base44.com/Setting-up-your-app/Managing-access)
+- [OWASP: Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)

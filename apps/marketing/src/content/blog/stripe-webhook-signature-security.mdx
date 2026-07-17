@@ -1,0 +1,141 @@
+---
+title: "Verify Stripe Webhook Signatures"
+description: "Verify Stripe against the exact raw request body and the correct endpoint secret before parsing events or changing application state."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: false
+heroImage: verification-01
+faq:
+  - q: "Why does parsed JSON fail Stripe signature verification?"
+    a: "Stripe signs the exact request bytes. Parsing and reserializing JSON can change whitespace, key order, or encoding. Capture the raw body before JSON middleware changes it and pass that raw value to Stripe's official verification function."
+  - q: "Can a Stripe publishable key verify webhooks?"
+    a: "No. Verification uses the webhook endpoint signing secret, which starts with whsec_. The publishable key is for client-side Stripe operations and is not the endpoint secret."
+  - q: "Does a valid Stripe signature make processing idempotent?"
+    a: "No. A valid signature authenticates the request body under the endpoint secret. Stripe can retry events and does not guarantee delivery order, so handlers still need duplicate, ordering, concurrency, and entitlement controls."
+---
+
+**Direct answer:** Verify a Stripe webhook before parsing it or changing state. Read the unmodified raw request body, obtain the `Stripe-Signature` header, and call Stripe's official verification function with the signing secret for that exact endpoint. Reject verification failures with a 400 response. Keep Stripe CLI and Dashboard endpoint secrets separate.
+
+A webhook route is public by design. Anyone can send an HTTP request to it. The event object becomes trustworthy only after the application verifies that Stripe signed the exact body with the endpoint secret expected by that deployment.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) treats this check as request authenticity evidence. It is a narrow but necessary claim. A valid signature does not decide which internal user receives an entitlement, whether the event is new, or whether earlier events have arrived.
+
+## The vulnerable pattern: parsing before verification
+
+**Vulnerable pattern. Do not grant access from an unverified JSON body.**
+
+```ts
+app.post("/webhooks/stripe", express.json(), async (req, res) => {
+  if (req.body.type === "invoice.paid") {
+    await enableSubscription(req.body.data.object.customer)
+  }
+
+  return res.sendStatus(200)
+})
+```
+
+The handler accepts any JSON that resembles a Stripe event. It performs the side effect before checking origin or integrity. An API key elsewhere in the application does not authenticate this request.
+
+A subtler failure calls verification after `express.json()` has parsed the body. Stripe signs the original bytes. Parsing and serializing the object again may change whitespace, key order, or encoding, so the signature no longer matches. The current [Stripe signature troubleshooting guide](https://docs.stripe.com/webhooks/signature) explicitly requires the UTF-8 request body without changes.
+
+## Why generated integrations get the body boundary wrong
+
+Most JSON APIs install one body parser globally. A generated Stripe route then looks like every other POST handler and reads `req.body` as an object. The framework has already consumed the stream before the handler asks for raw bytes.
+
+Generated code can also confuse Stripe credentials. A secret API key, publishable key, and webhook endpoint secret have different purposes. Signature verification uses the endpoint secret beginning with `whsec_`. Stripe CLI forwarding prints its own signing secret when `stripe listen` starts. Stripe's current documentation says that secret differs from the one attached to a Dashboard-managed endpoint.
+
+Environment reuse makes the problem worse. A developer copies a CLI secret into production configuration or points a preview deployment at the production endpoint secret. The route either rejects every real event or expands who can produce a valid request for the wrong environment.
+
+## Capture the raw body for this route
+
+Configure raw-body handling before general JSON middleware. The exact code depends on the framework and deployment adapter. The important invariant is that the value passed to Stripe is the original body, not a reconstructed object.
+
+Keep this route limited to `POST` and the expected content type. Those checks reduce accidental traffic, but neither one authenticates Stripe. Signature verification remains the gate before any trusted parsing or side effect.
+
+```ts
+import express from "express"
+import Stripe from "stripe"
+
+const app = express()
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+
+app.post(
+  "/webhooks/stripe",
+  express.raw({ type: "application/json", limit: "512kb" }),
+  async (req, res) => {
+    const signature = req.header("Stripe-Signature")
+    if (!signature) return res.status(400).send("Invalid webhook")
+
+    let event: Stripe.Event
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        signature,
+        process.env.STRIPE_WEBHOOK_SECRET!
+      )
+    } catch {
+      return res.status(400).send("Invalid webhook")
+    }
+
+    await enqueueVerifiedStripeEvent(event)
+    return res.sendStatus(200)
+  }
+)
+
+app.use(express.json({ limit: "256kb" }))
+```
+
+Mounting order matters. If a global JSON parser runs first, `express.raw()` cannot recover the original stream. Other frameworks provide route-specific raw-body settings, request buffers, or webhook helpers. Use the framework's supported mechanism and test the deployed adapter, not only a local Node server.
+
+Bound the body size before buffering it. Keep the public error generic. Log a bounded internal reason and request correlation ID without logging the full event, signature, endpoint secret, customer data, or payment details.
+
+Stripe's [webhook guide](https://docs.stripe.com/webhooks) recommends using an official library to verify the event payload, `Stripe-Signature` header, and endpoint secret. Avoid reimplementing the signing format unless a supported library is unavailable and the protocol implementation receives a dedicated review.
+
+## Use the secret for the exact endpoint
+
+Treat endpoint secrets as deployment configuration. Development CLI forwarding, local fixtures, preview deployments, production account webhooks, Connect webhooks, and organization destinations may have different endpoints and event scopes.
+
+Record which endpoint ID and environment a secret belongs to without storing the secret in documentation. Rotate it through Stripe if it is exposed. A Stripe publishable key cannot verify webhooks. A Stripe API secret key also does not replace the endpoint signing secret.
+
+The verification library checks the timestamp embedded in the signature according to its configured tolerance. Keep server time synchronized. Do not extract a timestamp and write a loose homegrown comparison while skipping the official signature check. If the product changes the library's default tolerance, document the reason and test delayed delivery behavior.
+
+Reject failures before publishing a queue message, updating a database, sending email, or granting access. A dead-letter record containing the unverified body can become another processing path, so store it only if incident requirements justify that risk and the data handling has been reviewed.
+
+## Authenticity is not entitlement or replay protection
+
+After verification, route only event types the application expects. Validate the event object's relevant identifiers and map Stripe customer or subscription records to a server-owned internal account. Do not accept an email address or client-provided metadata as the sole authority for entitlement.
+
+Stripe's current documentation states that live event delivery is retried for up to three days and that event ordering is not guaranteed. A handler must therefore expect duplicate and out-of-order delivery. Store processed event identifiers or use an equivalent idempotent transition. Protect the check and state change from concurrent workers.
+
+The related [idempotency and replay protection guide](/blog/idempotency-replay-protection) covers that state boundary. Signature verification answers whether Stripe signed this body under the endpoint secret. Idempotency answers whether processing the same or competing events changes state more than intended.
+
+If the handler queues work, acknowledge the request only after durable enqueue succeeds. Keep the synchronous path short enough to meet provider delivery behavior. A 200 response before durable acceptance can lose an event. A long synchronous business transaction can time out and invite retries.
+
+## Test with Stripe CLI and negative fixtures
+
+Use Stripe CLI for local forwarding and copy the `whsec_` value printed by `stripe listen` into the local environment only. Send a test event through the CLI and confirm that the raw-body path accepts it. Do not use the Dashboard endpoint secret for that forwarded event.
+
+Then run negative tests. Alter one byte in a captured synthetic body while keeping the signature. Remove the signature header, use a secret from another test endpoint, pass a stale fixture, and send an oversized body. Every failure should occur before enqueue or state change.
+
+Use placeholders and Stripe test mode. Never paste a real endpoint secret into a test fixture, issue, or article. Confirm that logs and error monitoring redact request bodies and signature headers.
+
+Test the actual production-shaped runtime because serverless adapters and middleware ordering can alter body handling. A local Express success does not prove a Worker, Lambda, or framework route preserves the same bytes.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record raw-body handling, secret ownership, and negative tests. It does not receive webhook requests or verify a Stripe signature.
+
+## What automation can and cannot prove
+
+An integration test can prove that a known Stripe test event is accepted and a modified body is rejected. Static checks can flag JSON middleware mounted before a webhook route. Configuration tests can ensure the expected secret is present without printing it.
+
+Those checks cannot prove correct entitlement mapping, event ordering, or idempotency. They also cannot prove that the production Dashboard points to the intended URL unless the provider configuration is inspected. Keep the evidence statement narrow: the tested handler verified the exact request and rejected defined failures.
+
+## Sources
+
+- [Stripe: Receive events in your webhook endpoint](https://docs.stripe.com/webhooks)
+- [Stripe: Resolve webhook signature verification errors](https://docs.stripe.com/webhooks/signature)
+- [Stripe: Test webhook handling with Stripe CLI](https://docs.stripe.com/webhooks#test-webhook)
+- [Stripe: Idempotent requests](https://docs.stripe.com/api/idempotent_requests)

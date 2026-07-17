@@ -1,0 +1,153 @@
+---
+title: "XSS in AI Apps That Render Markdown or Model Output"
+description: "Trace untrusted Markdown and model output through parsing, sanitization, DOM insertion, CSP, and safe local verification."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: false
+heroImage: web-execution-02
+faq:
+  - q: "Is Markdown safe to render by default?"
+    a: "Not automatically. Safety depends on the renderer configuration, raw HTML support, URL handling, extensions, sanitizer, and final DOM sink. Treat rendered output as untrusted HTML until the full pipeline is reviewed."
+  - q: "Does React prevent XSS?"
+    a: "React escapes values rendered through normal JSX text interpolation. Dangerous HTML APIs, unsafe URLs, third-party renderers, and direct DOM sinks can bypass that protection."
+  - q: "Does a Content Security Policy fix unsafe HTML rendering?"
+    a: "No. CSP can reduce impact and block some script execution, but it is defense in depth. Use safe sinks, context-aware encoding, restricted rendering, and maintained sanitization first."
+  - q: "Can model output be trusted because the model generated it?"
+    a: "No. Model output can reproduce user-controlled instructions, retrieved documents, or hostile markup. Treat it as untrusted data at every renderer and browser boundary."
+---
+
+**Direct answer:** Treat Markdown and model output as untrusted data. If rich HTML is unnecessary, render text through a safe text sink. If rich output is required, disable raw HTML where possible, restrict links and extensions, sanitize the generated HTML with a maintained library, and insert only the sanitized result through a reviewed sink. Keep CSP as defense in depth.
+
+Markdown is a syntax, not a security boundary. A renderer turns it into HTML, then the application inserts that HTML into a browser context. Raw HTML support, link handling, plugins, sanitizer configuration, and the final DOM API all affect the result.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) places rendered output beside other interpreter boundaries. Input validation cannot predict every harmful HTML context, and a model does not make user-influenced text trustworthy.
+
+## The vulnerable pattern: model output into innerHTML
+
+**Vulnerable pattern. Use only inert local test strings.**
+
+```ts
+const html = markdownRenderer.render(modelResponse)
+resultElement.innerHTML = html
+```
+
+MDN identifies `innerHTML` as an injection sink. If the renderer preserves raw HTML, dangerous URL schemes, or unsafe attributes, the browser interprets them as markup rather than text.
+
+The model response may contain content from a prompt, uploaded file, retrieval index, support ticket, or external page. Calling it "AI output" does not remove those influences. Stored output can execute later when another user opens a conversation or report.
+
+## Why generated apps trust the rendering pipeline
+
+AI coding tools often know that modern frameworks escape text. They may assume that protection extends through Markdown plugins or dangerous HTML APIs. It does not. A framework can safely render `{message}` while a Markdown component later passes generated HTML to a raw sink.
+
+Renderer examples focus on appearance. Enabling raw HTML makes tables, custom tags, and embedded media work quickly. Sanitization is omitted or added before Markdown parsing, where the parser can create new HTML afterward.
+
+CSP can create false confidence too. A strict policy is useful, but unsafe DOM insertion can still alter forms, links, styles, or application structure. A permissive policy may allow script execution. The source bug remains the unsafe rendering path.
+
+Generated code also mixes contexts. HTML body text, attribute values, URLs, CSS, and JavaScript strings need different handling. One generic `escape()` function does not make every sink safe.
+
+## Choose text when rich HTML is not required
+
+For plain model responses, status messages, log excerpts, or code explanations, use the framework's normal escaped text rendering or `textContent`.
+
+```ts
+resultElement.textContent = modelResponse
+```
+
+Preserve whitespace with CSS or a text component rather than changing to `innerHTML`. For code blocks, keep the code as text inside a `<pre><code>` structure created by the framework.
+
+Safe text rendering is easier to review because the browser never receives markup from the untrusted value. It also avoids sanitizer bypasses and plugin drift.
+
+## Build a restricted Markdown pipeline
+
+When the product genuinely needs Markdown, define the accepted feature set. Disable raw HTML. Decide which links, images, tables, code fences, and extensions are allowed. Remove plugins that emit arbitrary HTML or execute embedded components.
+
+Then sanitize the renderer's HTML output with a maintained, environment-appropriate sanitizer. Sanitizing before Markdown parsing is not enough because parsing creates the HTML that reaches the sink.
+
+```ts
+const rendered = markdownRenderer.render(untrustedMarkdown, {
+  allowRawHtml: false,
+})
+
+const safeHtml = sanitizer.sanitize(rendered, {
+  allowedTags: approvedTags,
+  allowedAttributes: approvedAttributes,
+  allowedUrlSchemes: ["https", "mailto"],
+})
+
+renderSanitizedHtml(resultElement, safeHtml)
+```
+
+The API names are illustrative. Use documented options from maintained libraries. Keep the allowlist small. Block event-handler attributes and review URL normalization, relative links, image sources, SVG, MathML, `style`, and target-window behavior.
+
+If links open a new tab, use appropriate opener isolation. Consider routing external links through a confirmation or warning when the product handles sensitive tasks.
+
+## Keep sanitization and insertion coupled
+
+A sanitized string can become unsafe if later code concatenates markup into it or inserts it into a different context. Name a type or wrapper for reviewed sanitized HTML and keep its construction close to the sanitizer.
+
+Trusted Types can restrict assignments to dangerous DOM sinks in supporting browsers. A policy can require that HTML pass through an approved function before insertion. The policy is not a sanitizer by itself. If it returns unsafe content, the sink remains unsafe.
+
+Avoid mutating sanitized DOM with libraries that interpret strings as HTML. A safe initial render followed by an unsafe tooltip, syntax highlighter, or link-preview plugin reopens the path.
+
+Server-side rendering does not remove the browser risk. If the server emits unsafe markup into the page, the browser still parses it. Apply the same output boundary before serialized HTML leaves the server.
+
+## Review URLs and non-script impact
+
+XSS discussion often focuses on `<script>`, but HTML can cause harm without one. Injected forms can collect credentials. Links can send users to a deceptive origin. Images can trigger requests that disclose network information or load tracking pixels. CSS can obscure warnings.
+
+Define allowed URL schemes and resolve parser edge cases. Block `javascript:` and other schemes the product does not need. Decide whether user-controlled images are allowed and whether they are proxied, loaded directly, or disabled.
+
+Do not rewrite a dangerous URL with a brittle prefix check. Parse it with a standards-based URL API in the expected base context, then apply an explicit scheme and host policy where appropriate.
+
+## Add CSP after fixing the sink
+
+A Content Security Policy can block inline scripts, restrict script origins, and support Trusted Types enforcement. It reduces impact when another mistake survives. It should be deployed through tested response headers and monitored for breakage.
+
+Avoid weakening the policy with broad sources merely to silence violations. Nonces and hashes can support required scripts, while `unsafe-inline` removes an important restriction. The exact policy depends on the application and third-party dependencies.
+
+CSP does not turn raw model HTML into trusted content. Keep the sanitizer and safe-sink controls even under a strict policy.
+
+## Verify with inert local fixtures
+
+Test a local build or authorized staging environment. Use inert strings that reveal whether markup survives without executing code or contacting third parties.
+
+Check:
+
+1. Plain text containing angle brackets remains text where rich HTML is disabled.
+2. Raw HTML in Markdown is removed or displayed as text according to the product rule.
+3. Event-like attributes do not survive sanitization.
+4. Disallowed URL schemes are removed or made inert.
+5. Approved links, code blocks, and formatting still render correctly.
+6. Stored output follows the same pipeline when another test account views it.
+7. Server-rendered and client-rendered paths produce the same safety behavior.
+8. Plugins cannot add attributes or tags outside the approved policy.
+9. CSP and Trusted Types violations appear only where expected and do not expose user content in reports.
+
+Use the browser DOM inspector to examine the final nodes, not only the source Markdown. Verify after syntax highlighting, link previews, and hydration because later transformations can change the DOM.
+
+## Edge cases in AI features
+
+Streaming output can render partial Markdown before the complete document exists. Do not append streamed fragments through `innerHTML`. Accumulate text safely or use a renderer designed to sanitize each stable update.
+
+Tool results and retrieved documents need the same boundary as the model's prose. A tool may return HTML, JSON fields that later become links, or filenames displayed in attributes. Keep each value in its expected output context.
+
+Conversation exports and shared reports can create a second renderer with different rules. Reuse the reviewed pipeline and test both private and public views.
+
+The related [API input validation guide](/blog/input-validation-ai-generated-api) explains request schemas and size limits. Those controls reduce malformed input but do not replace output encoding or sanitization.
+
+## What automation can and cannot prove
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can prompt a team to inventory raw HTML sinks and Markdown settings. It is not an HTML sanitizer and does not execute a runtime XSS test.
+
+Static tools can find `innerHTML` and framework escape hatches. Dynamic scanners can exercise known payload classes in an authorized environment. Neither proves that every plugin, browser context, streamed update, or future renderer is safe. Keep the renderer configuration, sanitizer version, local tests, CSP, and known limitations with the release.
+
+## Sources
+
+- [OWASP: Cross Site Scripting Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)
+- [OWASP: DOM Based XSS Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html)
+- [MDN: innerHTML](https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML)
+- [MITRE CWE-79: Cross-Site Scripting](https://cwe.mitre.org/data/definitions/79.html)

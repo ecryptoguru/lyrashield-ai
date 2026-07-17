@@ -1,0 +1,172 @@
+---
+title: "Input Validation for AI-Generated APIs"
+description: "Define strict server-side request schemas, reject unknown and oversized data, and enforce business invariants before processing."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: false
+heroImage: web-execution-01
+faq:
+  - q: "Is client-side validation enough for an API?"
+    a: "No. Client validation improves feedback, but a caller can bypass the interface and send requests directly. The server must validate every untrusted request before processing it."
+  - q: "Should an API reject unknown JSON fields?"
+    a: "Usually yes for mutation contracts. Rejecting unknown fields limits mass assignment and catches client drift. Version or explicitly extend the schema when a new field is intended."
+  - q: "What is the difference between validation and sanitization?"
+    a: "Validation decides whether data matches the accepted contract. Sanitization transforms data for a defined purpose. Neither replaces authorization, SQL parameterization, or context-aware output encoding."
+---
+
+**Direct answer:** Validate API input on the server before business logic runs. Define accepted fields, types, lengths, ranges, formats, and collection sizes. Reject unknown properties and oversized bodies. After structural validation, enforce business invariants and authorization with server-owned context. Keep SQL parameterization and output encoding separate because a valid request can still reach an unsafe interpreter.
+
+A TypeScript type disappears at runtime. A form constraint runs in a browser the caller controls. The API boundary receives bytes, so it needs a runtime contract for what those bytes may become.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) places validation before processing, then keeps it distinct from authorization and output safety. One broad word should not hide several different controls.
+
+## The vulnerable pattern: copy the request body
+
+**Vulnerable pattern. Use only a local fixture.**
+
+```ts
+app.patch("/api/profile", requireSession, async (req, res) => {
+  const profile = await db.profile.update({
+    where: { userId: req.user.id },
+    data: req.body,
+  })
+  return res.json(profile)
+})
+```
+
+The request can contain fields the interface never showed. A user might alter `role`, `workspaceId`, `verifiedAt`, or an internal status if the ORM model accepts them. Wrong types, huge strings, deep objects, and unexpected arrays reach the database layer unchanged.
+
+Adding browser validation does not repair this. A caller can use a script, mobile client, or changed request. The server must construct the update from validated fields.
+
+## Why generated APIs accept too much
+
+AI coding tools see the frontend model and backend model, then connect them with the shortest code. Spreading `req.body` or passing it directly to an ORM feels type-safe when both sides use TypeScript, but runtime input has not passed through the compiler.
+
+Generated schemas often check only required fields. They omit maximum sizes, reject nothing extra, coerce surprising strings into numbers, or use a permissive record because it makes development easier.
+
+The happy path also hides business rules. Two dates can each be valid ISO strings while the end precedes the start. A quantity can be a positive integer yet exceed inventory. A workspace ID can be a valid UUID that belongs to another tenant.
+
+## Bound the request before parsing
+
+Set body-size limits at the earliest practical layer: proxy, platform, framework parser, and endpoint where needed. A schema cannot protect memory if the server buffers a huge body before validation.
+
+Choose limits by endpoint. A small JSON mutation should not inherit a file-upload limit. Bound header count, query length, nesting depth, array length, and decompressed size where the stack exposes those controls.
+
+Reject unsupported media types. A JSON endpoint should require the expected `Content-Type` and handle malformed JSON through a consistent client error, not an internal stack trace.
+
+## Define a strict runtime schema
+
+Use a maintained validation library or JSON Schema implementation. A mutation schema should name every accepted property and reject unknown ones.
+
+```ts
+const profileUpdateSchema = object({
+  displayName: string().trim().min(1).max(80),
+  timezone: enumValue(allowedTimezones),
+}).strict()
+
+app.patch("/api/profile", requireSession, async (req, res) => {
+  const input = profileUpdateSchema.parse(req.body)
+
+  const profile = await db.profile.update({
+    where: { userId: req.user.id },
+    data: {
+      displayName: input.displayName,
+      timezone: input.timezone,
+    },
+  })
+
+  return res.json(publicProfile(profile))
+})
+```
+
+The exact API is illustrative. The important properties are strict unknown-field handling, explicit bounds, and an update object assembled from accepted fields.
+
+Keep coercion narrow. Converting `"42"` into `42` may suit a query parameter, while converting arbitrary truthy values into booleans creates surprises. Document every normalization that changes what the caller sent.
+
+Version contract changes deliberately. Adding an optional field can still alter business behavior, and making a field required can break older clients. Keep the old schema while its API version remains supported, or coordinate a migration. Do not switch a strict schema to passthrough mode merely to silence an unknown-field error. That removes the protection for every future field.
+
+Treat schema-library failure as a request error only when the input caused it. A missing compiled schema, invalid application configuration, or unexpected validator exception is a server fault that should fail closed and alert operations without returning internal details.
+
+## Separate syntax from business invariants
+
+Structural validation answers whether fields have the expected shape. Semantic validation answers whether the request makes sense now.
+
+A booking schema can require two valid dates. Business logic still checks that the end follows the start, the resource is available, the account may book it, and the requested range meets product rules.
+
+```ts
+const input = bookingSchema.parse(req.body)
+
+if (input.endsAt <= input.startsAt) {
+  throw new ValidationError("End time must follow start time")
+}
+
+const resource = await loadAuthorizedResource({
+  userId: req.user.id,
+  resourceId: input.resourceId,
+})
+```
+
+Do not trust a valid tenant or user ID as authorization. Resolve ownership and membership from the authenticated principal. A syntactically valid identifier can still name someone else's resource.
+
+Concurrency can invalidate a rule after the check. Inventory, quotas, uniqueness, and state transitions may need a database constraint or transaction so two valid requests cannot violate the invariant together.
+
+## Canonicalization needs a purpose
+
+Normalize only when the domain defines one representation. Trimming a display name may be intended. Lowercasing every identifier can be wrong when the external system is case-sensitive.
+
+For Unicode, decide whether normalization applies, which form is accepted, and how equality works. Do not remove arbitrary punctuation from free-form text to make it "safe." Apostrophes and angle brackets can be legitimate data. Use output encoding and parameterized interpreters at their respective sinks.
+
+Validate an allowlist of accepted values for enums and small option sets. Denylists can catch known noise, but they cannot describe every unexpected representation.
+
+## Return useful but bounded errors
+
+Map validation failures to a stable error format with field paths and human-readable reasons that do not reveal database structure or library internals. Cap the number of returned errors so a deeply malformed request cannot create an enormous response.
+
+Log only what operations need. Avoid dumping raw request bodies into validation errors because they may contain tokens, personal data, or large attacker-controlled strings.
+
+Use the same public response for structurally equivalent failures where account existence or authorization state would otherwise leak.
+
+## Verify with a contract test matrix
+
+Use a local or authorized test environment. Build cases from the schema rather than sending generic attack strings to a real API.
+
+Test:
+
+1. The smallest and largest accepted values.
+2. Missing required fields and explicit null values.
+3. Wrong scalar types, arrays where objects are expected, and deep nesting.
+4. Unknown fields such as `role` or `workspaceId` on a profile update.
+5. Oversized bodies rejected before normal parsing and business work.
+6. Valid shapes that violate date, quota, ownership, or state invariants.
+7. Unicode and whitespace behavior specified by the product.
+8. Concurrent requests against invariants enforced by the database.
+9. Error bodies and logs that omit raw secrets and internal stack details.
+
+Keep generated clients in the test loop. If a strict server rejects an older client's extra field, that is a compatibility decision to manage, not a reason to make every schema permissive.
+
+## Edge cases beyond JSON
+
+Query strings can repeat a key, encode arrays in several forms, or include empty values. Configure the parser and validate the parsed representation. Do not assume the framework chooses the same interpretation as an upstream proxy.
+
+Multipart forms contain structured fields and files. Validate text fields through a schema, but send file content through a dedicated upload pipeline with byte limits and content checks.
+
+Webhooks need signature verification before trusting their payload, followed by schema and business validation. A valid provider signature does not make every field suitable for every internal state transition.
+
+For the interpreter boundary, read [SQL injection in AI-generated code](/blog/sql-injection-ai-generated-code). Parameter binding remains required even after a value passes this schema.
+
+## What automation can and cannot prove
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help inventory schemas, limits, and server enforcement points. It does not inspect code or fuzz an endpoint.
+
+Schema tests can prove the documented examples pass or fail. Static tools can find direct body-to-model assignments. Neither proves that every business invariant, authorization rule, proxy limit, parser option, or downstream interpreter is correct. Keep the contract, test cases, and known gaps with the release.
+
+## Sources
+
+- [OWASP: Input Validation Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html)
+- [MITRE CWE-20: Improper Input Validation](https://cwe.mitre.org/data/definitions/20.html)
+- [JSON Schema Draft 2020-12 Core](https://json-schema.org/draft/2020-12/json-schema-core)
+- [MITRE CWE-602: Client-Side Enforcement of Server-Side Security](https://cwe.mitre.org/data/definitions/602.html)

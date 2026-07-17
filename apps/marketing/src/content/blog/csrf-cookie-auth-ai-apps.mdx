@@ -1,0 +1,148 @@
+---
+title: "CSRF Protection for Cookie-Based AI Apps"
+description: "Protect cookie-authenticated state changes with framework controls or verified tokens, plus SameSite and Fetch Metadata layers."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - web-security
+  - verification
+draft: false
+heroImage: web-execution-06
+faq:
+  - q: "Is SameSite enough to prevent CSRF?"
+    a: "SameSite reduces many cross-site cookie sends, but behavior depends on its value and request context. Use it as a layer beside a framework CSRF control or verified token pattern."
+  - q: "Do bearer-token APIs need CSRF protection?"
+    a: "A token added explicitly by JavaScript and not sent automatically has a different CSRF threat model. If the token also lives in an ambient cookie, the cookie-authenticated path still needs protection."
+  - q: "Can a GET request change state safely?"
+    a: "No. GET, HEAD, and OPTIONS should be safe methods without application state changes. Links and browser prefetch behavior make GET an unsuitable place for destructive operations."
+  - q: "Does CSRF protection stop XSS?"
+    a: "No. XSS can often act within the trusted origin and undermine CSRF controls. Prevent XSS separately and keep CSRF defenses for cross-site request intent."
+---
+
+**Direct answer:** For cookie-authenticated state changes, use the framework's maintained CSRF protection or a verified synchronizer or signed double-submit token pattern. Reject missing or invalid tokens before the action. Add secure SameSite cookies, Origin or Referer checks where appropriate, and Fetch Metadata rules as layers. Keep safe HTTP methods free of state changes.
+
+A browser sends eligible cookies automatically. The server can see a valid session while knowing nothing about whether the user intended the request. A page on another origin may trigger that request even if it cannot read the response.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) separates CSRF from CORS. CORS controls cross-origin response sharing. CSRF defenses bind a state-changing request to an interaction the application accepts.
+
+## The vulnerable pattern: trust the session cookie
+
+**Vulnerable pattern. Use only a disposable local record.**
+
+```ts
+app.post("/api/account/email", requireSessionCookie, async (req, res) => {
+  await changeEmail(req.user.id, req.body.email)
+  return res.sendStatus(204)
+})
+```
+
+The session is valid, but the request carries no anti-forgery signal. If browser cookie rules allow it, another site can cause the user's browser to submit a state-changing request.
+
+Moving the action to GET makes it worse. Browsers, crawlers, previews, and prefetchers may follow links without the user intending a mutation.
+
+## Why generated cookie flows omit request intent
+
+Generated authentication examples often focus on login and session lookup. Once middleware produces `req.user`, every later request looks authenticated. The prompt may never mention that cookies are ambient credentials.
+
+SameSite defaults can create false comfort. Browser behavior has improved, but explicit cookie settings and request contexts still matter. Cross-site top-level navigation, subdomains, embedded contexts, and legacy clients complicate a one-line claim that SameSite "solves CSRF."
+
+AI tools may also add permissive CORS headers and assume they enable or disable CSRF. A cross-origin request can have an effect even when the browser blocks script from reading the result.
+
+## Prefer the framework's maintained control
+
+If the framework has built-in CSRF protection for the chosen session and form model, use it according to current documentation. Confirm which methods it protects, where tokens are generated, how they are validated, and whether API routes or server actions are included.
+
+Do not install a package and assume every handler is covered. Add a negative integration test for a real state-changing route.
+
+For stateful applications, a synchronizer token is a common pattern. The server creates a random token tied to the user's session, the client submits it in a form field or custom header, and the server compares it before processing.
+
+```ts
+app.post("/api/account/email", requireSessionCookie, async (req, res) => {
+  requireValidCsrfToken({
+    session: req.session,
+    submittedToken: req.headers["x-csrf-token"],
+  })
+
+  const input = emailChangeSchema.parse(req.body)
+  await changeEmail(req.user.id, input.email)
+  return res.sendStatus(204)
+})
+```
+
+The token must be unpredictable, handled without logging, and compared through a maintained function. Do not place it in a URL, where browser history and request logs can retain it.
+
+## Use a signed double-submit pattern carefully
+
+In a stateless design, a double-submit cookie can work when the submitted token is cryptographically bound to session-specific data. OWASP recommends a signed pattern rather than a naive token copied into both cookie and request.
+
+The server verifies the signature and binding, not merely equality between two attacker-influenced values. Use a separate secret, stable serialization, and a maintained cryptographic construction. Regenerate the token when the session changes according to the framework design.
+
+Do not confuse the CSRF token with the session cookie. The anti-forgery value proves request context under the pattern; it should not itself grant account access.
+
+## Add Origin and Referer checks
+
+For HTTPS state-changing requests, verify the `Origin` header against the expected origin where it is reliably supplied. When Origin is absent, a strict deployment may use Referer as a fallback after considering privacy and client compatibility.
+
+Compare parsed origins exactly. Do not use suffix matching. Determine the target origin from trusted configuration or a hardened proxy contract, not an arbitrary Host header.
+
+Decide how to handle requests with neither header. A fail-closed policy is strongest but may affect unusual clients. Document any allowed exception and keep it off browser session routes where possible.
+
+Header checks are layers, not a reason to remove a working token defense without a reviewed architecture change.
+
+## Configure SameSite and Fetch Metadata
+
+Set session cookies with an explicit SameSite value suited to the product, plus `Secure` in HTTPS environments and `HttpOnly` when script access is unnecessary. `Lax` and `Strict` reduce different cross-site sends. `None` requires `Secure` and permits cross-site contexts, so it needs the strongest companion controls.
+
+Fetch Metadata headers such as `Sec-Fetch-Site` let the server distinguish same-origin, same-site, cross-site, and some direct navigation contexts. A policy can reject cross-site state-changing requests while allowing documented exceptions.
+
+Roll out Fetch Metadata with observation and compatibility tests. Requests that lack the headers need an explicit fallback. Same-site subdomains may not be equally trusted, so a product with untrusted tenant subdomains should prefer same-origin rules for sensitive actions.
+
+## Keep safe methods safe
+
+GET, HEAD, and OPTIONS should not change application state. Use POST, PUT, PATCH, or DELETE for mutations and protect them. A confirmation page may use GET to display details, then a protected POST to perform the action.
+
+Do not create logout, unsubscribe, delete, or role-change links that execute on navigation. Email links can open a confirmation page with a one-time purpose token, but the final sensitive transition still deserves deliberate handling.
+
+WebSocket handshakes and GraphQL endpoints need attention. Validate Origin for browser WebSockets and apply CSRF protection to cookie-authenticated GraphQL mutations even when every operation uses one POST URL.
+
+## Test from an isolated second origin
+
+Use two local test origins and disposable accounts. Do not send forged requests against an unapproved production application.
+
+Verify:
+
+1. A normal same-origin form or API request with the valid token succeeds.
+2. Missing, changed, expired, and other-session tokens fail before side effects.
+3. A cross-site form cannot complete the state change.
+4. A cross-site script cannot bypass the token through a simple request.
+5. Requests with unapproved Origin fail according to policy.
+6. Fetch Metadata rejects cross-site unsafe methods and follows the documented fallback when headers are absent.
+7. GET, HEAD, and OPTIONS perform no state change.
+8. CORS errors do not hide a mutation that happened anyway.
+9. Logs and analytics contain no CSRF token or sensitive request body.
+
+Check the final database state after every denial. A 403 response is not enough if an operation happened before validation.
+
+## Edge cases and limits
+
+XSS can read tokens available to page script or send same-origin requests. Keep output handling, CSP, and dependency review in place. CSRF protection is not an XSS fix.
+
+Native mobile and backend clients do not usually rely on browser cookies or Fetch Metadata. Give them a separate authentication contract rather than weakening browser checks for every caller.
+
+Multi-origin products may need several exact allowed origins. Bind each to a real client and avoid a regex that accepts arbitrary subdomains.
+
+The related [CORS guide](/blog/cors-vibe-coded-apps) explains response-sharing headers and credentialed preflights without treating them as request-intent proof.
+
+## What automation can and cannot prove
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can prompt a review of CSRF tokens, SameSite, safe methods, and negative tests. It cannot submit a cross-site request or inspect the deployed session model.
+
+Static checks can find state-changing GET routes or handlers without an obvious token call. Browser tests can exercise known origins. Neither proves that every framework route, subdomain trust decision, WebSocket, GraphQL mutation, or legacy client follows the policy.
+
+## Sources
+
+- [OWASP: Cross-Site Request Forgery Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+- [W3C: Fetch Metadata Request Headers](https://www.w3.org/TR/fetch-metadata/)
+- [MDN: Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie)
+- [MITRE CWE-352: Cross-Site Request Forgery](https://cwe.mitre.org/data/definitions/352.html)

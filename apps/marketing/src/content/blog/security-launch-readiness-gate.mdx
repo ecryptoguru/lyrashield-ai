@@ -1,0 +1,158 @@
+---
+title: "Build a Go / No-Go Security Launch Gate"
+description: "Turn scoped security evidence into an accountable go, conditional, no-go, or not-evaluated decision with owners and rollback readiness."
+pubDate: 2026-07-17
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - verification
+  - access-control
+  - web-security
+draft: false
+heroImage: decision-operations-01
+faq:
+  - q: "Who owns the security launch decision?"
+    a: "Name one accountable decision maker with authority over the release, supported by engineering, security, operations, and product evidence owners. A committee can advise, but the final record should show who accepted the decision and its conditions."
+  - q: "Which findings should always block launch?"
+    a: "There is no universal list for every product. Define non-negotiable blockers before the release, including missing required evidence and unacceptable exposure at critical trust boundaries. Apply the policy consistently and document any permitted exception path."
+  - q: "Can a security score decide launch automatically?"
+    a: "No. A score can summarize selected inputs, but it can hide missing coverage, unsupported checks, business context, and operational readiness. The decision owner must review the underlying evidence, limitations, findings, conditions, and rollback plan."
+  - q: "When is a conditional launch defensible?"
+    a: "Only when the remaining risk is within written policy, required checks completed, compensating controls are active, owners and deadlines are named, monitoring and rollback are ready, and the accountable decision maker explicitly accepts the conditions."
+---
+
+**Direct answer:** Block release when required checks did not complete, critical trust boundaries lack evidence, unresolved high-impact findings exceed policy, or rollback and incident ownership are absent. Permit a conditional release only with named owners, active compensating controls, deadlines, retained limitations, monitoring, and accountable approval. Record the outcome as not evaluated, go, go with conditions, or no-go for one exact candidate.
+
+A checklist gathers facts. A launch gate makes a decision from those facts. Without an explicit policy, the last meeting before release tends to reward optimism, urgency, and whichever result is easiest to summarize.
+
+The gate is one part of the [security model for AI-built applications](/blog/vibe-coding-security-guide). It does not certify the product or promise that no vulnerability remains. It states whether the available evidence satisfies a defined release policy for a named candidate.
+
+## Bind the gate to one candidate
+
+Start the decision record with:
+
+- release, commit, image, and environment identity;
+- features and data flows in scope;
+- decision owner and evidence owners;
+- evidence cutoff time;
+- required checks and acceptance criteria;
+- known limitations and out-of-scope areas;
+- planned release and rollback window.
+
+If the commit, deployment configuration, sensitive data flow, or infrastructure changes after the cutoff, reopen the gate. A decision for one image does not transfer automatically to another. A staging test does not describe production when identity, secrets, network access, or feature flags differ materially.
+
+The [pre-launch security checklist](/blog/ai-app-prelaunch-security-checklist) helps assemble the evidence. This gate begins after that collection step and asks whether the evidence is complete enough for a release decision.
+
+## Check completeness before severity
+
+Do not score findings until required evidence has completed. A clean result from one scanner cannot compensate for another required scanner that crashed, an authorization test that never ran, or a production boundary that was not represented.
+
+For each check, record one of four coverage states:
+
+- **Completed:** the required target and applicable coverage were exercised.
+- **Limited:** the check ran, but a named area or condition was not covered.
+- **Not applicable:** the requirement does not apply, with rationale.
+- **Not tested:** no usable evidence exists.
+
+Missing required evidence should produce `NOT_EVALUATED` or a block under your policy. It should not become zero findings. NIST's [developer verification guidance](https://www.nist.gov/publications/guidelines-minimum-standards-developer-verification-software) recommends a set of complementary techniques because no single test is complete.
+
+Generated code increases the need for this sequence. An AI tool can add a route, dependency, background job, and provider integration in one change. A green dependency scan says nothing about the new authorization path. The gate must follow trust boundaries and effects, not count tool runs.
+
+## Define blockers before the meeting
+
+Write policy in terms of evidence and product risk. Possible blocker classes include:
+
+- required scanner, test, or review did not complete;
+- server-side authorization lacks evidence on a material tenant boundary;
+- an exposed credential has not been revoked or rotated;
+- a high-impact state-changing path lacks authentication or approval;
+- an unresolved finding exceeds the organization's risk policy;
+- no tested rollback, incident owner, or monitoring signal exists;
+- a condition from a previous release has expired or remains unmet.
+
+These examples are not universal thresholds. A medical workflow, public brochure site, internal tool, and financial API have different assets and consequences. Define the policy with the accountable owner, then apply it consistently.
+
+The risky shortcut lets one numeric score make the decision:
+
+```yaml
+# RISKY: missing evidence can disappear inside a single number.
+if: security_score >= 80
+decision: go
+```
+
+A stronger decision record keeps the inputs visible:
+
+```yaml
+candidate: release-2026-07-17.3
+evidence:
+  authorization_tests: completed
+  dependency_scan: completed
+  recovery_test: limited
+open_risk:
+  - id: OPS-14
+    owner: platform-team
+    due: 2026-07-24
+decision: go_with_conditions
+limitations:
+  - regional failover was not exercised
+```
+
+This is an illustrative record, not an industry standard. A real condition should include its compensating control, monitoring signal, rollback trigger, and approval.
+
+## Separate severity from application risk
+
+Technical severity helps describe a vulnerability's characteristics. It does not decide whether the vulnerable component is reachable, which asset is exposed, or what compensating controls exist. FIRST's [CVSS FAQ](https://www.first.org/cvss/faq) distinguishes the base score from threat and environmental context.
+
+Review each material finding's state and evidence. A detected but unverified candidate can still block when its plausible impact is unacceptable and verification is pending. An independently verified issue deserves clear priority. A retest-confirmed fix supplies fresh evidence under recorded coverage, but it is not the same as independent verification. An inconclusive retest leaves uncertainty open.
+
+Accepted risk is a decision, not proof that the finding is false or fixed. Record the owner, rationale, affected assets, compensating controls, expiry, monitoring, and review trigger. Avoid permanent exceptions without a date.
+
+Limit who can approve an exception and separate that authority from the person requesting release when practical. The record should show the exact condition accepted, not a blanket waiver for the component. Expired conditions return to the gate as blockers until reviewed.
+
+## Make conditional release specific
+
+"Ship and fix later" is not a condition. A defensible conditional release has:
+
+- a named owner with authority and capacity;
+- a concrete remediation or evidence task;
+- an expiry and release-independent deadline;
+- an active compensating control;
+- a monitoring signal and incident contact;
+- a rollback trigger and tested procedure;
+- a scheduled retest or review.
+
+If any of those elements is missing for a material risk, use no-go. Conditions should reduce or observe risk now, not merely promise future attention.
+
+Rollback readiness includes the data path, not only application deployment. A database migration, queued job, email send, or external side effect may not reverse when code rolls back. Test the actual recovery path and name who can invoke it during the launch window.
+
+The [security monitoring guide for AI apps](/blog/security-monitoring-ai-apps) helps define signals and ownership. Monitoring is not a substitute for prevention, but it is part of a conditional decision and incident response.
+
+## Produce one signed decision record
+
+Use four clear outcomes:
+
+- **NOT_EVALUATED:** required evidence is absent or incomplete enough that no decision can be supported.
+- **GO:** the candidate meets the written policy with no open release condition.
+- **GO_WITH_CONDITIONS:** the candidate meets the conditional-release policy and every condition is owned and time-bound.
+- **NO_GO:** a blocker exists or the remaining risk exceeds policy.
+
+The record should contain scope, evidence links, coverage, limitations, findings, accepted risks, conditions, rollback, decision maker, time, and candidate identity. Protect sensitive evidence while keeping the decision visible to the people operating the release.
+
+Reopen the gate when the candidate, environment, evidence, assumptions, or condition status changes. A late patch intended to fix one blocker can alter another trust boundary. Run the relevant checks again against the new candidate.
+
+## What the current LyraShield code means
+
+The LyraShield AI repository contains launch-readiness logic that returns `NOT_EVALUATED`, `GO`, `GO_WITH_CONDITIONS`, or `NO_GO`. The web helper returns `NOT_EVALUATED` with a null score when no completed scan exists, then applies product-specific thresholds to completed-scan data. Those thresholds are internal product logic, not an industry policy, warranty, compliance result, or public hosted feature.
+
+The [LyraShield AI methodology](/methodology) explains the evidence states behind a decision. The [sample report](/sample-report) is a sanitized mock labeled in active development, not a customer assessment or production result.
+
+The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign owners and record whether release controls were considered. It does not inspect a release, verify evidence, calculate launch readiness, or issue a go decision.
+
+## Sources
+
+- [NIST: Recommended Minimum Standard for Vendor or Developer Verification of Software](https://nvlpubs.nist.gov/nistpubs/ir/2021/NIST.IR.8397.pdf)
+- [NIST: Guidelines on Minimum Standards for Developer Verification of Software](https://www.nist.gov/publications/guidelines-minimum-standards-developer-verification-software)
+- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final)
+- [NIST SP 800-115: Technical Guide to Information Security Testing and Assessment](https://csrc.nist.gov/pubs/sp/800/115/final)
+- [OWASP Web Security Testing Guide v4.2](https://owasp.org/www-project-web-security-testing-guide/v42/)
+- [FIRST: CVSS v4.0 FAQ](https://www.first.org/cvss/faq)
