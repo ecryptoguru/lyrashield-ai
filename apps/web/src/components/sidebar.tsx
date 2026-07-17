@@ -6,18 +6,18 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { authClient } from "@lyrashield/auth"
 import {
-  Bell,
   Bug,
   Calendar,
+  ChevronDown,
   Crosshair,
   FileText,
   FolderKanban,
   LayoutDashboard,
   LogOut,
   Menu,
+  Bell,
   Plug,
   Radar,
-  Rocket,
   Settings,
   Users,
   Wrench,
@@ -35,35 +35,22 @@ import {
 } from "@/components/ui/sheet"
 import { apiPost } from "@/lib/api-client"
 
-const navGroups = [
-  {
-    label: "Observe",
-    items: [
-      { href: "/dashboard", label: "Command center", icon: LayoutDashboard },
-      { href: "/dashboard/launch-readiness", label: "Launch readiness", icon: Rocket },
-      { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
-    ],
-  },
-  {
-    label: "Protect",
-    items: [
-      { href: "/dashboard/projects", label: "Projects", icon: FolderKanban },
-      { href: "/dashboard/targets", label: "Targets", icon: Crosshair },
-      { href: "/dashboard/scans", label: "Scans", icon: Radar },
-      { href: "/dashboard/findings", label: "Findings", icon: Bug },
-      { href: "/dashboard/fixes", label: "Fixes", icon: Wrench },
-      { href: "/dashboard/reports", label: "Reports", icon: FileText },
-    ],
-  },
-  {
-    label: "Manage",
-    items: [
-      { href: "/dashboard/schedules", label: "Schedules", icon: Calendar },
-      { href: "/dashboard/team", label: "Team", icon: Users },
-      { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
-      { href: "/dashboard/settings", label: "Settings", icon: Settings },
-    ],
-  },
+const navItems = [
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/targets", label: "Assets", icon: Crosshair },
+  { href: "/dashboard/scans", label: "Scans", icon: Radar },
+  { href: "/dashboard/findings", label: "Findings", icon: Bug },
+  { href: "/dashboard/reports", label: "Reports", icon: FileText },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+]
+
+const secondaryItems = [
+  { href: "/dashboard/projects", label: "Projects", icon: FolderKanban },
+  { href: "/dashboard/fixes", label: "Fix proposals", icon: Wrench },
+  { href: "/dashboard/schedules", label: "Schedules", icon: Calendar },
+  { href: "/dashboard/team", label: "Team", icon: Users },
+  { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
+  { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
 ]
 
 interface Workspace {
@@ -112,7 +99,7 @@ function SidebarPanel({
         <div className="min-w-0">
           <span className="block text-[15px] font-bold tracking-[-0.025em]">LyraShield AI</span>
           <span className="text-muted-foreground block text-[10px] font-semibold tracking-[0.16em] uppercase">
-            Security command
+            Evidence console
           </span>
         </div>
       </div>
@@ -128,46 +115,78 @@ function SidebarPanel({
       )}
 
       <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Main navigation">
-        <div className="flex flex-col gap-5">
-          {navGroups.map((group) => (
-            <div key={group.label} className="flex flex-col gap-1">
-              <p className="text-muted-foreground px-3 pb-1 text-[10px] font-semibold tracking-[0.16em] uppercase">
-                {group.label}
-              </p>
-              {group.items.map((item) => {
-                const isActive =
-                  item.href === "/dashboard"
-                    ? pathname === item.href
-                    : pathname === item.href || pathname.startsWith(`${item.href}/`)
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={isActive ? "page" : undefined}
-                    onClick={onNavigate}
-                    className={cn(
-                      "group flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    )}
-                  >
-                    <item.icon
-                      className={cn(
-                        "size-[18px] shrink-0",
-                        isActive
-                          ? "text-primary"
-                          : "text-muted-foreground group-hover:text-sidebar-accent-foreground"
-                      )}
-                      aria-hidden="true"
-                    />
-                    {item.label}
-                  </Link>
-                )
-              })}
-            </div>
-          ))}
+        <div className="flex flex-col gap-1">
+          {navItems.map((item) => {
+            const isActive =
+              item.href === "/dashboard"
+                ? pathname === item.href
+                : pathname === item.href || pathname.startsWith(`${item.href}/`)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={isActive ? "page" : undefined}
+                onClick={onNavigate}
+                className={cn(
+                  "group flex min-h-11 items-center gap-3 border-l-2 px-3 text-sm font-medium transition-[background-color,border-color,color] duration-150",
+                  isActive
+                    ? "border-primary bg-primary/8 text-primary"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-transparent"
+                )}
+              >
+                <item.icon
+                  className={cn(
+                    "size-[18px] shrink-0",
+                    isActive
+                      ? "text-primary"
+                      : "text-muted-foreground group-hover:text-sidebar-accent-foreground"
+                  )}
+                  aria-hidden="true"
+                />
+                {item.label}
+              </Link>
+            )
+          })}
         </div>
+        <details
+          className="group mt-4"
+          open={secondaryItems.some(
+            (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
+          )}
+        >
+          <summary className="text-muted-foreground hover:text-foreground flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold tracking-[0.14em] uppercase">
+            More
+            <ChevronDown
+              className="size-4 transition-transform duration-150 group-open:rotate-180"
+              aria-hidden="true"
+            />
+          </summary>
+          <div className="mt-1 flex flex-col gap-1 border-l pl-2">
+            {secondaryItems.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={onNavigate}
+                  className={cn(
+                    "group flex min-h-11 items-center gap-3 px-3 text-sm font-medium transition-[background-color,color] duration-150",
+                    isActive
+                      ? "bg-primary/8 text-primary"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                >
+                  <item.icon
+                    className="text-muted-foreground size-[18px] shrink-0"
+                    aria-hidden="true"
+                  />
+                  {item.label}
+                </Link>
+              )
+            })}
+          </div>
+        </details>
       </nav>
 
       <div className="shrink-0 border-t p-3">
@@ -239,7 +258,7 @@ export function Sidebar({
 
   return (
     <>
-      <div className="bg-background/92 fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between border-b px-4 backdrop-blur-xl md:hidden">
+      <div className="bg-background fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between border-b px-4 md:hidden">
         <div className="flex items-center gap-2.5">
           <div className="flex size-8 items-center justify-center rounded-lg border bg-[#07111f] p-0.5">
             <Image

@@ -1,59 +1,24 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import {
-  ShieldCheck,
-  Check,
-  ChevronRight,
-  ChevronLeft,
-  SkipForward,
-  Globe,
-  Zap,
-  FileCheck,
-  Rocket,
-  Bug,
-  GitBranch,
-  Clock,
-} from "lucide-react"
-import { Button, Input, Spinner, GithubIcon, FormField } from "@lyrashield/ui"
-import { apiPost, apiPatch } from "@/lib/api-client"
-
-const STEPS = [
-  { label: "Workspace", icon: ShieldCheck },
-  { label: "Target", icon: GithubIcon },
-  { label: "Goal", icon: Zap },
-  { label: "Preflight", icon: FileCheck },
-  { label: "Scan", icon: Rocket },
-  { label: "Results", icon: Bug },
-  { label: "Fix", icon: GitBranch },
-]
+import { Check, ChevronLeft, ChevronRight, Globe, Rocket, SkipForward } from "lucide-react"
+import { Button, FormField, GithubIcon, Input, Spinner } from "@lyrashield/ui"
+import { apiPatch, apiPost } from "@/lib/api-client"
 
 const GOALS = [
-  {
-    value: "CHECK_PR",
-    label: "Check a PR",
-    description: "Review a pull request for security issues before merging",
-    icon: GitBranch,
-  },
+  { value: "CHECK_PR", label: "Check a PR", description: "Review a pull request before merging." },
   {
     value: "TEST_APP",
     label: "Test my app",
-    description: "Run a security scan against your running application",
-    icon: Bug,
+    description: "Review an app or repository for issues.",
   },
   {
     value: "LAUNCH_REVIEW",
     label: "Launch review",
-    description: "Pre-launch security review before going to production",
-    icon: Rocket,
+    description: "Check what needs attention before release.",
   },
-  {
-    value: "WEEKLY_MONITOR",
-    label: "Monitor weekly",
-    description: "Set up recurring weekly security scans",
-    icon: ShieldCheck,
-  },
+  { value: "WEEKLY_MONITOR", label: "Monitor weekly", description: "Set a recurring review goal." },
 ] as const
 
 interface OnboardingData {
@@ -65,638 +30,421 @@ interface OnboardingData {
   selectedGoal: string | null
 }
 
+function getInitialPhase(state: OnboardingData) {
+  if (!state.workspaceId) return 0
+  if (!state.targetId || !state.selectedGoal) return 1
+  return 2
+}
+
 export function OnboardingWizard({ initialState }: { initialState: OnboardingData }) {
   const router = useRouter()
-  const [step, setStep] = useState(initialState.currentStep)
+  const [phase, setPhase] = useState(() => getInitialPhase(initialState))
+  const [data, setData] = useState(initialState)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [data, setData] = useState<OnboardingData>(initialState)
-
-  // Workspace form state
-  const [wsName, setWsName] = useState("")
-  const [wsMode, setWsMode] = useState<"VIBE" | "TEAM">("VIBE")
-
-  // Target form state
+  const [workspaceName, setWorkspaceName] = useState("")
+  const [workspaceMode, setWorkspaceMode] = useState<"VIBE" | "TEAM">("VIBE")
   const [targetType, setTargetType] = useState<"REPO" | "URL">("REPO")
   const [targetName, setTargetName] = useState("")
   const [repoOwner, setRepoOwner] = useState("")
   const [repoName, setRepoName] = useState("")
   const [targetUrl, setTargetUrl] = useState("")
+  const [selectedGoal, setSelectedGoal] = useState(initialState.selectedGoal ?? "TEST_APP")
+  const [replaceTarget, setReplaceTarget] = useState(!initialState.targetId)
 
-  // Goal state
-  const [selectedGoal, setSelectedGoal] = useState<string | null>(initialState.selectedGoal)
-  const [scanId, setScanId] = useState<string | null>(null)
-  const [scanStatus, setScanStatus] = useState<string | null>(null)
+  async function persist(updates: Partial<OnboardingData>) {
+    const next = await apiPatch<OnboardingData>("/api/onboarding", updates)
+    setData(next)
+    return next
+  }
 
-  const updateState = useCallback(async (updates: Partial<OnboardingData>) => {
-    setError(null)
-    try {
-      const updated = await apiPatch<OnboardingData>("/api/onboarding", updates)
-      setData(updated)
-      return updated
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong")
-      return null
-    }
-  }, [])
-
-  async function handleCreateWorkspace() {
-    if (!wsName.trim()) {
-      setError("Workspace name is required")
+  async function createWorkspace() {
+    if (!workspaceName.trim()) {
+      setError("Name your workspace to continue.")
       return
     }
+
     setLoading(true)
     setError(null)
     try {
-      const ws = await apiPost<{ id: string }>("/api/workspaces", { name: wsName, mode: wsMode })
-      await updateState({ workspaceId: ws.id, currentStep: 1 })
-      setStep(1)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create workspace")
+      const workspace = await apiPost<{ id: string }>("/api/workspaces", {
+        name: workspaceName.trim(),
+        mode: workspaceMode,
+      })
+      await persist({ workspaceId: workspace.id, currentStep: 1, skipped: false })
+      setPhase(1)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not create your workspace.")
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleCreateTarget() {
-    if (!targetName.trim()) {
-      setError("Target name is required")
+  async function saveTargetAndGoal() {
+    if (!data.workspaceId) {
+      setError("Create a workspace before adding a target.")
       return
     }
-    if (targetType === "REPO" && (!repoOwner.trim() || !repoName.trim())) {
-      setError("Repository owner and name are required")
+    if (!selectedGoal) {
+      setError("Choose what you want this scan to help with.")
       return
     }
-    if (targetType === "URL" && !targetUrl.trim()) {
-      setError("URL is required")
+    if (replaceTarget && !targetName.trim()) {
+      setError("Name the app or repository you want to review.")
       return
     }
+    if (replaceTarget && targetType === "REPO" && (!repoOwner.trim() || !repoName.trim())) {
+      setError("Enter both the repository owner and name.")
+      return
+    }
+    if (replaceTarget && targetType === "URL" && !targetUrl.trim()) {
+      setError("Enter the app URL.")
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
-      const body =
-        targetType === "REPO"
-          ? {
-              type: "REPO",
-              name: targetName,
-              workspaceId: data.workspaceId,
-              repoProvider: "github",
-              repoOwner,
-              repoName,
-              environment: "STAGING",
-            }
-          : {
-              type: "WEB_APP",
-              name: targetName,
-              workspaceId: data.workspaceId,
-              url: targetUrl,
-              environment: "STAGING",
-            }
+      let targetId = data.targetId
+      if (replaceTarget) {
+        const target = await apiPost<{ id: string }>("/api/targets", {
+          workspaceId: data.workspaceId,
+          name: targetName.trim(),
+          type: targetType === "REPO" ? "REPO" : "WEB_APP",
+          environment: "STAGING",
+          ...(targetType === "REPO"
+            ? {
+                repoProvider: "github",
+                repoOwner: repoOwner.trim(),
+                repoName: repoName.trim(),
+              }
+            : { url: targetUrl.trim() }),
+        })
+        targetId = target.id
+      }
 
-      const target = await apiPost<{ id: string }>("/api/targets", body)
-      await updateState({ targetId: target.id, currentStep: 2 })
-      setStep(2)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create target")
+      await persist({ targetId, selectedGoal, currentStep: 2, skipped: false })
+      setPhase(2)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save this target.")
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleSelectGoal(goal: string) {
-    setSelectedGoal(goal)
-    setLoading(true)
-    const updated = await updateState({ selectedGoal: goal, currentStep: 3 })
-    setLoading(false)
-    if (updated) setStep(3)
-  }
-
-  async function handleNext() {
-    const nextStep = step + 1
-    setLoading(true)
-    const updated = await updateState({ currentStep: nextStep })
-    setLoading(false)
-    if (updated) setStep(nextStep)
-  }
-
-  async function handleStartScan() {
+  async function startScan() {
     if (!data.workspaceId || !data.targetId) {
-      setError("Create a workspace and target before starting a scan")
+      setError("Add a workspace and target before starting a scan.")
       return
     }
 
     setLoading(true)
     setError(null)
     try {
-      const scan = await apiPost<{ id: string; status: string }>("/api/scans", {
+      const scan = await apiPost<{ id: string }>("/api/scans", {
         workspaceId: data.workspaceId,
         targetId: data.targetId,
-        goal: selectedGoal ?? data.selectedGoal ?? "TEST_APP",
+        goal: selectedGoal,
         mode: "SAFE",
       })
-      setScanId(scan.id)
-      setScanStatus(scan.status)
-      const updated = await updateState({ currentStep: 5 })
-      if (updated) setStep(5)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start scan")
+      await persist({ currentStep: 4, completed: true, skipped: false, selectedGoal })
+      router.push(`/dashboard/scans/${scan.id}`)
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not start the scan. Try again.")
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleBack() {
-    const prevStep = Math.max(0, step - 1)
+  async function finishLater() {
     setLoading(true)
-    const updated = await updateState({ currentStep: prevStep })
-    setLoading(false)
-    if (updated) setStep(prevStep)
+    setError(null)
+    try {
+      await persist({ skipped: true })
+      router.push("/dashboard")
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save your progress.")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  async function handleSkip() {
-    setLoading(true)
-    await updateState({ skipped: true, completed: true })
-    setLoading(false)
-    router.push("/dashboard")
-    router.refresh()
-  }
-
-  async function handleComplete() {
-    setLoading(true)
-    await updateState({ completed: true })
-    setLoading(false)
-    router.push("/dashboard")
-    router.refresh()
-  }
+  const phases = ["Workspace", "What to protect", "Review and start"]
 
   return (
-    <div className="mx-auto max-w-2xl">
-      {/* Progress Indicator */}
-      <nav className="mb-8" aria-label="Onboarding progress">
-        <div className="flex items-center justify-between">
-          {STEPS.map((s, i) => (
-            <div
-              key={s.label}
-              className="flex flex-1 flex-col items-center"
-              aria-current={i === step ? "step" : undefined}
+    <div className="w-full max-w-2xl">
+      <ol className="mb-6 grid grid-cols-3 border-y" aria-label="Getting started progress">
+        {phases.map((label, index) => {
+          const current = index === phase
+          const done = index < phase
+          return (
+            <li
+              key={label}
+              className={`min-h-16 border-l-2 px-3 py-3 text-xs font-semibold sm:px-4 ${
+                current
+                  ? "border-primary bg-primary/8 text-primary"
+                  : "text-muted-foreground border-transparent"
+              }`}
+              aria-current={current ? "step" : undefined}
             >
-              <div className="flex w-full items-center">
-                {i > 0 && (
-                  <div
-                    className={`h-0.5 flex-1 transition-colors duration-300 ${i <= step ? "bg-primary" : "bg-border"}`}
-                  />
-                )}
-                <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-[border-color,box-shadow] duration-300 ${
-                    i < step
-                      ? "gradient-primary text-primary-foreground border-transparent shadow-sm"
-                      : i === step
-                        ? "border-primary text-primary shadow-primary-glow"
-                        : "border-border text-muted-foreground"
-                  }`}
-                >
-                  {i < step ? (
-                    <Check className="h-4 w-4" aria-hidden="true" />
-                  ) : (
-                    <s.icon className="h-4 w-4" aria-hidden="true" />
-                  )}
-                </div>
-                {i < STEPS.length - 1 && (
-                  <div
-                    className={`h-0.5 flex-1 transition-colors duration-300 ${i < step ? "bg-primary" : "bg-border"}`}
-                  />
-                )}
-              </div>
-              <span
-                className={`mt-2 text-xs font-medium ${
-                  i === step ? "text-foreground block" : "text-muted-foreground hidden sm:block"
-                }`}
-              >
-                {s.label}
+              <span className="mb-1 flex size-5 items-center justify-center border text-[10px]">
+                {done ? <Check className="size-3" aria-hidden="true" /> : index + 1}
               </span>
-            </div>
-          ))}
-        </div>
-      </nav>
+              {label}
+            </li>
+          )
+        })}
+      </ol>
 
-      {/* Skip Button */}
       <div className="mb-4 flex justify-end">
-        <Button onClick={handleSkip} disabled={loading} variant="ghost" size="sm">
-          <SkipForward className="h-4 w-4" aria-hidden="true" />
-          Skip onboarding
+        <Button type="button" onClick={finishLater} disabled={loading} variant="ghost" size="sm">
+          <SkipForward className="size-4" aria-hidden="true" />
+          Finish later
         </Button>
       </div>
 
-      {/* Error */}
       {error && (
-        <div
-          className="border-destructive/50 bg-destructive/10 text-destructive mb-4 rounded-lg border p-3 text-sm"
+        <p
           role="alert"
+          className="border-destructive bg-destructive/10 mb-4 border-l-2 p-3 text-sm"
         >
           {error}
-        </div>
+        </p>
       )}
 
-      {/* Step Content */}
-      <div className="bg-card rounded-xl border p-4 shadow-sm sm:p-6">
-        {/* Step 0: Workspace */}
-        {step === 0 && (
-          <div className="space-y-4">
+      <section className="border p-5 sm:p-7" aria-live="polite">
+        {phase === 0 && (
+          <div className="space-y-5">
             <div>
-              <h2 className="text-xl font-bold">Create your workspace</h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                A workspace is where your projects, targets, and scans live.
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                Step 1
+              </p>
+              <h2 className="mt-1 text-2xl font-bold tracking-tight">Give your work a home</h2>
+              <p className="text-muted-foreground mt-2 text-sm">
+                A workspace keeps your apps, scans, and reports together.
               </p>
             </div>
-            {data.workspaceId && (
-              <div className="border-primary/30 bg-primary/5 flex items-center gap-2 rounded-lg border p-3 text-sm">
-                <Check className="text-primary h-4 w-4" aria-hidden="true" />
-                Workspace already created. Click Next to continue.
-              </div>
-            )}
-            <FormField label="Workspace name" htmlFor="ws-name">
+            <FormField label="Workspace name" htmlFor="workspace-name">
               <Input
-                id="ws-name"
-                type="text"
-                value={wsName}
-                onChange={(e) => setWsName(e.target.value)}
-                placeholder="My Security Team"
+                id="workspace-name"
+                value={workspaceName}
+                onChange={(event) => setWorkspaceName(event.target.value)}
+                placeholder="My app security"
+                autoComplete="organization"
               />
             </FormField>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Mode</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setWsMode("VIBE")}
-                  className={`focus-visible:ring-ring flex-1 cursor-pointer rounded-lg border p-3 text-left text-sm transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:outline-none ${
-                    wsMode === "VIBE" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
-                  }`}
-                >
-                  <div className="font-medium">Vibe</div>
-                  <div className="text-muted-foreground">Solo developer</div>
-                </button>
-                <button
-                  onClick={() => setWsMode("TEAM")}
-                  className={`focus-visible:ring-ring flex-1 cursor-pointer rounded-lg border p-3 text-left text-sm transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:outline-none ${
-                    wsMode === "TEAM" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
-                  }`}
-                >
-                  <div className="font-medium">Team</div>
-                  <div className="text-muted-foreground">Multiple members</div>
-                </button>
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium">Who is this for?</legend>
+              <div className="grid gap-px border sm:grid-cols-2">
+                {[
+                  ["VIBE", "Just me", "A solo project or small product"],
+                  ["TEAM", "My team", "Shared work across multiple people"],
+                ].map(([value, title, description]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setWorkspaceMode(value as "VIBE" | "TEAM")}
+                    className={`focus-visible:ring-ring min-h-24 p-4 text-left transition-[background-color,border-color] duration-150 focus-visible:ring-2 focus-visible:outline-none ${
+                      workspaceMode === value ? "bg-primary/8" : "hover:bg-accent"
+                    }`}
+                    aria-pressed={workspaceMode === value}
+                  >
+                    <span className="block font-medium">{title}</span>
+                    <span className="text-muted-foreground mt-1 block text-sm">{description}</span>
+                  </button>
+                ))}
               </div>
-            </div>
+            </fieldset>
             <div className="flex justify-end">
-              <Button
-                onClick={
-                  data.workspaceId
-                    ? () => {
-                        setStep(1)
-                      }
-                    : handleCreateWorkspace
-                }
-                disabled={loading}
-              >
-                {loading && <Spinner className="mr-1" />}
-                {data.workspaceId ? "Next" : "Create workspace"}
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              <Button type="button" onClick={createWorkspace} disabled={loading}>
+                {loading ? <Spinner className="mr-2" /> : <ChevronRight className="size-4" />}
+                Continue
               </Button>
             </div>
           </div>
         )}
 
-        {/* Step 1: Target */}
-        {step === 1 && (
-          <div className="space-y-4">
+        {phase === 1 && (
+          <div className="space-y-5">
             <div>
-              <h2 className="text-xl font-bold">Choose your target</h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                What do you want to scan? Connect a GitHub repo or enter an app URL.
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                Step 2
+              </p>
+              <h2 className="mt-1 text-2xl font-bold tracking-tight">
+                What do you want to protect?
+              </h2>
+              <p className="text-muted-foreground mt-2 text-sm">
+                Add one app or repository and choose the outcome you need.
               </p>
             </div>
-            {data.targetId && (
-              <div className="border-primary/30 bg-primary/5 flex items-center gap-2 rounded-lg border p-3 text-sm">
-                <Check className="text-primary h-4 w-4" aria-hidden="true" />
-                Target already set. Click Next to continue.
-              </div>
-            )}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <button
-                onClick={() => setTargetType("REPO")}
-                className={`focus-visible:ring-ring flex flex-1 cursor-pointer items-center gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:outline-none ${
-                  targetType === "REPO"
-                    ? "border-primary bg-primary/5 shadow-sm"
-                    : "hover:bg-accent"
-                }`}
-              >
-                <GithubIcon className="h-5 w-5" aria-hidden="true" />
-                <div>
-                  <div className="font-medium">GitHub Repo</div>
-                  <div className="text-muted-foreground text-sm">Scan a repository</div>
-                </div>
-              </button>
-              <button
-                onClick={() => setTargetType("URL")}
-                className={`focus-visible:ring-ring flex flex-1 cursor-pointer items-center gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:outline-none ${
-                  targetType === "URL" ? "border-primary bg-primary/5 shadow-sm" : "hover:bg-accent"
-                }`}
-              >
-                <Globe className="h-5 w-5" aria-hidden="true" />
-                <div>
-                  <div className="font-medium">App URL</div>
-                  <div className="text-muted-foreground text-sm">Scan a running app</div>
-                </div>
-              </button>
-            </div>
-            <FormField label="Target name" htmlFor="target-name">
-              <Input
-                id="target-name"
-                type="text"
-                value={targetName}
-                onChange={(e) => setTargetName(e.target.value)}
-                placeholder="My Web App"
-              />
-            </FormField>
-            {targetType === "REPO" ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FormField label="Repo owner" htmlFor="repo-owner">
-                  <Input
-                    id="repo-owner"
-                    type="text"
-                    value={repoOwner}
-                    onChange={(e) => setRepoOwner(e.target.value)}
-                    placeholder="octocat"
-                  />
-                </FormField>
-                <FormField label="Repo name" htmlFor="repo-name">
-                  <Input
-                    id="repo-name"
-                    type="text"
-                    value={repoName}
-                    onChange={(e) => setRepoName(e.target.value)}
-                    placeholder="Hello-World"
-                  />
-                </FormField>
+
+            {data.targetId && !replaceTarget ? (
+              <div className="border-primary bg-primary/8 flex items-center justify-between gap-3 border-l-2 p-4 text-sm">
+                <span>A target is already connected to this workspace.</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setReplaceTarget(true)}
+                >
+                  Add another
+                </Button>
               </div>
             ) : (
-              <FormField label="App URL" htmlFor="target-url">
-                <Input
-                  id="target-url"
-                  type="url"
-                  value={targetUrl}
-                  onChange={(e) => setTargetUrl(e.target.value)}
-                  placeholder="https://myapp.example.com"
-                />
-              </FormField>
-            )}
-            <div className="flex justify-between">
-              <Button onClick={handleBack} disabled={loading} variant="ghost" size="sm">
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                Back
-              </Button>
-              <Button
-                onClick={
-                  data.targetId
-                    ? () => {
-                        setStep(2)
-                      }
-                    : handleCreateTarget
-                }
-                disabled={loading}
-              >
-                {loading && <Spinner className="mr-1" />}
-                {data.targetId ? "Next" : "Add target"}
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Goal */}
-        {step === 2 && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-bold">Choose your goal</h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                What are you trying to accomplish with this scan?
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {GOALS.map((goal) => (
-                <button
-                  key={goal.value}
-                  onClick={() => handleSelectGoal(goal.value)}
-                  disabled={loading}
-                  className={`focus-visible:ring-ring flex cursor-pointer items-start gap-3 rounded-lg border p-4 text-left transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:outline-none ${
-                    selectedGoal === goal.value
-                      ? "border-primary bg-primary/5 shadow-sm"
-                      : "hover:bg-accent"
-                  }`}
+              <>
+                <div
+                  className="grid gap-px border sm:grid-cols-2"
+                  role="group"
+                  aria-label="Target type"
                 >
-                  <goal.icon className="text-primary mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-                  <div>
-                    <div className="font-medium">{goal.label}</div>
-                    <div className="text-muted-foreground text-sm">{goal.description}</div>
+                  <button
+                    type="button"
+                    onClick={() => setTargetType("REPO")}
+                    className={`focus-visible:ring-ring flex min-h-24 items-center gap-3 p-4 text-left focus-visible:ring-2 focus-visible:outline-none ${targetType === "REPO" ? "bg-primary/8" : "hover:bg-accent"}`}
+                    aria-pressed={targetType === "REPO"}
+                  >
+                    <GithubIcon className="size-5" aria-hidden="true" />
+                    <span>
+                      <span className="block font-medium">Repository</span>
+                      <span className="text-muted-foreground text-sm">Review source code</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTargetType("URL")}
+                    className={`focus-visible:ring-ring flex min-h-24 items-center gap-3 p-4 text-left focus-visible:ring-2 focus-visible:outline-none ${targetType === "URL" ? "bg-primary/8" : "hover:bg-accent"}`}
+                    aria-pressed={targetType === "URL"}
+                  >
+                    <Globe className="size-5" aria-hidden="true" />
+                    <span>
+                      <span className="block font-medium">Live app</span>
+                      <span className="text-muted-foreground text-sm">Review a public URL</span>
+                    </span>
+                  </button>
+                </div>
+                <FormField label="Name" htmlFor="target-name">
+                  <Input
+                    id="target-name"
+                    value={targetName}
+                    onChange={(event) => setTargetName(event.target.value)}
+                    placeholder="My web app"
+                  />
+                </FormField>
+                {targetType === "REPO" ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField label="Repository owner" htmlFor="repo-owner">
+                      <Input
+                        id="repo-owner"
+                        value={repoOwner}
+                        onChange={(event) => setRepoOwner(event.target.value)}
+                        placeholder="octocat"
+                      />
+                    </FormField>
+                    <FormField label="Repository name" htmlFor="repo-name">
+                      <Input
+                        id="repo-name"
+                        value={repoName}
+                        onChange={(event) => setRepoName(event.target.value)}
+                        placeholder="hello-world"
+                      />
+                    </FormField>
                   </div>
-                </button>
-              ))}
-            </div>
-            <div className="flex justify-between">
-              <Button onClick={handleBack} disabled={loading} variant="ghost" size="sm">
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                Back
-              </Button>
-            </div>
-          </div>
-        )}
+                ) : (
+                  <FormField label="Public app URL" htmlFor="target-url">
+                    <Input
+                      id="target-url"
+                      type="url"
+                      value={targetUrl}
+                      onChange={(event) => setTargetUrl(event.target.value)}
+                      placeholder="https://app.example.com"
+                    />
+                  </FormField>
+                )}
+              </>
+            )}
 
-        {/* Step 3: Preflight */}
-        {step === 3 && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-bold">Preflight check</h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Verifying your setup is ready for scanning.
-              </p>
-            </div>
-            <div className="space-y-3">
-              <PreflightItem label="Workspace connected" passed={!!data.workspaceId} />
-              <PreflightItem label="Target configured" passed={!!data.targetId} />
-              <PreflightItem label="Goal selected" passed={!!data.selectedGoal} />
-              <PreflightItem label="Scan policy ready" passed={!!data.workspaceId} />
-            </div>
-            <div className="flex justify-between">
-              <Button onClick={handleBack} disabled={loading} variant="ghost" size="sm">
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium">What do you need from the scan?</legend>
+              <div className="grid gap-px border sm:grid-cols-2">
+                {GOALS.map((goal) => (
+                  <button
+                    key={goal.value}
+                    type="button"
+                    onClick={() => setSelectedGoal(goal.value)}
+                    className={`focus-visible:ring-ring min-h-24 p-4 text-left focus-visible:ring-2 focus-visible:outline-none ${selectedGoal === goal.value ? "bg-primary/8" : "hover:bg-accent"}`}
+                    aria-pressed={selectedGoal === goal.value}
+                  >
+                    <span className="block font-medium">{goal.label}</span>
+                    <span className="text-muted-foreground mt-1 block text-sm">
+                      {goal.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <div className="flex justify-between gap-3">
+              <Button type="button" variant="ghost" onClick={() => setPhase(0)} disabled={loading}>
+                <ChevronLeft className="size-4" />
                 Back
               </Button>
-              <Button onClick={handleNext} disabled={loading}>
-                {loading && <Spinner className="mr-1" />}
+              <Button type="button" onClick={saveTargetAndGoal} disabled={loading}>
+                {loading ? <Spinner className="mr-2" /> : <ChevronRight className="size-4" />}
                 Continue
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           </div>
         )}
 
-        {/* Step 4: Scan */}
-        {step === 4 && (
-          <div className="space-y-4">
+        {phase === 2 && (
+          <div className="space-y-5">
             <div>
-              <h2 className="text-xl font-bold">Start your first scan</h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Queue a safe first scan for the target you just configured.
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                Step 3
+              </p>
+              <h2 className="mt-1 text-2xl font-bold tracking-tight">Review and start</h2>
+              <p className="text-muted-foreground mt-2 text-sm">
+                Your first scan uses Safe mode. You can choose other modes later.
               </p>
             </div>
-            <div className="bg-card/50 rounded-xl border p-4">
-              <div className="flex items-start gap-3">
-                <div className="bg-primary/10 text-primary flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
-                  <Rocket className="h-5 w-5" aria-hidden="true" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium">Safe scan mode</p>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    LyraShield will validate the target, enqueue the scan, and stream progress from
-                    the Scans page.
-                  </p>
-                </div>
+            <dl className="divide-y border text-sm">
+              <div className="flex justify-between gap-4 p-4">
+                <dt className="text-muted-foreground">Workspace</dt>
+                <dd className="font-medium">Ready</dd>
               </div>
-            </div>
-            <div className="flex justify-between">
-              <Button onClick={handleBack} disabled={loading} variant="ghost" size="sm">
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              <div className="flex justify-between gap-4 p-4">
+                <dt className="text-muted-foreground">Target</dt>
+                <dd className="font-medium">Configured</dd>
+              </div>
+              <div className="flex justify-between gap-4 p-4">
+                <dt className="text-muted-foreground">Goal</dt>
+                <dd className="font-medium">
+                  {GOALS.find((goal) => goal.value === selectedGoal)?.label ?? "Selected"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 p-4">
+                <dt className="text-muted-foreground">Scan mode</dt>
+                <dd className="font-medium">Safe</dd>
+              </div>
+            </dl>
+            <p className="border-warning bg-warning/10 border-l-2 p-3 text-sm">
+              A scan can report evidence and limitations. A clean result is not a universal security
+              guarantee.
+            </p>
+            <div className="flex justify-between gap-3">
+              <Button type="button" variant="ghost" onClick={() => setPhase(1)} disabled={loading}>
+                <ChevronLeft className="size-4" />
                 Back
               </Button>
-              <Button onClick={handleStartScan} disabled={loading || !data.targetId}>
-                {loading && <Spinner className="mr-1" />}
-                <Rocket className="h-4 w-4" aria-hidden="true" />
-                Start scan
+              <Button type="button" onClick={startScan} disabled={loading}>
+                <Rocket className="size-4" />
+                {loading ? "Starting…" : "Start safe scan"}
               </Button>
             </div>
           </div>
         )}
-
-        {/* Step 5: Results */}
-        {step === 5 && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-bold">Track results</h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Follow scan progress, then review verified findings with severity, evidence, and
-                plain-language context.
-              </p>
-            </div>
-            <div className="bg-card/50 rounded-xl border p-4">
-              <div className="flex items-start gap-3">
-                <div className="bg-primary/10 text-primary flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
-                  <Bug className="h-5 w-5" aria-hidden="true" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium">
-                    {scanId
-                      ? `Scan ${scanStatus?.toLowerCase() ?? "queued"}`
-                      : "Scan workspace ready"}
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    {scanId
-                      ? "Open the scan detail page to watch lifecycle events and findings as they are persisted."
-                      : "Open Scans to start or inspect runs whenever you are ready."}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-col justify-between gap-3 sm:flex-row">
-              <Button onClick={handleBack} disabled={loading} variant="ghost" size="sm">
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                Back
-              </Button>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  onClick={() =>
-                    router.push(scanId ? `/dashboard/scans/${scanId}` : "/dashboard/scans")
-                  }
-                  disabled={loading}
-                  variant="secondary"
-                >
-                  <Rocket className="h-4 w-4" aria-hidden="true" />
-                  Open scan
-                </Button>
-                <Button onClick={handleNext} disabled={loading}>
-                  Continue
-                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 6: Fix */}
-        {step === 6 && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-bold">Turn findings into fixes</h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Review findings, generate fix proposals, and create pull requests from the Fixes
-                page when results are available.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <button
-                onClick={() => router.push("/dashboard/findings")}
-                className="bg-card/50 hover:border-primary/50 focus-visible:ring-ring rounded-xl border p-4 text-left transition-[border-color,box-shadow] hover:shadow-sm focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <Bug className="text-primary mb-3 h-5 w-5" aria-hidden="true" />
-                <div className="font-medium">Review findings</div>
-                <div className="text-muted-foreground mt-1 text-sm">
-                  Triage severity, evidence, confidence, and status.
-                </div>
-              </button>
-              <button
-                onClick={() => router.push("/dashboard/fixes")}
-                className="bg-card/50 hover:border-primary/50 focus-visible:ring-ring rounded-xl border p-4 text-left transition-[border-color,box-shadow] hover:shadow-sm focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <GitBranch className="text-primary mb-3 h-5 w-5" aria-hidden="true" />
-                <div className="font-medium">Prepare fixes</div>
-                <div className="text-muted-foreground mt-1 text-sm">
-                  Create fix proposals and GitHub pull requests.
-                </div>
-              </button>
-            </div>
-            <div className="flex justify-between">
-              <Button onClick={handleBack} disabled={loading} variant="ghost" size="sm">
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                Back
-              </Button>
-              <Button onClick={handleComplete} disabled={loading}>
-                {loading && <Spinner className="mr-1" />}
-                <Check className="h-4 w-4" aria-hidden="true" />
-                Finish onboarding
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function PreflightItem({ label, passed }: { label: string; passed: boolean }) {
-  return (
-    <div className="flex items-center gap-3 rounded-lg border p-3">
-      <div
-        className={`flex h-6 w-6 items-center justify-center rounded-full ${
-          passed ? "gradient-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-        }`}
-      >
-        {passed ? (
-          <Check className="h-3.5 w-3.5" aria-hidden="true" />
-        ) : (
-          <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-        )}
-      </div>
-      <span className={`text-sm ${passed ? "text-foreground" : "text-muted-foreground"}`}>
-        {label}
-      </span>
+      </section>
     </div>
   )
 }

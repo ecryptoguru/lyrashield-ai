@@ -7,7 +7,7 @@ function generateNonce(): string {
   return Buffer.from(crypto.randomUUID()).toString("base64")
 }
 
-function buildCspHeader(nonce: string): string {
+function buildCspHeader(nonce: string, upgradeInsecureRequests: boolean): string {
   const isDev = process.env.NODE_ENV === "development"
   const directives = [
     "default-src 'self'",
@@ -20,7 +20,7 @@ function buildCspHeader(nonce: string): string {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    "upgrade-insecure-requests",
+    ...(upgradeInsecureRequests ? ["upgrade-insecure-requests"] : []),
   ]
   return directives.join("; ")
 }
@@ -50,7 +50,15 @@ function warnUnknownIp(): "unknown" {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const nonce = generateNonce()
-  const csp = buildCspHeader(nonce)
+  // Browsers apply this directive to every same-origin asset request. Keeping it
+  // off for local HTTP previews lets Docker and device QA load the actual build
+  // without weakening the policy for public origins.
+  const localPreviewHosts = new Set(["localhost", "127.0.0.1", "::1"])
+  const requestHost = (request.headers.get("host") ?? new URL(request.url).hostname)
+    .split(":")[0]
+    ?.toLowerCase()
+  const isLocalPreview = requestHost && localPreviewHosts.has(requestHost)
+  const csp = buildCspHeader(nonce, !isLocalPreview)
 
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-nonce", nonce)
@@ -71,7 +79,10 @@ export async function proxy(request: NextRequest) {
 
   const ip = getClientIP(request)
 
-  if (pathname.startsWith("/api/auth/")) {
+  // Provider discovery is a public configuration read. Keep mutation endpoints
+  // behind the tighter auth bucket without charging this page-render helper
+  // against a user's sign-up/sign-in attempts.
+  if (pathname.startsWith("/api/auth/") && pathname !== "/api/auth/providers") {
     const result = await checkAuthRateLimit(ip)
     if (result.limited) {
       const response = NextResponse.json(
