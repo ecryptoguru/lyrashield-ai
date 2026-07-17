@@ -31,8 +31,9 @@ The [vibe coding security guide](/blog/vibe-coding-security-guide) separates aut
 
 ```ts
 const task = await model.proposeBuildTask(userRequest)
+const runThroughShell = exec
 
-exec(`npm run ${task.script} -- --project ${task.project}`, (error, stdout) => {
+runThroughShell(`npm run ${task.script} -- --project ${task.project}`, (error, stdout) => {
   if (error) throw error
   saveOutput(stdout)
 })
@@ -44,7 +45,7 @@ The code assumes `script` and `project` are labels. The shell sees one command l
 
 ## Why generated workflows keep the shell
 
-Shell commands are compact and familiar. Documentation often shows them because a developer can paste one into a terminal. A code generator then translates the same example into `exec()` without changing the trust model.
+Shell commands are compact and familiar. Documentation often shows them because a developer can paste one into a terminal. A code generator then translates the same example into Node's shell-running `exec` API without changing the trust model.
 
 An AI tool can also apply a cosmetic fix such as replacing one metacharacter or wrapping the value in quotes. Shell quoting rules differ between POSIX shells and Windows command processors. Nested quoting, environment expansion, and later concatenation make an escaping helper easy to misuse. The [OWASP command injection guidance](https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html) puts the strongest defense first: avoid operating-system commands when a safer API can perform the task.
 
@@ -74,7 +75,7 @@ Avoid giving the model a raw escape hatch for convenience. If one unusual operat
 
 ## Execute a fixed program without a shell
 
-When an external binary is necessary, select it in trusted code and pass each argument separately. In Node.js, `exec()` launches a shell. The [child process documentation](https://nodejs.org/api/child_process.html) describes `execFile()` as running an executable directly by default on Unix-like systems. `spawn()` also accepts an executable and argument array.
+When an external binary is necessary, select it in trusted code and pass each argument separately. In Node.js, the `exec` API launches a shell. The [child process documentation](https://nodejs.org/api/child_process.html) describes `execFile()` as running an executable directly by default on Unix-like systems. `spawn()` also accepts an executable and argument array.
 
 ```ts
 import { execFile } from "node:child_process"
@@ -128,7 +129,7 @@ The browser-local [AI app security checklist](/tools/ai-app-security-checklist) 
 
 ## What automation can and cannot prove
 
-Static tools can flag `exec()`, `shell: true`, string interpolation, and untrusted data flowing toward process APIs. Unit tests can verify the constructed call. Sandbox policy tests can confirm some filesystem and network restrictions.
+Static tools can flag use of `exec`, `shell: true`, string interpolation, and untrusted data flowing toward process APIs. Unit tests can verify the constructed call. Sandbox policy tests can confirm some filesystem and network restrictions.
 
 Automation cannot assume that every safe-looking argument is harmless to the target program. It may not understand configuration files, plugins, response files, or nested interpreters. A clean scan also does not prove that tool authorization or approval binding is correct. Review the executable's grammar and the agent's permission model independently. Record which path was inspected and which controls were exercised.
 

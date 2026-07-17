@@ -67,7 +67,7 @@ jobs:
 
 The example uses a placeholder for a reviewed action commit rather than pretending one current SHA fits every repository. Pin the exact action revision your team has reviewed. The script name refers to a synthetic fixture, not production code or a network callback.
 
-GitHub's current [secure use reference](https://docs.github.com/en/actions/reference/security/secure-use) recommends minimum `GITHUB_TOKEN` permissions and warns about untrusted checkout in privileged workflows. A read token is still a credential. Do not print it, pass it to child processes that do not need it, or assume `persist-credentials: false` removes every other secret from the runner.
+GitHub's current [Actions hardening guidance][github-actions-security] recommends minimum `GITHUB_TOKEN` permissions and warns about untrusted checkout in privileged workflows. A read token is still a credential. Do not print it, pass it to child processes that do not need it, or assume `persist-credentials: false` removes every other secret from the runner.
 
 ## Do not turn pull_request_target into a code runner
 
@@ -143,3 +143,5 @@ The browser-local [AI app security checklist](/tools/ai-app-security-checklist) 
 - [GitHub Docs: Secure use reference for GitHub Actions](https://docs.github.com/en/actions/reference/security/secure-use)
 - [GitHub Docs: Deployment environments](https://docs.github.com/en/actions/concepts/workflows-and-actions/deployment-environments)
 - [GitHub Docs: Configuring OpenID Connect in cloud providers](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-cloud-providers)
+
+[github-actions-security]: https://docs.github.com/en/actions/reference/security/secure-use
