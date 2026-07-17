@@ -4,15 +4,15 @@ const scannerAvailable = Boolean(appOrigin)
 ---
 
 <section id="free-scan" aria-labelledby="free-scan-heading" class="border-y border-border bg-bg-raised/55 px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
-  <div class="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[.8fr_1.2fr] lg:items-center">
-    <div class="max-w-xl">
+  <div class="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[.8fr_1.2fr] lg:items-center" data-reveal-group>
+    <div class="max-w-xl" data-reveal="left">
       <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Live URL scan · passive and read-only</p>
       <h2 id="free-scan-heading" class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl">Check your public app before it ships.</h2>
       <p class="mt-5 text-lg leading-8 text-text-muted">Look for exposed secrets, missing browser protections, risky data-layer signals, and HTTPS issues. Results in seconds. No signup.</p>
       <a href="/scan" class="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">What the Lite Check covers and cannot prove</a>
     </div>
 
-    <form id="home-lite-scan-form" action="/scan" class="border-l-2 border-accent pl-5 sm:pl-8">
+    <form id="home-lite-scan-form" action="/scan" data-reveal="right" class="border-l-2 border-accent pl-5 sm:pl-8">
       <label for="home-scan-url" class="block text-sm font-semibold text-text">Public app URL</label>
       <div class="mt-2 flex flex-col gap-3 sm:flex-row">
         <input id="home-scan-url" type="text" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="lyrashieldai.com or https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />

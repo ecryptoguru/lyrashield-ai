@@ -3,6 +3,7 @@ import Base from "@layouts/Base.astro"
 import BlogCard from "@components/BlogCard.astro"
 import { getCollection, getEntry } from "astro:content"
 import type { GetStaticPathsOptions } from "astro"
+import { categoryHref, getCategoriesWithCounts } from "../../lib/blog-categories"
 
 export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
   const posts = await getCollection("blog", (entry) => !entry.data.draft)
@@ -21,7 +22,9 @@ const title =
 const description = "Read LyraShield AI research and practical guidance on securing AI-built apps, interpreting security evidence, verifying findings, and retesting fixes."
 const featuredPost = page.currentPage === 1 ? page.data[0] : undefined
 const remainingPosts = featuredPost ? page.data.slice(1) : page.data
-const topics = [...new Set(page.data.flatMap((post) => post.data.tags))].sort()
+// All six categories with counts computed from the FULL published set —
+// stable across every pagination page, never derived from page.data.
+const categories = await getCategoriesWithCounts()
 const imageEntries = await Promise.all(
   page.data.map(async (post) => [post.id, await getEntry(post.data.heroImage)] as const)
 )
@@ -39,26 +42,38 @@ const jsonLd = [
         <h1>Security guidance for AI-built apps.</h1>
         <p>{description}</p>
       </div>
-      <a href="/rss.xml">Follow via RSS <span aria-hidden="true">↗</span></a>
+      <a class="link-underline" href="/rss.xml">Follow via RSS <span aria-hidden="true">↗</span></a>
     </header>
 
-    {topics.length > 0 && (
-      <nav class="blog-index__topics" aria-label="Resource topics">
-        <span>Browse by topic</span>
-        <ul>
-          {topics.map((topic) => (
-            <li><a href={`/blog/tags/${topic.toLowerCase().replace(/\s+/g, "-")}`}>{topic}</a></li>
-          ))}
-        </ul>
-      </nav>
-    )}
-
     {featuredPost && (
-      <section aria-labelledby="featured-heading" class="blog-index__featured">
+      <section aria-labelledby="featured-heading" class="blog-index__featured" data-reveal>
         <p id="featured-heading">Latest resource</p>
         <BlogCard post={featuredPost} heroImage={imagesByPost.get(featuredPost.id)} featured />
       </section>
     )}
+
+    <section class="blog-index__categories" aria-labelledby="categories-heading">
+      <div class="blog-index__section-heading" data-reveal="fade">
+        <h2 id="categories-heading">Browse by category</h2>
+        <span>{categories.length} categories</span>
+      </div>
+      <ul class="blog-index__category-grid" data-reveal-group>
+        {categories.map((category) => (
+          <li data-reveal="scale">
+            <a class="category-card lift" href={categoryHref(category.id)}>
+              <span class="category-card__eyebrow">{category.eyebrow}</span>
+              <span class="category-card__label">{category.label}</span>
+              <span class="category-card__description">{category.description}</span>
+              <span class="category-card__count">
+                <span class="category-card__count-number" data-countup={String(category.count)}>{category.count}</span>
+                {category.count === 1 ? "article" : "articles"}
+                <span class="category-card__arrow" aria-hidden="true">→</span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
 
     {page.data.length === 0 && (
       <section aria-labelledby="start-heading" class="blog-index__empty">
@@ -75,11 +90,13 @@ const jsonLd = [
 
     {remainingPosts.length > 0 && (
       <section class="blog-index__latest" aria-labelledby="latest-heading">
-        <div class="blog-index__section-heading">
+        <div class="blog-index__section-heading" data-reveal="fade">
           <h2 id="latest-heading">More practical guidance</h2>
           <span>{page.total} {page.total === 1 ? "article" : "articles"}</span>
         </div>
-        {remainingPosts.map((post) => <BlogCard post={post} heroImage={imagesByPost.get(post.id)} headingLevel="h3" />)}
+        <div data-reveal-group>
+          {remainingPosts.map((post) => <BlogCard post={post} heroImage={imagesByPost.get(post.id)} headingLevel="h3" />)}
+        </div>
       </section>
     )}
 
@@ -103,20 +120,28 @@ const jsonLd = [
   .blog-index__hero h1 { max-width: 58rem; margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(3.25rem, 8vw, 7.25rem); font-weight: 800; line-height: .88; letter-spacing: -.06em; }
   .blog-index__hero p { max-width: 48rem; margin: 2rem 0 0; color: var(--color-text-muted); font-size: clamp(1.05rem, 2vw, 1.25rem); line-height: 1.7; }
   .blog-index__hero > a { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; color: var(--color-accent); font-size: .9rem; font-weight: 700; text-decoration: none; }
-  .blog-index__hero a:focus-visible, .blog-index__topics a:focus-visible, .blog-index__starting-points a:focus-visible, .blog-index__pagination a:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
-  .blog-index__notice, .blog-index__featured > p, .blog-index__topics > span { margin: 0; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; }
+  .blog-index__hero a:focus-visible, .blog-index__starting-points a:focus-visible, .blog-index__pagination a:focus-visible, .category-card:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
+  .blog-index__notice, .blog-index__featured > p { margin: 0; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; }
   .blog-index__notice { border-left: 2px solid var(--color-accent); padding-left: .75rem; }
-  .blog-index__topics { display: flex; gap: 1.5rem; align-items: baseline; border-block: 1px solid var(--color-border); padding-block: 1.1rem; margin-top: 2rem; }
-  .blog-index__topics ul { display: flex; flex-wrap: wrap; gap: .45rem 1rem; margin: 0; padding: 0; list-style: none; }
-  .blog-index__topics a { color: var(--color-text); font-size: .88rem; text-decoration: none; }
-  .blog-index__topics a:hover { color: var(--color-accent); }
-  .blog-index__featured { margin-top: clamp(3rem, 7vw, 6rem); }
+  .blog-index__featured { margin-top: clamp(1rem, 3vw, 2rem); }
   .blog-index__featured > p { margin-bottom: 1rem; }
+  .blog-index__categories { margin-top: clamp(4rem, 9vw, 8rem); }
+  .blog-index__category-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 0; padding: 0; list-style: none; }
+  .blog-index__category-grid > li { display: grid; }
+  .category-card { display: grid; align-content: start; gap: .8rem; min-height: 13rem; border: 1px solid var(--color-border); border-radius: 1rem; padding: clamp(1.35rem, 2.5vw, 1.85rem); background: linear-gradient(160deg, var(--color-bg-raised), var(--color-bg)); color: var(--color-text); text-decoration: none; }
+  .category-card:hover { border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border)); box-shadow: 0 18px 40px -28px color-mix(in srgb, var(--color-accent) 55%, transparent); }
+  .category-card__eyebrow { color: var(--color-accent); font-family: "JetBrains Mono Variable", monospace; font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; }
+  .category-card__label { font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(1.35rem, 2.4vw, 1.7rem); font-weight: 760; line-height: 1.05; letter-spacing: -.03em; }
+  .category-card__description { color: var(--color-text-muted); font-size: .9rem; line-height: 1.6; }
+  .category-card__count { display: inline-flex; align-items: center; gap: .45rem; margin-top: auto; padding-top: .75rem; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; }
+  .category-card__count-number { color: var(--color-text); font-weight: 700; }
+  .category-card__arrow { color: var(--color-accent); transition: transform 200ms cubic-bezier(.22, 1, .36, 1); }
+  .category-card:hover .category-card__arrow { transform: translateX(4px); }
   .blog-index__latest { margin-top: clamp(4rem, 9vw, 8rem); }
   .blog-index__section-heading { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 1rem; }
   .blog-index__section-heading h2, .blog-index__empty h2 { margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing: -.04em; }
-  .blog-index__section-heading span { color: var(--color-text-muted); font-size: .85rem; }
-  .blog-index__empty { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, .75fr); gap: clamp(2rem, 6vw, 6rem); align-items: start; border-block: 1px solid var(--color-border); padding-block: clamp(3rem, 7vw, 6rem); }
+  .blog-index__section-heading span { color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; }
+  .blog-index__empty { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, .75fr); gap: clamp(2rem, 6vw, 6rem); align-items: start; border-block: 1px solid var(--color-border); padding-block: clamp(3rem, 7vw, 6rem); margin-top: clamp(4rem, 9vw, 8rem); }
   .blog-index__empty p { max-width: 43rem; color: var(--color-text-muted); line-height: 1.75; }
   .blog-index__starting-points { display: grid; }
   .blog-index__starting-points a { display: grid; gap: .45rem; border-top: 1px solid var(--color-border); padding-block: 1.35rem; color: var(--color-text); text-decoration: none; }
@@ -126,5 +151,7 @@ const jsonLd = [
   .blog-index__starting-points span:last-child { color: var(--color-text-muted); font-size: .88rem; line-height: 1.55; }
   .blog-index__pagination { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--color-border); padding-top: 2rem; margin-top: 4rem; color: var(--color-text-muted); font-size: .85rem; }
   .blog-index__pagination a { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--color-accent); font-weight: 700; text-decoration: none; }
-  @media (max-width: 720px) { .blog-index__hero, .blog-index__empty { grid-template-columns: 1fr; } .blog-index__hero { gap: 1rem; } .blog-index__topics { align-items: flex-start; flex-direction: column; } }
+  @media (max-width: 960px) { .blog-index__category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 720px) { .blog-index__hero, .blog-index__empty { grid-template-columns: 1fr; } .blog-index__hero { gap: 1rem; } }
+  @media (max-width: 600px) { .blog-index__category-grid { grid-template-columns: 1fr; } .category-card { min-height: 0; } }
 </style>

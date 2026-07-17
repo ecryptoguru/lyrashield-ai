@@ -1,27 +1,45 @@
 ---
 import Base from "@layouts/Base.astro"
 import BlogCard from "@components/BlogCard.astro"
-import { getCollection, getEntry } from "astro:content"
+import { getCollection, getEntry, type CollectionEntry } from "astro:content"
+import {
+  BLOG_CATEGORIES,
+  categoryHref,
+  getCategoriesWithCounts,
+  type BlogCategory,
+} from "../../../lib/blog-categories"
 
 export async function getStaticPaths() {
   const posts = await getCollection("blog", (entry) => !entry.data.draft)
-  const tags = [...new Set(posts.flatMap((post) => post.data.tags))].sort()
 
-  return tags.map((tag) => ({
-    params: { tag: tag.toLowerCase().replace(/\s+/g, "-") },
-    props: { tag, posts: posts.filter((post) => post.data.tags.includes(tag)) },
+  // One hub page per category — every category renders even with zero posts,
+  // so the index "Browse by category" cards never point at a missing page.
+  return BLOG_CATEGORIES.map((category) => ({
+    params: { tag: category.id },
+    props: {
+      category,
+      posts: posts.filter((post) => post.data.tags.includes(category.id)),
+    },
   }))
 }
 
-const { tag, posts } = Astro.props
+interface Props {
+  category: BlogCategory
+  posts: CollectionEntry<"blog">[]
+}
+
+const { category, posts } = Astro.props
 const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 const imageEntries = await Promise.all(
   sortedPosts.map(async (post) => [post.id, await getEntry(post.data.heroImage)] as const)
 )
 const imagesByPost = new Map(imageEntries)
+const otherCategories = (await getCategoriesWithCounts()).filter(
+  (entry) => entry.id !== category.id
+)
 
-const title = `Tag: ${tag} — LyraShield AI Blog`
-const description = `Read LyraShield AI articles tagged ${tag}, with practical guidance for securing AI-built apps, interpreting evidence, and verifying fixes.`
+const title = `${category.label} — AI App Security Resources | LyraShield AI`
+const description = `${category.description} Practical guidance from LyraShield AI, with verified evidence and honest limitations.`
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL(Astro.url.pathname, origin).toString()
 const jsonLd = [
@@ -29,7 +47,7 @@ const jsonLd = [
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     "@id": `${canonical}#collection`,
-    name: `${tag} security resources`,
+    name: `${category.label} security resources`,
     description,
     url: canonical,
     inLanguage: "en-US",
@@ -54,7 +72,7 @@ const jsonLd = [
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
       { "@type": "ListItem", position: 2, name: "Resources", item: `${origin}/blog` },
-      { "@type": "ListItem", position: 3, name: tag, item: canonical },
+      { "@type": "ListItem", position: 3, name: category.label, item: canonical },
     ],
   },
 ]
@@ -62,29 +80,58 @@ const jsonLd = [
 
 <Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
   <section class="tag-index">
-    <header>
-      <a href="/blog">← All resources</a>
-      <h1>{tag}</h1>
-      <p>{description}</p>
+    <header data-reveal>
+      <a class="tag-index__back link-underline" href="/blog">← All resources</a>
+      <p class="tag-index__eyebrow">{category.eyebrow}</p>
+      <h1>{category.label}</h1>
+      <p class="tag-index__description">{category.description}</p>
+      <p class="tag-index__count">
+        <span data-countup={String(sortedPosts.length)}>{sortedPosts.length}</span>
+        {sortedPosts.length === 1 ? "published article" : "published articles"}
+      </p>
     </header>
 
     {sortedPosts.length === 0 && (
-      <p class="tag-index__empty">No published posts for this topic.</p>
+      <p class="tag-index__empty">No published posts for this category yet. New guidance lands here as soon as it clears editorial review.</p>
     )}
 
-    <div class="tag-index__posts">
+    <div class="tag-index__posts" data-reveal-group>
       {sortedPosts.map((post) => <BlogCard post={post} heroImage={imagesByPost.get(post.id)} />)}
     </div>
+
+    <nav class="tag-index__more" aria-label="Other categories" data-reveal="fade">
+      <p>More categories</p>
+      <ul>
+        {otherCategories.map((entry) => (
+          <li>
+            <a class="lift" href={categoryHref(entry.id)}>
+              <span>{entry.label}</span>
+              <span>{entry.count} {entry.count === 1 ? "article" : "articles"}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   </section>
 </Base>
 
 <style>
   .tag-index { width: min(100% - 2rem, 64rem); margin-inline: auto; padding-block: clamp(4rem, 9vw, 8rem); }
   .tag-index header { border-bottom: 1px solid var(--color-border); padding-bottom: clamp(2.5rem, 6vw, 5rem); }
-  .tag-index header > a { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--color-accent); font-size: .85rem; font-weight: 700; text-decoration: none; }
-  .tag-index h1 { margin: 1rem 0 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(3.5rem, 9vw, 7rem); font-weight: 800; line-height: .92; letter-spacing: -.055em; text-transform: capitalize; }
-  .tag-index header p { max-width: 45rem; margin: 1.5rem 0 0; color: var(--color-text-muted); font-size: 1.08rem; line-height: 1.7; }
+  .tag-index__back { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--color-accent); font-size: .85rem; font-weight: 700; text-decoration: none; }
+  .tag-index__eyebrow { margin: 1.75rem 0 0; color: var(--color-accent); font-family: "JetBrains Mono Variable", monospace; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; }
+  .tag-index h1 { margin: .75rem 0 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(3.25rem, 8.5vw, 6.5rem); font-weight: 800; line-height: .92; letter-spacing: -.055em; }
+  .tag-index__description { max-width: 45rem; margin: 1.5rem 0 0; color: var(--color-text-muted); font-size: 1.08rem; line-height: 1.7; }
+  .tag-index__count { display: inline-flex; align-items: baseline; gap: .5rem; margin: 1.75rem 0 0; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; }
+  .tag-index__count > span { color: var(--color-text); font-size: 1.2rem; font-weight: 700; }
   .tag-index__posts { margin-top: 1rem; }
   .tag-index__empty { margin-top: 3rem; color: var(--color-text-muted); }
   .tag-index a:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
+  .tag-index__more { border-top: 1px solid var(--color-border); padding-top: clamp(2rem, 5vw, 3.5rem); margin-top: clamp(3rem, 7vw, 5rem); }
+  .tag-index__more > p { margin: 0 0 1.25rem; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; }
+  .tag-index__more ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .75rem; margin: 0; padding: 0; list-style: none; }
+  .tag-index__more a { display: flex; min-height: 3rem; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--color-border); border-radius: .75rem; padding: .85rem 1.1rem; color: var(--color-text); text-decoration: none; }
+  .tag-index__more a:hover { border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border)); }
+  .tag-index__more a span:first-child { font-weight: 700; font-size: .95rem; }
+  .tag-index__more a span:last-child { color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
 </style>

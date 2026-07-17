@@ -11,31 +11,33 @@ const jsonLd = [
 ---
 <Base title="Free Security Tools for AI-Built Apps | LyraShield AI" description={description} canonical={canonical} jsonLd={jsonLd}>
   <section class="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:py-20">
-    <h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-text sm:text-5xl">Free security tools for AI-built apps</h1>
-    <p class="mt-5 max-w-2xl text-lg leading-8 text-text-muted">Get a useful answer before creating an account. Each focused check runs in your browser, keeps sensitive input on your device, and states what it cannot prove.</p>
-    <div class="mt-12 divide-y divide-border border-y border-border">
+    <header class="max-w-3xl" data-reveal-group>
+      <h1 class="text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>Free security tools for AI-built apps</h1>
+      <p class="mt-5 max-w-2xl text-lg leading-8 text-text-muted" data-reveal>Get a useful answer before creating an account. Each focused check runs in your browser, keeps sensitive input on your device, and states what it cannot prove.</p>
+    </header>
+    <div class="mt-12 divide-y divide-border border-y border-border" data-reveal-group>
       {tools.map((tool, index) => (
-        <article class="grid gap-5 py-7 md:grid-cols-[3rem_1fr_auto] md:items-center">
-          <span class="font-mono text-xs text-text-muted" aria-hidden="true">0{index + 1}</span>
+        <article class="grid gap-5 py-7 md:grid-cols-[3rem_1fr_auto] md:items-center" data-reveal>
+          <span class="font-mono text-xs text-text-muted" aria-hidden="true" data-countup={index + 1}>0{index + 1}</span>
           <div>
-            <h2 class="text-xl font-semibold text-text"><a href={toolUrl(tool.slug)} class="rounded-sm hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{tool.title}</a></h2>
+            <h2 class="text-xl font-semibold text-text"><a href={toolUrl(tool.slug)} class="link-underline rounded-sm hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{tool.title}</a></h2>
             <p class="mt-2 leading-7 text-text-muted">{tool.description}</p>
             <p class="mt-3 text-sm font-medium text-accent">Local analyzer · {tool.privacy}</p>
           </div>
-          <a href={toolUrl(tool.slug)} class="inline-flex min-h-11 items-center justify-center rounded-lg border border-border bg-bg-raised px-4 text-sm font-semibold text-text hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open tool</a>
+          <a href={toolUrl(tool.slug)} class="lift inline-flex min-h-11 items-center justify-center rounded-lg border border-border bg-bg-raised px-4 text-sm font-semibold text-text hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open tool</a>
         </article>
       ))}
     </div>
-    <section class="mt-16 grid gap-8 border-y border-border py-10 md:grid-cols-2">
-      <div><h2 class="text-2xl font-semibold text-text">How do these free security tools work?</h2><p class="mt-4 leading-7 text-text-muted">Each tool performs a focused deterministic check in your browser. The page explains exactly what input it reviews, what signals it reports, and what the result cannot establish.</p></div>
-      <div><h2 class="text-2xl font-semibold text-text">Are inputs uploaded?</h2><p class="mt-4 leading-7 text-text-muted">No. The checklist, pasted headers, selected files, SQL, JWTs, and cookie values are processed on your device by the page code. Use non-production tokens and review each tool's stated limits.</p></div>
+    <section class="mt-16 grid gap-8 border-y border-border py-10 md:grid-cols-2" data-reveal-group>
+      <div data-reveal="left"><h2 class="text-2xl font-semibold text-text">How do these free security tools work?</h2><p class="mt-4 leading-7 text-text-muted">Each tool performs a focused deterministic check in your browser. The page explains exactly what input it reviews, what signals it reports, and what the result cannot establish.</p></div>
+      <div data-reveal="right"><h2 class="text-2xl font-semibold text-text">Are inputs uploaded?</h2><p class="mt-4 leading-7 text-text-muted">No. The checklist, pasted headers, selected files, SQL, JWTs, and cookie values are processed on your device by the page code. Use non-production tokens and review each tool's stated limits.</p></div>
     </section>
-    <section class="mt-20 grid gap-8 border-y border-border py-10 lg:grid-cols-[1fr_auto] lg:items-center">
+    <section class="mt-20 grid gap-8 border-y border-border py-10 lg:grid-cols-[1fr_auto] lg:items-center" data-reveal>
       <div class="max-w-3xl">
         <h2 class="text-2xl font-semibold text-text">Need an app-wide assurance record?</h2>
         <p class="mt-4 leading-7 text-text-muted">The complete product adds authorized target scanning, SCA and secret checks, explicit coverage receipts, evidence states, approval-gated fix proposals, server-owned retests, immutable reports, schedules, notifications, and workspace-scoped audit history. Read the <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">evidence methodology</a> before interpreting a result.</p>
       </div>
-      <a href="/?source=tools#waitlist" class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Request design-partner access</a>
+      <a href="/?source=tools#waitlist" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Request design-partner access</a>
     </section>
   </section>
 </Base>

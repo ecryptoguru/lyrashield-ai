@@ -68,6 +68,24 @@ const {
         } catch {}
       })()
     </script>
+    <script is:inline>
+      /* Opt into the scroll-reveal pre-state before first paint to avoid a
+         flash-of-visible-then-hidden. Gated on motion + data preferences and
+         IntersectionObserver support, so no-JS / reduced-motion / data-saver
+         users always render fully visible. Observation wiring loads after. */
+      ;(() => {
+        try {
+          const connection = navigator.connection
+          if (
+            "IntersectionObserver" in window &&
+            !matchMedia("(prefers-reduced-motion: reduce)").matches &&
+            !(connection && connection.saveData === true)
+          ) {
+            document.documentElement.classList.add("reveal-ready")
+          }
+        } catch {}
+      })()
+    </script>
   </head>
   <body class="bg-bg text-text font-ui antialiased">
     <a
@@ -81,6 +99,15 @@ const {
       <slot />
     </main>
     <Footer />
+    <script>
+      import { initMotion } from "../lib/reveal"
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initMotion, { once: true })
+      } else {
+        initMotion()
+      }
+    </script>
     <script>
       const posthogKey = import.meta.env.PUBLIC_POSTHOG_KEY
       const posthogHost = import.meta.env.PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com"

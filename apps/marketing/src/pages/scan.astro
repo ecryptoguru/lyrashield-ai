@@ -46,12 +46,12 @@ const jsonLd = [
   <section class="relative overflow-hidden border-b border-border">
     <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_18%,color-mix(in_srgb,var(--accent)_15%,transparent),transparent_32%)]"></div>
     <div class="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:px-8 lg:py-24">
-      <div>
-        <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Live URL scan · passive and read-only</p>
-        <h1 class="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-text sm:text-5xl lg:text-6xl">Free security check for AI-built apps</h1>
-        <p class="mt-6 max-w-2xl text-lg leading-8 text-text-muted">{scannerAvailable ? "Paste your app's URL. We'll check for the security gaps that AI coding tools most often leave behind — exposed secrets, missing protections, risky data-access setups. Results in seconds. No signup." : "The passive Lite Check is available after the separately protected LyraShield app API is deployed. Explore the methodology and browser-local tools while this preview remains in pre-launch mode."}</p>
+      <div data-reveal-group>
+        <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase" data-reveal="fade">Live URL scan · passive and read-only</p>
+        <h1 class="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-text sm:text-5xl lg:text-6xl" data-reveal>Free security check for AI-built apps</h1>
+        <p class="mt-6 max-w-2xl text-lg leading-8 text-text-muted" data-reveal>{scannerAvailable ? "Paste your app's URL. We'll check for the security gaps that AI coding tools most often leave behind — exposed secrets, missing protections, risky data-access setups. Results in seconds. No signup." : "The passive Lite Check is available after the separately protected LyraShield app API is deployed. Explore the methodology and browser-local tools while this preview remains in pre-launch mode."}</p>
 
-        <form id="scan-form" class="mt-9 max-w-2xl" data-api-origin={appOrigin} data-turnstile-site-key={turnstileSiteKey}>
+        <form id="scan-form" class="mt-9 max-w-2xl" data-reveal data-api-origin={appOrigin} data-turnstile-site-key={turnstileSiteKey}>
           <label for="scan-url" class="block text-sm font-semibold text-text">Public app URL</label>
           <div class="mt-2 flex flex-col gap-3 sm:flex-row">
             <input id="scan-url" name="url" type="text" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="lyrashieldai.com or https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg-raised px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
@@ -67,13 +67,13 @@ const jsonLd = [
         </form>
       </div>
 
-      <div class="rounded-2xl border border-border bg-[#07131d] p-5 text-[#edf8fb] shadow-2xl sm:p-7" aria-label="Lite Check preview">
+      <div class="rounded-2xl border border-border bg-[#07131d] p-5 text-[#edf8fb] shadow-2xl sm:p-7" data-reveal="right" aria-label="Lite Check preview">
         <div class="flex items-center justify-between border-b border-[#203246] pb-4 font-mono text-xs"><span class="text-[#54d6df]">lyrashield / lite-check</span><span class="text-[#91a7b8]">PASSIVE</span></div>
-        <div class="space-y-4 py-6 font-mono text-sm leading-6">
-          <p><span class="mr-3 text-[#54d6df]">01</span>Fetch only public browser assets</p>
-          <p><span class="mr-3 text-[#54d6df]">02</span>Keep credentials out of results</p>
-          <p><span class="mr-3 text-[#f3b95f]">03</span>Separate signals from proof</p>
-          <p><span class="mr-3 text-[#91a7b8]">04</span>State every important limit</p>
+        <div class="space-y-4 py-6 font-mono text-sm leading-6" data-reveal-group>
+          <p data-reveal="fade"><span class="mr-3 text-[#54d6df]" data-countup="1">01</span>Fetch only public browser assets</p>
+          <p data-reveal="fade"><span class="mr-3 text-[#54d6df]" data-countup="2">02</span>Keep credentials out of results</p>
+          <p data-reveal="fade"><span class="mr-3 text-[#f3b95f]" data-countup="3">03</span>Separate signals from proof</p>
+          <p data-reveal="fade"><span class="mr-3 text-[#91a7b8]" data-countup="4">04</span>State every important limit</p>
         </div>
         <p class="border-t border-[#203246] pt-4 text-sm leading-6 text-[#91a7b8]">No login · no exploit payloads · no table queries · no active RLS test</p>
       </div>
@@ -250,9 +250,9 @@ const jsonLd = [
     </section>
   </section>
 
-  <section class="border-t border-border bg-bg-raised/65"><div class="mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8"><p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">What this check can tell you</p><div class="mt-8 grid gap-8 md:grid-cols-2"><article><h2 class="text-xl font-semibold text-text">Exposed secrets</h2><p class="mt-3 leading-7 text-text-muted">Looks for high-confidence server-side credential patterns in public HTML and linked client assets. Public Supabase anon keys, Firebase web config, Stripe publishable keys, and reCAPTCHA site keys are not labeled secrets.</p></article><article><h2 class="text-xl font-semibold text-text">Browser protections</h2><p class="mt-3 leading-7 text-text-muted">Reads Content Security Policy, HSTS, MIME sniffing, framing, referrer, and browser-permission headers. Missing headers are hardening gaps, not automatic proof of exploitation.</p></article><article><h2 class="text-xl font-semibold text-text">Data-layer signals</h2><p class="mt-3 leading-7 text-text-muted">Recognizes supported public BaaS markers and explains why server-enforced RLS or security rules deserve review. It never queries a table or collection.</p></article><article><h2 class="text-xl font-semibold text-text">Transport and framework signals</h2><p class="mt-3 leading-7 text-text-muted">Checks HTTPS and obvious mixed-content references, then records ordinary public framework fingerprints to help scope a deeper authorized review.</p></article></div></div></section>
+  <section class="border-t border-border bg-bg-raised/65"><div class="mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8"><p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase" data-reveal="fade">What this check can tell you</p><div class="mt-8 grid gap-8 md:grid-cols-2" data-reveal-group><article data-reveal><h2 class="text-xl font-semibold text-text">Exposed secrets</h2><p class="mt-3 leading-7 text-text-muted">Looks for high-confidence server-side credential patterns in public HTML and linked client assets. Public Supabase anon keys, Firebase web config, Stripe publishable keys, and reCAPTCHA site keys are not labeled secrets.</p></article><article data-reveal><h2 class="text-xl font-semibold text-text">Browser protections</h2><p class="mt-3 leading-7 text-text-muted">Reads Content Security Policy, HSTS, MIME sniffing, framing, referrer, and browser-permission headers. Missing headers are hardening gaps, not automatic proof of exploitation.</p></article><article data-reveal><h2 class="text-xl font-semibold text-text">Data-layer signals</h2><p class="mt-3 leading-7 text-text-muted">Recognizes supported public BaaS markers and explains why server-enforced RLS or security rules deserve review. It never queries a table or collection.</p></article><article data-reveal><h2 class="text-xl font-semibold text-text">Transport and framework signals</h2><p class="mt-3 leading-7 text-text-muted">Checks HTTPS and obvious mixed-content references, then records ordinary public framework fingerprints to help scope a deeper authorized review.</p></article></div></div></section>
 
-  <section class="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8"><h2 class="text-3xl font-semibold tracking-tight text-text">Questions about the free Lite Check</h2><div class="mt-8 divide-y divide-border border-y border-border">{faqs.map((faq, index) => (<details data-question-id={`lite-${index + 1}`} class="group py-5"><summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 font-semibold text-text"><span>{faq.question}</span><span class="text-accent group-open:rotate-45" aria-hidden="true">+</span></summary><p class="max-w-3xl pb-2 pr-8 leading-7 text-text-muted">{faq.answer}</p></details>))}</div></section>
+  <section class="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8"><h2 class="text-3xl font-semibold tracking-tight text-text" data-reveal>Questions about the free Lite Check</h2><div class="mt-8 divide-y divide-border border-y border-border" data-reveal="fade">{faqs.map((faq, index) => (<details data-question-id={`lite-${index + 1}`} class="group py-5"><summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 font-semibold text-text"><span>{faq.question}</span><span class="text-accent group-open:rotate-45" aria-hidden="true">+</span></summary><p class="max-w-3xl pb-2 pr-8 leading-7 text-text-muted">{faq.answer}</p></details>))}</div></section>
 
   {turnstileSiteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer is:inline></script>}
   <script>
