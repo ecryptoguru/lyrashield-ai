@@ -15,7 +15,7 @@ const scannerAvailable = Boolean(appOrigin)
     <form id="home-lite-scan-form" action="/scan" data-reveal="right" class="border-l-2 border-accent pl-5 sm:pl-8">
       <label for="home-scan-url" class="block text-sm font-semibold text-text">Public app URL</label>
       <div class="mt-2 flex flex-col gap-3 sm:flex-row">
-        <input id="home-scan-url" type="text" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="lyrashieldai.com or https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
+        <input id="home-scan-url" type="text" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="example.com or https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
         <button type="submit" data-cta-id="homepage_lite_scan" disabled={!scannerAvailable} class="min-h-13 rounded-xl bg-accent px-6 font-semibold text-bg shadow-sm hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-55">{scannerAvailable ? "Scan my app" : "Scanner unavailable"}</button>
       </div>
       <label class="mt-4 flex cursor-pointer items-start gap-3 text-sm leading-6 text-text-muted">

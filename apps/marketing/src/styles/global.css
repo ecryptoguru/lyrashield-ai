@@ -64,6 +64,7 @@ html {
 }
 
 body {
+  overflow-x: clip;
   background-color: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
@@ -79,6 +80,26 @@ input,
 select,
 textarea {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Keep form controls inside their container; iOS Safari zooms focused text below 16px. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]),
+select,
+textarea {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+textarea {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 /* Custom focus ring for accessibility */
