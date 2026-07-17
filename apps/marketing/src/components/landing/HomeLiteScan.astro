@@ -3,7 +3,7 @@ const appOrigin = (import.meta.env.PUBLIC_SCANNER_URL as string | undefined)?.re
 const scannerAvailable = Boolean(appOrigin)
 ---
 
-<section id="free-scan" aria-labelledby="free-scan-heading" class="border-y border-border bg-bg-raised/55 px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+<section id="free-scan" aria-labelledby="free-scan-heading" class="overflow-x-clip border-y border-border bg-bg-raised/55 px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
   <div class="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[.8fr_1.2fr] lg:items-center" data-reveal-group>
     <div class="max-w-xl" data-reveal="left">
       <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Live URL scan · passive and read-only</p>
