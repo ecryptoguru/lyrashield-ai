@@ -62,9 +62,9 @@ docker compose --profile marketing down
 
 This Docker target proves the generated static pages and assets. The Worker-backed preview above separately proves Wrangler routing, D1 migrations, and waitlist API behavior because Astro's Cloudflare prerender subprocess is not reliable inside Docker Desktop's VM.
 
-## Authority blog local release candidate
+## Authority blog and premium assurance world release
 
-The current authority-blog work is local branch state only. The release manifest maps exactly 100 locally approved articles and a 36-image source-artwork library; all entries are `draft: false` for local release testing. These routes and assets are not production truth, and this work does not authorize a Cloudflare change or deployment.
+PR #88 merged and deployed on 2026-07-17. The release manifest maps 100 published authority articles and a 36-image source-artwork library. The canonical homepage renders the premium seven-chapter assurance world; `/premium-preview` is intentionally absent in production.
 
 Validate one planned release at a time:
 
@@ -74,7 +74,7 @@ pnpm --filter @lyrashield/marketing blog:validate:images -- --release batch-1
 pnpm --filter @lyrashield/marketing blog:check-links -- --release batch-1
 ```
 
-The program-completeness test requires all 100 mapped articles to be published. It must pass before the local release candidate can be presented for final approval.
+The program-completeness test requires all 100 mapped articles to be published. It must pass before any subsequent article release can be approved.
 
 To inspect the built release candidate, build and start the production-shaped Worker preview in one terminal:
 
@@ -89,7 +89,9 @@ Then crawl it from another terminal:
 node apps/marketing/scripts/crawl-built-blog.mjs --origin http://localhost:8787
 ```
 
-The crawler validates local blog URLs and sitemap membership, 200 responses, unique canonicals, titles and descriptions, one H1 and main landmark, internal anchors, images, parseable JSON-LD, draft exclusion, RSS membership, and tag-archive membership. Error reports strip query strings and fragments. The complete release gate, final local approval, a focused PR, green CI, guarded deployment, and live verification are still required before any production claim.
+The crawler validates local blog URLs and sitemap membership, 200 responses, unique canonicals, titles and descriptions, one H1 and main landmark, internal anchors, images, parseable JSON-LD, draft exclusion, RSS membership, and tag-archive membership. Error reports strip query strings and fragments. Every subsequent release still requires the complete release gate, local approval, focused PR, green CI, guarded deployment, and live verification.
+
+The deployed motion media is immutable R2 content at `https://media.lyrashieldai.com/assurance-world/v1/14cdcb1b53692d73/`. The bucket permits only `GET`/`HEAD` CORS from `https://lyrashieldai.com`, serves range requests, and uses `public, max-age=31536000, immutable` object caching.
 
 ## Manual deploy (Cloudflare Workers)
 
