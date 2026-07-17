@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
 
 // eslint-disable-next-line security/detect-non-literal-fs-filename
-const preview = readFileSync(new URL("../pages/premium-preview.astro", import.meta.url), "utf8")
+const homepage = readFileSync(new URL("../pages/index.astro", import.meta.url), "utf8")
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const hero = readFileSync(
   new URL("../components/landing/PremiumHero.astro", import.meta.url),
@@ -17,14 +17,13 @@ const world = readFileSync(
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const astroConfig = readFileSync(new URL("../../astro.config.mjs", import.meta.url), "utf8")
 
-describe("premium assurance-world preview", () => {
-  it("keeps the preview isolated, noindex, and outside the sitemap", () => {
-    expect(preview).toContain("noindex={true}")
-    expect(astroConfig).toContain('pathname !== "/premium-preview"')
+describe("premium assurance-world homepage", () => {
+  it("promotes the assurance world to the canonical homepage", () => {
+    expect(astroConfig).not.toContain('pathname !== "/premium-preview"')
     expect(astroConfig).toContain('inlineStylesheets: "always"')
-    expect(preview).toContain("<HomeLiteScan />")
-    expect(preview).toContain("<EvidenceWorld manifest={manifest} />")
-    expect(preview).not.toContain("<Loop />")
+    expect(homepage).toContain("<HomeLiteScan />")
+    expect(homepage).toContain("<EvidenceWorld manifest={motionManifest} />")
+    expect(homepage).not.toContain("<Loop />")
   })
 
   it("uses approved gateway copy and conversion anchors", () => {
@@ -36,7 +35,7 @@ describe("premium assurance-world preview", () => {
   })
 
   it("builds all seven typed desktop and portrait media variants", () => {
-    const manifest = createMotionMediaManifest("/media-local/")
+    const manifest = createMotionMediaManifest("/media-local/", "test-render")
     const ids = manifest.chapters.map((chapter) => chapter.id)
     expect(manifest.version).toBe("1")
     expect(ids).toHaveLength(7)
@@ -52,7 +51,7 @@ describe("premium assurance-world preview", () => {
     ])
     for (const chapter of manifest.chapters) {
       expect(chapter.desktop.mp4).toMatch(
-        /^\/media-local\/assurance-world\/v1\/local\/desktop\/.+\.mp4$/
+        /^\/media-local\/assurance-world\/v1\/test-render\/desktop\/.+\.mp4$/
       )
       expect(chapter.desktop.webm).toMatch(/\.webm$/)
       expect(chapter.portrait.poster).toMatch(/-portrait\.webp$/)

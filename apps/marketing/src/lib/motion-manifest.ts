@@ -68,9 +68,9 @@ const chapterCopy: ReadonlyArray<Pick<EvidenceWorldChapter, "id" | "eyebrow" | "
     },
   ]
 
-export function createMotionMediaManifest(mediaUrl: string): MotionMediaManifest {
+export function createMotionMediaManifest(mediaUrl: string, renderHash = "local"): MotionMediaManifest {
   const base = mediaUrl.replace(/\/$/, "")
-  const root = `${base}/assurance-world/v1/local`
+  const root = `${base}/assurance-world/v1/${renderHash}`
   const variant = (id: EvidenceChapterId, format: "desktop" | "portrait"): MotionVariant => ({
     poster: `${root}/posters/${id}-${format}.webp`,
     mp4: `${root}/${format}/${id}.mp4`,
@@ -79,7 +79,7 @@ export function createMotionMediaManifest(mediaUrl: string): MotionMediaManifest
 
   return {
     version: "1",
-    renderHash: "local",
+    renderHash,
     chapters: chapterCopy.map((chapter) => ({
       ...chapter,
       desktop: variant(chapter.id, "desktop"),

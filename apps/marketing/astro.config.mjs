@@ -83,7 +83,6 @@ export default defineConfig({
         const pathname = new URL(page).pathname
         return (
           pathname !== "/terms" &&
-          pathname !== "/premium-preview" &&
           (Boolean(configuredScannerUrl) || pathname !== "/scan")
         )
       },
@@ -111,6 +110,11 @@ export default defineConfig({
         context: "client",
         access: "public",
         default: "/media-local",
+      }),
+      PUBLIC_MOTION_RENDER_HASH: envField.string({
+        context: "client",
+        access: "public",
+        default: "local",
       }),
       PUBLIC_X_URL: envField.string({
         context: "client",
