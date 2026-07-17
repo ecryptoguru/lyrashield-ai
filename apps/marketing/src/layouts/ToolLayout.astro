@@ -14,26 +14,28 @@ const jsonLd = [
 ---
 <Base title={tool.seoTitle} description={tool.description} canonical={canonical} jsonLd={jsonLd}>
   <section class="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:py-16">
-    <h1 class="text-4xl font-semibold tracking-tight text-text sm:text-5xl">{tool.title}</h1>
-    <p class="mt-4 max-w-3xl text-lg leading-8 text-text-muted">{tool.summary}</p>
-    <p class="mt-5 rounded-xl border border-border bg-bg-raised px-4 py-3 text-sm text-text-muted"><strong class="text-text">Local analyzer:</strong> Runs entirely in this browser. {tool.privacy}</p>
-    <div class="mt-8 rounded-2xl border border-border bg-bg-raised p-5 shadow-sm sm:p-8"><slot /></div>
-    <section class="mt-12 grid gap-8 border-t border-border pt-10 md:grid-cols-2">
-      <div>
+    <header data-reveal-group>
+      <h1 class="text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>{tool.title}</h1>
+      <p class="mt-4 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>{tool.summary}</p>
+      <p class="mt-5 rounded-xl border border-border bg-bg-raised px-4 py-3 text-sm text-text-muted" data-reveal="fade"><strong class="text-text">Local analyzer:</strong> Runs entirely in this browser. {tool.privacy}</p>
+    </header>
+    <div class="mt-8 rounded-2xl border border-border bg-bg-raised p-5 shadow-sm sm:p-8" data-reveal="scale" style="--reveal-shift: 1.5rem"><slot /></div>
+    <section class="mt-12 grid gap-8 border-t border-border pt-10 md:grid-cols-2" data-reveal-group>
+      <div data-reveal="left">
         <h2 class="text-xl font-semibold text-text">What this checks</h2>
         <ul class="mt-4 space-y-3 text-sm leading-6 text-text-muted">{tool.checks.map((item) => <li class="flex gap-3"><span class="mt-2 size-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true"></span><span>{item}</span></li>)}</ul>
       </div>
-      <div>
+      <div data-reveal="right">
         <h2 class="text-xl font-semibold text-text">What this cannot prove</h2>
         <ul class="mt-4 space-y-3 text-sm leading-6 text-text-muted">{tool.limitations.map((item) => <li class="flex gap-3"><span class="mt-2 size-1.5 shrink-0 rounded-full bg-text-muted" aria-hidden="true"></span><span>{item}</span></li>)}</ul>
       </div>
     </section>
-    <section aria-labelledby="sources-heading" class="mt-10 border-t border-border pt-8">
+    <section aria-labelledby="sources-heading" class="mt-10 border-t border-border pt-8" data-reveal="fade">
       <h2 id="sources-heading" class="text-xl font-semibold text-text">Primary references</h2>
       <p class="mt-3 text-sm leading-6 text-text-muted">Use these standards and vendor references when you investigate a result. A link does not imply certification or full coverage of the source.</p>
       <ul class="mt-4 flex flex-wrap gap-x-6 gap-y-3">{tool.references.map((reference) => <li><a href={reference.url} target="_blank" rel="noreferrer" class="text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{reference.label}<span class="sr-only"> (opens in a new tab)</span></a></li>)}</ul>
     </section>
-    <section class="mt-10 rounded-2xl border border-border bg-bg-raised p-6"><h2 class="text-xl font-semibold text-text">Need an app-wide assurance record?</h2><p class="mt-3 leading-7 text-text-muted">LyraShield AI adds authorized target scanning, explicit coverage receipts, evidence states, approval-gated fix proposals, server-owned retests, and immutable reports. This browser tool remains guidance, not a security guarantee.</p><a href="/?source=tool#waitlist" class="mt-5 inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Request design-partner access</a></section>
-    {faq.length > 0 && <section class="mt-12"><h2 class="text-2xl font-semibold text-text">Frequently asked questions</h2><div class="mt-4 divide-y divide-border rounded-xl border border-border bg-bg-raised">{faq.map((item) => <details class="p-4"><summary class="cursor-pointer font-medium text-text">{item.q}</summary><p class="mt-3 text-sm leading-6 text-text-muted">{item.a}</p></details>)}</div></section>}
+    <section class="mt-10 rounded-2xl border border-border bg-bg-raised p-6" data-reveal><h2 class="text-xl font-semibold text-text">Need an app-wide assurance record?</h2><p class="mt-3 leading-7 text-text-muted">LyraShield AI adds authorized target scanning, explicit coverage receipts, evidence states, approval-gated fix proposals, server-owned retests, and immutable reports. This browser tool remains guidance, not a security guarantee.</p><a href="/?source=tool#waitlist" class="lift mt-5 inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Request design-partner access</a></section>
+    {faq.length > 0 && <section class="mt-12" data-reveal="fade"><h2 class="text-2xl font-semibold text-text">Frequently asked questions</h2><div class="mt-4 divide-y divide-border rounded-xl border border-border bg-bg-raised">{faq.map((item) => <details class="p-4"><summary class="cursor-pointer font-medium text-text">{item.q}</summary><p class="mt-3 text-sm leading-6 text-text-muted">{item.a}</p></details>)}</div></section>}
   </section>
 </Base>

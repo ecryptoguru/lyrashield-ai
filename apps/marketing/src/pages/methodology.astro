@@ -60,33 +60,33 @@ const jsonLd = [
   jsonLd={jsonLd}
 >
   <section class="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:py-24">
-    <header class="max-w-3xl">
-      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase">Methodology</p>
-      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">
+    <header class="max-w-3xl" data-reveal-group>
+      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase" data-reveal="fade">Methodology</p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>
         A security result should say what it knows—and what it does not.
       </h1>
-      <p class="mt-6 text-lg leading-8 text-text-muted">
+      <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
         LyraShield AI preserves scope, coverage, evidence provenance, and retest state as separate facts. It does not turn scanner confidence or missing evidence into a universal security verdict.
       </p>
-      <p class="mt-4 text-sm text-text-muted">Last reviewed: <time datetime="2026-07-17">July 17, 2026</time> · Maintained by LyraShield Security + Engineering</p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-07-17">July 17, 2026</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
     <section aria-labelledby="record-heading" class="mt-16 border-y border-border py-12">
-      <h2 id="record-heading" class="text-2xl font-semibold text-text">What every new scan record preserves</h2>
-      <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2">
-        <div><dt class="font-semibold text-text">Scope</dt><dd class="mt-2 leading-7 text-text-muted">The authorized target, available source, scan mode, and immutable result-manifest checksum.</dd></div>
-        <div><dt class="font-semibold text-text">Coverage</dt><dd class="mt-2 leading-7 text-text-muted">Which checks completed, were limited, were skipped, or did not apply, including retained limitations.</dd></div>
-        <div><dt class="font-semibold text-text">Provenance</dt><dd class="mt-2 leading-7 text-text-muted">Which scanner produced a candidate and whether an independent verification receipt exists.</dd></div>
-        <div><dt class="font-semibold text-text">Outcome</dt><dd class="mt-2 leading-7 text-text-muted">The server-owned retest result and the evidence boundary behind validated or inconclusive status.</dd></div>
+      <h2 id="record-heading" class="text-2xl font-semibold text-text" data-reveal>What every new scan record preserves</h2>
+      <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
+        <div data-reveal><dt class="font-semibold text-text">Scope</dt><dd class="mt-2 leading-7 text-text-muted">The authorized target, available source, scan mode, and immutable result-manifest checksum.</dd></div>
+        <div data-reveal><dt class="font-semibold text-text">Coverage</dt><dd class="mt-2 leading-7 text-text-muted">Which checks completed, were limited, were skipped, or did not apply, including retained limitations.</dd></div>
+        <div data-reveal><dt class="font-semibold text-text">Provenance</dt><dd class="mt-2 leading-7 text-text-muted">Which scanner produced a candidate and whether an independent verification receipt exists.</dd></div>
+        <div data-reveal><dt class="font-semibold text-text">Outcome</dt><dd class="mt-2 leading-7 text-text-muted">The server-owned retest result and the evidence boundary behind validated or inconclusive status.</dd></div>
       </dl>
     </section>
 
     <section aria-labelledby="states-heading" class="py-16">
-      <h2 id="states-heading" class="text-2xl font-semibold text-text">Evidence states are not interchangeable</h2>
-      <div class="mt-8 divide-y divide-border border-y border-border">
+      <h2 id="states-heading" class="text-2xl font-semibold text-text" data-reveal>Evidence states are not interchangeable</h2>
+      <div class="mt-8 divide-y divide-border border-y border-border" data-reveal-group>
         {evidenceStates.map((state, index) => (
-          <article class="grid gap-3 py-7 md:grid-cols-[3rem_13rem_1fr] md:gap-6">
-            <span class="font-mono text-xs text-text-muted" aria-hidden="true">0{index + 1}</span>
+          <article class="grid gap-3 py-7 md:grid-cols-[3rem_13rem_1fr] md:gap-6" data-reveal>
+            <span class="font-mono text-xs text-text-muted" aria-hidden="true" data-countup={index + 1}>0{index + 1}</span>
             <h3 class="font-semibold text-text">{state.name}</h3>
             <p class="leading-7 text-text-muted">{state.meaning}</p>
           </article>
@@ -94,7 +94,7 @@ const jsonLd = [
       </div>
     </section>
 
-    <section aria-labelledby="limits-heading" class="rounded-2xl border border-border bg-bg-raised p-7 sm:p-9">
+    <section aria-labelledby="limits-heading" class="rounded-2xl border border-border bg-bg-raised p-7 sm:p-9" data-reveal="scale">
       <h2 id="limits-heading" class="text-2xl font-semibold text-text">What this methodology does not claim</h2>
       <ul class="mt-6 grid gap-4 text-text-muted sm:grid-cols-2">
         <li>It does not prove an application has no vulnerabilities.</li>
@@ -104,15 +104,15 @@ const jsonLd = [
       </ul>
     </section>
 
-    <section aria-labelledby="interpret-heading" class="py-16">
-      <h2 id="interpret-heading" class="text-2xl font-semibold text-text">How should you interpret a LyraShield AI result?</h2>
-      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted">Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected candidates from independently verified findings, then read the retest receipt and retained limitations. A score or confidence value never replaces those facts.</p>
-      <p class="mt-5 max-w-3xl leading-7 text-text-muted">For a broader catalog of web application verification requirements, consult the <a href="https://owasp.org/www-project-application-security-verification-standard/" rel="noreferrer" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">OWASP Application Security Verification Standard</a>. This reference does not imply certification or full ASVS coverage.</p>
+    <section aria-labelledby="interpret-heading" class="py-16" data-reveal-group>
+      <h2 id="interpret-heading" class="text-2xl font-semibold text-text" data-reveal>How should you interpret a LyraShield AI result?</h2>
+      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected candidates from independently verified findings, then read the retest receipt and retained limitations. A score or confidence value never replaces those facts.</p>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>For a broader catalog of web application verification requirements, consult the <a href="https://owasp.org/www-project-application-security-verification-standard/" rel="noreferrer" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">OWASP Application Security Verification Standard</a>. This reference does not imply certification or full ASVS coverage.</p>
     </section>
 
-    <section class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between">
+    <section class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between" data-reveal>
       <div><h2 class="text-2xl font-semibold text-text">Start with a check you can inspect.</h2><p class="mt-2 text-text-muted">The free tools run locally in your browser and state their limits.</p></div>
-      <a href="/tools" class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">View free tools</a>
+      <a href="/tools" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">View free tools</a>
     </section>
   </section>
 </Base>
