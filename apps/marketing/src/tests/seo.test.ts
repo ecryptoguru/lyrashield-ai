@@ -116,6 +116,26 @@ describe("marketing SEO metadata", () => {
     expect(terms).toMatch(/<Base[^>]+noindex/s)
   })
 
+  it("routes Free scan navigation to the canonical, answer-ready Lite Check page", () => {
+    const header = source("../components/Header.astro")
+    const premiumHero = source("../components/landing/PremiumHero.astro")
+    const scanner = source("../pages/scan.astro")
+
+    expect(header.match(/href="\/scan"/g)).toHaveLength(2)
+    expect(header).not.toContain('href="/#free-scan"')
+    expect(premiumHero).toContain('href="/scan" data-cta-id="premium-hero-lite-check"')
+    expect(premiumHero).not.toContain('href="#free-scan"')
+    expect(scanner).toContain(
+      'const title = "Free AI App Security Check — Passive URL Scan | LyraShield"'
+    )
+    expect(scanner).toContain(
+      'const description = "Run a free, passive URL security check for AI-built apps.'
+    )
+    expect(scanner).toContain('"@type": "WebApplication"')
+    expect(scanner).toContain('"@type": "FAQPage"')
+    expect(scanner).toContain('"@type": "BreadcrumbList"')
+  })
+
   it("uses one page-level main landmark and keeps breadcrumbs in metadata only", () => {
     const methodology = source("../pages/methodology.astro")
     const toolLayout = source("../layouts/ToolLayout.astro")

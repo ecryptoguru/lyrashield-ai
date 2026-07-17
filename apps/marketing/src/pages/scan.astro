@@ -6,8 +6,8 @@ const canonical = new URL("/scan", origin).toString()
 const appOrigin = (import.meta.env.PUBLIC_SCANNER_URL as string | undefined)?.replace(/\/$/, "") || ""
 const scannerAvailable = Boolean(appOrigin)
 const turnstileSiteKey = (import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string | undefined) || ""
-const title = "Free security check for AI-built apps — LyraShield"
-const description = "Run a free, passive security check for exposed secrets, missing browser protections, risky data-layer signals, and HTTPS basics. No signup."
+const title = "Free AI App Security Check — Passive URL Scan | LyraShield"
+const description = "Run a free, passive URL security check for AI-built apps. Review exposed secrets, browser security headers, data-layer signals, and HTTPS basics. No signup."
 const faqs = [
   { question: "What does the free security check inspect?", answer: "It reads the public page, response headers, and up to six same-origin JavaScript or CSS assets linked by that page. It checks for high-confidence secret patterns, baseline security headers, data-layer signals, HTTPS consistency, and supported framework fingerprints." },
   { question: "Is the LyraShield Lite Check safe?", answer: "It is passive and read-only. It does not log in, send attack payloads, query databases, enumerate private paths, exploit a finding, or actively test row-level security. Scan only apps you own or have permission to test." },
@@ -54,7 +54,7 @@ const jsonLd = [
         <form id="scan-form" class="mt-9 max-w-2xl" data-reveal data-api-origin={appOrigin} data-turnstile-site-key={turnstileSiteKey}>
           <label for="scan-url" class="block text-sm font-semibold text-text">Public app URL</label>
           <div class="mt-2 flex flex-col gap-3 sm:flex-row">
-            <input id="scan-url" name="url" type="text" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="lyrashieldai.com or https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg-raised px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
+            <input id="scan-url" name="url" type="text" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="example.com or https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg-raised px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
             <button id="scan-button" type="submit" disabled={!scannerAvailable} class="min-h-13 rounded-xl bg-accent px-6 font-semibold text-bg shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-55">{scannerAvailable ? "Scan my app" : "Scanner API not connected"}</button>
           </div>
           <label class="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-bg-raised/70 p-4 text-sm leading-6 text-text-muted">

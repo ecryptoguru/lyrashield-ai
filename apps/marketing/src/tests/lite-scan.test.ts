@@ -25,6 +25,8 @@ const freeToolsPreview = readFileSync(
 const toolsIndex = readFileSync(new URL("../pages/tools/index.astro", import.meta.url), "utf8")
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const toolLayout = readFileSync(new URL("../layouts/ToolLayout.astro", import.meta.url), "utf8")
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const globalStyles = readFileSync(new URL("../styles/global.css", import.meta.url), "utf8")
 
 describe("Lite Check marketing surface", () => {
   it("keeps the founder-provided promise and permission copy", () => {
@@ -88,8 +90,15 @@ describe("Lite Check marketing surface", () => {
   it("accepts bare domains and normalizes them to HTTPS before scanning", () => {
     expect(page).toContain('id="scan-url" name="url" type="text" inputmode="url"')
     expect(page).toContain("normalizePublicHttpUrl(input.value)")
-    expect(page).toContain("lyrashieldai.com or https://your-app.com")
-    expect(homeScan).toContain("lyrashieldai.com or https://your-app.com")
+    expect(page).toContain("example.com or https://your-app.com")
+    expect(homeScan).toContain("example.com or https://your-app.com")
+  })
+
+  it("keeps every mobile text field readable without Safari focus zoom or page overflow", () => {
+    expect(globalStyles).toContain("overflow-x: clip")
+    expect(globalStyles).toContain("max-inline-size: 100%")
+    expect(globalStyles).toContain("overflow-wrap: anywhere")
+    expect(globalStyles).toMatch(/@media \(max-width: 767px\)[\s\S]*font-size: 16px/)
   })
 
   it("rejects malformed and local homepage targets before handoff", () => {
