@@ -70,4 +70,13 @@ describe("premium assurance-world homepage", () => {
     expect(world).toContain('rootMargin: "50% 0px"')
     expect(world).toContain("URL.revokeObjectURL")
   })
+
+  it("coalesces scroll seeks and keeps exactly one decoded video layer in front", () => {
+    expect(world).toContain("if (video.seeking) return")
+    expect(world).toContain('video.addEventListener("seeked", this.queueSeek)')
+    expect(world).toContain("HTMLMediaElement.HAVE_CURRENT_DATA")
+    expect(world).toContain('video.classList.toggle("is-front", videoIndex === slot)')
+    expect(world).toContain("if (innerWidth === this.viewportWidth)")
+    expect(world).toContain('chapter.classList.toggle("is-active", chapterIndex === index)')
+  })
 })

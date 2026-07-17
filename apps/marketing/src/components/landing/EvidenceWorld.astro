@@ -66,13 +66,17 @@ const { manifest } = Astro.props
   class EvidenceWorldElement extends HTMLElement {
     private manifest!: MotionMediaManifest
     private posters: HTMLElement[] = []
+    private chapters: HTMLElement[] = []
     private videos: HTMLVideoElement[] = []
     private activeIndex = 0
     private frontVideo = 0
     private frame = 0
+    private seekFrame = 0
     private idleHandle = 0
     private initialized = false
     private motionEnabled = true
+    private viewportWidth = 0
+    private targetTime = 0
     private observer?: IntersectionObserver
     private fetchController?: AbortController
     private objectUrls = new Map<number, string>()
@@ -85,13 +89,19 @@ const { manifest } = Astro.props
       if (!raw) return
       this.manifest = JSON.parse(raw) as MotionMediaManifest
       this.posters = Array.from(this.querySelectorAll<HTMLElement>("[data-poster-index]"))
+      this.chapters = Array.from(this.querySelectorAll<HTMLElement>("[data-chapter-index]"))
       this.videos = Array.from(this.querySelectorAll<HTMLVideoElement>("video"))
+      this.viewportWidth = innerWidth
 
       const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
       const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true
       this.motionEnabled = !reduced && !saveData
       if (!this.motionEnabled) this.captureView(0, "poster")
       this.updatePosters(0)
+      this.updateChapters(0)
+      this.showPoster()
+      this.classList.add("is-enhanced")
+      this.videos.forEach((video) => video.addEventListener("seeked", this.queueSeek))
       this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) => image.addEventListener("error", this.handlePosterError))
 
       if (this.motionEnabled) {
@@ -104,13 +114,15 @@ const { manifest } = Astro.props
       this.observer?.disconnect()
       this.fetchController?.abort()
       cancelAnimationFrame(this.frame)
+      cancelAnimationFrame(this.seekFrame)
       const idleWindow = window as IdleWindow
       if (this.idleHandle) idleWindow.cancelIdleCallback?.(this.idleHandle)
       removeEventListener("scroll", this.queueUpdate)
       removeEventListener("resize", this.handleResize)
-      removeEventListener("orientationchange", this.handleResize)
+      removeEventListener("orientationchange", this.handleOrientation)
       removeEventListener("pointerdown", this.primeIos)
       removeEventListener("touchstart", this.primeIos)
+      this.videos.forEach((video) => video.removeEventListener("seeked", this.queueSeek))
       this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) => image.removeEventListener("error", this.handlePosterError))
       this.objectUrls.forEach((url) => URL.revokeObjectURL(url))
       this.objectUrls.clear()
@@ -139,10 +151,10 @@ const { manifest } = Astro.props
       this.initialized = true
       addEventListener("scroll", this.queueUpdate, { passive: true })
       addEventListener("resize", this.handleResize, { passive: true })
-      addEventListener("orientationchange", this.handleResize, { passive: true })
+      addEventListener("orientationchange", this.handleOrientation, { passive: true })
       addEventListener("pointerdown", this.primeIos, { once: true, passive: true })
       addEventListener("touchstart", this.primeIos, { once: true, passive: true })
-      this.loadPair(0)
+      void this.loadPair(this.activeIndex)
       this.queueUpdate()
     }
 
@@ -154,16 +166,19 @@ const { manifest } = Astro.props
     }
 
     private handleResize = () => {
-      this.fetchController?.abort()
-      this.videoIndexes.clear()
-      this.objectUrls.forEach((url) => URL.revokeObjectURL(url))
-      this.objectUrls.clear()
-      this.videos.forEach((video) => {
-        video.removeAttribute("src")
-        video.load()
-      })
-      this.loadPair(this.activeIndex)
+      if (innerWidth === this.viewportWidth) {
+        this.queueUpdate()
+        return
+      }
+      this.viewportWidth = innerWidth
+      this.resetMedia()
+      void this.loadPair(this.activeIndex)
       this.queueUpdate()
+    }
+
+    private handleOrientation = () => {
+      this.viewportWidth = -1
+      requestAnimationFrame(this.handleResize)
     }
 
     private queueUpdate = () => {
@@ -178,91 +193,221 @@ const { manifest } = Astro.props
       const rect = this.getBoundingClientRect()
       const scrollable = Math.max(this.offsetHeight - innerHeight, 1)
       const progress = Math.min(1, Math.max(0, -rect.top / scrollable))
-      const scaled = progress * this.manifest.chapters.length
-      const nextIndex = Math.min(this.manifest.chapters.length - 1, Math.floor(scaled))
-      const chapterProgress = Math.min(1, Math.max(0, scaled - nextIndex))
+      this.classList.toggle("is-pinned", rect.top <= 0 && rect.bottom >= innerHeight)
+      const chapterCount = this.manifest.chapters.length
+      const scaled = Math.min(chapterCount - 0.000001, progress * chapterCount)
+      const nextIndex = progress === 1 ? chapterCount - 1 : Math.floor(scaled)
+      const chapterProgress = progress === 1 ? 1 : Math.min(1, Math.max(0, scaled - nextIndex))
 
       if (nextIndex !== this.activeIndex) {
+        const previousFront = this.frontVideo
         this.activeIndex = nextIndex
-        this.frontVideo = 1 - this.frontVideo
-        if (this.motionEnabled) this.loadPair(nextIndex)
         this.updatePosters(nextIndex)
+        this.updateChapters(nextIndex)
+        const readySlot = this.findReadySlot(nextIndex)
+        if (readySlot === undefined) this.showPoster()
+        else this.showVideo(readySlot)
+        if (this.motionEnabled) void this.loadPair(nextIndex, previousFront)
         if (!this.motionEnabled) this.captureView(nextIndex, "poster")
       }
 
-      const video = this.videos[this.frontVideo]
-      if (this.videoIndexes.get(this.frontVideo) === nextIndex && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
-        const desired = Math.min(Math.max(video.duration - 1 / 30, 0), chapterProgress * 6)
-        if (Number.isFinite(desired) && Math.abs(video.currentTime - desired) > 1 / 30) video.currentTime = desired
+      const currentSlot = this.findReadySlot(nextIndex)
+      if (currentSlot !== undefined) {
+        const video = this.videos[currentSlot]
+        const duration = Math.max(video.duration - 1 / 30, 0)
+        this.targetTime = chapterProgress * duration
+        this.queueSeek()
       }
 
       const label = this.querySelector<HTMLElement>("[data-progress-label]")
       const bar = this.querySelector<HTMLElement>("[data-progress-bar]")
-      if (label) label.textContent = `${String(nextIndex + 1).padStart(2, "0")} / 07`
+      if (label) label.textContent = `${String(nextIndex + 1).padStart(2, "0")} / ${String(chapterCount).padStart(2, "0")}`
       if (bar) bar.style.transform = `scaleX(${Math.max(0.02, progress)})`
+    }
+
+    private queueSeek = () => {
+      if (this.seekFrame) return
+      this.seekFrame = requestAnimationFrame(this.performSeek)
+    }
+
+    private performSeek = () => {
+      this.seekFrame = 0
+      const slot = this.findReadySlot(this.activeIndex)
+      if (slot === undefined) return
+      const video = this.videos[slot]
+      if (video.seeking) return
+      const delta = this.targetTime - video.currentTime
+      const epsilon = this.isMobile() ? 2 / 30 : 1 / 30
+      if (!Number.isFinite(delta) || Math.abs(delta) <= epsilon) return
+      const eased = Math.abs(delta) < 0.35
+        ? this.targetTime
+        : video.currentTime + delta * (this.isMobile() ? 0.42 : 0.3)
+      video.currentTime = Math.min(Math.max(eased, 0), Math.max(video.duration - 1 / 30, 0))
     }
 
     private updatePosters(index: number) {
       this.posters.forEach((poster, posterIndex) => poster.classList.toggle("is-active", posterIndex === index))
     }
 
-    private getVariant(index: number): MotionVariant {
-      const chapter = this.manifest.chapters[index]
-      return matchMedia("(max-width: 767px)").matches ? chapter.portrait : chapter.desktop
+    private updateChapters(index: number) {
+      this.chapters.forEach((chapter, chapterIndex) => chapter.classList.toggle("is-active", chapterIndex === index))
     }
 
-    private async loadPair(index: number) {
+    private showPoster() {
+      this.videos.forEach((video) => video.classList.remove("is-front"))
+    }
+
+    private showVideo(slot: number) {
+      this.frontVideo = slot
+      this.videos.forEach((video, videoIndex) => video.classList.toggle("is-front", videoIndex === slot))
+    }
+
+    private findReadySlot(index: number) {
+      for (const [slot, loadedIndex] of this.videoIndexes) {
+        if (loadedIndex === index && this.videos[slot].readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return slot
+      }
+      return undefined
+    }
+
+    private isMobile() {
+      return matchMedia("(max-width: 767px)").matches
+    }
+
+    private getVariant(index: number): MotionVariant {
+      const chapter = this.manifest.chapters[index]
+      return this.isMobile() ? chapter.portrait : chapter.desktop
+    }
+
+    private async loadPair(index: number, previousFront?: number) {
       this.fetchController?.abort()
-      this.fetchController = new AbortController()
-      const currentSlot = this.frontVideo
+      const controller = new AbortController()
+      this.fetchController = controller
+      const currentSlot = this.findReadySlot(index) ?? this.frontVideo
       const nextSlot = 1 - currentSlot
       const nextIndex = Math.min(index + 1, this.manifest.chapters.length - 1)
 
-      await Promise.all([
-        this.loadVideo(index, currentSlot, this.fetchController.signal),
-        nextIndex === index ? Promise.resolve() : this.loadVideo(nextIndex, nextSlot, this.fetchController.signal),
-      ])
-
-      const allowed = new Set([index, nextIndex])
-      for (const [cachedIndex, url] of this.objectUrls) {
-        if (!allowed.has(cachedIndex)) {
-          URL.revokeObjectURL(url)
-          this.objectUrls.delete(cachedIndex)
+      try {
+        await this.loadVideo(index, currentSlot, controller.signal)
+        if (controller.signal.aborted) return
+        if (index === this.activeIndex) {
+          this.showVideo(currentSlot)
+          this.updateFromScroll()
         }
+
+        if (nextIndex !== index) {
+          if (previousFront === nextSlot && previousFront !== currentSlot) {
+            await this.waitForCrossfade(controller.signal)
+          }
+          await this.loadVideo(nextIndex, nextSlot, controller.signal)
+        }
+        if (controller.signal.aborted) return
+        this.releaseUnusedMedia(new Set([index, nextIndex]))
+      } catch (error) {
+        if ((error as DOMException).name === "AbortError") return
+        this.motionEnabled = false
+        this.showPoster()
+        this.captureError(this.manifest.chapters[index].id, "video")
+        this.captureView(this.activeIndex, "poster")
       }
+    }
+
+    private async waitForCrossfade(signal: AbortSignal) {
+      await new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(finish, 240)
+        const abort = () => finish(new DOMException("Aborted", "AbortError"))
+        function finish(error?: DOMException) {
+          clearTimeout(timeout)
+          signal.removeEventListener("abort", abort)
+          if (error) reject(error)
+          else resolve()
+        }
+        signal.addEventListener("abort", abort, { once: true })
+      })
     }
 
     private async loadVideo(index: number, slot: number, signal: AbortSignal) {
       const video = this.videos[slot]
-      const chapter = this.manifest.chapters[index]
-      try {
-        let objectUrl = this.objectUrls.get(index)
-        if (!objectUrl) {
-          const variant = this.getVariant(index)
-          const asset = video.canPlayType("video/webm; codecs=vp9") ? variant.webm : variant.mp4
+      if (this.videoIndexes.get(slot) === index && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return
+
+      let objectUrl = this.objectUrls.get(index)
+      if (!objectUrl) {
+        const variant = this.getVariant(index)
+        const blob = await this.fetchVideo(variant, signal)
+        objectUrl = URL.createObjectURL(blob)
+        this.objectUrls.set(index, objectUrl)
+      }
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+
+      this.videoIndexes.delete(slot)
+      video.preload = "auto"
+      video.src = objectUrl
+      video.load()
+      await this.waitForLoadedData(video, signal)
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+      this.videoIndexes.set(slot, index)
+      if (index === this.activeIndex) this.captureView(index, "motion")
+    }
+
+    private async fetchVideo(variant: MotionVariant, signal: AbortSignal) {
+      let lastError: unknown
+      for (const asset of [variant.mp4, variant.webm]) {
+        try {
           const response = await fetch(asset, { signal })
           if (!response.ok) throw new Error("media response failed")
-          objectUrl = URL.createObjectURL(await response.blob())
-          this.objectUrls.set(index, objectUrl)
+          return await response.blob()
+        } catch (error) {
+          if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+          lastError = error
         }
-        if (signal.aborted) return
-        video.src = objectUrl
-        video.load()
-        this.videoIndexes.set(slot, index)
-        await new Promise<void>((resolve, reject) => {
-          if (video.readyState >= HTMLMediaElement.HAVE_METADATA) return resolve()
-          video.addEventListener("loadedmetadata", () => resolve(), { once: true })
-          video.addEventListener("error", () => reject(new Error("decode failed")), { once: true })
-        })
-        video.classList.toggle("is-front", slot === this.frontVideo)
-        if (index === this.activeIndex) this.captureView(index, "motion")
-      } catch (error) {
-        if ((error as DOMException).name === "AbortError") return
-        this.motionEnabled = false
-        this.videos.forEach((item) => item.classList.remove("is-front"))
-        this.captureError(chapter.id, "video")
-        this.captureView(this.activeIndex, "poster")
       }
+      throw lastError ?? new Error("media response failed")
+    }
+
+    private waitForLoadedData(video: HTMLVideoElement, signal: AbortSignal) {
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return Promise.resolve()
+      return new Promise<void>((resolve, reject) => {
+        const ready = () => finish()
+        const failed = () => finish(new Error("decode failed"))
+        const aborted = () => finish(new DOMException("Aborted", "AbortError"))
+        const finish = (error?: Error) => {
+          video.removeEventListener("loadeddata", ready)
+          video.removeEventListener("error", failed)
+          signal.removeEventListener("abort", aborted)
+          if (error) reject(error)
+          else resolve()
+        }
+        video.addEventListener("loadeddata", ready, { once: true })
+        video.addEventListener("error", failed, { once: true })
+        signal.addEventListener("abort", aborted, { once: true })
+      })
+    }
+
+    private releaseUnusedMedia(allowed: Set<number>) {
+      for (const [slot, index] of this.videoIndexes) {
+        if (allowed.has(index)) continue
+        const video = this.videos[slot]
+        video.removeAttribute("src")
+        video.load()
+        this.videoIndexes.delete(slot)
+      }
+      for (const [index, url] of this.objectUrls) {
+        if (allowed.has(index)) continue
+        URL.revokeObjectURL(url)
+        this.objectUrls.delete(index)
+      }
+    }
+
+    private resetMedia() {
+      this.fetchController?.abort()
+      this.showPoster()
+      this.targetTime = 0
+      this.videoIndexes.clear()
+      this.objectUrls.forEach((url) => URL.revokeObjectURL(url))
+      this.objectUrls.clear()
+      this.videos.forEach((video) => {
+        video.removeAttribute("src")
+        video.load()
+      })
     }
 
     private handlePosterError = (event: Event) => {
@@ -320,7 +465,7 @@ const { manifest } = Astro.props
   .evidence-world__poster,
   .evidence-world__video {
     opacity: 0;
-    transition: opacity 220ms ease;
+    transition: opacity 240ms ease-out;
   }
 
   .evidence-world__poster.is-active,
@@ -335,6 +480,9 @@ const { manifest } = Astro.props
 
   .evidence-world__video {
     z-index: 2;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+    will-change: opacity;
   }
 
   .evidence-world__poster {
@@ -401,9 +549,45 @@ const { manifest } = Astro.props
     padding: clamp(1.25rem, 3vw, 2.5rem);
     border: 1px solid rgba(84, 214, 223, 0.18);
     border-radius: 0.35rem;
-    background: rgba(8, 17, 28, 0.78);
+    background: rgba(8, 17, 28, 0.9);
     box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.24);
-    backdrop-filter: blur(18px);
+  }
+
+  evidence-world.is-enhanced .evidence-world__copy {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(1.25rem) scale(0.985);
+    transition: none;
+    will-change: opacity, transform;
+  }
+
+  evidence-world.is-enhanced .evidence-world__chapter.is-active .evidence-world__copy {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
+    transition:
+      opacity 240ms ease-out,
+      transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  evidence-world.is-enhanced.is-pinned .evidence-world__copy {
+    position: fixed;
+    top: 50svh;
+    right: auto;
+    left: max(1rem, calc((100vw - 1280px) / 2));
+    z-index: 4;
+    transform: translateY(calc(-50% + 1.25rem)) scale(0.985);
+  }
+
+  evidence-world.is-enhanced.is-pinned .evidence-world__chapter:nth-child(even) .evidence-world__copy {
+    right: max(1rem, calc((100vw - 1280px) / 2));
+    left: auto;
+  }
+
+  evidence-world.is-enhanced.is-pinned .evidence-world__chapter.is-active .evidence-world__copy {
+    transform: translateY(-50%) scale(1);
   }
 
   .evidence-world__copy > p:first-child,
@@ -499,17 +683,25 @@ const { manifest } = Astro.props
 
   @media (max-width: 767px) {
     .evidence-world__chapter {
-      min-height: 122svh;
-      align-items: end;
-      padding-block: 6rem 5.5rem;
+      min-height: 118svh;
+      align-items: center;
+      padding: 5rem 1rem;
     }
 
     .evidence-world__chapter .evidence-world__copy,
     .evidence-world__chapter:nth-child(even) .evidence-world__copy {
       width: 100%;
       margin: 0;
+      padding: 1.1rem 1.2rem 1.2rem;
       text-align: left;
-      background: rgba(8, 17, 28, 0.86);
+      background: rgba(8, 17, 28, 0.94);
+    }
+
+    evidence-world.is-enhanced.is-pinned .evidence-world__chapter .evidence-world__copy,
+    evidence-world.is-enhanced.is-pinned .evidence-world__chapter:nth-child(even) .evidence-world__copy {
+      right: 1rem;
+      left: 1rem;
+      width: auto;
     }
 
     .evidence-world__chapter:nth-child(even) .evidence-world__rule {
@@ -517,7 +709,28 @@ const { manifest } = Astro.props
     }
 
     .evidence-world__copy h2 {
-      font-size: clamp(2.55rem, 13vw, 4.3rem);
+      font-size: clamp(2.15rem, 10.5vw, 3.25rem);
+      line-height: 0.98;
+    }
+
+    .evidence-world__copy > p:first-child {
+      margin-bottom: 0.7rem;
+      font-size: 0.68rem;
+    }
+
+    .evidence-world__copy > p:last-of-type {
+      margin-top: 0.9rem;
+      font-size: 0.85rem;
+      line-height: 1.55;
+    }
+
+    .evidence-world__rule {
+      margin-top: 1rem;
+    }
+
+    .evidence-world__copy ul,
+    .evidence-world__status {
+      margin-top: 0.9rem;
     }
 
     .evidence-world__copy li {
