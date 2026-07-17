@@ -6,7 +6,7 @@ const canonical = new URL("/scan", origin).toString()
 const appOrigin = (import.meta.env.PUBLIC_SCANNER_URL as string | undefined)?.replace(/\/$/, "") || ""
 const scannerAvailable = Boolean(appOrigin)
 const turnstileSiteKey = (import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string | undefined) || ""
-const title = "Free AI App Security Check — Passive URL Scan | LyraShield"
+const title = "Free AI App Security Check — Passive URL Scan | LyraShield AI"
 const description = "Run a free, passive URL security check for AI-built apps. Review exposed secrets, browser security headers, data-layer signals, and HTTPS basics. No signup."
 const faqs = [
   { question: "What does the free security check inspect?", answer: "It reads the public page, response headers, and up to six same-origin JavaScript or CSS assets linked by that page. It checks for high-confidence secret patterns, baseline security headers, data-layer signals, HTTPS consistency, and supported framework fingerprints." },
