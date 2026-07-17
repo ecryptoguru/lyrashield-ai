@@ -126,6 +126,10 @@ const jsonLd = [
 >
   <PremiumHero />
   <HomeLiteScan />
+  {/* Anchor for the "How it works" nav link. The Assurance World walkthrough
+      below (Target → Scan → Evidence → Fix → Retest → Report) is the how-it-works
+      loop; this keeps the shareable /#how-it-works URL resolving on the homepage. */}
+  <div id="how-it-works" aria-hidden="true" style="scroll-margin-top: 4.5rem"></div>
   <EvidenceWorld manifest={motionManifest} />
   <AssuranceRecord />
   <TwoDepths />
