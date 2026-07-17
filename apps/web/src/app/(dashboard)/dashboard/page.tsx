@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Activity, ArrowRight, Bug, FileText, Plus, Radar, ShieldCheck, Wrench } from "lucide-react"
+import { Activity, ArrowRight, Bug, FileText, Play, Radar, ShieldCheck, Wrench } from "lucide-react"
 import { Badge, Card, EmptyState, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
 import {
@@ -11,6 +11,8 @@ import {
 } from "@/components/security-visuals"
 import { formatDate } from "@/lib/date-format"
 import { getCachedSession, getCachedWorkspaceId, getCachedWorkspaces } from "@/lib/cache"
+import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
+import { getScanPresentation } from "@/lib/scan-presentation"
 
 export default async function DashboardPage() {
   const session = await getCachedSession()
@@ -29,7 +31,7 @@ export default async function DashboardPage() {
         description="Create your first workspace to start scanning your apps."
         action={
           <Link href="/onboarding" className={buttonVariants()}>
-            <Plus className="size-4" aria-hidden="true" />
+            <Play className="size-4" aria-hidden="true" />
             Create workspace
           </Link>
         }
@@ -42,8 +44,8 @@ export default async function DashboardPage() {
     scanCount,
     openFindingCount,
     reportCount,
-    severityGroups,
-    statusGroups,
+    findingGroups,
+    completedScanCount,
     scoreSnapshots,
     recentScans,
   ] = await Promise.all([
@@ -57,14 +59,12 @@ export default async function DashboardPage() {
     }),
     prisma.report.count({ where: { workspaceId, deletedAt: null } }),
     prisma.finding.groupBy({
-      by: ["severity"],
+      by: ["severity", "status", "verified"],
       where: { workspaceId, deletedAt: null },
       _count: { _all: true },
     }),
-    prisma.finding.groupBy({
-      by: ["status"],
-      where: { workspaceId, deletedAt: null },
-      _count: { _all: true },
+    prisma.scan.count({
+      where: { workspaceId, deletedAt: null, status: "COMPLETED" },
     }),
     prisma.scoreSnapshot.findMany({
       where: { workspaceId },
@@ -84,10 +84,25 @@ export default async function DashboardPage() {
   ])
 
   const severity = Object.fromEntries(
-    severityGroups.map((group) => [group.severity, group._count._all])
+    Object.entries(
+      findingGroups.reduce<Record<string, number>>((totals, group) => {
+        totals[group.severity] = (totals[group.severity] ?? 0) + group._count._all
+        return totals
+      }, {})
+    )
   )
-  const statuses = Object.fromEntries(
-    statusGroups.map((group) => [group.status, group._count._all])
+  const statuses = findingGroups.reduce<Record<string, number>>((totals, group) => {
+    totals[group.status] = (totals[group.status] ?? 0) + group._count._all
+    return totals
+  }, {})
+  const readiness = generateLaunchReadinessReportFromAggregate(
+    findingGroups.map((group) => ({
+      severity: group.severity,
+      status: group.status,
+      verified: group.verified,
+      count: group._count._all,
+    })),
+    completedScanCount > 0
   )
   const fixed = statuses.FIXED ?? 0
   const inProgress =
@@ -100,6 +115,31 @@ export default async function DashboardPage() {
   const trend = [...scoreSnapshots]
     .reverse()
     .map((snapshot) => ({ label: formatDate(snapshot.computedAt), score: snapshot.score }))
+  const readinessConfig =
+    readiness.verdict === "GO"
+      ? {
+          label: "Ready to launch",
+          description: "Current scan evidence has no unresolved launch blockers.",
+          href: "/dashboard/launch-readiness",
+          action: "Review launch decision",
+          className: "border-success bg-success/10",
+        }
+      : readiness.verdict === "NOT_EVALUATED"
+        ? {
+            label: "Needs evidence",
+            description: "Run a scan before making a launch decision.",
+            href: "/dashboard/scans?new=1",
+            action: "Start a safe scan",
+            className: "border-warning bg-warning/10",
+          }
+        : {
+            label: "Needs action",
+            description:
+              readiness.conditions[0] ?? "Review the remaining evidence before you launch.",
+            href: "/dashboard/findings",
+            action: "Review blockers",
+            className: "border-destructive bg-destructive/10",
+          }
 
   return (
     <div className="flex flex-col gap-6 lg:gap-8">
@@ -109,26 +149,46 @@ export default async function DashboardPage() {
             {activeWorkspace?.name ?? "Active workspace"}
           </p>
           <h1 className="mt-1 text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
-            Security command center
+            What needs your attention?
           </h1>
           <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
-            Monitor verified risk, remediation momentum, and release readiness from one operational
-            view.
+            Start with the next decision, then use the evidence below when you need detail.
           </p>
         </div>
         <Link
-          href="/dashboard/scans"
+          href="/dashboard/scans?new=1"
           className={buttonVariants({ className: "self-start sm:self-auto" })}
         >
-          <Plus className="size-4" aria-hidden="true" />
-          New scan
+          <Play className="size-4" aria-hidden="true" />
+          Start a scan
         </Link>
       </header>
+
+      <section
+        className={`border-l-2 p-5 sm:p-6 ${readinessConfig.className}`}
+        aria-labelledby="launch-verdict"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.14em] uppercase">Launch verdict</p>
+            <h2 id="launch-verdict" className="mt-1 text-2xl font-bold tracking-tight">
+              {readinessConfig.label}
+            </h2>
+            <p className="text-foreground/80 mt-2 max-w-2xl text-sm">
+              {readinessConfig.description}
+            </p>
+          </div>
+          <Link href={readinessConfig.href} className={buttonVariants({ variant: "secondary" })}>
+            {readinessConfig.action}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        </div>
+      </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Workspace metrics">
         <MetricCard
           label="Security score"
-          value={latestScore?.score ?? "—"}
+          value={readiness.score ?? latestScore?.score ?? "—"}
           detail={
             latestScore
               ? `Grade ${latestScore.grade.replace("_PLUS", "+")}`
@@ -145,7 +205,7 @@ export default async function DashboardPage() {
         <MetricCard
           label="Scans"
           value={scanCount}
-          detail={`${recentScans.filter((scan) => scan.status === "COMPLETED").length} recently completed`}
+          detail={`${completedScanCount} completed evidence run${completedScanCount === 1 ? "" : "s"}`}
           icon={Radar}
         />
         <MetricCard
@@ -253,16 +313,8 @@ export default async function DashboardPage() {
                       {formatDate(scan.createdAt)} · {scan._count.findings} findings
                     </span>
                   </span>
-                  <Badge
-                    variant={
-                      scan.status === "COMPLETED"
-                        ? "success"
-                        : scan.status === "FAILED"
-                          ? "danger"
-                          : "info"
-                    }
-                  >
-                    {scan.status.replaceAll("_", " ")}
+                  <Badge variant={getScanPresentation(scan.status).badgeVariant}>
+                    {getScanPresentation(scan.status).label}
                   </Badge>
                 </Link>
               ))}

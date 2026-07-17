@@ -7,6 +7,7 @@ import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@ly
 import { apiPost, apiGetPaginated } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
 import { mergePolledScans } from "./scans-client.utils"
+import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 
 interface ScanItem {
   id: string
@@ -43,22 +44,7 @@ interface ScansClientProps {
   targets: TargetItem[]
   initialData: ScanItem[]
   initialNextCursor: string | null
-}
-
-const STATUS_VARIANT: Record<
-  string,
-  "default" | "success" | "danger" | "warning" | "info" | "muted"
-> = {
-  QUEUED: "muted",
-  PREFLIGHT: "info",
-  RUNNING: "default",
-  VERIFYING: "default",
-  COMPLETED: "success",
-  FAILED: "danger",
-  CANCELLED: "muted",
-  REQUIRES_APPROVAL: "warning",
-  STOPPED_BUDGET: "warning",
-  TIMED_OUT: "danger",
+  initialShowCreate?: boolean
 }
 
 const GOAL_LABELS: Record<string, string> = {
@@ -75,13 +61,14 @@ export function ScansClient({
   targets,
   initialData,
   initialNextCursor,
+  initialShowCreate = false,
 }: ScansClientProps) {
   const [scans, setScans] = useState<ScanItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasLoadedMore, setHasLoadedMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [showCreate, setShowCreate] = useState(false)
+  const [showCreate, setShowCreate] = useState(initialShowCreate)
   const [selectedTarget, setSelectedTarget] = useState("")
   const [selectedGoal, setSelectedGoal] = useState("TEST_APP")
   const [selectedMode, setSelectedMode] = useState("SAFE")
@@ -167,9 +154,7 @@ export function ScansClient({
     }
   }
 
-  const isActive = (status: string) =>
-    ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"].includes(status)
-  const hasActiveScans = scans.some((scan) => isActive(scan.status))
+  const hasActiveScans = scans.some((scan) => isActiveScan(scan.status))
 
   useEffect(() => {
     if (!hasActiveScans) return
@@ -311,69 +296,71 @@ export function ScansClient({
         />
       ) : (
         <div className="space-y-3">
-          {scans.map((scan) => (
-            <Card
-              key={scan.id}
-              className="hover:shadow-card-hover p-4 transition-shadow duration-200"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <Badge variant={STATUS_VARIANT[scan.status] ?? "muted"}>{scan.status}</Badge>
-                    <span className="text-sm font-medium">
-                      {GOAL_LABELS[scan.goal] ?? scan.goal}
-                    </span>
-                    <span className="text-muted-foreground text-xs">{scan.mode}</span>
-                  </div>
-                  {scan.target && (
-                    <p className="mb-1 truncate text-sm">
-                      <span className="font-medium">{scan.target.name}</span>
-                      <span className="text-muted-foreground ml-2">
-                        {scan.target.repoFullName ?? scan.target.url ?? scan.target.type}
+          {scans.map((scan) => {
+            const presentation = getScanPresentation(scan.status)
+            return (
+              <Card key={scan.id} className="p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <Badge variant={presentation.badgeVariant}>{presentation.label}</Badge>
+                      <span className="text-sm font-medium">
+                        {GOAL_LABELS[scan.goal] ?? scan.goal}
                       </span>
-                    </p>
-                  )}
-                  {scan.summary && <p className="text-muted-foreground text-sm">{scan.summary}</p>}
-                  {scan.errorMessage && (
-                    <p className="text-destructive text-sm">{scan.errorMessage}</p>
-                  )}
-                  <div className="text-muted-foreground mt-1 flex items-center gap-3 text-xs">
-                    <span>{formatDateTime(scan.createdAt)}</span>
-                    {scan.endedAt && <span>· ended {formatDateTime(scan.endedAt)}</span>}
-                    {scan.findingCount !== undefined && scan.findingCount > 0 && (
-                      <span className="text-foreground font-medium">
-                        {scan.findingCount} finding{scan.findingCount !== 1 ? "s" : ""}
-                      </span>
+                      <span className="text-muted-foreground text-xs">{scan.mode}</span>
+                    </div>
+                    {scan.target && (
+                      <p className="mb-1 truncate text-sm">
+                        <span className="font-medium">{scan.target.name}</span>
+                        <span className="text-muted-foreground ml-2">
+                          {scan.target.repoFullName ?? scan.target.url ?? scan.target.type}
+                        </span>
+                      </p>
                     )}
+                    {scan.summary && presentation.assuranceAvailable && (
+                      <p className="text-muted-foreground text-sm">{scan.summary}</p>
+                    )}
+                    {scan.errorMessage && (
+                      <p className="text-destructive text-sm">{presentation.description}</p>
+                    )}
+                    <div className="text-muted-foreground mt-1 flex items-center gap-3 text-xs">
+                      <span>{formatDateTime(scan.createdAt)}</span>
+                      {scan.endedAt && <span>· ended {formatDateTime(scan.endedAt)}</span>}
+                      {scan.findingCount !== undefined && scan.findingCount > 0 && (
+                        <span className="text-foreground font-medium">
+                          {scan.findingCount} finding{scan.findingCount !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isActiveScan(scan.status) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCancelScan(scan.id)}
+                        disabled={cancelling === scan.id}
+                      >
+                        {cancelling === scan.id ? (
+                          <Spinner className="h-4 w-4" />
+                        ) : (
+                          <X className="h-4 w-4" aria-hidden="true" />
+                        )}
+                        <span className="ml-1">Cancel</span>
+                      </Button>
+                    )}
+                    <Link
+                      href={`/dashboard/scans/${scan.id}`}
+                      aria-label={`View details for ${scan.target?.name ?? "scan"}`}
+                      className="text-muted-foreground hover:text-foreground inline-flex min-h-11 min-w-11 items-center justify-center"
+                    >
+                      <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                    </Link>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {isActive(scan.status) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCancelScan(scan.id)}
-                      disabled={cancelling === scan.id}
-                    >
-                      {cancelling === scan.id ? (
-                        <Spinner className="h-4 w-4" />
-                      ) : (
-                        <X className="h-4 w-4" aria-hidden="true" />
-                      )}
-                      <span className="ml-1">Cancel</span>
-                    </Button>
-                  )}
-                  <Link
-                    href={`/dashboard/scans/${scan.id}`}
-                    aria-label={`View details for ${scan.target?.name ?? "scan"}`}
-                    className="text-muted-foreground hover:text-foreground inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg"
-                  >
-                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
-                  </Link>
-                </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            )
+          })}
 
           {nextCursor && (
             <div className="flex justify-center pt-4">

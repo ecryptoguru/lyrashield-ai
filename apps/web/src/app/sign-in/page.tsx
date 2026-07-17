@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { authClient, getAuthErrorMessage, isEmailNotVerifiedError } from "@lyrashield/auth"
@@ -15,6 +15,16 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
+  const [providers, setProviders] = useState({ github: false, microsoft: false })
+
+  useEffect(() => {
+    void fetch("/api/auth/providers")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { github?: boolean; microsoft?: boolean } | null) => {
+        if (data) setProviders({ github: Boolean(data.github), microsoft: Boolean(data.microsoft) })
+      })
+      .catch(() => {})
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -138,6 +148,14 @@ export default function SignInPage() {
                 placeholder="••••••••"
               />
             </FormField>
+            <div className="flex justify-end">
+              <Link
+                href="/forgot-password"
+                className="text-primary min-h-11 py-2 text-sm font-medium hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
 
             {error && (
               <p className="text-destructive text-sm" role="alert">
@@ -151,34 +169,42 @@ export default function SignInPage() {
             </Button>
           </form>
 
-          <div className="my-6 flex items-center gap-3">
-            <div className="bg-border h-px flex-1" />
-            <span className="text-muted-foreground text-xs font-medium">OR</span>
-            <div className="bg-border h-px flex-1" />
-          </div>
+          {(providers.github || providers.microsoft) && (
+            <>
+              <div className="my-6 flex items-center gap-3">
+                <div className="bg-border h-px flex-1" />
+                <span className="text-muted-foreground text-xs font-medium">OR</span>
+                <div className="bg-border h-px flex-1" />
+              </div>
 
-          <div className="space-y-3">
-            <Button
-              onClick={handleGitHub}
-              disabled={loading}
-              variant="secondary"
-              className="w-full"
-              size="lg"
-            >
-              <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-              Continue with GitHub
-            </Button>
-            <Button
-              onClick={handleMicrosoft}
-              disabled={loading}
-              variant="secondary"
-              className="w-full"
-              size="lg"
-            >
-              <MicrosoftIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-              Continue with Microsoft
-            </Button>
-          </div>
+              <div className="space-y-3">
+                {providers.github && (
+                  <Button
+                    onClick={handleGitHub}
+                    disabled={loading}
+                    variant="secondary"
+                    className="w-full"
+                    size="lg"
+                  >
+                    <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Continue with GitHub
+                  </Button>
+                )}
+                {providers.microsoft && (
+                  <Button
+                    onClick={handleMicrosoft}
+                    disabled={loading}
+                    variant="secondary"
+                    className="w-full"
+                    size="lg"
+                  >
+                    <MicrosoftIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Continue with Microsoft
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         <p className="text-muted-foreground mt-6 text-center text-sm">

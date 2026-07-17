@@ -6,9 +6,9 @@ import { cn } from "./utils"
 describe("buttonVariants", () => {
   it("applies default variant classes", () => {
     const cls = buttonVariants()
-    expect(cls).toContain("rounded-lg")
+    expect(cls).toContain("rounded-[2px]")
     expect(cls).toContain("inline-flex")
-    expect(cls).toContain("gradient-primary")
+    expect(cls).toContain("bg-primary")
     expect(cls).toContain("shadow-sm")
   })
 

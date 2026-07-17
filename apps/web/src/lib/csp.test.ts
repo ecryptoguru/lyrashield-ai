@@ -46,6 +46,10 @@ function makeRequest(pathname: string): NextRequest {
   })
 }
 
+function makePublicRequest(pathname: string): NextRequest {
+  return new NextRequest(new URL(`https://app.example.com${pathname}`))
+}
+
 describe("CSP nonce proxy", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -112,10 +116,17 @@ describe("CSP nonce proxy", () => {
   })
 
   it("includes upgrade-insecure-requests in CSP", async () => {
-    const req = makeRequest("/dashboard")
+    const req = makePublicRequest("/dashboard")
     const res = await proxy(req)
     const csp = res.headers.get("Content-Security-Policy")!
     expect(csp).toContain("upgrade-insecure-requests")
+  })
+
+  it("does not upgrade HTTP requests in local Docker previews", async () => {
+    const req = makeRequest("/dashboard")
+    const res = await proxy(req)
+    const csp = res.headers.get("Content-Security-Policy")!
+    expect(csp).not.toContain("upgrade-insecure-requests")
   })
 
   it("allows avatar image hosts in img-src", async () => {

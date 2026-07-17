@@ -46,20 +46,20 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
       response.url().endsWith("/api/workspaces") && response.request().method() === "POST"
   )
   await page.getByLabel("Workspace name").fill(`E2E ${suffix}`)
-  await page.getByRole("button", { name: "Create workspace" }).click()
+  await page.getByRole("button", { name: "Continue" }).click()
   const workspaceBody = await (await workspaceResponse).json()
   const workspaceId = workspaceBody.data.id as string
 
   const targetResponse = page.waitForResponse(
     (response) => response.url().endsWith("/api/targets") && response.request().method() === "POST"
   )
-  await page.getByLabel("Target name").fill("Example target")
-  await page.getByLabel("Repo owner").fill("octocat")
-  await page.getByLabel("Repo name").fill("Hello-World")
-  await page.getByRole("button", { name: "Add target" }).click()
+  await page.locator("#target-name").fill("Example target")
+  await page.locator("#repo-owner").fill("octocat")
+  await page.locator("#repo-name").fill("Hello-World")
+  await page.getByRole("button", { name: "Continue" }).click()
   const targetBody = await (await targetResponse).json()
   const targetId = targetBody.data.id as string
-  await expect(page.getByRole("heading", { name: "Choose your goal" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Review and start" })).toBeVisible()
 
   const scan = await page.request.post("/api/scans", {
     data: { workspaceId, targetId, goal: "TEST_APP", mode: "SAFE" },

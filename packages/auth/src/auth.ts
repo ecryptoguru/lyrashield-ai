@@ -87,6 +87,40 @@ async function sendVerificationEmail({
   }
 }
 
+async function sendResetPasswordEmail({
+  user,
+  url,
+}: {
+  user: { email: string; name: string }
+  url: string
+}) {
+  if (isProd && env.BREVO_API_KEY) {
+    void fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": env.BREVO_API_KEY,
+      },
+      body: JSON.stringify({
+        sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
+        to: [{ email: user.email, name: user.name }],
+        subject: "Reset your LyraShield password",
+        htmlContent: `<p>Hi ${user.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")},</p><p>Use the link below to reset your password. It expires in one hour.</p><p><a href="${url}">Reset password</a></p><p>If you did not request this, you can safely ignore this email.</p>`,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) logger.error("Failed to send reset email via Brevo", { status: res.status })
+      })
+      .catch((error) =>
+        logger.error("Exception while sending reset email", { error: String(error) })
+      )
+  } else if (isProd) {
+    logger.error("BREVO_API_KEY is required to send password reset emails")
+  } else {
+    logger.info("Password reset (dev mode — no email sent)", { email: user.email, url })
+  }
+}
+
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
@@ -97,6 +131,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: !isDev,
+    sendResetPassword: sendResetPasswordEmail,
   },
   emailVerification: {
     sendVerificationEmail,

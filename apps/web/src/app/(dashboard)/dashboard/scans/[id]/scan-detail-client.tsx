@@ -18,6 +18,7 @@ import {
 import { Card, Badge, Button, EmptyState } from "@lyrashield/ui"
 import { formatTime } from "@/lib/date-format"
 import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
+import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 
 interface ScanEvent {
   id: string
@@ -68,22 +69,6 @@ interface FindingItem {
   verificationMethod: string | null
   verificationReason: string | null
   createdAt: string
-}
-
-const STATUS_VARIANT: Record<
-  string,
-  "default" | "success" | "danger" | "warning" | "info" | "muted"
-> = {
-  QUEUED: "muted",
-  PREFLIGHT: "info",
-  RUNNING: "default",
-  VERIFYING: "default",
-  COMPLETED: "success",
-  FAILED: "danger",
-  CANCELLED: "muted",
-  REQUIRES_APPROVAL: "warning",
-  STOPPED_BUDGET: "warning",
-  TIMED_OUT: "danger",
 }
 
 const SEVERITY_ORDER: Record<string, number> = {
@@ -156,9 +141,8 @@ export function ScanDetailClient({
   const [expandedFindings, setExpandedFindings] = useState<Set<string>>(new Set())
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const isActive = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"].includes(
-    scan.status
-  )
+  const isActive = isActiveScan(scan.status)
+  const presentation = getScanPresentation(scan.status)
 
   const refresh = useCallback(async () => {
     try {
@@ -237,7 +221,7 @@ export function ScanDetailClient({
       <div className="mb-6">
         <Link
           href="/dashboard/scans"
-          className="text-muted-foreground hover:text-foreground mb-3 inline-flex items-center gap-1.5 text-sm"
+          className="text-muted-foreground hover:text-foreground mb-3 inline-flex min-h-11 items-center gap-1.5 px-1 text-sm"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back to scans
@@ -246,7 +230,7 @@ export function ScanDetailClient({
           <div>
             <h1 className="flex items-center gap-3 text-2xl font-bold tracking-tight">
               <Radar className="h-6 w-6" aria-hidden="true" />
-              Scan Details
+              {presentation.headline}
             </h1>
             <p className="text-muted-foreground mt-1 text-sm">
               {GOAL_LABELS[scan.goal] ?? scan.goal} · {scan.mode} · {scan.triggerType}
@@ -262,15 +246,15 @@ export function ScanDetailClient({
                 Live
               </span>
             )}
-            <Badge variant={STATUS_VARIANT[scan.status] ?? "muted"} className="text-sm">
-              {scan.status}
+            <Badge variant={presentation.badgeVariant} className="text-sm">
+              {presentation.label}
             </Badge>
           </div>
         </div>
       </div>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="p-4">
+      <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-5">
+        <Card className="border-0 p-4 shadow-none">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Clock className="h-4 w-4" aria-hidden="true" />
             Duration
@@ -279,14 +263,14 @@ export function ScanDetailClient({
             {formatDuration(scan.startedAt, scan.endedAt)}
           </p>
         </Card>
-        <Card className="p-4">
+        <Card className="border-0 p-4 shadow-none">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-            Findings
+            Findings reported
           </div>
           <p className="mt-1 text-lg font-semibold">{currentFindings.length}</p>
         </Card>
-        <Card className="p-4">
+        <Card className="border-0 p-4 shadow-none">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
             Independently verified
@@ -295,14 +279,14 @@ export function ScanDetailClient({
             {currentFindings.filter((f) => f.verified).length}
           </p>
         </Card>
-        <Card className="p-4">
+        <Card className="border-0 p-4 shadow-none">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <XCircle className="h-4 w-4" aria-hidden="true" />
             Status
           </div>
-          <p className="mt-1 text-lg font-semibold">{scan.status}</p>
+          <p className="mt-1 text-lg font-semibold">{presentation.label}</p>
         </Card>
-        <Card className="p-4">
+        <Card className="border-0 p-4 shadow-none">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
             Result integrity
@@ -336,17 +320,26 @@ export function ScanDetailClient({
         </Card>
       )}
 
-      {scan.errorMessage && (
+      {presentation.showFailureDetails && (
         <div
           role="alert"
-          className="border-destructive/50 bg-destructive/10 text-destructive mb-6 rounded-lg border p-4 text-sm"
+          className="border-destructive/50 bg-destructive/10 mb-6 border-l-2 p-4 text-sm"
         >
-          <p className="font-semibold">{scan.errorCategory}</p>
-          <p className="mt-1">{scan.errorMessage}</p>
+          <p className="font-semibold">{presentation.headline}</p>
+          <p className="text-foreground/80 mt-1">{presentation.description}</p>
+          {scan.errorMessage && (
+            <details className="text-foreground/80 mt-3">
+              <summary className="cursor-pointer font-medium">Failure details</summary>
+              <p className="mt-2 wrap-break-word">
+                {scan.errorCategory ? `${scan.errorCategory}: ` : ""}
+                {scan.errorMessage}
+              </p>
+            </details>
+          )}
         </div>
       )}
 
-      {scan.summary && (
+      {scan.summary && presentation.assuranceAvailable && (
         <Card className="mb-6 p-4">
           <h2 className="mb-1 text-sm font-semibold">Summary</h2>
           <p className="text-muted-foreground text-sm">{scan.summary}</p>
@@ -526,7 +519,7 @@ export function ScanDetailClient({
         </div>
       )}
 
-      {currentFindings.length === 0 && !isActive && (
+      {currentFindings.length === 0 && !isActive && presentation.assuranceAvailable && (
         <EmptyState
           icon={ShieldCheck}
           title={hasLimitedCoverage ? "No findings were reported" : "No findings"}
@@ -540,51 +533,59 @@ export function ScanDetailClient({
         />
       )}
 
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Scan Events ({scan.events.length})</h2>
-          {scan.events.length > 10 && (
-            <Button variant="ghost" size="sm" onClick={() => setExpandedEvents(!expandedEvents)}>
-              {expandedEvents ? "Show last 10" : `Show all ${scan.events.length}`}
-            </Button>
+      <details className="group">
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 border-y py-3 text-sm font-semibold marker:hidden">
+          <span>Technical details</span>
+          <span className="text-muted-foreground text-xs font-normal">
+            {scan.events.length} event{scan.events.length === 1 ? "" : "s"}
+          </span>
+        </summary>
+        <div className="pt-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Scan events</h2>
+            {scan.events.length > 10 && (
+              <Button variant="ghost" size="sm" onClick={() => setExpandedEvents(!expandedEvents)}>
+                {expandedEvents ? "Show last 10" : `Show all ${scan.events.length}`}
+              </Button>
+            )}
+          </div>
+          {scan.events.length === 0 ? (
+            <EmptyState
+              icon={Clock}
+              title="No events"
+              description="No scan events have been recorded yet."
+            />
+          ) : (
+            <Card className="p-4">
+              <div className="space-y-2">
+                {visibleEvents.map((event, idx) => (
+                  <div
+                    key={event.id}
+                    className="flex items-start gap-3 border-b pb-2 text-sm last:border-0 last:pb-0"
+                  >
+                    <span className="text-muted-foreground shrink-0 text-xs">
+                      {formatTime(event.createdAt)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span
+                        className={`font-mono text-xs ${EVENT_LEVEL_COLOR[event.level] ?? "text-muted-foreground"}`}
+                      >
+                        [{event.stage}]
+                      </span>
+                      <span className="ml-2 wrap-break-word">{event.message}</span>
+                    </div>
+                    {idx === 0 && !expandedEvents && scan.events.length > 10 && (
+                      <span className="text-muted-foreground shrink-0 text-xs">
+                        +{scan.events.length - 10} earlier
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Card>
           )}
         </div>
-        {scan.events.length === 0 ? (
-          <EmptyState
-            icon={Clock}
-            title="No events"
-            description="No scan events have been recorded yet."
-          />
-        ) : (
-          <Card className="p-4">
-            <div className="space-y-2">
-              {visibleEvents.map((event, idx) => (
-                <div
-                  key={event.id}
-                  className="flex items-start gap-3 border-b pb-2 text-sm last:border-0 last:pb-0"
-                >
-                  <span className="text-muted-foreground shrink-0 text-xs">
-                    {formatTime(event.createdAt)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <span
-                      className={`font-mono text-xs ${EVENT_LEVEL_COLOR[event.level] ?? "text-muted-foreground"}`}
-                    >
-                      [{event.stage}]
-                    </span>
-                    <span className="ml-2 wrap-break-word">{event.message}</span>
-                  </div>
-                  {idx === 0 && !expandedEvents && scan.events.length > 10 && (
-                    <span className="text-muted-foreground shrink-0 text-xs">
-                      +{scan.events.length - 10} earlier
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-      </div>
+      </details>
     </div>
   )
 }

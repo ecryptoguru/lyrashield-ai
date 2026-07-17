@@ -3,7 +3,11 @@ import { redirect } from "next/navigation"
 import { ScansClient } from "./scans-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 
-export default async function ScansPage() {
+export default async function ScansPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>
+}) {
   const session = await getCachedSession()
   if (!session) redirect("/sign-in")
 
@@ -70,6 +74,7 @@ export default async function ScansPage() {
       }))}
       initialData={initialData}
       initialNextCursor={nextCursor}
+      initialShowCreate={(await searchParams).new === "1"}
     />
   )
 }
