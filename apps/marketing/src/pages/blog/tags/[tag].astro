@@ -1,12 +1,11 @@
 ---
 import Base from "@layouts/Base.astro"
 import BlogCard from "@components/BlogCard.astro"
-import { getCollection, getEntry, type CollectionEntry } from "astro:content"
+import { getCollection, getEntry } from "astro:content"
 import {
   BLOG_CATEGORIES,
   categoryHref,
   getCategoriesWithCounts,
-  type BlogCategory,
 } from "../../../lib/blog-categories"
 
 export async function getStaticPaths() {
@@ -21,11 +20,6 @@ export async function getStaticPaths() {
       posts: posts.filter((post) => post.data.tags.includes(category.id)),
     },
   }))
-}
-
-interface Props {
-  category: BlogCategory
-  posts: CollectionEntry<"blog">[]
 }
 
 const { category, posts } = Astro.props
