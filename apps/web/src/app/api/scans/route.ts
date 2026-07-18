@@ -1,7 +1,7 @@
 import { prisma, createScan, listScans, updateScanStatus } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { CreateScanSchema } from "@lyrashield/types"
+import { CreateScanSchema, ScanStatusSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
 import {
@@ -163,10 +163,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const workspaceId = searchParams.get("workspaceId")
     const targetId = searchParams.get("targetId")
-    const status = searchParams.get("status")
+    const rawStatus = searchParams.get("status")
+    const status = rawStatus ? ScanStatusSchema.safeParse(rawStatus) : undefined
 
     if (!workspaceId) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
+    }
+    if (status && !status.success) {
+      return apiError("INVALID_PARAM", "status must be a valid scan status", 400)
     }
 
     await requirePermission(workspaceId, PERMISSIONS.scan.view)
@@ -176,7 +180,7 @@ export async function GET(request: Request) {
     const { items, nextCursor } = await listScans({
       workspaceId,
       ...(targetId ? { targetId } : {}),
-      ...(status ? { status: status as never } : {}),
+      ...(status?.success ? { status: status.data } : {}),
       ...(cursor ? { cursor } : {}),
       limit,
     })

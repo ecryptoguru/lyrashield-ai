@@ -25,6 +25,7 @@ const mockPrisma = prisma as unknown as {
 describe("updateScanStatus", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
     mockPrisma.scanEvent.create.mockResolvedValue({ id: "event-1" })
   })
 
@@ -49,6 +50,10 @@ describe("updateScanStatus", () => {
 })
 
 describe("createScan", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it("rejects an invalid determinism mode before opening a transaction", async () => {
     await expect(
       createScan({

@@ -142,7 +142,7 @@ describe("schedule-service", () => {
       const result = await listSchedules({ workspaceId: "ws-1", limit: 20 })
 
       expect(result.items).toHaveLength(20)
-      expect(result.nextCursor).toBe("sched-20")
+      expect(result.nextCursor).toBe("sched-19")
     })
 
     it("filters by targetId and enabled", async () => {

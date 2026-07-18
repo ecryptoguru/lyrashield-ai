@@ -47,8 +47,17 @@ function isLocalEvidenceConfigured(): boolean {
   return env.NODE_ENV !== "production" && env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE === "1"
 }
 
+export function assertEvidenceStorageConfigured(): void {
+  if (!isLocalEvidenceConfigured() && !isS3Configured()) {
+    throw new EvidenceStorageConfigurationError()
+  }
+}
+
+let s3Client: S3Client | null = null
+
 function getS3Client(): S3Client {
-  return new S3Client({
+  if (s3Client) return s3Client
+  s3Client = new S3Client({
     endpoint: env.S3_ENDPOINT,
     region: env.S3_REGION || "auto",
     credentials: {
@@ -57,6 +66,7 @@ function getS3Client(): S3Client {
     },
     forcePathStyle: true,
   })
+  return s3Client
 }
 
 function computeChecksum(content: string): string {
@@ -67,9 +77,10 @@ function buildKey(
   workspaceId: string,
   findingId: string,
   type: string,
-  artifactId: string
+  artifactId: string,
+  checksum: string
 ): string {
-  return `evidence/${workspaceId}/${findingId}/${type}/${artifactId}`
+  return `evidence/${workspaceId}/${findingId}/${type}/${artifactId}-${checksum}`
 }
 
 function getLocalEvidencePath(key: string): string {
@@ -133,7 +144,7 @@ export async function uploadEvidence(params: UploadEvidenceParams): Promise<Uplo
   } = params
 
   const checksum = computeChecksum(content)
-  const key = buildKey(workspaceId, findingId, type, artifactId)
+  const key = buildKey(workspaceId, findingId, type, artifactId, checksum)
 
   if (isLocalEvidenceConfigured()) {
     return storeLocalEvidence(key, content, checksum)
@@ -146,7 +157,7 @@ export async function uploadEvidence(params: UploadEvidenceParams): Promise<Uplo
       type,
       artifactId,
     })
-    throw new EvidenceStorageConfigurationError()
+    assertEvidenceStorageConfigured()
   }
 
   const client = getS3Client()

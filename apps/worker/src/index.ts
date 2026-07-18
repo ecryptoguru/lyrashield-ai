@@ -12,8 +12,12 @@ import {
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
 import { startScheduleRunner } from "./schedules"
-import { terminateActiveEngineProcesses } from "./engine/runner"
+import {
+  assertRepositoryScanRuntimeConfigured,
+  terminateActiveEngineProcesses,
+} from "./engine/runner"
 import { reconcileFailedQueueJob, reconcileScanQueue } from "./queue-reconciliation"
+import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let queueEvents: ReturnType<typeof getScanQueueEvents> | null = null
@@ -99,6 +103,8 @@ process.on("SIGINT", () => void shutdown("SIGINT"))
 
 async function main(): Promise<void> {
   logger.info("LyraShield worker starting", { redisConfigured: Boolean(env.REDIS_URL) })
+  assertEvidenceStorageConfigured()
+  assertRepositoryScanRuntimeConfigured()
 
   worker = new Worker<ScanJobData, ScanJobResult>(SCAN_QUEUE_NAME, processScanJob, {
     connection: {
@@ -106,11 +112,32 @@ async function main(): Promise<void> {
       maxRetriesPerRequest: null,
     },
     concurrency: 3,
+    autorun: false,
   })
 
   await worker.waitUntilReady()
+  queueEvents = getScanQueueEvents()
+  await queueEvents.waitUntilReady()
+  queueEvents.on("completed", ({ jobId, returnvalue }) => {
+    logger.info("Job completed", { jobId, result: returnvalue })
+  })
+  queueEvents.on("failed", ({ jobId, failedReason }) => {
+    logger.error("Job failed in queue", { jobId, reason: failedReason })
+    if (jobId) void reconcileFailedQueueJob(jobId, failedReason)
+  })
+
+  worker.on("error", (error) => {
+    logger.error("Worker error", { error: error.message, stack: error.stack })
+  })
+
+  await reconcileScanQueue()
   await registerScanWorker(workerId)
   await refreshWorkerReadiness()
+  void worker.run().catch((error) => {
+    logger.error("BullMQ worker stopped unexpectedly", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
   logger.info("Worker ready — processing scan jobs", {
     queue: SCAN_QUEUE_NAME,
     concurrency: 3,
@@ -125,24 +152,6 @@ async function main(): Promise<void> {
       })
   }, SCAN_WORKER_HEARTBEAT_MS)
 
-  queueEvents = getScanQueueEvents()
-  queueEvents.on("completed", ({ jobId, returnvalue }) => {
-    logger.info("Job completed", { jobId, result: returnvalue })
-  })
-  queueEvents.on("failed", ({ jobId, failedReason }) => {
-    logger.error("Job failed in queue", { jobId, reason: failedReason })
-    if (jobId) void reconcileFailedQueueJob(jobId, failedReason)
-  })
-
-  worker.on("error", (error) => {
-    logger.error("Worker error", { error: error.message, stack: error.stack })
-  })
-
-  void reconcileScanQueue().catch((error) => {
-    logger.error("Initial scan queue reconciliation failed", {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  })
   reconciliationTimer = setInterval(() => {
     void reconcileScanQueue().catch((error) => {
       logger.error("Scan queue reconciliation failed", {

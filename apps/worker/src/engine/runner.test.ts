@@ -119,11 +119,11 @@ describe("interpretExitCode", () => {
     expect(result.category).toBe("VULNERABILITIES_FOUND")
   })
 
-  it("maps exit 3+ to FAILED", () => {
+  it("maps exit 3 to the protected budget terminal state", () => {
     const result = interpretExitCode(3)
     expect(result.status).toBe("FAILED")
-    expect(result.category).toBe("ENGINE_ERROR")
-    expect(result.message).toContain("code 3")
+    expect(result.category).toBe("BUDGET_EXCEEDED")
+    expect(result.message).toContain("protected budget")
   })
 
   it("maps negative exit codes to FAILED", () => {

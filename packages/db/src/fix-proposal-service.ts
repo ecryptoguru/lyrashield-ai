@@ -83,13 +83,14 @@ export async function listFixProposals(params: {
       },
       pullRequests: true,
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
   })
 
-  const nextCursor = proposals.length > limit ? proposals[limit]!.id : null
-  const items = proposals.slice(0, limit) as FixProposalWithDetails[]
+  const hasMore = proposals.length > limit
+  const items = (hasMore ? proposals.slice(0, limit) : proposals) as FixProposalWithDetails[]
+  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
   return { items, nextCursor }
 }

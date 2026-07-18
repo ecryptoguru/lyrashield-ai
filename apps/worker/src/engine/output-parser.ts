@@ -58,6 +58,7 @@ export interface EngineRunRecord {
   max_output_tokens?: number
   max_agents?: number
   scan_mode?: string
+  terminal_reason?: string
 }
 
 export interface ParsedScanOutput {
@@ -65,6 +66,8 @@ export interface ParsedScanOutput {
   runRecord: EngineRunRecord | null
   summary: string
   findingCount: number
+  /** False when the engine did not provide a valid findings artifact. */
+  findingsComplete: boolean
 }
 
 const VALID_SEVERITIES = new Set([
@@ -418,17 +421,20 @@ function validateVulnerability(v: Record<string, unknown>): EngineVulnerability 
   }
 }
 
-export function parseVulnerabilitiesJson(raw: string): EngineVulnerability[] {
-  if (!raw.trim()) return []
+function parseVulnerabilitiesArtifact(raw: string): {
+  vulnerabilities: EngineVulnerability[]
+  complete: boolean
+} {
+  if (!raw.trim()) return { vulnerabilities: [], complete: false }
   try {
     const data = JSON.parse(raw)
     if (!Array.isArray(data)) {
       logger.warn("vulnerabilities.json is not an array", { type: typeof data })
-      return []
+      return { vulnerabilities: [], complete: false }
     }
     if (data.length > MAX_ENGINE_FINDINGS) {
       logger.warn("vulnerabilities.json exceeds finding limit", { count: data.length })
-      return []
+      return { vulnerabilities: [], complete: false }
     }
     const validated: EngineVulnerability[] = []
     for (const item of data) {
@@ -436,13 +442,17 @@ export function parseVulnerabilitiesJson(raw: string): EngineVulnerability[] {
       const vuln = validateVulnerability(item as Record<string, unknown>)
       if (vuln) validated.push(vuln)
     }
-    return validated
+    return { vulnerabilities: validated, complete: true }
   } catch (err) {
     logger.error("Failed to parse vulnerabilities.json", {
       error: err instanceof Error ? err.message : String(err),
     })
-    return []
+    return { vulnerabilities: [], complete: false }
   }
+}
+
+export function parseVulnerabilitiesJson(raw: string): EngineVulnerability[] {
+  return parseVulnerabilitiesArtifact(raw).vulnerabilities
 }
 
 export function parseRunJson(raw: string): EngineRunRecord | null {
@@ -493,6 +503,9 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
       ...(maxAgents !== undefined ? { max_agents: maxAgents } : {}),
       ...(boundedString(record.scan_mode) ? { scan_mode: boundedString(record.scan_mode) } : {}),
+      ...(boundedString(record.terminal_reason)
+        ? { terminal_reason: boundedString(record.terminal_reason) }
+        : {}),
     }
   } catch (err) {
     logger.error("Failed to parse run.json", {
@@ -506,7 +519,8 @@ export function parseEngineOutput(
   vulnerabilitiesRaw: string,
   runJsonRaw: string
 ): ParsedScanOutput {
-  const vulnerabilities = parseVulnerabilitiesJson(vulnerabilitiesRaw)
+  const parsedVulnerabilities = parseVulnerabilitiesArtifact(vulnerabilitiesRaw)
+  const vulnerabilities = parsedVulnerabilities.vulnerabilities
   const runRecord = parseRunJson(runJsonRaw)
 
   const summary = runRecord?.status
@@ -518,6 +532,7 @@ export function parseEngineOutput(
     runRecord,
     summary,
     findingCount: vulnerabilities.length,
+    findingsComplete: parsedVulnerabilities.complete,
   }
 }
 

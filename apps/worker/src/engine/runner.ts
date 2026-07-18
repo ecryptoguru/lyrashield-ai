@@ -27,6 +27,21 @@ const EXIT_CODE_MAP: Record<
     category: "VULNERABILITIES_FOUND",
     message: "Scan completed with vulnerabilities found",
   },
+  3: {
+    status: "FAILED",
+    category: "BUDGET_EXCEEDED",
+    message: "Engine stopped at the protected budget limit",
+  },
+  4: {
+    status: "FAILED",
+    category: "RATE_LIMITED",
+    message: "Engine stopped because the model provider rate limited the scan",
+  },
+  5: {
+    status: "FAILED",
+    category: "ENGINE_INCOMPLETE",
+    message: "Engine ended without a completed scan receipt",
+  },
   [-2]: {
     status: "FAILED",
     category: "INFRA_ERROR",
@@ -124,11 +139,34 @@ export function resolveEngineProfile(
   const model = selectedModel?.trim() || routingEnv.LYRASHIELD_LLM?.trim() || undefined
 
   const normalizedModel = model?.toLowerCase().replaceAll("_", "-")
-  if (normalizedModel && !/(?:^|[/.-])gpt-5\.6(?:$|[/.-])/.test(normalizedModel)) {
+  if (
+    normalizedModel &&
+    !/(?:^|[/.-])gpt-5\.6-(?:sol|terra|luna)(?:$|[/.-])/.test(normalizedModel)
+  ) {
     throw new Error("LyraShield scans require a GPT-5.6 Sol, Terra, or Luna deployment")
   }
 
   return { model, reasoningEffort: deep ? "high" : "medium" }
+}
+
+export function assertRepositoryScanRuntimeConfigured(): void {
+  requireRepositoryModel(resolveEngineProfile("SAFE").model)
+  requireRepositoryModel(resolveEngineProfile("DEEP").model)
+  if (!(
+    process.env.LLM_API_KEY ||
+    process.env.AZURE_OPENAI_API_KEY ||
+    process.env.AZURE_AI_API_KEY ||
+    process.env.OPENAI_API_KEY
+  )) {
+    throw new Error("A model provider credential must be configured for repository scans")
+  }
+}
+
+function requireRepositoryModel(model: string | undefined): string {
+  if (!model) {
+    throw new Error("A GPT-5.6 Sol, Terra, or Luna deployment must be configured")
+  }
+  return model
 }
 
 function buildEngineEnv(profile: EngineProfile): Record<string, string> {

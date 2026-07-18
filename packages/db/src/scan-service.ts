@@ -51,7 +51,7 @@ export async function createScan(params: CreateScanParams): Promise<Scan> {
       throw new Error("Target already has an active scan")
     }
 
-    return tx.scan.create({
+    const scan = await tx.scan.create({
       data: {
         workspaceId: params.workspaceId,
         targetId: params.targetId,
@@ -64,12 +64,20 @@ export async function createScan(params: CreateScanParams): Promise<Scan> {
         createdById: params.createdById,
       },
     })
-  })
-
-  await addScanEvent(scan.id, "queued", "info", "Scan queued", {
-    targetId: params.targetId,
-    goal: params.goal,
-    mode: params.mode ?? "SAFE",
+    await tx.scanEvent.create({
+      data: {
+        scanId: scan.id,
+        stage: "queued",
+        level: "info",
+        message: "Scan queued",
+        metadata: {
+          targetId: params.targetId,
+          goal: params.goal,
+          mode: params.mode ?? "SAFE",
+        },
+      },
+    })
+    return scan
   })
 
   logger.info("Scan created", {
@@ -91,58 +99,58 @@ export async function updateScanStatus(
     actualCostCents?: number
   }
 ): Promise<Scan> {
-  const scan = await prisma.scan.findUnique({ where: { id: scanId } })
-  if (!scan) throw new Error(`Scan not found: ${scanId}`)
+  const { updated, currentStatus } = await prisma.$transaction(async (tx) => {
+    const scan = await tx.scan.findUnique({ where: { id: scanId } })
+    if (!scan) throw new Error(`Scan not found: ${scanId}`)
 
-  const currentStatus = scan.status as ScanStatus
-  if (!isValidTransition(currentStatus, newStatus)) {
-    throw new Error(`Invalid scan status transition: ${currentStatus} → ${newStatus}`)
-  }
+    const currentStatus = scan.status as ScanStatus
+    if (!isValidTransition(currentStatus, newStatus)) {
+      throw new Error(`Invalid scan status transition: ${currentStatus} → ${newStatus}`)
+    }
 
-  const now = new Date()
-  const updateData: Record<string, unknown> = {
-    status: newStatus,
-    ...(metadata?.errorCategory ? { errorCategory: metadata.errorCategory } : {}),
-    ...(metadata?.errorMessage ? { errorMessage: metadata.errorMessage } : {}),
-    ...(metadata?.summary ? { summary: metadata.summary } : {}),
-    ...(metadata?.riskScoreAfter !== undefined ? { riskScoreAfter: metadata.riskScoreAfter } : {}),
-    ...(metadata?.actualCostCents !== undefined
-      ? { actualCostCents: metadata.actualCostCents }
-      : {}),
-  }
+    const now = new Date()
+    const updateData: Record<string, unknown> = {
+      status: newStatus,
+      ...(metadata?.errorCategory ? { errorCategory: metadata.errorCategory } : {}),
+      ...(metadata?.errorMessage ? { errorMessage: metadata.errorMessage } : {}),
+      ...(metadata?.summary ? { summary: metadata.summary } : {}),
+      ...(metadata?.riskScoreAfter !== undefined
+        ? { riskScoreAfter: metadata.riskScoreAfter }
+        : {}),
+      ...(metadata?.actualCostCents !== undefined
+        ? { actualCostCents: metadata.actualCostCents }
+        : {}),
+    }
 
-  if (newStatus === "PREFLIGHT" || newStatus === "RUNNING") {
-    if (!scan.startedAt) updateData.startedAt = now
-  }
-  if (
-    newStatus === "COMPLETED" ||
-    newStatus === "FAILED" ||
-    newStatus === "CANCELLED" ||
-    newStatus === "STOPPED_BUDGET" ||
-    newStatus === "TIMED_OUT"
-  ) {
-    updateData.endedAt = now
-  }
+    if ((newStatus === "PREFLIGHT" || newStatus === "RUNNING") && !scan.startedAt) {
+      updateData.startedAt = now
+    }
+    if (["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(newStatus)) {
+      updateData.endedAt = now
+    }
 
-  const result = await prisma.scan.updateMany({
-    where: { id: scanId, status: currentStatus },
-    data: updateData,
+    const result = await tx.scan.updateMany({
+      where: { id: scanId, status: currentStatus },
+      data: updateData,
+    })
+    if (result.count !== 1) {
+      const latest = await tx.scan.findUnique({ where: { id: scanId } })
+      throw new Error(`Scan status changed concurrently to ${latest?.status ?? "unknown"}`)
+    }
+
+    const updated = await tx.scan.findUnique({ where: { id: scanId } })
+    if (!updated) throw new Error(`Scan not found after status update: ${scanId}`)
+    await tx.scanEvent.create({
+      data: {
+        scanId,
+        stage: newStatus.toLowerCase(),
+        level: "info",
+        message: `Scan status: ${newStatus}`,
+        metadata: metadata ?? undefined,
+      },
+    })
+    return { updated, currentStatus }
   })
-  if (result.count !== 1) {
-    const latest = await prisma.scan.findUnique({ where: { id: scanId } })
-    throw new Error(`Scan status changed concurrently to ${latest?.status ?? "unknown"}`)
-  }
-
-  const updated = await prisma.scan.findUnique({ where: { id: scanId } })
-  if (!updated) throw new Error(`Scan not found after status update: ${scanId}`)
-
-  await addScanEvent(
-    scanId,
-    newStatus.toLowerCase(),
-    "info",
-    `Scan status: ${newStatus}`,
-    metadata ?? {}
-  )
 
   logger.info("Scan status updated", { scanId, from: currentStatus, to: newStatus })
   return updated
@@ -219,7 +227,7 @@ export async function listScans(params: ListScansParams): Promise<{
 
   const scans = await prisma.scan.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
     include: {

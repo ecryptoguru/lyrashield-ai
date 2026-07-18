@@ -76,13 +76,14 @@ export async function listRetests(params: {
         select: { id: true, status: true, summary: true },
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
   })
 
-  const nextCursor = retests.length > limit ? retests[limit]!.id : null
-  const items = retests.slice(0, limit) as RetestWithDetails[]
+  const hasMore = retests.length > limit
+  const items = (hasMore ? retests.slice(0, limit) : retests) as RetestWithDetails[]
+  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
   return { items, nextCursor }
 }

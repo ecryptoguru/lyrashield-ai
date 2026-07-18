@@ -171,19 +171,19 @@ export async function completeScanWithScore(scanId: string, summary: string | nu
       where: { id: scan.target.id },
       data: { lastScanAt: now },
     })
-    return { scan: updated, snapshot, created: true }
-  })
-
-  if (outcome.created) {
-    await prisma.scanEvent.create({
+    await tx.scanEvent.create({
       data: {
         scanId,
         stage: "completed",
         level: "info",
         message: "Scan status: COMPLETED",
-        metadata: { score: outcome.snapshot.score, grade: outcome.snapshot.grade },
+        metadata: { score: snapshot.score, grade: snapshot.grade },
       },
     })
+    return { scan: updated, snapshot, created: true }
+  })
+
+  if (outcome.created) {
     logger.info("Score snapshot created", {
       scanId,
       score: outcome.snapshot.score,

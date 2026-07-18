@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => ({
   prisma: {
+    $transaction: vi.fn(),
     scanResultManifest: { findUnique: vi.fn(), create: vi.fn() },
     scanCoverageReceipt: { createMany: vi.fn() },
     findingCandidate: { upsert: vi.fn() },
@@ -20,7 +21,10 @@ import {
 } from "./result-integrity"
 
 describe("result integrity", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback(prisma))
+  })
 
   it("records blocked source-scanner coverage instead of treating it as clean", () => {
     const receipts = buildCoverageReceipts({

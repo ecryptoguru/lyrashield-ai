@@ -224,10 +224,10 @@ export async function runScannerOrchestrator(
       { targetType: target.type, scanners: ["sca", "secrets", "agent_config"] }
     )
   }
-  const [scaRaw, secretsRaw, urlRaw, agentConfigRaw] = await withScannerPhaseTimeout(
+  const scannerResults = await withScannerPhaseTimeout(
     scanId,
     (signal) =>
-      Promise.all([
+      Promise.allSettled([
         hasSourceCheckout
           ? runScaScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
@@ -244,6 +244,23 @@ export async function runScannerOrchestrator(
     scannerPhaseTimeoutMs,
     config.isCancelled
   )
+
+  const scannerNames = ["sca", "secrets", "url", "agent_config"] as const
+  const rawFindings = scannerResults.map((result, index) => {
+    if (result.status === "fulfilled") return result.value
+    const scanner = scannerNames[index]!
+    coverageIssues.push({
+      scanner,
+      status: "partial",
+      reason:
+        result.reason instanceof Error ? result.reason.message.slice(0, 500) : "Scanner failed",
+    })
+    return [] as EngineVulnerability[]
+  })
+  const scaRaw = rawFindings[0] ?? []
+  const secretsRaw = rawFindings[1] ?? []
+  const urlRaw = rawFindings[2] ?? []
+  const agentConfigRaw = rawFindings[3] ?? []
 
   for (const issue of coverageIssues) {
     await addScanEvent(scanId, "scanner", "warning", "Deterministic scanner coverage incomplete", {

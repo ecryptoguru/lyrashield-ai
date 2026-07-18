@@ -115,13 +115,14 @@ export async function listSchedules(params: {
     include: {
       target: { select: { id: true, name: true, type: true, url: true } },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
   })
 
-  const nextCursor = schedules.length > limit ? schedules[limit]!.id : null
-  const items = schedules.slice(0, limit) as ScheduleWithDetails[]
+  const hasMore = schedules.length > limit
+  const items = (hasMore ? schedules.slice(0, limit) : schedules) as ScheduleWithDetails[]
+  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
   return { items, nextCursor }
 }
