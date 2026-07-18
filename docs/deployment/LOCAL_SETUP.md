@@ -113,7 +113,7 @@ Submit a disposable local waitlist address and verify the success state shows qu
 ```bash
 cd ~/Desktop/lyrashield-ai
 docker compose build worker
-docker compose up -d worker
+docker compose up -d web worker
 docker compose exec worker lyrashield --version
 curl -fsS http://localhost:3000/api/ready/scans
 ```

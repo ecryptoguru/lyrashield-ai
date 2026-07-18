@@ -37,8 +37,15 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
         continue
       }
 
-      // Do not advance a schedule unless this worker can still accept its scan.
-      await assertScanWorkerAvailable()
+      try {
+        // Do not advance a schedule unless this worker can still accept its scan.
+        await assertScanWorkerAvailable()
+      } catch (error) {
+        logger.warn("Scan worker unavailable; pausing scheduled scan processing", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+        break
+      }
 
       if (!(await claimDueSchedule(schedule.id, now, nextRunAt))) {
         continue

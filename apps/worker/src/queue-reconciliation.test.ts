@@ -1,7 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
-  redis: { set: vi.fn() },
+  redis: { duplicate: vi.fn() },
+  lockRedis: {
+    owner: null as string | null,
+    set: vi.fn(),
+    on: vi.fn(),
+    disconnect: vi.fn(),
+    watch: vi.fn(),
+    get: vi.fn(),
+    unwatch: vi.fn(),
+    multi: vi.fn(),
+    pexpire: vi.fn(),
+    quit: vi.fn(),
+  },
   queue: { getJob: vi.fn(), getJobs: vi.fn() },
   prisma: {
     scan: { findMany: vi.fn(), findUnique: vi.fn() },
@@ -24,11 +36,43 @@ import { reconcileFailedQueueJob, reconcileScanQueue } from "./queue-reconciliat
 describe("scan queue reconciliation", () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    mocks.redis.set.mockResolvedValue("OK")
+    mocks.lockRedis.owner = null
+    mocks.redis.duplicate.mockReturnValue(mocks.lockRedis)
+    mocks.lockRedis.on.mockReturnValue(mocks.lockRedis)
+    mocks.lockRedis.set.mockImplementation(async (_key: string, token: string) => {
+      mocks.lockRedis.owner = token
+      return "OK"
+    })
+    mocks.lockRedis.watch.mockResolvedValue("OK")
+    mocks.lockRedis.get.mockImplementation(async () => mocks.lockRedis.owner)
+    mocks.lockRedis.unwatch.mockResolvedValue("OK")
+    mocks.lockRedis.multi.mockImplementation(() => {
+      let deletesLock = false
+      const transaction = {
+        pexpire: vi.fn((...args: unknown[]) => {
+          mocks.lockRedis.pexpire(...args)
+          return transaction
+        }),
+        del: vi.fn(() => {
+          deletesLock = true
+          return transaction
+        }),
+        exec: vi.fn(async () => {
+          if (deletesLock) mocks.lockRedis.owner = null
+          return [[null, 1]]
+        }),
+      }
+      return transaction
+    })
+    mocks.lockRedis.quit.mockResolvedValue("OK")
     mocks.queue.getJob.mockResolvedValue(null)
     mocks.queue.getJobs.mockResolvedValue([])
     mocks.prisma.scan.findMany.mockResolvedValue([])
     mocks.updateScanStatus.mockResolvedValue({ id: "scan-1" })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it("fails stale queued scans without recreating jobs", async () => {
@@ -41,9 +85,9 @@ describe("scan queue reconciliation", () => {
       errorCategory: "QUEUE",
       errorMessage: expect.stringContaining("QUEUE_ORPHANED"),
     })
-    expect(mocks.redis.set).toHaveBeenCalledWith(
+    expect(mocks.lockRedis.set).toHaveBeenCalledWith(
       "lyrashield:scan-queue:reconciliation",
-      "leased",
+      expect.any(String),
       "PX",
       55_000,
       "NX"
@@ -51,7 +95,7 @@ describe("scan queue reconciliation", () => {
   })
 
   it("does nothing when another worker owns the reconciliation lease", async () => {
-    mocks.redis.set.mockResolvedValue(null)
+    mocks.lockRedis.set.mockResolvedValue(null)
 
     await expect(reconcileScanQueue()).resolves.toEqual({
       failedOrphanedScans: 0,
@@ -60,6 +104,28 @@ describe("scan queue reconciliation", () => {
 
     expect(mocks.prisma.scan.findMany).not.toHaveBeenCalled()
     expect(mocks.queue.getJobs).not.toHaveBeenCalled()
+  })
+
+  it("renews the token-owned lease during a slow reconciliation", async () => {
+    vi.useFakeTimers()
+    let resolveScans: ((value: Array<{ id: string }>) => void) | undefined
+    mocks.prisma.scan.findMany.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveScans = resolve
+        })
+    )
+
+    const reconciliation = reconcileScanQueue()
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(mocks.lockRedis.pexpire).toHaveBeenCalledWith(
+      "lyrashield:scan-queue:reconciliation",
+      55_000
+    )
+
+    resolveScans?.([])
+    await reconciliation
   })
 
   it("removes waiting jobs whose database scan is absent or terminal", async () => {
@@ -89,5 +155,13 @@ describe("scan queue reconciliation", () => {
       errorCategory: "QUEUE",
       errorMessage: "Queue job failed: worker crashed",
     })
+  })
+
+  it("contains database failures from the queue failure callback", async () => {
+    mocks.prisma.scan.findUnique.mockRejectedValue(new Error("database unavailable"))
+
+    await expect(reconcileFailedQueueJob("scan-1", "worker crashed")).resolves.toBeUndefined()
+
+    expect(mocks.updateScanStatus).not.toHaveBeenCalled()
   })
 })

@@ -124,11 +124,14 @@ describe("processDueSchedules", () => {
   })
 
   it("does not advance a schedule when worker availability is lost", async () => {
+    const secondSchedule = { ...schedule, id: "schedule-2", targetId: "target-2" }
+    vi.mocked(getDueSchedules).mockResolvedValue([schedule, secondSchedule] as never)
     vi.mocked(assertScanWorkerAvailable).mockRejectedValue(new Error("worker unavailable"))
 
     const enqueued = await processDueSchedules()
 
     expect(enqueued).toBe(0)
+    expect(assertScanWorkerAvailable).toHaveBeenCalledTimes(1)
     expect(claimDueSchedule).not.toHaveBeenCalled()
     expect(createScan).not.toHaveBeenCalled()
   })

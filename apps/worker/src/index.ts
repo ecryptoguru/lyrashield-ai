@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { unlink, writeFile } from "node:fs/promises"
 import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
@@ -21,6 +22,17 @@ let heartbeatTimer: NodeJS.Timeout | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
 let shuttingDown = false
 const workerId = `${process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
+const readinessPath = "/tmp/lyrashield-worker-ready"
+
+async function refreshWorkerReadiness(): Promise<void> {
+  await writeFile(readinessPath, new Date().toISOString(), { mode: 0o600 })
+}
+
+async function removeWorkerReadiness(): Promise<void> {
+  await unlink(readinessPath).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error
+  })
+}
 
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return
@@ -32,6 +44,11 @@ async function shutdown(signal: string): Promise<void> {
     clearInterval(heartbeatTimer)
     heartbeatTimer = null
   }
+  await removeWorkerReadiness().catch((error) => {
+    logger.warn("Could not remove worker readiness marker", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
   if (reconciliationTimer) {
     clearInterval(reconciliationTimer)
     reconciliationTimer = null
@@ -93,16 +110,19 @@ async function main(): Promise<void> {
 
   await worker.waitUntilReady()
   await registerScanWorker(workerId)
+  await refreshWorkerReadiness()
   logger.info("Worker ready — processing scan jobs", {
     queue: SCAN_QUEUE_NAME,
     concurrency: 3,
   })
   heartbeatTimer = setInterval(() => {
-    void registerScanWorker(workerId).catch((error) => {
-      logger.error("Scan worker heartbeat failed", {
-        error: error instanceof Error ? error.message : String(error),
+    void registerScanWorker(workerId)
+      .then(refreshWorkerReadiness)
+      .catch((error) => {
+        logger.error("Scan worker heartbeat failed", {
+          error: error instanceof Error ? error.message : String(error),
+        })
       })
-    })
   }, SCAN_WORKER_HEARTBEAT_MS)
 
   queueEvents = getScanQueueEvents()

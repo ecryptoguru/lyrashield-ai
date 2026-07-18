@@ -202,7 +202,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://web:3000/api/ready/scans').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "require('fs').stat('/tmp/lyrashield-worker-ready',(e,s)=>process.exit(e||Date.now()-s.mtimeMs>30000?1:0))",
         ]
       interval: 15s
       timeout: 5s
