@@ -25,4 +25,15 @@ export {
 } from "./notifications"
 
 export { getRedis, closeRedis } from "./redis"
-export { getScanQueue, getScanQueueEvents, enqueueScan } from "./queue"
+export {
+  getScanQueue,
+  getScanQueueEvents,
+  enqueueScan,
+  registerScanWorker,
+  unregisterScanWorker,
+  isScanWorkerAvailable,
+  assertScanWorkerAvailable,
+  ScanWorkerUnavailableError,
+  SCAN_WORKER_HEARTBEAT_MS,
+  SCAN_WORKER_TTL_MS,
+} from "./queue"

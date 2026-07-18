@@ -26,6 +26,7 @@ vi.mock("@lyrashield/logger", () => ({
 
 vi.mock("./queue", () => ({
   enqueueScan: vi.fn(),
+  assertScanWorkerAvailable: vi.fn(),
 }))
 
 import {
@@ -36,7 +37,7 @@ import {
   prisma,
   updateScanStatus,
 } from "@lyrashield/db"
-import { enqueueScan } from "./queue"
+import { assertScanWorkerAvailable, enqueueScan } from "./queue"
 import { processDueSchedules } from "./schedules"
 
 const schedule = {
@@ -68,6 +69,7 @@ describe("processDueSchedules", () => {
     vi.mocked(getNextRunAt).mockReturnValue(new Date("2026-01-04T00:00:00Z"))
     vi.mocked(createScan).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(enqueueScan).mockResolvedValue("scan-1")
+    vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
     vi.mocked(updateScanStatus).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(claimDueSchedule).mockResolvedValue(true)
     mockPrisma.scan.count.mockResolvedValue(0)
@@ -121,6 +123,19 @@ describe("processDueSchedules", () => {
     expect(createScan).not.toHaveBeenCalled()
   })
 
+  it("does not advance a schedule when worker availability is lost", async () => {
+    const secondSchedule = { ...schedule, id: "schedule-2", targetId: "target-2" }
+    vi.mocked(getDueSchedules).mockResolvedValue([schedule, secondSchedule] as never)
+    vi.mocked(assertScanWorkerAvailable).mockRejectedValue(new Error("worker unavailable"))
+
+    const enqueued = await processDueSchedules()
+
+    expect(enqueued).toBe(0)
+    expect(assertScanWorkerAvailable).toHaveBeenCalledTimes(1)
+    expect(claimDueSchedule).not.toHaveBeenCalled()
+    expect(createScan).not.toHaveBeenCalled()
+  })
+
   it("disables schedules with unsupported cron expressions", async () => {
     vi.mocked(getNextRunAt).mockReturnValue(null)
 
@@ -142,7 +157,7 @@ describe("processDueSchedules", () => {
     expect(enqueued).toBe(0)
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", {
       errorCategory: "QUEUE",
-      errorMessage: "Failed to enqueue scheduled scan job - Redis may be unavailable",
+      errorMessage: "Scan worker became unavailable while queueing the scheduled scan",
     })
   })
 

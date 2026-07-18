@@ -7,7 +7,7 @@ import {
   updateScanStatus,
 } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { enqueueScan } from "./queue"
+import { assertScanWorkerAvailable, enqueueScan } from "./queue"
 
 const ACTIVE_SCAN_STATUSES = [
   "QUEUED",
@@ -35,6 +35,16 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
           cron: schedule.cron,
         })
         continue
+      }
+
+      try {
+        // Do not advance a schedule unless this worker can still accept its scan.
+        await assertScanWorkerAvailable()
+      } catch (error) {
+        logger.warn("Scan worker unavailable; pausing scheduled scan processing", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+        break
       }
 
       if (!(await claimDueSchedule(schedule.id, now, nextRunAt))) {
@@ -87,7 +97,7 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
         })
         await updateScanStatus(scan.id, "FAILED", {
           errorCategory: "QUEUE",
-          errorMessage: "Failed to enqueue scheduled scan job - Redis may be unavailable",
+          errorMessage: "Scan worker became unavailable while queueing the scheduled scan",
         })
       }
     } catch (error) {

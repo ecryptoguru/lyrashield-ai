@@ -1,4 +1,11 @@
-import { prisma, listFindings, getFinding, createScan, getScanWithEvents } from "@lyrashield/db"
+import {
+  prisma,
+  listFindings,
+  getFinding,
+  createScan,
+  getScanWithEvents,
+  updateScanStatus,
+} from "@lyrashield/db"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
   ListTargetsInputSchema,
@@ -12,7 +19,7 @@ import {
 import { z } from "zod"
 import { logger } from "@lyrashield/logger"
 import { explainFinding } from "./plain-language-bridge"
-import { enqueueScanJob } from "./queue"
+import { assertScanWorkerAvailable, enqueueScanJob } from "./queue"
 
 export const listTargetsAction: AgentActionDefinition<z.infer<typeof ListTargetsInputSchema>> = {
   name: "list-targets",
@@ -96,6 +103,8 @@ export const runScanAction: AgentActionDefinition<z.infer<typeof RunScanInputSch
       throw new Error("Target already has an active scan")
     }
 
+    await assertScanWorkerAvailable()
+
     const scan = await createScan({
       workspaceId: input.workspaceId,
       targetId: input.targetId,
@@ -120,16 +129,11 @@ export const runScanAction: AgentActionDefinition<z.infer<typeof RunScanInputSch
         scanId: scan.id,
         error: enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr),
       })
-      await prisma.scan.update({
-        where: { id: scan.id },
-        data: {
-          status: "FAILED",
-          errorCategory: "QUEUE",
-          errorMessage: "Failed to enqueue scan job — Redis may be unavailable",
-          endedAt: new Date(),
-        },
+      await updateScanStatus(scan.id, "FAILED", {
+        errorCategory: "QUEUE",
+        errorMessage: "Scan worker became unavailable while queueing the agent scan",
       })
-      throw new Error("Scan created but failed to enqueue — Redis may be unavailable")
+      throw new Error("Scanning became unavailable while starting the agent scan")
     }
 
     logger.info("Agent triggered scan", { scanId: scan.id, targetId: input.targetId })

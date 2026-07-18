@@ -9,6 +9,7 @@ vi.mock("@lyrashield/db", () => ({
   },
   createScan: vi.fn(),
   listScans: vi.fn(),
+  updateScanStatus: vi.fn(),
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
@@ -30,12 +31,18 @@ vi.mock("@lyrashield/logger", () => ({
 
 vi.mock("../../../lib/queue", () => ({
   enqueueScanJob: vi.fn().mockResolvedValue("job-1"),
+  assertScanWorkerAvailable: vi.fn().mockResolvedValue(undefined),
+  ScanWorkerUnavailableError: class ScanWorkerUnavailableError extends Error {},
 }))
 
 import { POST, GET } from "./route"
-import { prisma, createScan, listScans } from "@lyrashield/db"
+import { prisma, createScan, listScans, updateScanStatus } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
-import { enqueueScanJob } from "../../../lib/queue"
+import {
+  assertScanWorkerAvailable,
+  enqueueScanJob,
+  ScanWorkerUnavailableError,
+} from "../../../lib/queue"
 
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost:3000/api/scans", {
@@ -62,6 +69,7 @@ describe("POST /api/scans", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     defaultAuthMock()
+    vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
   })
 
   it("returns 400 for invalid JSON body", async () => {
@@ -192,6 +200,25 @@ describe("POST /api/scans", () => {
     expect(prisma.auditLog.create).toHaveBeenCalled()
   })
 
+  it("returns 503 without creating a scan when no worker is available", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(assertScanWorkerAvailable).mockRejectedValue(new ScanWorkerUnavailableError())
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
+
+    expect(res.status).toBe(503)
+    expect((await res.json()).error.code).toBe("SCAN_SERVICE_UNAVAILABLE")
+    expect(createScan).not.toHaveBeenCalled()
+  })
+
   it("returns 503 when enqueue fails", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({ id: "t1" } as never)
     vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
@@ -216,12 +243,11 @@ describe("POST /api/scans", () => {
 
     expect(res.status).toBe(503)
     const json = await res.json()
-    expect(json.error.code).toBe("QUEUE_ERROR")
-    expect(prisma.scan.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "scan-2" },
-        data: expect.objectContaining({ status: "FAILED" }),
-      })
+    expect(json.error.code).toBe("SCAN_SERVICE_UNAVAILABLE")
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-2",
+      "FAILED",
+      expect.objectContaining({ errorCategory: "QUEUE" })
     )
   })
 
