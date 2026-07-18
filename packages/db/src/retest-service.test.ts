@@ -118,7 +118,7 @@ describe("retest-service", () => {
       expect(mockPrisma.retest.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { workspaceId: "ws-1" },
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 21,
         })
       )
@@ -136,7 +136,7 @@ describe("retest-service", () => {
       const result = await listRetests({ workspaceId: "ws-1", limit: 20 })
 
       expect(result.items).toHaveLength(20)
-      expect(result.nextCursor).toBe("retest-20")
+      expect(result.nextCursor).toBe("retest-19")
     })
 
     it("filters by findingId and status", async () => {

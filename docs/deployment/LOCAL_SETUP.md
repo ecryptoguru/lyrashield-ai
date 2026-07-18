@@ -38,7 +38,7 @@ Next.js production builds read required values from `process.env`; the root `.en
 cp .env apps/web/.env
 ```
 
-The dashboard can run without evidence storage, but any scan that produces PoC or code-location evidence requires `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and `S3_REGION`. Evidence persistence fails closed when these values are absent or upload fails.
+The dashboard can run without evidence storage, but a scan worker requires durable evidence storage before it registers as ready: `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and `S3_REGION`. Local development may explicitly use `LYRASHIELD_LOCAL_EVIDENCE_STORAGE=1` outside production. Evidence persistence fails closed when storage is absent or an upload fails; the worker does not accept scans it cannot retain.
 
 ## 2. Start Postgres and Redis
 
@@ -112,7 +112,8 @@ Submit a disposable local waitlist address and verify the success state shows qu
 
 ```bash
 cd ~/Desktop/lyrashieldai
-docker compose build worker
+docker compose build migrate web worker
+docker compose up -d --force-recreate migrate
 docker compose up -d web worker
 docker compose exec worker lyrashield --version
 curl -fsS http://localhost:3000/api/ready/scans
@@ -122,7 +123,7 @@ The worker image consumes the sibling engine source through its named Docker bui
 
 The web app accepts a scan only while a worker heartbeat is live. Workers refresh their Redis lease every 10 seconds; the lease expires after 30 seconds following a crash or lost Redis connection. `/api/ready/scans` returns `503` while no worker is available, and the UI asks the user to retry instead of leaving a scan permanently queued.
 
-The worker reconciles queue/database drift at startup and every minute. A database scan that remains `QUEUED` for five minutes without a processable BullMQ job fails closed as `QUEUE_ORPHANED`; it is never re-enqueued automatically because that could repeat paid model work. Do not delete BullMQ keys or jobs directly in Redis. Remove a queued job only through an application/operator flow that also transitions its database scan to `CANCELLED` or `FAILED` and records a scan event.
+The worker reconciles queue/database drift at startup and every minute. An active database scan (`QUEUED`, `PREFLIGHT`, `RUNNING`, or `VERIFYING`) stale for five minutes without a processable BullMQ job fails closed as `QUEUE_ORPHANED`; it is never re-enqueued automatically because that could repeat paid model work. Do not delete BullMQ keys or jobs directly in Redis. Remove a queued job only through an application/operator flow that also transitions its database scan to `CANCELLED` or `FAILED` and records a scan event.
 
 Exercise the readiness transition without creating a scan:
 

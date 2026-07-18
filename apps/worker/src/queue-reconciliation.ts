@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import type Redis from "ioredis"
-import { prisma, updateScanStatus } from "@lyrashield/db"
+import { prisma, type ScanStatus, updateScanStatus } from "@lyrashield/db"
 import { getRedis } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 import { getScanQueue } from "./queue"
@@ -10,7 +10,7 @@ const RECONCILIATION_LOCK_MS = 55_000
 const RECONCILIATION_LOCK_RENEW_MS = 20_000
 const ORPHAN_GRACE_MS = 5 * 60_000
 const BATCH_SIZE = 500
-const ACTIVE_SCAN_STATUSES = new Set(["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"])
+const ACTIVE_SCAN_STATUSES = new Set<ScanStatus>(["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"])
 
 export interface QueueReconciliationResult {
   failedOrphanedScans: number
@@ -126,43 +126,55 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
 
   try {
     const queue = getScanQueue()
-    const staleQueuedScans = await prisma.scan.findMany({
-      where: {
-        status: "QUEUED",
-        deletedAt: null,
-        createdAt: { lt: new Date(now.getTime() - ORPHAN_GRACE_MS) },
-      },
-      select: { id: true },
-      take: BATCH_SIZE,
-    })
+    let scanCursor: string | undefined
+    do {
+      const staleScans = await prisma.scan.findMany({
+        where: {
+          status: { in: [...ACTIVE_SCAN_STATUSES] },
+          deletedAt: null,
+          updatedAt: { lt: new Date(now.getTime() - ORPHAN_GRACE_MS) },
+        },
+        select: { id: true },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: BATCH_SIZE,
+        ...(scanCursor ? { cursor: { id: scanCursor }, skip: 1 } : {}),
+      })
 
-    for (const scan of staleQueuedScans) {
-      lease.assertOwned()
-      const job = await queue.getJob(scan.id)
-      const state = job ? await job.getState() : "missing"
-      if (state !== "missing" && state !== "failed" && state !== "completed") continue
-
-      try {
+      for (const scan of staleScans) {
         lease.assertOwned()
-        await updateScanStatus(scan.id, "FAILED", {
-          errorCategory: "QUEUE",
-          errorMessage: "QUEUE_ORPHANED: queued scan has no processable queue job",
-        })
-        result.failedOrphanedScans += 1
-      } catch (error) {
-        logger.warn("Could not reconcile orphaned scan", {
-          scanId: scan.id,
-          error: error instanceof Error ? error.message : String(error),
-        })
+        const job = await queue.getJob(scan.id)
+        const state = job ? await job.getState() : "missing"
+        if (state !== "missing" && state !== "failed" && state !== "completed") continue
+
+        try {
+          lease.assertOwned()
+          await updateScanStatus(scan.id, "FAILED", {
+            errorCategory: "QUEUE",
+            errorMessage: "QUEUE_ORPHANED: active scan has no processable queue job",
+          })
+          result.failedOrphanedScans += 1
+        } catch (error) {
+          logger.warn("Could not reconcile orphaned scan", {
+            scanId: scan.id,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
       }
-    }
+      scanCursor = staleScans.at(-1)?.id
+      if (staleScans.length < BATCH_SIZE) scanCursor = undefined
+    } while (scanCursor)
 
     lease.assertOwned()
-    const jobs = await queue.getJobs(
-      ["wait", "delayed", "prioritized", "paused"],
-      0,
-      BATCH_SIZE - 1
-    )
+    const jobs = [] as Awaited<ReturnType<typeof queue.getJobs>>
+    for (let start = 0; ; start += BATCH_SIZE) {
+      const page = await queue.getJobs(
+        ["wait", "delayed", "prioritized", "paused"],
+        start,
+        start + BATCH_SIZE - 1
+      )
+      jobs.push(...page)
+      if (page.length < BATCH_SIZE) break
+    }
     const jobIds = jobs.map((job) => job.id).filter((id): id is string => Boolean(id))
     const scans = jobIds.length
       ? await prisma.scan.findMany({

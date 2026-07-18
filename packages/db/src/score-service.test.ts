@@ -224,6 +224,7 @@ describe("score-service", () => {
         finding: { findMany: vi.fn() },
         project: { update: vi.fn() },
         target: { update: vi.fn() },
+        scanEvent: { create: vi.fn() },
       }
       mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
       const outcome = await completeScanWithScore("scan-1", "summary")
@@ -255,6 +256,7 @@ describe("score-service", () => {
         finding: { findMany: vi.fn().mockResolvedValue([]) },
         project: { update: vi.fn().mockResolvedValue({}) },
         target: { update: vi.fn().mockResolvedValue({}) },
+        scanEvent: { create: vi.fn().mockResolvedValue({}) },
       }
       mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
       mockPrisma.scanEvent.create.mockResolvedValue({})
@@ -306,6 +308,7 @@ describe("score-service", () => {
         },
         project: { update: vi.fn() },
         target: { update: vi.fn().mockResolvedValue({}) },
+        scanEvent: { create: vi.fn().mockResolvedValue({}) },
       }
       mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
       mockPrisma.scanEvent.create.mockResolvedValue({})

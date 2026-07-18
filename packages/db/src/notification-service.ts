@@ -63,13 +63,14 @@ export async function listNotifications(params: {
       ...(params.status ? { status: params.status } : {}),
       ...(params.type ? { type: params.type } : {}),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
   })
 
-  const nextCursor = notifications.length > limit ? (notifications[limit]?.id ?? null) : null
-  const items = notifications.slice(0, limit)
+  const hasMore = notifications.length > limit
+  const items = hasMore ? notifications.slice(0, limit) : notifications
+  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
   return { items, nextCursor }
 }

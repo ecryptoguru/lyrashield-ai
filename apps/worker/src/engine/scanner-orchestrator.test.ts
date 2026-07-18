@@ -264,21 +264,26 @@ describe("runScannerOrchestrator", () => {
     )
   })
 
-  it("fails closed when the SCA scanner cannot run", async () => {
+  it("retains other results and records partial coverage when the SCA scanner cannot run", async () => {
     vi.mocked(scanSca).mockRejectedValueOnce(new Error("OSV API down") as never)
 
-    await expect(
-      runScannerOrchestrator({
-        scanId: "scan-1",
-        workspaceId: "ws-1",
-        targetId: "target-1",
-        target: { id: "target-1", type: "REPO", name: "Test" },
-        goal: "TEST_APP",
-        mode: "STANDARD",
-        engineFindings,
-        workspaceDir: sourceCheckout,
-      })
-    ).rejects.toThrow("OSV API down")
+    const result = await runScannerOrchestrator({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: { id: "target-1", type: "REPO", name: "Test" },
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      engineFindings,
+      workspaceDir: sourceCheckout,
+    })
+
+    expect(result.engineFindings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "v1", scannerSource: "engine" })])
+    )
+    expect(result.coverageIssues).toContainEqual(
+      expect.objectContaining({ scanner: "sca", status: "partial", reason: "OSV API down" })
+    )
   })
 
   it("fails the scanner phase and records an event when the phase times out", async () => {

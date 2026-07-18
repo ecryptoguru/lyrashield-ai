@@ -1,5 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const completeUsage = vi.hoisted(() => ({
+  request_count: 1,
+  input_tokens: 1_000,
+  cached_input_tokens: 0,
+  cache_write_input_tokens: 0,
+  output_tokens: 100,
+  standard_input_tokens: 1_000,
+  standard_cached_input_tokens: 0,
+  standard_cache_write_input_tokens: 0,
+  standard_output_tokens: 100,
+  long_input_tokens: 0,
+  long_cached_input_tokens: 0,
+  long_cache_write_input_tokens: 0,
+  long_output_tokens: 0,
+}))
+
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     target: {
@@ -30,15 +46,21 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 vi.mock("../engine/runner", () => ({
-  runEngine: vi.fn().mockResolvedValue({
+  runEngine: vi.fn().mockImplementation(({ scanId }: { scanId: string }) => ({
     exitCode: 0,
     output: {
       vulnerabilities: [],
-      runRecord: { run_id: "r1", status: "completed" },
+      findingsComplete: true,
+      runRecord: {
+        run_id: scanId,
+        run_name: scanId,
+        status: "completed",
+        llm_usage: completeUsage,
+      },
       summary: "Scan completed with 0 findings",
       findingCount: 0,
     },
-  }),
+  })),
   cleanupEngineWorkspace: vi.fn().mockResolvedValue(undefined),
   resolveEngineProfile: vi.fn((mode: string) => ({
     model:
@@ -50,6 +72,16 @@ vi.mock("../engine/runner", () => ({
     if (code === 2) return { status: "COMPLETED", category: "VULNERABILITIES_FOUND" }
     return { status: "FAILED", category: "ENGINE_ERROR", message: `Engine error (code ${code})` }
   }),
+}))
+
+vi.mock("../engine/evidence-storage", () => ({
+  assertEvidenceStorageConfigured: vi.fn(),
+  EvidenceStorageConfigurationError: class EvidenceStorageConfigurationError extends Error {
+    constructor() {
+      super("Evidence storage is not configured")
+      this.name = "EVIDENCE_STORAGE_CONFIGURATION"
+    }
+  },
 }))
 
 vi.mock("../engine/finding-persister", () => ({
@@ -100,7 +132,10 @@ import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/
 import { persistFindings } from "../engine/finding-persister"
 import { completeRetestsForScan, persistResultManifest } from "../engine/result-integrity"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
-import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
+import {
+  assertEvidenceStorageConfigured,
+  EvidenceStorageConfigurationError,
+} from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
 import {
   completeScanWithScore,
@@ -196,15 +231,24 @@ describe("processScanJob", () => {
     vi.clearAllMocks()
     // Restore default mock implementations after clearAllMocks
     vi.mocked(runPreflight).mockResolvedValue({ passed: true, checks: [] })
-    vi.mocked(runEngine).mockResolvedValue({
-      exitCode: 0,
-      output: {
-        vulnerabilities: [],
-        runRecord: { run_id: "r1", status: "completed" },
-        summary: "Scan completed with 0 findings",
-        findingCount: 0,
-      },
-    } as never)
+    vi.mocked(runEngine).mockImplementation(
+      ({ scanId }: { scanId: string }) =>
+        ({
+          exitCode: 0,
+          output: {
+            vulnerabilities: [],
+            findingsComplete: true,
+            runRecord: {
+              run_id: scanId,
+              run_name: scanId,
+              status: "completed",
+              llm_usage: completeUsage,
+            },
+            summary: "Scan completed with 0 findings",
+            findingCount: 0,
+          },
+        }) as never
+    )
     vi.mocked(interpretExitCode).mockImplementation((code: number) => {
       if (code === 0) return { status: "COMPLETED" as const, category: "SUCCESS", message: "" }
       if (code === 2)
@@ -315,10 +359,27 @@ describe("processScanJob", () => {
       exitCode: 0,
       output: {
         vulnerabilities: [],
+        findingsComplete: true,
         runRecord: {
-          run_id: "r-over-budget",
+          run_id: "scan-1",
+          run_name: "scan-1",
           status: "completed",
-          llm_usage: { total_cost_usd: 2.75 },
+          llm_usage: {
+            request_count: 1,
+            input_tokens: 2_750_000,
+            cached_input_tokens: 0,
+            cache_write_input_tokens: 0,
+            output_tokens: 0,
+            standard_input_tokens: 2_750_000,
+            standard_cached_input_tokens: 0,
+            standard_cache_write_input_tokens: 0,
+            standard_output_tokens: 0,
+            long_input_tokens: 0,
+            long_cached_input_tokens: 0,
+            long_cache_write_input_tokens: 0,
+            long_output_tokens: 0,
+            total_cost_usd: 2.75,
+          },
         },
         summary: "Engine completed above budget",
         findingCount: 0,
@@ -337,10 +398,10 @@ describe("processScanJob", () => {
         providerCostUsd: "2.750000",
         billedCostUsd: "1.200000",
         actualCostCents: 120,
-        llmRequestCount: null,
-        llmInputTokens: null,
-        llmCachedInputTokens: null,
-        llmOutputTokens: null,
+        llmRequestCount: 1,
+        llmInputTokens: 2_750_000,
+        llmCachedInputTokens: 0,
+        llmOutputTokens: 0,
       },
     })
     expect(prisma.scan.update).toHaveBeenCalledWith({
@@ -366,8 +427,10 @@ describe("processScanJob", () => {
       exitCode: 0,
       output: {
         vulnerabilities: [],
+        findingsComplete: true,
         runRecord: {
-          run_id: "r-rate-card",
+          run_id: "scan-1",
+          run_name: "scan-1",
           status: "completed",
           llm_usage: {
             request_count: 7,
@@ -375,6 +438,14 @@ describe("processScanJob", () => {
             cached_input_tokens: 6_100,
             cache_write_input_tokens: 0,
             output_tokens: 2_310,
+            standard_input_tokens: 18_420,
+            standard_cached_input_tokens: 6_100,
+            standard_cache_write_input_tokens: 0,
+            standard_output_tokens: 2_310,
+            long_input_tokens: 0,
+            long_cached_input_tokens: 0,
+            long_cache_write_input_tokens: 0,
+            long_output_tokens: 0,
           },
         },
         summary: "Engine completed without a cost field",
@@ -405,18 +476,20 @@ describe("processScanJob", () => {
         calculatedCostUsd: 0.02679,
         costSource: "openai_rate_card",
         pricingEffectiveDate: "2026-07-09",
-        reconciliationStatus: "unavailable",
+        reconciliationStatus: "rate_card_only",
       })
     )
   })
 
-  it("uses the conservative rate-card basis when provider telemetry disagrees", async () => {
+  it("completes the scan but records no bill when provider telemetry disagrees", async () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
       output: {
         vulnerabilities: [],
+        findingsComplete: true,
         runRecord: {
-          run_id: "r-reconciliation",
+          run_id: "scan-1",
+          run_name: "scan-1",
           status: "completed",
           llm_usage: {
             request_count: 7,
@@ -425,6 +498,14 @@ describe("processScanJob", () => {
             cache_write_input_tokens: 0,
             output_tokens: 2_310,
             total_cost_usd: 0.02,
+            standard_input_tokens: 18_420,
+            standard_cached_input_tokens: 6_100,
+            standard_cache_write_input_tokens: 0,
+            standard_output_tokens: 2_310,
+            long_input_tokens: 0,
+            long_cached_input_tokens: 0,
+            long_cache_write_input_tokens: 0,
+            long_output_tokens: 0,
           },
         },
         summary: "Engine completed with provider telemetry",
@@ -438,8 +519,8 @@ describe("processScanJob", () => {
       where: { id: "scan-1" },
       data: expect.objectContaining({
         providerCostUsd: "0.020000",
-        billedCostUsd: "0.026790",
-        actualCostCents: 3,
+        billedCostUsd: null,
+        actualCostCents: null,
       }),
     })
     expect(addScanEvent).toHaveBeenCalledWith(
@@ -456,13 +537,41 @@ describe("processScanJob", () => {
     )
   })
 
+  it("completes a valid scan when provider usage is unavailable without inventing a cost", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 0,
+      output: {
+        vulnerabilities: [],
+        findingsComplete: true,
+        runRecord: { run_id: "scan-1", run_name: "scan-1", status: "completed" },
+        summary: "Engine completed without usage telemetry",
+        findingCount: 0,
+      },
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+    expect(prisma.scan.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ billedCostUsd: expect.any(String) }),
+      })
+    )
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "llm_usage_unavailable",
+      "warning",
+      expect.any(String)
+    )
+  })
+
   it("checkpoints usage before a downstream scanner failure", async () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
       output: {
         vulnerabilities: [],
+        findingsComplete: true,
         runRecord: {
-          run_id: "r-checkpoint",
+          run_id: "scan-1",
+          run_name: "scan-1",
           status: "completed",
           llm_usage: {
             request_count: 1,
@@ -470,7 +579,15 @@ describe("processScanJob", () => {
             cached_input_tokens: 0,
             cache_write_input_tokens: 0,
             output_tokens: 100,
-            total_cost_usd: 0.01,
+            standard_input_tokens: 1_000,
+            standard_cached_input_tokens: 0,
+            standard_cache_write_input_tokens: 0,
+            standard_output_tokens: 100,
+            long_input_tokens: 0,
+            long_cached_input_tokens: 0,
+            long_cache_write_input_tokens: 0,
+            long_output_tokens: 0,
+            total_cost_usd: 0.0016,
           },
         },
         summary: "Engine completed",
@@ -487,8 +604,8 @@ describe("processScanJob", () => {
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: expect.objectContaining({
-        providerCostUsd: "0.010000",
-        billedCostUsd: "0.010000",
+        providerCostUsd: "0.001600",
+        billedCostUsd: "0.001600",
         llmRequestCount: 1,
       }),
     })
@@ -547,6 +664,7 @@ describe("processScanJob", () => {
       exitCode: 3,
       output: {
         vulnerabilities: [],
+        findingsComplete: false,
         runRecord: null,
         summary: "Engine failed",
         findingCount: 0,
@@ -734,7 +852,9 @@ describe("processScanJob", () => {
   })
 
   it("fails closed without replaying a billable scan when evidence storage is unconfigured", async () => {
-    vi.mocked(persistFindings).mockRejectedValue(new EvidenceStorageConfigurationError())
+    vi.mocked(assertEvidenceStorageConfigured).mockImplementationOnce(() => {
+      throw new EvidenceStorageConfigurationError()
+    })
     const retryingJob = {
       id: "job-evidence-storage-1",
       attemptsMade: 0,
@@ -779,7 +899,13 @@ describe("processScanJob", () => {
       sourceCheckoutPath: "/tmp/strix_repos/r1/repo",
       output: {
         vulnerabilities: vulns,
-        runRecord: { run_id: "r1", status: "completed" },
+        findingsComplete: true,
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "completed",
+          llm_usage: completeUsage,
+        },
         summary: "1 finding",
         findingCount: 1,
       },

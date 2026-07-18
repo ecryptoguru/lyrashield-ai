@@ -92,6 +92,31 @@ describe("uploadEvidence", () => {
     expect(result.encryptionKeyRef).toMatch(/^local-hkdf:/)
   })
 
+  it("does not overwrite a prior artifact when content changes", async () => {
+    evidenceEnv.LYRASHIELD_LOCAL_EVIDENCE_STORAGE = "1"
+    const first = await uploadEvidence({
+      workspaceId: "ws-1",
+      findingId: "finding-1",
+      type: "poc",
+      artifactId: "same-artifact",
+      content: "first proof",
+    })
+    const second = await uploadEvidence({
+      workspaceId: "ws-1",
+      findingId: "finding-1",
+      type: "poc",
+      artifactId: "same-artifact",
+      content: "second proof",
+    })
+
+    expect(first.storageUri).not.toBe(second.storageUri)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- both URIs are produced by uploadEvidence
+    expect(await readFile(fileURLToPath(first.storageUri))).not.toEqual(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- both URIs are produced by uploadEvidence
+      await readFile(fileURLToPath(second.storageUri))
+    )
+  })
+
   it("does not permit the local store in production", async () => {
     evidenceEnv.LYRASHIELD_LOCAL_EVIDENCE_STORAGE = "1"
     evidenceEnv.NODE_ENV = "production"

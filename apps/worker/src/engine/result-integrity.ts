@@ -252,30 +252,28 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
     coverage,
   }
   const manifestChecksum = checksum(manifest)
-  const existing = await prisma.scanResultManifest.findUnique({ where: { scanId: input.scanId } })
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.scanResultManifest.findUnique({ where: { scanId: input.scanId } })
+    if (existing && existing.checksum !== manifestChecksum) {
+      throw new Error("Scan result manifest already exists with different contents")
+    }
 
-  if (existing && existing.checksum !== manifestChecksum) {
-    throw new Error("Scan result manifest already exists with different contents")
-  }
-
-  // If this insert succeeds but the process stops before the manifest write,
-  // the next attempt can safely repeat it. Once the manifest exists, the
-  // worker resumes finalization rather than replaying the scan result.
-  await prisma.scanCoverageReceipt.createMany({
-    data: coverage.map((receipt) => ({ scanId: input.scanId, ...receipt })),
-    skipDuplicates: true,
-  })
-
-  if (!existing) {
-    await prisma.scanResultManifest.create({
-      data: {
-        scanId: input.scanId,
-        version: MANIFEST_VERSION,
-        manifest,
-        checksum: manifestChecksum,
-      },
+    await tx.scanCoverageReceipt.createMany({
+      data: coverage.map((receipt) => ({ scanId: input.scanId, ...receipt })),
+      skipDuplicates: true,
     })
-  }
+
+    if (!existing) {
+      await tx.scanResultManifest.create({
+        data: {
+          scanId: input.scanId,
+          version: MANIFEST_VERSION,
+          manifest,
+          checksum: manifestChecksum,
+        },
+      })
+    }
+  })
 }
 
 function isNormalizedFinding(finding: FindingInput): finding is NormalizedFinding {
@@ -464,43 +462,45 @@ export async function completeRetestsForScan(params: {
 
     const reason =
       "The originating deterministic scanner did not detect the finding in the queued retest."
-    await prisma.finding.update({
-      where: { id: retest.findingId },
-      data: {
-        status: "FIXED",
-        fixedAt: new Date(),
-        verified: false,
-        verificationStatus: "VALIDATED",
-        verificationMethod: "RETEST",
-        verificationReason: reason,
-      },
-    })
     const idempotencyKey = checksum({
       retestId: retest.id,
       scanId: params.scanId,
       status: "VALIDATED",
     })
-    await prisma.findingVerification.upsert({
-      where: { idempotencyKey },
-      create: {
-        workspaceId: params.workspaceId,
-        findingId: retest.findingId,
-        scanId: params.scanId,
-        status: "VALIDATED",
-        method: "RETEST",
-        reason,
-        verifierVersion: "result-integrity-v1",
-        evidence: { retestId: retest.id, scannerSource },
-        idempotencyKey,
-      },
-      update: {},
-    })
-    await prisma.retest.update({
-      where: { id: retest.id },
-      data: {
-        status: "passed",
-        resultAfter: "Finding was not detected by the originating scanner.",
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.finding.update({
+        where: { id: retest.findingId },
+        data: {
+          status: "FIXED",
+          fixedAt: new Date(),
+          verified: false,
+          verificationStatus: "VALIDATED",
+          verificationMethod: "RETEST",
+          verificationReason: reason,
+        },
+      })
+      await tx.findingVerification.upsert({
+        where: { idempotencyKey },
+        create: {
+          workspaceId: params.workspaceId,
+          findingId: retest.findingId,
+          scanId: params.scanId,
+          status: "VALIDATED",
+          method: "RETEST",
+          reason,
+          verifierVersion: "result-integrity-v1",
+          evidence: { retestId: retest.id, scannerSource },
+          idempotencyKey,
+        },
+        update: {},
+      })
+      await tx.retest.update({
+        where: { id: retest.id },
+        data: {
+          status: "passed",
+          resultAfter: "Finding was not detected by the originating scanner.",
+        },
+      })
     })
   }
 }

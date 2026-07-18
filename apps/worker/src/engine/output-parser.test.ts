@@ -342,6 +342,7 @@ describe("output-parser", () => {
       const result = parseEngineOutput(vulnsRaw, runRaw)
       expect(result.findingCount).toBe(1)
       expect(result.vulnerabilities).toHaveLength(1)
+      expect(result.findingsComplete).toBe(true)
       expect(result.runRecord).not.toBeNull()
       expect(result.runRecord!.status).toBe("completed")
       expect(result.summary).toContain("1 finding")
@@ -351,8 +352,15 @@ describe("output-parser", () => {
       const result = parseEngineOutput("", "")
       expect(result.findingCount).toBe(0)
       expect(result.vulnerabilities).toEqual([])
+      expect(result.findingsComplete).toBe(false)
       expect(result.runRecord).toBeNull()
       expect(result.summary).toContain("0 finding")
+    })
+
+    it("treats a valid empty artifact as complete", () => {
+      const result = parseEngineOutput("[]", JSON.stringify({ status: "completed" }))
+      expect(result.vulnerabilities).toEqual([])
+      expect(result.findingsComplete).toBe(true)
     })
   })
 

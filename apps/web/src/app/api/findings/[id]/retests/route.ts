@@ -107,15 +107,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       throw error
     }
 
-    const retest = await prisma.retest.create({
-      data: {
-        workspaceId,
-        findingId: id,
-        scanId: scan.id,
-        status: "pending",
-        resultBefore: retestProfile.reason,
-      },
-    })
+    let retest: { id: string }
+    try {
+      retest = await prisma.retest.create({
+        data: {
+          workspaceId,
+          findingId: id,
+          scanId: scan.id,
+          status: "pending",
+          resultBefore: retestProfile.reason,
+        },
+      })
+    } catch (error) {
+      await updateScanStatus(scan.id, "FAILED", {
+        errorCategory: "RETEST_SETUP",
+        errorMessage: "Retest could not be prepared before queueing",
+      })
+      throw error
+    }
 
     try {
       await enqueueScanJob({

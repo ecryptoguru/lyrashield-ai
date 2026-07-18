@@ -164,7 +164,7 @@ describe("fix-proposal-service", () => {
             deletedAt: null,
             finding: { workspaceId: "ws-1", deletedAt: null },
           },
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 21,
         })
       )
@@ -180,7 +180,7 @@ describe("fix-proposal-service", () => {
       const result = await listFixProposals({ workspaceId: "ws-1", limit: 20 })
 
       expect(result.items).toHaveLength(20)
-      expect(result.nextCursor).toBe("prop-20")
+      expect(result.nextCursor).toBe("prop-19")
     })
 
     it("filters by findingId and status", async () => {

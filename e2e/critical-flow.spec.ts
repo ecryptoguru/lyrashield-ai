@@ -78,7 +78,13 @@ test("anonymous APIs reject access", async ({ request }) => {
 test("onboarding creates a target and tenant boundaries deny another user", async ({
   page,
   browser,
-}) => {
+}, testInfo) => {
+  // The production proxy accepts this header only from configured trusted
+  // ingress. Give repeated E2E workers distinct simulated clients so the
+  // production auth limiter is exercised without unrelated fixtures sharing
+  // a single IP bucket.
+  const forwardedFor = `198.51.100.${testInfo.workerIndex + 1}`
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": forwardedFor })
   await signUp(page, ownerEmail, "E2E Owner")
 
   const workspaceResponse = page.waitForResponse(
@@ -102,7 +108,9 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
   const targetId = targetBody.data.id as string
   await expect(page.getByRole("heading", { name: "Review and start" })).toBeVisible()
 
-  const other = await browser.newContext()
+  const other = await browser.newContext({
+    extraHTTPHeaders: { "x-forwarded-for": forwardedFor },
+  })
   try {
     const otherPage = await other.newPage()
     await signUp(otherPage, otherEmail, "E2E Other")

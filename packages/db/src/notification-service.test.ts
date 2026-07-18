@@ -166,7 +166,7 @@ describe("notification-service", () => {
       const result = await listNotifications({ workspaceId: "ws-1", limit: 20 })
 
       expect(result.items).toHaveLength(20)
-      expect(result.nextCursor).toBe("notif-20")
+      expect(result.nextCursor).toBe("notif-19")
     })
 
     it("filters by status and type", async () => {

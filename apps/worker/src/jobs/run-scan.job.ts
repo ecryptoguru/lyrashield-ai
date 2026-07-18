@@ -20,13 +20,15 @@ import {
 } from "../engine/runner"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
 import {
-  calculateGpt56CostUsd,
   calculateGpt56CostUsdFromBuckets,
   GPT_56_PRICING_EFFECTIVE_DATE,
   GPT_56_PRICING_SOURCE,
 } from "../engine/gpt56-pricing"
 import { persistFindings } from "../engine/finding-persister"
-import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
+import {
+  assertEvidenceStorageConfigured,
+  EvidenceStorageConfigurationError,
+} from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import {
   completeRetestsForScan,
@@ -116,7 +118,12 @@ export async function persistEngineUsageCheckpoint(params: {
   maxBudgetUsd: number
   llmUsage?: Record<string, unknown>
   usageExpected: boolean
-}): Promise<{ budgetExceeded: boolean; billedCostUsd: number | null }> {
+}): Promise<{
+  budgetExceeded: boolean
+  billedCostUsd: number | null
+  costReconciled: boolean
+  reconciliationReason?: string
+}> {
   const { scanId, model, maxBudgetUsd, llmUsage, usageExpected } = params
   if (!llmUsage) {
     if (usageExpected) {
@@ -134,17 +141,31 @@ export async function persistEngineUsageCheckpoint(params: {
         })
       }
     }
-    return { budgetExceeded: false, billedCostUsd: null }
+    return {
+      budgetExceeded: false,
+      billedCostUsd: null,
+      costReconciled: !usageExpected,
+      ...(usageExpected
+        ? { reconciliationReason: "Per-request GPT-5.6 usage was unavailable" }
+        : {}),
+    }
   }
 
   const usage = extractUsageSummary(llmUsage)
+  // Aggregate totals cannot prove whether an individual request crossed the
+  // long-context boundary. Only complete per-request buckets are priceable.
   const rateCardCostUsd = usage.pricingBuckets
     ? calculateGpt56CostUsdFromBuckets(model, usage.pricingBuckets)
-    : calculateGpt56CostUsd(model, usage)
-  const knownCosts = [usage.engineReportedCostUsd, rateCardCostUsd].filter(
-    (cost): cost is number => cost !== null
-  )
-  const billableCostUsd = knownCosts.length > 0 ? Math.max(...knownCosts) : null
+    : null
+  const costsMatch =
+    rateCardCostUsd !== null &&
+    (usage.engineReportedCostUsd === null ||
+      Math.abs(rateCardCostUsd - usage.engineReportedCostUsd) < 0.000001)
+  // Do not attach a money value to a scan unless the recorded provider total
+  // agrees with the complete, per-request rate-card calculation. A completed
+  // scan remains useful when accounting needs later operator reconciliation;
+  // inventing a billable amount would not be.
+  const billableCostUsd = costsMatch ? rateCardCostUsd : null
   const billedCostUsd = billableCostUsd === null ? null : Math.min(billableCostUsd, maxBudgetUsd)
   const costSource =
     rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
@@ -155,17 +176,19 @@ export async function persistEngineUsageCheckpoint(params: {
           ? "engine_reported_unreconciled"
           : "unavailable"
   const reconciliationStatus =
-    rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
-      ? Math.abs(rateCardCostUsd - usage.engineReportedCostUsd) < 0.000001
-        ? "matched"
-        : "mismatch"
-      : "unavailable"
+    rateCardCostUsd === null
+      ? "unavailable"
+      : usage.engineReportedCostUsd === null
+        ? "rate_card_only"
+        : costsMatch
+          ? "matched"
+          : "mismatch"
 
   try {
     await addScanEvent(scanId, "llm_usage", "info", "AI usage counters recorded", {
       ...usage,
       calculatedCostUsd: rateCardCostUsd,
-      pricingMethod: usage.pricingBuckets ? "per_request_buckets" : "aggregate_standard_only",
+      pricingMethod: usage.pricingBuckets ? "per_request_buckets" : "unavailable",
       billedCostUsd,
       costSource,
       reconciliationStatus,
@@ -226,7 +249,19 @@ export async function persistEngineUsageCheckpoint(params: {
     })
   }
 
-  return { budgetExceeded, billedCostUsd }
+  return {
+    budgetExceeded,
+    billedCostUsd,
+    costReconciled: !usageExpected || costsMatch,
+    ...(!usageExpected || costsMatch
+      ? {}
+      : {
+          reconciliationReason:
+            rateCardCostUsd === null
+              ? "Complete per-request GPT-5.6 usage buckets were unavailable"
+              : "Engine-reported cost did not match the GPT-5.6 rate-card calculation",
+        }),
+  }
 }
 
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
@@ -337,6 +372,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       }
 
+      // Evidence is part of the result contract. Refuse before provider work
+      // when it cannot be retained durably.
+      assertEvidenceStorageConfigured()
+
       // 3. Run the scan engine
       await updateScanStatus(scanId, "RUNNING" as ScanStatus)
       await markRetestsRunning(scanId)
@@ -422,6 +461,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                 runRecord: null,
                 findingCount: 0,
                 summary: "URL target scanned through the pinned deterministic URL scanner.",
+                findingsComplete: true,
               },
             }
 
@@ -445,6 +485,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         usageExpected: target.type === "REPO",
       })
       const runRecord = engineResult.output.runRecord
+      const exitInterpretation = interpretExitCode(engineResult.exitCode)
       const engineExecution =
         target.type === "REPO"
           ? {
@@ -488,6 +529,64 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           })
         }
         return { status: "failed", errorCategory: "TIMEOUT", errorMessage: timeoutMessage }
+      }
+
+      // Preserve the engine's real terminal cause. Usage is checkpointed above
+      // for reconciliation, but a non-success exit must never be relabelled as
+      // an accounting problem.
+      if (target.type === "REPO" && exitInterpretation.status === "FAILED") {
+        const stoppedForBudget = exitInterpretation.category === "BUDGET_EXCEEDED"
+        await updateScanStatus(
+          scanId,
+          (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanStatus,
+          {
+            errorCategory: exitInterpretation.category,
+            errorMessage: exitInterpretation.message,
+            summary: engineResult.output.summary,
+            ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
+          }
+        )
+        try {
+          await notifyScanFailed(workspaceId, scanId, exitInterpretation.message)
+        } catch (notificationError) {
+          log.warn("Failed to send scan failure notification", {
+            scanId,
+            error:
+              notificationError instanceof Error
+                ? notificationError.message
+                : String(notificationError),
+          })
+        }
+        return {
+          status: "failed",
+          errorCategory: exitInterpretation.category,
+          errorMessage: exitInterpretation.message,
+        }
+      }
+
+      if (
+        target.type === "REPO" &&
+        (!engineResult.output.findingsComplete ||
+          !runRecord ||
+          runRecord.run_id !== scanId ||
+          runRecord.run_name !== scanId ||
+          runRecord.status !== "completed")
+      ) {
+        const stoppedForBudget = runRecord?.terminal_reason === "budget_exceeded"
+        const errorCategory = stoppedForBudget ? "BUDGET_EXCEEDED" : "ENGINE_INCOMPLETE"
+        const errorMessage = stoppedForBudget
+          ? "Protected run limit reached"
+          : "Engine did not produce a completed, valid result receipt"
+        await updateScanStatus(
+          scanId,
+          (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanStatus,
+          {
+            errorCategory,
+            errorMessage,
+            ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
+          }
+        )
+        return { status: "failed", errorCategory, errorMessage }
       }
 
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
@@ -615,33 +714,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           status: "failed",
           errorCategory: "BUDGET_EXCEEDED",
           errorMessage: "Protected run limit reached",
-        }
-      }
-
-      // 6. Interpret exit code and finalize
-      const exitInterpretation = interpretExitCode(engineResult.exitCode)
-
-      if (exitInterpretation.status === "FAILED") {
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: exitInterpretation.category,
-          errorMessage: exitInterpretation.message,
-          summary: engineResult.output.summary,
-        })
-        try {
-          await notifyScanFailed(workspaceId, scanId, exitInterpretation.message)
-        } catch (notificationError) {
-          log.warn("Failed to send scan failure notification", {
-            scanId,
-            error:
-              notificationError instanceof Error
-                ? notificationError.message
-                : String(notificationError),
-          })
-        }
-        return {
-          status: "failed",
-          errorCategory: exitInterpretation.category,
-          errorMessage: exitInterpretation.message,
         }
       }
 
