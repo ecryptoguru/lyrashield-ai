@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
+  ArrowRight,
   Radar,
   ShieldCheck,
   ShieldAlert,
@@ -15,10 +16,11 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react"
-import { Card, Badge, Button, EmptyState } from "@lyrashield/ui"
+import { Card, Badge, Button, EmptyState, buttonVariants } from "@lyrashield/ui"
 import { formatTime } from "@/lib/date-format"
 import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
+import { getScanReviewProfile } from "@/lib/scan-review-profile"
 
 interface ScanEvent {
   id: string
@@ -206,6 +208,8 @@ export function ScanDetailClient({
   const incompleteCoverage = scan.integrity.coverage.filter(
     (receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status)
   )
+  const reviewProfile = getScanReviewProfile(scan.events)
+  const topFinding = sortedFindings[0]
 
   function toggleFinding(id: string) {
     setExpandedFindings((prev) => {
@@ -320,6 +324,37 @@ export function ScanDetailClient({
         </Card>
       )}
 
+      {presentation.assuranceAvailable && (
+        <Card className="border-primary/30 bg-primary/5 mb-6 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                Next step
+              </p>
+              <h2 className="mt-1 text-lg font-semibold">
+                {topFinding ? "Review the highest-priority finding" : "Create an assurance report"}
+              </h2>
+              <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
+                {topFinding
+                  ? "Understand the evidence, record a fix proposal, then queue a fresh retest."
+                  : "Package this completed scan and its retained scope into an immutable report."}
+              </p>
+            </div>
+            <Link
+              href={
+                topFinding
+                  ? `/dashboard/findings?finding=${encodeURIComponent(topFinding.id)}`
+                  : `/dashboard/reports?scanId=${encodeURIComponent(scan.id)}`
+              }
+              className={buttonVariants({ className: "shrink-0" })}
+            >
+              {topFinding ? "Review finding" : "Generate report"}
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          </div>
+        </Card>
+      )}
+
       {presentation.showFailureDetails && (
         <div
           role="alert"
@@ -388,6 +423,63 @@ export function ScanDetailClient({
             </div>
           </div>
         </section>
+      )}
+
+      {(scan.integrity.coverage.length > 0 ||
+        reviewProfile.model ||
+        reviewProfile.maxBudgetUsd) && (
+        <Card className="mb-6 p-4" aria-labelledby="review-profile-heading">
+          <div>
+            <h2 id="review-profile-heading" className="font-semibold">
+              Review details
+            </h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              AI assistance can support analysis. Retained scanner receipts and independent
+              verification determine the proof state shown by LyraShield.
+            </p>
+          </div>
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-md border p-3">
+              <dt className="text-muted-foreground text-xs">Analysis path</dt>
+              <dd className="mt-1 text-sm font-medium">
+                {reviewProfile.model ? "AI-assisted review" : "Deterministic scanners"}
+              </dd>
+            </div>
+            <div className="rounded-md border p-3">
+              <dt className="text-muted-foreground text-xs">Model</dt>
+              <dd className="mt-1 text-sm font-medium wrap-break-word">
+                {reviewProfile.model ?? "Not invoked"}
+              </dd>
+              {reviewProfile.reasoningEffort && (
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {reviewProfile.reasoningEffort} reasoning
+                </p>
+              )}
+            </div>
+            <div className="rounded-md border p-3">
+              <dt className="text-muted-foreground text-xs">Approved budget cap</dt>
+              <dd className="mt-1 text-sm font-medium">
+                {reviewProfile.maxBudgetUsd ? `$${reviewProfile.maxBudgetUsd.toFixed(2)}` : "—"}
+              </dd>
+              {reviewProfile.budgetSource && (
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {reviewProfile.budgetSource.replaceAll("_", " ")}
+                </p>
+              )}
+            </div>
+            <div className="rounded-md border p-3">
+              <dt className="text-muted-foreground text-xs">Coverage receipts</dt>
+              <dd className="mt-1 text-sm font-medium">{scan.integrity.coverage.length}</dd>
+              <p className="text-muted-foreground mt-1 text-xs">
+                {scan.integrity.coverage.length === 0
+                  ? "No receipt recorded"
+                  : incompleteCoverage.length > 0
+                    ? `${incompleteCoverage.length} limited`
+                    : "No retained limitation"}
+              </p>
+            </div>
+          </dl>
+        </Card>
       )}
 
       {scan.integrity.coverage.length > 0 && (
@@ -522,12 +614,12 @@ export function ScanDetailClient({
       {currentFindings.length === 0 && !isActive && presentation.assuranceAvailable && (
         <EmptyState
           icon={ShieldCheck}
-          title={hasLimitedCoverage ? "No findings were reported" : "No findings"}
+          title="No findings were reported"
           description={
             hasLimitedCoverage
               ? "Some scanner coverage was limited. Review the coverage notice above before treating this as a clean result."
               : scan.status === "COMPLETED"
-                ? "This scan completed without any findings."
+                ? "No findings were reported within this scan's completed coverage. Review the retained scope before relying on the result."
                 : "No findings were recorded before this scan ended."
           }
         />

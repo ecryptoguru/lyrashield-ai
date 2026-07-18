@@ -22,7 +22,7 @@ import {
   Select,
   FormField,
 } from "@lyrashield/ui"
-import { apiGetPaginated, apiPost } from "@/lib/api-client"
+import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { formatDate } from "@/lib/date-format"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -41,7 +41,13 @@ interface ReportItem {
   scanId: string | null
 }
 
-export function ReportsClient({ workspaceId }: { workspaceId: string }) {
+export function ReportsClient({
+  workspaceId,
+  initialScanId,
+}: {
+  workspaceId: string
+  initialScanId?: string
+}) {
   const [reports, setReports] = useState<ReportItem[]>([])
   const [loading, setLoading] = useState(true)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -88,31 +94,62 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
     }
   }, [workspaceId])
 
-  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [showCreateForm, setShowCreateForm] = useState(Boolean(initialScanId))
   const [reportTitle, setReportTitle] = useState("")
   const [creatingReport, setCreatingReport] = useState(false)
   const [scans, setScans] = useState<Array<{ id: string; targetName: string; status: string }>>([])
-  const [selectedScanId, setSelectedScanId] = useState<string>("")
+  const [selectedScanId, setSelectedScanId] = useState<string>(initialScanId ?? "")
   const [reportType, setReportType] = useState<"executive" | "developer" | "compliance">(
     "executive"
   )
 
   useEffect(() => {
     let cancelled = false
-    apiGetPaginated<{ id: string; target: { name: string }; status: string }>(`/api/scans`, {
-      workspaceId,
-    })
-      .then((res) => {
+    async function loadCompletedScans() {
+      try {
+        const res = await apiGetPaginated<{
+          id: string
+          target: { name: string }
+          status: string
+        }>(`/api/scans`, { workspaceId, status: "COMPLETED" })
+        const completedScans = res.items
+        let linkedScanAvailable =
+          !initialScanId || completedScans.some((scan) => scan.id === initialScanId)
+
+        if (initialScanId && !linkedScanAvailable) {
+          try {
+            const linkedScan = await apiGet<{
+              id: string
+              target: { name: string }
+              status: string
+            }>(`/api/scans/${initialScanId}`)
+            if (linkedScan.status === "COMPLETED") {
+              completedScans.unshift(linkedScan)
+              linkedScanAvailable = true
+            }
+          } catch {
+            // The report form remains usable if the linked scan is unavailable.
+          }
+        }
+
         if (cancelled) return
-        setScans(res.items.map((s) => ({ id: s.id, targetName: s.target.name, status: s.status })))
-      })
-      .catch(() => {
+        if (!linkedScanAvailable) setSelectedScanId("")
+        setScans(
+          completedScans.map((scan) => ({
+            id: scan.id,
+            targetName: scan.target.name,
+            status: scan.status,
+          }))
+        )
+      } catch {
         // scans optional — ignore errors
-      })
+      }
+    }
+    void loadCompletedScans()
     return () => {
       cancelled = true
     }
-  }, [workspaceId])
+  }, [workspaceId, initialScanId])
 
   const handleCreateReport = async () => {
     setCreatingReport(true)
@@ -207,7 +244,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Generate and share security reports with stakeholders
+            Create immutable assurance snapshots from completed scan evidence
           </p>
         </div>
         <Button
@@ -223,9 +260,9 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
         <Card className="mb-5 p-5 sm:p-6">
           <div className="flex flex-col gap-5">
             <div>
-              <h3 className="font-semibold">Generate an Assurance Story</h3>
+              <h3 className="font-semibold">Generate an assurance report</h3>
               <p className="text-muted-foreground mt-1 text-xs">
-                Create an immutable, visual snapshot tailored to its reader.
+                Create an immutable, visual snapshot tailored to its reader and retained scan scope.
               </p>
             </div>
             <Tabs
@@ -271,7 +308,7 @@ export function ReportsClient({ workspaceId }: { workspaceId: string }) {
                   value={selectedScanId}
                   onChange={(e) => setSelectedScanId(e.target.value)}
                 >
-                  <option value="">Select a scan (optional)</option>
+                  <option value="">Select a completed scan (optional)</option>
                   {scans.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.targetName} — {s.status}

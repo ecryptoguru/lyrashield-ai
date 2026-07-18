@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
 import {
   Bug,
   ShieldCheck,
@@ -11,6 +12,7 @@ import {
   XCircle,
   AlertCircle,
   Wrench,
+  ArrowRight,
 } from "lucide-react"
 import {
   Button,
@@ -21,9 +23,11 @@ import {
   LoadMore,
   Select,
   Textarea,
+  buttonVariants,
 } from "@lyrashield/ui"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
+import { getFindingNextStep } from "@/lib/finding-next-step"
 import {
   Sheet,
   SheetContent,
@@ -77,15 +81,21 @@ export function FindingsClient({
   workspaceId,
   initialData,
   initialNextCursor,
+  initialSelectedFindingId,
 }: {
   workspaceId: string
   initialData: FindingListItem[]
   initialNextCursor: string | null
+  initialSelectedFindingId?: string
 }) {
   const [findings, setFindings] = useState<FindingListItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
   const [filter, setFilter] = useState<string>("ALL")
-  const [selectedFinding, setSelectedFinding] = useState<FindingListItem | null>(null)
+  const [selectedFinding, setSelectedFinding] = useState<FindingListItem | null>(() =>
+    initialSelectedFindingId
+      ? (initialData.find((finding) => finding.id === initialSelectedFindingId) ?? null)
+      : null
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -130,7 +140,7 @@ export function FindingsClient({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Findings</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Security vulnerabilities detected by your scans
+            Potential and verified security findings reported by your scans
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -322,7 +332,7 @@ interface FindingDetail {
   }>
   evidence?: Array<{ id: string; type: string; storageUri: string | null; redactionStatus: string }>
   fixProposals?: Array<{ id: string; status: string; summary: string }>
-  retests?: Array<{ id: string; status: string; createdAt: string }>
+  retests?: Array<{ id: string; scanId: string; status: string; createdAt: string }>
   scanId?: string | null
   plainLanguage?: PlainLanguage
 }
@@ -344,6 +354,7 @@ function FindingDetailDrawer({
   const [fixError, setFixError] = useState<string | null>(null)
   const [creatingRetest, setCreatingRetest] = useState(false)
   const [retestError, setRetestError] = useState<string | null>(null)
+  const [queuedRetestScanId, setQueuedRetestScanId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -364,6 +375,34 @@ function FindingDetailDrawer({
       cancelled = true
     }
   }, [finding.id, workspaceId])
+
+  const latestRetest = detail?.retests?.[0] ?? null
+  const hasFixProposal = (detail?.fixProposals?.length ?? 0) > 0
+  const nextStep = getFindingNextStep({
+    latestRetestStatus: latestRetest?.status,
+    hasFixProposal,
+  })
+
+  async function queueRetest() {
+    if (!detail?.scanId) return
+    setCreatingRetest(true)
+    setRetestError(null)
+    try {
+      const result = await apiPost<{ scan: { id: string; status: string } }>(
+        `/api/findings/${finding.id}/retests`,
+        { workspaceId }
+      )
+      setQueuedRetestScanId(result.scan.id)
+      const res = await apiGet<FindingDetail>(
+        `/api/findings/${finding.id}?workspaceId=${workspaceId}`
+      )
+      setDetail(res ?? null)
+    } catch (err) {
+      setRetestError(err instanceof Error ? err.message : "Failed to create retest")
+    } finally {
+      setCreatingRetest(false)
+    }
+  }
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -395,6 +434,163 @@ function FindingDetailDrawer({
                 <Badge variant="muted">{finding.verificationStatus.replaceAll("_", " ")}</Badge>
               )}
               {finding.confidence && <Badge variant="muted">{finding.confidence} confidence</Badge>}
+            </div>
+
+            <div className="border-primary/30 bg-primary/5 rounded-lg border p-4">
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                Next step
+              </p>
+              {nextStep === "REPORT" && latestRetest ? (
+                <div className="mt-2">
+                  <h3 className="font-semibold">Turn the retest result into an assurance report</h3>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    This fresh retest passed. Generate an immutable report from its retained result.
+                  </p>
+                  <Link
+                    href={`/dashboard/reports?scanId=${encodeURIComponent(latestRetest.scanId)}`}
+                    className={buttonVariants({ size: "sm", className: "mt-3" })}
+                  >
+                    Generate report
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </div>
+              ) : nextStep === "RETEST_IN_PROGRESS" && latestRetest ? (
+                <div className="mt-2">
+                  <h3 className="font-semibold">Retest in progress</h3>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    The fresh scan will determine whether the recorded change is retest-confirmed or
+                    remains inconclusive.
+                  </p>
+                  <Link
+                    href={`/dashboard/scans/${encodeURIComponent(latestRetest.scanId)}`}
+                    className={buttonVariants({
+                      variant: "secondary",
+                      size: "sm",
+                      className: "mt-3",
+                    })}
+                  >
+                    View retest
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </div>
+              ) : showFixForm ? (
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <h3 className="font-semibold">Create a fix proposal</h3>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      Review and edit this plan before saving it. Creating a proposal does not
+                      change your code.
+                    </p>
+                  </div>
+                  <Textarea
+                    className="w-full"
+                    rows={4}
+                    placeholder="Describe the change you intend to make..."
+                    value={fixSummary}
+                    onChange={(e) => setFixSummary(e.target.value)}
+                  />
+                  {fixError && <p className="text-destructive text-xs">{fixError}</p>}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={creatingFix || fixSummary.trim().length < 10}
+                      onClick={async () => {
+                        setCreatingFix(true)
+                        setFixError(null)
+                        try {
+                          await apiPost(`/api/findings/${finding.id}/fix-proposals`, {
+                            workspaceId,
+                            summary: fixSummary.trim(),
+                          })
+                          setShowFixForm(false)
+                          setFixSummary("")
+                          const res = await apiGet<FindingDetail>(
+                            `/api/findings/${finding.id}?workspaceId=${workspaceId}`
+                          )
+                          setDetail(res ?? null)
+                        } catch (err) {
+                          setFixError(
+                            err instanceof Error ? err.message : "Failed to create fix proposal"
+                          )
+                        } finally {
+                          setCreatingFix(false)
+                        }
+                      }}
+                    >
+                      {creatingFix ? <Spinner /> : "Save proposal"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setShowFixForm(false)
+                        setFixSummary("")
+                        setFixError(null)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : nextStep === "RETEST" ? (
+                <div className="mt-2">
+                  <h3 className="font-semibold">Apply the change, then run a fresh retest</h3>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    The proposal is recorded, but LyraShield has not changed your code. Queue the
+                    retest only after you apply the fix.
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      disabled={creatingRetest || !detail.scanId}
+                      onClick={() => void queueRetest()}
+                    >
+                      {creatingRetest ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner /> Queuing retest...
+                        </span>
+                      ) : (
+                        "Queue fresh retest"
+                      )}
+                    </Button>
+                    {!detail.scanId && (
+                      <span className="text-muted-foreground text-xs">
+                        No scan is linked to this finding
+                      </span>
+                    )}
+                  </div>
+                  {retestError && <p className="text-destructive mt-2 text-xs">{retestError}</p>}
+                </div>
+              ) : (
+                <div className="mt-2">
+                  <h3 className="font-semibold">Review the guidance and record your plan</h3>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Use the evidence and recommended fix below, then save the change you intend to
+                    make.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => {
+                      setFixSummary(detail.recommendedFix ?? detail.plainLanguage?.howToFix ?? "")
+                      setFixError(null)
+                      setShowFixForm(true)
+                    }}
+                  >
+                    <Wrench className="mr-1 size-4" aria-hidden="true" />
+                    Create fix proposal
+                  </Button>
+                </div>
+              )}
+              {queuedRetestScanId && nextStep !== "RETEST_IN_PROGRESS" && (
+                <Link
+                  href={`/dashboard/scans/${encodeURIComponent(queuedRetestScanId)}`}
+                  className="text-primary mt-3 inline-flex min-h-11 items-center gap-1 text-sm font-medium hover:underline"
+                >
+                  View queued retest
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              )}
             </div>
 
             <div>
@@ -566,120 +762,6 @@ function FindingDetailDrawer({
                 </div>
               </div>
             )}
-
-            <div className="border-t pt-4">
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={creatingRetest || !detail.scanId}
-                  onClick={async () => {
-                    if (!detail.scanId) return
-                    setCreatingRetest(true)
-                    setRetestError(null)
-                    try {
-                      await apiPost(`/api/findings/${finding.id}/retests`, {
-                        workspaceId,
-                      })
-                      const res = await apiGet<FindingDetail>(
-                        `/api/findings/${finding.id}?workspaceId=${workspaceId}`
-                      )
-                      setDetail(res ?? null)
-                    } catch (err) {
-                      setRetestError(err instanceof Error ? err.message : "Failed to create retest")
-                    } finally {
-                      setCreatingRetest(false)
-                    }
-                  }}
-                >
-                  {creatingRetest ? (
-                    <span className="flex items-center gap-2">
-                      <Spinner /> Queuing retest...
-                    </span>
-                  ) : (
-                    "Queue Retest"
-                  )}
-                </Button>
-                {!detail.scanId && (
-                  <span className="text-muted-foreground text-xs">
-                    No scan linked to this finding
-                  </span>
-                )}
-              </div>
-              {retestError && <p className="text-destructive mt-2 text-xs">{retestError}</p>}
-            </div>
-
-            <div className="border-t pt-4">
-              {showFixForm ? (
-                <div className="space-y-3">
-                  <h3 className="text-sm font-medium">Generate Fix Proposal</h3>
-                  <Textarea
-                    className="w-full"
-                    rows={3}
-                    placeholder="Describe the proposed fix..."
-                    value={fixSummary}
-                    onChange={(e) => setFixSummary(e.target.value)}
-                  />
-                  {fixError && <p className="text-destructive text-xs">{fixError}</p>}
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      disabled={creatingFix || fixSummary.length < 10}
-                      onClick={async () => {
-                        setCreatingFix(true)
-                        setFixError(null)
-                        try {
-                          await apiPost(`/api/findings/${finding.id}/fix-proposals`, {
-                            workspaceId,
-                            summary: fixSummary,
-                          })
-                          setShowFixForm(false)
-                          setFixSummary("")
-                          setDetail(null)
-                          setLoading(true)
-                          try {
-                            const res = await apiGet<FindingDetail>(
-                              `/api/findings/${finding.id}?workspaceId=${workspaceId}`
-                            )
-                            setDetail(res ?? null)
-                          } catch {
-                            setFixError(
-                              "Proposal created but failed to reload details. Close and reopen the drawer."
-                            )
-                          } finally {
-                            setLoading(false)
-                          }
-                        } catch (err) {
-                          setFixError(
-                            err instanceof Error ? err.message : "Failed to create fix proposal"
-                          )
-                        } finally {
-                          setCreatingFix(false)
-                        }
-                      }}
-                    >
-                      {creatingFix ? <Spinner /> : "Create Proposal"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setShowFixForm(false)
-                        setFixSummary("")
-                        setFixError(null)
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <Button size="sm" variant="outline" onClick={() => setShowFixForm(true)}>
-                  <Wrench className="mr-1 h-4 w-4" aria-hidden="true" />
-                  Generate Fix Proposal
-                </Button>
-              )}
-            </div>
           </div>
         ) : (
           <p className="text-muted-foreground text-sm">Failed to load finding details.</p>
