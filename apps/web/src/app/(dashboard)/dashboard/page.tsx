@@ -245,7 +245,7 @@ export default async function DashboardPage() {
 
         <Card className="p-5 sm:p-6">
           <div className="mb-5">
-            <h2 className="font-semibold">Verified risk mix</h2>
+            <h2 className="font-semibold">Retained finding mix</h2>
             <p className="text-muted-foreground mt-1 text-xs">
               All retained findings grouped by severity.
             </p>
@@ -260,7 +260,7 @@ export default async function DashboardPage() {
             <div>
               <h2 className="font-semibold">Remediation flow</h2>
               <p className="text-muted-foreground mt-1 text-xs">
-                Finding movement from verified risk to closure.
+                Current finding movement from review through closure.
               </p>
             </div>
             <Wrench className="text-primary size-5" aria-hidden="true" />

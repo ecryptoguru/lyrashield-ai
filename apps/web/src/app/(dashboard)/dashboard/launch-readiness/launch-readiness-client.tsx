@@ -251,13 +251,14 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
         </Card>
       )}
 
-      {/* All Clear */}
+      {/* Completed scope */}
       {report.verdict === "GO" && report.totalFindings === 0 && (
         <Card className="p-6 text-center">
           <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-emerald-500" aria-hidden="true" />
-          <h3 className="mb-1 text-lg font-semibold">No Security Issues Found</h3>
+          <h3 className="mb-1 text-lg font-semibold">No blocking findings in completed scope</h3>
           <p className="text-muted-foreground text-sm">
-            Your application has no security findings. You&apos;re clear to launch!
+            No findings were reported within completed scan coverage. Review the retained coverage
+            and limitations before making your launch decision.
           </p>
         </Card>
       )}

@@ -78,7 +78,7 @@ export async function getFinding(
         createdAt: Date
       }[]
       fixProposals: { id: string; status: string; summary: string }[]
-      retests: { id: string; status: string; createdAt: Date }[]
+      retests: { id: string; scanId: string; status: string; createdAt: Date }[]
     })
   | null
 > {
@@ -108,6 +108,7 @@ export async function getFinding(
       retests: {
         select: {
           id: true,
+          scanId: true,
           status: true,
           createdAt: true,
         },
