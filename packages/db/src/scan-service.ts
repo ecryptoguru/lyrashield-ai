@@ -7,6 +7,7 @@ import type {
   ScanCoverageReceipt,
 } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
+import { DeterminismModeSchema, type DeterminismMode } from "@lyrashield/types"
 import { isValidTransition } from "./scan-transitions"
 
 export interface CreateScanParams {
@@ -17,6 +18,7 @@ export interface CreateScanParams {
   policyId?: string
   createdById: string
   triggerType?: string
+  determinismMode?: DeterminismMode
 }
 
 export interface ScanWithEvents extends Scan {
@@ -34,6 +36,7 @@ const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
 ]
 
 export async function createScan(params: CreateScanParams): Promise<Scan> {
+  const determinismMode = DeterminismModeSchema.parse(params.determinismMode ?? "default")
   const scan = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.targetId}))`
 
@@ -57,6 +60,7 @@ export async function createScan(params: CreateScanParams): Promise<Scan> {
         policyId: params.policyId ?? null,
         status: "QUEUED",
         triggerType: params.triggerType ?? "manual",
+        determinismMode,
         createdById: params.createdById,
       },
     })
@@ -163,17 +167,19 @@ export async function addScanEvent(
 }
 
 export async function getScanWithEvents(scanId: string): Promise<ScanWithEvents | null> {
-  return prisma.scan.findUnique({
+  const scan = await prisma.scan.findUnique({
     where: { id: scanId },
     include: {
       events: {
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 200,
       },
       resultManifest: true,
       coverageReceipts: { orderBy: { controlId: "asc" } },
     },
   })
+  if (scan) scan.events.reverse()
+  return scan
 }
 
 /**

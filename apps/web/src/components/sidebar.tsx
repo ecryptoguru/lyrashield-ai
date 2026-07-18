@@ -92,7 +92,7 @@ function SidebarPanel({
             alt=""
             width={32}
             height={32}
-            className="size-8"
+            className="size-6"
             aria-hidden="true"
           />
         </div>
@@ -201,6 +201,7 @@ function SidebarPanel({
           <ThemeToggle className="shrink-0" />
         </div>
         <Button
+          type="button"
           onClick={onSignOut}
           aria-label="Sign out"
           variant="ghost"
@@ -266,7 +267,7 @@ export function Sidebar({
               alt=""
               width={28}
               height={28}
-              className="size-7"
+              className="size-6"
               aria-hidden="true"
             />
           </div>

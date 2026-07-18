@@ -328,6 +328,7 @@ export interface VibeCoverageFinding {
   title: string
   description?: string
   technical_analysis?: string
+  control_ids?: readonly number[]
 }
 
 export function buildVibeSecurityInstruction(goal: string): string {
@@ -338,7 +339,7 @@ export function buildVibeSecurityInstruction(goal: string): string {
     (control) => control.strategy === "evidence"
   )
   const checklist = machineControls.map((control) => `${control.rank}. ${control.title}`).join("; ")
-  return `Goal: ${goal}. Assess every applicable item in LyraShield ${VIBE_SECURITY_COVERAGE_VERSION}: ${checklist}. Report only evidence-backed findings; do not treat absence of evidence as a vulnerability. Operational evidence controls ${evidenceControls.map((control) => control.rank).join(", ")} require separate human or deployment proof.`
+  return `Goal: ${goal}. Assess every applicable item in LyraShield ${VIBE_SECURITY_COVERAGE_VERSION}: ${checklist}. Report only evidence-backed findings; do not treat absence of evidence as a vulnerability. For each reported finding, include the applicable checklist ranks in control_ids. Operational evidence controls ${evidenceControls.map((control) => control.rank).join(", ")} require separate human or deployment proof.`
 }
 
 export function summarizeVibeSecurityCoverage(findings: readonly VibeCoverageFinding[]) {
@@ -350,9 +351,17 @@ export function summarizeVibeSecurityCoverage(findings: readonly VibeCoverageFin
         .toLowerCase()
     )
     .join("\n")
-  const matchedControlRanks = VIBE_SECURITY_CONTROLS.filter((control) =>
-    control.keywords.some((keyword) => findingText.includes(keyword))
-  ).map((control) => control.rank)
+  const explicitRanks = findings.flatMap((finding) => finding.control_ids ?? [])
+  const matchedControlRanks = [
+    ...new Set([
+      ...explicitRanks.filter(
+        (rank) => Number.isInteger(rank) && rank >= 1 && rank <= VIBE_SECURITY_CONTROLS.length
+      ),
+      ...VIBE_SECURITY_CONTROLS.filter((control) =>
+        control.keywords.some((keyword) => findingText.includes(keyword))
+      ).map((control) => control.rank),
+    ]),
+  ].sort((left, right) => left - right)
   const evidenceControlRanks = VIBE_SECURITY_CONTROLS.filter(
     (control) => control.strategy === "evidence"
   ).map((control) => control.rank)

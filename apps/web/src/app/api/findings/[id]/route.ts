@@ -48,7 +48,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       severity: finding.severity,
       cwe: finding.cwe,
       category: finding.category,
-      technicalDetail: finding.technicalDetail,
       recommendedFix: finding.recommendedFix,
     })
 

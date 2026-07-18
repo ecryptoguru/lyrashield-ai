@@ -2,6 +2,8 @@
 
 > No production deployment is approved by this document. It records the minimum gates that must be satisfied before a release. Choose vendors and infrastructure only after founder approval; do not copy local Docker Compose into production.
 
+`userguide.md` documents the end-user experience. This runbook owns only deployment, configuration, verification, and operational release boundaries.
+
 ## Architecture boundary
 
 - The Next.js web application and BullMQ worker need managed PostgreSQL and Redis.
@@ -19,7 +21,7 @@
 5. The worker runs as a dedicated non-root user with least-privilege filesystem and Docker access.
 6. The sandbox image is pinned to an inspected digest; mutable tags are not acceptable.
 7. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
-8. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined.
+8. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
 
 ## Full-scan resource checklist
 
@@ -99,11 +101,23 @@ The worker selects one profile before each engine subprocess:
 | Deep         | deep        | `LYRASHIELD_TERRA_LLM` | high      |      $15.00 |
 | Custom       | deep        | `LYRASHIELD_TERRA_LLM` | high      |      $15.00 |
 
+The worker permanently versions the official OpenAI GPT-5.6 rate card in `apps/worker/src/engine/gpt56-pricing.ts` (effective 2026-07-09; USD per 1 million tokens):
+
+| Model         | Input | Cached input read | Cache write | Output |
+| ------------- | ----: | ----------------: | ----------: | -----: |
+| GPT-5.6 Sol   | $5.00 |             $0.50 |       $6.25 | $30.00 |
+| GPT-5.6 Terra | $2.50 |             $0.25 |      $3.125 | $15.00 |
+| GPT-5.6 Luna  | $1.00 |             $0.10 |       $1.25 |  $6.00 |
+
+Source: OpenAI's official GPT-5.6 announcement and pricing, captured with its effective date. Cache writes are 1.25 times the uncached input rate. Requests whose prompts exceed 272,000 tokens use the official long-context multipliers of 2 times input and 1.5 times output; aggregate counters that cannot identify which request crossed that boundary are not estimated locally.
+
 `LYRASHIELD_LLM` is mandatory as the backward-compatible fallback when a routed variable is absent or empty. Azure deployment names are operator-defined: if the Azure deployment is not literally named `gpt-5.6-luna` or `gpt-5.6-terra`, put the real deployment name after `azure/` or `azure_ai/`.
 
-A finite positive `Policy.maxBudgetUsd` overrides the default for that scan. Zero, negative, non-finite, missing, deleted, or cross-workspace policy values cannot remove the mode cap. The worker records `engine_start` with model/reasoning and `budget_cap` with amount/source; provider-reported `llm_usage` is recorded separately when returned by the engine.
+A finite positive `Policy.maxBudgetUsd` overrides the default for that scan. Zero, negative, non-finite, missing, deleted, or cross-workspace policy values cannot remove the mode cap. The worker records `engine_start` with model/reasoning and `budget_cap` with amount/source. When the engine returns usage, the scan ledger retains its reported cost, capped billable cost, request count, input tokens, cached input tokens, and output tokens. If complete standard-context GPT-5.6 counters arrive without a cost, the worker uses the versioned official OpenAI rate card in `apps/worker/src/engine/gpt56-pricing.ts`; ambiguous long-context aggregates fail closed instead of being underpriced. It never stores prompts or raw provider request payloads.
 
-These amounts are hard ceilings, not expected per-scan charges. Actual spend depends on provider token accounting and how early the scan completes; reconcile the retained usage event against the Azure meter during the controlled gate.
+These amounts are hard ceilings, not expected per-scan charges. Engine-reported cost is retained for reconciliation even when it exceeds the approved ceiling; the amount presented as billable by LyraShield is clamped to that ceiling. Actual spend still depends on provider token accounting and how early the scan completes, so reconcile the retained ledger against the Azure meter during the controlled gate.
+
+A durable scan event is recorded immediately before a repository scan enters the provider-billable engine phase. Preflight work remains retryable, while recovery after that boundary fails closed instead of replaying provider work; a failed billable invocation requires an explicit new scan or retest so the queue cannot silently duplicate model spend. Deterministic SCA, secret, URL, and agent-configuration findings use the Safe profile for targeted retests; engine-only findings retain their originating review depth.
 
 This is mode-level routing: a scan uses one model for its full engine invocation. It does not run Luna discovery followed by Terra validation inside the same scan.
 
@@ -124,12 +138,12 @@ git diff --check
 
 Then, in the target environment:
 
-1. Deploy all 20 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, and `20260716151000_scorecard_share_active_snapshot_unique`; run the migration-diff gate against a fresh shadow database.
+1. Deploy all 21 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, `20260716151000_scorecard_share_active_snapshot_unique`, and `20260718110000_scan_cost_ledger`; run the migration-diff gate against a fresh shadow database.
 2. Verify `/api/health`, `/api/ready`, authentication, workspace isolation, Redis queue connectivity, and Worker readiness.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.
 5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with high reasoning and its cap is $15 or the selected positive policy override.
-6. Capture audit evidence, confirm the sandbox image digest used, reconcile provider billing with the retained `llm_usage` event, and verify evidence artifacts are retrievable from the configured S3-compatible endpoint. Any placeholder or failed upload blocks the gate.
+6. Capture audit evidence, confirm the sandbox image digest used, reconcile provider billing with the retained exact cost/token ledger, and verify evidence artifacts are retrievable from the configured S3-compatible endpoint. Any placeholder or failed upload blocks the gate.
 7. Exercise backup and restore on non-production data before claiming an RPO/RTO.
 8. Confirm URL targets use only the pinned deterministic URL scanner. Do not re-enable the external engine for URL targets until its transport is DNS-pinned and redirect-safe.
 9. Confirm GitHub callbacks can refresh only a pre-existing workspace binding. Fresh installation claims and client-authored Fix PR payloads must remain blocked until their provider-ownership and server-generated-patch gates are implemented.

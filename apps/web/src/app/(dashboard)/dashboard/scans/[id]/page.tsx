@@ -8,6 +8,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
   if (!session) redirect("/sign-in")
 
   const { id } = await params
+  const workspaceId = await getCachedWorkspaceId(session.userId)
 
   const scan = await getScanWithEvents(id)
   if (!scan) {
@@ -21,7 +22,6 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     )
   }
 
-  const workspaceId = await getCachedWorkspaceId(session.userId)
   if (scan.workspaceId !== workspaceId) {
     return (
       <div className="rounded-lg border border-dashed p-12 text-center">
@@ -33,11 +33,11 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
 
   const [target, findings] = await Promise.all([
     prisma.target.findFirst({
-      where: { id: scan.targetId ?? "" },
+      where: { id: scan.targetId ?? "", workspaceId, deletedAt: null },
       select: { id: true, name: true, type: true, url: true, repoFullName: true },
     }),
     prisma.finding.findMany({
-      where: { scanId: id, deletedAt: null },
+      where: { scanId: id, workspaceId, deletedAt: null },
       select: {
         id: true,
         title: true,
@@ -68,6 +68,15 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     summary: scan.summary,
     errorCategory: scan.errorCategory,
     errorMessage: scan.errorMessage,
+    cost: {
+      providerUsd: scan.providerCostUsd?.toString() ?? null,
+      billedUsd: scan.billedCostUsd?.toString() ?? null,
+      legacyBilledCents: scan.actualCostCents,
+      requestCount: scan.llmRequestCount,
+      inputTokens: scan.llmInputTokens,
+      cachedInputTokens: scan.llmCachedInputTokens,
+      outputTokens: scan.llmOutputTokens,
+    },
     createdAt: scan.createdAt.toISOString(),
     target: target
       ? {
@@ -96,6 +105,13 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
         controlId: receipt.controlId,
         status: receipt.status,
         reason: receipt.reason,
+        subject: receipt.subject,
+        metadata:
+          receipt.metadata &&
+          typeof receipt.metadata === "object" &&
+          !Array.isArray(receipt.metadata)
+            ? (receipt.metadata as Record<string, unknown>)
+            : null,
       })),
     },
   }

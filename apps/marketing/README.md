@@ -188,3 +188,4 @@ curl -X POST -d "email=you@example.com" -d "source=landing" http://localhost:878
 - Blog posts are `draft: true` by default. Only un-draft a post after founder sign-off.
 - Marketing share buttons promote the waitlist referral link. Product scorecards, grades, verified-fix cards, and README badges come from the app origin and must never be recreated or edited as marketing artwork.
 - See `BLOG_AUTHORING.md` for content rules.
+- See `../../userguide.md` for the complete public Lite Check and authenticated-product user guide; keep public copy within the availability boundaries documented there.

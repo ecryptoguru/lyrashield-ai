@@ -660,7 +660,7 @@ Status: **Thin-fork offline gate passed; one local Safe scan completed; producti
 Repo: ecryptoguru/lyrashield-engine
 Upstream remote: https://github.com/usestrix/strix.git
 Recorded baseline: 7b639505fecf20a2d9e356f96bd91470aa828182
-Adapter version: 1.0.4.post1
+Adapter version: 1.1.0.post1
 Offline proof: 155 tests, Ruff, formatting, headless mypy, Bandit
 Worker proof: image builds, lyrashield --version succeeds, missing model config exits before sandbox pull
 ```
@@ -5228,12 +5228,12 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
-- Current `main` baseline: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, `git diff --check`, **840 passing tests in 90 files**, and **2 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
-- Current product surface: **23 page route files** and **42 API route files** in `apps/web`.
-- Current data surface: **39 Prisma models**, **18 enums**, and **20 committed migrations**. After the result-integrity migration, Postgres RLS covers 20 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
+- PR #108 release-candidate baseline: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, `git diff --check`, **853 core tests in 94 files**, **79 marketing tests in 12 files**, **16 motion tests**, and **2 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
+- Current product surface: **25 page route files** and **42 API route files** in `apps/web`.
+- Current data surface: **39 Prisma models**, **18 enums**, and **21 committed migrations**. Postgres RLS covers 20 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
 - Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
-- Current Docker proof: the web/worker stack and engine-bearing worker image build; the CLI reports `1.0.4.post1`; configuration failure occurs before sandbox pull when model credentials are missing.
+- Current Docker proof: fresh web/worker images build; the web container passes health plus database/Redis readiness; the engine-bearing worker image reports CLI `1.1.0.post1`. Docker/runtime health remains separate from a paid controlled-scan result.
 - Current engine proof: 155 engine tests plus Ruff, formatting, headless mypy, and Bandit passed on the thin fork.
 
 Historical test and migration counts elsewhere in this PRD describe earlier checkpoints. They must not be used as the current release gate.
@@ -5266,7 +5266,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - AI-builder-aware URL checks, security-header/CORS checks, redirect and DNS revalidation, and shared SSRF-safe fetch utilities.
 - GitHub Action diff gate with secret, dependency, and code checks plus SARIF output.
 - Hardened prompt-injection detection and sanitization for agent-controlled inputs, with `normalizeInput()` (zero-width characters, NFKC normalization, HTML entity decoding) and an expanded/tightened pattern set.
-- Azure AI / GPT 5.6 routing is wired through `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, and the fallback `LYRASHIELD_LLM`, sharing `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION`/`LLM_API_VERSION`. Safe/Quick/Standard select Luna at medium reasoning; Deep/Custom select Terra at high. Default dollar caps are $1.20/$1.20/$3.20/$15/$15, with positive workspace-policy overrides clamped to `PLATFORM_MAX_SCAN_BUDGET_USD` (default $50). A provider-reported overage is retained as usage truth, transitions the scan to `STOPPED_BUDGET`, and cannot persist billable cents above the approved cap.
+- Azure AI / GPT 5.6 routing is wired through `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, and the fallback `LYRASHIELD_LLM`, sharing `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION`/`LLM_API_VERSION`. Safe/Quick/Standard select Luna at medium reasoning; Deep/Custom select Terra at high. Default dollar caps are $1.20/$1.20/$3.20/$15/$15, with positive workspace-policy overrides clamped to `PLATFORM_MAX_SCAN_BUDGET_USD` (default $50). Engine-reported cost remains the primary ledger input; complete standard-context GPT-5.6 token usage falls back to the versioned official OpenAI rate card when that cost is absent. An overage is retained as usage truth, transitions the scan to `STOPPED_BUDGET`, and cannot persist billable cents above the approved cap.
 - The versioned Vibe Security 50 registry delivers 43 machine-testable controls to the existing engine and preserves an explicit 7-control evidence-required boundary. It adds bounded deterministic SCA, secret, URL, agent-instruction, and CI-workflow signals without treating no result as a pass. See `docs/vibe-security-50.md`.
 
 ### C1.4 Agent-native surfaces
@@ -5275,11 +5275,13 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - Permission enforcement, workspace matching, signed service tokens, audit logging, queue error handling, and exact `actionName` plus input-hash approval verification. Both `DEEP` and `CUSTOM` agent scan modes require approval.
 - Approval list/approve/deny APIs and an `AgentApproval` persistence model protected by RLS. Execution uses an atomic single-use transition and retains execution time/result without reopening the approval on result-recording failure.
 - MCP package with real API-backed tools and stdio JSON-RPC transport. Mutating tools require approval on the controlling terminal; headless/no-TTY invocation fails closed while stdout remains reserved for JSON-RPC.
+- The scan tool advertises and defaults to the API's real goal/mode enums (`TEST_APP`/`SAFE`) rather than obsolete pre-schema labels. The complete current tool and user workflow reference lives in `userguide.md`.
 
 ### C1.5 User experience and marketing
 
 - Responsive dashboard, accessible Sheet-based mobile navigation, shared UI components, persisted system/light/dark themes, 44px touch targets, accessible form fields, loading/error/empty states, pagination, and server-fetched initial data.
 - Dashboard pages for projects, targets, scans, findings, fixes, reports, notifications, schedules, launch readiness, integrations, team, and settings.
+- `userguide.md` is the complete user-facing reference for public tools, onboarding, every dashboard surface, scan presets/costs, evidence language, roles, MCP, troubleshooting, and current availability. It must stay aligned with code whenever a user-visible option changes.
 - Account deletion blocks sole owners, anonymizes loose user attribution, removes auth/membership data, and rebuilds affected audit chains.
 - Liveness/readiness endpoints, structured Next.js request-error instrumentation, and maintained Playwright coverage for auth, onboarding, target/scan creation, and tenant denial boundaries.
 - Astro 7 marketing site with landing page, blog, authoring rules, RSS, sitemap, robots, JSON-LD, canonical/social metadata, and a Cloudflare D1 waitlist. The marketing header links to the app via `PUBLIC_APP_URL`; the app root redirects unauthenticated users to `NEXT_PUBLIC_MARKETING_URL` (or `/sign-in` as a fallback).
@@ -5381,7 +5383,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 1. **Controlled scan proof:** one pre-v4 local Safe scan against an approved public repository completed with Luna/medium routing, Docker sandbox execution, retained scan events, zero findings, and a persisted post-run budget-overage warning under behavior that PR #79 has since replaced with terminal/clamped handling. It is not a production proof and does not establish coverage of all controls. A production target, approved Terra/Deep run, production-pinned image provenance, retained artifacts when findings exist, and production egress enforcement are still required.
 2. **Transport-level egress control:** application SSRF checks are present, but untrusted multi-tenant scanning still requires a deployment-level proxy or equivalent DNS-pinned network enforcement.
-3. **Production infrastructure:** provision production PostgreSQL, a BullMQ-compatible TLS Redis endpoint (REST-only Upstash credentials do not operate the queue), mandatory private S3-compatible evidence storage, secrets, TLS, backups, monitoring, dedicated worker capacity with the engine and pinned sandbox, and the authenticated Next.js application origin. Apply and verify all 20 migrations on a fresh database, including scorecard events, single-use approvals, evidence idempotency, report snapshots, result-integrity receipts, the public-score lookup index, global provider installation uniqueness, canonical GitHub installation IDs, and active-scorecard uniqueness. Reconcile legacy duplicate provider bindings before the uniqueness migration; evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
+3. **Production infrastructure:** provision production PostgreSQL, a BullMQ-compatible TLS Redis endpoint (REST-only Upstash credentials do not operate the queue), mandatory private S3-compatible evidence storage, secrets, TLS, backups, monitoring, dedicated worker capacity with the engine and pinned sandbox, and the authenticated Next.js application origin. Apply and verify all 21 migrations on a fresh database, including scorecard events, single-use approvals, evidence idempotency, report snapshots, result-integrity receipts, scan-cost accounting, the public-score lookup index, global provider installation uniqueness, canonical GitHub installation IDs, and active-scorecard uniqueness. Reconcile legacy duplicate provider bindings before the uniqueness migration; evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
 
 ### C2.2 Required before self-serve paid launch
 

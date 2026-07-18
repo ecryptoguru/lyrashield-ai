@@ -2,6 +2,8 @@
 
 Status: deployed at `https://lyrashieldai.com/scan` with the scanner API isolated at `https://scanner.lyrashieldai.com`. Production Turnstile, origin-scoped CORS, rate limiting, monitored abuse routing, health/readiness, and a real browser Lite Check have passed. This status does not include the authenticated application or full worker/engine scan pipeline.
 
+For the end-user walkthrough, target rules, result interpretation, and the difference between Lite Check and authenticated scans, see `userguide.md` §§2 and 23.
+
 ## Product boundary
 
 The public route is `/scan`. It returns a distinct **Lite Check**, never the official deterministic LyraShield Score. Findings appear without signup. Email is used only for the waitlist and optional saved scorecard.

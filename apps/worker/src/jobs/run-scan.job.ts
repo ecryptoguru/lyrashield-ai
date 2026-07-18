@@ -14,9 +14,15 @@ import {
   runEngine,
   cleanupEngineWorkspace,
   interpretExitCode,
+  resolveEngineProfile,
   type EngineRunResult,
 } from "../engine/runner"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
+import {
+  calculateGpt56CostUsd,
+  GPT_56_PRICING_EFFECTIVE_DATE,
+  GPT_56_PRICING_SOURCE,
+} from "../engine/gpt56-pricing"
 import { persistFindings } from "../engine/finding-persister"
 import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
@@ -33,9 +39,39 @@ export function extractActualCostUsd(usage: Record<string, unknown> | undefined)
   if (!usage) return null
   for (const key of ["total_cost_usd", "cost_usd", "total_cost", "cost"]) {
     const value = usage[key]
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1_000_000) {
+      return value
+    }
   }
   return null
+}
+
+type UsageSummary = {
+  requestCount: number | null
+  inputTokens: number | null
+  cachedInputTokens: number | null
+  outputTokens: number | null
+  engineReportedCostUsd: number | null
+}
+
+function usageCount(usage: Record<string, unknown>, key: string): number | null {
+  const value = usage[key]
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= 2_147_483_647
+    ? value
+    : null
+}
+
+export function extractUsageSummary(usage: Record<string, unknown>): UsageSummary {
+  return {
+    requestCount: usageCount(usage, "request_count"),
+    inputTokens: usageCount(usage, "input_tokens"),
+    cachedInputTokens: usageCount(usage, "cached_input_tokens"),
+    outputTokens: usageCount(usage, "output_tokens"),
+    engineReportedCostUsd: extractActualCostUsd(usage),
+  }
 }
 
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
@@ -48,6 +84,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
   // auto-scoping safety net is active for all DB queries. Without this, a
   // missed manual workspaceId filter could leak cross-tenant data.
   return runWithWorkspaceContext(workspaceId, async () => {
+    let billablePhaseStarted = false
     try {
       // A manifest is the immutable checkpoint after findings and retests have
       // been persisted. If an infrastructure error interrupted only the final
@@ -58,10 +95,34 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         select: {
           status: true,
           summary: true,
+          errorCategory: true,
+          errorMessage: true,
+          actualCostCents: true,
           resultManifest: { select: { id: true } },
+          events: {
+            where: { stage: "billable_boundary" },
+            select: { id: true },
+            take: 1,
+          },
         },
       })
       if (pendingFinalization?.status === "VERIFYING" && pendingFinalization.resultManifest) {
+        if (pendingFinalization.errorCategory === "BUDGET_EXCEEDED") {
+          await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
+            errorCategory: "BUDGET_EXCEEDED",
+            errorMessage:
+              pendingFinalization.errorMessage ??
+              "Engine reported spend above the worker budget cap",
+            ...(pendingFinalization.actualCostCents !== null
+              ? { actualCostCents: pendingFinalization.actualCostCents }
+              : {}),
+          })
+          return {
+            status: "failed",
+            errorCategory: "BUDGET_EXCEEDED",
+            errorMessage: "Engine reported spend above the worker budget cap",
+          }
+        }
         await completeScanWithScore(scanId, pendingFinalization.summary)
         try {
           await qualifyReferralForWorkspace(workspaceId)
@@ -72,6 +133,22 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           })
         }
         return { status: "completed", summary: pendingFinalization.summary ?? "Scan completed" }
+      }
+      if (
+        ["RUNNING", "VERIFYING"].includes(pendingFinalization?.status ?? "") &&
+        pendingFinalization?.events?.length
+      ) {
+        const interruptedMessage =
+          "Provider-billable analysis was interrupted and was not replayed automatically"
+        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+          errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+          errorMessage: interruptedMessage,
+        })
+        return {
+          status: "failed",
+          errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+          errorMessage: interruptedMessage,
+        }
       }
 
       // 1. Preflight checks
@@ -119,6 +196,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         : null
       const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
       const maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
+      const engineProfile = resolveEngineProfile(mode)
       const budgetSource =
         typeof policyMaxBudgetUsd === "number" &&
         Number.isFinite(policyMaxBudgetUsd) &&
@@ -139,6 +217,20 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           scanId,
           error: eventErr instanceof Error ? eventErr.message : String(eventErr),
         })
+      }
+
+      if (target.type === "REPO") {
+        // Once the external engine begins, an automatic BullMQ replay could
+        // spend twice for the same scan. Preflight remains retryable; the
+        // billable phase is terminal and any rerun requires a fresh scan.
+        await addScanEvent(
+          scanId,
+          "billable_boundary",
+          "info",
+          "Automatic retries disabled before provider-billable analysis",
+          { retryPolicy: "fresh_scan_required" }
+        )
+        billablePhaseStarted = true
       }
 
       const engineResult: EngineRunResult =
@@ -287,16 +379,47 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
 
-      // Persist LLM usage data from engine run record for cost observability
+      let budgetExceeded = false
+      let billedCostUsd: number | null = null
+
+      // Persist only normalized provider usage counters. Prompts, responses,
+      // and per-request payloads never enter the scan ledger.
       if (engineResult.output.runRecord?.llm_usage) {
-        const actualCostUsd = extractActualCostUsd(engineResult.output.runRecord.llm_usage)
+        const usage = extractUsageSummary(engineResult.output.runRecord.llm_usage)
+        const rateCardCostUsd =
+          usage.engineReportedCostUsd === null
+            ? calculateGpt56CostUsd(engineProfile.model, usage)
+            : null
+        const actualCostUsd = usage.engineReportedCostUsd ?? rateCardCostUsd
+        const costSource =
+          usage.engineReportedCostUsd !== null
+            ? "engine_reported"
+            : rateCardCostUsd !== null
+              ? "openai_rate_card"
+              : "unavailable"
+        billedCostUsd = actualCostUsd === null ? null : Math.min(actualCostUsd, maxBudgetUsd)
         try {
           await addScanEvent(
             scanId,
             "llm_usage",
             "info",
-            `LLM usage: ${JSON.stringify(engineResult.output.runRecord.llm_usage)}`,
-            { llm_usage: engineResult.output.runRecord.llm_usage }
+            actualCostUsd === null
+              ? "Engine usage counters recorded; cost was unavailable"
+              : costSource === "engine_reported"
+                ? `Engine reported $${actualCostUsd.toFixed(6)}; bill capped at $${billedCostUsd!.toFixed(6)}`
+                : `Official GPT-5.6 rates calculated $${actualCostUsd.toFixed(6)}; bill capped at $${billedCostUsd!.toFixed(6)}`,
+            {
+              ...usage,
+              calculatedCostUsd: rateCardCostUsd,
+              billedCostUsd,
+              costSource,
+              ...(costSource === "openai_rate_card"
+                ? {
+                    pricingEffectiveDate: GPT_56_PRICING_EFFECTIVE_DATE,
+                    pricingSource: GPT_56_PRICING_SOURCE,
+                  }
+                : {}),
+            }
           )
         } catch (eventErr) {
           log.warn("Failed to persist llm_usage event", {
@@ -304,36 +427,48 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             error: eventErr instanceof Error ? eventErr.message : String(eventErr),
           })
         }
-        if (actualCostUsd !== null) {
-          const billedCostUsd = Math.min(actualCostUsd, maxBudgetUsd)
+        await prisma.scan.update({
+          where: { id: scanId },
+          data: {
+            ...(usage.engineReportedCostUsd !== null
+              ? {
+                  providerCostUsd: usage.engineReportedCostUsd.toFixed(6),
+                }
+              : {}),
+            ...(billedCostUsd !== null
+              ? {
+                  billedCostUsd: billedCostUsd.toFixed(6),
+                  actualCostCents: Math.round(billedCostUsd * 100),
+                }
+              : {}),
+            llmRequestCount: usage.requestCount,
+            llmInputTokens: usage.inputTokens,
+            llmCachedInputTokens: usage.cachedInputTokens,
+            llmOutputTokens: usage.outputTokens,
+          },
+        })
+        if (actualCostUsd !== null && actualCostUsd > maxBudgetUsd) {
+          budgetExceeded = true
+          log.warn("Engine reported spend above worker budget cap", {
+            scanId,
+            actualCostUsd,
+            maxBudgetUsd,
+          })
+          await addScanEvent(
+            scanId,
+            "budget_exceeded",
+            "error",
+            "Engine reported spend above the worker budget cap",
+            { actualCostUsd, billedCostUsd, maxBudgetUsd }
+          )
           await prisma.scan.update({
             where: { id: scanId },
-            data: { actualCostCents: Math.round(billedCostUsd * 100) },
+            data: {
+              errorCategory: "BUDGET_EXCEEDED",
+              errorMessage: "Engine reported spend above the worker budget cap",
+              actualCostCents: Math.round(billedCostUsd! * 100),
+            },
           })
-          if (actualCostUsd > maxBudgetUsd) {
-            log.warn("Engine reported spend above worker budget cap", {
-              scanId,
-              actualCostUsd,
-              maxBudgetUsd,
-            })
-            await addScanEvent(
-              scanId,
-              "budget_exceeded",
-              "error",
-              "Engine reported spend above the worker budget cap",
-              { actualCostUsd, billedCostUsd, maxBudgetUsd }
-            )
-            await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-              errorCategory: "BUDGET_EXCEEDED",
-              errorMessage: "Engine reported spend above the worker budget cap",
-              actualCostCents: Math.round(billedCostUsd * 100),
-            })
-            return {
-              status: "failed",
-              errorCategory: "BUDGET_EXCEEDED",
-              errorMessage: "Engine reported spend above the worker budget cap",
-            }
-          }
         }
       }
 
@@ -365,6 +500,37 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           scanId,
           error: eventErr instanceof Error ? eventErr.message : String(eventErr),
         })
+      }
+
+      if (budgetExceeded) {
+        await prisma.scan.update({
+          where: { id: scanId },
+          data: { summary: engineResult.output.summary },
+        })
+        await persistResultManifest({
+          scanId,
+          target: {
+            id: target.id,
+            type: target.type,
+            repoFullName: target.repoFullName,
+            branch: target.branch,
+            url: target.url,
+          },
+          sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
+          engineFindingCount: orchestratorResult.engineFindings.length,
+          coverageIssues: orchestratorResult.coverageIssues,
+          matchedControlRanks: coverage.matchedControlRanks,
+        })
+        await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
+          errorCategory: "BUDGET_EXCEEDED",
+          errorMessage: "Engine reported spend above the worker budget cap",
+          actualCostCents: Math.round(billedCostUsd! * 100),
+        })
+        return {
+          status: "failed",
+          errorCategory: "BUDGET_EXCEEDED",
+          errorMessage: "Engine reported spend above the worker budget cap",
+        }
       }
 
       // 6. Interpret exit code and finalize
@@ -418,6 +584,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
         engineFindingCount: orchestratorResult.engineFindings.length,
         coverageIssues: orchestratorResult.coverageIssues,
+        matchedControlRanks: coverage.matchedControlRanks,
       })
       // Retests may validate a pending fix and change the target's scoreable
       // state. Freeze the score only after those outcomes are persisted.
@@ -505,7 +672,18 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       const maxAttempts = job.opts?.attempts ?? 1
       const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
-      if (!isTerminalPrerequisiteFailure && (job.attemptsMade ?? 0) + 1 < maxAttempts) {
+      if (
+        !billablePhaseStarted &&
+        !isTerminalPrerequisiteFailure &&
+        (job.attemptsMade ?? 0) + 1 < maxAttempts
+      ) {
+        await prisma.scan.updateMany({
+          where: {
+            id: scanId,
+            status: { in: ["PREFLIGHT", "RUNNING", "VERIFYING"] },
+          },
+          data: { status: "QUEUED" },
+        })
         log.warn("Scan job failed and will be retried", {
           scanId,
           attempt: (job.attemptsMade ?? 0) + 1,

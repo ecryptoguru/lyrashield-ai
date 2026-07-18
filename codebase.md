@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current baseline — 2026-07-16:** 4 apps, 10 shared packages (including `packages/score`), 23 web page files, 42 API route files, 39 Prisma models, 18 enums, 20 migrations, and 20 directly RLS-protected workspace tables. Current `main` passes lint, typecheck, test, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, and diff checks (840 tests in 90 files; 2 Playwright Chromium tests). Sections 17–45 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current release-candidate baseline — 2026-07-18:** 4 apps, 10 shared packages (including `packages/score`), 25 web page files, 42 API route files, 39 Prisma models, 18 enums, 21 migrations, and 20 directly RLS-protected workspace tables. PR #108 passes lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, and diff checks (853 core tests in 94 files, 79 marketing tests in 12 files, 16 motion tests, and 2 Playwright Chromium tests). Sections 17–45 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -27,7 +27,7 @@ The canonical engine repo is `ecryptoguru/lyrashield-engine`. It is a thin adapt
 - **Repo:** `ecryptoguru/lyrashield-engine`
 - **Upstream remote**: `https://github.com/usestrix/strix.git`
 - **Recorded upstream baseline:** `7b639505fecf20a2d9e356f96bd91470aa828182`
-- **Adapter version:** `1.0.4.post1`
+- **Adapter version:** `1.1.0.post1`
 - **Compatibility:** maps `LYRASHIELD_*` only when the corresponding `STRIX_*` value is unset; explicit upstream values win; telemetry defaults to `0`
 - **Model config:** the engine accepts one resolved `LYRASHIELD_LLM`/`STRIX_LLM` per subprocess plus `LLM_API_KEY`/`LLM_API_BASE`/`LLM_API_VERSION` and Azure aliases. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for Deep/Custom, falling back to `LYRASHIELD_LLM`. `strix/config/models.py` mirrors credentials/endpoints into the LiteLLM variables expected by `azure/`, `azure_ai/`, and `litellm/` providers.
 - **Artifacts:** worker accepts `strix_runs` and legacy `lyrashield_runs`, with `run.json` or `vulnerabilities.json`
@@ -68,12 +68,12 @@ Public copy uses **LyraShield AI**. Internal package scopes (`@lyrashield/*`), e
 | Component variants      | class-variance-authority (cva)   | 0.7.x                                                |
 | Icons                   | lucide-react                     | 1.23.x                                               |
 | Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                      |
-| Testing                 | Vitest + Playwright              | 840 tests in 90 files + 2 Chromium E2E tests         |
+| Testing                 | Vitest + Playwright              | 948 unit/contract tests + 2 Chromium E2E tests       |
 | Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration |
 | Job queue               | BullMQ                           | 5.78.x                                               |
 | Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate      |
 | MCP                     | JSON-RPC over stdio              | API-backed tools + prompt-injection guard            |
-| Scan engine             | Python thin fork                 | Adapter 1.0.4.post1 over recorded upstream baseline  |
+| Scan engine             | Python thin fork                 | Adapter 1.1.0.post1 over recorded upstream baseline  |
 | Marketing site          | Astro 7 + @astrojs/cloudflare    | Server output on Cloudflare Workers                  |
 | Marketing storage       | Cloudflare D1                    | Waitlist + fallback-rate-limit migrations            |
 | Marketing rate limiting | Cloudflare Rate Limits           | WAITLIST_RL binding for waitlist API                 |
@@ -350,7 +350,7 @@ Next.js page-data collection does not reliably load the root `.env`; export requ
 
 ### MCP
 
-`LYRASHIELD_API_URL` selects the product API (default `http://localhost:3000`); `LYRASHIELD_API_KEY` supplies MCP authentication when configured. A complete user-facing API-key issuance lifecycle is still pending.
+`LYRASHIELD_API_URL` selects the product API (default `http://localhost:3000`); `LYRASHIELD_API_KEY` supplies MCP authentication when configured. A complete user-facing API-key issuance lifecycle is still pending. The current tool catalog, supported scan enums, and approval behavior are documented in `userguide.md` §22.
 
 ### Marketing Worker
 
@@ -438,7 +438,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **840 tests in 90 files**, pass
+- `pnpm test`: **853 core tests in 94 files**, **79 marketing tests in 12 files**, and **16 motion tests**, pass
 - `pnpm test:e2e`: **2 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `pnpm format:check`: pass
@@ -450,7 +450,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 ### Runtime Truth
 
 - The local Compose architecture includes PostgreSQL, Redis, a migration job, web, and worker.
-- The engine-bearing worker image builds and exposes `lyrashield 1.0.4.post1`.
+- The current engine-bearing worker image builds and exposes `lyrashield 1.1.0.post1`.
 - Missing engine model configuration fails before sandbox pull.
 - Historical Docker smoke in §§24–30 proves prior container health, routes, migrations, queue startup, and engine packaging. It does **not** prove a current authorized scan.
 - Marketing is deployed and indexable at `https://lyrashieldai.com` with production D1/Rate Limit/KV bindings, all D1 migrations, a Worker-secret IP salt, custom apex/`www` domains, an active canonical 301, sitemap/robots/`llms.txt`, security headers, privacy-bounded PostHog capture, and live waitlist/crawl/Lighthouse/Brave QA. The passive `/scan` route is live and indexable behind the separate scanner origin, Turnstile, rate limit, and monitored abuse route. `/terms` remains individually `noindex`; the authenticated app origin and app-origin unfurl/referral proof remain open gates.
@@ -1899,7 +1899,7 @@ Implements the "LyraShield Score, Shareable Scorecard & Referral System — Engi
 - `apps/worker/src/engine/runner.ts` resolves one engine profile per scan. Safe, Quick, and Standard use `LYRASHIELD_LUNA_LLM` with medium reasoning; Deep and Custom use `LYRASHIELD_TERRA_LLM` with high reasoning. If the selected variable is empty, `LYRASHIELD_LLM` remains the backward-compatible fallback.
 - The resolved model and reasoning effort override only the spawned engine process. Azure credentials, endpoint, and API version continue through the existing generic/Azure allowlist; routing does not duplicate secrets or create separate queues.
 - `apps/worker/src/engine/command-builder.ts` applies positive default caps of $1.20 for Safe/Quick, $3.20 for Standard, and $15 for Deep/Custom. Unknown modes receive the conservative $15 fallback. A finite positive `Policy.maxBudgetUsd`, fetched with `workspaceId` and soft-delete scope, overrides the mode cap.
-- `run-scan.job.ts` passes the cap to the engine's `--max-budget-usd` guard and records a `budget_cap` event with the amount and source. The `engine_start` event records model and reasoning selection; provider-reported `llm_usage` remains separately persisted after execution.
+- `run-scan.job.ts` passes the cap to the engine's `--max-budget-usd` guard and records a `budget_cap` event with the amount and source. The `engine_start` event records model and reasoning selection; engine-reported `llm_usage` remains separately persisted after execution. A versioned official GPT-5.6 Sol/Terra/Luna rate table supplies a fail-closed fallback only for complete standard-context token aggregates when engine cost is absent.
 - This is mode-level routing, not a within-scan cascade: one engine invocation uses one model. Luna discovery followed by Terra validation inside the same scan, provider prompt-cache orchestration, billing-plan quotas, and cross-workspace cost policy remain roadmap work.
 - Configuration is propagated through `packages/config`, `turbo.json`, `docker-compose.yml`, `.env.example`, and the deployment runbooks. Regression tests cover every mode, fallback routing, policy overrides, invalid policy budgets, and CLI cap propagation. The full local gate passes 689 Vitest tests in 65 files, lint, typecheck, and production build.
 
@@ -2015,7 +2015,7 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 
 - **Scanner truth:** `apps/worker/src/engine/normalizer.ts` makes false-positive assessment source-aware. URL/host placeholders remain high-risk heuristics for engine/URL results, while SCA, secret, and agent-config file paths are not discarded merely because a directory contains `test`, `example`, or similar text. Regression coverage preserves a real path-based secret finding.
 - **Deletion and database integrity:** `packages/db/src/account-deletion.ts` anonymizes `ReferralCode.userId` with a unique row sentinel, matching referral attribution's uniqueness-safe design. Migration `20260716150000_integration_external_id_check` validates positive canonical GitHub installation IDs; `20260716151000_scorecard_share_active_snapshot_unique` resolves legacy duplicates and creates the partial unique active-share index.
-- **Worker truth and money:** a provider-reported budget overrun records the usage event, transitions to `STOPPED_BUDGET`, and clamps `actualCostCents` to the authorized cap. Active engine processes are registered and terminated during SIGTERM/SIGINT shutdown. Evidence persistence checks finding/checksum identity before upload, preventing retry-created orphan objects.
+- **Worker truth and money:** an engine-reported budget overrun records the usage event, transitions to `STOPPED_BUDGET`, and clamps billable cost to the authorized cap. Active engine processes are registered and terminated during SIGTERM/SIGINT shutdown. Evidence persistence checks finding/checksum identity before upload, preventing retry-created orphan objects. PR #108 adds exact decimal cost/token retention and the official-rate fallback described in §35.
 - **Idempotent sharing and typed workflows:** scorecard publishing takes a transaction-scoped advisory lock per snapshot and reuses the active share across administrators. Approval mutations expose stable `NOT_FOUND`, `NOT_PENDING`, and `EXPIRED` codes rather than requiring API routes to parse error text.
 - **Dashboard correctness and UX:** findings return a cursor-backed first page; active scan polling merges refreshed first-page rows without deleting older loaded pages; report share/revoke state uses server responses and clears revoked banners; destructive operations confirm intent. Shared skeletons, title disclosure, mobile targets, keyboard semantics, schedule previews, onboarding state, link fallbacks, light-theme contrast, the Radix finding Sheet, and the shared score visual components close the reviewed UX/accessibility gaps.
 - **Marketing and boundary hardening:** preview RSS returns 404 when indexing is disabled; waitlist-position requests use the shared rate limiter; Cloudflare marketing trusts only `cf-connecting-ip`; dynamic/static security headers have a parity regression test. External tool references open separately so browser-local input remains in the original page. PostHog receives an explicit `$pageview` whose `$current_url` contains only origin and pathname; automatic pageview/session recording remain disabled, and the canonical domain is authorized in the production PostHog project.

@@ -4,6 +4,7 @@ import { basename, join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
+import { fetchThreatSignals, type ThreatSignal } from "./threat-intelligence"
 
 export interface ScaScanConfig {
   repoPath: string
@@ -649,6 +650,22 @@ function extractFixedVersion(vuln: OsvVulnerability): string | undefined {
   return undefined
 }
 
+function formatThreatPriority(signal: ThreatSignal | undefined): string | null {
+  if (!signal) return null
+  const parts: string[] = []
+  if (signal.knownExploited) {
+    parts.push(
+      `CISA KEV: known exploited in the wild${signal.dateAdded ? `; cataloged ${signal.dateAdded}` : ""}${signal.dueDate ? `; federal remediation due ${signal.dueDate}` : ""}.`
+    )
+  }
+  if (signal.epss !== undefined) {
+    parts.push(
+      `FIRST EPSS: ${(signal.epss * 100).toFixed(2)}% probability of exploitation activity in the next 30 days${signal.percentile !== undefined ? ` (${(signal.percentile * 100).toFixed(1)}th percentile)` : ""}${signal.epssDate ? ` as of ${signal.epssDate}` : ""}.`
+    )
+  }
+  return parts.length > 0 ? `Threat priority — ${parts.join("\n")}` : null
+}
+
 export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerability[]> {
   const { repoPath, fetchFn, coverageIssues, signal } = config
   throwIfAborted(signal)
@@ -704,6 +721,7 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
         target: dep.filePath,
         cve,
         cwe: "CWE-1104", // Use of Unmaintained Third Party Components
+        control_ids: [37],
         description:
           vuln.summary ?? `Vulnerability ${vuln.id} affects ${dep.name} version ${dep.version}`,
         technical_analysis:
@@ -718,10 +736,24 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
     }
   }
 
+  const threatSignals = await fetchThreatSignals(
+    findings.flatMap((finding) => (finding.cve ? [finding.cve] : [])),
+    fetchFn ?? fetch,
+    signal
+  )
+  const enrichedFindings = findings.map((finding) => {
+    const priority = finding.cve ? formatThreatPriority(threatSignals.get(finding.cve)) : null
+    return priority
+      ? {
+          ...finding,
+          technical_analysis: `${finding.technical_analysis ?? ""}\n\n${priority}`.trim(),
+        }
+      : finding
+  })
   logger.info("SCA scan complete", {
     repoPath,
-    findingCount: findings.length,
+    findingCount: enrichedFindings.length,
     depsScanned: uniqueDeps.length,
   })
-  return findings
+  return enrichedFindings
 }

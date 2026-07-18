@@ -193,6 +193,7 @@ export function TargetsClient({
         <div>
           {filterProjectId && (
             <button
+              type="button"
               onClick={() => {
                 setFilterProjectId(null)
                 router.push("/dashboard/targets")

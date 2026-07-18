@@ -1,5 +1,17 @@
 import Link from "next/link"
-import { Activity, ArrowRight, Bug, FileText, Play, Radar, ShieldCheck, Wrench } from "lucide-react"
+import {
+  Activity,
+  ArrowRight,
+  Bug,
+  CheckCircle2,
+  Circle,
+  Coins,
+  FileText,
+  Play,
+  Radar,
+  ShieldCheck,
+  Wrench,
+} from "lucide-react"
 import { Badge, Card, EmptyState, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
 import {
@@ -40,7 +52,10 @@ export default async function DashboardPage() {
   }
 
   const activeWorkspace = workspaces.find((workspace) => workspace.id === workspaceId)
+  const now = new Date()
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
   const [
+    targetCount,
     scanCount,
     openFindingCount,
     reportCount,
@@ -48,7 +63,11 @@ export default async function DashboardPage() {
     completedScanCount,
     scoreSnapshots,
     recentScans,
+    monthlyBilledCosts,
+    monthlyLegacyCosts,
+    meteredScanCount,
   ] = await Promise.all([
+    prisma.target.count({ where: { workspaceId, deletedAt: null } }),
     prisma.scan.count({ where: { workspaceId, deletedAt: null } }),
     prisma.finding.count({
       where: {
@@ -79,6 +98,33 @@ export default async function DashboardPage() {
       include: {
         target: { select: { name: true, type: true } },
         _count: { select: { findings: { where: { deletedAt: null } } } },
+      },
+    }),
+    prisma.scan.aggregate({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        createdAt: { gte: monthStart },
+        billedCostUsd: { not: null },
+      },
+      _sum: { billedCostUsd: true },
+    }),
+    prisma.scan.aggregate({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        createdAt: { gte: monthStart },
+        billedCostUsd: null,
+        actualCostCents: { not: null },
+      },
+      _sum: { actualCostCents: true },
+    }),
+    prisma.scan.count({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        createdAt: { gte: monthStart },
+        OR: [{ billedCostUsd: { not: null } }, { actualCostCents: { not: null } }],
       },
     }),
   ])
@@ -112,6 +158,9 @@ export default async function DashboardPage() {
     (statuses.FIXED_PENDING_RETEST ?? 0)
   const riskAccepted = statuses.ACCEPTED_RISK ?? 0
   const latestScore = scoreSnapshots[0] ?? null
+  const monthlySpendUsd =
+    Number(monthlyBilledCosts._sum.billedCostUsd ?? 0) +
+    (monthlyLegacyCosts._sum.actualCostCents ?? 0) / 100
   const trend = [...scoreSnapshots]
     .reverse()
     .map((snapshot) => ({ label: formatDate(snapshot.computedAt), score: snapshot.score }))
@@ -140,6 +189,23 @@ export default async function DashboardPage() {
             action: "Review blockers",
             className: "border-destructive bg-destructive/10",
           }
+
+  const assuranceSteps = [
+    { label: "Target ready", complete: targetCount > 0, href: "/dashboard/targets" },
+    {
+      label: "Evidence captured",
+      complete: completedScanCount > 0,
+      href: "/dashboard/scans?new=1",
+    },
+    {
+      label: "Blockers cleared",
+      complete: readiness.verdict === "GO",
+      href:
+        readiness.verdict === "NOT_EVALUATED" ? "/dashboard/scans?new=1" : "/dashboard/findings",
+    },
+    { label: "Assurance shared", complete: reportCount > 0, href: "/dashboard/reports" },
+  ]
+  const nextAssuranceStep = assuranceSteps.find((step) => !step.complete) ?? assuranceSteps.at(-1)!
 
   return (
     <div className="flex flex-col gap-6 lg:gap-8">
@@ -188,11 +254,13 @@ export default async function DashboardPage() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Workspace metrics">
         <MetricCard
           label="Security score"
-          value={readiness.score ?? latestScore?.score ?? "—"}
+          value={latestScore?.score ?? "—"}
           detail={
             latestScore
               ? `Grade ${latestScore.grade.replace("_PLUS", "+")}`
-              : "Awaiting completed scan"
+              : completedScanCount > 0
+                ? "Score snapshot unavailable"
+                : "Awaiting completed scan"
           }
           icon={ShieldCheck}
         />
@@ -215,6 +283,63 @@ export default async function DashboardPage() {
           icon={FileText}
         />
       </section>
+
+      <Card className="overflow-hidden" aria-labelledby="assurance-progress-heading">
+        <div className="flex flex-col gap-4 border-b px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div>
+            <h2 id="assurance-progress-heading" className="font-semibold">
+              Assurance progress
+            </h2>
+            <p className="text-muted-foreground mt-1 text-xs">
+              A simple path from a configured target to evidence you can share.
+            </p>
+          </div>
+          <div className="bg-muted/60 flex items-center gap-2 rounded-full px-3 py-2 text-xs">
+            <Coins className="text-primary size-4" aria-hidden="true" />
+            <span className="font-medium">${monthlySpendUsd.toFixed(6)} this month</span>
+            <span className="text-muted-foreground">· {meteredScanCount} metered</span>
+          </div>
+        </div>
+        <div className="bg-border grid gap-px sm:grid-cols-2 xl:grid-cols-4">
+          {assuranceSteps.map((step, index) => {
+            const Icon = step.complete ? CheckCircle2 : Circle
+            return (
+              <Link
+                key={step.label}
+                href={step.href}
+                className="bg-card hover:bg-accent/60 flex min-h-20 items-center gap-3 px-5 py-4 transition-colors sm:px-6"
+              >
+                <Icon
+                  className={step.complete ? "text-success size-5" : "text-muted-foreground size-5"}
+                  aria-hidden="true"
+                />
+                <span className="min-w-0">
+                  <span className="text-muted-foreground block text-xs">Step {index + 1}</span>
+                  <span className="block text-sm font-medium">{step.label}</span>
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p className="text-muted-foreground text-sm">
+            {assuranceSteps.every((step) => step.complete)
+              ? "Your core assurance loop is complete. Keep it current with a scheduled review."
+              : `Next: ${nextAssuranceStep.label}.`}
+          </p>
+          <Link
+            href={
+              assuranceSteps.every((step) => step.complete)
+                ? "/dashboard/schedules"
+                : nextAssuranceStep.href
+            }
+            className="text-primary inline-flex min-h-11 items-center gap-1 text-sm font-medium"
+          >
+            {assuranceSteps.every((step) => step.complete) ? "Schedule monitoring" : "Continue"}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        </div>
+      </Card>
 
       <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <Card className="p-5 sm:p-6">

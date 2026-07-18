@@ -45,6 +45,12 @@ describe("output-parser", () => {
       expect(result[0]?.title).toBe("SQL Injection in login endpoint")
     })
 
+    it("retains only bounded Vibe Security control identifiers", () => {
+      const raw = JSON.stringify([{ ...SAMPLE_VULN, control_ids: [11, 11, 0, 51, 14, "3"] }])
+
+      expect(parseVulnerabilitiesJson(raw)[0]?.control_ids).toEqual([11, 14])
+    })
+
     it("returns empty array for empty string", () => {
       expect(parseVulnerabilitiesJson("")).toEqual([])
       expect(parseVulnerabilitiesJson("   ")).toEqual([])
@@ -153,7 +159,20 @@ describe("output-parser", () => {
             targets_info: [
               { details: { cloned_repo_path: "/tmp/strix_repos/run-1" }, ignored: "x" },
             ],
-            llm_usage: { total_cost_usd: 1.25, prompt: "ok", ignored: { nested: true } },
+            llm_usage: {
+              total_cost_usd: 1.25,
+              prompt: "do not retain",
+              requests: [
+                {
+                  usage: {
+                    input_tokens: 100,
+                    output_tokens: 20,
+                    input_tokens_details: { cached_tokens: 40 },
+                  },
+                },
+                { usage: { input_tokens: 50, output_tokens: 10 } },
+              ],
+            },
             scan_results: { untrusted: true },
           })
         )
@@ -164,8 +183,45 @@ describe("output-parser", () => {
         end_time: null,
         status: "completed",
         targets_info: [{ details: { cloned_repo_path: "/tmp/strix_repos/run-1" } }],
-        llm_usage: { total_cost_usd: 1.25, prompt: "ok" },
+        llm_usage: {
+          request_count: 2,
+          input_tokens: 150,
+          cached_input_tokens: 40,
+          output_tokens: 30,
+          total_tokens: 180,
+          total_cost_usd: 1.25,
+        },
       })
+    })
+
+    it("rejects usage values that cannot fit the exact database ledger", () => {
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-bad-usage",
+          status: "completed",
+          llm_usage: {
+            request_count: 1.5,
+            input_tokens: 2_147_483_648,
+            output_tokens: -1,
+            total_cost_usd: 1_000_000,
+          },
+        })
+      )
+
+      expect(result?.llm_usage).toBeUndefined()
+    })
+
+    it("does not retain partial usage totals from payloads beyond the traversal limit", () => {
+      const requests = Array.from({ length: 600 }, () => ({ usage: { input_tokens: 1 } }))
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-wide-usage",
+          status: "completed",
+          llm_usage: { requests },
+        })
+      )
+
+      expect(result?.llm_usage).toEqual({ request_count: 600 })
     })
   })
 

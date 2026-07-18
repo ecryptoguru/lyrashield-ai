@@ -8,6 +8,7 @@ import { apiPost, apiGetPaginated } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
 import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
+import { getScanPreset, SCAN_PRESETS, type ScanPresetId } from "@/lib/scan-presets"
 
 interface ScanItem {
   id: string
@@ -52,7 +53,7 @@ const GOAL_LABELS: Record<string, string> = {
   TEST_APP: "Test App",
   LAUNCH_REVIEW: "Launch Review",
   WEEKLY_MONITOR: "Weekly Monitor",
-  FULL_PENTEST: "Full Pentest",
+  FULL_PENTEST: "Deep Security Review",
   COMPLIANCE_REVIEW: "Compliance Review",
 }
 
@@ -70,8 +71,7 @@ export function ScansClient({
   const [refreshing, setRefreshing] = useState(false)
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const [selectedTarget, setSelectedTarget] = useState("")
-  const [selectedGoal, setSelectedGoal] = useState("TEST_APP")
-  const [selectedMode, setSelectedMode] = useState("SAFE")
+  const [selectedPreset, setSelectedPreset] = useState<ScanPresetId>("RELEASE_CHECK")
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<string | null>(null)
@@ -84,11 +84,12 @@ export function ScansClient({
     setCreating(true)
     setError(null)
     try {
+      const preset = getScanPreset(selectedPreset)
       const result = await apiPost<ScanItem>("/api/scans", {
         workspaceId,
         targetId: selectedTarget,
-        goal: selectedGoal,
-        mode: selectedMode,
+        goal: preset.goal,
+        mode: preset.mode,
       })
       setScans((prev) => [result, ...prev])
       setShowCreate(false)
@@ -155,22 +156,36 @@ export function ScansClient({
   }
 
   const hasActiveScans = scans.some((scan) => isActiveScan(scan.status))
+  const selectedTargetUsesEngine =
+    targets.find((target) => target.id === selectedTarget)?.type === "REPO"
 
   useEffect(() => {
     if (!hasActiveScans) return
-    const interval = window.setInterval(() => {
-      void apiGetPaginated<ScanItem>("/api/scans", { workspaceId })
-        .then((result) => {
+    const controller = new AbortController()
+    let timeoutId: number | undefined
+    const poll = async () => {
+      try {
+        const result = await apiGetPaginated<ScanItem>(
+          "/api/scans",
+          { workspaceId },
+          { signal: controller.signal }
+        )
+        if (!controller.signal.aborted) {
           setScans((current) =>
             hasLoadedMore ? mergePolledScans(current, result.items) : result.items
           )
           if (!hasLoadedMore) setNextCursor(result.nextCursor)
-        })
-        .catch(() => {
-          // Keep the current list visible; the manual refresh action reports errors.
-        })
-    }, 10_000)
-    return () => window.clearInterval(interval)
+        }
+      } catch {
+        // Keep the current list visible; the manual refresh action reports errors.
+      }
+      if (!controller.signal.aborted) timeoutId = window.setTimeout(poll, 10_000)
+    }
+    timeoutId = window.setTimeout(poll, 10_000)
+    return () => {
+      controller.abort()
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+    }
   }, [hasActiveScans, hasLoadedMore, workspaceId])
 
   return (
@@ -221,7 +236,7 @@ export function ScansClient({
               <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Target" htmlFor="scan-target">
               <Select
                 id="scan-target"
@@ -236,31 +251,24 @@ export function ScansClient({
                 ))}
               </Select>
             </FormField>
-            <FormField label="Goal" htmlFor="scan-goal">
+            <FormField label="Review depth" htmlFor="scan-preset">
               <Select
-                id="scan-goal"
-                value={selectedGoal}
-                onChange={(e) => setSelectedGoal(e.target.value)}
+                id="scan-preset"
+                value={selectedPreset}
+                onChange={(e) => setSelectedPreset(e.target.value as ScanPresetId)}
               >
-                <option value="CHECK_PR">Check PR</option>
-                <option value="TEST_APP">Test App</option>
-                <option value="LAUNCH_REVIEW">Launch Review</option>
-                <option value="WEEKLY_MONITOR">Weekly Monitor</option>
-                <option value="FULL_PENTEST">Full Pentest</option>
-                <option value="COMPLIANCE_REVIEW">Compliance Review</option>
+                {(["RELEASE_CHECK", "CODE_REVIEW", "DEEP_REVIEW"] as const).map((id) => (
+                  <option key={id} value={id}>
+                    {SCAN_PRESETS[id].label}
+                  </option>
+                ))}
               </Select>
-            </FormField>
-            <FormField label="Mode" htmlFor="scan-mode">
-              <Select
-                id="scan-mode"
-                value={selectedMode}
-                onChange={(e) => setSelectedMode(e.target.value)}
-              >
-                <option value="SAFE">Safe</option>
-                <option value="QUICK">Quick</option>
-                <option value="STANDARD">Standard</option>
-                <option value="DEEP">Deep</option>
-              </Select>
+              <p className="text-muted-foreground mt-1 text-xs">
+                {getScanPreset(selectedPreset).description}{" "}
+                {selectedTarget && !selectedTargetUsesEngine
+                  ? "This target uses deterministic scanners, so its AI model cost is $0."
+                  : `Maximum AI engine spend: $${getScanPreset(selectedPreset).maxCostUsd.toFixed(2)}.`}
+              </p>
             </FormField>
           </div>
           <div className="mt-4 flex gap-2">
@@ -323,11 +331,15 @@ export function ScansClient({
                     {scan.errorMessage && (
                       <p className="text-destructive text-sm">{presentation.description}</p>
                     )}
-                    <div className="text-muted-foreground mt-1 flex items-center gap-3 text-xs">
-                      <span>{formatDateTime(scan.createdAt)}</span>
-                      {scan.endedAt && <span>· ended {formatDateTime(scan.endedAt)}</span>}
+                    <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                      <span className="whitespace-nowrap">{formatDateTime(scan.createdAt)}</span>
+                      {scan.endedAt && (
+                        <span className="whitespace-nowrap">
+                          · ended {formatDateTime(scan.endedAt)}
+                        </span>
+                      )}
                       {scan.findingCount !== undefined && scan.findingCount > 0 && (
-                        <span className="text-foreground font-medium">
+                        <span className="text-foreground font-medium whitespace-nowrap">
                           {scan.findingCount} finding{scan.findingCount !== 1 ? "s" : ""}
                         </span>
                       )}

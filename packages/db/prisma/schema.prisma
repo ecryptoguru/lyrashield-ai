@@ -414,9 +414,15 @@ model Scan {
   errorMessage    String?
   riskScoreBefore Int?
   riskScoreAfter  Int?
-  estimatedCostCents Int?
-  actualCostCents     Int?
-  determinismMode     String?  @default("default")
+  estimatedCostCents   Int?
+  actualCostCents      Int?
+  providerCostUsd      Decimal? @db.Decimal(12, 6)
+  billedCostUsd        Decimal? @db.Decimal(12, 6)
+  llmRequestCount      Int?
+  llmInputTokens       Int?
+  llmCachedInputTokens Int?
+  llmOutputTokens      Int?
+  determinismMode      String?  @default("default")
   sarifUri            String?
   createdById     String
   deletedAt       DateTime?

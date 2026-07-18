@@ -11,6 +11,7 @@ vi.mock("@lyrashield/db", () => ({
     scan: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
   updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
@@ -39,6 +40,11 @@ vi.mock("../engine/runner", () => ({
     },
   }),
   cleanupEngineWorkspace: vi.fn().mockResolvedValue(undefined),
+  resolveEngineProfile: vi.fn((mode: string) => ({
+    model:
+      mode === "DEEP" || mode === "CUSTOM" ? "azure_ai/gpt-5.6-terra" : "azure_ai/gpt-5.6-luna",
+    reasoningEffort: mode === "DEEP" || mode === "CUSTOM" ? "high" : "medium",
+  })),
   interpretExitCode: vi.fn((code: number) => {
     if (code === 0) return { status: "COMPLETED", category: "SUCCESS" }
     if (code === 2) return { status: "COMPLETED", category: "VULNERABILITIES_FOUND" }
@@ -88,11 +94,11 @@ vi.mock("../engine/scanner-orchestrator", () => ({
   }),
 }))
 
-import { extractActualCostUsd, processScanJob } from "./run-scan.job"
+import { extractActualCostUsd, extractUsageSummary, processScanJob } from "./run-scan.job"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
-import { completeRetestsForScan } from "../engine/result-integrity"
+import { completeRetestsForScan, persistResultManifest } from "../engine/result-integrity"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
@@ -150,7 +156,34 @@ it("keeps URL targets out of the unpinned external engine", async () => {
 it("extracts only finite non-negative engine cost signals", () => {
   expect(extractActualCostUsd({ total_cost_usd: 3.25 })).toBe(3.25)
   expect(extractActualCostUsd({ cost: -1 })).toBeNull()
+  expect(extractActualCostUsd({ cost: 1_000_000 })).toBeNull()
   expect(extractActualCostUsd({ tokens: 100 })).toBeNull()
+})
+
+it("extracts a privacy-bounded provider usage summary", () => {
+  expect(
+    extractUsageSummary({
+      request_count: 3,
+      input_tokens: 12_345,
+      cached_input_tokens: 4_000,
+      output_tokens: 678,
+      total_cost_usd: 1.234567,
+      prompt: "must not be retained",
+    })
+  ).toEqual({
+    requestCount: 3,
+    inputTokens: 12_345,
+    cachedInputTokens: 4_000,
+    outputTokens: 678,
+    engineReportedCostUsd: 1.234567,
+  })
+  expect(extractUsageSummary({ request_count: 1.5, input_tokens: 2_147_483_648 })).toEqual({
+    requestCount: null,
+    inputTokens: null,
+    cachedInputTokens: null,
+    outputTokens: null,
+    engineReportedCostUsd: null,
+  })
 })
 
 describe("processScanJob", () => {
@@ -186,6 +219,7 @@ describe("processScanJob", () => {
     vi.mocked(prisma.policy.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
     vi.mocked(prisma.scan.update).mockResolvedValue({ id: "scan-1" } as never)
+    vi.mocked(prisma.scan.updateMany).mockResolvedValue({ count: 1 } as never)
     vi.mocked(runScannerOrchestrator).mockResolvedValue({
       allFindings: [],
       engineFindings: [],
@@ -246,6 +280,7 @@ describe("processScanJob", () => {
     } as never)
     const policyJob = {
       id: "job-policy-1",
+      discard: vi.fn(),
       data: {
         scanId: "scan-1",
         workspaceId: "ws-1",
@@ -293,15 +328,78 @@ describe("processScanJob", () => {
 
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
-      data: { actualCostCents: 120 },
+      data: {
+        providerCostUsd: "2.750000",
+        billedCostUsd: "1.200000",
+        actualCostCents: 120,
+        llmRequestCount: null,
+        llmInputTokens: null,
+        llmCachedInputTokens: null,
+        llmOutputTokens: null,
+      },
+    })
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: {
+        errorCategory: "BUDGET_EXCEEDED",
+        errorMessage: "Engine reported spend above the worker budget cap",
+        actualCostCents: 120,
+      },
     })
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
       errorCategory: "BUDGET_EXCEEDED",
       errorMessage: "Engine reported spend above the worker budget cap",
       actualCostCents: 120,
     })
-    expect(persistFindings).not.toHaveBeenCalled()
+    expect(persistFindings).toHaveBeenCalled()
+    expect(persistResultManifest).toHaveBeenCalled()
     expect(completeScanWithScore).not.toHaveBeenCalled()
+  })
+
+  it("uses the permanent GPT-5.6 rate card when engine cost is unavailable", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 0,
+      output: {
+        vulnerabilities: [],
+        runRecord: {
+          run_id: "r-rate-card",
+          status: "completed",
+          llm_usage: {
+            request_count: 7,
+            input_tokens: 18_420,
+            cached_input_tokens: 6_100,
+            output_tokens: 2_310,
+          },
+        },
+        summary: "Engine completed without a cost field",
+        findingCount: 0,
+      },
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: {
+        billedCostUsd: "0.026790",
+        actualCostCents: 3,
+        llmRequestCount: 7,
+        llmInputTokens: 18_420,
+        llmCachedInputTokens: 6_100,
+        llmOutputTokens: 2_310,
+      },
+    })
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "llm_usage",
+      "info",
+      "Official GPT-5.6 rates calculated $0.026790; bill capped at $0.026790",
+      expect.objectContaining({
+        calculatedCostUsd: 0.02679,
+        costSource: "openai_rate_card",
+        pricingEffectiveDate: "2026-07-09",
+      })
+    )
   })
 
   it("keeps a completed scan completed when a completion notification fails", async () => {
@@ -442,6 +540,13 @@ describe("processScanJob", () => {
     } as never
 
     await expect(processScanJob(retryingJob)).rejects.toThrow("temporary database error")
+    expect(prisma.scan.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "scan-1",
+        status: { in: ["PREFLIGHT", "RUNNING", "VERIFYING"] },
+      },
+      data: { status: "QUEUED" },
+    })
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
@@ -460,6 +565,80 @@ describe("processScanJob", () => {
     expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Recovered finalization")
     expect(runEngine).not.toHaveBeenCalled()
     expect(runScannerOrchestrator).not.toHaveBeenCalled()
+  })
+
+  it("resumes a durable budget stop without completing the scan", async () => {
+    vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+      status: "VERIFYING",
+      summary: "Stopped above budget",
+      errorCategory: "BUDGET_EXCEEDED",
+      errorMessage: "Engine reported spend above the worker budget cap",
+      actualCostCents: 120,
+      resultManifest: { id: "manifest-1" },
+      events: [{ id: "event-1" }],
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "BUDGET_EXCEEDED",
+    })
+
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
+      errorCategory: "BUDGET_EXCEEDED",
+      errorMessage: "Engine reported spend above the worker budget cap",
+      actualCostCents: 120,
+    })
+    expect(completeScanWithScore).not.toHaveBeenCalled()
+    expect(runEngine).not.toHaveBeenCalled()
+  })
+
+  it("fails safely instead of replaying an interrupted billable scan", async () => {
+    vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+      status: "RUNNING",
+      summary: null,
+      errorCategory: null,
+      errorMessage: null,
+      actualCostCents: null,
+      resultManifest: null,
+      events: [{ id: "billable-event" }],
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+    })
+
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", {
+      errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+      errorMessage: "Provider-billable analysis was interrupted and was not replayed automatically",
+    })
+    expect(runEngine).not.toHaveBeenCalled()
+  })
+
+  it("does not rethrow a post-billing failure while attempts remain", async () => {
+    vi.mocked(persistFindings).mockRejectedValue(new Error("post-billing database error") as never)
+    const retryingJob = {
+      id: "job-post-billing-error",
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      },
+    } as never
+
+    await expect(processScanJob(retryingJob)).resolves.toMatchObject({
+      status: "failed",
+      errorMessage: "post-billing database error",
+    })
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({ errorMessage: "post-billing database error" })
+    )
   })
 
   it("fails closed without replaying a billable scan when evidence storage is unconfigured", async () => {

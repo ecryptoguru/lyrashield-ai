@@ -264,7 +264,14 @@ export interface CvssScore {
 
 // ── Scan cost & determinism ────────────────────────────────────────
 
-export type DeterminismMode = "default" | "strict" | "best-effort"
+export const DeterminismModeSchema = z.enum([
+  "default",
+  "strict",
+  "best-effort",
+  "targeted_scanner",
+  "targeted_engine",
+])
+export type DeterminismMode = z.infer<typeof DeterminismModeSchema>
 
 export interface ScanCostControls {
   estimatedCostCents?: number

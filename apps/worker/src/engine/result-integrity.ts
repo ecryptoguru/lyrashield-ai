@@ -1,5 +1,6 @@
 import { createHash } from "crypto"
 import { prisma } from "@lyrashield/db"
+import { VIBE_SECURITY_CONTROLS, VIBE_SECURITY_COVERAGE_VERSION } from "@lyrashield/security"
 import type { EngineVulnerability } from "./output-parser"
 import type { NormalizedFinding } from "./normalizer"
 import type { ScannerCoverageIssue } from "./scanner-coverage"
@@ -18,11 +19,42 @@ type ResultManifestInput = {
   sourceCheckoutAvailable: boolean
   engineFindingCount: number
   coverageIssues: ScannerCoverageIssue[]
+  matchedControlRanks?: number[]
 }
 
 type FindingInput = EngineVulnerability | NormalizedFinding
 
-const MANIFEST_VERSION = 1
+const MANIFEST_VERSION = 2
+
+type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
+
+type FamilyReceipt = {
+  scanner: string
+  controlId: string
+  status: CoverageStatus
+  reason?: string
+  subject?: string
+  metadata: Record<string, unknown>
+}
+
+const CONTROL_SCANNERS: Readonly<Record<number, readonly string[]>> = {
+  1: ["url", "engine"],
+  2: ["url", "engine"],
+  3: ["secrets", "url"],
+  14: ["url"],
+  20: ["url", "engine"],
+  23: ["url", "engine"],
+  27: ["url"],
+  28: ["url"],
+  29: ["url"],
+  31: ["url"],
+  32: ["url"],
+  37: ["sca"],
+  38: ["sca", "engine"],
+  39: ["sca", "engine"],
+  45: ["agent_config"],
+  47: ["agent_config", "engine"],
+}
 
 function checksum(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex")
@@ -63,7 +95,7 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
   const repositoryTarget = input.target.type === "REPO"
   const engineStatus = scannerStatus("engine", repositoryTarget, input.coverageIssues)
   const urlStatus = scannerStatus("url", Boolean(input.target.url), input.coverageIssues)
-  return [
+  const familyReceipts: FamilyReceipt[] = [
     {
       scanner: "engine",
       controlId: "engine",
@@ -96,6 +128,83 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
       },
     },
   ]
+
+  const matchedRanks = new Set(input.matchedControlRanks ?? [])
+  const familyByScanner = new Map(familyReceipts.map((receipt) => [receipt.scanner, receipt]))
+  const controlReceipts: FamilyReceipt[] = VIBE_SECURITY_CONTROLS.map((control) => {
+    const controlId = `vibe-${String(control.rank).padStart(2, "0")}`
+    const scanners =
+      control.strategy === "engine" ? ["engine"] : (CONTROL_SCANNERS[control.rank] ?? [])
+    const applicableReceipts = scanners
+      .map((scanner) => familyByScanner.get(scanner))
+      .filter((receipt): receipt is FamilyReceipt => Boolean(receipt))
+    const metadata = {
+      rank: control.rank,
+      title: control.title,
+      strategy: control.strategy,
+      scanners,
+      coverageVersion: VIBE_SECURITY_COVERAGE_VERSION,
+    }
+
+    if (control.strategy === "evidence") {
+      return {
+        scanner: "evidence",
+        controlId,
+        status: "BLOCKED",
+        reason: "Requires deployment, operational, or accountable human evidence.",
+        metadata: { ...metadata, outcome: "EVIDENCE_REQUIRED" },
+      }
+    }
+
+    if (matchedRanks.has(control.rank)) {
+      return {
+        scanner: scanners.join("+") || control.strategy,
+        controlId,
+        status: "COMPLETED",
+        reason: "One or more findings were mapped to this control.",
+        metadata: { ...metadata, outcome: "DETECTED" },
+      }
+    }
+
+    if (
+      applicableReceipts.length === 0 ||
+      applicableReceipts.every((receipt) => receipt.status === "NOT_APPLICABLE")
+    ) {
+      return {
+        scanner: scanners.join("+") || control.strategy,
+        controlId,
+        status: "NOT_APPLICABLE",
+        reason: "No applicable scanner ran for this target type.",
+        metadata: { ...metadata, outcome: "NOT_APPLICABLE" },
+      }
+    }
+
+    const limitedReceipts = applicableReceipts.filter(
+      (receipt) => receipt.status !== "COMPLETED" && receipt.status !== "NOT_APPLICABLE"
+    )
+    if (limitedReceipts.length > 0) {
+      return {
+        scanner: scanners.join("+") || control.strategy,
+        controlId,
+        status: "BLOCKED",
+        reason: `Applicable coverage was limited: ${limitedReceipts
+          .map((receipt) => receipt.reason ?? receipt.status)
+          .join("; ")}`,
+        metadata: { ...metadata, outcome: "INCONCLUSIVE" },
+      }
+    }
+
+    return {
+      scanner: scanners.join("+") || control.strategy,
+      controlId,
+      status: "COMPLETED",
+      reason:
+        "No finding was returned by the completed applicable scanner. This is not independent verification.",
+      metadata: { ...metadata, outcome: "NO_FINDING" },
+    }
+  })
+
+  return [...familyReceipts, ...controlReceipts]
 }
 
 export async function persistResultManifest(input: ResultManifestInput): Promise<void> {

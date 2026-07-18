@@ -6,6 +6,7 @@ import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 import { z } from "zod"
 import { enqueueScanJob } from "../../../../../lib/queue"
+import { resolveRetestProfile } from "../../../../../lib/retest-profile"
 
 const CreateRetestSchema = z.object({
   workspaceId: z.string().min(1),
@@ -46,6 +47,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return apiError("RETEST_UNAVAILABLE", "The finding's source scan is unavailable", 409)
     }
 
+    const candidates = await prisma.findingCandidate.findMany({
+      where: { findingId: id, workspaceId, scanId: sourceScan.id },
+      select: { scannerSource: true },
+    })
+    const retestProfile = resolveRetestProfile(
+      sourceScan.mode,
+      candidates.map((candidate) => candidate.scannerSource)
+    )
+
     const existingPending = await prisma.retest.findFirst({
       where: {
         findingId: id,
@@ -63,10 +73,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         workspaceId,
         targetId: sourceScan.targetId,
         goal: sourceScan.goal,
-        mode: sourceScan.mode,
+        mode: retestProfile.mode,
         policyId: sourceScan.policyId ?? undefined,
         createdById: session.userId,
         triggerType: "retest",
+        determinismMode: retestProfile.determinismMode,
       })
     } catch (error) {
       if (error instanceof Error && error.message === "Target already has an active scan") {
@@ -85,7 +96,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         findingId: id,
         scanId: scan.id,
         status: "pending",
-        resultBefore: "Retest queued from the finding's source scan configuration.",
+        resultBefore: retestProfile.reason,
       },
     })
 
@@ -95,7 +106,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         workspaceId,
         targetId: sourceScan.targetId,
         goal: sourceScan.goal,
-        mode: sourceScan.mode,
+        mode: retestProfile.mode,
         policyId: sourceScan.policyId ?? undefined,
       })
     } catch (enqueueError) {
