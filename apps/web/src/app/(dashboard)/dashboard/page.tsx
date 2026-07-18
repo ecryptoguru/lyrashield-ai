@@ -5,7 +5,6 @@ import {
   Bug,
   CheckCircle2,
   Circle,
-  Coins,
   FileText,
   Play,
   Radar,
@@ -52,8 +51,6 @@ export default async function DashboardPage() {
   }
 
   const activeWorkspace = workspaces.find((workspace) => workspace.id === workspaceId)
-  const now = new Date()
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
   const [
     targetCount,
     scanCount,
@@ -63,9 +60,6 @@ export default async function DashboardPage() {
     completedScanCount,
     scoreSnapshots,
     recentScans,
-    monthlyBilledCosts,
-    monthlyLegacyCosts,
-    meteredScanCount,
   ] = await Promise.all([
     prisma.target.count({ where: { workspaceId, deletedAt: null } }),
     prisma.scan.count({ where: { workspaceId, deletedAt: null } }),
@@ -100,33 +94,6 @@ export default async function DashboardPage() {
         _count: { select: { findings: { where: { deletedAt: null } } } },
       },
     }),
-    prisma.scan.aggregate({
-      where: {
-        workspaceId,
-        deletedAt: null,
-        createdAt: { gte: monthStart },
-        billedCostUsd: { not: null },
-      },
-      _sum: { billedCostUsd: true },
-    }),
-    prisma.scan.aggregate({
-      where: {
-        workspaceId,
-        deletedAt: null,
-        createdAt: { gte: monthStart },
-        billedCostUsd: null,
-        actualCostCents: { not: null },
-      },
-      _sum: { actualCostCents: true },
-    }),
-    prisma.scan.count({
-      where: {
-        workspaceId,
-        deletedAt: null,
-        createdAt: { gte: monthStart },
-        OR: [{ billedCostUsd: { not: null } }, { actualCostCents: { not: null } }],
-      },
-    }),
   ])
 
   const severity = Object.fromEntries(
@@ -158,9 +125,6 @@ export default async function DashboardPage() {
     (statuses.FIXED_PENDING_RETEST ?? 0)
   const riskAccepted = statuses.ACCEPTED_RISK ?? 0
   const latestScore = scoreSnapshots[0] ?? null
-  const monthlySpendUsd =
-    Number(monthlyBilledCosts._sum.billedCostUsd ?? 0) +
-    (monthlyLegacyCosts._sum.actualCostCents ?? 0) / 100
   const trend = [...scoreSnapshots]
     .reverse()
     .map((snapshot) => ({ label: formatDate(snapshot.computedAt), score: snapshot.score }))
@@ -293,11 +257,6 @@ export default async function DashboardPage() {
             <p className="text-muted-foreground mt-1 text-xs">
               A simple path from a configured target to evidence you can share.
             </p>
-          </div>
-          <div className="bg-muted/60 flex items-center gap-2 rounded-full px-3 py-2 text-xs">
-            <Coins className="text-primary size-4" aria-hidden="true" />
-            <span className="font-medium">${monthlySpendUsd.toFixed(6)} this month</span>
-            <span className="text-muted-foreground">· {meteredScanCount} metered</span>
           </div>
         </div>
         <div className="bg-border grid gap-px sm:grid-cols-2 xl:grid-cols-4">

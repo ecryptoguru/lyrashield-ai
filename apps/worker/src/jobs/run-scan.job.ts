@@ -20,6 +20,7 @@ import {
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
 import {
   calculateGpt56CostUsd,
+  calculateGpt56CostUsdFromBuckets,
   GPT_56_PRICING_EFFECTIVE_DATE,
   GPT_56_PRICING_SOURCE,
 } from "../engine/gpt56-pricing"
@@ -50,7 +51,18 @@ type UsageSummary = {
   requestCount: number | null
   inputTokens: number | null
   cachedInputTokens: number | null
+  cacheWriteInputTokens: number | null
   outputTokens: number | null
+  pricingBuckets: {
+    standardInputTokens: number | null
+    standardCachedInputTokens: number | null
+    standardCacheWriteInputTokens: number | null
+    standardOutputTokens: number | null
+    longInputTokens: number | null
+    longCachedInputTokens: number | null
+    longCacheWriteInputTokens: number | null
+    longOutputTokens: number | null
+  } | null
   engineReportedCostUsd: number | null
 }
 
@@ -65,11 +77,25 @@ function usageCount(usage: Record<string, unknown>, key: string): number | null 
 }
 
 export function extractUsageSummary(usage: Record<string, unknown>): UsageSummary {
+  const pricingBuckets = {
+    standardInputTokens: usageCount(usage, "standard_input_tokens"),
+    standardCachedInputTokens: usageCount(usage, "standard_cached_input_tokens"),
+    standardCacheWriteInputTokens: usageCount(usage, "standard_cache_write_input_tokens"),
+    standardOutputTokens: usageCount(usage, "standard_output_tokens"),
+    longInputTokens: usageCount(usage, "long_input_tokens"),
+    longCachedInputTokens: usageCount(usage, "long_cached_input_tokens"),
+    longCacheWriteInputTokens: usageCount(usage, "long_cache_write_input_tokens"),
+    longOutputTokens: usageCount(usage, "long_output_tokens"),
+  }
   return {
     requestCount: usageCount(usage, "request_count"),
     inputTokens: usageCount(usage, "input_tokens"),
     cachedInputTokens: usageCount(usage, "cached_input_tokens"),
+    cacheWriteInputTokens: usageCount(usage, "cache_write_input_tokens"),
     outputTokens: usageCount(usage, "output_tokens"),
+    pricingBuckets: Object.values(pricingBuckets).every((value) => value !== null)
+      ? pricingBuckets
+      : null,
     engineReportedCostUsd: extractActualCostUsd(usage),
   }
 }
@@ -110,9 +136,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         if (pendingFinalization.errorCategory === "BUDGET_EXCEEDED") {
           await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
             errorCategory: "BUDGET_EXCEEDED",
-            errorMessage:
-              pendingFinalization.errorMessage ??
-              "Engine reported spend above the worker budget cap",
+            errorMessage: pendingFinalization.errorMessage ?? "Protected run limit reached",
             ...(pendingFinalization.actualCostCents !== null
               ? { actualCostCents: pendingFinalization.actualCostCents }
               : {}),
@@ -120,7 +144,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           return {
             status: "failed",
             errorCategory: "BUDGET_EXCEEDED",
-            errorMessage: "Engine reported spend above the worker budget cap",
+            errorMessage: "Protected run limit reached",
           }
         }
         await completeScanWithScore(scanId, pendingFinalization.summary)
@@ -205,13 +229,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           : "mode_default"
 
       try {
-        await addScanEvent(
-          scanId,
-          "budget_cap",
-          "info",
-          `Engine spend capped at $${maxBudgetUsd.toFixed(2)}`,
-          { maxBudgetUsd, source: budgetSource }
-        )
+        await addScanEvent(scanId, "budget_cap", "info", "Protected run limit enabled", {
+          maxBudgetUsd,
+          source: budgetSource,
+        })
       } catch (eventErr) {
         log.warn("Failed to persist budget_cap event", {
           scanId,
@@ -386,41 +407,44 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // and per-request payloads never enter the scan ledger.
       if (engineResult.output.runRecord?.llm_usage) {
         const usage = extractUsageSummary(engineResult.output.runRecord.llm_usage)
-        const rateCardCostUsd =
-          usage.engineReportedCostUsd === null
-            ? calculateGpt56CostUsd(engineProfile.model, usage)
-            : null
-        const actualCostUsd = usage.engineReportedCostUsd ?? rateCardCostUsd
+        const rateCardCostUsd = usage.pricingBuckets
+          ? calculateGpt56CostUsdFromBuckets(engineProfile.model, usage.pricingBuckets)
+          : calculateGpt56CostUsd(engineProfile.model, usage)
+        // Provider telemetry is useful for reconciliation, but it is not an
+        // independently auditable invoice. Use the higher known amount for
+        // the cap so a stale provider cost map can never understate spend.
+        const billableCostUsd =
+          Math.max(usage.engineReportedCostUsd ?? 0, rateCardCostUsd ?? 0) || null
         const costSource =
-          usage.engineReportedCostUsd !== null
-            ? "engine_reported"
+          rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
+            ? "rate_card_and_engine_reported"
             : rateCardCostUsd !== null
               ? "openai_rate_card"
-              : "unavailable"
-        billedCostUsd = actualCostUsd === null ? null : Math.min(actualCostUsd, maxBudgetUsd)
+              : usage.engineReportedCostUsd !== null
+                ? "engine_reported_unreconciled"
+                : "unavailable"
+        const reconciliationStatus =
+          rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
+            ? Math.abs(rateCardCostUsd - usage.engineReportedCostUsd) < 0.000001
+              ? "matched"
+              : "mismatch"
+            : "unavailable"
+        billedCostUsd = billableCostUsd === null ? null : Math.min(billableCostUsd, maxBudgetUsd)
         try {
-          await addScanEvent(
-            scanId,
-            "llm_usage",
-            "info",
-            actualCostUsd === null
-              ? "Engine usage counters recorded; cost was unavailable"
-              : costSource === "engine_reported"
-                ? `Engine reported $${actualCostUsd.toFixed(6)}; bill capped at $${billedCostUsd!.toFixed(6)}`
-                : `Official GPT-5.6 rates calculated $${actualCostUsd.toFixed(6)}; bill capped at $${billedCostUsd!.toFixed(6)}`,
-            {
-              ...usage,
-              calculatedCostUsd: rateCardCostUsd,
-              billedCostUsd,
-              costSource,
-              ...(costSource === "openai_rate_card"
-                ? {
-                    pricingEffectiveDate: GPT_56_PRICING_EFFECTIVE_DATE,
-                    pricingSource: GPT_56_PRICING_SOURCE,
-                  }
-                : {}),
-            }
-          )
+          await addScanEvent(scanId, "llm_usage", "info", "AI usage counters recorded", {
+            ...usage,
+            calculatedCostUsd: rateCardCostUsd,
+            pricingMethod: usage.pricingBuckets ? "per_request_buckets" : "aggregate_standard_only",
+            billedCostUsd,
+            costSource,
+            reconciliationStatus,
+            ...(rateCardCostUsd !== null
+              ? {
+                  pricingEffectiveDate: GPT_56_PRICING_EFFECTIVE_DATE,
+                  pricingSource: GPT_56_PRICING_SOURCE,
+                }
+              : {}),
+          })
         } catch (eventErr) {
           log.warn("Failed to persist llm_usage event", {
             scanId,
@@ -447,25 +471,23 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             llmOutputTokens: usage.outputTokens,
           },
         })
-        if (actualCostUsd !== null && actualCostUsd > maxBudgetUsd) {
+        if (billableCostUsd !== null && billableCostUsd > maxBudgetUsd) {
           budgetExceeded = true
           log.warn("Engine reported spend above worker budget cap", {
             scanId,
-            actualCostUsd,
+            billableCostUsd,
             maxBudgetUsd,
           })
-          await addScanEvent(
-            scanId,
-            "budget_exceeded",
-            "error",
-            "Engine reported spend above the worker budget cap",
-            { actualCostUsd, billedCostUsd, maxBudgetUsd }
-          )
+          await addScanEvent(scanId, "budget_exceeded", "error", "Protected run limit reached", {
+            billableCostUsd,
+            billedCostUsd,
+            maxBudgetUsd,
+          })
           await prisma.scan.update({
             where: { id: scanId },
             data: {
               errorCategory: "BUDGET_EXCEEDED",
-              errorMessage: "Engine reported spend above the worker budget cap",
+              errorMessage: "Protected run limit reached",
               actualCostCents: Math.round(billedCostUsd! * 100),
             },
           })
@@ -523,13 +545,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
         await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
           errorCategory: "BUDGET_EXCEEDED",
-          errorMessage: "Engine reported spend above the worker budget cap",
+          errorMessage: "Protected run limit reached",
           actualCostCents: Math.round(billedCostUsd! * 100),
         })
         return {
           status: "failed",
           errorCategory: "BUDGET_EXCEEDED",
-          errorMessage: "Engine reported spend above the worker budget cap",
+          errorMessage: "Protected run limit reached",
         }
       }
 

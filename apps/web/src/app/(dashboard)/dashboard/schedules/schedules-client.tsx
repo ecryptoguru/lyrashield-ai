@@ -224,8 +224,8 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
             <p className="text-muted-foreground text-xs">
               {getScanPreset(presetId).description}{" "}
               {selectedTargetId && !selectedTargetUsesEngine
-                ? "This target uses deterministic scanners, so its AI model cost is $0 per run."
-                : `Maximum AI engine spend: $${getScanPreset(presetId).maxCostUsd.toFixed(2)} per run.`}
+                ? "This target uses deterministic scanners."
+                : "A protected run limit is applied automatically."}
             </p>
             <div className="flex gap-2">
               <Button

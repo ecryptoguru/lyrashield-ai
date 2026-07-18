@@ -44,15 +44,6 @@ interface ScanData {
   summary: string | null
   errorCategory: string | null
   errorMessage: string | null
-  cost: {
-    providerUsd: string | null
-    billedUsd: string | null
-    legacyBilledCents: number | null
-    requestCount: number | null
-    inputTokens: number | null
-    cachedInputTokens: number | null
-    outputTokens: number | null
-  }
   createdAt: string
   target: {
     id: string
@@ -87,9 +78,6 @@ interface ScanPollData {
   summary: string | null
   errorCategory: string | null
   errorMessage: string | null
-  providerCostUsd?: string | number | null
-  billedCostUsd?: string | number | null
-  actualCostCents?: number | null
   llmRequestCount?: number | null
   llmInputTokens?: number | null
   llmCachedInputTokens?: number | null
@@ -108,6 +96,8 @@ interface ScanPollData {
     metadata?: unknown
   }>
 }
+
+const INTERNAL_ACCOUNTING_EVENT_STAGES = new Set(["budget_cap", "llm_usage", "budget_exceeded"])
 
 interface FindingItem {
   id: string
@@ -245,21 +235,6 @@ export function ScanDetailClient({
               metadata: asMetadata(receipt.metadata),
             })),
           },
-          cost: {
-            providerUsd:
-              updated.providerCostUsd !== null && updated.providerCostUsd !== undefined
-                ? String(updated.providerCostUsd)
-                : null,
-            billedUsd:
-              updated.billedCostUsd !== null && updated.billedCostUsd !== undefined
-                ? String(updated.billedCostUsd)
-                : null,
-            legacyBilledCents: updated.actualCostCents ?? null,
-            requestCount: updated.llmRequestCount ?? null,
-            inputTokens: updated.llmInputTokens ?? null,
-            cachedInputTokens: updated.llmCachedInputTokens ?? null,
-            outputTokens: updated.llmOutputTokens ?? null,
-          },
         })
         if (
           ["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(
@@ -313,7 +288,10 @@ export function ScanDetailClient({
     {} as Record<string, number>
   )
 
-  const visibleEvents = expandedEvents ? scan.events : scan.events.slice(-10)
+  const displayEvents = scan.events.filter(
+    (event) => !INTERNAL_ACCOUNTING_EVENT_STAGES.has(event.stage)
+  )
+  const visibleEvents = expandedEvents ? displayEvents : displayEvents.slice(-10)
   const coverageWarnings = getScannerCoverageWarnings(scan.events)
   const hasLimitedCoverage = coverageWarnings.length > 0
   const familyCoverage = scan.integrity.coverage.filter(
@@ -336,10 +314,6 @@ export function ScanDetailClient({
   )
   const reviewProfile = getScanReviewProfile(scan.events)
   const topFinding = sortedFindings[0]
-  const billedCost =
-    scan.cost.billedUsd ??
-    (scan.cost.legacyBilledCents !== null ? (scan.cost.legacyBilledCents / 100).toFixed(2) : null)
-
   function toggleFinding(id: string) {
     setExpandedFindings((prev) => {
       const next = new Set(prev)
@@ -496,7 +470,9 @@ export function ScanDetailClient({
               <summary className="cursor-pointer font-medium">Failure details</summary>
               <p className="mt-2 wrap-break-word">
                 {scan.errorCategory ? `${scan.errorCategory}: ` : ""}
-                {scan.errorMessage}
+                {scan.status === "STOPPED_BUDGET" || scan.errorCategory === "BUDGET_EXCEEDED"
+                  ? "The protected run limit was reached."
+                  : scan.errorMessage}
               </p>
             </details>
           )}
@@ -554,9 +530,7 @@ export function ScanDetailClient({
         </section>
       )}
 
-      {(scan.integrity.coverage.length > 0 ||
-        reviewProfile.model ||
-        reviewProfile.maxBudgetUsd) && (
+      {(scan.integrity.coverage.length > 0 || reviewProfile.model) && (
         <Card className="mb-6 p-4" aria-labelledby="review-profile-heading">
           <div>
             <h2 id="review-profile-heading" className="font-semibold">
@@ -567,7 +541,7 @@ export function ScanDetailClient({
               verification determine the proof state shown by LyraShield.
             </p>
           </div>
-          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-md border p-3">
               <dt className="text-muted-foreground text-xs">Analysis path</dt>
               <dd className="mt-1 text-sm font-medium">
@@ -586,17 +560,6 @@ export function ScanDetailClient({
               )}
             </div>
             <div className="rounded-md border p-3">
-              <dt className="text-muted-foreground text-xs">Approved budget cap</dt>
-              <dd className="mt-1 text-sm font-medium">
-                {reviewProfile.maxBudgetUsd ? `$${reviewProfile.maxBudgetUsd.toFixed(2)}` : "—"}
-              </dd>
-              {reviewProfile.budgetSource && (
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {reviewProfile.budgetSource.replaceAll("_", " ")}
-                </p>
-              )}
-            </div>
-            <div className="rounded-md border p-3">
               <dt className="text-muted-foreground text-xs">Vibe Security 50</dt>
               <dd className="mt-1 text-sm font-medium">
                 {controlCoverage.length > 0
@@ -607,21 +570,6 @@ export function ScanDetailClient({
                 {controlCoverage.length === 0
                   ? "No checklist receipt recorded"
                   : `${controlOutcomeCounts.DETECTED ?? 0} with findings · ${controlOutcomeCounts.EVIDENCE_REQUIRED ?? 0} need evidence`}
-              </p>
-            </div>
-            <div className="rounded-md border p-3">
-              <dt className="text-muted-foreground text-xs">Billed engine cost</dt>
-              <dd className="mt-1 text-sm font-medium">
-                {billedCost !== null ? `$${Number(billedCost).toFixed(6)}` : "Not reported"}
-              </dd>
-              <p className="text-muted-foreground mt-1 text-xs">
-                {scan.cost.providerUsd !== null && scan.cost.providerUsd !== billedCost
-                  ? `$${Number(scan.cost.providerUsd).toFixed(6)} engine-reported before cap`
-                  : scan.cost.inputTokens !== null || scan.cost.outputTokens !== null
-                    ? `${(scan.cost.inputTokens ?? 0).toLocaleString()} in · ${(scan.cost.outputTokens ?? 0).toLocaleString()} out`
-                    : scan.target?.type === "REPO"
-                      ? "Waiting for engine usage"
-                      : "AI engine not invoked"}
               </p>
             </div>
           </dl>
@@ -847,19 +795,19 @@ export function ScanDetailClient({
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 border-y py-3 text-sm font-semibold marker:hidden">
           <span>Technical details</span>
           <span className="text-muted-foreground text-xs font-normal">
-            {scan.events.length} event{scan.events.length === 1 ? "" : "s"}
+            {displayEvents.length} event{displayEvents.length === 1 ? "" : "s"}
           </span>
         </summary>
         <div className="pt-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Scan events</h2>
-            {scan.events.length > 10 && (
+            {displayEvents.length > 10 && (
               <Button variant="ghost" size="sm" onClick={() => setExpandedEvents(!expandedEvents)}>
-                {expandedEvents ? "Show last 10" : `Show all ${scan.events.length}`}
+                {expandedEvents ? "Show last 10" : `Show all ${displayEvents.length}`}
               </Button>
             )}
           </div>
-          {scan.events.length === 0 ? (
+          {displayEvents.length === 0 ? (
             <EmptyState
               icon={Clock}
               title="No events"
@@ -884,9 +832,9 @@ export function ScanDetailClient({
                       </span>
                       <span className="ml-2 wrap-break-word">{event.message}</span>
                     </div>
-                    {idx === 0 && !expandedEvents && scan.events.length > 10 && (
+                    {idx === 0 && !expandedEvents && displayEvents.length > 10 && (
                       <span className="text-muted-foreground shrink-0 text-xs">
-                        +{scan.events.length - 10} earlier
+                        +{displayEvents.length - 10} earlier
                       </span>
                     )}
                   </div>
