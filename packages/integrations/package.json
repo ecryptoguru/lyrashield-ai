@@ -12,7 +12,7 @@
     "@lyrashield/config": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "bullmq": "^5.80.1",
+    "bullmq": "^5.80.8",
     "ioredis": "^5.11.1"
   },
   "devDependencies": {

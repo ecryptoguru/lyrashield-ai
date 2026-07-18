@@ -10,14 +10,14 @@
     "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1084.0",
+    "@aws-sdk/client-s3": "^3.1090.0",
     "@lyrashield/config": "workspace:*",
     "@lyrashield/db": "workspace:*",
     "@lyrashield/integrations": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "bullmq": "^5.80.1",
+    "bullmq": "^5.80.8",
     "ioredis": "^5.4.0"
   },
   "devDependencies": {
