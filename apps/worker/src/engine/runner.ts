@@ -16,6 +16,20 @@ export interface EngineRunResult {
   sourceCheckoutPath: string | null
 }
 
+const DEFAULT_ENGINE_TIMEOUT_MS = 30 * 60 * 1000
+const MAX_ENGINE_TIMEOUT_MS = 24 * 60 * 60 * 1000
+
+export function resolveEngineTimeoutMs(maxDurationMinutes?: number | null): number {
+  if (
+    typeof maxDurationMinutes !== "number" ||
+    !Number.isFinite(maxDurationMinutes) ||
+    maxDurationMinutes <= 0
+  ) {
+    return DEFAULT_ENGINE_TIMEOUT_MS
+  }
+  return Math.min(Math.floor(maxDurationMinutes * 60 * 1000), MAX_ENGINE_TIMEOUT_MS)
+}
+
 const EXIT_CODE_MAP: Record<
   number,
   { status: "COMPLETED" | "FAILED"; category: string; message: string }
@@ -127,7 +141,19 @@ export function createKillEscalation(
 
 export interface EngineProfile {
   model?: string
-  reasoningEffort: "medium" | "high"
+  reasoningEffort: "medium"
+  delegateModel?: string
+  delegateReasoningEffort: "medium"
+}
+
+function assertSupportedRepositoryModel(model: string | undefined): void {
+  const normalizedModel = model?.toLowerCase().replaceAll("_", "-")
+  if (
+    normalizedModel &&
+    !/(?:^|[/.-])gpt-5\.6-(?:sol|terra|luna)(?:$|[/.-])/.test(normalizedModel)
+  ) {
+    throw new Error("LyraShield scans require a GPT-5.6 Sol, Terra, or Luna deployment")
+  }
 }
 
 export function resolveEngineProfile(
@@ -137,29 +163,42 @@ export function resolveEngineProfile(
   const deep = mode.toUpperCase() === "DEEP" || mode.toUpperCase() === "CUSTOM"
   const selectedModel = deep ? routingEnv.LYRASHIELD_TERRA_LLM : routingEnv.LYRASHIELD_LUNA_LLM
   const model = selectedModel?.trim() || routingEnv.LYRASHIELD_LLM?.trim() || undefined
+  const delegateModel = routingEnv.LYRASHIELD_LUNA_LLM?.trim() || model
+  assertSupportedRepositoryModel(model)
+  assertSupportedRepositoryModel(delegateModel)
 
-  const normalizedModel = model?.toLowerCase().replaceAll("_", "-")
-  if (
-    normalizedModel &&
-    !/(?:^|[/.-])gpt-5\.6-(?:sol|terra|luna)(?:$|[/.-])/.test(normalizedModel)
-  ) {
-    throw new Error("LyraShield scans require a GPT-5.6 Sol, Terra, or Luna deployment")
+  return {
+    model,
+    reasoningEffort: "medium",
+    delegateModel,
+    delegateReasoningEffort: "medium",
   }
-
-  return { model, reasoningEffort: deep ? "high" : "medium" }
 }
 
-export function assertRepositoryScanRuntimeConfigured(): void {
-  requireRepositoryModel(resolveEngineProfile("SAFE").model)
-  requireRepositoryModel(resolveEngineProfile("DEEP").model)
+export function resolveEngineSandboxNetwork(runtimeEnv: NodeJS.ProcessEnv = process.env): string {
+  const network = runtimeEnv.LYRASHIELD_ENGINE_SANDBOX_NETWORK?.trim()
+  if (!network || network.toLowerCase() === "none") {
+    throw new Error(
+      "LYRASHIELD_ENGINE_SANDBOX_NETWORK must name a routable, egress-restricted Docker network"
+    )
+  }
+  return network
+}
+
+export function assertRepositoryScanRuntimeConfigured(
+  runtimeEnv: NodeJS.ProcessEnv = process.env
+): void {
+  requireRepositoryModel(resolveEngineProfile("SAFE", runtimeEnv).model)
+  requireRepositoryModel(resolveEngineProfile("DEEP", runtimeEnv).model)
   if (!(
-    process.env.LLM_API_KEY ||
-    process.env.AZURE_OPENAI_API_KEY ||
-    process.env.AZURE_AI_API_KEY ||
-    process.env.OPENAI_API_KEY
+    runtimeEnv.LLM_API_KEY ||
+    runtimeEnv.AZURE_OPENAI_API_KEY ||
+    runtimeEnv.AZURE_AI_API_KEY ||
+    runtimeEnv.OPENAI_API_KEY
   )) {
     throw new Error("A model provider credential must be configured for repository scans")
   }
+  resolveEngineSandboxNetwork(runtimeEnv)
 }
 
 function requireRepositoryModel(model: string | undefined): string {
@@ -210,8 +249,9 @@ function buildEngineEnv(profile: EngineProfile): Record<string, string> {
   }
   if (profile.model) filtered.LYRASHIELD_LLM = profile.model
   filtered.LYRASHIELD_REASONING_EFFORT = profile.reasoningEffort
-  filtered.STRIX_DOCKER_SANDBOX_NETWORK =
-    process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK?.trim() || "none"
+  if (profile.delegateModel) filtered.LYRASHIELD_DELEGATE_LLM = profile.delegateModel
+  filtered.LYRASHIELD_DELEGATE_REASONING_EFFORT = profile.delegateReasoningEffort
+  filtered.STRIX_DOCKER_SANDBOX_NETWORK = resolveEngineSandboxNetwork()
   filtered.STRIX_SANDBOX_MEM_LIMIT = process.env.STRIX_SANDBOX_MEM_LIMIT?.trim() || "4g"
   filtered.STRIX_SANDBOX_CPUS = process.env.STRIX_SANDBOX_CPUS?.trim() || "2"
   filtered.STRIX_SANDBOX_PIDS_LIMIT = process.env.STRIX_SANDBOX_PIDS_LIMIT?.trim() || "512"
@@ -482,7 +522,7 @@ async function readEngineOutput(outputDir: string): Promise<{
 export async function runEngine(
   config: ScanConfig,
   scanId: string,
-  timeoutMs = 30 * 60 * 1000,
+  timeoutMs = DEFAULT_ENGINE_TIMEOUT_MS,
   shouldCancel?: () => Promise<boolean>
 ): Promise<EngineRunResult> {
   const cmd = buildEngineCommand(config)

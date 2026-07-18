@@ -157,6 +157,28 @@ describe("scanSecrets", () => {
     expect(findings.find((f) => f.id.startsWith("aws-access-key"))).toBeUndefined()
   })
 
+  it("filters reserved-domain credentials and readable bearer placeholders", async () => {
+    const dir = await setupRepo({
+      "docs.md": [
+        "DATABASE_URL=postgres://admin:example-password@db.invalid/app",
+        "Authorization: Bearer token-from-secret-storage",
+      ].join("\n"),
+    })
+    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
+
+    expect(findings).toEqual([])
+  })
+
+  it("keeps opaque bearer credentials", async () => {
+    const dir = await setupRepo({
+      "src/config.ts": "Authorization: Bearer AbCDef0123456789_token.value",
+    })
+    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
+
+    expect(findings).toHaveLength(1)
+    expect(findings[0]!.id).toMatch(/^bearer-token-/)
+  })
+
   it("skips test-only credential fixtures while preserving production-source detection", async () => {
     const dir = await setupRepo({
       "src/config.ts": `const token = "ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD"`,

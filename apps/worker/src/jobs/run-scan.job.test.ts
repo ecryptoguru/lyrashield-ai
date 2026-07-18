@@ -67,6 +67,9 @@ vi.mock("../engine/runner", () => ({
       mode === "DEEP" || mode === "CUSTOM" ? "azure_ai/gpt-5.6-terra" : "azure_ai/gpt-5.6-luna",
     reasoningEffort: mode === "DEEP" || mode === "CUSTOM" ? "high" : "medium",
   })),
+  resolveEngineTimeoutMs: vi.fn((minutes?: number | null) =>
+    typeof minutes === "number" && minutes > 0 ? minutes * 60 * 1000 : 30 * 60 * 1000
+  ),
   interpretExitCode: vi.fn((code: number) => {
     if (code === 0) return { status: "COMPLETED", category: "SUCCESS" }
     if (code === 2) return { status: "COMPLETED", category: "VULNERABILITIES_FOUND" }
@@ -213,6 +216,7 @@ it("extracts a privacy-bounded provider usage summary", () => {
     cacheWriteInputTokens: 500,
     outputTokens: 678,
     pricingBuckets: null,
+    modelPricingBuckets: null,
     engineReportedCostUsd: 1.234567,
   })
   expect(extractUsageSummary({ request_count: 1.5, input_tokens: 2_147_483_648 })).toEqual({
@@ -222,6 +226,7 @@ it("extracts a privacy-bounded provider usage summary", () => {
     cacheWriteInputTokens: null,
     outputTokens: null,
     pricingBuckets: null,
+    modelPricingBuckets: null,
     engineReportedCostUsd: null,
   })
 })
@@ -311,7 +316,7 @@ describe("processScanJob", () => {
         instruction: expect.stringContaining("vibe-security-50/1.0.0"),
       }),
       "scan-1",
-      undefined,
+      30 * 60 * 1000,
       expect.any(Function)
     )
     expect(addScanEvent).toHaveBeenCalledWith(
@@ -326,6 +331,7 @@ describe("processScanJob", () => {
   it("uses the selected workspace policy budget for the engine cap", async () => {
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       maxBudgetUsd: { toNumber: () => 6.5 },
+      maxDurationMinutes: 75,
     } as never)
     const policyJob = {
       id: "job-policy-1",
@@ -344,12 +350,12 @@ describe("processScanJob", () => {
 
     expect(prisma.policy.findFirst).toHaveBeenCalledWith({
       where: { id: "policy-1", workspaceId: "ws-1", deletedAt: null },
-      select: { maxBudgetUsd: true },
+      select: { maxBudgetUsd: true, maxDurationMinutes: true },
     })
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 6.5 }),
       "scan-1",
-      undefined,
+      75 * 60 * 1000,
       expect.any(Function)
     )
   })

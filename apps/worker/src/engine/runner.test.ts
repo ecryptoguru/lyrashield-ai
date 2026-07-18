@@ -27,8 +27,11 @@ import {
   cleanupEngineWorkspace,
   findRunOutputDir,
   interpretExitCode,
+  assertRepositoryScanRuntimeConfigured,
   resolveEngineSourceCheckout,
   resolveEngineProfile,
+  resolveEngineSandboxNetwork,
+  resolveEngineTimeoutMs,
   terminateActiveEngineProcesses,
   trackActiveEngineProcess,
 } from "./runner"
@@ -155,13 +158,17 @@ describe("resolveEngineProfile", () => {
     expect(resolveEngineProfile(mode, routingEnv)).toEqual({
       model: "azure/gpt-5.6-luna",
       reasoningEffort: "medium",
+      delegateModel: "azure/gpt-5.6-luna",
+      delegateReasoningEffort: "medium",
     })
   })
 
-  it.each(["DEEP", "CUSTOM"])("routes %s to Terra at high reasoning", (mode) => {
+  it.each(["DEEP", "CUSTOM"])("routes %s to Terra at medium reasoning", (mode) => {
     expect(resolveEngineProfile(mode, routingEnv)).toEqual({
       model: "azure/gpt-5.6-terra",
-      reasoningEffort: "high",
+      reasoningEffort: "medium",
+      delegateModel: "azure/gpt-5.6-luna",
+      delegateReasoningEffort: "medium",
     })
   })
 
@@ -169,6 +176,8 @@ describe("resolveEngineProfile", () => {
     expect(resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.6-luna" })).toEqual({
       model: "azure/gpt-5.6-luna",
       reasoningEffort: "medium",
+      delegateModel: "azure/gpt-5.6-luna",
+      delegateReasoningEffort: "medium",
     })
   })
 
@@ -176,6 +185,49 @@ describe("resolveEngineProfile", () => {
     expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.5" })).toThrow(
       "require a GPT-5.6"
     )
+  })
+})
+
+describe("repository scan runtime configuration", () => {
+  const runtimeEnv = {
+    LYRASHIELD_LUNA_LLM: "azure/gpt-5.6-luna",
+    LYRASHIELD_TERRA_LLM: "azure/gpt-5.6-terra",
+    AZURE_AI_API_KEY: "test-key",
+    LYRASHIELD_ENGINE_SANDBOX_NETWORK: "lyrashield-sandbox",
+  }
+
+  it("accepts a named sandbox control-plane network", () => {
+    expect(resolveEngineSandboxNetwork(runtimeEnv)).toBe("lyrashield-sandbox")
+    expect(() => assertRepositoryScanRuntimeConfigured(runtimeEnv)).not.toThrow()
+  })
+
+  it.each([undefined, "", "none", " NONE "])(
+    "rejects an unroutable sandbox network value %s",
+    (network) => {
+      expect(() =>
+        assertRepositoryScanRuntimeConfigured({
+          ...runtimeEnv,
+          LYRASHIELD_ENGINE_SANDBOX_NETWORK: network,
+        })
+      ).toThrow("LYRASHIELD_ENGINE_SANDBOX_NETWORK")
+    }
+  )
+})
+
+describe("resolveEngineTimeoutMs", () => {
+  it("uses the policy duration when configured", () => {
+    expect(resolveEngineTimeoutMs(60)).toBe(60 * 60 * 1000)
+  })
+
+  it.each([undefined, null, 0, -1, Number.NaN])(
+    "uses the safe default for invalid duration %s",
+    (duration) => {
+      expect(resolveEngineTimeoutMs(duration)).toBe(30 * 60 * 1000)
+    }
+  )
+
+  it("caps an excessive duration at 24 hours", () => {
+    expect(resolveEngineTimeoutMs(10_000)).toBe(24 * 60 * 60 * 1000)
   })
 })
 

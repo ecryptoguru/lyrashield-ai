@@ -16,13 +16,16 @@ import {
   cleanupEngineWorkspace,
   interpretExitCode,
   resolveEngineProfile,
+  resolveEngineTimeoutMs,
   type EngineRunResult,
 } from "../engine/runner"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
 import {
   calculateGpt56CostUsdFromBuckets,
+  calculateGpt56CostUsdFromModelBuckets,
   GPT_56_PRICING_EFFECTIVE_DATE,
   GPT_56_PRICING_SOURCE,
+  type Gpt56ModelUsageBuckets,
 } from "../engine/gpt56-pricing"
 import { persistFindings } from "../engine/finding-persister"
 import {
@@ -66,6 +69,7 @@ type UsageSummary = {
     longCacheWriteInputTokens: number | null
     longOutputTokens: number | null
   } | null
+  modelPricingBuckets: Gpt56ModelUsageBuckets[] | null
   engineReportedCostUsd: number | null
 }
 
@@ -77,6 +81,32 @@ function usageCount(usage: Record<string, unknown>, key: string): number | null 
     value <= 2_147_483_647
     ? value
     : null
+}
+
+function extractModelPricingBuckets(
+  usage: Record<string, unknown>
+): Gpt56ModelUsageBuckets[] | null {
+  const rawBuckets = usage.model_usage_buckets
+  if (!Array.isArray(rawBuckets) || rawBuckets.length === 0 || rawBuckets.length > 3) return null
+  const result: Gpt56ModelUsageBuckets[] = []
+  for (const rawBucket of rawBuckets) {
+    if (typeof rawBucket !== "object" || rawBucket === null || Array.isArray(rawBucket)) return null
+    const bucket = rawBucket as Record<string, unknown>
+    const model = typeof bucket.model === "string" ? bucket.model.trim() : ""
+    const values = {
+      standardInputTokens: usageCount(bucket, "standard_input_tokens"),
+      standardCachedInputTokens: usageCount(bucket, "standard_cached_input_tokens"),
+      standardCacheWriteInputTokens: usageCount(bucket, "standard_cache_write_input_tokens"),
+      standardOutputTokens: usageCount(bucket, "standard_output_tokens"),
+      longInputTokens: usageCount(bucket, "long_input_tokens"),
+      longCachedInputTokens: usageCount(bucket, "long_cached_input_tokens"),
+      longCacheWriteInputTokens: usageCount(bucket, "long_cache_write_input_tokens"),
+      longOutputTokens: usageCount(bucket, "long_output_tokens"),
+    }
+    if (!model || Object.values(values).some((value) => value === null)) return null
+    result.push({ model, ...(values as Omit<Gpt56ModelUsageBuckets, "model">) })
+  }
+  return result
 }
 
 export function extractUsageSummary(usage: Record<string, unknown>): UsageSummary {
@@ -99,6 +129,7 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
     pricingBuckets: Object.values(pricingBuckets).every((value) => value !== null)
       ? pricingBuckets
       : null,
+    modelPricingBuckets: extractModelPricingBuckets(usage),
     engineReportedCostUsd: extractActualCostUsd(usage),
   }
 }
@@ -154,9 +185,11 @@ export async function persistEngineUsageCheckpoint(params: {
   const usage = extractUsageSummary(llmUsage)
   // Aggregate totals cannot prove whether an individual request crossed the
   // long-context boundary. Only complete per-request buckets are priceable.
-  const rateCardCostUsd = usage.pricingBuckets
-    ? calculateGpt56CostUsdFromBuckets(model, usage.pricingBuckets)
-    : null
+  const rateCardCostUsd = usage.modelPricingBuckets
+    ? calculateGpt56CostUsdFromModelBuckets(usage.modelPricingBuckets)
+    : usage.pricingBuckets
+      ? calculateGpt56CostUsdFromBuckets(model, usage.pricingBuckets)
+      : null
   const costsMatch =
     rateCardCostUsd !== null &&
     (usage.engineReportedCostUsd === null ||
@@ -188,7 +221,11 @@ export async function persistEngineUsageCheckpoint(params: {
     await addScanEvent(scanId, "llm_usage", "info", "AI usage counters recorded", {
       ...usage,
       calculatedCostUsd: rateCardCostUsd,
-      pricingMethod: usage.pricingBuckets ? "per_request_buckets" : "unavailable",
+      pricingMethod: usage.modelPricingBuckets
+        ? "per_request_model_buckets"
+        : usage.pricingBuckets
+          ? "per_request_buckets"
+          : "unavailable",
       billedCostUsd,
       costSource,
       reconciliationStatus,
@@ -383,7 +420,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const policy = policyId
         ? await prisma.policy.findFirst({
             where: { id: policyId, workspaceId, deletedAt: null },
-            select: { maxBudgetUsd: true },
+            select: { maxBudgetUsd: true, maxDurationMinutes: true },
           })
         : null
       const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
@@ -442,7 +479,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                 maxBudgetUsd,
               },
               scanId,
-              undefined,
+              resolveEngineTimeoutMs(policy?.maxDurationMinutes),
               async () => {
                 const current = await prisma.scan.findUnique({
                   where: { id: scanId },

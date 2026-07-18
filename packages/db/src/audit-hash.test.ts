@@ -82,6 +82,9 @@ describe("evidence", () => {
   describe("assertEvidenceEncrypted", () => {
     it("does not throw when key ref is provided", () => {
       expect(() => assertEvidenceEncrypted("kms/evidence-key")).not.toThrow()
+      expect(() =>
+        assertEvidenceEncrypted("local-hkdf/better-auth-secret/lyrashield-evidence/v1")
+      ).not.toThrow()
     })
 
     it("throws when key ref is null", () => {

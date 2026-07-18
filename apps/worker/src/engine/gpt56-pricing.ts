@@ -19,6 +19,8 @@ export type Gpt56UsageBuckets = {
   longOutputTokens: number | null
 }
 
+export type Gpt56ModelUsageBuckets = Gpt56UsageBuckets & { model: string }
+
 function resolveRate(model: string | undefined) {
   const modelId = model?.trim().toLowerCase().split("/").pop()
   return modelId
@@ -74,6 +76,19 @@ export function calculateGpt56CostUsdFromBuckets(
       2
     )
   return Math.round((cost / 1_000_000) * 1_000_000) / 1_000_000
+}
+
+export function calculateGpt56CostUsdFromModelBuckets(
+  usageByModel: Gpt56ModelUsageBuckets[]
+): number | null {
+  if (usageByModel.length === 0 || usageByModel.length > 3) return null
+  let total = 0
+  for (const usage of usageByModel) {
+    const cost = calculateGpt56CostUsdFromBuckets(usage.model, usage)
+    if (cost === null) return null
+    total += cost
+  }
+  return Math.round(total * 1_000_000) / 1_000_000
 }
 
 export function calculateGpt56CostUsd(
