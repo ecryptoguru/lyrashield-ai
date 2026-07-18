@@ -115,9 +115,14 @@ cd ~/Desktop/lyrashield-ai
 docker compose build worker
 docker compose up -d worker
 docker compose exec worker lyrashield --version
+curl -fsS http://localhost:3000/api/ready/scans
 ```
 
 The worker image consumes the sibling engine source through its named Docker build context. It exits before sandbox setup if the resolved model or selected provider credential is missing.
+
+The web app accepts a scan only while a worker heartbeat is live. Workers refresh their Redis lease every 10 seconds; the lease expires after 30 seconds following a crash or lost Redis connection. `/api/ready/scans` returns `503` while no worker is available, and the UI asks the user to retry instead of leaving a scan permanently queued.
+
+The worker reconciles queue/database drift at startup and every minute. A database scan that remains `QUEUED` for five minutes without a processable BullMQ job fails closed as `QUEUE_ORPHANED`; it is never re-enqueued automatically because that could repeat paid model work. Do not delete BullMQ keys or jobs directly in Redis. Remove a queued job only through an application/operator flow that also transitions its database scan to `CANCELLED` or `FAILED` and records a scan event.
 
 The base `LYRASHIELD_LLM` is the fallback. During worker scans, Safe/Quick/Standard use `LYRASHIELD_LUNA_LLM` at medium reasoning; Deep/Custom use `LYRASHIELD_TERRA_LLM` at high. The values after `azure/` or `azure_ai/` must be the real Azure deployment names.
 

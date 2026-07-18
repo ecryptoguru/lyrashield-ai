@@ -1,11 +1,15 @@
-import { createScan, getFinding, prisma } from "@lyrashield/db"
+import { createScan, getFinding, prisma, updateScanStatus } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 import { z } from "zod"
-import { enqueueScanJob } from "../../../../../lib/queue"
+import {
+  assertScanWorkerAvailable,
+  enqueueScanJob,
+  ScanWorkerUnavailableError,
+} from "../../../../../lib/queue"
 import { resolveRetestProfile } from "../../../../../lib/retest-profile"
 
 const CreateRetestSchema = z.object({
@@ -67,6 +71,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return apiError("RETEST_IN_PROGRESS", "A retest is already in progress for this finding", 409)
     }
 
+    try {
+      await assertScanWorkerAvailable()
+    } catch (error) {
+      if (error instanceof ScanWorkerUnavailableError) {
+        return apiError(
+          "SCAN_SERVICE_UNAVAILABLE",
+          "Retesting is temporarily unavailable. Please try again shortly.",
+          503
+        )
+      }
+      throw error
+    }
+
     let scan: Awaited<ReturnType<typeof createScan>>
     try {
       scan = await createScan({
@@ -110,14 +127,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         policyId: sourceScan.policyId ?? undefined,
       })
     } catch (enqueueError) {
-      await prisma.scan.update({
-        where: { id: scan.id },
-        data: {
-          status: "FAILED",
-          errorCategory: "QUEUE",
-          errorMessage: "Retest could not be queued. Check Redis connectivity.",
-          endedAt: new Date(),
-        },
+      await updateScanStatus(scan.id, "FAILED", {
+        errorCategory: "QUEUE",
+        errorMessage: "Scan worker became unavailable while queueing the retest",
       })
       await prisma.retest.update({
         where: { id: retest.id },
@@ -128,7 +140,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         scanId: scan.id,
         error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
       })
-      return apiError("QUEUE_ERROR", "Retest could not be queued. Try again shortly.", 503)
+      return apiError(
+        "SCAN_SERVICE_UNAVAILABLE",
+        "Retesting became unavailable while starting. Please try again shortly.",
+        503
+      )
     }
 
     await prisma.auditLog.create({

@@ -4,6 +4,9 @@ const getFinding = vi.fn()
 const createScan = vi.fn()
 const requirePermission = vi.fn()
 const enqueueScanJob = vi.fn()
+const assertScanWorkerAvailable = vi.fn()
+const updateScanStatus = vi.fn()
+class ScanWorkerUnavailableError extends Error {}
 const prisma = {
   scan: { findFirst: vi.fn(), update: vi.fn() },
   findingCandidate: { findMany: vi.fn() },
@@ -11,11 +14,15 @@ const prisma = {
   auditLog: { create: vi.fn() },
 }
 
-vi.mock("@lyrashield/db", () => ({ getFinding, createScan, prisma }))
+vi.mock("@lyrashield/db", () => ({ getFinding, createScan, updateScanStatus, prisma }))
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { retest: { create: "retest:create" } } }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
-vi.mock("../../../../../lib/queue", () => ({ enqueueScanJob }))
+vi.mock("../../../../../lib/queue", () => ({
+  enqueueScanJob,
+  assertScanWorkerAvailable,
+  ScanWorkerUnavailableError,
+}))
 
 const { POST } = await import("./route")
 
@@ -40,6 +47,7 @@ describe("POST /api/findings/[id]/retests", () => {
       status: "pending",
     })
     enqueueScanJob.mockResolvedValue("job-1")
+    assertScanWorkerAvailable.mockResolvedValue(undefined)
   })
 
   it("queues a fresh scan from server-owned source-scan configuration", async () => {
@@ -82,12 +90,31 @@ describe("POST /api/findings/[id]/retests", () => {
     )
 
     expect(response.status).toBe(503)
-    expect(prisma.scan.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "FAILED" }) })
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "retest-scan",
+      "FAILED",
+      expect.objectContaining({ errorCategory: "QUEUE" })
     )
     expect(prisma.retest.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "error" }) })
     )
+  })
+
+  it("does not create a retest when no worker is available", async () => {
+    assertScanWorkerAvailable.mockRejectedValue(new ScanWorkerUnavailableError())
+
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId: "workspace-1" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+
+    expect(response.status).toBe(503)
+    expect((await response.json()).error.code).toBe("SCAN_SERVICE_UNAVAILABLE")
+    expect(createScan).not.toHaveBeenCalled()
   })
 
   it("reports an active target scan as an in-progress retest", async () => {

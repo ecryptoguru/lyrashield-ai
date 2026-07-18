@@ -196,6 +196,17 @@ services:
           pids: ${WORKER_PIDS_LIMIT:-512}
     working_dir: /app
     command: ["pnpm", "--filter", "@lyrashield/worker", "exec", "tsx", "src/index.ts"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://web:3000/api/ready/scans').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 4
 
 volumes:
   postgres_data:

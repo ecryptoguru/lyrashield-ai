@@ -1,4 +1,4 @@
-import { prisma, createScan, listScans } from "@lyrashield/db"
+import { prisma, createScan, listScans, updateScanStatus } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateScanSchema } from "@lyrashield/types"
@@ -10,7 +10,11 @@ import {
   apiSuccess,
   parsePaginationParams,
 } from "../../../lib/api-response"
-import { enqueueScanJob } from "../../../lib/queue"
+import {
+  assertScanWorkerAvailable,
+  enqueueScanJob,
+  ScanWorkerUnavailableError,
+} from "../../../lib/queue"
 
 export async function POST(request: Request) {
   let body: unknown
@@ -62,6 +66,19 @@ export async function POST(request: Request) {
       )
     }
 
+    try {
+      await assertScanWorkerAvailable()
+    } catch (error) {
+      if (error instanceof ScanWorkerUnavailableError) {
+        return apiError(
+          "SCAN_SERVICE_UNAVAILABLE",
+          "Scanning is temporarily unavailable. Please try again shortly.",
+          503
+        )
+      }
+      throw error
+    }
+
     const scan = await createScan({
       workspaceId,
       targetId: data.targetId,
@@ -85,18 +102,13 @@ export async function POST(request: Request) {
         scanId: scan.id,
         error: enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr),
       })
-      await prisma.scan.update({
-        where: { id: scan.id },
-        data: {
-          status: "FAILED",
-          errorCategory: "QUEUE",
-          errorMessage: "Failed to enqueue scan job — Redis may be unavailable",
-          endedAt: new Date(),
-        },
+      await updateScanStatus(scan.id, "FAILED", {
+        errorCategory: "QUEUE",
+        errorMessage: "Scan worker became unavailable while queueing the scan",
       })
       return apiError(
-        "QUEUE_ERROR",
-        "Scan created but failed to enqueue. Check Redis connectivity.",
+        "SCAN_SERVICE_UNAVAILABLE",
+        "Scanning became unavailable while starting this scan. Please try again shortly.",
         503
       )
     }
