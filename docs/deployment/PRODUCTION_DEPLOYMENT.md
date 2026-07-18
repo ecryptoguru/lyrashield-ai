@@ -99,11 +99,21 @@ The worker selects one profile before each engine subprocess:
 | Deep         | deep        | `LYRASHIELD_TERRA_LLM` | high      |      $15.00 |
 | Custom       | deep        | `LYRASHIELD_TERRA_LLM` | high      |      $15.00 |
 
+The worker permanently versions the official OpenAI GPT-5.6 rate card in `apps/worker/src/engine/gpt56-pricing.ts` (effective 2026-07-09; USD per 1 million tokens):
+
+| Model         | Input | Cached input read | Cache write | Output |
+| ------------- | ----: | ----------------: | ----------: | -----: |
+| GPT-5.6 Sol   | $5.00 |             $0.50 |       $6.25 | $30.00 |
+| GPT-5.6 Terra | $2.50 |             $0.25 |      $3.125 | $15.00 |
+| GPT-5.6 Luna  | $1.00 |             $0.10 |       $1.25 |  $6.00 |
+
+Source: OpenAI's official GPT-5.6 announcement and pricing, captured with its effective date. Cache writes are 1.25 times the uncached input rate. Requests whose prompts exceed 272,000 tokens use the official long-context multipliers of 2 times input and 1.5 times output; aggregate counters that cannot identify which request crossed that boundary are not estimated locally.
+
 `LYRASHIELD_LLM` is mandatory as the backward-compatible fallback when a routed variable is absent or empty. Azure deployment names are operator-defined: if the Azure deployment is not literally named `gpt-5.6-luna` or `gpt-5.6-terra`, put the real deployment name after `azure/` or `azure_ai/`.
 
-A finite positive `Policy.maxBudgetUsd` overrides the default for that scan. Zero, negative, non-finite, missing, deleted, or cross-workspace policy values cannot remove the mode cap. The worker records `engine_start` with model/reasoning and `budget_cap` with amount/source. When the provider returns usage, the scan ledger retains provider cost, capped billable cost, request count, input tokens, cached input tokens, and output tokens. It never stores prompts or raw provider request payloads.
+A finite positive `Policy.maxBudgetUsd` overrides the default for that scan. Zero, negative, non-finite, missing, deleted, or cross-workspace policy values cannot remove the mode cap. The worker records `engine_start` with model/reasoning and `budget_cap` with amount/source. When the engine returns usage, the scan ledger retains its reported cost, capped billable cost, request count, input tokens, cached input tokens, and output tokens. If complete standard-context GPT-5.6 counters arrive without a cost, the worker uses the versioned official OpenAI rate card in `apps/worker/src/engine/gpt56-pricing.ts`; ambiguous long-context aggregates fail closed instead of being underpriced. It never stores prompts or raw provider request payloads.
 
-These amounts are hard ceilings, not expected per-scan charges. Provider-reported cost is retained for reconciliation even when it exceeds the approved ceiling; the amount presented as billable by LyraShield is clamped to that ceiling. Actual spend still depends on provider token accounting and how early the scan completes, so reconcile the retained ledger against the Azure meter during the controlled gate.
+These amounts are hard ceilings, not expected per-scan charges. Engine-reported cost is retained for reconciliation even when it exceeds the approved ceiling; the amount presented as billable by LyraShield is clamped to that ceiling. Actual spend still depends on provider token accounting and how early the scan completes, so reconcile the retained ledger against the Azure meter during the controlled gate.
 
 A durable scan event is recorded immediately before a repository scan enters the provider-billable engine phase. Preflight work remains retryable, while recovery after that boundary fails closed instead of replaying provider work; a failed billable invocation requires an explicit new scan or retest so the queue cannot silently duplicate model spend. Deterministic SCA, secret, URL, and agent-configuration findings use the Safe profile for targeted retests; engine-only findings retain their originating review depth.
 

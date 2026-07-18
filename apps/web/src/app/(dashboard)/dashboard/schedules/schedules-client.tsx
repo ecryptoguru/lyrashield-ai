@@ -58,6 +58,8 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   const [cron, setCron] = useState("0 0 * * 0")
   const [presetId, setPresetId] = useState<ScanPresetId>("WEEKLY_MONITOR")
   const [creating, setCreating] = useState(false)
+  const selectedTargetUsesEngine =
+    targets.find((target) => target.id === selectedTargetId)?.type === "REPO"
 
   const loadSchedules = useCallback(async () => {
     setLoading(true)
@@ -220,8 +222,10 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
               </FormField>
             </div>
             <p className="text-muted-foreground text-xs">
-              {getScanPreset(presetId).description} Maximum engine spend: $
-              {getScanPreset(presetId).maxCostUsd.toFixed(2)} per run.
+              {getScanPreset(presetId).description}{" "}
+              {selectedTargetId && !selectedTargetUsesEngine
+                ? "This target uses deterministic scanners, so its AI model cost is $0 per run."
+                : `Maximum AI engine spend: $${getScanPreset(presetId).maxCostUsd.toFixed(2)} per run.`}
             </p>
             <div className="flex gap-2">
               <Button

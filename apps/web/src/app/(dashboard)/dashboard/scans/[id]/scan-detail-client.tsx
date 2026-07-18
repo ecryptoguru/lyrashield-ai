@@ -616,12 +616,12 @@ export function ScanDetailClient({
               </dd>
               <p className="text-muted-foreground mt-1 text-xs">
                 {scan.cost.providerUsd !== null && scan.cost.providerUsd !== billedCost
-                  ? `$${Number(scan.cost.providerUsd).toFixed(6)} provider-reported before cap`
+                  ? `$${Number(scan.cost.providerUsd).toFixed(6)} engine-reported before cap`
                   : scan.cost.inputTokens !== null || scan.cost.outputTokens !== null
                     ? `${(scan.cost.inputTokens ?? 0).toLocaleString()} in · ${(scan.cost.outputTokens ?? 0).toLocaleString()} out`
                     : scan.target?.type === "REPO"
-                      ? "Waiting for provider usage"
-                      : "Provider not invoked"}
+                      ? "Waiting for engine usage"
+                      : "AI engine not invoked"}
               </p>
             </div>
           </dl>

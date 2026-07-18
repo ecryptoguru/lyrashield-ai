@@ -156,6 +156,8 @@ export function ScansClient({
   }
 
   const hasActiveScans = scans.some((scan) => isActiveScan(scan.status))
+  const selectedTargetUsesEngine =
+    targets.find((target) => target.id === selectedTarget)?.type === "REPO"
 
   useEffect(() => {
     if (!hasActiveScans) return
@@ -262,8 +264,10 @@ export function ScansClient({
                 ))}
               </Select>
               <p className="text-muted-foreground mt-1 text-xs">
-                {getScanPreset(selectedPreset).description} Maximum engine spend: $
-                {getScanPreset(selectedPreset).maxCostUsd.toFixed(2)}.
+                {getScanPreset(selectedPreset).description}{" "}
+                {selectedTarget && !selectedTargetUsesEngine
+                  ? "This target uses deterministic scanners, so its AI model cost is $0."
+                  : `Maximum AI engine spend: $${getScanPreset(selectedPreset).maxCostUsd.toFixed(2)}.`}
               </p>
             </FormField>
           </div>

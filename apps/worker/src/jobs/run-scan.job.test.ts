@@ -40,6 +40,11 @@ vi.mock("../engine/runner", () => ({
     },
   }),
   cleanupEngineWorkspace: vi.fn().mockResolvedValue(undefined),
+  resolveEngineProfile: vi.fn((mode: string) => ({
+    model:
+      mode === "DEEP" || mode === "CUSTOM" ? "azure_ai/gpt-5.6-terra" : "azure_ai/gpt-5.6-luna",
+    reasoningEffort: mode === "DEEP" || mode === "CUSTOM" ? "high" : "medium",
+  })),
   interpretExitCode: vi.fn((code: number) => {
     if (code === 0) return { status: "COMPLETED", category: "SUCCESS" }
     if (code === 2) return { status: "COMPLETED", category: "VULNERABILITIES_FOUND" }
@@ -170,14 +175,14 @@ it("extracts a privacy-bounded provider usage summary", () => {
     inputTokens: 12_345,
     cachedInputTokens: 4_000,
     outputTokens: 678,
-    providerCostUsd: 1.234567,
+    engineReportedCostUsd: 1.234567,
   })
   expect(extractUsageSummary({ request_count: 1.5, input_tokens: 2_147_483_648 })).toEqual({
     requestCount: null,
     inputTokens: null,
     cachedInputTokens: null,
     outputTokens: null,
-    providerCostUsd: null,
+    engineReportedCostUsd: null,
   })
 })
 
@@ -349,6 +354,52 @@ describe("processScanJob", () => {
     expect(persistFindings).toHaveBeenCalled()
     expect(persistResultManifest).toHaveBeenCalled()
     expect(completeScanWithScore).not.toHaveBeenCalled()
+  })
+
+  it("uses the permanent GPT-5.6 rate card when engine cost is unavailable", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 0,
+      output: {
+        vulnerabilities: [],
+        runRecord: {
+          run_id: "r-rate-card",
+          status: "completed",
+          llm_usage: {
+            request_count: 7,
+            input_tokens: 18_420,
+            cached_input_tokens: 6_100,
+            output_tokens: 2_310,
+          },
+        },
+        summary: "Engine completed without a cost field",
+        findingCount: 0,
+      },
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: {
+        billedCostUsd: "0.026790",
+        actualCostCents: 3,
+        llmRequestCount: 7,
+        llmInputTokens: 18_420,
+        llmCachedInputTokens: 6_100,
+        llmOutputTokens: 2_310,
+      },
+    })
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "llm_usage",
+      "info",
+      "Official GPT-5.6 rates calculated $0.026790; bill capped at $0.026790",
+      expect.objectContaining({
+        calculatedCostUsd: 0.02679,
+        costSource: "openai_rate_card",
+        pricingEffectiveDate: "2026-07-09",
+      })
+    )
   })
 
   it("keeps a completed scan completed when a completion notification fails", async () => {

@@ -14,9 +14,15 @@ import {
   runEngine,
   cleanupEngineWorkspace,
   interpretExitCode,
+  resolveEngineProfile,
   type EngineRunResult,
 } from "../engine/runner"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
+import {
+  calculateGpt56CostUsd,
+  GPT_56_PRICING_EFFECTIVE_DATE,
+  GPT_56_PRICING_SOURCE,
+} from "../engine/gpt56-pricing"
 import { persistFindings } from "../engine/finding-persister"
 import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
@@ -45,7 +51,7 @@ type UsageSummary = {
   inputTokens: number | null
   cachedInputTokens: number | null
   outputTokens: number | null
-  providerCostUsd: number | null
+  engineReportedCostUsd: number | null
 }
 
 function usageCount(usage: Record<string, unknown>, key: string): number | null {
@@ -64,7 +70,7 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
     inputTokens: usageCount(usage, "input_tokens"),
     cachedInputTokens: usageCount(usage, "cached_input_tokens"),
     outputTokens: usageCount(usage, "output_tokens"),
-    providerCostUsd: extractActualCostUsd(usage),
+    engineReportedCostUsd: extractActualCostUsd(usage),
   }
 }
 
@@ -190,6 +196,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         : null
       const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
       const maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
+      const engineProfile = resolveEngineProfile(mode)
       const budgetSource =
         typeof policyMaxBudgetUsd === "number" &&
         Number.isFinite(policyMaxBudgetUsd) &&
@@ -379,7 +386,17 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // and per-request payloads never enter the scan ledger.
       if (engineResult.output.runRecord?.llm_usage) {
         const usage = extractUsageSummary(engineResult.output.runRecord.llm_usage)
-        const actualCostUsd = usage.providerCostUsd
+        const rateCardCostUsd =
+          usage.engineReportedCostUsd === null
+            ? calculateGpt56CostUsd(engineProfile.model, usage)
+            : null
+        const actualCostUsd = usage.engineReportedCostUsd ?? rateCardCostUsd
+        const costSource =
+          usage.engineReportedCostUsd !== null
+            ? "engine_reported"
+            : rateCardCostUsd !== null
+              ? "openai_rate_card"
+              : "unavailable"
         billedCostUsd = actualCostUsd === null ? null : Math.min(actualCostUsd, maxBudgetUsd)
         try {
           await addScanEvent(
@@ -387,9 +404,22 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             "llm_usage",
             "info",
             actualCostUsd === null
-              ? "Provider usage counters recorded; provider cost was not reported"
-              : `Provider reported $${actualCostUsd.toFixed(6)}; bill capped at $${billedCostUsd!.toFixed(6)}`,
-            { ...usage, billedCostUsd }
+              ? "Engine usage counters recorded; cost was unavailable"
+              : costSource === "engine_reported"
+                ? `Engine reported $${actualCostUsd.toFixed(6)}; bill capped at $${billedCostUsd!.toFixed(6)}`
+                : `Official GPT-5.6 rates calculated $${actualCostUsd.toFixed(6)}; bill capped at $${billedCostUsd!.toFixed(6)}`,
+            {
+              ...usage,
+              calculatedCostUsd: rateCardCostUsd,
+              billedCostUsd,
+              costSource,
+              ...(costSource === "openai_rate_card"
+                ? {
+                    pricingEffectiveDate: GPT_56_PRICING_EFFECTIVE_DATE,
+                    pricingSource: GPT_56_PRICING_SOURCE,
+                  }
+                : {}),
+            }
           )
         } catch (eventErr) {
           log.warn("Failed to persist llm_usage event", {
@@ -400,11 +430,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         await prisma.scan.update({
           where: { id: scanId },
           data: {
-            ...(actualCostUsd !== null
+            ...(usage.engineReportedCostUsd !== null
               ? {
-                  providerCostUsd: actualCostUsd.toFixed(6),
-                  billedCostUsd: billedCostUsd!.toFixed(6),
-                  actualCostCents: Math.round(billedCostUsd! * 100),
+                  providerCostUsd: usage.engineReportedCostUsd.toFixed(6),
+                }
+              : {}),
+            ...(billedCostUsd !== null
+              ? {
+                  billedCostUsd: billedCostUsd.toFixed(6),
+                  actualCostCents: Math.round(billedCostUsd * 100),
                 }
               : {}),
             llmRequestCount: usage.requestCount,
