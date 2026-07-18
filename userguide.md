@@ -101,7 +101,7 @@ Choose the outcome you need:
 - **Launch review** — identify what needs attention before release.
 - **Monitor weekly** — establish a recurring review goal.
 
-The goal explains the intended outcome. Review depth determines the model, reasoning level, and maximum engine spend.
+The goal explains the intended outcome. Review depth determines the model, reasoning level, and protected internal run profile.
 
 ### Step 3: First scan
 
@@ -160,7 +160,7 @@ Select **URL**, then configure:
 - optional project;
 - environment: Local, Preview, Staging, or Production.
 
-URL and API targets use the pinned deterministic URL scanner. The external AI engine is not invoked for these targets, so their AI-model cost is **$0**. Review depth still describes the requested workflow, but it does not turn a passive URL scan into a repository or intrusive assessment.
+URL and API targets use the pinned deterministic URL scanner. The external AI engine is not invoked for these targets. Review depth still describes the requested workflow, but it does not turn a passive URL scan into a repository or intrusive assessment.
 
 ### 7.3 GitHub-connected target
 
@@ -177,30 +177,20 @@ The default branch and repository visibility are returned by GitHub. A connected
 
 Open a target to view repository or URL details, its recent scans, latest eligible LyraShield Score, and public-scorecard controls when your role permits publication.
 
-## 8. Scan types, models, and costs
+## 8. Scan types and models
 
 The authenticated dashboard exposes three one-off review depths. Weekly Monitor is the recurring user workflow.
 
-| User option          | Backend mode | Model for repository engine | Reasoning | Default maximum AI spend |
-| -------------------- | ------------ | --------------------------- | --------- | -----------------------: |
-| Release Check        | SAFE         | GPT-5.6 Luna                | Medium    |                    $1.20 |
-| Code Review          | STANDARD     | GPT-5.6 Luna                | Medium    |                    $3.20 |
-| Deep Security Review | DEEP         | GPT-5.6 Terra               | High      |                   $15.00 |
-| Weekly Monitor       | SAFE         | GPT-5.6 Luna                | Medium    |            $1.20 per run |
+| User option          | Backend mode | Model for repository engine | Reasoning |
+| -------------------- | ------------ | --------------------------- | --------- |
+| Release Check        | SAFE         | GPT-5.6 Luna                | Medium    |
+| Code Review          | STANDARD     | GPT-5.6 Luna                | Medium    |
+| Deep Security Review | DEEP         | GPT-5.6 Terra               | High      |
+| Weekly Monitor       | SAFE         | GPT-5.6 Luna                | Medium    |
 
-The backend also supports QUICK (Luna/medium, $1.20 default cap) and CUSTOM (Terra/high, $15 default cap) for approved API or agent workflows. They are not additional one-off dashboard choices. GPT-5.6 Sol pricing is retained for accurate accounting but Sol is not currently assigned to a scan preset.
+The backend also supports QUICK (Luna/medium) and CUSTOM (Terra/high) for approved API or agent workflows. They are not additional one-off dashboard choices. GPT-5.6 Sol is retained in internal accounting but is not currently assigned to a scan preset.
 
-The amount shown before a scan is a maximum budget, not a quoted or fixed scan price. Actual repository cost depends on uncached input, cached input, and output tokens. A positive workspace policy can override the mode default, subject to the platform maximum. If engine-reported cost exceeds the approved cap, the scan stops as `STOPPED_BUDGET` and persisted billable cost is clamped to the approved amount.
-
-Official OpenAI GPT-5.6 rates retained by the worker, in USD per 1 million tokens:
-
-| Model         | Input | Cached input read | Cache write | Output |
-| ------------- | ----: | ----------------: | ----------: | -----: |
-| GPT-5.6 Luna  | $1.00 |             $0.10 |       $1.25 |  $6.00 |
-| GPT-5.6 Terra | $2.50 |             $0.25 |      $3.125 | $15.00 |
-| GPT-5.6 Sol   | $5.00 |             $0.50 |       $6.25 | $30.00 |
-
-Source: [OpenAI's official GPT-5.6 announcement and pricing](https://openai.com/index/gpt-5-6/), effective 2026-07-09. Cache writes cost 1.25 times uncached input. Requests with more than 272,000 input tokens use the official long-context multipliers. When complete standard-context token counters are available but engine cost is missing, LyraShield calculates the value from this versioned rate card and records the source. Ambiguous long-context aggregates are not guessed. When models are purchased through Azure or another provider, that provider's contract and meter remain the final billing source of truth.
+LyraShield applies protected internal run limits automatically. The dashboard does not display model costs, spend, or accounting events. If a protected limit is reached, the scan ends with a neutral limit message while operators retain the internal usage record for reconciliation.
 
 ## 9. Start and monitor a scan
 
@@ -208,12 +198,12 @@ Source: [OpenAI's official GPT-5.6 announcement and pricing](https://openai.com/
 2. Select **New Scan**.
 3. Choose a target.
 4. Choose Release Check, Code Review, or Deep Security Review.
-5. Review the description and maximum AI spend or the $0 non-repository message.
+5. Review the selected workflow description.
 6. Select **Start Scan**.
 
 Only one active scan may run against the same target. Wait for it to finish or cancel it before starting another.
 
-Possible lifecycle states include Queued, Preflight, Running, Verifying, Completed, Failed, Cancelled, Stopped Budget, Timed Out, and Requires Approval. The list refreshes active scans automatically and also provides manual **Refresh**, **Cancel**, and **Load more** actions.
+Possible lifecycle states include Queued, Preflight, Running, Verifying, Completed, Failed, Cancelled, Stopped by Limit, Timed Out, and Requires Approval. The list refreshes active scans automatically and also provides manual **Refresh**, **Cancel**, and **Load more** actions.
 
 ## 10. Understand scan details
 
@@ -222,8 +212,7 @@ Open a scan to review:
 - status, goal, review depth, duration, and trigger type;
 - target and completed scanner scope;
 - summary and coverage warnings;
-- selected model, reasoning effort, and maximum spend for repository scans;
-- billed cost, engine-reported cost before a cap when different, request count, and token usage;
+- selected model and reasoning effort for repository scans;
 - immutable result-manifest checksum;
 - coverage receipts grouped by scanner and Vibe Security 50 family;
 - findings sorted by severity;
@@ -348,7 +337,7 @@ Open **More → Schedules → New Schedule** and configure:
 
 Built-in descriptions recognize common daily, weekly, and monthly cron expressions. Custom expressions remain UTC and should be verified before saving.
 
-Each schedule displays its target, review depth, human-readable timing, last run, next run, and enabled state. You can enable/disable or delete a schedule. The displayed maximum is per run; non-repository runs have $0 AI-model cost.
+Each schedule displays its target, review depth, human-readable timing, last run, next run, and enabled state. You can enable/disable or delete a schedule.
 
 ## 18. Notifications
 
@@ -440,15 +429,11 @@ Billing plans, plan quotas, automatic server-generated Fix PRs, intrusive exploi
 - Confirm your role has scan-create permission.
 - Check whether the target already has an active scan.
 - For repository scans, confirm the worker, Redis queue, model deployment, provider credentials, sandbox image, and evidence storage are available.
-- Review the returned error and scan events; do not repeatedly retry a provider-billable failure.
+- Review the returned error and scan events; do not repeatedly retry the same failed run.
 
 ### A scan has no findings
 
 Open the scan detail and read coverage receipts and warnings. No findings may mean the assigned checks returned no mapped result, a scanner was not applicable, evidence is required, or the scan was limited. It is not proof that every control passed.
-
-### Cost is blank
-
-URL/API targets correctly show $0 AI-model cost. Repository cost may remain unavailable when the engine returned neither cost nor complete standard-context token counters, or when aggregated long-context usage cannot be priced accurately. Reconcile engine-reported usage with the configured provider meter during controlled production scans.
 
 ### A report or scorecard link stopped working
 
@@ -463,9 +448,9 @@ For most solo builders and small teams:
 3. Run Code Review before a meaningful release.
 4. Inspect coverage and limitations before interpreting findings.
 5. Record the fix proposal, apply the change, and queue a fresh retest.
-6. Run Deep Security Review for high-risk or complex releases when the additional budget is justified.
+6. Run Deep Security Review for high-risk or complex releases that need additional depth.
 7. Generate the report appropriate for the reader.
 8. Publish a privacy-bounded scorecard only when you want a public artifact.
 9. Add Weekly Monitor after the first release.
 
-This keeps routine work inexpensive while preserving deeper review for releases where it provides the most value.
+This keeps routine work simple while preserving deeper review for releases where it provides the most value.
