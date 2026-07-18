@@ -35,13 +35,13 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
-    "@cloudflare/workers-types": "^5.20260708.1",
+    "@cloudflare/workers-types": "^5.20260718.1",
     "@tailwindcss/typography": "^0.5.20",
     "@types/node": "^22.20.1",
     "lighthouse": "^13.4.0",
     "puppeteer": "^25.3.0",
     "typescript": "^6.0.0",
-    "wrangler": "^4.110.0"
+    "wrangler": "^4.112.0"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -24,8 +24,8 @@
     "eslint-config-next": "^16.2.10",
     "eslint-plugin-security": "^3.0.1",
     "prettier": "^3.9.5",
-    "prettier-plugin-tailwindcss": "^0.8.0",
-    "turbo": "^2.10.4",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "turbo": "^2.10.5",
     "vitest": "^4.1.9"
   },
   "packageManager": "pnpm@11.6.0",
