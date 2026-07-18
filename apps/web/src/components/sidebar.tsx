@@ -92,7 +92,8 @@ function SidebarPanel({
             alt=""
             width={32}
             height={32}
-            className="size-8"
+            className="h-8 w-auto"
+            style={{ width: "auto", height: "auto" }}
             aria-hidden="true"
           />
         </div>
@@ -266,7 +267,8 @@ export function Sidebar({
               alt=""
               width={28}
               height={28}
-              className="size-7"
+              className="h-7 w-auto"
+              style={{ width: "auto", height: "auto" }}
               aria-hidden="true"
             />
           </div>

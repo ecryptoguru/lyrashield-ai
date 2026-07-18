@@ -43,6 +43,15 @@ interface ScanData {
   summary: string | null
   errorCategory: string | null
   errorMessage: string | null
+  cost: {
+    providerUsd: string | null
+    billedUsd: string | null
+    legacyBilledCents: number | null
+    requestCount: number | null
+    inputTokens: number | null
+    cachedInputTokens: number | null
+    outputTokens: number | null
+  }
   createdAt: string
   target: {
     id: string
@@ -54,7 +63,14 @@ interface ScanData {
   events: ScanEvent[]
   integrity: {
     manifestChecksum: string | null
-    coverage: Array<{ scanner: string; controlId: string; status: string; reason: string | null }>
+    coverage: Array<{
+      scanner: string
+      controlId: string
+      status: string
+      reason: string | null
+      subject: string | null
+      metadata: Record<string, unknown> | null
+    }>
   }
 }
 
@@ -102,7 +118,7 @@ const GOAL_LABELS: Record<string, string> = {
   TEST_APP: "Test App",
   LAUNCH_REVIEW: "Launch Review",
   WEEKLY_MONITOR: "Weekly Monitor",
-  FULL_PENTEST: "Full Pentest",
+  FULL_PENTEST: "Deep Security Review",
   COMPLIANCE_REVIEW: "Compliance Review",
 }
 
@@ -117,6 +133,7 @@ const SCANNER_LABELS: Record<string, string> = {
   engine: "Engine review",
   agent_config: "Agent configuration",
   sca: "Dependency scan",
+  secrets: "Secret scan",
   url: "URL scan",
 }
 
@@ -155,6 +172,7 @@ export function ScanDetailClient({
         const updated = json.data
         setScan({
           ...updated,
+          target: scan.target,
           startedAt: updated.startedAt ?? null,
           endedAt: updated.endedAt ?? null,
           events: (updated.events ?? []).map((e: { createdAt: string | Date }) => ({
@@ -162,6 +180,35 @@ export function ScanDetailClient({
             createdAt:
               e.createdAt instanceof Date ? e.createdAt.toISOString() : String(e.createdAt),
           })),
+          integrity: {
+            manifestChecksum: updated.resultManifest?.checksum ?? null,
+            coverage: (updated.coverageReceipts ?? []).map(
+              (receipt: {
+                scanner: string
+                controlId: string
+                status: string
+                reason?: string | null
+                subject?: string | null
+                metadata?: Record<string, unknown> | null
+              }) => ({
+                scanner: receipt.scanner,
+                controlId: receipt.controlId,
+                status: receipt.status,
+                reason: receipt.reason ?? null,
+                subject: receipt.subject ?? null,
+                metadata: receipt.metadata ?? null,
+              })
+            ),
+          },
+          cost: {
+            providerUsd: updated.providerCostUsd ? String(updated.providerCostUsd) : null,
+            billedUsd: updated.billedCostUsd ? String(updated.billedCostUsd) : null,
+            legacyBilledCents: updated.actualCostCents ?? null,
+            requestCount: updated.llmRequestCount ?? null,
+            inputTokens: updated.llmInputTokens ?? null,
+            cachedInputTokens: updated.llmCachedInputTokens ?? null,
+            outputTokens: updated.llmOutputTokens ?? null,
+          },
         })
         if (
           ["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(
@@ -180,7 +227,7 @@ export function ScanDetailClient({
     } catch {
       // Network errors during polling are non-fatal — keep showing stale data
     }
-  }, [scan.id])
+  }, [scan.id, scan.target])
 
   useEffect(() => {
     if (!isActive) return
@@ -205,11 +252,29 @@ export function ScanDetailClient({
   const visibleEvents = expandedEvents ? scan.events : scan.events.slice(-10)
   const coverageWarnings = getScannerCoverageWarnings(scan.events)
   const hasLimitedCoverage = coverageWarnings.length > 0
-  const incompleteCoverage = scan.integrity.coverage.filter(
+  const familyCoverage = scan.integrity.coverage.filter(
+    (receipt) => !receipt.controlId.startsWith("vibe-")
+  )
+  const controlCoverage = scan.integrity.coverage.filter((receipt) =>
+    receipt.controlId.startsWith("vibe-")
+  )
+  const incompleteCoverage = familyCoverage.filter(
     (receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status)
+  )
+  const controlOutcomeCounts = controlCoverage.reduce(
+    (counts, receipt) => {
+      const outcome =
+        typeof receipt.metadata?.outcome === "string" ? receipt.metadata.outcome : receipt.status
+      counts[outcome] = (counts[outcome] ?? 0) + 1
+      return counts
+    },
+    {} as Record<string, number>
   )
   const reviewProfile = getScanReviewProfile(scan.events)
   const topFinding = sortedFindings[0]
+  const billedCost =
+    scan.cost.billedUsd ??
+    (scan.cost.legacyBilledCents !== null ? (scan.cost.legacyBilledCents / 100).toFixed(2) : null)
 
   function toggleFinding(id: string) {
     setExpandedFindings((prev) => {
@@ -438,7 +503,7 @@ export function ScanDetailClient({
               verification determine the proof state shown by LyraShield.
             </p>
           </div>
-          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="rounded-md border p-3">
               <dt className="text-muted-foreground text-xs">Analysis path</dt>
               <dd className="mt-1 text-sm font-medium">
@@ -468,14 +533,29 @@ export function ScanDetailClient({
               )}
             </div>
             <div className="rounded-md border p-3">
-              <dt className="text-muted-foreground text-xs">Coverage receipts</dt>
-              <dd className="mt-1 text-sm font-medium">{scan.integrity.coverage.length}</dd>
+              <dt className="text-muted-foreground text-xs">Vibe Security 50</dt>
+              <dd className="mt-1 text-sm font-medium">
+                {controlCoverage.length > 0
+                  ? `${controlCoverage.length} controls recorded`
+                  : "Pending"}
+              </dd>
               <p className="text-muted-foreground mt-1 text-xs">
-                {scan.integrity.coverage.length === 0
-                  ? "No receipt recorded"
-                  : incompleteCoverage.length > 0
-                    ? `${incompleteCoverage.length} limited`
-                    : "No retained limitation"}
+                {controlCoverage.length === 0
+                  ? "No checklist receipt recorded"
+                  : `${controlOutcomeCounts.DETECTED ?? 0} with findings · ${controlOutcomeCounts.EVIDENCE_REQUIRED ?? 0} need evidence`}
+              </p>
+            </div>
+            <div className="rounded-md border p-3">
+              <dt className="text-muted-foreground text-xs">Billed engine cost</dt>
+              <dd className="mt-1 text-sm font-medium">
+                {billedCost !== null ? `$${Number(billedCost).toFixed(6)}` : "Not reported"}
+              </dd>
+              <p className="text-muted-foreground mt-1 text-xs">
+                {scan.cost.providerUsd !== null && scan.cost.providerUsd !== billedCost
+                  ? `$${Number(scan.cost.providerUsd).toFixed(6)} provider-reported before cap`
+                  : scan.cost.inputTokens !== null || scan.cost.outputTokens !== null
+                    ? `${(scan.cost.inputTokens ?? 0).toLocaleString()} in · ${(scan.cost.outputTokens ?? 0).toLocaleString()} out`
+                    : "Waiting for provider usage"}
               </p>
             </div>
           </dl>
@@ -499,7 +579,7 @@ export function ScanDetailClient({
             </Badge>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {scan.integrity.coverage.map((receipt) => (
+            {familyCoverage.map((receipt) => (
               <div key={receipt.controlId} className="rounded-md border p-3 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium">
@@ -523,6 +603,78 @@ export function ScanDetailClient({
               </div>
             ))}
           </div>
+          {controlCoverage.length > 0 && (
+            <div className="mt-5 border-t pt-5">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {[
+                  ["Findings mapped", controlOutcomeCounts.DETECTED ?? 0, "danger"],
+                  ["No finding returned", controlOutcomeCounts.NO_FINDING ?? 0, "success"],
+                  ["Evidence required", controlOutcomeCounts.EVIDENCE_REQUIRED ?? 0, "warning"],
+                  ["Inconclusive", controlOutcomeCounts.INCONCLUSIVE ?? 0, "warning"],
+                  ["Not applicable", controlOutcomeCounts.NOT_APPLICABLE ?? 0, "muted"],
+                ].map(([label, count, variant]) => (
+                  <div key={String(label)} className="rounded-md border p-3">
+                    <p className="text-muted-foreground text-xs">{label}</p>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <span className="text-lg font-semibold">{count}</span>
+                      <Badge variant={variant as "danger" | "success" | "warning" | "muted"}>
+                        {count}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-muted-foreground mt-3 text-xs">
+                “No finding returned” means an applicable scanner completed without reporting this
+                issue. It is not an independent verification or a security guarantee.
+              </p>
+              <details className="mt-4 rounded-md border">
+                <summary className="hover:bg-muted/50 flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
+                  Review all 50 control receipts
+                  <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+                </summary>
+                <div className="border-t">
+                  {controlCoverage.map((receipt) => {
+                    const rank =
+                      typeof receipt.metadata?.rank === "number" ? receipt.metadata.rank : null
+                    const title =
+                      typeof receipt.metadata?.title === "string"
+                        ? receipt.metadata.title
+                        : receipt.controlId
+                    const outcome =
+                      typeof receipt.metadata?.outcome === "string"
+                        ? receipt.metadata.outcome
+                        : receipt.status
+                    const badgeVariant =
+                      outcome === "DETECTED"
+                        ? "danger"
+                        : outcome === "NO_FINDING"
+                          ? "success"
+                          : outcome === "NOT_APPLICABLE"
+                            ? "muted"
+                            : "warning"
+                    return (
+                      <div
+                        key={receipt.controlId}
+                        className="grid gap-2 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">
+                            {rank ? `${rank}. ` : ""}
+                            {title}
+                          </p>
+                          {receipt.reason && (
+                            <p className="text-muted-foreground mt-1 text-xs">{receipt.reason}</p>
+                          )}
+                        </div>
+                        <Badge variant={badgeVariant}>{outcome.replaceAll("_", " ")}</Badge>
+                      </div>
+                    )
+                  })}
+                </div>
+              </details>
+            </div>
+          )}
           {scan.integrity.manifestChecksum && (
             <p className="text-muted-foreground mt-3 font-mono text-xs">
               Manifest SHA-256: {scan.integrity.manifestChecksum}

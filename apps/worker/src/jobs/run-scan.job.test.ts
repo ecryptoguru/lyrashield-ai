@@ -88,11 +88,11 @@ vi.mock("../engine/scanner-orchestrator", () => ({
   }),
 }))
 
-import { extractActualCostUsd, processScanJob } from "./run-scan.job"
+import { extractActualCostUsd, extractUsageSummary, processScanJob } from "./run-scan.job"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
-import { completeRetestsForScan } from "../engine/result-integrity"
+import { completeRetestsForScan, persistResultManifest } from "../engine/result-integrity"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
 import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { notifyScanCompleted } from "../notifications"
@@ -104,8 +104,10 @@ import {
   prisma,
 } from "@lyrashield/db"
 
+const discardMock = vi.fn()
 const mockJob = {
   id: "job-1",
+  discard: discardMock,
   data: {
     scanId: "scan-1",
     workspaceId: "ws-1",
@@ -151,6 +153,25 @@ it("extracts only finite non-negative engine cost signals", () => {
   expect(extractActualCostUsd({ total_cost_usd: 3.25 })).toBe(3.25)
   expect(extractActualCostUsd({ cost: -1 })).toBeNull()
   expect(extractActualCostUsd({ tokens: 100 })).toBeNull()
+})
+
+it("extracts a privacy-bounded provider usage summary", () => {
+  expect(
+    extractUsageSummary({
+      request_count: 3,
+      input_tokens: 12_345,
+      cached_input_tokens: 4_000,
+      output_tokens: 678,
+      total_cost_usd: 1.234567,
+      prompt: "must not be retained",
+    })
+  ).toEqual({
+    requestCount: 3,
+    inputTokens: 12_345,
+    cachedInputTokens: 4_000,
+    outputTokens: 678,
+    providerCostUsd: 1.234567,
+  })
 })
 
 describe("processScanJob", () => {
@@ -231,6 +252,7 @@ describe("processScanJob", () => {
       undefined,
       expect.any(Function)
     )
+    expect(discardMock).toHaveBeenCalledOnce()
     expect(addScanEvent).toHaveBeenCalledWith(
       "scan-1",
       "coverage_contract",
@@ -246,6 +268,7 @@ describe("processScanJob", () => {
     } as never)
     const policyJob = {
       id: "job-policy-1",
+      discard: vi.fn(),
       data: {
         scanId: "scan-1",
         workspaceId: "ws-1",
@@ -293,14 +316,23 @@ describe("processScanJob", () => {
 
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
-      data: { actualCostCents: 120 },
+      data: {
+        providerCostUsd: "2.750000",
+        billedCostUsd: "1.200000",
+        actualCostCents: 120,
+        llmRequestCount: null,
+        llmInputTokens: null,
+        llmCachedInputTokens: null,
+        llmOutputTokens: null,
+      },
     })
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
       errorCategory: "BUDGET_EXCEEDED",
       errorMessage: "Engine reported spend above the worker budget cap",
       actualCostCents: 120,
     })
-    expect(persistFindings).not.toHaveBeenCalled()
+    expect(persistFindings).toHaveBeenCalled()
+    expect(persistResultManifest).toHaveBeenCalled()
     expect(completeScanWithScore).not.toHaveBeenCalled()
   })
 
@@ -464,8 +496,10 @@ describe("processScanJob", () => {
 
   it("fails closed without replaying a billable scan when evidence storage is unconfigured", async () => {
     vi.mocked(persistFindings).mockRejectedValue(new EvidenceStorageConfigurationError())
+    const discard = vi.fn()
     const retryingJob = {
       id: "job-evidence-storage-1",
+      discard,
       attemptsMade: 0,
       opts: { attempts: 3 },
       data: {
@@ -487,6 +521,7 @@ describe("processScanJob", () => {
       "FAILED",
       expect.objectContaining({ errorCategory: "EVIDENCE_STORAGE_CONFIGURATION" })
     )
+    expect(discard).toHaveBeenCalledOnce()
   })
 
   it("always cleans up engine workspace", async () => {

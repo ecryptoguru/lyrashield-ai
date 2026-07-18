@@ -355,6 +355,8 @@ function FindingDetailDrawer({
   const [creatingRetest, setCreatingRetest] = useState(false)
   const [retestError, setRetestError] = useState<string | null>(null)
   const [queuedRetestScanId, setQueuedRetestScanId] = useState<string | null>(null)
+  const knownExploited = detail?.technicalDetail?.includes("CISA KEV:") ?? false
+  const epssSummary = detail?.technicalDetail?.match(/FIRST EPSS: ([^\n]+)/)?.[1]
 
   useEffect(() => {
     let cancelled = false
@@ -629,8 +631,14 @@ function FindingDetailDrawer({
               </div>
             )}
 
-            {(detail.cwe || detail.cvssScore || detail.category) && (
+            {(detail.cwe ||
+              detail.cvssScore ||
+              detail.category ||
+              knownExploited ||
+              epssSummary) && (
               <div className="flex flex-wrap gap-2 text-xs">
+                {knownExploited && <Badge variant="danger">Known exploited · CISA KEV</Badge>}
+                {epssSummary && <Badge variant="warning">EPSS {epssSummary}</Badge>}
                 {detail.cwe && <Badge variant="info">{detail.cwe}</Badge>}
                 {detail.cvssScore != null && (
                   <Badge variant="warning">CVSS {detail.cvssScore}</Badge>

@@ -16,6 +16,7 @@ import {
 import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { formatDate, formatDateTime } from "@/lib/date-format"
 import { Skeleton } from "@/components/ui/skeleton"
+import { getScanPreset, SCAN_PRESETS, type ScanPresetId } from "@/lib/scan-presets"
 
 interface ScheduleItem {
   id: string
@@ -55,8 +56,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   const [targets, setTargets] = useState<TargetOption[]>([])
   const [selectedTargetId, setSelectedTargetId] = useState("")
   const [cron, setCron] = useState("0 0 * * 0")
-  const [goal, setGoal] = useState("WEEKLY_MONITOR")
-  const [mode, setMode] = useState("SAFE")
+  const [presetId, setPresetId] = useState<ScanPresetId>("WEEKLY_MONITOR")
   const [creating, setCreating] = useState(false)
 
   const loadSchedules = useCallback(async () => {
@@ -110,18 +110,18 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
     setCreating(true)
     setError(null)
     try {
+      const preset = getScanPreset(presetId)
       await apiPost(`/api/schedules`, {
         workspaceId,
         targetId: selectedTargetId,
         cron,
-        goal,
-        mode,
+        goal: preset.goal,
+        mode: preset.mode,
       })
       setShowCreateForm(false)
       setSelectedTargetId("")
       setCron("0 0 * * 0")
-      setGoal("WEEKLY_MONITOR")
-      setMode("SAFE")
+      setPresetId("WEEKLY_MONITOR")
       await loadSchedules()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create schedule.")
@@ -205,25 +205,24 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                 />
                 <p className="text-muted-foreground mt-1 text-xs">{describeCron(cron)}</p>
               </FormField>
-              <FormField label="Scan Goal" htmlFor="scan-goal">
-                <Select id="scan-goal" value={goal} onChange={(e) => setGoal(e.target.value)}>
-                  <option value="WEEKLY_MONITOR">Weekly Monitor</option>
-                  <option value="TEST_APP">Test App</option>
-                  <option value="LAUNCH_REVIEW">Launch Review</option>
-                  <option value="CHECK_PR">Check PR</option>
-                  <option value="FULL_PENTEST">Full Pentest</option>
-                  <option value="COMPLIANCE_REVIEW">Compliance Review</option>
+              <FormField label="Review depth" htmlFor="scan-preset">
+                <Select
+                  id="scan-preset"
+                  value={presetId}
+                  onChange={(e) => setPresetId(e.target.value as ScanPresetId)}
+                >
+                  {Object.entries(SCAN_PRESETS).map(([id, preset]) => (
+                    <option key={id} value={id}>
+                      {preset.label}
+                    </option>
+                  ))}
                 </Select>
               </FormField>
             </div>
-            <FormField label="Mode" htmlFor="scan-mode">
-              <Select id="scan-mode" value={mode} onChange={(e) => setMode(e.target.value)}>
-                <option value="SAFE">Safe</option>
-                <option value="QUICK">Quick</option>
-                <option value="STANDARD">Standard</option>
-                <option value="DEEP">Deep</option>
-              </Select>
-            </FormField>
+            <p className="text-muted-foreground text-xs">
+              {getScanPreset(presetId).description} Maximum engine spend: $
+              {getScanPreset(presetId).maxCostUsd.toFixed(2)} per run.
+            </p>
             <div className="flex gap-2">
               <Button
                 size="sm"

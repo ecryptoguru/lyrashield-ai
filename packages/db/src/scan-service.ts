@@ -17,6 +17,7 @@ export interface CreateScanParams {
   policyId?: string
   createdById: string
   triggerType?: string
+  determinismMode?: string
 }
 
 export interface ScanWithEvents extends Scan {
@@ -57,6 +58,7 @@ export async function createScan(params: CreateScanParams): Promise<Scan> {
         policyId: params.policyId ?? null,
         status: "QUEUED",
         triggerType: params.triggerType ?? "manual",
+        determinismMode: params.determinismMode ?? "default",
         createdById: params.createdById,
       },
     })

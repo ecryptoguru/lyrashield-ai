@@ -6,6 +6,7 @@ const requirePermission = vi.fn()
 const enqueueScanJob = vi.fn()
 const prisma = {
   scan: { findFirst: vi.fn(), update: vi.fn() },
+  findingCandidate: { findMany: vi.fn() },
   retest: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   auditLog: { create: vi.fn() },
 }
@@ -31,6 +32,7 @@ describe("POST /api/findings/[id]/retests", () => {
       policyId: null,
     })
     prisma.retest.findFirst.mockResolvedValue(null)
+    prisma.findingCandidate.findMany.mockResolvedValue([{ scannerSource: "engine" }])
     createScan.mockResolvedValue({ id: "retest-scan", status: "QUEUED" })
     prisma.retest.create.mockResolvedValue({
       id: "retest-1",

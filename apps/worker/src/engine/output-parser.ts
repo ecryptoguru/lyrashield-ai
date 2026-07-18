@@ -19,6 +19,7 @@ export interface EngineVulnerability {
   poc_description?: string
   poc_script_code?: string
   remediation_steps?: string
+  control_ids?: number[]
   code_locations?: Array<{
     file?: string
     start_line?: number
@@ -65,7 +66,8 @@ const MAX_ENGINE_FINDINGS = 1_000
 const MAX_TEXT_FIELD_LENGTH = 64 * 1024
 const MAX_CODE_LOCATIONS = 100
 const MAX_RUN_TARGETS = 100
-const MAX_LLM_USAGE_FIELDS = 100
+const MAX_CONTROL_IDS = 10
+const MAX_LLM_USAGE_NODES = 500
 
 function boundedString(value: unknown): string | undefined {
   return typeof value === "string" && value.length <= MAX_TEXT_FIELD_LENGTH ? value : undefined
@@ -102,6 +104,93 @@ function validateCodeLocations(value: unknown): EngineVulnerability["code_locati
     })
   }
   return locations
+}
+
+function validateControlIds(value: unknown): number[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_CONTROL_IDS) return undefined
+  const controlIds = [
+    ...new Set(
+      value.filter(
+        (candidate): candidate is number =>
+          typeof candidate === "number" &&
+          Number.isInteger(candidate) &&
+          candidate >= 1 &&
+          candidate <= 50
+      )
+    ),
+  ]
+  return controlIds.length > 0 ? controlIds : undefined
+}
+
+function nonnegativeNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+function findUsageMetric(
+  value: unknown,
+  keys: ReadonlySet<string>,
+  visited = { count: 0 },
+  depth = 0
+): number | undefined {
+  if (depth > 4 || visited.count >= MAX_LLM_USAGE_NODES || value === null) return undefined
+  visited.count += 1
+  if (Array.isArray(value)) {
+    const values = value
+      .map((item) => findUsageMetric(item, keys, visited, depth + 1))
+      .filter((candidate): candidate is number => candidate !== undefined)
+    return values.length > 0 ? values.reduce((sum, candidate) => sum + candidate, 0) : undefined
+  }
+  if (typeof value !== "object") return undefined
+  const record = value as Record<string, unknown>
+  for (const key of keys) {
+    const direct = nonnegativeNumber(record[key])
+    if (direct !== undefined) return direct
+  }
+  const values = Object.values(record)
+    .map((item) => findUsageMetric(item, keys, visited, depth + 1))
+    .filter((candidate): candidate is number => candidate !== undefined)
+  return values.length > 0 ? values.reduce((sum, candidate) => sum + candidate, 0) : undefined
+}
+
+function normalizeLlmUsage(value: unknown): Record<string, number> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  const requests = findUsageMetric(record, new Set(["request_count", "requests_count", "requests"]))
+  const requestCount =
+    requests ?? (Array.isArray(record.requests) ? record.requests.length : undefined)
+  const inputTokens = findUsageMetric(
+    record,
+    new Set(["input_tokens", "prompt_tokens", "input_token_count"])
+  )
+  const cachedInputTokens = findUsageMetric(
+    record,
+    new Set(["cached_input_tokens", "cached_tokens"])
+  )
+  const outputTokens = findUsageMetric(
+    record,
+    new Set(["output_tokens", "completion_tokens", "output_token_count"])
+  )
+  const reportedTotalTokens = findUsageMetric(record, new Set(["total_tokens", "token_count"]))
+  const totalTokens =
+    reportedTotalTokens ??
+    (inputTokens !== undefined || outputTokens !== undefined
+      ? (inputTokens ?? 0) + (outputTokens ?? 0)
+      : undefined)
+  const totalCostUsd = findUsageMetric(
+    record,
+    new Set(["total_cost_usd", "cost_usd", "total_cost", "cost"])
+  )
+  const normalized = {
+    ...(requestCount !== undefined ? { request_count: Math.trunc(requestCount) } : {}),
+    ...(inputTokens !== undefined ? { input_tokens: Math.trunc(inputTokens) } : {}),
+    ...(cachedInputTokens !== undefined
+      ? { cached_input_tokens: Math.trunc(cachedInputTokens) }
+      : {}),
+    ...(outputTokens !== undefined ? { output_tokens: Math.trunc(outputTokens) } : {}),
+    ...(totalTokens !== undefined ? { total_tokens: Math.trunc(totalTokens) } : {}),
+    ...(totalCostUsd !== undefined ? { total_cost_usd: totalCostUsd } : {}),
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined
 }
 
 function validateVulnerability(v: Record<string, unknown>): EngineVulnerability | null {
@@ -155,6 +244,9 @@ function validateVulnerability(v: Record<string, unknown>): EngineVulnerability 
       : {}),
     ...(boundedString(v.remediation_steps)
       ? { remediation_steps: boundedString(v.remediation_steps) }
+      : {}),
+    ...(validateControlIds(v.control_ids)
+      ? { control_ids: validateControlIds(v.control_ids) }
       : {}),
     ...(validateCodeLocations(v.code_locations)
       ? { code_locations: validateCodeLocations(v.code_locations) }
@@ -211,22 +303,7 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
           return sourcePath ? [{ details: { cloned_repo_path: sourcePath } }] : []
         })
       : undefined
-    const llmUsage: Record<string, unknown> = {}
-    if (
-      typeof record.llm_usage === "object" &&
-      record.llm_usage !== null &&
-      !Array.isArray(record.llm_usage)
-    ) {
-      for (const [key, value] of Object.entries(record.llm_usage).slice(0, MAX_LLM_USAGE_FIELDS)) {
-        if (
-          typeof value === "number" ||
-          typeof value === "boolean" ||
-          (typeof value === "string" && value.length <= MAX_TEXT_FIELD_LENGTH)
-        ) {
-          llmUsage[key] = value
-        }
-      }
-    }
+    const llmUsage = normalizeLlmUsage(record.llm_usage)
 
     return {
       run_id: runId,
@@ -235,7 +312,7 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       end_time: boundedString(record.end_time) ?? null,
       status,
       ...(targetsInfo ? { targets_info: targetsInfo } : {}),
-      ...(Object.keys(llmUsage).length > 0 ? { llm_usage: llmUsage } : {}),
+      ...(llmUsage ? { llm_usage: llmUsage } : {}),
     }
   } catch (err) {
     logger.error("Failed to parse run.json", {

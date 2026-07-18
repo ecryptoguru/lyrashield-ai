@@ -38,6 +38,36 @@ describe("result integrity", () => {
     expect(receipts.find((receipt) => receipt.scanner === "secrets")).toMatchObject({
       status: "COMPLETED",
     })
+    expect(receipts).toHaveLength(55)
+    expect(receipts.find((receipt) => receipt.controlId === "vibe-34")).toMatchObject({
+      status: "BLOCKED",
+      metadata: expect.objectContaining({ outcome: "EVIDENCE_REQUIRED" }),
+    })
+    expect(receipts.find((receipt) => receipt.controlId === "vibe-37")).toMatchObject({
+      status: "BLOCKED",
+      metadata: expect.objectContaining({ outcome: "INCONCLUSIVE" }),
+    })
+  })
+
+  it("records detected and no-finding control outcomes without claiming verification", () => {
+    const receipts = buildCoverageReceipts({
+      scanId: "scan-1",
+      target: { id: "target-1", type: "URL", url: "https://example.com" },
+      sourceCheckoutAvailable: false,
+      engineFindingCount: 0,
+      coverageIssues: [],
+      matchedControlRanks: [14],
+    })
+
+    expect(receipts.find((receipt) => receipt.controlId === "vibe-14")).toMatchObject({
+      status: "COMPLETED",
+      metadata: expect.objectContaining({ outcome: "DETECTED" }),
+    })
+    expect(receipts.find((receipt) => receipt.controlId === "vibe-27")).toMatchObject({
+      status: "COMPLETED",
+      reason: expect.stringContaining("not independent verification"),
+      metadata: expect.objectContaining({ outcome: "NO_FINDING" }),
+    })
   })
 
   it("retains every coverage limitation and subject in the scanner receipt", () => {
