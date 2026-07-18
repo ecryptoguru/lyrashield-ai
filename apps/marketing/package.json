@@ -41,7 +41,7 @@
     "lighthouse": "^13.4.0",
     "puppeteer": "^25.3.0",
     "typescript": "^6.0.0",
-    "wrangler": "^4.110.0"
+    "wrangler": "^4.112.0"
   },
   "engines": {
     "node": ">=20.0.0"
