@@ -223,6 +223,65 @@ describe("output-parser", () => {
 
       expect(result?.llm_usage).toEqual({ request_count: 600 })
     })
+
+    it("retains aggregate cache counters even when nested request usage is wide", () => {
+      const requests = Array.from({ length: 600 }, () => ({ usage: { input_tokens: 1 } }))
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-cache-root",
+          status: "completed",
+          llm_usage: {
+            requests,
+            input_tokens: 2_725_857,
+            output_tokens: 7_713,
+            input_tokens_details: { cached_tokens: 1_700_000, cache_write_tokens: 10_000 },
+          },
+        })
+      )
+
+      expect(result?.llm_usage).toMatchObject({
+        request_count: 600,
+        input_tokens: 2_725_857,
+        cached_input_tokens: 1_700_000,
+        cache_write_input_tokens: 10_000,
+        output_tokens: 7_713,
+      })
+    })
+
+    it("separates long-context request usage from standard request usage", () => {
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-pricing-buckets",
+          status: "completed",
+          llm_usage: {
+            requests: 2,
+            input_tokens: 300_100,
+            output_tokens: 30,
+            request_usage_entries: [
+              {
+                input_tokens: 100,
+                output_tokens: 10,
+                input_tokens_details: [{ cached_tokens: 20 }],
+              },
+              {
+                input_tokens: 300_000,
+                output_tokens: 20,
+                input_tokens_details: [{ cached_tokens: 200_000 }],
+              },
+            ],
+          },
+        })
+      )
+
+      expect(result?.llm_usage).toMatchObject({
+        standard_input_tokens: 100,
+        standard_cached_input_tokens: 20,
+        standard_output_tokens: 10,
+        long_input_tokens: 300_000,
+        long_cached_input_tokens: 200_000,
+        long_output_tokens: 20,
+      })
+    })
   })
 
   describe("parseEngineOutput", () => {

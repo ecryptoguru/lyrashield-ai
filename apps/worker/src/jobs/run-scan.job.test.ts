@@ -166,6 +166,7 @@ it("extracts a privacy-bounded provider usage summary", () => {
       request_count: 3,
       input_tokens: 12_345,
       cached_input_tokens: 4_000,
+      cache_write_input_tokens: 500,
       output_tokens: 678,
       total_cost_usd: 1.234567,
       prompt: "must not be retained",
@@ -174,14 +175,18 @@ it("extracts a privacy-bounded provider usage summary", () => {
     requestCount: 3,
     inputTokens: 12_345,
     cachedInputTokens: 4_000,
+    cacheWriteInputTokens: 500,
     outputTokens: 678,
+    pricingBuckets: null,
     engineReportedCostUsd: 1.234567,
   })
   expect(extractUsageSummary({ request_count: 1.5, input_tokens: 2_147_483_648 })).toEqual({
     requestCount: null,
     inputTokens: null,
     cachedInputTokens: null,
+    cacheWriteInputTokens: null,
     outputTokens: null,
+    pricingBuckets: null,
     engineReportedCostUsd: null,
   })
 })
@@ -323,7 +328,7 @@ describe("processScanJob", () => {
     await expect(processScanJob(mockJob)).resolves.toEqual({
       status: "failed",
       errorCategory: "BUDGET_EXCEEDED",
-      errorMessage: "Engine reported spend above the worker budget cap",
+      errorMessage: "Protected run limit reached",
     })
 
     expect(prisma.scan.update).toHaveBeenCalledWith({
@@ -342,13 +347,13 @@ describe("processScanJob", () => {
       where: { id: "scan-1" },
       data: {
         errorCategory: "BUDGET_EXCEEDED",
-        errorMessage: "Engine reported spend above the worker budget cap",
+        errorMessage: "Protected run limit reached",
         actualCostCents: 120,
       },
     })
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
       errorCategory: "BUDGET_EXCEEDED",
-      errorMessage: "Engine reported spend above the worker budget cap",
+      errorMessage: "Protected run limit reached",
       actualCostCents: 120,
     })
     expect(persistFindings).toHaveBeenCalled()
@@ -393,11 +398,57 @@ describe("processScanJob", () => {
       "scan-1",
       "llm_usage",
       "info",
-      "Official GPT-5.6 rates calculated $0.026790; bill capped at $0.026790",
+      "AI usage counters recorded",
       expect.objectContaining({
         calculatedCostUsd: 0.02679,
         costSource: "openai_rate_card",
         pricingEffectiveDate: "2026-07-09",
+        reconciliationStatus: "unavailable",
+      })
+    )
+  })
+
+  it("uses the conservative rate-card basis when provider telemetry disagrees", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 0,
+      output: {
+        vulnerabilities: [],
+        runRecord: {
+          run_id: "r-reconciliation",
+          status: "completed",
+          llm_usage: {
+            request_count: 7,
+            input_tokens: 18_420,
+            cached_input_tokens: 6_100,
+            output_tokens: 2_310,
+            total_cost_usd: 0.02,
+          },
+        },
+        summary: "Engine completed with provider telemetry",
+        findingCount: 0,
+      },
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: expect.objectContaining({
+        providerCostUsd: "0.020000",
+        billedCostUsd: "0.026790",
+        actualCostCents: 3,
+      }),
+    })
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "llm_usage",
+      "info",
+      "AI usage counters recorded",
+      expect.objectContaining({
+        calculatedCostUsd: 0.02679,
+        engineReportedCostUsd: 0.02,
+        costSource: "rate_card_and_engine_reported",
+        reconciliationStatus: "mismatch",
       })
     )
   })
@@ -572,7 +623,7 @@ describe("processScanJob", () => {
       status: "VERIFYING",
       summary: "Stopped above budget",
       errorCategory: "BUDGET_EXCEEDED",
-      errorMessage: "Engine reported spend above the worker budget cap",
+      errorMessage: "Protected run limit reached",
       actualCostCents: 120,
       resultManifest: { id: "manifest-1" },
       events: [{ id: "event-1" }],
@@ -585,7 +636,7 @@ describe("processScanJob", () => {
 
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
       errorCategory: "BUDGET_EXCEEDED",
-      errorMessage: "Engine reported spend above the worker budget cap",
+      errorMessage: "Protected run limit reached",
       actualCostCents: 120,
     })
     expect(completeScanWithScore).not.toHaveBeenCalled()

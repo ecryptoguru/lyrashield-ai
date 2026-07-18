@@ -68,15 +68,6 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     summary: scan.summary,
     errorCategory: scan.errorCategory,
     errorMessage: scan.errorMessage,
-    cost: {
-      providerUsd: scan.providerCostUsd?.toString() ?? null,
-      billedUsd: scan.billedCostUsd?.toString() ?? null,
-      legacyBilledCents: scan.actualCostCents,
-      requestCount: scan.llmRequestCount,
-      inputTokens: scan.llmInputTokens,
-      cachedInputTokens: scan.llmCachedInputTokens,
-      outputTokens: scan.llmOutputTokens,
-    },
     createdAt: scan.createdAt.toISOString(),
     target: target
       ? {

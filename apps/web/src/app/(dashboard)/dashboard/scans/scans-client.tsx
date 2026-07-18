@@ -266,8 +266,8 @@ export function ScansClient({
               <p className="text-muted-foreground mt-1 text-xs">
                 {getScanPreset(selectedPreset).description}{" "}
                 {selectedTarget && !selectedTargetUsesEngine
-                  ? "This target uses deterministic scanners, so its AI model cost is $0."
-                  : `Maximum AI engine spend: $${getScanPreset(selectedPreset).maxCostUsd.toFixed(2)}.`}
+                  ? "This target uses deterministic scanners."
+                  : "A protected run limit is applied automatically."}
               </p>
             </FormField>
           </div>

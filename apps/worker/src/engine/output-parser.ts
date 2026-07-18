@@ -70,6 +70,8 @@ const MAX_CONTROL_IDS = 10
 const MAX_LLM_USAGE_NODES = 500
 const MAX_DB_INTEGER = 2_147_483_647
 const MAX_DB_DECIMAL_12_6 = 1_000_000
+const MAX_LLM_USAGE_REQUESTS = 10_000
+const GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
 
 function boundedString(value: unknown): string | undefined {
   return typeof value === "string" && value.length <= MAX_TEXT_FIELD_LENGTH ? value : undefined
@@ -195,6 +197,16 @@ function findUsageMetric(
 function normalizeLlmUsage(value: unknown): Record<string, number> | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
+  const inputTokenDetails =
+    typeof record.input_tokens_details === "object" &&
+    record.input_tokens_details !== null &&
+    !Array.isArray(record.input_tokens_details)
+      ? (record.input_tokens_details as Record<string, unknown>)
+      : undefined
+  // Prefer the aggregate root counters. A wide per-request usage payload may
+  // exceed the bounded recursive traversal, which previously dropped cached
+  // input tokens and made the stored cost impossible to reconcile.
+  const directInteger = (key: string) => usageInteger(record[key])
   const requests = findUsageMetric(
     record,
     new Set(["request_count", "requests_count", "requests"]),
@@ -202,21 +214,32 @@ function normalizeLlmUsage(value: unknown): Record<string, number> | undefined {
   )
   const requestCount =
     requests ?? (Array.isArray(record.requests) ? usageInteger(record.requests.length) : undefined)
-  const inputTokens = findUsageMetric(
-    record,
-    new Set(["input_tokens", "prompt_tokens", "input_token_count"]),
-    usageInteger
-  )
-  const cachedInputTokens = findUsageMetric(
-    record,
-    new Set(["cached_input_tokens", "cached_tokens"]),
-    usageInteger
-  )
-  const outputTokens = findUsageMetric(
-    record,
-    new Set(["output_tokens", "completion_tokens", "output_token_count"]),
-    usageInteger
-  )
+  const inputTokens =
+    directInteger("input_tokens") ??
+    findUsageMetric(
+      record,
+      new Set(["input_tokens", "prompt_tokens", "input_token_count"]),
+      usageInteger
+    )
+  const cachedInputTokens =
+    usageInteger(inputTokenDetails?.cached_tokens) ??
+    directInteger("cached_input_tokens") ??
+    findUsageMetric(record, new Set(["cached_input_tokens", "cached_tokens"]), usageInteger)
+  const cacheWriteInputTokens =
+    usageInteger(inputTokenDetails?.cache_write_tokens) ??
+    directInteger("cache_write_input_tokens") ??
+    findUsageMetric(
+      record,
+      new Set(["cache_write_input_tokens", "cache_write_tokens"]),
+      usageInteger
+    )
+  const outputTokens =
+    directInteger("output_tokens") ??
+    findUsageMetric(
+      record,
+      new Set(["output_tokens", "completion_tokens", "output_token_count"]),
+      usageInteger
+    )
   const reportedTotalTokens = findUsageMetric(
     record,
     new Set(["total_tokens", "token_count"]),
@@ -232,15 +255,65 @@ function normalizeLlmUsage(value: unknown): Record<string, number> | undefined {
     new Set(["total_cost_usd", "cost_usd", "total_cost", "cost"]),
     usageCost
   )
+  const requestUsageBuckets = normalizeRequestUsageBuckets(record.request_usage_entries)
   const normalized = {
     ...(requestCount !== undefined ? { request_count: requestCount } : {}),
     ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
     ...(cachedInputTokens !== undefined ? { cached_input_tokens: cachedInputTokens } : {}),
+    ...(cacheWriteInputTokens !== undefined
+      ? { cache_write_input_tokens: cacheWriteInputTokens }
+      : {}),
     ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
     ...(totalTokens !== undefined ? { total_tokens: totalTokens } : {}),
     ...(totalCostUsd !== undefined ? { total_cost_usd: totalCostUsd } : {}),
+    ...requestUsageBuckets,
   }
   return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+function detailInteger(value: unknown, key: string): number | undefined {
+  if (Array.isArray(value)) return detailInteger(value[0], key)
+  if (typeof value !== "object" || value === null) return undefined
+  return usageInteger((value as Record<string, unknown>)[key])
+}
+
+function normalizeRequestUsageBuckets(value: unknown): Record<string, number> {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_LLM_USAGE_REQUESTS) {
+    return {}
+  }
+  const buckets = {
+    standard_input_tokens: 0,
+    standard_cached_input_tokens: 0,
+    standard_cache_write_input_tokens: 0,
+    standard_output_tokens: 0,
+    long_input_tokens: 0,
+    long_cached_input_tokens: 0,
+    long_cache_write_input_tokens: 0,
+    long_output_tokens: 0,
+  }
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return {}
+    const record = entry as Record<string, unknown>
+    const inputTokens = usageInteger(record.input_tokens)
+    const outputTokens = usageInteger(record.output_tokens)
+    const cachedInputTokens = detailInteger(record.input_tokens_details, "cached_tokens") ?? 0
+    const cacheWriteInputTokens =
+      detailInteger(record.input_tokens_details, "cache_write_tokens") ?? 0
+    if (
+      inputTokens === undefined ||
+      outputTokens === undefined ||
+      cachedInputTokens > inputTokens ||
+      cacheWriteInputTokens > inputTokens - cachedInputTokens
+    ) {
+      return {}
+    }
+    const prefix = inputTokens > GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS ? "long" : "standard"
+    buckets[`${prefix}_input_tokens` as keyof typeof buckets] += inputTokens
+    buckets[`${prefix}_cached_input_tokens` as keyof typeof buckets] += cachedInputTokens
+    buckets[`${prefix}_cache_write_input_tokens` as keyof typeof buckets] += cacheWriteInputTokens
+    buckets[`${prefix}_output_tokens` as keyof typeof buckets] += outputTokens
+  }
+  return buckets
 }
 
 function validateVulnerability(v: Record<string, unknown>): EngineVulnerability | null {

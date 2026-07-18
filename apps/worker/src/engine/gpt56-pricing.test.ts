@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { calculateGpt56CostUsd, GPT_56_PRICING_USD_PER_MILLION } from "./gpt56-pricing"
+import {
+  calculateGpt56CostUsd,
+  calculateGpt56CostUsdFromBuckets,
+  GPT_56_PRICING_USD_PER_MILLION,
+} from "./gpt56-pricing"
 
 describe("GPT-5.6 official pricing", () => {
   it("stores the official Sol, Terra, and Luna rates", () => {
@@ -22,6 +26,32 @@ describe("GPT-5.6 official pricing", () => {
         outputTokens: 2_310,
       })
     ).toBe(expected)
+  })
+
+  it("accounts for explicit cache writes", () => {
+    expect(
+      calculateGpt56CostUsd("gpt-5.6-luna", {
+        inputTokens: 27_257,
+        cachedInputTokens: 17_000,
+        cacheWriteInputTokens: 10_000,
+        outputTokens: 7_713,
+      })
+    ).toBe(0.060735)
+  })
+
+  it("applies long-context rates only to requests above 272k input tokens", () => {
+    expect(
+      calculateGpt56CostUsdFromBuckets("gpt-5.6-luna", {
+        standardInputTokens: 100_000,
+        standardCachedInputTokens: 20_000,
+        standardCacheWriteInputTokens: 0,
+        standardOutputTokens: 1_000,
+        longInputTokens: 300_000,
+        longCachedInputTokens: 100_000,
+        longCacheWriteInputTokens: 0,
+        longOutputTokens: 1_000,
+      })
+    ).toBe(0.517)
   })
 
   it("fails closed for unknown models or incomplete usage", () => {
