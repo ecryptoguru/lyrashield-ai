@@ -51,6 +51,31 @@ describe("output-parser", () => {
       expect(parseVulnerabilitiesJson(raw)[0]?.control_ids).toEqual([11, 14])
     })
 
+    it("retains bounded evidence and dependency context", () => {
+      const result = parseVulnerabilitiesJson(
+        JSON.stringify([
+          {
+            ...SAMPLE_VULN,
+            evidence: "Confirmed from the installed lockfile",
+            assumptions: "Package is present in the deployed build",
+            fix_effort: "LOW",
+            finding_class: "dependency_cve",
+            cvss_breakdown: { attack_vector: "N" },
+            dependency_metadata: { package_name: "example", package_ecosystem: "npm" },
+          },
+        ])
+      )
+
+      expect(result[0]).toMatchObject({
+        evidence: "Confirmed from the installed lockfile",
+        assumptions: "Package is present in the deployed build",
+        fix_effort: "low",
+        finding_class: "dependency_cve",
+        cvss_breakdown: { attack_vector: "N" },
+        dependency_metadata: { package_name: "example", package_ecosystem: "npm" },
+      })
+    })
+
     it("returns empty array for empty string", () => {
       expect(parseVulnerabilitiesJson("")).toEqual([])
       expect(parseVulnerabilitiesJson("   ")).toEqual([])
@@ -135,6 +160,32 @@ describe("output-parser", () => {
       expect(result).not.toBeNull()
       expect(result!.run_id).toBe("run-abc")
       expect(result!.status).toBe("completed")
+    })
+
+    it("retains bounded reproducibility metadata", () => {
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-meta",
+          status: "completed",
+          engine_version: "1.1.0",
+          prompt_bundle_hash: "a".repeat(64),
+          model: "azure_ai/gpt-5.6-luna",
+          reasoning_effort: "medium",
+          max_output_tokens: 4096,
+          max_agents: 2,
+          scan_mode: "quick",
+        })
+      )
+
+      expect(result).toMatchObject({
+        engine_version: "1.1.0",
+        prompt_bundle_hash: "a".repeat(64),
+        model: "azure_ai/gpt-5.6-luna",
+        reasoning_effort: "medium",
+        max_output_tokens: 4096,
+        max_agents: 2,
+        scan_mode: "quick",
+      })
     })
 
     it("returns null for empty string", () => {
@@ -261,12 +312,12 @@ describe("output-parser", () => {
               {
                 input_tokens: 100,
                 output_tokens: 10,
-                input_tokens_details: [{ cached_tokens: 20 }],
+                input_tokens_details: [{ cached_tokens: 20, cache_write_tokens: 0 }],
               },
               {
                 input_tokens: 300_000,
                 output_tokens: 20,
-                input_tokens_details: [{ cached_tokens: 200_000 }],
+                input_tokens_details: [{ cached_tokens: 200_000, cache_write_tokens: 0 }],
               },
             ],
           },
@@ -341,6 +392,40 @@ describe("output-parser", () => {
     it("produces a 32-char hex string", () => {
       const key = generateDedupeKey(SAMPLE_VULN, "target-1")
       expect(key).toMatch(/^[a-f0-9]{32}$/)
+    })
+
+    it("does not collapse distinct code locations", () => {
+      const first = generateDedupeKey(SAMPLE_VULN, "target-1")
+      const second = generateDedupeKey(
+        {
+          ...SAMPLE_VULN,
+          code_locations: [{ ...SAMPLE_VULN.code_locations[0], start_line: 100, end_line: 103 }],
+        },
+        "target-1"
+      )
+      expect(first).not.toBe(second)
+    })
+
+    it("correlates the same dependency CVE across independently worded scanners", () => {
+      const engine = generateDedupeKey(
+        {
+          ...SAMPLE_VULN,
+          title: "CVE in dependency",
+          finding_class: "dependency_cve",
+          dependency_metadata: { package_name: "lodash", package_ecosystem: "npm" },
+        },
+        "target-1"
+      )
+      const sca = generateDedupeKey(
+        {
+          ...SAMPLE_VULN,
+          title: "Vulnerable dependency: lodash",
+          finding_class: "dependency_cve",
+          dependency_metadata: { package_name: "lodash", package_ecosystem: "npm" },
+        },
+        "target-1"
+      )
+      expect(engine).toBe(sca)
     })
   })
 

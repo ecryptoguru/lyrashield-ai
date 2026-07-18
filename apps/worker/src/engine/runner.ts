@@ -12,8 +12,6 @@ export interface EngineRunResult {
   cancelled: boolean
   timedOut: boolean
   output: ParsedScanOutput
-  stdout: string
-  stderr: string
   /** Validated host-side checkout for deterministic repository scanners. */
   sourceCheckoutPath: string | null
 }
@@ -60,11 +58,10 @@ export function interpretExitCode(
   )
 }
 
-const MAX_BUFFER_BYTES = 10 * 1024 * 1024
 const MAX_ENGINE_VULNERABILITIES_BYTES = 10 * 1024 * 1024
 const MAX_ENGINE_RUN_BYTES = 1 * 1024 * 1024
-const MAX_STREAM_EVENTS = 200
 const SIGKILL_GRACE_MS = 5000
+const ENGINE_HEARTBEAT_MS = 30_000
 
 export interface KillableChild {
   kill(signal?: NodeJS.Signals): boolean
@@ -126,6 +123,11 @@ export function resolveEngineProfile(
   const selectedModel = deep ? routingEnv.LYRASHIELD_TERRA_LLM : routingEnv.LYRASHIELD_LUNA_LLM
   const model = selectedModel?.trim() || routingEnv.LYRASHIELD_LLM?.trim() || undefined
 
+  const normalizedModel = model?.toLowerCase().replaceAll("_", "-")
+  if (normalizedModel && !/(?:^|[/.-])gpt-5\.6(?:$|[/.-])/.test(normalizedModel)) {
+    throw new Error("LyraShield scans require a GPT-5.6 Sol, Terra, or Luna deployment")
+  }
+
   return { model, reasoningEffort: deep ? "high" : "medium" }
 }
 
@@ -151,7 +153,8 @@ function buildEngineEnv(profile: EngineProfile): Record<string, string> {
     "LYRASHIELD_MAX_LOCAL_COPY_MB",
     "LYRASHIELD_REASONING_EFFORT",
     "LYRASHIELD_TELEMETRY",
-    "PERPLEXITY_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
     "AZURE_OPENAI_API_KEY",
     "AZURE_OPENAI_ENDPOINT",
     "AZURE_OPENAI_API_BASE",
@@ -160,32 +163,20 @@ function buildEngineEnv(profile: EngineProfile): Record<string, string> {
     "AZURE_API_VERSION",
     "AZURE_OPENAI_API_VERSION",
   ])
-  // Prefix-based allowlist for LLM/AI provider API keys so new providers
-  // work without code changes. Each prefix matches env vars like
-  // ANTHROPIC_API_KEY, OPENAI_API_KEY, GROQ_API_KEY, etc.
-  const ALLOWED_PREFIXES = [
-    "LLM_",
-    "AI_",
-    "ANTHROPIC_",
-    "OPENAI_",
-    "AZURE_OPENAI_",
-    "AZURE_AI_",
-    "GROQ_",
-    "MISTRAL_",
-    "TOGETHER_",
-    "FIREWORKS_",
-    "DEEPSEEK_",
-    "GOOGLE_AI_", // Google Vertex AI / Gemini
-  ]
   const filtered: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue
-    if (allow.has(key) || ALLOWED_PREFIXES.some((p) => key.startsWith(p))) {
+    if (allow.has(key)) {
       filtered[key] = value
     }
   }
   if (profile.model) filtered.LYRASHIELD_LLM = profile.model
   filtered.LYRASHIELD_REASONING_EFFORT = profile.reasoningEffort
+  filtered.STRIX_DOCKER_SANDBOX_NETWORK =
+    process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK?.trim() || "none"
+  filtered.STRIX_SANDBOX_MEM_LIMIT = process.env.STRIX_SANDBOX_MEM_LIMIT?.trim() || "4g"
+  filtered.STRIX_SANDBOX_CPUS = process.env.STRIX_SANDBOX_CPUS?.trim() || "2"
+  filtered.STRIX_SANDBOX_PIDS_LIMIT = process.env.STRIX_SANDBOX_PIDS_LIMIT?.trim() || "512"
   return filtered
 }
 
@@ -216,8 +207,6 @@ async function runEngineProcess(
   shouldCancel?: () => Promise<boolean>
 ): Promise<{
   exitCode: number
-  stdout: string
-  stderr: string
   timedOut: boolean
   cancelled: boolean
 }> {
@@ -228,11 +217,8 @@ async function runEngineProcess(
       stdio: ["ignore", "pipe", "pipe"],
     })
 
-    let stdout = ""
-    let stderr = ""
-    let stdoutTruncated = false
-    let stderrTruncated = false
-    let streamEvents = 0
+    let stdoutBytes = 0
+    let stderrBytes = 0
     let timedOut = false
     let cancelled = false
     let closed = false
@@ -262,52 +248,37 @@ async function runEngineProcess(
             .catch(() => {})
         }, 1000)
       : null
+    const startedAt = Date.now()
+    const heartbeatTimer = setInterval(() => {
+      void emitScanEvent(scanId, "engine_activity", "info", "AI analysis is still running", {
+        elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
+      })
+    }, ENGINE_HEARTBEAT_MS)
 
     child.stdout?.on("data", (chunk: Buffer) => {
-      const text = chunk.toString()
-      if (stdout.length < MAX_BUFFER_BYTES) {
-        stdout += text
-      } else if (!stdoutTruncated) {
-        stdoutTruncated = true
-        logger.warn("stdout buffer truncated", { scanId, maxBytes: MAX_BUFFER_BYTES })
-      }
-      const lines = text.trim().split("\n")
-      for (const line of lines) {
-        if (line.trim() && streamEvents++ < MAX_STREAM_EVENTS) {
-          emitScanEvent(scanId, "engine_stdout", "info", line.slice(0, 500), {}).catch(() => {})
-        }
-      }
+      stdoutBytes += chunk.byteLength
     })
 
     child.stderr?.on("data", (chunk: Buffer) => {
-      const text = chunk.toString()
-      if (stderr.length < MAX_BUFFER_BYTES) {
-        stderr += text
-      } else if (!stderrTruncated) {
-        stderrTruncated = true
-        logger.warn("stderr buffer truncated", { scanId, maxBytes: MAX_BUFFER_BYTES })
-      }
-      const lines = text.trim().split("\n")
-      for (const line of lines) {
-        if (line.trim() && streamEvents++ < MAX_STREAM_EVENTS) {
-          emitScanEvent(scanId, "engine_stderr", "warn", line.slice(0, 500), {}).catch(() => {})
-        }
-      }
+      stderrBytes += chunk.byteLength
     })
 
     child.on("close", (code) => {
       closed = true
       clearTimeout(timer)
+      clearInterval(heartbeatTimer)
       if (cancellationTimer) clearInterval(cancellationTimer)
       escalation.markExited()
       stopTracking()
       const exitCode = code ?? (timedOut || cancelled ? -1 : 1)
-      resolvePromise({ exitCode, stdout, stderr, timedOut, cancelled })
+      logger.info("Engine streams consumed", { scanId, stdoutBytes, stderrBytes })
+      resolvePromise({ exitCode, timedOut, cancelled })
     })
 
     child.on("error", (err) => {
       closed = true
       clearTimeout(timer)
+      clearInterval(heartbeatTimer)
       if (cancellationTimer) clearInterval(cancellationTimer)
       escalation.markExited()
       stopTracking()
@@ -320,6 +291,7 @@ const ENGINE_RUN_LAYOUTS = ["strix_runs", "lyrashield_runs"] as const
 const ENGINE_OUTPUT_ARTIFACTS = ["run.json", "vulnerabilities.json"] as const
 const MAX_RUN_OUTPUT_ENTRIES = 50_000
 const ENGINE_CHECKOUT_ROOT = resolve(tmpdir(), "strix_repos")
+const ENGINE_WORK_ROOT = resolve(process.cwd(), "lyrashield_runs")
 
 /**
  * Extract only a repository checkout created by the engine below its dedicated
@@ -485,16 +457,13 @@ export async function runEngine(
   logger.info("Starting engine process", {
     scanId,
     executable: cmd.executable,
-    args: cmd.args,
+    argumentCount: cmd.args.length,
     workDir: absWorkDir,
     model: profile.model,
     reasoningEffort: profile.reasoningEffort,
   })
 
   await emitScanEvent(scanId, "engine_start", "info", "Starting LyraShield scan engine", {
-    executable: cmd.executable,
-    args: cmd.args,
-    target: config.target.name,
     model: profile.model ?? "fallback",
     reasoningEffort: profile.reasoningEffort,
   })
@@ -517,13 +486,11 @@ export async function runEngine(
     })
     processResult = {
       exitCode: -2,
-      stdout: "",
-      stderr: String(error),
       timedOut: false,
       cancelled: false,
     }
   }
-  const { exitCode, stdout, stderr, timedOut, cancelled } = processResult
+  const { exitCode, timedOut, cancelled } = processResult
 
   if (timedOut) {
     await emitScanEvent(
@@ -545,8 +512,6 @@ export async function runEngine(
   logger.info("Engine process finished", {
     scanId,
     exitCode,
-    stdoutLen: stdout.length,
-    stderrLen: stderr.length,
     timedOut,
   })
 
@@ -578,21 +543,44 @@ export async function runEngine(
     {
       findingCount: output.findingCount,
       engineStatus: output.runRecord?.status ?? "unknown",
-      outputDir: outputDir ?? "not_found",
+      outputAvailable: Boolean(outputDir),
     }
   )
 
-  return { exitCode, cancelled, timedOut, output, stdout, stderr, sourceCheckoutPath }
+  return { exitCode, cancelled, timedOut, output, sourceCheckoutPath }
 }
 
-export async function cleanupEngineWorkspace(workDir: string): Promise<void> {
-  try {
-    await rm(resolve(workDir), { recursive: true, force: true })
-    logger.info("Engine workspace cleaned up", { workDir })
-  } catch (err) {
-    logger.warn("Failed to clean up engine workspace", {
-      workDir,
-      error: err instanceof Error ? err.message : String(err),
-    })
+export async function cleanupEngineWorkspace(workDir: string, runName?: string): Promise<void> {
+  const targets: string[] = []
+  const workspace = resolve(workDir)
+  const workspaceFromRoot = relative(ENGINE_WORK_ROOT, workspace)
+  if (
+    workspaceFromRoot &&
+    workspaceFromRoot !== ".." &&
+    !workspaceFromRoot.startsWith(`..${sep}`)
+  ) {
+    targets.push(workspace)
+  } else {
+    logger.warn("Refusing to clean an engine workspace outside the owned run root", { workDir })
   }
+
+  if (runName && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(runName) && !runName.includes("..")) {
+    const checkoutRunDir = resolve(ENGINE_CHECKOUT_ROOT, runName)
+    const checkoutFromRoot = relative(ENGINE_CHECKOUT_ROOT, checkoutRunDir)
+    if (checkoutFromRoot && checkoutFromRoot !== ".." && !checkoutFromRoot.startsWith(`..${sep}`)) {
+      targets.push(checkoutRunDir)
+    }
+  }
+
+  for (const target of targets) {
+    try {
+      await rm(target, { recursive: true, force: true })
+    } catch (err) {
+      logger.warn("Failed to clean up engine-owned files", {
+        workDir,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+  logger.info("Engine workspace cleaned up", { workDir })
 }

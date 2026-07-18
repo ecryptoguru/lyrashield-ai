@@ -34,7 +34,7 @@ async function persistEvidence(
   vuln: EngineVulnerability | NormalizedFinding
 ): Promise<void> {
   const artifacts: Array<{
-    type: "poc" | "code_location"
+    type: "poc" | "code_location" | "claim_context"
     artifactId: string
     content: string
     contentType: string
@@ -56,6 +56,23 @@ async function persistEvidence(
         contentType: "application/json; charset=utf-8",
       })
     }
+  }
+  const claimContext = {
+    evidence: vuln.evidence,
+    assumptions: vuln.assumptions,
+    fixEffort: vuln.fix_effort,
+    findingClass: vuln.finding_class,
+    dependencyMetadata: vuln.dependency_metadata,
+    cvssBreakdown: vuln.cvss_breakdown,
+    controlIds: vuln.control_ids,
+  }
+  if (Object.values(claimContext).some((value) => value !== undefined)) {
+    artifacts.push({
+      type: "claim_context",
+      artifactId: "claim-context",
+      content: JSON.stringify(claimContext),
+      contentType: "application/json; charset=utf-8",
+    })
   }
   for (const artifact of artifacts) {
     const checksum = createHash("sha256").update(artifact.content, "utf8").digest("hex")
@@ -166,13 +183,15 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
           summary,
           severity,
           confidence,
-          ...(cwe ? { cwe } : {}),
-          ...(category ? { category } : {}),
-          ...(owaspCategory ? { owaspCategory } : {}),
-          ...(cvss != null ? { cvssScore: cvss } : {}),
-          ...(vuln.technical_analysis ? { technicalDetail: vuln.technical_analysis } : {}),
-          ...(vuln.remediation_steps ? { recommendedFix: vuln.remediation_steps } : {}),
-          ...(vuln.impact ? { businessImpact: vuln.impact } : {}),
+          cwe: cwe ?? null,
+          category: category ?? null,
+          owaspCategory: owaspCategory ?? null,
+          sarifRuleId: vuln.cve ?? null,
+          cvssScore: cvss ?? null,
+          technicalDetail: vuln.technical_analysis ?? null,
+          recommendedFix: vuln.remediation_steps ?? null,
+          businessImpact: vuln.impact ?? null,
+          exploitability: vuln.poc_description ?? null,
           ...(reopen ? { status: "OPEN" as const, fixedAt: null } : {}),
           verified,
           verificationStatus: "DETECTED",

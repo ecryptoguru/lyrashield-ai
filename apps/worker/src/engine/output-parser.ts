@@ -16,6 +16,11 @@ export interface EngineVulnerability {
   description?: string
   impact?: string
   technical_analysis?: string
+  evidence?: string
+  assumptions?: string
+  fix_effort?: "trivial" | "low" | "medium" | "high"
+  finding_class?: string
+  dependency_metadata?: Record<string, string>
   poc_description?: string
   poc_script_code?: string
   remediation_steps?: string
@@ -33,6 +38,8 @@ export interface EngineVulnerability {
   agent_name?: string
   /** Internal detector provenance, attached by the orchestrator after parsing. */
   scannerSource?: "engine" | "sca" | "secrets" | "url" | "agent_config"
+  /** Every detector that independently produced the normalized finding. */
+  corroboratingSources?: Array<"engine" | "sca" | "secrets" | "url" | "agent_config">
 }
 
 export interface EngineRunRecord {
@@ -44,6 +51,13 @@ export interface EngineRunRecord {
   targets_info?: unknown[]
   llm_usage?: Record<string, unknown>
   scan_results?: Record<string, unknown>
+  engine_version?: string
+  prompt_bundle_hash?: string
+  model?: string
+  reasoning_effort?: string
+  max_output_tokens?: number
+  max_agents?: number
+  scan_mode?: string
 }
 
 export interface ParsedScanOutput {
@@ -67,6 +81,7 @@ const MAX_TEXT_FIELD_LENGTH = 64 * 1024
 const MAX_CODE_LOCATIONS = 100
 const MAX_RUN_TARGETS = 100
 const MAX_CONTROL_IDS = 10
+const MAX_METADATA_ENTRIES = 32
 const MAX_LLM_USAGE_NODES = 500
 const MAX_DB_INTEGER = 2_147_483_647
 const MAX_DB_DECIMAL_12_6 = 1_000_000
@@ -75,6 +90,20 @@ const GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
 
 function boundedString(value: unknown): string | undefined {
   return typeof value === "string" && value.length <= MAX_TEXT_FIELD_LENGTH ? value : undefined
+}
+
+function boundedStringRecord(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
+  const entries = Object.entries(value)
+  if (entries.length === 0 || entries.length > MAX_METADATA_ENTRIES) return undefined
+  const normalized: Record<string, string> = {}
+  for (const [key, candidate] of entries) {
+    if (key.length > 128 || typeof candidate !== "string" || candidate.length > 4_096) {
+      return undefined
+    }
+    normalized[key] = candidate
+  }
+  return normalized
 }
 
 function validateCodeLocations(value: unknown): EngineVulnerability["code_locations"] {
@@ -296,12 +325,13 @@ function normalizeRequestUsageBuckets(value: unknown): Record<string, number> {
     const record = entry as Record<string, unknown>
     const inputTokens = usageInteger(record.input_tokens)
     const outputTokens = usageInteger(record.output_tokens)
-    const cachedInputTokens = detailInteger(record.input_tokens_details, "cached_tokens") ?? 0
-    const cacheWriteInputTokens =
-      detailInteger(record.input_tokens_details, "cache_write_tokens") ?? 0
+    const cachedInputTokens = detailInteger(record.input_tokens_details, "cached_tokens")
+    const cacheWriteInputTokens = detailInteger(record.input_tokens_details, "cache_write_tokens")
     if (
       inputTokens === undefined ||
       outputTokens === undefined ||
+      cachedInputTokens === undefined ||
+      cacheWriteInputTokens === undefined ||
       cachedInputTokens > inputTokens ||
       cacheWriteInputTokens > inputTokens - cachedInputTokens
     ) {
@@ -343,6 +373,15 @@ function validateVulnerability(v: Record<string, unknown>): EngineVulnerability 
   }
   const timestamp = boundedString(v.timestamp)
   if (!timestamp) return null
+  const fixEffort = boundedString(v.fix_effort)?.toLowerCase()
+  const validFixEffort =
+    fixEffort === "trivial" || fixEffort === "low" || fixEffort === "medium" || fixEffort === "high"
+      ? fixEffort
+      : undefined
+  const cvssBreakdown = boundedStringRecord(v.cvss_breakdown)
+  const dependencyMetadata = boundedStringRecord(v.dependency_metadata)
+  const controlIds = validateControlIds(v.control_ids)
+  const codeLocations = validateCodeLocations(v.code_locations)
   return {
     id,
     title,
@@ -359,6 +398,12 @@ function validateVulnerability(v: Record<string, unknown>): EngineVulnerability 
     ...(boundedString(v.technical_analysis)
       ? { technical_analysis: boundedString(v.technical_analysis) }
       : {}),
+    ...(boundedString(v.evidence) ? { evidence: boundedString(v.evidence) } : {}),
+    ...(boundedString(v.assumptions) ? { assumptions: boundedString(v.assumptions) } : {}),
+    ...(validFixEffort ? { fix_effort: validFixEffort } : {}),
+    ...(boundedString(v.finding_class) ? { finding_class: boundedString(v.finding_class) } : {}),
+    ...(cvssBreakdown ? { cvss_breakdown: cvssBreakdown } : {}),
+    ...(dependencyMetadata ? { dependency_metadata: dependencyMetadata } : {}),
     ...(boundedString(v.poc_description)
       ? { poc_description: boundedString(v.poc_description) }
       : {}),
@@ -368,12 +413,8 @@ function validateVulnerability(v: Record<string, unknown>): EngineVulnerability 
     ...(boundedString(v.remediation_steps)
       ? { remediation_steps: boundedString(v.remediation_steps) }
       : {}),
-    ...(validateControlIds(v.control_ids)
-      ? { control_ids: validateControlIds(v.control_ids) }
-      : {}),
-    ...(validateCodeLocations(v.code_locations)
-      ? { code_locations: validateCodeLocations(v.code_locations) }
-      : {}),
+    ...(controlIds ? { control_ids: controlIds } : {}),
+    ...(codeLocations ? { code_locations: codeLocations } : {}),
   }
 }
 
@@ -427,6 +468,9 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
         })
       : undefined
     const llmUsage = normalizeLlmUsage(record.llm_usage)
+    const promptBundleHash = boundedString(record.prompt_bundle_hash)
+    const maxOutputTokens = usageInteger(record.max_output_tokens)
+    const maxAgents = usageInteger(record.max_agents)
 
     return {
       run_id: runId,
@@ -436,6 +480,19 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       status,
       ...(targetsInfo ? { targets_info: targetsInfo } : {}),
       ...(llmUsage ? { llm_usage: llmUsage } : {}),
+      ...(boundedString(record.engine_version)
+        ? { engine_version: boundedString(record.engine_version) }
+        : {}),
+      ...(promptBundleHash && /^[a-f0-9]{64}$/i.test(promptBundleHash)
+        ? { prompt_bundle_hash: promptBundleHash.toLowerCase() }
+        : {}),
+      ...(boundedString(record.model) ? { model: boundedString(record.model) } : {}),
+      ...(boundedString(record.reasoning_effort)
+        ? { reasoning_effort: boundedString(record.reasoning_effort) }
+        : {}),
+      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxAgents !== undefined ? { max_agents: maxAgents } : {}),
+      ...(boundedString(record.scan_mode) ? { scan_mode: boundedString(record.scan_mode) } : {}),
     }
   } catch (err) {
     logger.error("Failed to parse run.json", {
@@ -481,9 +538,25 @@ export function mapSeverity(
 }
 
 export function generateDedupeKey(vuln: EngineVulnerability, targetId: string): string {
-  const raw = [targetId, vuln.cwe ?? "", vuln.endpoint ?? "", vuln.method ?? "", vuln.title]
+  const location = vuln.code_locations?.[0]
+  const dependency = vuln.dependency_metadata
+  const isDependencyFinding = Boolean(vuln.cve && dependency?.package_name)
+  const identity = isDependencyFinding
+    ? ["dependency", vuln.cve, dependency?.package_ecosystem ?? "", dependency?.package_name ?? ""]
+    : [
+        vuln.finding_class ?? "dynamic",
+        vuln.cve ?? "",
+        vuln.cwe ?? "",
+        vuln.endpoint ?? "",
+        vuln.method ?? "",
+        location?.file ?? "",
+        location?.start_line ?? "",
+        location?.end_line ?? "",
+        vuln.title,
+      ]
+  const raw = ["v2", targetId, ...identity]
+    .map((value) => String(value).trim().toLowerCase())
     .join("|")
-    .toLowerCase()
   return createHash("sha256").update(raw).digest("hex").slice(0, 32)
 }
 

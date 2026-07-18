@@ -373,6 +373,7 @@ describe("processScanJob", () => {
             request_count: 7,
             input_tokens: 18_420,
             cached_input_tokens: 6_100,
+            cache_write_input_tokens: 0,
             output_tokens: 2_310,
           },
         },
@@ -386,6 +387,7 @@ describe("processScanJob", () => {
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: {
+        providerCostUsd: null,
         billedCostUsd: "0.026790",
         actualCostCents: 3,
         llmRequestCount: 7,
@@ -420,6 +422,7 @@ describe("processScanJob", () => {
             request_count: 7,
             input_tokens: 18_420,
             cached_input_tokens: 6_100,
+            cache_write_input_tokens: 0,
             output_tokens: 2_310,
             total_cost_usd: 0.02,
           },
@@ -451,6 +454,44 @@ describe("processScanJob", () => {
         reconciliationStatus: "mismatch",
       })
     )
+  })
+
+  it("checkpoints usage before a downstream scanner failure", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 0,
+      output: {
+        vulnerabilities: [],
+        runRecord: {
+          run_id: "r-checkpoint",
+          status: "completed",
+          llm_usage: {
+            request_count: 1,
+            input_tokens: 1_000,
+            cached_input_tokens: 0,
+            cache_write_input_tokens: 0,
+            output_tokens: 100,
+            total_cost_usd: 0.01,
+          },
+        },
+        summary: "Engine completed",
+        findingCount: 0,
+      },
+    } as never)
+    vi.mocked(runScannerOrchestrator).mockRejectedValueOnce(new Error("scanner unavailable"))
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      status: "failed",
+      errorMessage: "scanner unavailable",
+    })
+
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: expect.objectContaining({
+        providerCostUsd: "0.010000",
+        billedCostUsd: "0.010000",
+        llmRequestCount: 1,
+      }),
+    })
   })
 
   it("keeps a completed scan completed when a completion notification fails", async () => {
@@ -722,7 +763,7 @@ describe("processScanJob", () => {
   it("always cleans up engine workspace", async () => {
     await processScanJob(mockJob)
 
-    expect(cleanupEngineWorkspace).toHaveBeenCalledWith("lyrashield_runs/scan-1")
+    expect(cleanupEngineWorkspace).toHaveBeenCalledWith("lyrashield_runs/scan-1", "scan-1")
   })
 
   it("transitions through VERIFYING status before completion", async () => {

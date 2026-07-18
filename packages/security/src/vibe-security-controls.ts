@@ -343,24 +343,13 @@ export function buildVibeSecurityInstruction(goal: string): string {
 }
 
 export function summarizeVibeSecurityCoverage(findings: readonly VibeCoverageFinding[]) {
-  const findingText = findings
-    .map((finding) =>
-      [finding.title, finding.description, finding.technical_analysis]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-    )
-    .join("\n")
   const explicitRanks = findings.flatMap((finding) => finding.control_ids ?? [])
   const matchedControlRanks = [
-    ...new Set([
-      ...explicitRanks.filter(
+    ...new Set(
+      explicitRanks.filter(
         (rank) => Number.isInteger(rank) && rank >= 1 && rank <= VIBE_SECURITY_CONTROLS.length
-      ),
-      ...VIBE_SECURITY_CONTROLS.filter((control) =>
-        control.keywords.some((keyword) => findingText.includes(keyword))
-      ).map((control) => control.rank),
-    ]),
+      )
+    ),
   ].sort((left, right) => left - right)
   const evidenceControlRanks = VIBE_SECURITY_CONTROLS.filter(
     (control) => control.strategy === "evidence"

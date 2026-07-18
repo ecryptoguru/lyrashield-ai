@@ -20,11 +20,21 @@ type ResultManifestInput = {
   engineFindingCount: number
   coverageIssues: ScannerCoverageIssue[]
   matchedControlRanks?: number[]
+  engineExecution?: {
+    model: string
+    reasoningEffort: string
+    image: string | null
+    engineVersion?: string
+    promptBundleHash?: string
+    maxOutputTokens?: number
+    maxAgents?: number
+  }
 }
 
 type FindingInput = EngineVulnerability | NormalizedFinding
 
-const MANIFEST_VERSION = 2
+const MANIFEST_VERSION = 3
+const SCANNER_CONTRACT_VERSION = "2026-07-18"
 
 type CoverageStatus = "COMPLETED" | "NOT_APPLICABLE" | "BLOCKED"
 
@@ -166,6 +176,20 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
       }
     }
 
+    if (control.strategy === "engine") {
+      const engineReceipt = familyByScanner.get("engine")
+      if (engineReceipt?.status === "COMPLETED") {
+        return {
+          scanner: "engine",
+          controlId,
+          status: "BLOCKED",
+          reason:
+            "The model completed without an explicit control mapping; absence is inconclusive.",
+          metadata: { ...metadata, outcome: "INCONCLUSIVE" },
+        }
+      }
+    }
+
     if (
       applicableReceipts.length === 0 ||
       applicableReceipts.every((receipt) => receipt.status === "NOT_APPLICABLE")
@@ -220,6 +244,8 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
       urlChecksum: input.target.url ? checksum(input.target.url) : null,
     },
     sourceCheckoutAvailable: input.sourceCheckoutAvailable,
+    scannerContractVersion: SCANNER_CONTRACT_VERSION,
+    engineExecution: input.engineExecution ?? null,
     // Coverage limitations are part of the immutable result contract. Keep
     // their bounded subjects and reasons in the manifest, not only in the
     // mutable receipt table.
@@ -257,6 +283,20 @@ function isNormalizedFinding(finding: FindingInput): finding is NormalizedFindin
 }
 
 function candidatePayload(finding: FindingInput, severity: string, dedupeKey: string) {
+  const contentHashes = Object.fromEntries(
+    Object.entries({
+      description: finding.description,
+      impact: finding.impact,
+      technicalAnalysis: finding.technical_analysis,
+      evidence: finding.evidence,
+      assumptions: finding.assumptions,
+      pocDescription: finding.poc_description,
+      pocScriptCode: finding.poc_script_code,
+      remediationSteps: finding.remediation_steps,
+      cvssBreakdown: finding.cvss_breakdown,
+      dependencyMetadata: finding.dependency_metadata,
+    }).flatMap(([key, value]) => (value === undefined ? [] : [[key, checksum(value)]]))
+  )
   return {
     id: finding.id,
     title: finding.title,
@@ -264,12 +304,21 @@ function candidatePayload(finding: FindingInput, severity: string, dedupeKey: st
     cwe: finding.cwe ?? null,
     cvss: finding.cvss ?? null,
     dedupeKey,
-    codeLocations: (finding.code_locations ?? []).map(({ file, start_line, end_line, label }) => ({
-      file: file ?? null,
-      startLine: start_line ?? null,
-      endLine: end_line ?? null,
-      label: label ?? null,
-    })),
+    findingClass: finding.finding_class ?? null,
+    fixEffort: finding.fix_effort ?? null,
+    controlIds: finding.control_ids ?? [],
+    contentHashes,
+    codeLocations: (finding.code_locations ?? []).map(
+      ({ file, start_line, end_line, label, snippet, fix_before, fix_after }) => ({
+        file: file ?? null,
+        startLine: start_line ?? null,
+        endLine: end_line ?? null,
+        label: label ?? null,
+        snippetHash: snippet === undefined ? null : checksum(snippet),
+        fixBeforeHash: fix_before === undefined ? null : checksum(fix_before),
+        fixAfterHash: fix_after === undefined ? null : checksum(fix_after),
+      })
+    ),
   }
 }
 
@@ -283,64 +332,71 @@ export async function persistDetectionReceipt(params: {
   dedupeKey: string
 }): Promise<void> {
   const normalized = isNormalizedFinding(params.finding) ? params.finding : null
-  const scannerSource = normalized?.scannerSource ?? "engine"
   const payload = candidatePayload(params.finding, params.severity, params.dedupeKey)
   const evidenceHash = checksum(payload)
-  const candidate = await prisma.findingCandidate.upsert({
-    where: {
-      scanId_dedupeKey_scannerSource: {
-        scanId: params.scanId,
-        dedupeKey: params.dedupeKey,
-        scannerSource,
+  const scannerSources = [
+    ...new Set(
+      normalized?.corroboratingSources ?? [normalized?.scannerSource ?? ("engine" as const)]
+    ),
+  ]
+
+  for (const scannerSource of scannerSources) {
+    const candidate = await prisma.findingCandidate.upsert({
+      where: {
+        scanId_dedupeKey_scannerSource: {
+          scanId: params.scanId,
+          dedupeKey: params.dedupeKey,
+          scannerSource,
+        },
       },
-    },
-    create: {
-      workspaceId: params.workspaceId,
+      create: {
+        workspaceId: params.workspaceId,
+        scanId: params.scanId,
+        targetId: params.targetId,
+        findingId: params.findingId,
+        scannerSource,
+        dedupeKey: params.dedupeKey,
+        status: "PROMOTED",
+        payload,
+        evidenceHash,
+      },
+      update: {
+        findingId: params.findingId,
+        status: "PROMOTED",
+        payload,
+        evidenceHash,
+      },
+    })
+
+    const method = scannerSource === "engine" ? "ENGINE_CLAIM" : "SCANNER_DETECTION"
+    const reason =
+      scannerSource === "engine"
+        ? "Engine claim recorded; independent validation is required before verification."
+        : "Scanner detection recorded; an independent validation receipt is required before verification."
+    const idempotencyKey = checksum({
       scanId: params.scanId,
-      targetId: params.targetId,
-      findingId: params.findingId,
-      scannerSource,
       dedupeKey: params.dedupeKey,
-      status: "PROMOTED",
-      payload,
-      evidenceHash,
-    },
-    update: {
-      findingId: params.findingId,
-      status: "PROMOTED",
-      payload,
-      evidenceHash,
-    },
-  })
-
-  const method = scannerSource === "engine" ? "ENGINE_CLAIM" : "SCANNER_DETECTION"
-  const reason =
-    scannerSource === "engine"
-      ? "Engine claim recorded; independent validation is required before verification."
-      : "Scanner detection recorded; an independent validation receipt is required before verification."
-  const idempotencyKey = checksum({
-    scanId: params.scanId,
-    dedupeKey: params.dedupeKey,
-    scannerSource,
-    status: "DETECTED",
-  })
-
-  await prisma.findingVerification.upsert({
-    where: { idempotencyKey },
-    create: {
-      workspaceId: params.workspaceId,
-      findingId: params.findingId,
-      scanId: params.scanId,
-      candidateId: candidate.id,
+      scannerSource,
       status: "DETECTED",
-      method,
-      reason,
-      verifierVersion: "result-integrity-v1",
-      evidence: { candidateEvidenceHash: evidenceHash },
-      idempotencyKey,
-    },
-    update: {},
-  })
+    })
+
+    await prisma.findingVerification.upsert({
+      where: { idempotencyKey },
+      create: {
+        workspaceId: params.workspaceId,
+        findingId: params.findingId,
+        scanId: params.scanId,
+        candidateId: candidate.id,
+        status: "DETECTED",
+        method,
+        reason,
+        verifierVersion: "result-integrity-v2",
+        evidence: { candidateEvidenceHash: evidenceHash },
+        idempotencyKey,
+      },
+      update: {},
+    })
+  }
 }
 
 export async function markRetestsRunning(scanId: string): Promise<void> {

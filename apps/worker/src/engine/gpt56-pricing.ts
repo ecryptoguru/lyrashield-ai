@@ -86,14 +86,23 @@ export function calculateGpt56CostUsd(
   }
 ): number | null {
   const rate = resolveRate(model)
-  if (!rate || usage.inputTokens === null || usage.outputTokens === null) return null
+  if (
+    !rate ||
+    usage.inputTokens === null ||
+    usage.outputTokens === null ||
+    usage.cachedInputTokens === null ||
+    usage.cacheWriteInputTokens === null ||
+    usage.cacheWriteInputTokens === undefined
+  ) {
+    return null
+  }
   // Long-context pricing applies to an individual request. Aggregate totals
   // cannot reveal which requests exceeded the threshold, so calculating from
   // them would produce a made-up number.
   if (usage.inputTokens > GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS) return null
-  const cachedInputTokens = Math.min(usage.cachedInputTokens ?? 0, usage.inputTokens)
+  const cachedInputTokens = Math.min(usage.cachedInputTokens, usage.inputTokens)
   const cacheWriteInputTokens = Math.min(
-    usage.cacheWriteInputTokens ?? 0,
+    usage.cacheWriteInputTokens,
     usage.inputTokens - cachedInputTokens
   )
   const uncachedInputTokens = usage.inputTokens - cachedInputTokens - cacheWriteInputTokens

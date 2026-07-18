@@ -312,11 +312,20 @@ export async function runScannerOrchestrator(
     }
     const existingRank = SEVERITY_RANK[existing.normalizedSeverity] ?? 0
     const newRank = SEVERITY_RANK[finding.normalizedSeverity] ?? 0
+    const corroboratingSources = [
+      ...new Set([
+        ...(existing.corroboratingSources ??
+          (existing.scannerSource ? [existing.scannerSource] : [])),
+        ...(finding.corroboratingSources ?? (finding.scannerSource ? [finding.scannerSource] : [])),
+      ]),
+    ]
     if (
       newRank > existingRank ||
       (newRank === existingRank && finding.confidenceScore > existing.confidenceScore)
     ) {
-      merged.set(finding.dedupeKey, finding)
+      merged.set(finding.dedupeKey, { ...finding, corroboratingSources })
+    } else {
+      merged.set(finding.dedupeKey, { ...existing, corroboratingSources })
     }
   }
 

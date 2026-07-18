@@ -132,4 +132,79 @@ describe("persistFindings", () => {
     expect(uploadEvidence).not.toHaveBeenCalled()
     expect(prisma.evidence.createMany).not.toHaveBeenCalled()
   })
+
+  it("clears stale optional fields when a finding is re-detected", async () => {
+    const vulnerability = {
+      id: "vuln-1",
+      title: "Updated finding",
+      severity: "medium",
+      timestamp: "2026-07-14T00:00:00Z",
+    }
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([
+      { id: "finding-1", dedupeKey: generateDedupeKey(vulnerability, "target-1"), status: "OPEN" },
+    ] as never)
+    vi.mocked(prisma.finding.update).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+
+    await persistFindings({
+      scanId: "scan-2",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: [vulnerability],
+    })
+
+    expect(prisma.finding.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          cwe: null,
+          category: null,
+          owaspCategory: null,
+          sarifRuleId: null,
+          cvssScore: null,
+          technicalDetail: null,
+          recommendedFix: null,
+          businessImpact: null,
+          exploitability: null,
+        }),
+      })
+    )
+  })
+
+  it("uploads structured claim context through encrypted evidence storage", async () => {
+    const vulnerability = {
+      id: "vuln-1",
+      title: "Dependency finding",
+      severity: "high",
+      timestamp: "2026-07-14T00:00:00Z",
+      evidence: "lockfile proof",
+      assumptions: "deployed dependency",
+      fix_effort: "low" as const,
+      finding_class: "dependency_cve",
+      dependency_metadata: { package_name: "example", package_ecosystem: "npm" },
+      control_ids: [37],
+    }
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+    vi.mocked(prisma.finding.create).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    vi.mocked(uploadEvidence).mockResolvedValue({
+      storageUri: "s3://bucket/evidence",
+      checksum: "sha256-checksum",
+      encryptionKeyRef: "vault://test",
+    })
+
+    await persistFindings({
+      scanId: "scan-2",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: [vulnerability],
+    })
+
+    expect(uploadEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "claim_context",
+        contentType: "application/json; charset=utf-8",
+        content: expect.stringContaining("lockfile proof"),
+      })
+    )
+  })
 })

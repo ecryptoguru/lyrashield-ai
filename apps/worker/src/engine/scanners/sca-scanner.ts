@@ -699,15 +699,16 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
   })
   const osvResults = await queryOsvBatch(uniqueDeps, fetchFn, signal)
 
-  const seenVulnIds = new Set<string>()
+  const seenDependencyVulnerabilities = new Set<string>()
   const findings: EngineVulnerability[] = []
 
   for (const dep of uniqueDeps) {
     throwIfAborted(signal)
     const vulns = osvResults.get(dependencyKey(dep)) ?? []
     for (const vuln of vulns) {
-      if (seenVulnIds.has(vuln.id)) continue
-      seenVulnIds.add(vuln.id)
+      const dependencyVulnerabilityId = `${dependencyKey(dep)}:${vuln.id}`
+      if (seenDependencyVulnerabilities.has(dependencyVulnerabilityId)) continue
+      seenDependencyVulnerabilities.add(dependencyVulnerabilityId)
 
       const severity = mapOsvSeverity(vuln)
       const cve = extractCveId(vuln)
@@ -721,6 +722,13 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
         target: dep.filePath,
         cve,
         cwe: "CWE-1104", // Use of Unmaintained Third Party Components
+        finding_class: "dependency_cve",
+        dependency_metadata: {
+          package_name: dep.name,
+          installed_version: dep.version,
+          package_ecosystem: dep.ecosystem.toLowerCase(),
+          ...(fixedVersion ? { fixed_version: fixedVersion } : {}),
+        },
         control_ids: [37],
         description:
           vuln.summary ?? `Vulnerability ${vuln.id} affects ${dep.name} version ${dep.version}`,
