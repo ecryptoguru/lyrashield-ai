@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
-  redis: { set: vi.fn(), eval: vi.fn() },
+  redis: { set: vi.fn() },
   queue: { getJob: vi.fn(), getJobs: vi.fn() },
   prisma: {
     scan: { findMany: vi.fn(), findUnique: vi.fn() },
@@ -25,7 +25,6 @@ describe("scan queue reconciliation", () => {
   beforeEach(() => {
     vi.resetAllMocks()
     mocks.redis.set.mockResolvedValue("OK")
-    mocks.redis.eval.mockResolvedValue(1)
     mocks.queue.getJob.mockResolvedValue(null)
     mocks.queue.getJobs.mockResolvedValue([])
     mocks.prisma.scan.findMany.mockResolvedValue([])
@@ -42,6 +41,25 @@ describe("scan queue reconciliation", () => {
       errorCategory: "QUEUE",
       errorMessage: expect.stringContaining("QUEUE_ORPHANED"),
     })
+    expect(mocks.redis.set).toHaveBeenCalledWith(
+      "lyrashield:scan-queue:reconciliation",
+      "leased",
+      "PX",
+      55_000,
+      "NX"
+    )
+  })
+
+  it("does nothing when another worker owns the reconciliation lease", async () => {
+    mocks.redis.set.mockResolvedValue(null)
+
+    await expect(reconcileScanQueue()).resolves.toEqual({
+      failedOrphanedScans: 0,
+      removedOrphanedJobs: 0,
+    })
+
+    expect(mocks.prisma.scan.findMany).not.toHaveBeenCalled()
+    expect(mocks.queue.getJobs).not.toHaveBeenCalled()
   })
 
   it("removes waiting jobs whose database scan is absent or terminal", async () => {
