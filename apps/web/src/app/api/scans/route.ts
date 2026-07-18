@@ -49,6 +49,7 @@ export async function POST(request: Request) {
 
     const activeScans = await prisma.scan.count({
       where: {
+        workspaceId,
         targetId: data.targetId,
         status: { in: ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"] },
       },

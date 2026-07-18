@@ -20,7 +20,8 @@
     "pg": "^8.13.0",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/config": "workspace:*",
-    "@lyrashield/score": "workspace:*"
+    "@lyrashield/score": "workspace:*",
+    "@lyrashield/types": "workspace:*"
   },
   "devDependencies": {
     "prisma": "7.8.0",

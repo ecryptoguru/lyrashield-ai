@@ -175,28 +175,21 @@ export function explainFinding(params: {
   severity: FindingSeverity
   cwe?: string | null
   category?: string | null
-  technicalDetail?: string | null
   recommendedFix?: string | null
 }): PlainLanguageFinding {
   if (params.cwe && CWE_EXPLANATIONS[params.cwe]) {
     const explanation = CWE_EXPLANATIONS[params.cwe]!
-    const whatItIs = params.technicalDetail
-      ? `${explanation.whatItIs}\n\nTechnical detail: ${params.technicalDetail}`
-      : explanation.whatItIs
     if (params.recommendedFix) {
-      return { ...explanation, whatItIs, howToFix: params.recommendedFix }
+      return { ...explanation, howToFix: params.recommendedFix }
     }
-    return { ...explanation, whatItIs }
+    return { ...explanation }
   }
 
   const generic = GENERIC_EXPLANATIONS[params.severity]!
   const categoryLabel = params.category ? CATEGORY_LABELS[params.category] : null
   const title = categoryLabel ?? params.title
-  const whatItIs = params.technicalDetail
-    ? `${generic.whatItIs}\n\nTechnical detail: ${params.technicalDetail}`
-    : generic.whatItIs
   if (params.recommendedFix) {
-    return { ...generic, title, whatItIs, howToFix: params.recommendedFix }
+    return { ...generic, title, howToFix: params.recommendedFix }
   }
-  return { ...generic, title, whatItIs }
+  return { ...generic, title }
 }

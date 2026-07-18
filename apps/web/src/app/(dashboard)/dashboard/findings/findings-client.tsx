@@ -77,6 +77,19 @@ const STATUS_BADGE: Record<string, BadgeVariant> = {
   DUPLICATE: "muted",
 }
 
+function extractEpssPercentage(technicalDetail?: string | null): string | undefined {
+  const marker = "FIRST EPSS: "
+  const valueStart = technicalDetail?.indexOf(marker) ?? -1
+  if (!technicalDetail || valueStart < 0) return undefined
+
+  const start = valueStart + marker.length
+  const end = technicalDetail.indexOf("%", start)
+  if (end < start || end - start > 6) return undefined
+
+  const percentage = technicalDetail.slice(start, end)
+  return Number.isFinite(Number(percentage)) ? `${percentage}%` : undefined
+}
+
 export function FindingsClient({
   workspaceId,
   initialData,
@@ -166,6 +179,7 @@ export function FindingsClient({
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
             <Button
+              type="button"
               size="sm"
               variant="ghost"
               className="ml-auto"
@@ -356,7 +370,7 @@ function FindingDetailDrawer({
   const [retestError, setRetestError] = useState<string | null>(null)
   const [queuedRetestScanId, setQueuedRetestScanId] = useState<string | null>(null)
   const knownExploited = detail?.technicalDetail?.includes("CISA KEV:") ?? false
-  const epssSummary = detail?.technicalDetail?.match(/FIRST EPSS: ([^\n]+)/)?.[1]
+  const epssSummary = extractEpssPercentage(detail?.technicalDetail)
 
   useEffect(() => {
     let cancelled = false
@@ -494,6 +508,7 @@ function FindingDetailDrawer({
                   {fixError && <p className="text-destructive text-xs">{fixError}</p>}
                   <div className="flex gap-2">
                     <Button
+                      type="button"
                       size="sm"
                       disabled={creatingFix || fixSummary.trim().length < 10}
                       onClick={async () => {
@@ -522,6 +537,7 @@ function FindingDetailDrawer({
                       {creatingFix ? <Spinner /> : "Save proposal"}
                     </Button>
                     <Button
+                      type="button"
                       size="sm"
                       variant="ghost"
                       onClick={() => {
@@ -543,6 +559,7 @@ function FindingDetailDrawer({
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Button
+                      type="button"
                       size="sm"
                       disabled={creatingRetest || !detail.scanId}
                       onClick={() => void queueRetest()}
@@ -571,6 +588,7 @@ function FindingDetailDrawer({
                     make.
                   </p>
                   <Button
+                    type="button"
                     size="sm"
                     className="mt-3"
                     onClick={() => {

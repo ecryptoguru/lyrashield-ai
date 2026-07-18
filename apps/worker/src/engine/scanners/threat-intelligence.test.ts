@@ -69,4 +69,19 @@ describe("fetchThreatSignals", () => {
       new Map([["CVE-2024-12345", { epss: 0.42 }]])
     )
   })
+
+  it("does not start enrichment when the parent scan is already cancelled", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const fetchFn = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError")
+      return new Response("{}")
+    }) as unknown as typeof fetch
+
+    await expect(
+      fetchThreatSignals(["CVE-2024-12345"], fetchFn, controller.signal)
+    ).rejects.toThrow("SCA scan cancelled")
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(fetchFn).mock.calls.every((call) => call[1]?.signal?.aborted)).toBe(true)
+  })
 })

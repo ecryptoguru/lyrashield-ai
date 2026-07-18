@@ -139,6 +139,7 @@ export function GithubIntegration({
             ) : (
               repos.map((repo) => (
                 <button
+                  type="button"
                   key={repo.id}
                   onClick={() => setSelectedRepo(repo)}
                   className={`focus-visible:ring-ring flex w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none ${

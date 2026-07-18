@@ -193,6 +193,36 @@ describe("output-parser", () => {
         },
       })
     })
+
+    it("rejects usage values that cannot fit the exact database ledger", () => {
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-bad-usage",
+          status: "completed",
+          llm_usage: {
+            request_count: 1.5,
+            input_tokens: 2_147_483_648,
+            output_tokens: -1,
+            total_cost_usd: 1_000_000,
+          },
+        })
+      )
+
+      expect(result?.llm_usage).toBeUndefined()
+    })
+
+    it("does not retain partial usage totals from payloads beyond the traversal limit", () => {
+      const requests = Array.from({ length: 600 }, () => ({ usage: { input_tokens: 1 } }))
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-wide-usage",
+          status: "completed",
+          llm_usage: { requests },
+        })
+      )
+
+      expect(result?.llm_usage).toEqual({ request_count: 600 })
+    })
   })
 
   describe("parseEngineOutput", () => {

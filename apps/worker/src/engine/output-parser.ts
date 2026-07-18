@@ -68,6 +68,8 @@ const MAX_CODE_LOCATIONS = 100
 const MAX_RUN_TARGETS = 100
 const MAX_CONTROL_IDS = 10
 const MAX_LLM_USAGE_NODES = 500
+const MAX_DB_INTEGER = 2_147_483_647
+const MAX_DB_DECIMAL_12_6 = 1_000_000
 
 function boundedString(value: unknown): string | undefined {
   return typeof value === "string" && value.length <= MAX_TEXT_FIELD_LENGTH ? value : undefined
@@ -122,72 +124,120 @@ function validateControlIds(value: unknown): number[] | undefined {
   return controlIds.length > 0 ? controlIds : undefined
 }
 
-function nonnegativeNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined
+function usageInteger(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= MAX_DB_INTEGER
+    ? value
+    : undefined
+}
+
+function usageCost(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value < MAX_DB_DECIMAL_12_6
+    ? value
+    : undefined
 }
 
 function findUsageMetric(
   value: unknown,
   keys: ReadonlySet<string>,
-  visited = { count: 0 },
+  validate: (candidate: unknown) => number | undefined,
+  visited = { count: 0, truncated: false },
   depth = 0
 ): number | undefined {
-  if (depth > 4 || visited.count >= MAX_LLM_USAGE_NODES || value === null) return undefined
+  if (value === null) return undefined
+  if (depth > 4 || visited.count >= MAX_LLM_USAGE_NODES) {
+    if (typeof value === "object") visited.truncated = true
+    return undefined
+  }
   visited.count += 1
   if (Array.isArray(value)) {
-    const values = value
-      .map((item) => findUsageMetric(item, keys, visited, depth + 1))
-      .filter((candidate): candidate is number => candidate !== undefined)
-    return values.length > 0 ? values.reduce((sum, candidate) => sum + candidate, 0) : undefined
+    let total: number | undefined
+    for (const item of value) {
+      if (visited.count >= MAX_LLM_USAGE_NODES) {
+        visited.truncated = true
+        break
+      }
+      const candidate = findUsageMetric(item, keys, validate, visited, depth + 1)
+      if (candidate !== undefined) {
+        total = validate((total ?? 0) + candidate)
+        if (total === undefined) return undefined
+      }
+    }
+    return visited.truncated ? undefined : total
   }
   if (typeof value !== "object") return undefined
   const record = value as Record<string, unknown>
   for (const key of keys) {
-    const direct = nonnegativeNumber(record[key])
+    const direct = validate(record[key])
     if (direct !== undefined) return direct
   }
-  const values = Object.values(record)
-    .map((item) => findUsageMetric(item, keys, visited, depth + 1))
-    .filter((candidate): candidate is number => candidate !== undefined)
-  return values.length > 0 ? values.reduce((sum, candidate) => sum + candidate, 0) : undefined
+  let total: number | undefined
+  for (const property in record) {
+    if (!Object.prototype.hasOwnProperty.call(record, property)) continue
+    if (visited.count >= MAX_LLM_USAGE_NODES) {
+      visited.truncated = true
+      break
+    }
+    const candidate = findUsageMetric(record[property], keys, validate, visited, depth + 1)
+    if (candidate !== undefined) {
+      total = validate((total ?? 0) + candidate)
+      if (total === undefined) return undefined
+    }
+  }
+  return visited.truncated ? undefined : total
 }
 
 function normalizeLlmUsage(value: unknown): Record<string, number> | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
-  const requests = findUsageMetric(record, new Set(["request_count", "requests_count", "requests"]))
+  const requests = findUsageMetric(
+    record,
+    new Set(["request_count", "requests_count", "requests"]),
+    usageInteger
+  )
   const requestCount =
-    requests ?? (Array.isArray(record.requests) ? record.requests.length : undefined)
+    requests ?? (Array.isArray(record.requests) ? usageInteger(record.requests.length) : undefined)
   const inputTokens = findUsageMetric(
     record,
-    new Set(["input_tokens", "prompt_tokens", "input_token_count"])
+    new Set(["input_tokens", "prompt_tokens", "input_token_count"]),
+    usageInteger
   )
   const cachedInputTokens = findUsageMetric(
     record,
-    new Set(["cached_input_tokens", "cached_tokens"])
+    new Set(["cached_input_tokens", "cached_tokens"]),
+    usageInteger
   )
   const outputTokens = findUsageMetric(
     record,
-    new Set(["output_tokens", "completion_tokens", "output_token_count"])
+    new Set(["output_tokens", "completion_tokens", "output_token_count"]),
+    usageInteger
   )
-  const reportedTotalTokens = findUsageMetric(record, new Set(["total_tokens", "token_count"]))
+  const reportedTotalTokens = findUsageMetric(
+    record,
+    new Set(["total_tokens", "token_count"]),
+    usageInteger
+  )
   const totalTokens =
     reportedTotalTokens ??
     (inputTokens !== undefined || outputTokens !== undefined
-      ? (inputTokens ?? 0) + (outputTokens ?? 0)
+      ? usageInteger((inputTokens ?? 0) + (outputTokens ?? 0))
       : undefined)
   const totalCostUsd = findUsageMetric(
     record,
-    new Set(["total_cost_usd", "cost_usd", "total_cost", "cost"])
+    new Set(["total_cost_usd", "cost_usd", "total_cost", "cost"]),
+    usageCost
   )
   const normalized = {
-    ...(requestCount !== undefined ? { request_count: Math.trunc(requestCount) } : {}),
-    ...(inputTokens !== undefined ? { input_tokens: Math.trunc(inputTokens) } : {}),
-    ...(cachedInputTokens !== undefined
-      ? { cached_input_tokens: Math.trunc(cachedInputTokens) }
-      : {}),
-    ...(outputTokens !== undefined ? { output_tokens: Math.trunc(outputTokens) } : {}),
-    ...(totalTokens !== undefined ? { total_tokens: Math.trunc(totalTokens) } : {}),
+    ...(requestCount !== undefined ? { request_count: requestCount } : {}),
+    ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cached_input_tokens: cachedInputTokens } : {}),
+    ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+    ...(totalTokens !== undefined ? { total_tokens: totalTokens } : {}),
     ...(totalCostUsd !== undefined ? { total_cost_usd: totalCostUsd } : {}),
   }
   return Object.keys(normalized).length > 0 ? normalized : undefined

@@ -13,4 +13,10 @@ describe("resolveRetestProfile", () => {
       expect.objectContaining({ mode: "DEEP", determinismMode: "targeted_engine" })
     )
   })
+
+  it("keeps the source depth when a deterministic signal also required engine analysis", () => {
+    expect(resolveRetestProfile("DEEP", ["sca", "engine"])).toEqual(
+      expect.objectContaining({ mode: "DEEP", determinismMode: "targeted_engine" })
+    )
+  })
 })

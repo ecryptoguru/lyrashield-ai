@@ -33,7 +33,9 @@ export function extractActualCostUsd(usage: Record<string, unknown> | undefined)
   if (!usage) return null
   for (const key of ["total_cost_usd", "cost_usd", "total_cost", "cost"]) {
     const value = usage[key]
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1_000_000) {
+      return value
+    }
   }
   return null
 }
@@ -48,8 +50,11 @@ type UsageSummary = {
 
 function usageCount(usage: Record<string, unknown>, key: string): number | null {
   const value = usage[key]
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? Math.trunc(value)
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= 2_147_483_647
+    ? value
     : null
 }
 
@@ -73,6 +78,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
   // auto-scoping safety net is active for all DB queries. Without this, a
   // missed manual workspaceId filter could leak cross-tenant data.
   return runWithWorkspaceContext(workspaceId, async () => {
+    let billablePhaseStarted = false
     try {
       // A manifest is the immutable checkpoint after findings and retests have
       // been persisted. If an infrastructure error interrupted only the final
@@ -83,10 +89,34 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         select: {
           status: true,
           summary: true,
+          errorCategory: true,
+          errorMessage: true,
+          actualCostCents: true,
           resultManifest: { select: { id: true } },
+          events: {
+            where: { stage: "billable_boundary" },
+            select: { id: true },
+            take: 1,
+          },
         },
       })
       if (pendingFinalization?.status === "VERIFYING" && pendingFinalization.resultManifest) {
+        if (pendingFinalization.errorCategory === "BUDGET_EXCEEDED") {
+          await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
+            errorCategory: "BUDGET_EXCEEDED",
+            errorMessage:
+              pendingFinalization.errorMessage ??
+              "Engine reported spend above the worker budget cap",
+            ...(pendingFinalization.actualCostCents !== null
+              ? { actualCostCents: pendingFinalization.actualCostCents }
+              : {}),
+          })
+          return {
+            status: "failed",
+            errorCategory: "BUDGET_EXCEEDED",
+            errorMessage: "Engine reported spend above the worker budget cap",
+          }
+        }
         await completeScanWithScore(scanId, pendingFinalization.summary)
         try {
           await qualifyReferralForWorkspace(workspaceId)
@@ -97,6 +127,22 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           })
         }
         return { status: "completed", summary: pendingFinalization.summary ?? "Scan completed" }
+      }
+      if (
+        ["RUNNING", "VERIFYING"].includes(pendingFinalization?.status ?? "") &&
+        pendingFinalization?.events?.length
+      ) {
+        const interruptedMessage =
+          "Provider-billable analysis was interrupted and was not replayed automatically"
+        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+          errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+          errorMessage: interruptedMessage,
+        })
+        return {
+          status: "failed",
+          errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+          errorMessage: interruptedMessage,
+        }
       }
 
       // 1. Preflight checks
@@ -170,7 +216,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         // Once the external engine begins, an automatic BullMQ replay could
         // spend twice for the same scan. Preflight remains retryable; the
         // billable phase is terminal and any rerun requires a fresh scan.
-        job.discard()
         await addScanEvent(
           scanId,
           "billable_boundary",
@@ -178,6 +223,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           "Automatic retries disabled before provider-billable analysis",
           { retryPolicy: "fresh_scan_required" }
         )
+        billablePhaseStarted = true
       }
 
       const engineResult: EngineRunResult =
@@ -381,6 +427,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             "Engine reported spend above the worker budget cap",
             { actualCostUsd, billedCostUsd, maxBudgetUsd }
           )
+          await prisma.scan.update({
+            where: { id: scanId },
+            data: {
+              errorCategory: "BUDGET_EXCEEDED",
+              errorMessage: "Engine reported spend above the worker budget cap",
+              actualCostCents: Math.round(billedCostUsd! * 100),
+            },
+          })
         }
       }
 
@@ -584,7 +638,18 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       const maxAttempts = job.opts?.attempts ?? 1
       const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
-      if (!isTerminalPrerequisiteFailure && (job.attemptsMade ?? 0) + 1 < maxAttempts) {
+      if (
+        !billablePhaseStarted &&
+        !isTerminalPrerequisiteFailure &&
+        (job.attemptsMade ?? 0) + 1 < maxAttempts
+      ) {
+        await prisma.scan.updateMany({
+          where: {
+            id: scanId,
+            status: { in: ["PREFLIGHT", "RUNNING", "VERIFYING"] },
+          },
+          data: { status: "QUEUED" },
+        })
         log.warn("Scan job failed and will be retried", {
           scanId,
           attempt: (job.attemptsMade ?? 0) + 1,

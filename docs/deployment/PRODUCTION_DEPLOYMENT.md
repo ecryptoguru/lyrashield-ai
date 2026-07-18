@@ -105,7 +105,7 @@ A finite positive `Policy.maxBudgetUsd` overrides the default for that scan. Zer
 
 These amounts are hard ceilings, not expected per-scan charges. Provider-reported cost is retained for reconciliation even when it exceeds the approved ceiling; the amount presented as billable by LyraShield is clamped to that ceiling. Actual spend still depends on provider token accounting and how early the scan completes, so reconcile the retained ledger against the Azure meter during the controlled gate.
 
-Automatic BullMQ retries are discarded immediately before a repository scan enters the provider-billable engine phase. Preflight work remains retryable, while a failed billable invocation requires an explicit new scan or retest so the queue cannot silently duplicate model spend. Deterministic SCA, secret, URL, and agent-configuration findings use the Safe profile for targeted retests; engine-only findings retain their originating review depth.
+A durable scan event is recorded immediately before a repository scan enters the provider-billable engine phase. Preflight work remains retryable, while recovery after that boundary fails closed instead of replaying provider work; a failed billable invocation requires an explicit new scan or retest so the queue cannot silently duplicate model spend. Deterministic SCA, secret, URL, and agent-configuration findings use the Safe profile for targeted retests; engine-only findings retain their originating review depth.
 
 This is mode-level routing: a scan uses one model for its full engine invocation. It does not run Luna discovery followed by Terra validation inside the same scan.
 

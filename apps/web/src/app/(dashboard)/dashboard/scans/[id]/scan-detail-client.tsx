@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -21,6 +21,7 @@ import { formatTime } from "@/lib/date-format"
 import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanReviewProfile } from "@/lib/scan-review-profile"
+import { apiGet, apiGetPaginated } from "@/lib/api-client"
 
 interface ScanEvent {
   id: string
@@ -72,6 +73,40 @@ interface ScanData {
       metadata: Record<string, unknown> | null
     }>
   }
+}
+
+interface ScanPollData {
+  id: string
+  workspaceId: string
+  status: string
+  goal: string
+  mode: string
+  triggerType: string
+  startedAt: string | Date | null
+  endedAt: string | Date | null
+  summary: string | null
+  errorCategory: string | null
+  errorMessage: string | null
+  providerCostUsd?: string | number | null
+  billedCostUsd?: string | number | null
+  actualCostCents?: number | null
+  llmRequestCount?: number | null
+  llmInputTokens?: number | null
+  llmCachedInputTokens?: number | null
+  llmOutputTokens?: number | null
+  createdAt: string | Date
+  events?: Array<
+    Omit<ScanEvent, "metadata" | "createdAt"> & { metadata?: unknown; createdAt: string | Date }
+  >
+  resultManifest?: { checksum?: string | null } | null
+  coverageReceipts?: Array<{
+    scanner: string
+    controlId: string
+    status: string
+    reason?: string | null
+    subject?: string | null
+    metadata?: unknown
+  }>
 }
 
 interface FindingItem {
@@ -147,6 +182,17 @@ function formatDuration(start: string | null, end: string | null): string {
   return `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m`
 }
 
+function asIsoString(value: string | Date | null): string | null {
+  if (value === null) return null
+  return value instanceof Date ? value.toISOString() : String(value)
+}
+
+function asMetadata(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
 export function ScanDetailClient({
   scan: initialScan,
   findings,
@@ -158,51 +204,56 @@ export function ScanDetailClient({
   const [currentFindings, setCurrentFindings] = useState<FindingItem[]>(findings)
   const [expandedEvents, setExpandedEvents] = useState(false)
   const [expandedFindings, setExpandedFindings] = useState<Set<string>>(new Set())
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const isActive = isActiveScan(scan.status)
   const presentation = getScanPresentation(scan.status)
 
-  const refresh = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/scans/${scan.id}`, { headers: { Accept: "application/json" } })
-      if (!res.ok) return
-      const json = await res.json()
-      if (json.data) {
-        const updated = json.data
+  const refresh = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        const updated = await apiGet<ScanPollData>(`/api/scans/${scan.id}`, { signal })
         setScan({
-          ...updated,
+          id: updated.id,
+          workspaceId: updated.workspaceId,
+          status: updated.status,
+          goal: updated.goal,
+          mode: updated.mode,
+          triggerType: updated.triggerType,
           target: scan.target,
-          startedAt: updated.startedAt ?? null,
-          endedAt: updated.endedAt ?? null,
-          events: (updated.events ?? []).map((e: { createdAt: string | Date }) => ({
-            ...e,
-            createdAt:
-              e.createdAt instanceof Date ? e.createdAt.toISOString() : String(e.createdAt),
+          startedAt: asIsoString(updated.startedAt),
+          endedAt: asIsoString(updated.endedAt),
+          summary: updated.summary,
+          errorCategory: updated.errorCategory,
+          errorMessage: updated.errorMessage,
+          createdAt: asIsoString(updated.createdAt)!,
+          events: (updated.events ?? []).map((event) => ({
+            id: event.id,
+            stage: event.stage,
+            level: event.level,
+            message: event.message,
+            metadata: asMetadata(event.metadata),
+            createdAt: asIsoString(event.createdAt)!,
           })),
           integrity: {
             manifestChecksum: updated.resultManifest?.checksum ?? null,
-            coverage: (updated.coverageReceipts ?? []).map(
-              (receipt: {
-                scanner: string
-                controlId: string
-                status: string
-                reason?: string | null
-                subject?: string | null
-                metadata?: Record<string, unknown> | null
-              }) => ({
-                scanner: receipt.scanner,
-                controlId: receipt.controlId,
-                status: receipt.status,
-                reason: receipt.reason ?? null,
-                subject: receipt.subject ?? null,
-                metadata: receipt.metadata ?? null,
-              })
-            ),
+            coverage: (updated.coverageReceipts ?? []).map((receipt) => ({
+              scanner: receipt.scanner,
+              controlId: receipt.controlId,
+              status: receipt.status,
+              reason: receipt.reason ?? null,
+              subject: receipt.subject ?? null,
+              metadata: asMetadata(receipt.metadata),
+            })),
           },
           cost: {
-            providerUsd: updated.providerCostUsd ? String(updated.providerCostUsd) : null,
-            billedUsd: updated.billedCostUsd ? String(updated.billedCostUsd) : null,
+            providerUsd:
+              updated.providerCostUsd !== null && updated.providerCostUsd !== undefined
+                ? String(updated.providerCostUsd)
+                : null,
+            billedUsd:
+              updated.billedCostUsd !== null && updated.billedCostUsd !== undefined
+                ? String(updated.billedCostUsd)
+                : null,
             legacyBilledCents: updated.actualCostCents ?? null,
             requestCount: updated.llmRequestCount ?? null,
             inputTokens: updated.llmInputTokens ?? null,
@@ -215,25 +266,38 @@ export function ScanDetailClient({
             updated.status
           )
         ) {
-          const findingsResponse = await fetch(
-            `/api/findings?workspaceId=${updated.workspaceId}&scanId=${scan.id}`
-          )
-          if (findingsResponse.ok) {
-            const findingsJson = await findingsResponse.json()
-            if (Array.isArray(findingsJson.data)) setCurrentFindings(findingsJson.data)
-          }
+          const refreshedFindings: FindingItem[] = []
+          let cursor: string | undefined
+          do {
+            const page = await apiGetPaginated<FindingItem>(
+              "/api/findings",
+              { workspaceId: updated.workspaceId, scanId: scan.id, cursor, limit: "100" },
+              { signal }
+            )
+            refreshedFindings.push(...page.items)
+            cursor = page.nextCursor ?? undefined
+          } while (cursor && !signal.aborted)
+          if (!signal.aborted) setCurrentFindings(refreshedFindings)
         }
+      } catch {
+        // Network errors during polling are non-fatal — keep showing stale data
       }
-    } catch {
-      // Network errors during polling are non-fatal — keep showing stale data
-    }
-  }, [scan.id, scan.target])
+    },
+    [scan.id, scan.target]
+  )
 
   useEffect(() => {
     if (!isActive) return
-    pollRef.current = setInterval(refresh, 5000)
+    const controller = new AbortController()
+    let timeoutId: number | undefined
+    const poll = async () => {
+      await refresh(controller.signal)
+      if (!controller.signal.aborted) timeoutId = window.setTimeout(poll, 5000)
+    }
+    timeoutId = window.setTimeout(poll, 5000)
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+      controller.abort()
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
     }
   }, [isActive, refresh])
 
@@ -555,7 +619,9 @@ export function ScanDetailClient({
                   ? `$${Number(scan.cost.providerUsd).toFixed(6)} provider-reported before cap`
                   : scan.cost.inputTokens !== null || scan.cost.outputTokens !== null
                     ? `${(scan.cost.inputTokens ?? 0).toLocaleString()} in · ${(scan.cost.outputTokens ?? 0).toLocaleString()} out`
-                    : "Waiting for provider usage"}
+                    : scan.target?.type === "REPO"
+                      ? "Waiting for provider usage"
+                      : "Provider not invoked"}
               </p>
             </div>
           </dl>
@@ -608,7 +674,7 @@ export function ScanDetailClient({
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                 {[
                   ["Findings mapped", controlOutcomeCounts.DETECTED ?? 0, "danger"],
-                  ["No finding returned", controlOutcomeCounts.NO_FINDING ?? 0, "success"],
+                  ["No finding returned", controlOutcomeCounts.NO_FINDING ?? 0, "muted"],
                   ["Evidence required", controlOutcomeCounts.EVIDENCE_REQUIRED ?? 0, "warning"],
                   ["Inconclusive", controlOutcomeCounts.INCONCLUSIVE ?? 0, "warning"],
                   ["Not applicable", controlOutcomeCounts.NOT_APPLICABLE ?? 0, "muted"],
@@ -649,7 +715,7 @@ export function ScanDetailClient({
                       outcome === "DETECTED"
                         ? "danger"
                         : outcome === "NO_FINDING"
-                          ? "success"
+                          ? "muted"
                           : outcome === "NOT_APPLICABLE"
                             ? "muted"
                             : "warning"

@@ -40,7 +40,8 @@ async function fetchJson(
 ): Promise<unknown> {
   const controller = new AbortController()
   const onAbort = () => controller.abort()
-  signal?.addEventListener("abort", onAbort, { once: true })
+  if (signal?.aborted) onAbort()
+  else signal?.addEventListener("abort", onAbort, { once: true })
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
     const response = await fetchFn(url, {

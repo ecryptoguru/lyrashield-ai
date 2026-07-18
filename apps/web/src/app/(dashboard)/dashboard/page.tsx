@@ -63,7 +63,9 @@ export default async function DashboardPage() {
     completedScanCount,
     scoreSnapshots,
     recentScans,
-    monthlyScans,
+    monthlyBilledCosts,
+    monthlyLegacyCosts,
+    meteredScanCount,
   ] = await Promise.all([
     prisma.target.count({ where: { workspaceId, deletedAt: null } }),
     prisma.scan.count({ where: { workspaceId, deletedAt: null } }),
@@ -98,9 +100,32 @@ export default async function DashboardPage() {
         _count: { select: { findings: { where: { deletedAt: null } } } },
       },
     }),
-    prisma.scan.findMany({
-      where: { workspaceId, deletedAt: null, createdAt: { gte: monthStart } },
-      select: { billedCostUsd: true, actualCostCents: true },
+    prisma.scan.aggregate({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        createdAt: { gte: monthStart },
+        billedCostUsd: { not: null },
+      },
+      _sum: { billedCostUsd: true },
+    }),
+    prisma.scan.aggregate({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        createdAt: { gte: monthStart },
+        billedCostUsd: null,
+        actualCostCents: { not: null },
+      },
+      _sum: { actualCostCents: true },
+    }),
+    prisma.scan.count({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        createdAt: { gte: monthStart },
+        OR: [{ billedCostUsd: { not: null } }, { actualCostCents: { not: null } }],
+      },
     }),
   ])
 
@@ -133,17 +158,9 @@ export default async function DashboardPage() {
     (statuses.FIXED_PENDING_RETEST ?? 0)
   const riskAccepted = statuses.ACCEPTED_RISK ?? 0
   const latestScore = scoreSnapshots[0] ?? null
-  const monthlySpendUsd = monthlyScans.reduce(
-    (total, scan) =>
-      total +
-      (scan.billedCostUsd !== null
-        ? Number(scan.billedCostUsd)
-        : (scan.actualCostCents ?? 0) / 100),
-    0
-  )
-  const meteredScanCount = monthlyScans.filter(
-    (scan) => scan.billedCostUsd !== null || scan.actualCostCents !== null
-  ).length
+  const monthlySpendUsd =
+    Number(monthlyBilledCosts._sum.billedCostUsd ?? 0) +
+    (monthlyLegacyCosts._sum.actualCostCents ?? 0) / 100
   const trend = [...scoreSnapshots]
     .reverse()
     .map((snapshot) => ({ label: formatDate(snapshot.computedAt), score: snapshot.score }))
@@ -237,11 +254,13 @@ export default async function DashboardPage() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Workspace metrics">
         <MetricCard
           label="Security score"
-          value={readiness.score ?? latestScore?.score ?? "—"}
+          value={latestScore?.score ?? "—"}
           detail={
             latestScore
               ? `Grade ${latestScore.grade.replace("_PLUS", "+")}`
-              : "Awaiting completed scan"
+              : completedScanCount > 0
+                ? "Score snapshot unavailable"
+                : "Awaiting completed scan"
           }
           icon={ShieldCheck}
         />

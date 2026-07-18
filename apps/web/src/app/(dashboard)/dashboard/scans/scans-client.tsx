@@ -159,19 +159,31 @@ export function ScansClient({
 
   useEffect(() => {
     if (!hasActiveScans) return
-    const interval = window.setInterval(() => {
-      void apiGetPaginated<ScanItem>("/api/scans", { workspaceId })
-        .then((result) => {
+    const controller = new AbortController()
+    let timeoutId: number | undefined
+    const poll = async () => {
+      try {
+        const result = await apiGetPaginated<ScanItem>(
+          "/api/scans",
+          { workspaceId },
+          { signal: controller.signal }
+        )
+        if (!controller.signal.aborted) {
           setScans((current) =>
             hasLoadedMore ? mergePolledScans(current, result.items) : result.items
           )
           if (!hasLoadedMore) setNextCursor(result.nextCursor)
-        })
-        .catch(() => {
-          // Keep the current list visible; the manual refresh action reports errors.
-        })
-    }, 10_000)
-    return () => window.clearInterval(interval)
+        }
+      } catch {
+        // Keep the current list visible; the manual refresh action reports errors.
+      }
+      if (!controller.signal.aborted) timeoutId = window.setTimeout(poll, 10_000)
+    }
+    timeoutId = window.setTimeout(poll, 10_000)
+    return () => {
+      controller.abort()
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+    }
   }, [hasActiveScans, hasLoadedMore, workspaceId])
 
   return (

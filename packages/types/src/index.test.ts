@@ -10,6 +10,7 @@ import {
   ScanGoalSchema,
   ScanModeSchema,
   ScanStatusSchema,
+  DeterminismModeSchema,
   FindingSeveritySchema,
   FindingStatusSchema,
   IntegrationTypeSchema,
@@ -37,6 +38,19 @@ describe("OnboardingStepSchema", () => {
 
   it("rejects lowercase", () => {
     expect(OnboardingStepSchema.safeParse("workspace").success).toBe(false)
+  })
+})
+
+describe("DeterminismModeSchema", () => {
+  it("accepts full and targeted scan execution modes", () => {
+    expect(DeterminismModeSchema.options).toEqual([
+      "default",
+      "strict",
+      "best-effort",
+      "targeted_scanner",
+      "targeted_engine",
+    ])
+    expect(DeterminismModeSchema.safeParse("unknown").success).toBe(false)
   })
 })
 

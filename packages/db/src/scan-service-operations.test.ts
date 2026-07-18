@@ -14,7 +14,7 @@ vi.mock("./client", () => ({
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn() } }))
 
 import { prisma } from "./client"
-import { createScan, updateScanStatus } from "./scan-service"
+import { createScan, getScanWithEvents, updateScanStatus } from "./scan-service"
 
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
@@ -49,6 +49,19 @@ describe("updateScanStatus", () => {
 })
 
 describe("createScan", () => {
+  it("rejects an invalid determinism mode before opening a transaction", async () => {
+    await expect(
+      createScan({
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        createdById: "user-1",
+        determinismMode: "invalid" as never,
+      })
+    ).rejects.toThrow()
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+  })
+
   it("rejects a second active scan while holding the target lock", async () => {
     const tx = {
       $executeRaw: vi.fn().mockResolvedValue(undefined),
@@ -69,5 +82,30 @@ describe("createScan", () => {
     ).rejects.toThrow("Target already has an active scan")
     expect(tx.$executeRaw).toHaveBeenCalled()
     expect(tx.scan.create).not.toHaveBeenCalled()
+  })
+})
+
+describe("getScanWithEvents", () => {
+  it("retains the newest bounded events in chronological display order", async () => {
+    mockPrisma.scan.findUnique.mockResolvedValue({
+      id: "scan-1",
+      events: [{ id: "new" }, { id: "old" }],
+      resultManifest: null,
+      coverageReceipts: [],
+    })
+
+    const scan = await getScanWithEvents("scan-1")
+
+    expect(mockPrisma.scan.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          events: {
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 200,
+          },
+        }),
+      })
+    )
+    expect(scan?.events.map((event) => event.id)).toEqual(["old", "new"])
   })
 })

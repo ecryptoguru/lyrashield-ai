@@ -11,6 +11,7 @@ vi.mock("@lyrashield/db", () => ({
     scan: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
   updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
@@ -104,10 +105,8 @@ import {
   prisma,
 } from "@lyrashield/db"
 
-const discardMock = vi.fn()
 const mockJob = {
   id: "job-1",
-  discard: discardMock,
   data: {
     scanId: "scan-1",
     workspaceId: "ws-1",
@@ -152,6 +151,7 @@ it("keeps URL targets out of the unpinned external engine", async () => {
 it("extracts only finite non-negative engine cost signals", () => {
   expect(extractActualCostUsd({ total_cost_usd: 3.25 })).toBe(3.25)
   expect(extractActualCostUsd({ cost: -1 })).toBeNull()
+  expect(extractActualCostUsd({ cost: 1_000_000 })).toBeNull()
   expect(extractActualCostUsd({ tokens: 100 })).toBeNull()
 })
 
@@ -171,6 +171,13 @@ it("extracts a privacy-bounded provider usage summary", () => {
     cachedInputTokens: 4_000,
     outputTokens: 678,
     providerCostUsd: 1.234567,
+  })
+  expect(extractUsageSummary({ request_count: 1.5, input_tokens: 2_147_483_648 })).toEqual({
+    requestCount: null,
+    inputTokens: null,
+    cachedInputTokens: null,
+    outputTokens: null,
+    providerCostUsd: null,
   })
 })
 
@@ -207,6 +214,7 @@ describe("processScanJob", () => {
     vi.mocked(prisma.policy.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "RUNNING" } as never)
     vi.mocked(prisma.scan.update).mockResolvedValue({ id: "scan-1" } as never)
+    vi.mocked(prisma.scan.updateMany).mockResolvedValue({ count: 1 } as never)
     vi.mocked(runScannerOrchestrator).mockResolvedValue({
       allFindings: [],
       engineFindings: [],
@@ -252,7 +260,6 @@ describe("processScanJob", () => {
       undefined,
       expect.any(Function)
     )
-    expect(discardMock).toHaveBeenCalledOnce()
     expect(addScanEvent).toHaveBeenCalledWith(
       "scan-1",
       "coverage_contract",
@@ -324,6 +331,14 @@ describe("processScanJob", () => {
         llmInputTokens: null,
         llmCachedInputTokens: null,
         llmOutputTokens: null,
+      },
+    })
+    expect(prisma.scan.update).toHaveBeenCalledWith({
+      where: { id: "scan-1" },
+      data: {
+        errorCategory: "BUDGET_EXCEEDED",
+        errorMessage: "Engine reported spend above the worker budget cap",
+        actualCostCents: 120,
       },
     })
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
@@ -474,6 +489,13 @@ describe("processScanJob", () => {
     } as never
 
     await expect(processScanJob(retryingJob)).rejects.toThrow("temporary database error")
+    expect(prisma.scan.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "scan-1",
+        status: { in: ["PREFLIGHT", "RUNNING", "VERIFYING"] },
+      },
+      data: { status: "QUEUED" },
+    })
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
@@ -494,12 +516,84 @@ describe("processScanJob", () => {
     expect(runScannerOrchestrator).not.toHaveBeenCalled()
   })
 
+  it("resumes a durable budget stop without completing the scan", async () => {
+    vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+      status: "VERIFYING",
+      summary: "Stopped above budget",
+      errorCategory: "BUDGET_EXCEEDED",
+      errorMessage: "Engine reported spend above the worker budget cap",
+      actualCostCents: 120,
+      resultManifest: { id: "manifest-1" },
+      events: [{ id: "event-1" }],
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "BUDGET_EXCEEDED",
+    })
+
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
+      errorCategory: "BUDGET_EXCEEDED",
+      errorMessage: "Engine reported spend above the worker budget cap",
+      actualCostCents: 120,
+    })
+    expect(completeScanWithScore).not.toHaveBeenCalled()
+    expect(runEngine).not.toHaveBeenCalled()
+  })
+
+  it("fails safely instead of replaying an interrupted billable scan", async () => {
+    vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+      status: "RUNNING",
+      summary: null,
+      errorCategory: null,
+      errorMessage: null,
+      actualCostCents: null,
+      resultManifest: null,
+      events: [{ id: "billable-event" }],
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+    })
+
+    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", {
+      errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+      errorMessage: "Provider-billable analysis was interrupted and was not replayed automatically",
+    })
+    expect(runEngine).not.toHaveBeenCalled()
+  })
+
+  it("does not rethrow a post-billing failure while attempts remain", async () => {
+    vi.mocked(persistFindings).mockRejectedValue(new Error("post-billing database error") as never)
+    const retryingJob = {
+      id: "job-post-billing-error",
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      },
+    } as never
+
+    await expect(processScanJob(retryingJob)).resolves.toMatchObject({
+      status: "failed",
+      errorMessage: "post-billing database error",
+    })
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({ errorMessage: "post-billing database error" })
+    )
+  })
+
   it("fails closed without replaying a billable scan when evidence storage is unconfigured", async () => {
     vi.mocked(persistFindings).mockRejectedValue(new EvidenceStorageConfigurationError())
-    const discard = vi.fn()
     const retryingJob = {
       id: "job-evidence-storage-1",
-      discard,
       attemptsMade: 0,
       opts: { attempts: 3 },
       data: {
@@ -521,7 +615,6 @@ describe("processScanJob", () => {
       "FAILED",
       expect.objectContaining({ errorCategory: "EVIDENCE_STORAGE_CONFIGURATION" })
     )
-    expect(discard).toHaveBeenCalledOnce()
   })
 
   it("always cleans up engine workspace", async () => {

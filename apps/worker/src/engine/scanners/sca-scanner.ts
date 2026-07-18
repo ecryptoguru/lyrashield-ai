@@ -663,7 +663,7 @@ function formatThreatPriority(signal: ThreatSignal | undefined): string | null {
       `FIRST EPSS: ${(signal.epss * 100).toFixed(2)}% probability of exploitation activity in the next 30 days${signal.percentile !== undefined ? ` (${(signal.percentile * 100).toFixed(1)}th percentile)` : ""}${signal.epssDate ? ` as of ${signal.epssDate}` : ""}.`
     )
   }
-  return parts.length > 0 ? `Threat priority — ${parts.join(" ")}` : null
+  return parts.length > 0 ? `Threat priority — ${parts.join("\n")}` : null
 }
 
 export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerability[]> {
@@ -736,17 +736,12 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
     }
   }
 
-  logger.info("SCA scan complete", {
-    repoPath,
-    findingCount: findings.length,
-    depsScanned: uniqueDeps.length,
-  })
   const threatSignals = await fetchThreatSignals(
     findings.flatMap((finding) => (finding.cve ? [finding.cve] : [])),
     fetchFn ?? fetch,
     signal
   )
-  return findings.map((finding) => {
+  const enrichedFindings = findings.map((finding) => {
     const priority = finding.cve ? formatThreatPriority(threatSignals.get(finding.cve)) : null
     return priority
       ? {
@@ -755,4 +750,10 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
         }
       : finding
   })
+  logger.info("SCA scan complete", {
+    repoPath,
+    findingCount: enrichedFindings.length,
+    depsScanned: uniqueDeps.length,
+  })
+  return enrichedFindings
 }
