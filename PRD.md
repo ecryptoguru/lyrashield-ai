@@ -603,18 +603,19 @@ apps/marketing
 
 ## 6.0 Scan Engine Integration Strategy
 
-The scan engine is a separate Python repository at `ecryptoguru/lyrashield-engine`. It is a **thin compatibility fork** over the recorded upstream Strix baseline `7b639505fecf20a2d9e356f96bd91470aa828182`, not a repository-wide rebrand.
+The scan engine is a separate Python repository at `ecryptoguru/lyrashield-engine`. It is a **controlled derivative** over pinned Strix v1.1.0 at `7d5a67d234bd3faef34d22be8c6f5a9607de41a3`, not a repository-wide rebrand or a thin wrapper.
 
-**Decision: Thin adapter + subprocess boundary + review-only upstream sync**
+**Decision: controlled derivative + subprocess boundary + approval-gated stable-release imports**
 
 ```txt
-1. Keep upstream source and STRIX_* contracts intact wherever possible.
+1. Keep generic upstream sandbox, tool, SDK, and skill plumbing close to the pinned release.
 2. Expose the lyrashield CLI through lyrashield_adapter/.
 3. Map LYRASHIELD_* variables only when the corresponding STRIX_* value is unset.
-4. Default upstream telemetry off.
+4. Force inherited telemetry off through the product entry point.
 5. Build the locked engine into the worker image from the sibling canonical repo.
 6. Accept current strix_runs and legacy lyrashield_runs artifact layouts.
-7. Sync upstream only through ancestry-checked, reviewable PRs; never auto-merge or force-push.
+7. Own GPT-5.6 policy, budgets, compaction, lifecycle, identities, evidence metadata, and the versioned worker artifacts within explicit derivative modules.
+8. Import stable upstream release trees only through reviewable PRs; owner approval and green Engine CI are mandatory, conflicts are never auto-resolved, and history is never force-pushed.
 ```
 
 Architecture boundaries:
@@ -624,7 +625,8 @@ lyrashield-engine (separate repo, Python)
   - AI pentesting agents
   - Vulnerability scanning
   - Exploit validation
-  - Upstream-compatible CLI internals
+  - Upstream-derived sandbox, tool, SDK, and skill substrate
+  - LyraShield-owned GPT-5.6, limit, lifecycle, identity, and artifact policy
   - LyraShield compatibility adapter
 
 lyrashield (this monorepo, TypeScript)
@@ -642,34 +644,34 @@ lyrashield (this monorepo, TypeScript)
 The worker wraps the scan engine as a CLI subprocess. It does NOT import engine internals. Communication is via:
 
 - **Input**: CLI flags, rules-of-engagement file, allowlisted environment variables, and authorized model credentials
-- **Output**: bounded stdout/stderr, `run.json`/`vulnerabilities.json` artifacts, and an interpreted exit code
+- **Output**: bounded `run.json`/`vulnerabilities.json` artifacts and an interpreted exit code; raw stdout/stderr is not persisted
 
 This separation allows:
 
 - Clean language boundary (Python engine, TypeScript platform)
-- Small, auditable product-specific divergence
+- Explicit, auditable product-owned divergence
 - Reviewable upstream synchronization
 - Independent versioning and release cycles
 - A stable branded CLI without renaming upstream internals
 
 ### Engine Repo Status
 
-Status: **Thin-fork offline gate passed; one local Safe scan completed; production controlled-scan proof still pending**
+Status: **Controlled-derivative gate passed; one historical local Safe scan completed; production controlled-scan proof still pending**
 
 ```txt
 Repo: ecryptoguru/lyrashield-engine
 Upstream remote: https://github.com/usestrix/strix.git
-Recorded baseline: 7b639505fecf20a2d9e356f96bd91470aa828182
+Recorded release/base: v1.1.0 / 7d5a67d234bd3faef34d22be8c6f5a9607de41a3
 Adapter version: 1.1.0.post1
-Offline proof: 155 tests, Ruff, formatting, headless mypy, Bandit
-Worker proof: image builds, lyrashield --version succeeds, missing model config exits before sandbox pull
+Offline proof: 329 tests, Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox smoke, and worker compatibility
+Worker proof: image builds, lyrashield --version succeeds, missing/unsupported model config exits before sandbox pull
 ```
 
 Telemetry:
 
 ```txt
-Upstream telemetry defaults to 0 through the adapter
-Explicit STRIX_* values take precedence over LYRASHIELD_* compatibility values
+Upstream telemetry is forced to 0 through the adapter
+Explicit STRIX_* values take precedence over LYRASHIELD_* compatibility values except telemetry, which is always disabled
 ```
 
 Current release gates:
@@ -678,7 +680,8 @@ Current release gates:
 2. Pin and inspect the production sandbox image by digest.
 3. Run one approved target through the full worker lifecycle and retain audit evidence.
 4. Add transport-level egress enforcement before untrusted multi-tenant scanning at scale.
-5. Keep `engine-NOTICE.md` current whenever fork divergence or third-party notices change.
+5. Build a private LyraShield evaluation corpus before changing orchestration for claimed quality gains or publishing result claims.
+6. Keep `engine-NOTICE.md` current whenever fork divergence or third-party notices change.
 
 ## 6.1 Phase 1 Architecture
 
@@ -5028,6 +5031,8 @@ Add: (9) **engine supply-chain** (heavy Kali/LiteLLM/Caido dep tree — pin, SBO
 
 ## B9. Fork strategy & license hygiene
 
+> Historical audit recommendation. The current decision in Part C and `codebase.md` §54 supersedes the thin-wrapper proposal below: LyraShield Engine is maintained as a controlled derivative over a pinned upstream substrate.
+
 - **Engine license = Apache-2.0** — commercial closed-source SaaS on a fork is fully permitted; **no AGPL/network-copyleft**. Obligations: ship LICENSE, **mark modified files (§4b)**, add a **NOTICE** crediting LiteLLM/Caido/OpenAI-Agents-SDK/Textual. Verify the fork does these. `[P1]`
 - **Switch from in-tree rebrand → thin wrapper:** keep the vendored engine as close to pristine upstream as possible; brand/normalize in the TS worker by consuming unmodified engine output. Cuts monthly merge-conflict debt dramatically. `[P1]`
 - **Add a CVE-/security-triggered fast-path merge** separate from the routine monthly feature sync (monthly is too slow for security patches in a security product). Maintain a "files we've diverged in" manifest. `[P1]`
@@ -5236,6 +5241,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Current Docker proof: fresh web/worker images build; the web container passes health plus database/Redis readiness; scan readiness reports the live worker heartbeat; and the engine-bearing worker image reports CLI `1.1.0.post1`. The PR #115 smoke retained zero enabled schedules, queued database scans, waiting jobs, or active jobs before and after restart. Docker/runtime health remains separate from a paid controlled-scan result.
 - Scan admission is fail-closed: manual scans, retests, schedules, and agent actions require a live worker before database creation and again at central enqueue. Five-minute queue/database orphans become `FAILED` and are never requeued automatically; non-active jobs without a live scan are removed under a renewable distributed lease. The 17 historical E2E fixtures were narrowly reconciled, and E2E teardown no longer creates BullMQ jobs.
 - Current merged-engine proof: engine PRs #6 and #7 are on `main`; the coordinated gate passes 329 tests, Ruff, formatting, headless mypy, Bandit, native-binary checks, sandbox build/smoke, and worker compatibility.
+- Engine ownership boundary: LyraShield Engine is a controlled derivative over pinned Strix v1.1.0, not a thin wrapper. LyraShield owns GPT-5.6 policy, budgets, compaction, non-interactive lifecycle, deterministic identities, evidence/result schema, and the worker protocol; upstream remains the substrate for generic sandbox, tool, and agent-SDK plumbing. A fully independent rewrite is not justified without repeated upstream blockers or evaluation evidence.
 
 Historical test and migration counts elsewhere in this PRD describe earlier checkpoints. They must not be used as the current release gate.
 
@@ -5421,7 +5427,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 | ---------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Sprints 0–3 + 2.5            | Complete             | Foundation, auth, tenancy, dashboard, onboarding, targets, team, GitHub App, account deletion/anonymization, and browser E2E are implemented.                                                                                                                                                                                                                              |
 | Sprint 3.5 / 7.5             | Complete             | Agent actions, service tokens, single-use approval persistence, approval APIs, verification controls, and controlling-terminal MCP approval are implemented.                                                                                                                                                                                                               |
-| Sprints 4–6.5                | Complete in code     | Queue, bounded worker/scanner lifecycle, engine adapter, normalization, batched SCA, secrets scanning, and idempotent evidence persistence are implemented; controlled sandbox proof remains.                                                                                                                                                                              |
+| Sprints 4–6.5                | Complete in code     | Queue, fail-closed admission/reconciliation, bounded worker/scanner lifecycle, controlled engine derivative, normalization, batched SCA, secrets scanning, and idempotent evidence persistence are implemented; controlled production scan proof remains.                                                                                                                  |
 | Model routing and accounting | Complete in app code | Safe/Quick/Standard route to Luna/medium; Deep/Custom route to Terra/high; protected limits reach the engine; per-request standard/long-context buckets drive private reconciliation; the dashboard exposes no costs. Engine context compaction and GPT-5.6 execution hardening are merged; controlled production proof remains.                                           |
 | Growth layer                 | Complete             | Score snapshots, public scorecards, referral attribution/rewards, premium social cards, badges, channel sharing, privacy-safe signed-cookie funnel events, waitlist referrals, and report handoff copy are implemented. Real-domain unfurl and production attribution QA remain release gates.                                                                             |
 | Sprints 7–9                  | Complete in code     | Fix proposals, retests, immutable report snapshots, notifications, schedules, pinned URL scanning, aggregate launch readiness, sharing, and the exact-range diff gate are implemented. Fresh GitHub claims and Fix PR creation remain intentionally blocked pending their security proofs.                                                                                 |
@@ -5452,3 +5458,4 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 4. Add transport-level egress controls and validate migrations, backups, recovery, and observability.
 5. Complete the separate app-origin scorecard/unfurl/referral gate on the approved public domains and submit the sitemap through selected webmaster accounts.
 6. After pilot evidence, prioritize Security Copilot, visual plans, compliance-lite evidence, and Phase 2 features from real customer demand.
+7. Build a private LyraShield engine evaluation corpus before changing agent architecture or making result-quality claims; measure expected findings/non-findings, evidence correctness, duplicate stability, control coverage, runtime, and token use separately for Luna and Terra.

@@ -12,7 +12,7 @@ This product includes software developed by the following projects:
 
 - Source: <https://github.com/BerriAI/litellm>
 - License: MIT
-- Usage: LLM provider abstraction layer (dependency)
+- Usage: model-client and routing dependency; LyraShield policy restricts production execution to approved GPT-5.6 deployments
 
 ## Caido
 
@@ -36,9 +36,9 @@ This product includes software developed by the following projects:
 
 ### Baseline
 
-- Upstream baseline: `7b639505fecf20a2d9e356f96bd91470aa828182`
+- Upstream release/base: `v1.1.0` / `7d5a67d234bd3faef34d22be8c6f5a9607de41a3`
 - Fork repository: `ecryptoguru/lyrashield-engine`
-- Integration model: thin adapter plus review-only upstream-sync PRs
+- Integration model: controlled LyraShield derivative over a pinned upstream substrate; release imports require review, approval, and green CI
 
 ### Modified upstream files
 
@@ -54,19 +54,19 @@ This product includes software developed by the following projects:
 - `pyproject.toml` and `uv.lock`
 - Existing tests under `tests/`
 
-These changes support the LyraShield adapter contract, telemetry defaults, output compatibility, sandbox hardening, and regression coverage. They do not grant a right to use upstream trademarks.
+The current derivative also carries GPT-5.6-only validation, context/output/agent/spend limits, non-interactive lifecycle hardening, deterministic report identity, structured evidence/control metadata, and worker compatibility. The file list above is representative rather than exhaustive; `git diff $(cat .lyrashield-upstream-base)..HEAD -- strix` is authoritative. These changes do not grant a right to use upstream trademarks.
 
 ### Added fork files
 
 - `lyrashield_adapter/` — compatibility entry point and CLI adapter
 - `.lyrashield-upstream-base`, `scripts/check-upstream.sh`, and `scripts/verify-thin-fork.sh` — upstream-boundary verification
-- `.github/workflows/upstream-sync.yml` — weekly/manual, PR-only upstream synchronization
-- `UPGRADES.md` and the thin-fork design/plan records
+- `.github/workflows/upstream-sync.yml` — daily/manual, PR-only stable-release synchronization
+- `UPGRADES.md` and historical upstream-boundary design/plan records
 - Adapter, hardening, and upstream-sync regression tests
 
 ### Upstream synchronization
 
-The workflow verifies ancestry, aborts rewritten history, and opens a reviewable PR when a sync is needed. It does not auto-merge, force-push, resolve conflicts, or run mechanical repository-wide renames.
+The workflow compares stable release trees and opens a reviewable PR when a sync is needed. Candidate code is not executed in the write-enabled preparation job. Merge requires human approval and the read-only engine CI gate; conflicts are never resolved automatically and history is never force-pushed.
 
 Update this file whenever a new engine divergence or third-party notice is merged.
 

@@ -57,9 +57,9 @@ TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming c
 BREVO_API_KEY="..."
 EMAIL_FROM="noreply@example.com"
 
-LYRASHIELD_LLM="provider/fallback-model"
-LYRASHIELD_LUNA_LLM="provider/gpt-5.6-luna"
-LYRASHIELD_TERRA_LLM="provider/gpt-5.6-terra"
+LYRASHIELD_LLM="azure/gpt-5.6-terra"
+LYRASHIELD_LUNA_LLM="azure/gpt-5.6-luna"
+LYRASHIELD_TERRA_LLM="azure/gpt-5.6-terra"
 LLM_API_KEY="..."
 LYRASHIELD_ENGINE_PATH="lyrashield"
 LYRASHIELD_IMAGE="ghcr.io/usestrix/strix-sandbox@sha256:<approved-digest>"
@@ -121,7 +121,7 @@ A durable scan event is recorded immediately before a repository scan enters the
 
 This is mode-level routing: a scan uses one model for its full engine invocation. It does not run Luna discovery followed by Terra validation inside the same scan.
 
-Do not claim the below-272k compaction guard from engine PR #6 in production until that PR receives the required independent approval, merges to engine `main`, and the promoted worker image is rebuilt from the merged engine commit. The candidate implementation compacts estimated input at 240k toward 180k and bounds direct dedupe input to 200 kB; it does not replace provider-meter reconciliation.
+Engine PRs #6 and #7 are merged. The promoted engine compacts estimated input at 240k toward 180k, bounds direct dedupe input to 200 kB, limits output and agent concurrency, and reserves projected spend before each request. These controls do not replace provider-meter reconciliation or prove finding quality.
 
 Add GitHub OAuth/App, email, notification, billing, and analytics variables only when those integrations are enabled. R2/S3 is mandatory before controlled full scans, and monitoring is mandatory before general availability. Use `.env.example` as the complete variable index, not as a production secret file.
 
@@ -150,7 +150,17 @@ Then, in the target environment:
 8. Confirm URL targets use only the pinned deterministic URL scanner. Do not re-enable the external engine for URL targets until its transport is DNS-pinned and redirect-safe.
 9. Confirm GitHub callbacks can refresh only a pre-existing workspace binding. Fresh installation claims and client-authored Fix PR payloads must remain blocked until their provider-ownership and server-generated-patch gates are implemented.
 
-Queue recovery is deliberately fail-closed. Workers reconcile queue/database drift at startup and every 60 seconds under a distributed lock. A scan left `QUEUED` for more than five minutes without a processable job becomes `FAILED` with `QUEUE_ORPHANED`; operators must not automatically requeue it because the original attempt may have crossed a paid-provider boundary. Never delete BullMQ data directly in Redis. Any cancellation must update the corresponding database scan and append its lifecycle event.
+Queue recovery is deliberately fail-closed. Workers reconcile queue/database drift at startup and every 60 seconds under a renewable token-owned Redis lease. A scan left `QUEUED` for more than five minutes without a processable job becomes `FAILED` with `QUEUE_ORPHANED`; operators must not automatically requeue it because the original attempt may have crossed a paid-provider boundary.
+
+Operational queue rules:
+
+1. Use the authenticated scan cancellation action/API. It transitions the database scan to `CANCELLED`; the worker stops active phases and reconciliation removes a remaining non-active job.
+2. Never delete BullMQ keys or jobs directly in Redis, and never change only the database row. Queue and scan state must retain one auditable lifecycle.
+3. Before restarting workers, record counts for enabled schedules, non-terminal scans, and waiting/delayed/prioritized/active jobs. Investigate unexpected work before registration makes it eligible to run.
+4. After restart, verify `/api/ready/scans`, worker logs, the same queue/database counts, and the absence of an unintended `engine_start` event.
+5. Retry a failed/orphaned scan only through an explicit user/operator action that creates a new scan ID. Reconciliation never recreates paid work.
+
+Alert when scan readiness remains 503 beyond the deployment window, every worker heartbeat expires, reconciliation reports drift, a queue-failure event is retained, queue depth grows without active workers, or the oldest waiting job exceeds the approved latency. Web `/api/ready` may remain healthy during a scan-service outage and must not mask this alert.
 
 ## Public scorecard, referral, and sharing gate
 

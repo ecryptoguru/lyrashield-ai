@@ -12,14 +12,14 @@ This guide covers local development only. `docker-compose.yml` binds services to
 Keep the platform and engine repositories next to each other:
 
 ```text
-~/Desktop/lyrashield-ai
+~/Desktop/lyrashieldai
 ~/Desktop/lyrashield-engine
 ```
 
 ## 1. Configure the platform
 
 ```bash
-cd ~/Desktop/lyrashield-ai
+cd ~/Desktop/lyrashieldai
 cp .env.example .env
 pnpm install --frozen-lockfile
 ```
@@ -91,7 +91,7 @@ Event checks must use the UI-generated random session identifier; do not invent 
 ## 4. Run the marketing site
 
 ```bash
-cd ~/Desktop/lyrashield-ai
+cd ~/Desktop/lyrashieldai
 cp apps/marketing/.env.example apps/marketing/.env
 cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
 pnpm --filter @lyrashield/marketing exec wrangler d1 migrations apply lyrashield-marketing-waitlist --local
@@ -111,7 +111,7 @@ Submit a disposable local waitlist address and verify the success state shows qu
 ## 5. Build the worker image and engine
 
 ```bash
-cd ~/Desktop/lyrashield-ai
+cd ~/Desktop/lyrashieldai
 docker compose build worker
 docker compose up -d web worker
 docker compose exec worker lyrashield --version
@@ -123,6 +123,17 @@ The worker image consumes the sibling engine source through its named Docker bui
 The web app accepts a scan only while a worker heartbeat is live. Workers refresh their Redis lease every 10 seconds; the lease expires after 30 seconds following a crash or lost Redis connection. `/api/ready/scans` returns `503` while no worker is available, and the UI asks the user to retry instead of leaving a scan permanently queued.
 
 The worker reconciles queue/database drift at startup and every minute. A database scan that remains `QUEUED` for five minutes without a processable BullMQ job fails closed as `QUEUE_ORPHANED`; it is never re-enqueued automatically because that could repeat paid model work. Do not delete BullMQ keys or jobs directly in Redis. Remove a queued job only through an application/operator flow that also transitions its database scan to `CANCELLED` or `FAILED` and records a scan event.
+
+Exercise the readiness transition without creating a scan:
+
+```bash
+docker compose stop worker
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/ready/scans # 503
+docker compose up -d worker
+curl -fsS http://localhost:3000/api/ready/scans # ready after registration
+```
+
+Use the dashboard/API cancellation action for queued or running scans. Never remove a Redis job directly: cancellation owns the database transition and event, active phases observe it, and reconciliation removes a remaining non-active job.
 
 The base `LYRASHIELD_LLM` is the fallback. During worker scans, Safe/Quick/Standard use `LYRASHIELD_LUNA_LLM` at medium reasoning; Deep/Custom use `LYRASHIELD_TERRA_LLM` at high. The values after `azure/` or `azure_ai/` must be the real Azure deployment names.
 
@@ -181,7 +192,7 @@ After an authorized scan, inspect its timeline and confirm:
 
 One scan uses one selected model. A Luna-to-Terra cascade inside one scan is not implemented.
 
-Engine PR #6 adds local pre-request compaction when estimated input reaches 240,000 tokens, targeting about 180,000 tokens, and bounds direct dedupe input to 200 kB. Its CI is green but it is not canonical engine behavior until the required independent approval and merge. A worker image built from that branch proves only the local candidate image.
+Engine PRs #6 and #7 are merged. Current engine behavior compacts estimated input at 240,000 tokens toward about 180,000 tokens, bounds direct dedupe input to 200 kB, limits output/agent concurrency, and reserves projected spend before each request. These are code/build guarantees; they do not prove result quality or replace provider-meter reconciliation.
 
 For engine work on the host:
 
@@ -198,7 +209,7 @@ Do not merge Strix upstream or run mechanical rebranding commands locally. Use t
 ## 6. Full Docker smoke
 
 ```bash
-cd ~/Desktop/lyrashield-ai
+cd ~/Desktop/lyrashieldai
 docker compose up --build -d
 docker compose ps
 curl -fsS http://localhost:3000/ >/dev/null

@@ -203,6 +203,8 @@ LyraShield applies protected internal run limits automatically. The dashboard do
 
 Only one active scan may run against the same target. Wait for it to finish or cancel it before starting another.
 
+Scan submission is accepted only while the scan service has a live worker. If the worker is starting, restarting, or unavailable, the request returns `SCAN_SERVICE_UNAVAILABLE` and no scan is created. Wait briefly and retry once; repeated clicks are unnecessary and cannot create hidden queued work.
+
 Possible lifecycle states include Queued, Preflight, Running, Verifying, Completed, Failed, Cancelled, Stopped by Limit, Timed Out, and Requires Approval. The list refreshes active scans automatically and also provides manual **Refresh**, **Cancel**, and **Load more** actions.
 
 ## 10. Understand scan details
@@ -428,8 +430,9 @@ Billing plans, plan quotas, automatic server-generated Fix PRs, intrusive exploi
 - Confirm the target belongs to the active workspace.
 - Confirm your role has scan-create permission.
 - Check whether the target already has an active scan.
-- For repository scans, confirm the worker, Redis queue, model deployment, provider credentials, sandbox image, and evidence storage are available.
-- Review the returned error and scan events; do not repeatedly retry the same failed run.
+- If the message says the scan service is unavailable, no scan was launched. Wait for the operator to restore worker readiness, then retry once.
+- For repository scans, the operator should verify `/api/ready/scans`, Redis queue connectivity, the GPT-5.6 deployment, OpenAI/Azure credentials, sandbox image, and evidence storage.
+- Review the returned error and scan events. An enqueue race may create a visible `FAILED` scan with a retained queue event, but it will never remain silently queued or be replayed automatically.
 
 ### A scan has no findings
 
