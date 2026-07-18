@@ -35,9 +35,7 @@ const mocks = vi.hoisted(() => {
           commands.push(() => members.size)
           return chain
         },
-        async exec() {
-          return commands.map((command) => [null, command()])
-        },
+        exec: async () => commands.map((command) => [null, command()]),
       }
       return chain
     },
