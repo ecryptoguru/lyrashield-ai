@@ -28,15 +28,15 @@ describe("Vibe Security 50 coverage contract", () => {
 
   it("keeps findings separate from controls that require external evidence", () => {
     const summary = summarizeVibeSecurityCoverage([
-      { title: "SQL injection in search" },
-      { title: "Missing Content-Security-Policy header" },
+      { title: "SQL injection in search", control_ids: [11] },
+      { title: "Missing Content-Security-Policy header", control_ids: [27] },
       { title: "Missing backup and recovery proof" },
     ])
 
     expect(summary.totalControls).toBe(50)
     expect(summary.machineControlsRequested).toBe(43)
     expect(summary.evidenceControlsRequired).toBe(7)
-    expect(summary.matchedControlRanks).toEqual([11, 27, 36])
+    expect(summary.matchedControlRanks).toEqual([11, 27])
     expect(summary.evidenceControlRanks).toEqual([34, 35, 36, 43, 46, 48, 50])
   })
 })

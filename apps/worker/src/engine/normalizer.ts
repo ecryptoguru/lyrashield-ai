@@ -259,6 +259,7 @@ export function normalizeFindings(
 
     const normalized: NormalizedFinding = {
       ...vuln,
+      ...(vuln.scannerSource ? { corroboratingSources: [vuln.scannerSource] } : {}),
       normalizedSeverity,
       normalizedCwe,
       normalizedCvss,

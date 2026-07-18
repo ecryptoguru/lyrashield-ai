@@ -24,6 +24,7 @@ vi.mock("@lyrashield/logger", () => ({
 
 import {
   createKillEscalation,
+  cleanupEngineWorkspace,
   findRunOutputDir,
   interpretExitCode,
   resolveEngineSourceCheckout,
@@ -165,10 +166,16 @@ describe("resolveEngineProfile", () => {
   })
 
   it("falls back to the existing model when a routed deployment is absent", () => {
-    expect(resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/fallback" })).toEqual({
-      model: "azure/fallback",
+    expect(resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.6-luna" })).toEqual({
+      model: "azure/gpt-5.6-luna",
       reasoningEffort: "medium",
     })
+  })
+
+  it("rejects non-GPT-5.6 deployments", () => {
+    expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.5" })).toThrow(
+      "require a GPT-5.6"
+    )
   })
 })
 
@@ -250,4 +257,16 @@ it("terminates every tracked engine process during worker shutdown", () => {
   stopTrackingFirst()
   expect(terminateActiveEngineProcesses()).toBe(1)
   stopTrackingSecond()
+})
+
+it("refuses to clean a workspace outside the worker-owned run root", async () => {
+  const outside = await mkdtemp(join(tmpdir(), "worker-cleanup-guard-"))
+  cleanupPaths.push(outside)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(join(outside, "keep.txt"), "keep", "utf8")
+
+  await cleanupEngineWorkspace(outside, "../outside")
+
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await expect(realpath(join(outside, "keep.txt"))).resolves.toMatch(/keep\.txt$/)
 })

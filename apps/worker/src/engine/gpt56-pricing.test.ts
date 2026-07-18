@@ -23,6 +23,7 @@ describe("GPT-5.6 official pricing", () => {
       calculateGpt56CostUsd(model, {
         inputTokens: 18_420,
         cachedInputTokens: 6_100,
+        cacheWriteInputTokens: 0,
         outputTokens: 2_310,
       })
     ).toBe(expected)
@@ -59,6 +60,7 @@ describe("GPT-5.6 official pricing", () => {
       calculateGpt56CostUsd("gpt-5.5", {
         inputTokens: 100,
         cachedInputTokens: 0,
+        cacheWriteInputTokens: 0,
         outputTokens: 10,
       })
     ).toBeNull()
@@ -66,12 +68,21 @@ describe("GPT-5.6 official pricing", () => {
       calculateGpt56CostUsd("gpt-5.6-luna", {
         inputTokens: null,
         cachedInputTokens: null,
+        cacheWriteInputTokens: null,
         outputTokens: 10,
       })
     ).toBeNull()
     expect(
       calculateGpt56CostUsd("gpt-5.6-luna", {
         inputTokens: 272_001,
+        cachedInputTokens: 0,
+        cacheWriteInputTokens: 0,
+        outputTokens: 10,
+      })
+    ).toBeNull()
+    expect(
+      calculateGpt56CostUsd("gpt-5.6-luna", {
+        inputTokens: 100,
         cachedInputTokens: 0,
         outputTokens: 10,
       })

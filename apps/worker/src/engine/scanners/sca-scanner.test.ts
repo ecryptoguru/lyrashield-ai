@@ -95,6 +95,15 @@ describe("scanSca", () => {
       expect(lodashFinding!.severity).toBe("high")
       expect(lodashFinding!.cwe).toBe("CWE-1104")
       expect(lodashFinding!.remediation_steps).toContain("4.17.21")
+      expect(lodashFinding).toMatchObject({
+        finding_class: "dependency_cve",
+        dependency_metadata: {
+          package_name: "lodash",
+          installed_version: "4.17.20",
+          package_ecosystem: "npm",
+          fixed_version: "4.17.21",
+        },
+      })
     } finally {
       cleanupRepo()
     }
@@ -360,7 +369,7 @@ describe("scanSca", () => {
     }
   })
 
-  it("deduplicates vulnerabilities by ID", async () => {
+  it("keeps the same vulnerability ID distinct across packages", async () => {
     const dir = await setupRepo({
       "package.json": JSON.stringify({ dependencies: { "pkg-a": "1.0.0", "pkg-b": "2.0.0" } }),
     })
@@ -384,8 +393,11 @@ describe("scanSca", () => {
 
     try {
       const findings = await scanSca({ repoPath: dir, workspaceDir: dir, fetchFn })
-      expect(findings.length).toBe(1)
-      expect(findings[0]!.id).toBe("SHARED-VULN-001")
+      expect(findings).toHaveLength(2)
+      expect(findings.map((finding) => finding.dependency_metadata?.package_name).sort()).toEqual([
+        "pkg-a",
+        "pkg-b",
+      ])
     } finally {
       cleanupRepo()
     }
