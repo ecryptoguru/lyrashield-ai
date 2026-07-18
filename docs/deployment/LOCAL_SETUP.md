@@ -68,7 +68,7 @@ pnpm build
 git diff --check
 ```
 
-The merged `main` baseline is 840 tests in 90 files plus 2 Chromium E2E tests; treat command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+The PR #108 release candidate passes 853 core tests in 94 files, 79 marketing tests in 12 files, 16 motion tests, and 2 Chromium E2E tests. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Verify scorecards and social sharing
 
@@ -158,6 +158,8 @@ AZURE_API_VERSION="v1"
 
 Default spend limits are $1.20 for Safe/Quick, $3.20 for Standard, and $15 for Deep/Custom. A finite positive workspace `Policy.maxBudgetUsd` overrides the mode amount. The worker passes the resolved amount through `--max-budget-usd`; invalid or missing policy values fall back to the mode limit.
 
+The dashboard names these modes Release Check (Safe), Code Review (Standard), and Deep Security Review (Deep); Weekly Monitor schedules use Safe. URL/API targets skip the external engine and therefore have $0 AI-model cost. See `userguide.md` for the user-facing option matrix and `PRODUCTION_DEPLOYMENT.md` for the permanent GPT-5.6 rate card.
+
 Routing verification without printing credentials:
 
 ```bash
@@ -170,6 +172,7 @@ After an authorized scan, inspect its timeline and confirm:
 - Safe/Quick/Standard: `engine_start` reports Luna and `medium`; `budget_cap` reports $1.20/$3.20 unless policy-overridden.
 - Deep/Custom: `engine_start` reports Terra and `high`; `budget_cap` reports $15 unless policy-overridden.
 - `llm_usage` is present when the provider returned usage data.
+- When engine cost is absent but complete standard-context counters exist, `llm_usage` records `costSource: openai_rate_card` plus the pricing effective date and source. Ambiguous long-context aggregates remain unavailable instead of being guessed.
 
 One scan uses one selected model. A Luna-to-Terra cascade inside one scan is not implemented.
 

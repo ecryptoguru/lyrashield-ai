@@ -55,11 +55,22 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 
 ## Product status
 
-Implemented: core workspaces/targets/scans, existing GitHub integration refresh, scan orchestration, findings normalization, source-aware SCA/secret/agent-config handling, pinned deterministic URL scanning, fix proposals, queued retests, reports, notifications, schedules, MCP, single-use agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksum-first retry deduplication, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, LyraShield Score, cross-admin-idempotent public scorecards, referrals, premium social sharing, Azure AI / GPT 5.6 mode routing, and an evidence-backed marketing surface with a public methodology page plus five browser-local no-upload tools. New scans retain a manifest, coverage receipts, candidate provenance, and verification receipts: detected, validated, and independently verified are separate states. Safe/Quick/Standard scans use Luna with medium reasoning; Deep/Custom use Terra with high reasoning. Every engine run receives a positive dollar cap; a reported overage stops the scan and cannot bill above that cap. Engine findings are not self-verified.
+Implemented: core workspaces/targets/scans, existing GitHub integration refresh, scan orchestration, findings normalization, source-aware SCA/secret/agent-config handling, pinned deterministic URL scanning, fix proposals, queued retests, reports, notifications, schedules, MCP, single-use agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksum-first retry deduplication, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, LyraShield Score, cross-admin-idempotent public scorecards, referrals, premium social sharing, Azure AI / GPT 5.6 mode routing, and an evidence-backed marketing surface with a public methodology page plus five browser-local no-upload tools. New scans retain a manifest, coverage receipts, candidate provenance, verification receipts, engine-reported cost, capped billable cost, request counts, and token counters: detected, validated, and independently verified are separate states. Safe/Quick/Standard scans use Luna with medium reasoning; Deep/Custom use Terra with high reasoning. Every engine run receives a positive dollar cap; an overage stops the scan and cannot bill above that cap. Complete standard-context counters use the versioned official GPT-5.6 rate card only when engine cost is absent; ambiguous long-context aggregates are not guessed. Engine findings are not self-verified.
 
 Live acquisition status: the passive Lite Scanner and browser-local tools are public, and privacy-bounded PostHog funnel/pageview analytics are configured for the canonical domain. The authenticated application and full BullMQ/engine worker are separate deployment surfaces and are not public production capabilities yet.
 
 Not implemented: billing/plan quotas, provider-backed proof for a fresh GitHub installation claim, server-generated approval-bound PR patches, constrained intrusive sandbox exploit replay, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities. Production full scans additionally require private evidence storage, BullMQ-compatible TLS Redis, dedicated sandbox-capable worker compute, the authenticated application origin, monitoring/recovery, and transport-level egress enforcement. See `PRD.md` for the authoritative roadmap.
+
+## User-facing review options
+
+| Workflow             | Mode     | Repository model | Reasoning | Default maximum AI spend |
+| -------------------- | -------- | ---------------- | --------- | -----------------------: |
+| Release Check        | SAFE     | GPT-5.6 Luna     | medium    |                    $1.20 |
+| Code Review          | STANDARD | GPT-5.6 Luna     | medium    |                    $3.20 |
+| Deep Security Review | DEEP     | GPT-5.6 Terra    | high      |                   $15.00 |
+| Weekly Monitor       | SAFE     | GPT-5.6 Luna     | medium    |            $1.20 per run |
+
+These are ceilings, not quoted scan prices. URL/API targets skip the external engine and therefore have $0 AI-model cost. QUICK and CUSTOM remain backend/API modes rather than extra one-off dashboard choices; Sol pricing is retained for accounting but Sol is not assigned to a preset. See `userguide.md` for the complete workflow and option reference.
 
 ## Pre-launch GTM
 
@@ -85,4 +96,5 @@ Initial themes: secure AI-generated code, security review before SaaS launch, de
 - `PRD.md` — roadmap and acceptance scope
 - `codebase.md` — implemented architecture
 - `AGENTS.md` — current handoff, immediate blockers, and execution sequence
+- `userguide.md` — complete user workflows, options, permissions, costs, and limitations
 - `apps/marketing/BLOG_AUTHORING.md` — authoring and publication checklist

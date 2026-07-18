@@ -107,8 +107,15 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
         targetId: { type: "string", description: "Target ID to scan" },
-        goal: { type: "string", description: "Scan goal (e.g., 'full_audit', 'quick_check')" },
-        mode: { type: "string", description: "Scan mode: SAFE, DEEP, or AGGRESSIVE" },
+        goal: {
+          type: "string",
+          description:
+            "Scan goal: CHECK_PR, TEST_APP, LAUNCH_REVIEW, WEEKLY_MONITOR, FULL_PENTEST, or COMPLIANCE_REVIEW",
+        },
+        mode: {
+          type: "string",
+          description: "Scan mode: SAFE, QUICK, STANDARD, DEEP, or CUSTOM",
+        },
       },
       required: ["workspaceId", "targetId"],
     },
@@ -117,7 +124,7 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
         const data = await apiCall(context, "POST", "/api/scans", {
           workspaceId: args.workspaceId,
           targetId: args.targetId,
-          goal: (args.goal as string) ?? "full_audit",
+          goal: (args.goal as string) ?? "TEST_APP",
           mode: (args.mode as string) ?? "SAFE",
         })
         return makeToolResult({ action: "scan_triggered", scan: data })

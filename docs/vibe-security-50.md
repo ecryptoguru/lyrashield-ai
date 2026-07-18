@@ -22,9 +22,13 @@ The executable source of truth is `packages/security/src/vibe-security-controls.
 
 The scan-detail experience groups these receipts by control family and exposes the complete 50-control ledger on demand. The seven evidence-required controls are presented as user actions, not scanner failures.
 
+The dashboard exposes this contract through Release Check, Code Review, and Deep Security Review; Weekly Monitor is the recurring Safe workflow. These presets change review depth and budget, not the definition of the 50 controls. URL/API scans show only applicable deterministic receipts and never pretend repository or operational controls ran. See `userguide.md` §§8–10 for the user-facing interpretation.
+
 ## Cost controls
 
 The checklist reuses the current engine invocation and existing SCA, secrets, and URL phases. Maven and Gradle manifests use the existing batched OSV call. CVE-bearing dependency findings may also receive bounded, cached enrichment from the CISA Known Exploited Vulnerabilities catalog and FIRST EPSS API; either source may fail without failing the scan, and enrichment never changes severity or verification state. Agent-instruction and workflow checks read only a small allowlist of bounded files.
+
+Repository scans use Luna/medium for Safe, Quick, and Standard or Terra/high for Deep and Custom. Their default engine caps are $1.20, $1.20, $3.20, $15, and $15 respectively. URL/API targets skip the engine and have $0 AI-model cost. The cost ledger prefers engine-reported cost and uses the versioned official GPT-5.6 rate card only for complete standard-context counters when cost is absent.
 
 ## Release proof
 

@@ -2,6 +2,8 @@
 
 > No production deployment is approved by this document. It records the minimum gates that must be satisfied before a release. Choose vendors and infrastructure only after founder approval; do not copy local Docker Compose into production.
 
+`userguide.md` documents the end-user experience. This runbook owns only deployment, configuration, verification, and operational release boundaries.
+
 ## Architecture boundary
 
 - The Next.js web application and BullMQ worker need managed PostgreSQL and Redis.

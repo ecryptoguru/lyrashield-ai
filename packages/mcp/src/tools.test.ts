@@ -50,6 +50,10 @@ describe("createScanTargetTool", () => {
       "http://localhost:3000/api/scans",
       expect.objectContaining({ method: "POST" })
     )
+    const request = mockFetch.mock.calls[0]![1] as RequestInit
+    expect(JSON.parse(String(request.body))).toMatchObject({ goal: "TEST_APP", mode: "SAFE" })
+    const modeSchema = tool.inputSchema.properties.mode as { description: string }
+    expect(modeSchema.description).toContain("STANDARD")
   })
 
   it("returns error on API failure", async () => {
