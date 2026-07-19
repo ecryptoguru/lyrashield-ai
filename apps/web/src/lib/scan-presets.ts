@@ -13,7 +13,7 @@ export const SCAN_PRESETS = {
   },
   DEEP_REVIEW: {
     label: "Deep security review",
-    description: "High-reasoning review for complex or high-risk releases.",
+    description: "Deep cross-file review for complex or high-risk releases.",
     goal: "FULL_PENTEST",
     mode: "DEEP",
   },

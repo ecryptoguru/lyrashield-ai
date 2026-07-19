@@ -5,10 +5,11 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
 import { dirname, join, relative, resolve, sep } from "node:path"
 import { pathToFileURL } from "node:url"
 import { env } from "@lyrashield/config"
+import { assertEvidenceEncrypted } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 
 export const EVIDENCE_KEY_REF = "vault/lyrashield-evidence-key/v1"
-const LOCAL_EVIDENCE_KEY_REF = "local-hkdf://better-auth-secret/lyrashield-evidence/v1"
+const LOCAL_EVIDENCE_KEY_REF = "local-hkdf/better-auth-secret/lyrashield-evidence/v1"
 const LOCAL_EVIDENCE_KEY_INFO = "lyrashield-local-evidence-v1"
 
 export interface UploadEvidenceParams {
@@ -48,9 +49,15 @@ function isLocalEvidenceConfigured(): boolean {
 }
 
 export function assertEvidenceStorageConfigured(): void {
-  if (!isLocalEvidenceConfigured() && !isS3Configured()) {
-    throw new EvidenceStorageConfigurationError()
+  if (isLocalEvidenceConfigured()) {
+    assertEvidenceEncrypted(LOCAL_EVIDENCE_KEY_REF)
+    return
   }
+  if (isS3Configured()) {
+    assertEvidenceEncrypted(EVIDENCE_KEY_REF)
+    return
+  }
+  throw new EvidenceStorageConfigurationError()
 }
 
 let s3Client: S3Client | null = null
@@ -147,6 +154,7 @@ export async function uploadEvidence(params: UploadEvidenceParams): Promise<Uplo
   const key = buildKey(workspaceId, findingId, type, artifactId, checksum)
 
   if (isLocalEvidenceConfigured()) {
+    assertEvidenceEncrypted(LOCAL_EVIDENCE_KEY_REF)
     return storeLocalEvidence(key, content, checksum)
   }
 
@@ -161,6 +169,7 @@ export async function uploadEvidence(params: UploadEvidenceParams): Promise<Uplo
   }
 
   const client = getS3Client()
+  assertEvidenceEncrypted(encryptionKeyRef)
 
   try {
     await client.send(

@@ -28,7 +28,7 @@ The dashboard exposes this contract through Release Check, Code Review, and Deep
 
 The checklist reuses the current engine invocation and existing SCA, secrets, and URL phases. Maven and Gradle manifests use the existing batched OSV call. CVE-bearing dependency findings may also receive bounded, cached enrichment from the CISA Known Exploited Vulnerabilities catalog and FIRST EPSS API; either source may fail without failing the scan, and enrichment never changes severity or verification state. Agent-instruction and workflow checks read only a small allowlist of bounded files.
 
-Repository scans use Luna/medium for Safe, Quick, and Standard or Terra/high for Deep and Custom. URL/API targets skip the engine. Protected limits and provider reconciliation remain internal and are not displayed in the dashboard.
+Repository scans use Luna/medium for Safe, Quick, and Standard. Deep and Custom use a Terra/medium coordinator with Luna/medium specialists. URL/API targets skip the engine. Protected limits and provider reconciliation remain internal and are not displayed in the dashboard.
 
 ## Release proof
 

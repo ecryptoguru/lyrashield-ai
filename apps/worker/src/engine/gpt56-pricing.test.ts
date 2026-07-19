@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   calculateGpt56CostUsd,
   calculateGpt56CostUsdFromBuckets,
+  calculateGpt56CostUsdFromModelBuckets,
   GPT_56_PRICING_USD_PER_MILLION,
 } from "./gpt56-pricing"
 
@@ -53,6 +54,35 @@ describe("GPT-5.6 official pricing", () => {
         longOutputTokens: 1_000,
       })
     ).toBe(0.517)
+  })
+
+  it("prices a Terra coordinator and Luna delegates independently", () => {
+    expect(
+      calculateGpt56CostUsdFromModelBuckets([
+        {
+          model: "azure_ai/gpt-5.6-terra",
+          standardInputTokens: 100_000,
+          standardCachedInputTokens: 0,
+          standardCacheWriteInputTokens: 0,
+          standardOutputTokens: 1_000,
+          longInputTokens: 0,
+          longCachedInputTokens: 0,
+          longCacheWriteInputTokens: 0,
+          longOutputTokens: 0,
+        },
+        {
+          model: "azure_ai/gpt-5.6-luna",
+          standardInputTokens: 200_000,
+          standardCachedInputTokens: 0,
+          standardCacheWriteInputTokens: 0,
+          standardOutputTokens: 2_000,
+          longInputTokens: 0,
+          longCachedInputTokens: 0,
+          longCacheWriteInputTokens: 0,
+          longOutputTokens: 0,
+        },
+      ])
+    ).toBe(0.477)
   })
 
   it("fails closed for unknown models or incomplete usage", () => {

@@ -120,7 +120,7 @@ const SECRET_PATTERNS: SecretPattern[] = [
     pattern: /(postgres|postgresql|mongodb|mysql|redis|amqp):\/\/[^:\s]+:[^@\s]+@[^\s/]+/gi,
     description:
       "A database connection string containing embedded credentials was found in the source code.",
-    falsePositiveHints: ["localhost", "127.0.0.1", "user:pass", "username:password"],
+    falsePositiveHints: ["localhost", "127.0.0.1", ".invalid", "user:pass", "username:password"],
   },
   {
     id: "generic-api-key",
@@ -260,9 +260,19 @@ async function walkDir(
 }
 
 function isFalsePositive(match: string, pattern: SecretPattern): boolean {
-  if (!pattern.falsePositiveHints) return false
   const lowerMatch = match.toLowerCase()
-  return pattern.falsePositiveHints.some((hint) => lowerMatch.includes(hint.toLowerCase()))
+  if (pattern.falsePositiveHints?.some((hint) => lowerMatch.includes(hint.toLowerCase()))) {
+    return true
+  }
+
+  if (pattern.id === "bearer-token") {
+    const token = match.replace(/^Bearer\s+/i, "")
+    // Human-readable kebab-case placeholders are documentation, not opaque
+    // bearer credentials. Keep mixed-case, numeric, dotted, and encoded tokens.
+    return /^[a-z]+(?:-[a-z]+){2,}$/.test(token)
+  }
+
+  return false
 }
 
 function isTestFixturePath(relativePath: string): boolean {

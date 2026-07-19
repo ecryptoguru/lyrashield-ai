@@ -309,7 +309,13 @@ function detailInteger(value: unknown, key: string): number | undefined {
   return usageInteger((value as Record<string, unknown>)[key])
 }
 
-function normalizeRequestUsageBuckets(value: unknown): Record<string, number> {
+function boundedGpt56Model(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length === 0 || value.length > 128) return undefined
+  const normalized = value.toLowerCase().replaceAll("_", "-")
+  return /(?:^|[/.-])gpt-5\.6-(?:sol|terra|luna)(?:$|[/.-])/.test(normalized) ? value : undefined
+}
+
+function normalizeRequestUsageBuckets(value: unknown): Record<string, unknown> {
   if (!Array.isArray(value) || value.length === 0 || value.length > MAX_LLM_USAGE_REQUESTS) {
     return {}
   }
@@ -323,6 +329,8 @@ function normalizeRequestUsageBuckets(value: unknown): Record<string, number> {
     long_cache_write_input_tokens: 0,
     long_output_tokens: 0,
   }
+  const modelBuckets = new Map<string, typeof buckets>()
+  let everyEntryHasModel = true
   for (const entry of value) {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return {}
     const record = entry as Record<string, unknown>
@@ -330,6 +338,8 @@ function normalizeRequestUsageBuckets(value: unknown): Record<string, number> {
     const outputTokens = usageInteger(record.output_tokens)
     const cachedInputTokens = detailInteger(record.input_tokens_details, "cached_tokens")
     const cacheWriteInputTokens = detailInteger(record.input_tokens_details, "cache_write_tokens")
+    const model = boundedGpt56Model(record.model)?.trim()
+    if (!model) everyEntryHasModel = false
     if (
       inputTokens === undefined ||
       outputTokens === undefined ||
@@ -345,8 +355,34 @@ function normalizeRequestUsageBuckets(value: unknown): Record<string, number> {
     buckets[`${prefix}_cached_input_tokens` as keyof typeof buckets] += cachedInputTokens
     buckets[`${prefix}_cache_write_input_tokens` as keyof typeof buckets] += cacheWriteInputTokens
     buckets[`${prefix}_output_tokens` as keyof typeof buckets] += outputTokens
+    if (model && everyEntryHasModel) {
+      const perModel = modelBuckets.get(model) ?? {
+        standard_input_tokens: 0,
+        standard_cached_input_tokens: 0,
+        standard_cache_write_input_tokens: 0,
+        standard_output_tokens: 0,
+        long_input_tokens: 0,
+        long_cached_input_tokens: 0,
+        long_cache_write_input_tokens: 0,
+        long_output_tokens: 0,
+      }
+      perModel[`${prefix}_input_tokens` as keyof typeof perModel] += inputTokens
+      perModel[`${prefix}_cached_input_tokens` as keyof typeof perModel] += cachedInputTokens
+      perModel[`${prefix}_cache_write_input_tokens` as keyof typeof perModel] +=
+        cacheWriteInputTokens
+      perModel[`${prefix}_output_tokens` as keyof typeof perModel] += outputTokens
+      modelBuckets.set(model, perModel)
+      if (modelBuckets.size > 3) everyEntryHasModel = false
+    }
   }
-  return buckets
+  return {
+    ...buckets,
+    ...(everyEntryHasModel && modelBuckets.size > 0
+      ? {
+          model_usage_buckets: [...modelBuckets].map(([model, usage]) => ({ model, ...usage })),
+        }
+      : {}),
+  }
 }
 
 function validateVulnerability(v: Record<string, unknown>): EngineVulnerability | null {

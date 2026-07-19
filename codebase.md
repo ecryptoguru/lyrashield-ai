@@ -29,7 +29,7 @@ The canonical engine repo is `ecryptoguru/lyrashield-engine`. It is a controlled
 - **Recorded upstream release/base:** `v1.1.0` / `7d5a67d234bd3faef34d22be8c6f5a9607de41a3`
 - **Adapter version:** `1.1.0.post1`
 - **Compatibility:** maps `LYRASHIELD_*` only when the corresponding `STRIX_*` value is unset; explicit upstream values win; the product entry point forces upstream telemetry to `0`
-- **Model config:** the engine accepts only GPT-5.6 Sol/Terra/Luna deployment names. It receives one resolved `LYRASHIELD_LLM`/`STRIX_LLM` per subprocess plus the bounded OpenAI/Azure credential surface. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for Deep/Custom, falling back to `LYRASHIELD_LLM`. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel is not configured.
+- **Model config:** the engine accepts only GPT-5.6 Sol/Terra/Luna deployment names. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for the Deep/Custom coordinator, falling back to `LYRASHIELD_LLM`; Deep/Custom child specialists receive Luna/medium through the separate delegate route. Per-request receipts retain their actual model for mixed-model reconciliation. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel is not configured.
 - **Artifacts:** worker accepts `strix_runs` and legacy `lyrashield_runs`, with `run.json` or `vulnerabilities.json`
 - **Sync model:** stable-release tree imports on review branches; human approval and green CI are required, with no force-push or automatic conflict resolution
 - **Verification:** 329 tests, Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox build/smoke, and public worker compatibility
@@ -941,7 +941,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
   6. Emits scan events for RUNNING, output capture, completion
   7. Reads `vulnerabilities.json` + `run.json` from output dir
   8. Returns `{ exitCode, output: ParsedScanOutput }`
-- **`resolveEngineProfile(mode)`** — routes Safe/Quick/Standard to the configured Luna deployment at medium reasoning and Deep/Custom to Terra at high reasoning; a missing routed deployment falls back to `LYRASHIELD_LLM`.
+- **`resolveEngineProfile(mode)`** — routes Safe/Quick/Standard to Luna/medium throughout and Deep/Custom to a Terra/medium coordinator with Luna/medium specialists; missing routed deployments fall back to `LYRASHIELD_LLM`.
 - **`interpretExitCode(code)`** — maps engine exit codes: 0 → COMPLETED (SUCCESS), 2 → COMPLETED (VULNERABILITIES_FOUND), all other codes → FAILED.
 - **`cleanupEngineWorkspace(dir)`** — removes temp workspace (best-effort, non-fatal).
 - Focused runner tests cover exit mapping, termination escalation, output discovery, every routing mode, and fallback selection.
@@ -1898,11 +1898,11 @@ Implements the "LyraShield Score, Shareable Scorecard & Referral System — Engi
 
 ## §35 — GPT-5.6 mode routing and enforced scan budgets (2026-07-13)
 
-- `apps/worker/src/engine/runner.ts` resolves one engine profile per scan. Safe, Quick, and Standard use `LYRASHIELD_LUNA_LLM` with medium reasoning; Deep and Custom use `LYRASHIELD_TERRA_LLM` with high reasoning. If the selected variable is empty, `LYRASHIELD_LLM` remains the backward-compatible fallback.
+- `apps/worker/src/engine/runner.ts` resolves one engine profile per scan. Safe, Quick, and Standard use `LYRASHIELD_LUNA_LLM` with medium reasoning; Deep and Custom use `LYRASHIELD_TERRA_LLM` with medium reasoning. If the selected variable is empty, `LYRASHIELD_LLM` remains the backward-compatible fallback.
 - The resolved model and reasoning effort override only the spawned engine process. Azure credentials, endpoint, and API version continue through the existing generic/Azure allowlist; routing does not duplicate secrets or create separate queues.
 - `apps/worker/src/engine/command-builder.ts` applies positive default caps of $1.20 for Safe/Quick, $3.20 for Standard, and $15 for Deep/Custom. Unknown modes receive the conservative $15 fallback. A finite positive `Policy.maxBudgetUsd`, fetched with `workspaceId` and soft-delete scope, overrides the mode cap.
 - `run-scan.job.ts` passes the cap to the engine's `--max-budget-usd` guard and records private accounting events. The `engine_start` event records model and reasoning selection; normalized `llm_usage` remains separately persisted after execution. PR #109 supersedes the original aggregate fallback with the per-request accounting boundary in §51.
-- This is mode-level routing, not a within-scan cascade: one engine invocation uses one model. Luna discovery followed by Terra validation inside the same scan, provider prompt-cache orchestration, billing-plan quotas, and cross-workspace cost policy remain roadmap work.
+- Deep/Custom now use a deterministic within-scan route: Terra/medium owns coordination and cross-file judgment while Luna/medium runs focused child work. Only the root can create or stop specialists, specialists start without copied parent history unless explicitly requested, stable per-scan prompt-cache keys improve repeated-prefix reuse, and per-request model buckets keep reconciliation exact. Adaptive evidence-triggered promotion, billing-plan quotas, and cross-workspace cost policy remain roadmap work.
 - Configuration is propagated through `packages/config`, `turbo.json`, `docker-compose.yml`, `.env.example`, and the deployment runbooks. Regression tests cover every mode, fallback routing, policy overrides, invalid policy budgets, and CLI cap propagation. The full local gate passes 689 Vitest tests in 65 files, lint, typecheck, and production build.
 
 ## §36 — Deep Review v3 remediation (2026-07-14, PRs #54–#57)

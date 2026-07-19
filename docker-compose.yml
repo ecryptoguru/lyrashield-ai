@@ -170,6 +170,8 @@ services:
       LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-ghcr.io/usestrix/strix-sandbox@sha256:478e0b37ec83b2ba8c6e159593cb46d5dc9b624a45d6a9bb606851b83058d284}"
       LYRASHIELD_TELEMETRY: "${LYRASHIELD_TELEMETRY:-0}"
       LYRASHIELD_ENGINE_PATH: "${LYRASHIELD_ENGINE_PATH:-lyrashield}"
+      LYRASHIELD_ENGINE_SANDBOX_NETWORK: "${LYRASHIELD_ENGINE_SANDBOX_NETWORK:-lyrashield-sandbox}"
+      PLATFORM_MAX_SCAN_BUDGET_USD: "${PLATFORM_MAX_SCAN_BUDGET_USD:-50}"
       # Local-only encrypted evidence store; production must use S3-compatible storage.
       LYRASHIELD_LOCAL_EVIDENCE_STORAGE: "1"
       LYRASHIELD_LOCAL_EVIDENCE_DIR: "/app/.lyrashield/evidence"
@@ -187,6 +189,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - worker_runs:/app/lyrashield_runs
       - worker_evidence:/app/.lyrashield/evidence
+    networks:
+      - default
+      - scan_sandbox
     pids_limit: ${WORKER_PIDS_LIMIT:-512}
     deploy:
       resources:
@@ -213,3 +218,8 @@ volumes:
   redis_data:
   worker_runs:
   worker_evidence:
+
+networks:
+  scan_sandbox:
+    name: "${LYRASHIELD_ENGINE_SANDBOX_NETWORK:-lyrashield-sandbox}"
+    internal: true

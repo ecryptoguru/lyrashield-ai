@@ -310,11 +310,13 @@ describe("output-parser", () => {
             output_tokens: 30,
             request_usage_entries: [
               {
+                model: "azure_ai/gpt-5.6-terra",
                 input_tokens: 100,
                 output_tokens: 10,
                 input_tokens_details: [{ cached_tokens: 20, cache_write_tokens: 0 }],
               },
               {
+                model: "azure_ai/gpt-5.6-luna",
                 input_tokens: 300_000,
                 output_tokens: 20,
                 input_tokens_details: [{ cached_tokens: 200_000, cache_write_tokens: 0 }],
@@ -331,6 +333,16 @@ describe("output-parser", () => {
         long_input_tokens: 300_000,
         long_cached_input_tokens: 200_000,
         long_output_tokens: 20,
+        model_usage_buckets: [
+          expect.objectContaining({
+            model: "azure_ai/gpt-5.6-terra",
+            standard_input_tokens: 100,
+          }),
+          expect.objectContaining({
+            model: "azure_ai/gpt-5.6-luna",
+            long_input_tokens: 300_000,
+          }),
+        ],
       })
     })
   })

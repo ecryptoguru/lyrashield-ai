@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const send = vi.fn()
 const evidenceEnv = vi.hoisted(() => ({
+  DATABASE_URL: "postgresql://test:test@localhost:5432/test",
   S3_ENDPOINT: undefined as string | undefined,
   S3_BUCKET: undefined as string | undefined,
   S3_ACCESS_KEY: undefined as string | undefined,
@@ -29,6 +30,7 @@ vi.mock("@aws-sdk/client-s3", () => ({
 
 vi.mock("@lyrashield/config", () => ({
   env: evidenceEnv,
+  isDev: false,
 }))
 
 vi.mock("@lyrashield/logger", () => ({
@@ -89,7 +91,7 @@ describe("uploadEvidence", () => {
     expect(
       Buffer.concat([decipher.update(encrypted.subarray(28)), decipher.final()]).toString()
     ).toBe("sensitive proof")
-    expect(result.encryptionKeyRef).toMatch(/^local-hkdf:/)
+    expect(result.encryptionKeyRef).toBe("local-hkdf/better-auth-secret/lyrashield-evidence/v1")
   })
 
   it("does not overwrite a prior artifact when content changes", async () => {
