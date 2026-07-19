@@ -65,7 +65,9 @@ vi.mock("../engine/runner", () => ({
   resolveEngineProfile: vi.fn((mode: string) => ({
     model:
       mode === "DEEP" || mode === "CUSTOM" ? "azure_ai/gpt-5.6-terra" : "azure_ai/gpt-5.6-luna",
-    reasoningEffort: mode === "DEEP" || mode === "CUSTOM" ? "high" : "medium",
+    reasoningEffort: "medium",
+    delegateModel: "azure_ai/gpt-5.6-luna",
+    delegateReasoningEffort: "medium",
   })),
   resolveEngineTimeoutMs: vi.fn((minutes?: number | null) =>
     typeof minutes === "number" && minutes > 0 ? minutes * 60 * 1000 : 30 * 60 * 1000

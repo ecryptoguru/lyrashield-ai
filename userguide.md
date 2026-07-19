@@ -185,10 +185,10 @@ The authenticated dashboard exposes three one-off review depths. Weekly Monitor 
 | -------------------- | ------------ | --------------------------- | --------- |
 | Release Check        | SAFE         | GPT-5.6 Luna                | Medium    |
 | Code Review          | STANDARD     | GPT-5.6 Luna                | Medium    |
-| Deep Security Review | DEEP         | GPT-5.6 Terra               | High      |
+| Deep Security Review | DEEP         | GPT-5.6 Terra               | Medium    |
 | Weekly Monitor       | SAFE         | GPT-5.6 Luna                | Medium    |
 
-The backend also supports QUICK (Luna/medium) and CUSTOM (Terra/high) for approved API or agent workflows. They are not additional one-off dashboard choices. GPT-5.6 Sol is retained in internal accounting but is not currently assigned to a scan preset.
+The backend also supports QUICK (Luna/medium) and CUSTOM (Terra/medium coordination with Luna/medium specialists) for approved API or agent workflows. They are not additional one-off dashboard choices. GPT-5.6 Sol is retained in internal accounting but is not currently assigned to a scan preset.
 
 LyraShield applies protected internal run limits automatically. The dashboard does not display model costs, spend, or accounting events. If a protected limit is reached, the scan ends with a neutral limit message while operators retain the internal usage record for reconciliation.
 

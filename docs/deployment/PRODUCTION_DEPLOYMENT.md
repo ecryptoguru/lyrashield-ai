@@ -100,8 +100,8 @@ The worker selects one profile before each engine subprocess:
 | Safe         | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $1.20 |
 | Quick        | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $1.20 |
 | Standard     | standard    | `LYRASHIELD_LUNA_LLM`  | medium    |       $3.20 |
-| Deep         | deep        | `LYRASHIELD_TERRA_LLM` | high      |      $15.00 |
-| Custom       | deep        | `LYRASHIELD_TERRA_LLM` | high      |      $15.00 |
+| Deep         | deep        | `LYRASHIELD_TERRA_LLM` | medium    |      $15.00 |
+| Custom       | deep        | `LYRASHIELD_TERRA_LLM` | medium    |      $15.00 |
 
 The worker permanently versions the official OpenAI GPT-5.6 rate card in `apps/worker/src/engine/gpt56-pricing.ts` (effective 2026-07-09; USD per 1 million tokens):
 
