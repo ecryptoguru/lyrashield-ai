@@ -47,19 +47,19 @@ The beta is ready only after:
 
 ## 3. Proposed minimum architecture
 
-| Surface | Service | Minimum beta configuration | Expected base cost |
-| --- | --- | --- | ---: |
-| Marketing and waitlist | Existing Cloudflare Worker, D1, KV, Rate Limits | Keep current production deployment | Existing/free-tier usage |
-| Passive Lite Check | Existing Azure Container App | 0.5 vCPU, 1 GiB, min 0, max 1 | Expected within shared ACA grant at low traffic |
-| Authenticated web/API | Azure Container Apps Consumption | 0.5 vCPU, 1 GiB, min 0, max 1 | Expected within shared ACA grant at low traffic |
-| Application database | Supabase Free Postgres | Runtime pooler URL; direct URL only for migrations/backups | $0 while within Free limits |
-| Queue and rate limits | Upstash Free Redis | TLS Redis URL, one worker, measured command budget | $0 below Free command/storage limits |
-| Evidence and backups | Private Cloudflare R2 | Separate evidence and database-backup prefixes or buckets | $0 within R2 Free limits |
-| Worker | Azure D2as v5 Linux VM | 2 vCPU, 8 GiB, 64 GB Standard SSD, one active scan | About $45.87/month continuously running |
-| Container images | Public GHCR packages | Immutable image digests | $0 for public packages |
-| Transactional email | Brevo Free | Verification and invitations only | $0 below 300 emails/day |
-| CI and backup automation | GitHub Actions standard public-repo runners | Pinned actions and scheduled jobs | $0 for standard runners on a public repo |
-| Models | Azure-hosted GPT-5.6 Luna and Terra | Luna specialists; Terra only as Deep coordinator | Usage-based, reported separately |
+| Surface                  | Service                                         | Minimum beta configuration                                 |                              Expected base cost |
+| ------------------------ | ----------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------: |
+| Marketing and waitlist   | Existing Cloudflare Worker, D1, KV, Rate Limits | Keep current production deployment                         |                        Existing/free-tier usage |
+| Passive Lite Check       | Existing Azure Container App                    | 0.5 vCPU, 1 GiB, min 0, max 1                              | Expected within shared ACA grant at low traffic |
+| Authenticated web/API    | Azure Container Apps Consumption                | 0.5 vCPU, 1 GiB, min 0, max 1                              | Expected within shared ACA grant at low traffic |
+| Application database     | Supabase Free Postgres                          | Runtime pooler URL; direct URL only for migrations/backups |                     $0 while within Free limits |
+| Queue and rate limits    | Upstash Free Redis                              | TLS Redis URL, one worker, measured command budget         |            $0 below Free command/storage limits |
+| Evidence and backups     | Private Cloudflare R2                           | Separate evidence and database-backup prefixes or buckets  |                        $0 within R2 Free limits |
+| Worker                   | Azure D2as v5 Linux VM                          | 2 vCPU, 8 GiB, 64 GB Standard SSD, one active scan         |         About $45.87/month continuously running |
+| Container images         | Public GHCR packages                            | Immutable image digests                                    |                          $0 for public packages |
+| Transactional email      | Brevo Free                                      | Verification and invitations only                          |                         $0 below 300 emails/day |
+| CI and backup automation | GitHub Actions standard public-repo runners     | Pinned actions and scheduled jobs                          |        $0 for standard runners on a public repo |
+| Models                   | Azure-hosted GPT-5.6 Luna and Terra             | Luna specialists; Terra only as Deep coordinator           |                Usage-based, reported separately |
 
 Why the worker remains a VM: the current engine launches a digest-pinned Docker sandbox and needs controlled host runtime access. Azure Container Apps does not provide the required privileged host/Docker boundary. Replacing the VM requires a separate sandbox-service architecture and is not a beta prerequisite.
 
@@ -99,8 +99,8 @@ The most recent controlled local measurements are planning inputs, not provider 
 
 Example first-month model envelope:
 
-| Usage | Estimated model cost |
-| --- | ---: |
+| Usage                        | Estimated model cost |
+| ---------------------------- | -------------------: |
 | 10 Safe scans + 2 Deep scans | Approximately $19.30 |
 | 20 Safe scans + 4 Deep scans | Approximately $38.60 |
 | 40 Safe scans + 8 Deep scans | Approximately $77.20 |
@@ -462,18 +462,18 @@ Exit criteria:
 
 ## 14. Verification matrix
 
-| Gate | Required evidence |
-| --- | --- |
-| Source quality | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, formatting, `git diff --check` |
-| Database | Prisma generation, migration diff, deploy to empty DB, deploy to production, restricted-role checks |
-| Browser | Marketing and dashboard at desktop, 390 px, and 320 px; keyboard, focus, reduced motion, empty/error states |
-| Auth | Signup/invite, email verification, signin, signout, session expiry, cross-tenant denial |
-| Queue | Admission, one concurrency, heartbeat expiry/recovery, cancellation, failure callback, reconciliation |
-| Storage | Evidence upload/download/checksum, missing-storage failure, encrypted backup and isolated restore |
-| Models | Luna Safe and Terra/Luna Deep routes, reasoning level, token buckets, provider cost reconciliation |
-| Security | Secrets/SCA gates, prompt-injection guard, engine-output bounds, target allowlist, no URL-engine execution |
-| Deployment | Immutable digests, health/readiness, logs/alerts, rollback to prior revision, VM deallocation recovery |
-| Live truth | Marketing Beta label, dashboard Beta label, app link only when live, no unsupported claims |
+| Gate           | Required evidence                                                                                           |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| Source quality | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, formatting, `git diff --check`                    |
+| Database       | Prisma generation, migration diff, deploy to empty DB, deploy to production, restricted-role checks         |
+| Browser        | Marketing and dashboard at desktop, 390 px, and 320 px; keyboard, focus, reduced motion, empty/error states |
+| Auth           | Signup/invite, email verification, signin, signout, session expiry, cross-tenant denial                     |
+| Queue          | Admission, one concurrency, heartbeat expiry/recovery, cancellation, failure callback, reconciliation       |
+| Storage        | Evidence upload/download/checksum, missing-storage failure, encrypted backup and isolated restore           |
+| Models         | Luna Safe and Terra/Luna Deep routes, reasoning level, token buckets, provider cost reconciliation          |
+| Security       | Secrets/SCA gates, prompt-injection guard, engine-output bounds, target allowlist, no URL-engine execution  |
+| Deployment     | Immutable digests, health/readiness, logs/alerts, rollback to prior revision, VM deallocation recovery      |
+| Live truth     | Marketing Beta label, dashboard Beta label, app link only when live, no unsupported claims                  |
 
 ## 15. Go/no-go decision
 
