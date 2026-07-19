@@ -244,6 +244,7 @@ describe("score-service", () => {
             status: "VERIFYING",
             mode: "STANDARD",
             target: { id: "t-1", projectId: "p-1", branch: "main" },
+            coverageReceipts: [{ status: "COMPLETED" }],
           }),
           update: vi.fn().mockResolvedValue({ id: "scan-1", status: "COMPLETED" }),
         },
@@ -286,6 +287,7 @@ describe("score-service", () => {
             status: "VERIFYING",
             mode: "STANDARD",
             target: { id: "t-1", projectId: null, branch: "main" },
+            coverageReceipts: [{ status: "COMPLETED" }],
           }),
           update: vi.fn().mockResolvedValue({ id: "scan-1", status: "COMPLETED" }),
         },
@@ -317,6 +319,40 @@ describe("score-service", () => {
 
       expect(tx.scoreSnapshot.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ score: 90, grade: "B" }) })
+      )
+    })
+
+    it("does not make a scorecard shareable when retained coverage is incomplete", async () => {
+      const tx = {
+        scan: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "scan-1",
+            workspaceId: "ws-1",
+            targetId: "t-1",
+            status: "VERIFYING",
+            mode: "STANDARD",
+            target: { id: "t-1", projectId: null, branch: "main" },
+            coverageReceipts: [{ status: "BLOCKED" }],
+          }),
+          update: vi.fn().mockResolvedValue({ id: "scan-1", status: "COMPLETED" }),
+        },
+        scoreSnapshot: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          findFirst: vi.fn().mockResolvedValue(null),
+          findMany: vi.fn(),
+          create: vi.fn().mockResolvedValue({ id: "snap-1" }),
+        },
+        finding: { findMany: vi.fn().mockResolvedValue([]) },
+        project: { update: vi.fn() },
+        target: { update: vi.fn().mockResolvedValue({}) },
+        scanEvent: { create: vi.fn().mockResolvedValue({}) },
+      }
+      mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
+
+      await completeScanWithScore("scan-1", "done")
+
+      expect(tx.scoreSnapshot.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ shareEligible: false }) })
       )
     })
   })

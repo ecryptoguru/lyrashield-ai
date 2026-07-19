@@ -1,10 +1,13 @@
 import { betterAuth } from "better-auth"
+import { APIError, createAuthMiddleware } from "better-auth/api"
 import { prismaAdapter } from "better-auth/adapters/prisma"
 import { genericOAuth, microsoftEntraId } from "better-auth/plugins"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
+import { isBetaInviteAllowed } from "./beta-invites"
+import { isOAuthProviderConfigured, socialSignUpEnabled } from "./oauth-providers"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
 const GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET
@@ -14,6 +17,9 @@ const AZURE_AD_CLIENT_ID = env.AZURE_AD_CLIENT_ID
 const AZURE_AD_CLIENT_SECRET = env.AZURE_AD_CLIENT_SECRET
 const AZURE_AD_TENANT_ID = env.AZURE_AD_TENANT_ID
 const secureCookies = new URL(env.BETTER_AUTH_URL).protocol === "https:"
+const githubEnabled = isOAuthProviderConfigured(GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET)
+const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
+const microsoftEnabled = isOAuthProviderConfigured(AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)
 
 // Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; additional
 // origins (staging, apex+www, preview deploys) come from a comma-separated
@@ -133,6 +139,21 @@ export const auth = betterAuth({
     requireEmailVerification: !isDev,
     sendResetPassword: sendResetPasswordEmail,
   },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.context.path !== "/sign-up/email" || !isProd) return
+      const email = (ctx.body as { email?: unknown } | undefined)?.email
+      if (
+        typeof email !== "string" ||
+        !isBetaInviteAllowed(email, env.LYRASHIELD_BETA_INVITE_EMAILS)
+      ) {
+        throw APIError.from("FORBIDDEN", {
+          code: "BETA_INVITE_REQUIRED",
+          message: "Beta access is by invitation.",
+        })
+      }
+    }),
+  },
   emailVerification: {
     sendVerificationEmail,
     sendOnSignUp: true,
@@ -143,26 +164,32 @@ export const auth = betterAuth({
     github: {
       clientId: GITHUB_CLIENT_ID ?? "",
       clientSecret: GITHUB_CLIENT_SECRET ?? "",
-      enabled: !!GITHUB_CLIENT_ID,
+      enabled: githubEnabled,
+      // Invited beta users create and verify an email account first. OAuth can
+      // then link only to that account; it must never be a public sign-up path.
+      disableSignUp: !socialSignUpEnabled(isProd),
     },
     google: {
       clientId: GOOGLE_CLIENT_ID ?? "",
       clientSecret: GOOGLE_CLIENT_SECRET ?? "",
-      enabled: !!GOOGLE_CLIENT_ID,
+      enabled: googleEnabled,
+      disableSignUp: !socialSignUpEnabled(isProd),
     },
   },
-  plugins: [
-    genericOAuth({
-      config: [
-        microsoftEntraId({
-          clientId: AZURE_AD_CLIENT_ID ?? "",
-          clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
-          tenantId: AZURE_AD_TENANT_ID || "common",
-          ...(AZURE_AD_CLIENT_ID ? {} : { disableSignUp: true }),
+  plugins: microsoftEnabled
+    ? [
+        genericOAuth({
+          config: [
+            microsoftEntraId({
+              clientId: AZURE_AD_CLIENT_ID ?? "",
+              clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
+              tenantId: AZURE_AD_TENANT_ID || "common",
+              disableSignUp: !socialSignUpEnabled(isProd),
+            }),
+          ],
         }),
-      ],
-    }),
-  ],
+      ]
+    : [],
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days (rolling)
     updateAge: 60 * 60 * 24, // 1 day (refresh interval)

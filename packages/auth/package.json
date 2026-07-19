@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./oauth-providers": "./src/oauth-providers.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
