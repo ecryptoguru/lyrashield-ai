@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { authClient, getAuthErrorMessage, isEmailNotVerifiedError } from "@lyrashield/auth"
 import { ShieldCheck } from "lucide-react"
-import { Button, Input, Spinner, GithubIcon, MicrosoftIcon, FormField } from "@lyrashield/ui"
+import {
+  Button,
+  Input,
+  Spinner,
+  GithubIcon,
+  GoogleIcon,
+  MicrosoftIcon,
+  FormField,
+} from "@lyrashield/ui"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function SignInPage() {
@@ -15,13 +23,19 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
-  const [providers, setProviders] = useState({ github: false, microsoft: false })
+  const [providers, setProviders] = useState({ github: false, google: false, microsoft: false })
 
   useEffect(() => {
     void fetch("/api/auth/providers")
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { github?: boolean; microsoft?: boolean } | null) => {
-        if (data) setProviders({ github: Boolean(data.github), microsoft: Boolean(data.microsoft) })
+      .then((data: { github?: boolean; google?: boolean; microsoft?: boolean } | null) => {
+        if (data) {
+          setProviders({
+            github: Boolean(data.github),
+            google: Boolean(data.google),
+            microsoft: Boolean(data.microsoft),
+          })
+        }
       })
       .catch(() => {})
   }, [])
@@ -61,6 +75,21 @@ export default function SignInPage() {
       })
     } catch {
       setError("GitHub sign in failed. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleGoogle() {
+    setLoading(true)
+    setError(null)
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/dashboard",
+      })
+    } catch {
+      setError("Google sign in failed. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -169,7 +198,7 @@ export default function SignInPage() {
             </Button>
           </form>
 
-          {(providers.github || providers.microsoft) && (
+          {(providers.github || providers.google || providers.microsoft) && (
             <>
               <div className="my-6 flex items-center gap-3">
                 <div className="bg-border h-px flex-1" />
@@ -188,6 +217,18 @@ export default function SignInPage() {
                   >
                     <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
                     Continue with GitHub
+                  </Button>
+                )}
+                {providers.google && (
+                  <Button
+                    onClick={handleGoogle}
+                    disabled={loading}
+                    variant="secondary"
+                    className="w-full"
+                    size="lg"
+                  >
+                    <GoogleIcon className="mr-2 h-4 w-4" />
+                    Continue with Google
                   </Button>
                 )}
                 {providers.microsoft && (

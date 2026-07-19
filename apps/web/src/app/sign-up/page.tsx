@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import { ShieldCheck } from "lucide-react"
-import { Button, Input, Spinner, GithubIcon, MicrosoftIcon, FormField } from "@lyrashield/ui"
+import {
+  Button,
+  Input,
+  Spinner,
+  GithubIcon,
+  GoogleIcon,
+  MicrosoftIcon,
+  FormField,
+} from "@lyrashield/ui"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function SignUpPage() {
@@ -16,14 +24,35 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
-  const [providers, setProviders] = useState({ github: false, microsoft: false })
+  const [providers, setProviders] = useState({
+    github: false,
+    google: false,
+    microsoft: false,
+    socialSignUp: false,
+  })
 
   useEffect(() => {
     void fetch("/api/auth/providers")
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { github?: boolean; microsoft?: boolean } | null) => {
-        if (data) setProviders({ github: Boolean(data.github), microsoft: Boolean(data.microsoft) })
-      })
+      .then(
+        (
+          data: {
+            github?: boolean
+            google?: boolean
+            microsoft?: boolean
+            socialSignUp?: boolean
+          } | null
+        ) => {
+          if (data) {
+            setProviders({
+              github: Boolean(data.github),
+              google: Boolean(data.google),
+              microsoft: Boolean(data.microsoft),
+              socialSignUp: Boolean(data.socialSignUp),
+            })
+          }
+        }
+      )
       .catch(() => {})
   }, [])
 
@@ -67,6 +96,21 @@ export default function SignUpPage() {
       })
     } catch {
       setError("GitHub sign up failed. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleGoogle() {
+    setLoading(true)
+    setError(null)
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/onboarding",
+      })
+    } catch {
+      setError("Google sign up failed. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -119,8 +163,8 @@ export default function SignUpPage() {
           <div className="gradient-primary shadow-primary-glow mb-3 flex h-12 w-12 items-center justify-center rounded-xl">
             <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Create your account</h1>
-          <p className="text-muted-foreground text-sm">Start securing your apps with LyraShield</p>
+          <h1 className="text-2xl font-bold tracking-tight">Create your beta account</h1>
+          <p className="text-muted-foreground text-sm">LyraShield AI is currently invite-only.</p>
         </div>
 
         <div className="bg-card rounded-xl border p-6 shadow-lg sm:p-8">
@@ -172,42 +216,55 @@ export default function SignUpPage() {
             </Button>
           </form>
 
-          {(providers.github || providers.microsoft) && (
-            <>
-              <div className="my-6 flex items-center gap-3">
-                <div className="bg-border h-px flex-1" />
-                <span className="text-muted-foreground text-xs font-medium">OR</span>
-                <div className="bg-border h-px flex-1" />
-              </div>
+          {providers.socialSignUp &&
+            (providers.github || providers.google || providers.microsoft) && (
+              <>
+                <div className="my-6 flex items-center gap-3">
+                  <div className="bg-border h-px flex-1" />
+                  <span className="text-muted-foreground text-xs font-medium">OR</span>
+                  <div className="bg-border h-px flex-1" />
+                </div>
 
-              <div className="space-y-3">
-                {providers.github && (
-                  <Button
-                    onClick={handleGitHub}
-                    disabled={loading}
-                    variant="secondary"
-                    className="w-full"
-                    size="lg"
-                  >
-                    <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-                    Sign up with GitHub
-                  </Button>
-                )}
-                {providers.microsoft && (
-                  <Button
-                    onClick={handleMicrosoft}
-                    disabled={loading}
-                    variant="secondary"
-                    className="w-full"
-                    size="lg"
-                  >
-                    <MicrosoftIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-                    Sign up with Microsoft
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
+                <div className="space-y-3">
+                  {providers.github && (
+                    <Button
+                      onClick={handleGitHub}
+                      disabled={loading}
+                      variant="secondary"
+                      className="w-full"
+                      size="lg"
+                    >
+                      <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                      Sign up with GitHub
+                    </Button>
+                  )}
+                  {providers.google && (
+                    <Button
+                      onClick={handleGoogle}
+                      disabled={loading}
+                      variant="secondary"
+                      className="w-full"
+                      size="lg"
+                    >
+                      <GoogleIcon className="mr-2 h-4 w-4" />
+                      Sign up with Google
+                    </Button>
+                  )}
+                  {providers.microsoft && (
+                    <Button
+                      onClick={handleMicrosoft}
+                      disabled={loading}
+                      variant="secondary"
+                      className="w-full"
+                      size="lg"
+                    >
+                      <MicrosoftIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                      Sign up with Microsoft
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
         </div>
 
         <p className="text-muted-foreground mt-6 text-center text-sm">

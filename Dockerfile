@@ -32,7 +32,7 @@ EXPOSE 8787
 CMD ["httpd", "-f", "-p", "8787", "-h", "/site"]
 
 # ─── Stage 2: Build ────────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:22-alpine AS workspace-builder
 RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
 
 WORKDIR /app
@@ -52,6 +52,9 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     BETTER_AUTH_URL="$BUILD_APP_URL" \
     NEXT_PUBLIC_APP_URL="$BUILD_PUBLIC_APP_URL" \
     pnpm db:generate
+
+FROM workspace-builder AS web-builder
+
 RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     BETTER_AUTH_SECRET="build-placeholder-not-used-at-runtime" \
     BETTER_AUTH_URL="$BUILD_APP_URL" \
@@ -62,6 +65,8 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
 RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
+RUN addgroup --system lyrashield && \
+    adduser --system --ingroup lyrashield --home /app lyrashield
 
 WORKDIR /app
 
@@ -69,31 +74,27 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy only the standalone server output + static assets
-COPY --from=builder /app/apps/web/.next/standalone ./
-COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --chown=lyrashield:lyrashield --from=web-builder /app/apps/web/.next/standalone ./
+COPY --chown=lyrashield:lyrashield --from=web-builder /app/apps/web/.next/static ./apps/web/.next/static
 
 # Copy prisma schema + migrations for runtime
-COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
-COPY --from=builder /app/packages/db/package.json ./packages/db/package.json
-
-# NOTE: The worker runs from the builder stage (see docker-compose.yml worker service)
-# because workspace packages export TypeScript source (main: "./src/index.ts")
-# which requires tsx at runtime. A dedicated slim worker stage will be added
-# once shared packages are compiled to JS dist output.
+COPY --chown=lyrashield:lyrashield --from=web-builder /app/packages/db/prisma ./packages/db/prisma
+COPY --chown=lyrashield:lyrashield --from=web-builder /app/packages/db/package.json ./packages/db/package.json
 
 EXPOSE 3000
 
 WORKDIR /app/apps/web
 
+USER lyrashield
 CMD ["node", "server.js"]
 
-# ─── Stage 4: Worker + local engine CLI ──────────────────────────────────────
+# ─── Stage 4: Worker engine environment ──────────────────────────────────────
 # The `engine` named build context is supplied only by the worker service in
 # docker-compose.yml, so web/migration builds remain independent of the sibling
 # engine repository.
-FROM builder AS worker
+FROM node:22-alpine AS worker-engine
 
-RUN apk add --no-cache docker-cli git python3 py3-pip
+RUN apk add --no-cache python3 py3-pip
 
 COPY --from=engine . /opt/lyrashield-engine
 
@@ -104,9 +105,35 @@ RUN python3 -m venv /opt/uv-bootstrap && \
         --project /opt/lyrashield-engine \
         --frozen \
         --no-dev && \
-    /opt/lyrashield-venv/bin/lyrashield --version
+    /opt/lyrashield-venv/bin/lyrashield --version && \
+    rm -rf /opt/uv-bootstrap
 
-ENV PATH="/opt/lyrashield-venv/bin:$PATH"
+# ─── Stage 5: Dedicated worker runtime ───────────────────────────────────────
+# Do not inherit `builder`: it contains the web production build and causes the
+# worker image to be needlessly large. The worker needs only workspace runtime
+# packages, its TypeScript entry point, the generated Prisma client, and the
+# isolated engine virtual environment.
+FROM node:22-alpine AS worker
+
+RUN corepack enable && corepack prepare pnpm@11.6.0 --activate && \
+    apk add --no-cache docker-cli git python3 && \
+    addgroup --system lyrashield && \
+    adduser --system --ingroup lyrashield --home /app lyrashield
 
 WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PATH="/opt/lyrashield-venv/bin:$PATH"
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=workspace-builder /app/package.json /app/pnpm-workspace.yaml /app/tsconfig.json ./
+COPY --from=workspace-builder /app/packages ./packages
+COPY --from=workspace-builder /app/apps/worker ./apps/worker
+COPY --from=worker-engine /opt/lyrashield-engine /opt/lyrashield-engine
+COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
+
+RUN chown -R lyrashield:lyrashield /app /opt/lyrashield-engine /opt/lyrashield-venv
+
+USER lyrashield
 CMD ["pnpm", "--filter", "@lyrashield/worker", "exec", "tsx", "src/index.ts"]

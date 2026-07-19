@@ -83,6 +83,7 @@ export async function completeScanWithScore(scanId: string, summary: string | nu
       where: { id: scanId },
       include: {
         target: { select: { id: true, projectId: true, branch: true } },
+        coverageReceipts: { select: { status: true } },
       },
     })
     if (!scan || !scan.target) throw new Error("Scan or target not found")
@@ -111,8 +112,17 @@ export async function completeScanWithScore(scanId: string, summary: string | nu
       mode: scan.mode,
       isDefaultBranch: true,
     })
+    // Public scorecards are fail-closed: a partial control ledger cannot be
+    // presented as a complete review.
+    const coverageComplete =
+      scan.coverageReceipts.length > 0 &&
+      scan.coverageReceipts.every(
+        (receipt) => receipt.status === "COMPLETED" || receipt.status === "NOT_APPLICABLE"
+      )
     const shareEligible =
-      result.shareEligible && (findings.length === 0 || triaged / findings.length <= 0.25)
+      result.shareEligible &&
+      coverageComplete &&
+      (findings.length === 0 || triaged / findings.length <= 0.25)
     const previous = await tx.scoreSnapshot.findFirst({
       where: { workspaceId: scan.workspaceId, targetId: scan.target.id },
       orderBy: { computedAt: "desc" },
@@ -131,6 +141,7 @@ export async function completeScanWithScore(scanId: string, summary: string | nu
           ...result.breakdown,
           triagedRatio: findings.length ? triaged / findings.length : 0,
           scannedBranch: scan.target.branch,
+          coverageComplete,
         },
         scanMode: scan.mode,
         shareEligible,

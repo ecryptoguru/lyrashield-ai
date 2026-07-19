@@ -97,7 +97,12 @@ function SidebarPanel({
           />
         </div>
         <div className="min-w-0">
-          <span className="block text-[15px] font-bold tracking-[-0.025em]">LyraShield AI</span>
+          <div className="flex items-center gap-2">
+            <span className="block text-[15px] font-bold tracking-[-0.025em]">LyraShield AI</span>
+            <span className="border-primary/50 bg-primary/10 text-primary rounded border px-1 py-0.5 text-[9px] font-semibold tracking-[0.12em] uppercase">
+              Beta
+            </span>
+          </div>
           <span className="text-muted-foreground block text-[10px] font-semibold tracking-[0.16em] uppercase">
             Evidence console
           </span>
@@ -272,6 +277,9 @@ export function Sidebar({
             />
           </div>
           <span className="text-sm font-bold tracking-tight">LyraShield AI</span>
+          <span className="border-primary/50 bg-primary/10 text-primary rounded border px-1 py-0.5 text-[9px] font-semibold tracking-[0.12em] uppercase">
+            Beta
+          </span>
         </div>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild>

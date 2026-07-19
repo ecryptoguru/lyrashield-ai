@@ -111,7 +111,7 @@ async function main(): Promise<void> {
       url: env.REDIS_URL || "redis://localhost:6379",
       maxRetriesPerRequest: null,
     },
-    concurrency: 3,
+    concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
     autorun: false,
   })
 
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
   })
   logger.info("Worker ready — processing scan jobs", {
     queue: SCAN_QUEUE_NAME,
-    concurrency: 3,
+    concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
   })
   heartbeatTimer = setInterval(() => {
     void registerScanWorker(workerId)

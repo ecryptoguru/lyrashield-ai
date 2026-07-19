@@ -25,6 +25,8 @@ const envSchema = z
     LLM_API_KEY: z.string().optional().or(z.literal("")),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
+    LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
+    LYRASHIELD_BETA_INVITE_EMAILS: z.string().optional().or(z.literal("")),
     S3_ENDPOINT: z.string().optional().or(z.literal("")),
     S3_ACCESS_KEY: z.string().optional().or(z.literal("")),
     S3_SECRET_KEY: z.string().optional().or(z.literal("")),
@@ -165,6 +167,16 @@ describe("Env Validation Schema", () => {
   })
 
   describe("optional fields", () => {
+    it("defaults worker concurrency to one and rejects unsafe values", () => {
+      expect(envSchema.parse(validEnv).LYRASHIELD_WORKER_CONCURRENCY).toBe(1)
+      expect(envSchema.safeParse({ ...validEnv, LYRASHIELD_WORKER_CONCURRENCY: "0" }).success).toBe(
+        false
+      )
+      expect(envSchema.safeParse({ ...validEnv, LYRASHIELD_WORKER_CONCURRENCY: "4" }).success).toBe(
+        false
+      )
+    })
+
     it("should accept empty string for optional fields", () => {
       const result = envSchema.safeParse({
         ...validEnv,
