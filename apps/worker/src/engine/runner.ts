@@ -91,6 +91,19 @@ const MAX_ENGINE_VULNERABILITIES_BYTES = 10 * 1024 * 1024
 const MAX_ENGINE_RUN_BYTES = 1 * 1024 * 1024
 const SIGKILL_GRACE_MS = 5000
 const ENGINE_HEARTBEAT_MS = 30_000
+const MAX_ENGINE_ERROR_TAIL_BYTES = 4096
+
+/**
+ * Extract only the engine-owned exception class from its fixed non-interactive
+ * failure marker. The surrounding stderr may contain target-derived content
+ * and must never be logged or persisted.
+ */
+export function extractEngineFailureType(stderrTail: string): string | null {
+  const marker = /Non-interactive scan failed: ([A-Za-z_][A-Za-z0-9_.]{0,127})/g
+  let failureType: string | null = null
+  for (const match of stderrTail.matchAll(marker)) failureType = match[1] ?? null
+  return failureType
+}
 
 export interface KillableChild {
   kill(signal?: NodeJS.Signals): boolean
@@ -287,6 +300,7 @@ async function runEngineProcess(
   exitCode: number
   timedOut: boolean
   cancelled: boolean
+  failureType: string | null
 }> {
   return new Promise((resolvePromise, reject) => {
     const child: ChildProcess = spawn(cmd.executable, cmd.args, {
@@ -297,6 +311,7 @@ async function runEngineProcess(
 
     let stdoutBytes = 0
     let stderrBytes = 0
+    let stderrTail = Buffer.alloc(0)
     let timedOut = false
     let cancelled = false
     let closed = false
@@ -339,6 +354,7 @@ async function runEngineProcess(
 
     child.stderr?.on("data", (chunk: Buffer) => {
       stderrBytes += chunk.byteLength
+      stderrTail = Buffer.concat([stderrTail, chunk]).subarray(-MAX_ENGINE_ERROR_TAIL_BYTES)
     })
 
     child.on("close", (code) => {
@@ -350,7 +366,12 @@ async function runEngineProcess(
       stopTracking()
       const exitCode = code ?? (timedOut || cancelled ? -1 : 1)
       logger.info("Engine streams consumed", { scanId, stdoutBytes, stderrBytes })
-      resolvePromise({ exitCode, timedOut, cancelled })
+      resolvePromise({
+        exitCode,
+        timedOut,
+        cancelled,
+        failureType: extractEngineFailureType(stderrTail.toString("utf8")),
+      })
     })
 
     child.on("error", (err) => {
@@ -566,9 +587,10 @@ export async function runEngine(
       exitCode: -2,
       timedOut: false,
       cancelled: false,
+      failureType: null,
     }
   }
-  const { exitCode, timedOut, cancelled } = processResult
+  const { exitCode, timedOut, cancelled, failureType } = processResult
 
   if (timedOut) {
     await emitScanEvent(
@@ -591,7 +613,18 @@ export async function runEngine(
     scanId,
     exitCode,
     timedOut,
+    failureType,
   })
+
+  if (exitCode === 1 && failureType) {
+    await emitScanEvent(
+      scanId,
+      "engine_error_class",
+      "error",
+      `Engine analysis stopped unexpectedly (${failureType})`,
+      { failureType }
+    )
+  }
 
   const outputDir = await findRunOutputDir(absWorkDir)
   const { vulnerabilitiesRaw, runJsonRaw } = outputDir

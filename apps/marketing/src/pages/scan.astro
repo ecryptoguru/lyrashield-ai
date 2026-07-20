@@ -5,6 +5,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/scan", origin).toString()
 const appOrigin = (import.meta.env.PUBLIC_SCANNER_URL as string | undefined)?.replace(/\/$/, "") || ""
 const scannerAvailable = Boolean(appOrigin)
+const dashboardOrigin = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") || ""
 const turnstileSiteKey = (import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string | undefined) || ""
 const title = "Free AI App Security Check — Passive URL Scan | LyraShield AI"
 const description = "Run a free, passive URL security check for AI-built apps. Review exposed secrets, browser security headers, data-layer signals, and HTTPS basics. No signup."
@@ -233,13 +234,14 @@ const jsonLd = [
       <p class="mt-6 max-w-3xl leading-7 text-text-muted">This is a surface-level, passive check — a preview of what LyraShield's full loop does. It can't see everything, and a clean result here isn't a guarantee.</p>
     </div>
 
-    <div id="clean-result" class="mt-8 hidden rounded-2xl border border-accent/40 bg-accent-dim/25 p-6 sm:p-8"><h3 class="text-2xl font-semibold text-text">No surface issues found in this passive check.</h3><p class="mt-3 max-w-3xl leading-7 text-text-muted">That's a good sign — but it's a limited, outside-only look. Deeper classes of vulnerability (business-logic flaws, authenticated access issues, exploit validation) need the full LyraShield scan. Want us to run it when it's live?</p></div>
+    <div id="clean-result" class="mt-8 hidden rounded-2xl border border-accent/40 bg-accent-dim/25 p-6 sm:p-8"><h3 class="text-2xl font-semibold text-text">No surface issues found in this passive check.</h3><p class="mt-3 max-w-3xl leading-7 text-text-muted">That's a good sign — but it's a limited, outside-only look. Deeper classes of vulnerability (business-logic flaws, authenticated access issues, exploit validation) need an authorized full scan. Invited beta users can continue below; everyone else can request access.</p></div>
     <div id="findings" class="mt-8 space-y-4"></div>
 
     <section id="upsell" class="mt-10 rounded-2xl border border-border bg-[#07131d] p-6 text-[#edf8fb] sm:p-9">
-      <p class="font-mono text-xs font-semibold tracking-[.2em] text-[#54d6df] uppercase">Full loop · in active development</p>
+      <p class="font-mono text-xs font-semibold tracking-[.2em] text-[#54d6df] uppercase">Full loop · invite-only production beta</p>
       <h2 class="mt-4 text-3xl font-semibold tracking-tight">This is the surface. LyraShield goes the whole loop.</h2>
-      <p class="mt-4 max-w-3xl leading-7 text-[#b7c8d4]">The full product runs an agentic scan, records evidence state, prepares a fix proposal, retests, and hands you a shareable report — from your first vibe-coded app to production. PR execution stays blocked until an exact server-generated patch is bound to approval. It's in active development.</p>
+      <p class="mt-4 max-w-3xl leading-7 text-[#b7c8d4]">The invite-only beta runs an agentic repository scan, records evidence state, prepares a fix proposal, retests, and hands you a shareable report. PR execution stays blocked until an exact server-generated patch is bound to approval, and every result retains its coverage limits.</p>
+      {dashboardOrigin && <a href={`${dashboardOrigin}/sign-in`} class="mt-7 inline-flex min-h-12 items-center justify-center rounded-lg bg-[#54d6df] px-5 font-semibold text-[#07131d] hover:bg-[#77e0e6] focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Sign in to the invited beta</a>}
       <form id="capture-form" class="mt-7 max-w-2xl">
         <label for="result-email" class="block text-sm font-semibold">Email for waitlist or saved card</label>
         <div class="mt-2 flex flex-col gap-3 sm:flex-row"><input id="result-email" type="email" required autocomplete="email" placeholder="you@example.com" class="min-h-12 flex-1 rounded-lg border border-[#365069] bg-[#0e1a28] px-4 text-[#edf8fb] placeholder:text-[#91a7b8]" /><button type="submit" data-capture-action="waitlist" class="min-h-12 rounded-lg bg-[#54d6df] px-5 font-semibold text-[#07131d]">Join the waitlist</button></div>
