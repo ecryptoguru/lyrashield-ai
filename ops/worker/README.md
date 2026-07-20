@@ -1,6 +1,6 @@
 # Production worker runtime
 
-These files define the dedicated production worker boundary used by the invite-only beta. The worker image and sandbox image must both be immutable digests. Secrets are retrieved at service start from Azure Key Vault by the VM's system-assigned managed identity and are written only to a root-readable runtime file.
+These files define the dedicated production worker boundary used by the invite-only beta. The worker image and sandbox image must both be immutable digests. Secrets are retrieved at every service start from Azure Key Vault by the VM's system-assigned managed identity and are written only to a root-readable runtime file. Worker startup also reapplies the egress policy after refreshing those endpoints.
 
 The worker container joins two Docker networks:
 
@@ -27,7 +27,7 @@ systemctl enable --now lyrashield-worker-egress-refresh.timer
 systemctl enable --now lyrashield-worker.service
 ```
 
-Do not place secrets in the runtime configuration. `refresh-secrets.sh` owns the exact Key Vault-to-environment mapping and fails closed when a required secret is absent or empty.
+Do not place secrets in the runtime configuration. `refresh-secrets.sh` owns the exact Key Vault-to-environment mapping and fails closed when a required secret is absent or empty. `run-worker.sh` initializes the persistent runs volume through a networkless one-shot container, then starts the application as the image's non-root user.
 
 ## Verification
 

@@ -39,6 +39,14 @@ esac
 
 socket_group=$(stat -c '%g' /var/run/docker.sock)
 docker rm -f lyrashield-worker >/dev/null 2>&1 || true
+docker volume create lyrashield-worker-runs >/dev/null
+docker run --rm \
+  --network none \
+  --user 0:0 \
+  --mount type=volume,src=lyrashield-worker-runs,dst=/work \
+  --entrypoint sh \
+  "$LYRASHIELD_WORKER_IMAGE" \
+  -c 'chown -R lyrashield:lyrashield /work && chmod 700 /work'
 
 docker create \
   --name lyrashield-worker \
@@ -57,7 +65,7 @@ docker create \
   --group-add "$socket_group" \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
   --mount type=volume,src=lyrashield-worker-runs,dst=/app/apps/worker/lyrashield_runs \
-  --tmpfs /tmp:rw,nosuid,nodev,size=6g \
+  --tmpfs /tmp:rw,nosuid,nodev,size=2g \
   --security-opt no-new-privileges=true \
   --cap-drop ALL \
   --memory 3g \

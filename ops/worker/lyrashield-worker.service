@@ -7,6 +7,8 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
+ExecStartPre=/usr/local/libexec/lyrashield-refresh-secrets
+ExecStartPre=/usr/local/libexec/lyrashield-refresh-egress
 ExecStart=/usr/local/libexec/lyrashield-run-worker
 ExecStop=/usr/bin/docker stop --time 35 lyrashield-worker
 ExecStopPost=-/usr/bin/docker rm --force lyrashield-worker
