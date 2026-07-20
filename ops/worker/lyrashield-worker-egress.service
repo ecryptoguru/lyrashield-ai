@@ -1,0 +1,12 @@
+[Unit]
+Description=LyraShield worker deny-by-default egress policy
+After=docker.service network-online.target lyrashield-worker-secrets.service
+Requires=docker.service lyrashield-worker-secrets.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/lyrashield-refresh-egress
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

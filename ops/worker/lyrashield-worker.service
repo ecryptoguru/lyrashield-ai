@@ -1,0 +1,19 @@
+[Unit]
+Description=LyraShield production scan worker
+After=docker.service network-online.target lyrashield-worker-secrets.service lyrashield-worker-egress.service
+Requires=docker.service lyrashield-worker-secrets.service lyrashield-worker-egress.service
+StartLimitIntervalSec=300s
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/lyrashield-run-worker
+ExecStop=/usr/bin/docker stop --time 35 lyrashield-worker
+ExecStopPost=-/usr/bin/docker rm --force lyrashield-worker
+Restart=on-failure
+RestartSec=10s
+TimeoutStartSec=120s
+TimeoutStopSec=45s
+
+[Install]
+WantedBy=multi-user.target
