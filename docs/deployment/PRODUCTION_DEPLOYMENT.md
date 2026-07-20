@@ -1,6 +1,6 @@
 # LyraShield AI — Production Deployment Gate
 
-> No production deployment is approved by this document. It records the minimum gates that must be satisfied before a release. Choose vendors and infrastructure only after founder approval; do not copy local Docker Compose into production.
+> This runbook is not a blanket production approval. The invite-only authenticated beta is deployed at `https://app.lyrashieldai.com`, while full repository scans remain unavailable until their dedicated worker, egress, and controlled-scan gates are independently proven. Choose vendors and infrastructure only after founder approval; do not copy local Docker Compose into production.
 
 `userguide.md` documents the end-user experience. This runbook owns only deployment, configuration, verification, and operational release boundaries.
 
@@ -21,7 +21,7 @@
 5. The worker runs as a dedicated non-root user with least-privilege filesystem and Docker access.
 6. The sandbox image is pinned to an inspected digest; mutable tags are not acceptable. The worker and each sandbox share a dedicated internal control-plane network that has no default external route.
 7. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
-8. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
+8. Egress policy, DNS pinning/proxying, logs, alerts, and recovery ownership are defined. Backup and restore are explicitly deferred for the current no-full-scan invite-only beta; they remain required before general availability, any RPO/RTO claim, or broad scan availability. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
 
 ## Full-scan resource checklist
 
@@ -33,7 +33,7 @@ The live Lite Scanner is a separate passive API and cannot be promoted into the 
 - dedicated worker compute with Git, the `lyrashield` CLI, the inspected engine source, controlled access to the digest-pinned sandbox runtime, and a dedicated internal network shared only with scan sandboxes;
 - an authorized Luna/Terra/fallback model route and provider credentials;
 - private S3-compatible evidence storage configured through all five `S3_*` values;
-- secret management, TLS, monitoring, backup/restore, and deployment-level egress enforcement.
+- secret management, TLS, monitoring, deployment-level egress enforcement, and backup/restore before general availability.
 
 The initial invite-only beta uses password/OAuth access without email verification, so Brevo is not required for sign-up. Set `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="1"` only after Brevo and a verified sender are configured; password reset remains unavailable until then. GitHub App credentials are required for private-repository integration flows. Slack/Discord, billing, and product analytics are optional integrations and are not scan-runtime dependencies.
 
@@ -62,7 +62,7 @@ EMAIL_FROM="noreply@example.com"
 # https://<app-origin>/api/auth/callback/github
 # https://<app-origin>/api/auth/callback/google
 # https://<app-origin>/api/auth/callback/microsoft
-# The invite-only beta accepts OAuth only for existing invited, verified users;
+# The invite-only beta accepts OAuth only for existing invited users;
 # missing or partial credentials leave the corresponding button disabled.
 GITHUB_CLIENT_ID="..."
 GITHUB_CLIENT_SECRET="..."
@@ -165,7 +165,7 @@ Then, in the target environment:
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.
 5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with medium reasoning and its cap is $15 or the selected positive policy override.
 6. Capture audit evidence, confirm the sandbox image digest used, reconcile provider billing with the retained usage/rate-card ledger without treating it as an invoice, and verify evidence artifacts are retrievable from the configured S3-compatible endpoint. Any placeholder or failed upload blocks the gate.
-7. Exercise backup and restore on non-production data before claiming an RPO/RTO.
+7. Backup and restore are deferred by founder decision for the current no-full-scan beta. Do not claim an RPO/RTO or expand to general availability until an isolated restore drill passes.
 8. Confirm URL targets use only the pinned deterministic URL scanner. Do not re-enable the external engine for URL targets until its transport is DNS-pinned and redirect-safe.
 9. Confirm GitHub callbacks can refresh only a pre-existing workspace binding. Fresh installation claims and client-authored Fix PR payloads must remain blocked until their provider-ownership and server-generated-patch gates are implemented.
 
@@ -197,13 +197,14 @@ Monitor only coarse funnel stages: deduplicated scorecard view, share-button han
 
 ## Marketing deployment
 
-### Current pre-launch deployment status — 2026-07-16
+### Current production-beta deployment status — 2026-07-20
 
 - `https://lyrashieldai.com` is live on the `lyrashield-marketing` Worker. The apex and `www` custom domains are attached.
+- `https://app.lyrashieldai.com` is live as the separate invite-only authenticated beta. Password and configured OAuth access are available without email verification; password reset remains unavailable until an email provider is configured.
 - Production D1, Rate Limit, and KV bindings are provisioned; migrations `0001`–`0003` are applied remotely; `WAITLIST_IP_SALT` is stored as a Worker secret.
 - `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. The marketing, methodology, browser-local tools, and passive `/scan` surface are indexable. `/terms` remains page-scoped `noindex` and excluded from the sitemap.
 - Live HTTPS, security headers, canonical/schema metadata, sitemap/robots/`llms.txt`, waitlist behavior, representative Lighthouse/Brave rendering, the permanent path/query-preserving `www`-to-apex redirect, and a production browser Lite Check pass.
-- Production sets `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` together because the separately protected scanner API and monitored abuse workflow are live. Keep all three configured as one availability gate. `PUBLIC_APP_URL` remains independent, is intentionally unset, and controls only authenticated-app links.
+- Production sets `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` together because the separately protected scanner API and monitored abuse workflow are live. Keep all three configured as one availability gate. `PUBLIC_APP_URL` remains independent and intentionally unset on marketing because the beta app is not yet linked as a public destination.
 
 Before deploying the Cloudflare marketing Worker:
 
@@ -229,5 +230,5 @@ Before deploying the Cloudflare marketing Worker:
 - A local noindex marketing preview is not a live SEO verification.
 - A locally rendered scorecard image is not proof that external social caches have fetched the current canonical asset.
 - A scorecard share-button click is not a platform impression, signup, qualified referral, or customer claim.
-- A green application CI run is not evidence of configured production secrets, DNS, billing, or backups.
+- A green application CI run is not evidence of configured production secrets, DNS, billing, or recovery readiness.
 - A database uniqueness migration passing on an empty environment is not evidence that legacy duplicate provider bindings were reconciled.

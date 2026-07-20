@@ -1,18 +1,20 @@
 # LyraShield AI production beta readiness plan
 
-Status: **proposed — not implemented or approved for deployment**
+Status: **partially implemented — not a full-scan or general-availability approval**
 Date: 2026-07-20
 Target: invite-only production beta with a small number of real users
 Primary constraints: production-grade safety, truthful beta UX, Supabase Free, Upstash Free, low Azure cost, and controlled GPT-5.6 spend without a material quality reduction.
 
+Current state: the marketing site, passive Lite Check, and separate invite-only authenticated app at `https://app.lyrashieldai.com` are deployed. The beta currently uses password/configured OAuth access without email verification or password reset. By founder decision, backup/restore work is deferred for this limited no-full-scan phase; this exception does not establish recovery readiness, permit an RPO/RTO claim, or satisfy the gates for general availability. The full worker remains deliberately unregistered until deployment-level egress controls and an approved controlled scan are proven.
+
 ## 1. Outcome
 
-Launch a real, invite-only LyraShield AI beta in which users can authenticate, create authorized repository targets, run bounded scans, inspect findings and evidence state, retest, and view reports. The marketing site remains on Cloudflare. The authenticated application, database, Redis queue, evidence storage, and sandbox-capable worker are deployed separately.
+The target end state is an invite-only LyraShield AI beta in which users can authenticate, create authorized repository targets, run bounded scans, inspect findings and evidence state, retest, and view reports. The marketing site remains on Cloudflare. The authenticated application, database, Redis queue, evidence storage, and sandbox-capable worker are deployed separately. The currently deployed beta does not offer full repository scans.
 
 The beta is ready only after:
 
 1. all release-blocking security and tenant-integrity findings are closed or explicitly removed from the beta surface;
-2. production migrations, backups, restore drill, health checks, queue recovery, and rollback are proven;
+2. production migrations, health checks, queue recovery, and rollback are proven; backup/restore is deferred only for the current no-full-scan invite-only phase and remains a general-availability gate;
 3. one approved Safe scan and one approved Deep scan complete through the production worker lifecycle;
 4. model usage, provider-billed cost, latency, evidence storage, and result quality are reconciled;
 5. the live marketing and dashboard surfaces visibly identify the product as Beta;
@@ -24,7 +26,7 @@ The beta is ready only after:
 
 - Existing Cloudflare marketing site and passive Lite Check.
 - Authenticated Next.js dashboard.
-- Better Auth email verification and invited beta accounts.
+- Better Auth invited beta accounts with email verification intentionally disabled until an email provider is configured.
 - Supabase Postgres for authenticated application data only.
 - Upstash Redis over TLS for BullMQ and distributed rate limiting.
 - One sandbox-capable worker host.
@@ -47,19 +49,19 @@ The beta is ready only after:
 
 ## 3. Proposed minimum architecture
 
-| Surface                  | Service                                         | Minimum beta configuration                                 |                              Expected base cost |
-| ------------------------ | ----------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------: |
-| Marketing and waitlist   | Existing Cloudflare Worker, D1, KV, Rate Limits | Keep current production deployment                         |                        Existing/free-tier usage |
-| Passive Lite Check       | Existing Azure Container App                    | 0.5 vCPU, 1 GiB, min 0, max 1                              | Expected within shared ACA grant at low traffic |
-| Authenticated web/API    | Azure Container Apps Consumption                | 0.5 vCPU, 1 GiB, min 0, max 1                              | Expected within shared ACA grant at low traffic |
-| Application database     | Supabase Free Postgres                          | Runtime pooler URL; direct URL only for migrations/backups |                     $0 while within Free limits |
-| Queue and rate limits    | Upstash Free Redis                              | TLS Redis URL, one worker, measured command budget         |            $0 below Free command/storage limits |
-| Evidence and backups     | Private Cloudflare R2                           | Separate evidence and database-backup prefixes or buckets  |                        $0 within R2 Free limits |
-| Worker                   | Azure D2as v5 Linux VM                          | 2 vCPU, 8 GiB, 64 GB Standard SSD, one active scan         |         About $45.87/month continuously running |
-| Container images         | Public GHCR packages                            | Immutable image digests                                    |                          $0 for public packages |
-| Transactional email      | Brevo Free                                      | Verification and invitations only                          |                         $0 below 300 emails/day |
-| CI and backup automation | GitHub Actions standard public-repo runners     | Pinned actions and scheduled jobs                          |        $0 for standard runners on a public repo |
-| Models                   | Azure-hosted GPT-5.6 Luna and Terra             | Luna specialists; Terra only as Deep coordinator           |                Usage-based, reported separately |
+| Surface                | Service                                         | Minimum beta configuration                           |                              Expected base cost |
+| ---------------------- | ----------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------: |
+| Marketing and waitlist | Existing Cloudflare Worker, D1, KV, Rate Limits | Keep current production deployment                   |                        Existing/free-tier usage |
+| Passive Lite Check     | Existing Azure Container App                    | 0.5 vCPU, 1 GiB, min 0, max 1                        | Expected within shared ACA grant at low traffic |
+| Authenticated web/API  | Azure Container Apps Consumption                | 0.5 vCPU, 1 GiB, min 0, max 1                        | Expected within shared ACA grant at low traffic |
+| Application database   | Supabase Free Postgres                          | Runtime pooler URL; direct URL only for migrations   |                     $0 while within Free limits |
+| Queue and rate limits  | Upstash Free Redis                              | TLS Redis URL, one worker, measured command budget   |            $0 below Free command/storage limits |
+| Evidence storage       | Private Cloudflare R2                           | Scoped evidence bucket and credentials               |                        $0 within R2 Free limits |
+| Worker                 | Azure D2as v5 Linux VM                          | 2 vCPU, 8 GiB, 64 GB Standard SSD, one active scan   |         About $45.87/month continuously running |
+| Container images       | Public GHCR packages                            | Immutable image digests                              |                          $0 for public packages |
+| Transactional email    | Deferred                                        | No email verification or password reset in this beta |                                               — |
+| CI                     | GitHub Actions standard public-repo runners     | Pinned actions and release jobs                      |        $0 for standard runners on a public repo |
+| Models                 | Azure-hosted GPT-5.6 Luna and Terra             | Luna specialists; Terra only as Deep coordinator     |                Usage-based, reported separately |
 
 Why the worker remains a VM: the current engine launches a digest-pinned Docker sandbox and needs controlled host runtime access. Azure Container Apps does not provide the required privileged host/Docker boundary. Replacing the VM requires a separate sandbox-service architecture and is not a beta prerequisite.
 
