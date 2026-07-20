@@ -5,6 +5,8 @@ environment_file="${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}"
 chain_name="LYRASHIELD-EGRESS"
 worker_network="${LYRASHIELD_WORKER_NETWORK:-bridge}"
 sandbox_network="${LYRASHIELD_SANDBOX_NETWORK:-lyrashield-sandbox}"
+pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"
+refresh_pins="${LYRASHIELD_REFRESH_PINNED_HOSTS:-0}"
 
 if [ ! -r "$environment_file" ]; then
   echo "Worker environment file is unavailable: $environment_file" >&2
@@ -39,7 +41,39 @@ if [ -z "$worker_subnet" ] || [ -z "$worker_bridge" ] || [ -z "$sandbox_subnet" 
 fi
 
 temporary_rules=$(mktemp /run/lyrashield-egress.XXXXXX)
-trap 'rm -f "$temporary_rules"' EXIT HUP INT TERM
+temporary_pins=$(mktemp /run/lyrashield-egress-hosts.XXXXXX)
+trap 'rm -f "$temporary_rules" "$temporary_pins"' EXIT HUP INT TERM
+
+if [ ! -s "$pin_file" ]; then
+  refresh_pins=1
+fi
+
+append_approved_ip_rule() {
+  host="$1"
+  address="$2"
+  port="$3"
+
+  case "$host" in
+    '' | *[!A-Za-z0-9.-]*)
+      echo "Invalid endpoint host in worker egress pin" >&2
+      exit 1
+      ;;
+  esac
+  case "$address" in
+    '' | *[!0-9.]* | 0.* | 10.* | 100.6[4-9].* | 100.[7-9][0-9].* | 100.1[01][0-9].* | 100.12[0-7].* | 127.* | 169.254.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[01].* | 192.0.0.* | 192.0.2.* | 192.88.99.* | 192.168.* | 198.1[89].* | 198.51.100.* | 203.0.113.* | 22[4-9].* | 23[0-9].* | 24[0-9].* | 25[0-5].*)
+      echo "Approved endpoint resolved to a non-public IPv4 address: $host" >&2
+      exit 1
+      ;;
+  esac
+  case "$port" in
+    '' | *[!0-9]*)
+      echo "Invalid endpoint port in worker egress pin" >&2
+      exit 1
+      ;;
+  esac
+
+  printf '%s\n' "-A $chain_name -p tcp -d $address --dport $port -j ACCEPT" >>"$temporary_rules"
+}
 
 append_endpoint_rules() {
   endpoint="$1"
@@ -53,12 +87,6 @@ append_endpoint_rules() {
     port="$default_port"
   fi
 
-  case "$host" in
-    '' | *[!A-Za-z0-9.-]*)
-      echo "Invalid endpoint host in worker configuration" >&2
-      exit 1
-      ;;
-  esac
   case "$port" in
     '' | *[!0-9]*)
       echo "Invalid endpoint port in worker configuration" >&2
@@ -72,13 +100,10 @@ append_endpoint_rules() {
     exit 1
   fi
   for address in $addresses; do
-    case "$address" in
-      0.* | 10.* | 100.6[4-9].* | 100.[7-9][0-9].* | 100.1[01][0-9].* | 100.12[0-7].* | 127.* | 169.254.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[01].* | 192.0.0.* | 192.0.2.* | 192.88.99.* | 192.168.* | 198.1[89].* | 198.51.100.* | 203.0.113.* | 2[2-5][0-9].*)
-        echo "Approved endpoint resolved to a non-public address: $host" >&2
-        exit 1
-        ;;
-    esac
-    printf '%s\n' "-A $chain_name -p tcp -d $address --dport $port -j ACCEPT" >>"$temporary_rules"
+    append_approved_ip_rule "$host" "$address" "$port"
+    if [ "$refresh_pins" = "1" ]; then
+      printf '%s %s %s\n' "$host" "$address" "$port" >>"$temporary_pins"
+    fi
   done
 }
 
@@ -107,6 +132,16 @@ cat >"$temporary_rules" <<EOF
 -A ${chain_name} -d 240.0.0.0/4 -j REJECT --reject-with icmp-admin-prohibited
 EOF
 
+if [ "$refresh_pins" != "1" ]; then
+  while read -r pinned_host pinned_address pinned_port extra; do
+    if [ -n "${extra:-}" ]; then
+      echo "Invalid worker egress pin entry" >&2
+      exit 1
+    fi
+    append_approved_ip_rule "$pinned_host" "$pinned_address" "$pinned_port"
+  done <"$pin_file"
+fi
+
 append_endpoint_rules "$DATABASE_URL" 5432
 append_endpoint_rules "$REDIS_URL" 6379
 append_endpoint_rules "$AZURE_AI_API_BASE" 443
@@ -124,6 +159,10 @@ EOF
 
 iptables -N "$chain_name" 2>/dev/null || true
 iptables-restore --noflush <"$temporary_rules"
+if [ "$refresh_pins" = "1" ]; then
+  chmod 600 "$temporary_pins"
+  mv -f "$temporary_pins" "$pin_file"
+fi
 if ! iptables -C DOCKER-USER -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name" 2>/dev/null; then
   iptables -I DOCKER-USER 1 -i "$worker_bridge" -s "$worker_subnet" -j "$chain_name"
 fi
