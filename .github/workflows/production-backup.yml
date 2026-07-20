@@ -1,0 +1,210 @@
+name: Production database backup
+
+on:
+  schedule:
+    - cron: "20 2 * * *"
+    - cron: "40 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      restore:
+        description: Run the isolated restore drill after taking a backup
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-database-backup
+  cancel-in-progress: false
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: auto
+  AWS_EC2_METADATA_DISABLED: "true"
+  BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+  DATABASE_DIRECT_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
+  R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+  R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
+
+jobs:
+  backup:
+    name: Encrypted backup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify production backup configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in \
+            AWS_ACCESS_KEY_ID \
+            AWS_SECRET_ACCESS_KEY \
+            BACKUP_ENCRYPTION_PASSPHRASE \
+            DATABASE_DIRECT_URL \
+            R2_BACKUP_BUCKET \
+            R2_S3_ENDPOINT; do
+            test -n "${!name:-}" || { echo "::error title=Missing backup configuration::$name is required"; exit 1; }
+          done
+          command -v aws >/dev/null
+          command -v gpg >/dev/null
+
+      - name: Create, encrypt, and upload backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_name="lyrashield-$(date -u +%F)-${GITHUB_RUN_ID}.dump"
+          dump_path="$RUNNER_TEMP/$backup_name"
+          encrypted_path="$dump_path.gpg"
+          object_key="daily/${backup_name}.gpg"
+
+          docker run --rm \
+            --env DATABASE_DIRECT_URL \
+            --volume "$RUNNER_TEMP:/backup" \
+            postgres:16-alpine \
+            sh -ceu 'pg_dump --format=custom --schema=public --no-owner --no-acl --file="/backup/'"$backup_name"'" "$DATABASE_DIRECT_URL"'
+
+          dump_sha256="$(sha256sum "$dump_path" | awk '{print $1}')"
+          printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | \
+            gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+              --symmetric --cipher-algo AES256 --output "$encrypted_path" "$dump_path"
+
+          aws s3 cp "$encrypted_path" "s3://$R2_BACKUP_BUCKET/$object_key" \
+            --endpoint-url "$R2_S3_ENDPOINT" \
+            --metadata "sha256=$dump_sha256,backup-format=postgres-custom,schema=public" \
+            --no-progress
+
+          remote_sha256="$(aws s3api head-object --bucket "$R2_BACKUP_BUCKET" --key "$object_key" \
+            --endpoint-url "$R2_S3_ENDPOINT" --query 'Metadata.sha256' --output text)"
+          test "$remote_sha256" = "$dump_sha256"
+          rm -f "$dump_path" "$encrypted_path"
+
+  restore:
+    name: Weekly isolated restore drill
+    needs: backup
+    if: ${{ github.event.schedule == '40 3 * * 0' || inputs.restore }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore latest encrypted backup into PostgreSQL 16
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v aws >/dev/null
+          command -v gpg >/dev/null
+          object_key="$(aws s3api list-objects-v2 --bucket "$R2_BACKUP_BUCKET" --prefix daily/ \
+            --endpoint-url "$R2_S3_ENDPOINT" \
+            --query 'reverse(sort_by(Contents,&LastModified))[0].Key' --output text)"
+          test -n "$object_key" && test "$object_key" != "None"
+
+          encrypted_path="$RUNNER_TEMP/backup.gpg"
+          dump_path="$RUNNER_TEMP/backup.dump"
+          aws s3 cp "s3://$R2_BACKUP_BUCKET/$object_key" "$encrypted_path" \
+            --endpoint-url "$R2_S3_ENDPOINT" --no-progress
+          expected_sha256="$(aws s3api head-object --bucket "$R2_BACKUP_BUCKET" --key "$object_key" \
+            --endpoint-url "$R2_S3_ENDPOINT" --query 'Metadata.sha256' --output text)"
+          printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | \
+            gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+              --decrypt --output "$dump_path" "$encrypted_path"
+          test "$(sha256sum "$dump_path" | awk '{print $1}')" = "$expected_sha256"
+
+          docker run -d --name lyrashield-restore-postgres \
+            -e POSTGRES_USER=restore -e POSTGRES_PASSWORD=restore -e POSTGRES_DB=lyrashield_restore \
+            -p 5433:5432 postgres:16-alpine >/dev/null
+          for _ in $(seq 1 30); do
+            docker exec lyrashield-restore-postgres pg_isready -U restore -d lyrashield_restore && break
+            sleep 2
+          done
+          docker cp "$dump_path" lyrashield-restore-postgres:/tmp/backup.dump
+          docker exec lyrashield-restore-postgres pg_restore \
+            -U restore -d lyrashield_restore --clean --if-exists --no-owner --no-acl /tmp/backup.dump
+
+      - name: Verify schema and audit chains
+        shell: bash
+        run: |
+          set -euo pipefail
+          query() { docker exec lyrashield-restore-postgres psql -U restore -d lyrashield_restore -Atqc "$1"; }
+          test "$(query 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL')" -gt 0
+          test "$(query "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('User', 'Workspace', 'AuditLog', 'Scan')")" = 4
+
+          query "SELECT COALESCE(json_agg(json_build_object(
+            'id', id, 'workspaceId', \"workspaceId\", 'actorUserId', \"actorUserId\", 'action', action,
+            'resourceType', \"resourceType\", 'resourceId', \"resourceId\", 'ipAddress', \"ipAddress\",
+            'userAgent', \"userAgent\", 'metadata', metadata, 'createdAt', \"createdAt\",
+            'prevHash', \"prevHash\", 'hash', hash
+          ) ORDER BY \"workspaceId\", \"createdAt\", id), '[]'::json)::text FROM \"AuditLog\"" > "$RUNNER_TEMP/audit.json"
+
+          node - "$RUNNER_TEMP/audit.json" <<'NODE'
+          const { createHash } = require("node:crypto")
+          const fs = require("node:fs")
+          const entries = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+          const previous = new Map()
+          for (const entry of entries) {
+            const prevHash = previous.get(entry.workspaceId) ?? null
+            if (entry.prevHash !== prevHash) throw new Error(`invalid previous audit hash for ${entry.id}`)
+            const payload = {
+              id: entry.id,
+              workspaceId: entry.workspaceId,
+              actorUserId: entry.actorUserId,
+              action: entry.action,
+              resourceType: entry.resourceType,
+              resourceId: entry.resourceId,
+              ipAddress: entry.ipAddress,
+              userAgent: entry.userAgent,
+              metadata: entry.metadata ?? null,
+              createdAt: new Date(entry.createdAt).toISOString(),
+              prevHash,
+            }
+            const hash = createHash("sha256")
+              .update(JSON.stringify(payload, Object.keys(payload).sort()), "utf8")
+              .digest("hex")
+            if (entry.hash !== hash) throw new Error(`invalid audit hash for ${entry.id}`)
+            previous.set(entry.workspaceId, hash)
+          }
+          NODE
+
+      - name: Start the application against the restored database
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name lyrashield-restore-redis -p 6379:6379 redis:7-alpine >/dev/null
+          for _ in $(seq 1 30); do
+            docker exec lyrashield-restore-redis redis-cli ping | grep -qx PONG && break
+            sleep 1
+          done
+          DATABASE_URL='postgresql://restore:restore@127.0.0.1:5433/lyrashield_restore?schema=public' \
+          REDIS_URL='redis://127.0.0.1:6379' \
+          BETTER_AUTH_SECRET='restore-drill-secret-not-for-production' \
+          BETTER_AUTH_URL='http://127.0.0.1:3100' \
+          NEXT_PUBLIC_APP_URL='http://127.0.0.1:3100' \
+          TRUSTED_PROXY_IP_HEADER='x-forwarded-for' \
+          pnpm --filter @lyrashield/web dev -- --port 3100 > "$RUNNER_TEMP/restore-web.log" 2>&1 &
+          web_pid=$!
+          trap 'kill "$web_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:3100/api/ready | grep -qx '{"status":"ready","checks":{"database":true,"redis":true}}'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/restore-web.log"
+          exit 1
+
+      - name: Clean up isolated restore services
+        if: always()
+        run: docker rm -f lyrashield-restore-postgres lyrashield-restore-redis 2>/dev/null || true
