@@ -42,9 +42,9 @@ COPY --from=deps /app/ .
 COPY . .
 
 # Prisma config needs env vars to load at build time
-ARG BUILD_DATABASE_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
-ARG BUILD_APP_URL="http://localhost:3000"
-ARG BUILD_PUBLIC_APP_URL="http://localhost:3000"
+ARG BUILD_DATABASE_URL="postgresql://lyrashield:build-placeholder@db.example.com:5432/lyrashield?schema=public"
+ARG BUILD_APP_URL="https://app.example.invalid"
+ARG BUILD_PUBLIC_APP_URL="https://app.example.invalid"
 ARG BUILD_TRUSTED_PROXY_IP_HEADER="x-forwarded-for"
 
 RUN DATABASE_URL="$BUILD_DATABASE_URL" \
