@@ -25,6 +25,7 @@ vi.mock("@lyrashield/logger", () => ({
 import {
   createKillEscalation,
   cleanupEngineWorkspace,
+  extractEngineFailureType,
   findRunOutputDir,
   interpretExitCode,
   assertRepositoryScanRuntimeConfigured,
@@ -144,6 +145,23 @@ describe("interpretExitCode", () => {
   it("maps runtime OOM and kill signals to infrastructure errors", () => {
     expect(interpretExitCode(137).category).toBe("INFRA_ERROR")
     expect(interpretExitCode(-1, "SIGKILL").category).toBe("INFRA_ERROR")
+  })
+})
+
+describe("extractEngineFailureType", () => {
+  it("extracts only the fixed non-interactive exception class marker", () => {
+    expect(
+      extractEngineFailureType(
+        "target-derived details omitted\nNon-interactive scan failed: ModelBehaviorError\ntrace omitted"
+      )
+    ).toBe("ModelBehaviorError")
+  })
+
+  it("rejects messages and unrelated stderr", () => {
+    expect(extractEngineFailureType("Non-interactive scan failed: RuntimeError: secret")).toBe(
+      "RuntimeError"
+    )
+    expect(extractEngineFailureType("Traceback with target-derived content")).toBeNull()
   })
 })
 
