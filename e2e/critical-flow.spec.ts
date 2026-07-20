@@ -75,6 +75,29 @@ test("anonymous APIs reject access", async ({ request }) => {
   }
 })
 
+test("auth forms recover from a network failure", async ({ page }) => {
+  await page.route("**/api/auth/sign-*/email", (route) => route.abort())
+
+  await page.goto("/sign-in")
+  await page.getByLabel("Email").fill("user@example.com")
+  await page.locator("#password").fill(password)
+  await page.getByRole("button", { name: "Sign in" }).click()
+  await expect(
+    page.getByText("Could not sign in. Check your connection and try again.")
+  ).toBeVisible()
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeEnabled()
+
+  await page.goto("/sign-up")
+  await page.getByLabel("Name").fill("Network Error")
+  await page.getByLabel("Email").fill("network-error@example.com")
+  await page.locator("#password").fill(password)
+  await page.getByRole("button", { name: "Create account" }).click()
+  await expect(
+    page.getByText("Could not create your account. Check your connection and try again.")
+  ).toBeVisible()
+  await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled()
+})
+
 test("onboarding creates a target and tenant boundaries deny another user", async ({
   page,
   browser,

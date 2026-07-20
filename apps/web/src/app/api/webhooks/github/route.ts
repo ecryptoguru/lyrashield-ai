@@ -1,7 +1,37 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { z } from "zod"
 import { prisma } from "@lyrashield/db"
 import { verifyWebhookSignature } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
+
+const GitHubInstallationDeletedEventSchema = z.object({
+  action: z.literal("deleted"),
+  installation: z.object({
+    id: z.number().int().positive(),
+    account: z.object({ login: z.string().min(1).max(255) }),
+  }),
+})
+
+const GitHubPullRequestEventSchema = z.object({
+  action: z.string().min(1).max(64),
+  installation: z.object({ id: z.number().int().positive() }),
+  repository: z.object({
+    full_name: z.string().min(1).max(255),
+    id: z.number().int().positive(),
+  }),
+  pull_request: z.object({
+    number: z.number().int().positive(),
+    head: z.object({ ref: z.string().min(1).max(255) }),
+    base: z.object({ ref: z.string().min(1).max(255) }),
+  }),
+})
+
+function invalidPayloadResponse() {
+  return NextResponse.json(
+    { success: false, error: { code: "INVALID_PAYLOAD", message: "Webhook payload is invalid" } },
+    { status: 400 }
+  )
+}
 
 export async function POST(request: NextRequest) {
   const payload = await request.text()
@@ -42,7 +72,10 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const event = body as Record<string, unknown>
+  const event =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : null
 
   // Idempotency: GitHub retries any delivery that doesn't return 2xx (and can
   // redeliver on its own). The X-GitHub-Delivery id is unique per delivery, and
@@ -59,43 +92,74 @@ export async function POST(request: NextRequest) {
 
   try {
     if (eventType === "installation") {
+      if (!event) return invalidPayloadResponse()
       const action = event.action as string
-      const installation = event.installation as { id: number; account: { login: string } }
 
       if (action === "deleted") {
+        const parsedEvent = GitHubInstallationDeletedEventSchema.safeParse(body)
+        if (!parsedEvent.success) return invalidPayloadResponse()
+        const { installation } = parsedEvent.data
         const integration = await prisma.integration.findFirst({
           where: { type: "GITHUB", externalId: String(installation.id) },
         })
 
         if (integration) {
-          await prisma.integration.update({
-            where: { id: integration.id },
-            data: { status: "disconnected", deletedAt: new Date() },
-          })
+          try {
+            await prisma.$transaction(async (tx) => {
+              // Persist the unique delivery before side effects so retries cannot
+              // duplicate the disconnect audit event or target mutation.
+              await tx.webhookEvent.create({
+                data: {
+                  workspaceId: integration.workspaceId,
+                  provider: "github",
+                  eventType: "installation.deleted",
+                  externalId: deliveryId,
+                  payload: {
+                    installationId: installation.id,
+                    accountLogin: installation.account.login,
+                  },
+                },
+              })
 
-          // Match repos owned by this account exactly, by "owner/" prefix.
-          // A `contains` substring match previously disabled unrelated targets
-          // (login "acme" also matched "not-acme/repo" or "acme-corp/other").
-          // NOTE follow-up: once Target stores the numeric installationId, match
-          // on that instead of the login prefix for full precision.
-          await prisma.target.updateMany({
-            where: {
-              workspaceId: integration.workspaceId,
-              repoProvider: "github",
-              repoFullName: { startsWith: `${installation.account.login}/` },
-            },
-            data: { deletedAt: new Date() },
-          })
+              await tx.integration.update({
+                where: { id: integration.id },
+                data: { status: "disconnected", deletedAt: new Date() },
+              })
 
-          await prisma.auditLog.create({
-            data: {
-              workspaceId: integration.workspaceId,
-              action: "integration.github.disconnected",
-              resourceType: "integration",
-              resourceId: integration.id,
-              metadata: { installationId: installation.id, reason: "installation.deleted" },
-            },
-          })
+              // Match repos owned by this account exactly, by "owner/" prefix.
+              // A `contains` substring match previously disabled unrelated targets
+              // (login "acme" also matched "not-acme/repo" or "acme-corp/other").
+              // NOTE follow-up: once Target stores the numeric installationId, match
+              // on that instead of the login prefix for full precision.
+              await tx.target.updateMany({
+                where: {
+                  workspaceId: integration.workspaceId,
+                  repoProvider: "github",
+                  repoFullName: { startsWith: `${installation.account.login}/` },
+                },
+                data: { deletedAt: new Date() },
+              })
+
+              await tx.auditLog.create({
+                data: {
+                  workspaceId: integration.workspaceId,
+                  action: "integration.github.disconnected",
+                  resourceType: "integration",
+                  resourceId: integration.id,
+                  metadata: { installationId: installation.id, reason: "installation.deleted" },
+                },
+              })
+            })
+          } catch (err) {
+            if (err && typeof err === "object" && (err as { code?: string }).code === "P2002") {
+              logger.info("Concurrent duplicate GitHub delivery ignored", { deliveryId })
+              return NextResponse.json({
+                success: true,
+                data: { processed: true, duplicate: true },
+              })
+            }
+            throw err
+          }
 
           logger.info("GitHub installation deleted, targets disabled", {
             installationId: installation.id,
@@ -103,14 +167,9 @@ export async function POST(request: NextRequest) {
         }
       }
     } else if (eventType === "pull_request") {
-      const action = event.action as string
-      const pullRequest = event.pull_request as {
-        number: number
-        head: { ref: string }
-        base: { ref: string }
-      }
-      const repository = event.repository as { full_name: string; id: number }
-      const installation = event.installation as { id: number }
+      const parsedEvent = GitHubPullRequestEventSchema.safeParse(body)
+      if (!parsedEvent.success) return invalidPayloadResponse()
+      const { action, pull_request: pullRequest, repository, installation } = parsedEvent.data
 
       const integration = await prisma.integration.findFirst({
         where: { type: "GITHUB", externalId: String(installation.id) },
