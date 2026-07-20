@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last verified against the application code: 2026-07-18
+Last verified against the application code and invite-only beta deployment: 2026-07-20
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked. The product workflow is:
 
@@ -60,13 +60,13 @@ Use the public methodology page to understand scoring, evidence states, and limi
 
 ### 3.1 Create an account
 
-1. Open the configured authenticated application origin.
+1. Open [https://app.lyrashieldai.com](https://app.lyrashieldai.com) for the invite-only beta.
 2. Select **Sign up**.
 3. Enter your name, email, and password.
-4. Complete email verification when required.
+4. Complete email verification when required by the deployment.
 5. Sign in and continue through onboarding.
 
-The application preserves the intended destination through the authentication flow. If you cannot sign in, confirm that email verification is complete and use **Forgot password** to request a reset.
+The initial invite-only beta intentionally runs without an email provider: email verification and password reset are unavailable. The application preserves the intended destination through authentication. When an email provider is configured later, complete verification when required and use **Forgot password** for a reset.
 
 ### 3.2 Sign in, sign out, and theme
 

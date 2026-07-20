@@ -26,7 +26,7 @@
 
 4. **1:18–1:48 — invite-only workspace**
 
-   Show a recorded local/private-beta dashboard session: target list, scan detail, immutable manifest or coverage receipt, and report/scorecard view. Do not show credentials or customer data.
+   Show a recorded invite-only session from `https://app.lyrashieldai.com`: target list, scan detail, immutable manifest or coverage receipt, and report/scorecard view. Do not show credentials or customer data. If a retained scan is unavailable, use the public Lite Check and the synthetic sample report rather than presenting a local fixture as a production scan.
 
    > The invite-only workspace connects targets, findings, receipts, score snapshots, reports, schedules, and approval-gated actions. Scan admission fails closed when a worker is unavailable, and risky actions do not accept client-authored patches.
 
