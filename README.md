@@ -28,12 +28,12 @@ The authenticated workflow currently supports project targets, findings, determi
 
 ## Evidence states
 
-| State | Meaning |
-| --- | --- |
-| Detected | A scanner observed a candidate finding. |
-| Independently verified | Separate verification evidence exists. |
-| Retest-confirmed | A clean deterministic retest had complete applicable coverage. |
-| Inconclusive | Available evidence cannot establish the claim. |
+| State                  | Meaning                                                        |
+| ---------------------- | -------------------------------------------------------------- |
+| Detected               | A scanner observed a candidate finding.                        |
+| Independently verified | Separate verification evidence exists.                         |
+| Retest-confirmed       | A clean deterministic retest had complete applicable coverage. |
+| Inconclusive           | Available evidence cannot establish the claim.                 |
 
 ## Local setup
 
