@@ -1,0 +1,7 @@
+# Build apps/marketing first, then use this image to inspect the exact generated
+# client artifact. Worker/D1 behavior is verified separately with Wrangler.
+FROM busybox:1.37
+
+COPY dist/client /site
+EXPOSE 8787
+CMD ["httpd", "-f", "-p", "8787", "-h", "/site"]

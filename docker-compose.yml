@@ -4,9 +4,9 @@ services:
   marketing:
     profiles: ["marketing"]
     build:
-      context: .
-      dockerfile: Dockerfile
-      target: marketing-preview
+      # Keep generated marketing output outside the web/worker build context.
+      context: apps/marketing
+      dockerfile: Dockerfile.preview
     container_name: lyrashield-marketing
     restart: unless-stopped
     ports:
