@@ -21,10 +21,9 @@ const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_
 const microsoftEnabled = isOAuthProviderConfigured(AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)
 const requireEmailVerification = env.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION === "1"
 
-// Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; additional
-// origins (staging, apex+www, preview deploys) come from a comma-separated
-// ADDITIONAL_TRUSTED_ORIGINS env var so multi-origin deployments don't have
-// their sign-in/OAuth requests rejected.
+// Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; any origin
+// added here may initiate credentialed auth requests. Marketing and Lite Check
+// use separate route-scoped CORS policies and must not be trusted implicitly.
 const trustedOrigins = [
   env.BETTER_AUTH_URL,
   ...(env.ADDITIONAL_TRUSTED_ORIGINS
@@ -33,14 +32,6 @@ const trustedOrigins = [
         .filter(Boolean)
     : []),
 ]
-
-if (env.NEXT_PUBLIC_MARKETING_URL) {
-  try {
-    trustedOrigins.push(new URL(env.NEXT_PUBLIC_MARKETING_URL).origin)
-  } catch {
-    // Ignore malformed marketing URL; the env schema already validates it.
-  }
-}
 
 async function sendVerificationEmail({
   user,
