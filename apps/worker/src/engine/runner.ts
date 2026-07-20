@@ -92,6 +92,7 @@ const MAX_ENGINE_RUN_BYTES = 1 * 1024 * 1024
 const SIGKILL_GRACE_MS = 5000
 const ENGINE_HEARTBEAT_MS = 30_000
 const MAX_ENGINE_ERROR_TAIL_BYTES = 4096
+const MAX_ENGINE_FAILURE_MARKER_WINDOW = 512
 
 /**
  * Extract only the engine-owned exception class from its fixed non-interactive
@@ -103,6 +104,16 @@ export function extractEngineFailureType(stderrTail: string): string | null {
   let failureType: string | null = null
   for (const match of stderrTail.matchAll(marker)) failureType = match[1] ?? null
   return failureType
+}
+
+export function collectEngineFailureType(
+  previousWindow: string,
+  chunk: Buffer
+): { window: string; failureType: string | null } {
+  const window = `${previousWindow}${chunk.toString("utf8")}`.slice(
+    -MAX_ENGINE_FAILURE_MARKER_WINDOW
+  )
+  return { window, failureType: extractEngineFailureType(window) }
 }
 
 export interface KillableChild {
@@ -312,6 +323,8 @@ async function runEngineProcess(
     let stdoutBytes = 0
     let stderrBytes = 0
     let stderrTail = Buffer.alloc(0)
+    let failureMarkerWindow = ""
+    let failureType: string | null = null
     let timedOut = false
     let cancelled = false
     let closed = false
@@ -355,6 +368,9 @@ async function runEngineProcess(
     child.stderr?.on("data", (chunk: Buffer) => {
       stderrBytes += chunk.byteLength
       stderrTail = Buffer.concat([stderrTail, chunk]).subarray(-MAX_ENGINE_ERROR_TAIL_BYTES)
+      const marker = collectEngineFailureType(failureMarkerWindow, chunk)
+      failureMarkerWindow = marker.window
+      failureType = marker.failureType ?? failureType
     })
 
     child.on("close", (code) => {
@@ -370,7 +386,7 @@ async function runEngineProcess(
         exitCode,
         timedOut,
         cancelled,
-        failureType: extractEngineFailureType(stderrTail.toString("utf8")),
+        failureType: failureType ?? extractEngineFailureType(stderrTail.toString("utf8")),
       })
     })
 

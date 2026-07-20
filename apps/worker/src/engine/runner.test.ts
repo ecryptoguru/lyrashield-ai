@@ -23,6 +23,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import {
+  collectEngineFailureType,
   createKillEscalation,
   cleanupEngineWorkspace,
   extractEngineFailureType,
@@ -162,6 +163,18 @@ describe("extractEngineFailureType", () => {
       "RuntimeError"
     )
     expect(extractEngineFailureType("Traceback with target-derived content")).toBeNull()
+  })
+
+  it("retains a fixed failure class before a long traceback pushes the marker out of the tail", () => {
+    const first = collectEngineFailureType(
+      "",
+      Buffer.from("Non-interactive scan failed: ModelBehaviorError\n")
+    )
+    const second = collectEngineFailureType(first.window, Buffer.from("trace\n".repeat(2_000)))
+
+    expect(first.failureType).toBe("ModelBehaviorError")
+    expect(second.failureType).toBeNull()
+    expect(first.failureType ?? second.failureType).toBe("ModelBehaviorError")
   })
 })
 
