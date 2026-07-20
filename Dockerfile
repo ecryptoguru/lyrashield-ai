@@ -113,8 +113,7 @@ RUN python3 -m venv /opt/uv-bootstrap && \
 # isolated engine virtual environment.
 FROM node:22-alpine AS worker
 
-RUN corepack enable && corepack prepare pnpm@11.6.0 --activate && \
-    apk add --no-cache docker-cli git python3 && \
+RUN apk add --no-cache docker-cli git python3 && \
     addgroup --system lyrashield && \
     adduser --system --ingroup lyrashield --home /app lyrashield
 
@@ -134,4 +133,7 @@ COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
 RUN chown -R lyrashield:lyrashield /app /opt/lyrashield-engine /opt/lyrashield-venv
 
 USER lyrashield
-CMD ["pnpm", "--filter", "@lyrashield/worker", "exec", "tsx", "src/index.ts"]
+# Invoke the dependency copied into the image directly. Going through Corepack
+# can make a cold production start attempt to download pnpm from the registry,
+# which violates the worker's fail-closed egress policy.
+CMD ["./apps/worker/node_modules/.bin/tsx", "apps/worker/src/index.ts"]

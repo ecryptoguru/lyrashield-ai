@@ -7,7 +7,7 @@ The worker container joins two Docker networks:
 - `bridge` supplies deny-by-default outbound connectivity enforced in `DOCKER-USER`;
 - `lyrashield-sandbox` is an internal Docker network used only for worker-to-sandbox control traffic.
 
-Sandbox containers join only the internal network and therefore have no default external route. The egress policy permits DNS-only access to Azure's virtual resolver and resolves and permits only Postgres, Redis, Azure AI, R2, GitHub, OSV, CISA KEV, and FIRST EPSS endpoints. Metadata, private, loopback, benchmark, and multicast ranges are rejected before the final deny. A timer refreshes approved DNS answers every five minutes; a failed refresh leaves the last complete policy in place.
+Sandbox containers join only the internal network and therefore have no default external route. The egress policy permits DNS-only access to Azure's virtual resolver and resolves and permits only Postgres, Redis, Azure AI, R2, GitHub, OSV, CISA KEV, and FIRST EPSS endpoints. Worker startup stores the complete approved IPv4 answer set and injects it into the container's hosts file, closing the resolver-to-connect race for CDN and anycast endpoints. Metadata, private, loopback, benchmark, and multicast ranges are rejected before the final deny. A timer refreshes firewall answers every five minutes while retaining the running container's pinned set; a failed refresh leaves the last complete policy in place. Restart the worker to promote a refreshed pin set.
 
 ## Install
 
@@ -39,5 +39,7 @@ Before enabling scan admission:
 4. Verify a disposable container on `lyrashield-sandbox` cannot reach a public IP.
 5. Confirm the worker becomes healthy, `/api/ready/scans` becomes `200`, and the registry score advances after 45 seconds.
 6. Stop the service gracefully and confirm `/api/ready/scans` returns `503`; restart it and confirm readiness recovers without replaying work.
+
+Inspect `/run/lyrashield-egress-hosts` only as root when diagnosing endpoint drift. Every line must contain an approved hostname, one public IPv4 address, and its TCP port. Never hand-edit the file or add an unreviewed destination.
 
 This topology is the beta's bounded allowlist, not a general-purpose untrusted-target scanner. Expand endpoint scope only through a reviewed change and a repeated negative egress test.

@@ -38,6 +38,33 @@ case "$LYRASHIELD_SANDBOX_IMAGE" in
 esac
 
 socket_group=$(stat -c '%g' /var/run/docker.sock)
+pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"
+if [ ! -s "$pin_file" ]; then
+  echo "Worker egress pins are unavailable: $pin_file" >&2
+  exit 1
+fi
+
+set --
+while read -r pinned_host pinned_address pinned_port extra; do
+  case "$pinned_host" in
+    '' | *[!A-Za-z0-9.-]*)
+      echo "Invalid host in worker egress pins" >&2
+      exit 1
+      ;;
+  esac
+  case "$pinned_address" in
+    '' | *[!0-9.]*)
+      echo "Invalid IPv4 address in worker egress pins" >&2
+      exit 1
+      ;;
+  esac
+  if [ -z "$pinned_port" ] || [ -n "${extra:-}" ]; then
+    echo "Invalid worker egress pin entry" >&2
+    exit 1
+  fi
+  set -- "$@" --add-host "${pinned_host}:${pinned_address}"
+done <"$pin_file"
+
 docker rm -f lyrashield-worker >/dev/null 2>&1 || true
 docker volume create lyrashield-worker-runs >/dev/null
 docker run --rm \
@@ -51,6 +78,7 @@ docker run --rm \
 docker create \
   --name lyrashield-worker \
   --network bridge \
+  "$@" \
   --env-file "$environment_file" \
   --env NODE_ENV=production \
   --env LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 \
