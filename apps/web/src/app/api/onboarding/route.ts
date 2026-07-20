@@ -3,6 +3,7 @@ import { prisma } from "@lyrashield/db"
 import { getSession, getWorkspaceMembership } from "@lyrashield/auth/server"
 import { UpdateOnboardingSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
+import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
 
 export async function GET() {
   try {
@@ -14,15 +15,7 @@ export async function GET() {
       )
     }
 
-    let state = await prisma.onboardingState.findUnique({
-      where: { userId: session.userId },
-    })
-
-    if (!state) {
-      state = await prisma.onboardingState.create({
-        data: { userId: session.userId },
-      })
-    }
+    const state = await getOrCreateOnboardingState(session.userId)
 
     return NextResponse.json({
       success: true,
@@ -126,10 +119,10 @@ export async function PATCH(request: Request) {
     if (parsed.data.targetId !== undefined) updateData.targetId = parsed.data.targetId
     if (parsed.data.selectedGoal !== undefined) updateData.selectedGoal = parsed.data.selectedGoal
 
-    const state = await prisma.onboardingState.upsert({
+    await getOrCreateOnboardingState(session.userId)
+    const state = await prisma.onboardingState.update({
       where: { userId: session.userId },
-      create: { userId: session.userId, ...updateData },
-      update: updateData,
+      data: updateData,
     })
 
     return NextResponse.json({

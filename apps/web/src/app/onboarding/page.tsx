@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@lyrashield/auth/server"
-import { prisma } from "@lyrashield/db"
 import { ShieldCheck } from "lucide-react"
 import { OnboardingWizard } from "./onboarding-wizard"
 import { ReferralClaim } from "./referral-claim"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
 
 export default async function OnboardingPage() {
   const session = await getSession()
@@ -13,18 +13,10 @@ export default async function OnboardingPage() {
     redirect("/sign-in")
   }
 
-  let state = await prisma.onboardingState.findUnique({
-    where: { userId: session.userId },
-  })
+  const state = await getOrCreateOnboardingState(session.userId)
 
   if (state?.completed) {
     redirect("/dashboard")
-  }
-
-  if (!state) {
-    state = await prisma.onboardingState.create({
-      data: { userId: session.userId },
-    })
   }
 
   return (
