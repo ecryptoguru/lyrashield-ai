@@ -132,4 +132,54 @@ describe("uploadEvidence", () => {
       })
     ).rejects.toBeInstanceOf(EvidenceStorageConfigurationError)
   })
+
+  it("requests explicit AES-256 encryption from ordinary S3-compatible stores", async () => {
+    Object.assign(evidenceEnv, {
+      S3_ENDPOINT: "https://s3.example.test",
+      S3_BUCKET: "evidence",
+      S3_ACCESS_KEY: "access-key",
+      S3_SECRET_KEY: "secret-key",
+      NODE_ENV: "production",
+    })
+
+    await uploadEvidence({
+      workspaceId: "ws-1",
+      findingId: "finding-1",
+      type: "poc",
+      artifactId: "proof",
+      content: "sensitive proof",
+    })
+
+    expect(send).toHaveBeenCalledOnce()
+    expect(send.mock.calls[0]?.[0].input).toMatchObject({
+      Bucket: "evidence",
+      ServerSideEncryption: "AES256",
+      ChecksumSHA256: expect.any(String),
+    })
+  })
+
+  it("uses R2 provider-managed encryption without sending its unsupported S3 option", async () => {
+    Object.assign(evidenceEnv, {
+      S3_ENDPOINT: "https://account-id.eu.r2.cloudflarestorage.com",
+      S3_BUCKET: "evidence",
+      S3_ACCESS_KEY: "access-key",
+      S3_SECRET_KEY: "secret-key",
+      NODE_ENV: "production",
+    })
+
+    await uploadEvidence({
+      workspaceId: "ws-1",
+      findingId: "finding-1",
+      type: "poc",
+      artifactId: "proof",
+      content: "sensitive proof",
+    })
+
+    expect(send).toHaveBeenCalledOnce()
+    expect(send.mock.calls[0]?.[0].input).toMatchObject({
+      Bucket: "evidence",
+      ChecksumSHA256: expect.any(String),
+    })
+    expect(send.mock.calls[0]?.[0].input).not.toHaveProperty("ServerSideEncryption")
+  })
 })

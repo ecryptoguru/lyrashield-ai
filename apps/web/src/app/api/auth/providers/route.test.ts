@@ -15,7 +15,7 @@ vi.mock("@lyrashield/config", () => ({
 }))
 vi.mock("@lyrashield/auth/oauth-providers", () => ({
   isOAuthProviderConfigured: (id?: string, secret?: string) => Boolean(id && secret),
-  socialSignUpEnabled: () => false,
+  socialSignUpEnabled: () => true,
 }))
 
 const { GET } = await import("./route")
@@ -28,7 +28,7 @@ describe("auth provider configuration", () => {
       github: true,
       google: false,
       microsoft: false,
-      socialSignUp: false,
+      socialSignUp: true,
       emailVerification: false,
       passwordReset: false,
     })

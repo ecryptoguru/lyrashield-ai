@@ -6,7 +6,7 @@ import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
-import { isBetaInviteAllowed } from "./beta-invites"
+import { isBetaUserCreationAllowed } from "./beta-invites"
 import { isOAuthProviderConfigured, socialSignUpEnabled } from "./oauth-providers"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
@@ -141,7 +141,7 @@ export const auth = betterAuth({
       const email = (ctx.body as { email?: unknown } | undefined)?.email
       if (
         typeof email !== "string" ||
-        !isBetaInviteAllowed(email, env.LYRASHIELD_BETA_INVITE_EMAILS)
+        !isBetaUserCreationAllowed(isProd, email, env.LYRASHIELD_BETA_INVITE_EMAILS)
       ) {
         throw APIError.from("FORBIDDEN", {
           code: "BETA_INVITE_REQUIRED",
@@ -149,6 +149,21 @@ export const auth = betterAuth({
         })
       }
     }),
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          if (!isBetaUserCreationAllowed(isProd, user.email, env.LYRASHIELD_BETA_INVITE_EMAILS)) {
+            throw APIError.from("FORBIDDEN", {
+              code: "BETA_INVITE_REQUIRED",
+              message: "Beta access is by invitation.",
+            })
+          }
+          return { data: user }
+        },
+      },
+    },
   },
   ...(requireEmailVerification
     ? {
@@ -165,8 +180,8 @@ export const auth = betterAuth({
       clientId: GITHUB_CLIENT_ID ?? "",
       clientSecret: GITHUB_CLIENT_SECRET ?? "",
       enabled: githubEnabled,
-      // Invited beta users create and verify an email account first. OAuth can
-      // then link only to that account; it must never be a public sign-up path.
+      // OAuth account creation is authorized by the production user.create
+      // database hook, so only invited identities can be persisted.
       disableSignUp: !socialSignUpEnabled(isProd),
     },
     google: {
