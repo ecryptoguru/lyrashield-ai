@@ -35,7 +35,7 @@ The live Lite Scanner is a separate passive API and cannot be promoted into the 
 - private S3-compatible evidence storage configured through all five `S3_*` values;
 - secret management, TLS, monitoring, backup/restore, and deployment-level egress enforcement.
 
-Brevo is required when production email verification or invitations are enabled. GitHub App credentials are required for private-repository integration flows. Slack/Discord, billing, and product analytics are optional integrations and are not scan-runtime dependencies.
+The initial invite-only beta uses password/OAuth access without email verification, so Brevo is not required for sign-up. Set `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="1"` only after Brevo and a verified sender are configured; password reset remains unavailable until then. GitHub App credentials are required for private-repository integration flows. Slack/Discord, billing, and product analytics are optional integrations and are not scan-runtime dependencies.
 
 ## Required application configuration
 
@@ -53,7 +53,8 @@ BETTER_AUTH_COOKIE_DOMAIN=".example.com" # only when app and marketing share a p
 ADDITIONAL_TRUSTED_ORIGINS="https://www.example.com"
 TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming copies
 
-# Email (required for email verification in production)
+# Email (optional during the initial no-email-verification beta)
+LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"
 BREVO_API_KEY="..."
 EMAIL_FROM="noreply@example.com"
 

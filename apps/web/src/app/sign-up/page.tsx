@@ -29,6 +29,7 @@ export default function SignUpPage() {
     google: false,
     microsoft: false,
     socialSignUp: false,
+    emailVerification: false,
   })
 
   useEffect(() => {
@@ -41,6 +42,7 @@ export default function SignUpPage() {
             google?: boolean
             microsoft?: boolean
             socialSignUp?: boolean
+            emailVerification?: boolean
           } | null
         ) => {
           if (data) {
@@ -49,6 +51,7 @@ export default function SignUpPage() {
               google: Boolean(data.google),
               microsoft: Boolean(data.microsoft),
               socialSignUp: Boolean(data.socialSignUp),
+              emailVerification: Boolean(data.emailVerification),
             })
           }
         }
@@ -75,14 +78,20 @@ export default function SignUpPage() {
       }
 
       // When email verification is required the server returns token: null;
-      // when auto-sign-in is allowed it returns a session token.
+      // otherwise Better Auth signs the invited beta user in immediately.
       if (data?.token) {
         router.push("/onboarding")
         router.refresh()
         return
       }
 
-      setEmailSent(true)
+      if (providers.emailVerification) {
+        setEmailSent(true)
+      } else {
+        setError(
+          "Your account was created, but automatic sign-in did not complete. Please sign in."
+        )
+      }
     } catch {
       setError("Could not create your account. Check your connection and try again.")
     } finally {

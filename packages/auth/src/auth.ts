@@ -4,7 +4,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma"
 import { genericOAuth, microsoftEntraId } from "better-auth/plugins"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
-import { env, isProd, isDev } from "@lyrashield/config"
+import { env, isProd } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { isBetaInviteAllowed } from "./beta-invites"
 import { isOAuthProviderConfigured, socialSignUpEnabled } from "./oauth-providers"
@@ -20,6 +20,7 @@ const secureCookies = new URL(env.BETTER_AUTH_URL).protocol === "https:"
 const githubEnabled = isOAuthProviderConfigured(GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET)
 const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
 const microsoftEnabled = isOAuthProviderConfigured(AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)
+const requireEmailVerification = env.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION === "1"
 
 // Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; additional
 // origins (staging, apex+www, preview deploys) come from a comma-separated
@@ -131,7 +132,7 @@ export const auth = betterAuth({
   trustedOrigins,
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: !isDev,
+    requireEmailVerification,
     sendResetPassword: sendResetPasswordEmail,
   },
   hooks: {
@@ -149,12 +150,16 @@ export const auth = betterAuth({
       }
     }),
   },
-  emailVerification: {
-    sendVerificationEmail,
-    sendOnSignUp: true,
-    sendOnSignIn: true,
-    autoSignInAfterVerification: true,
-  },
+  ...(requireEmailVerification
+    ? {
+        emailVerification: {
+          sendVerificationEmail,
+          sendOnSignUp: true,
+          sendOnSignIn: true,
+          autoSignInAfterVerification: true,
+        },
+      }
+    : {}),
   socialProviders: {
     github: {
       clientId: GITHUB_CLIENT_ID ?? "",
