@@ -29,6 +29,7 @@ describe("auth provider configuration", () => {
       google: false,
       microsoft: false,
       socialSignUp: true,
+      microsoftSignUp: false,
       emailVerification: false,
       passwordReset: false,
     })

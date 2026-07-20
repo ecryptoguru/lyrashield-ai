@@ -29,6 +29,7 @@ export default function SignUpPage() {
     google: false,
     microsoft: false,
     socialSignUp: false,
+    microsoftSignUp: false,
     emailVerification: false,
   })
 
@@ -42,6 +43,7 @@ export default function SignUpPage() {
             google?: boolean
             microsoft?: boolean
             socialSignUp?: boolean
+            microsoftSignUp?: boolean
             emailVerification?: boolean
           } | null
         ) => {
@@ -51,6 +53,7 @@ export default function SignUpPage() {
               google: Boolean(data.google),
               microsoft: Boolean(data.microsoft),
               socialSignUp: Boolean(data.socialSignUp),
+              microsoftSignUp: Boolean(data.microsoftSignUp),
               emailVerification: Boolean(data.emailVerification),
             })
           }
@@ -133,9 +136,10 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.oauth2({
-        providerId: "microsoft-entra-id",
+      await authClient.signIn.social({
+        provider: "microsoft",
         callbackURL: "/onboarding",
+        errorCallbackURL: "/sign-up",
       })
     } catch {
       setError("Microsoft sign up failed. Please try again.")
@@ -263,7 +267,7 @@ export default function SignUpPage() {
                       Sign up with Google
                     </Button>
                   )}
-                  {providers.microsoft && (
+                  {providers.microsoft && providers.microsoftSignUp && (
                     <Button
                       onClick={handleMicrosoft}
                       disabled={loading}

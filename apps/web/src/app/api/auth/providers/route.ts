@@ -11,8 +11,11 @@ export async function GET() {
       emailVerification: env.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION === "1",
       passwordReset: isProd && Boolean(env.BREVO_API_KEY),
       // Production is invite-only. OAuth is available to sign in to a
-      // previously invited, verified account but cannot create a new account.
+      // database-hook-authorized GitHub or Google account.
       socialSignUp: socialSignUpEnabled(isProd),
+      // Microsoft email claims are mutable and are not an authorization
+      // boundary. Production users link Microsoft from an authenticated account.
+      microsoftSignUp: !isProd,
     },
     { headers: { "Cache-Control": "no-store" } }
   )

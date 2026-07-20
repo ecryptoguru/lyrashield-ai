@@ -1,7 +1,6 @@
 import { betterAuth } from "better-auth"
 import { APIError, createAuthMiddleware } from "better-auth/api"
 import { prismaAdapter } from "better-auth/adapters/prisma"
-import { genericOAuth, microsoftEntraId } from "better-auth/plugins"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd } from "@lyrashield/config"
@@ -190,21 +189,19 @@ export const auth = betterAuth({
       enabled: googleEnabled,
       disableSignUp: !socialSignUpEnabled(isProd),
     },
+    microsoft: {
+      clientId: AZURE_AD_CLIENT_ID ?? "",
+      clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
+      tenantId: AZURE_AD_TENANT_ID || "common",
+      enabled: microsoftEnabled,
+      prompt: "select_account",
+      disableProfilePhoto: true,
+      // Microsoft explicitly does not treat its mutable email claim as an
+      // authorization boundary. Production users first create an invited
+      // account and then link Microsoft from authenticated settings.
+      disableSignUp: isProd,
+    },
   },
-  plugins: microsoftEnabled
-    ? [
-        genericOAuth({
-          config: [
-            microsoftEntraId({
-              clientId: AZURE_AD_CLIENT_ID ?? "",
-              clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
-              tenantId: AZURE_AD_TENANT_ID || "common",
-              disableSignUp: !socialSignUpEnabled(isProd),
-            }),
-          ],
-        }),
-      ]
-    : [],
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days (rolling)
     updateAge: 60 * 60 * 24, // 1 day (refresh interval)
