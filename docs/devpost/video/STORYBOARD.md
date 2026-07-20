@@ -1,39 +1,49 @@
-# LyraShield AI — screen-capture storyboard
+# LyraShield AI — final screen-capture storyboard
 
-**Format:** 1920×1080, 30 fps, 16:9; final export is 2:57.9.  
-**Audio:** HeyGen narration, no music.  
-**Visual basis:** `DESIGN.md`.  
-**Evidence rule:** every narration claim must appear on screen at the moment it is spoken.
+**Format:** 1920×1080, 30 fps, 16:9; final export is 2:19.0.
 
-| Time        | Real capture                                                        | Edit treatment                                                      | Required visible proof                                                                                 |
-| ----------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 00:00–00:14 | Live landing-page hero                                              | Fast, clean scroll capture                                          | Product purpose and evidence-first positioning                                                         |
-| 00:14–00:50 | Live `/scan` Lite Check form and authorized result                  | Normal-speed capture                                                | `Passive and read-only`, `0 needs attention`, `5 look OK`, limitations                                 |
-| 00:50–01:05 | Live methodology surface                                            | Brief scroll capture                                                | Evidence states and the distinction between signals and proof                                          |
-| 01:05–01:23 | Live `/sample-report`                                               | Static clean browser capture                                        | `Sanitized mock · not a real assessment`                                                               |
-| 01:23–01:57 | Local production-like authenticated workspace and configured target | Clean browser captures; no scan action                              | Target ready, `Needs evidence`, and no manufactured score                                              |
-| 01:57–02:58 | Existing public assurance-world motion                              | Existing marketing visual used as a restrained editorial background | Narration clearly distinguishes proposed/illustrative future full-loop states from the live Lite Check |
+**Audio:** clean spoken narration, no music.
+
+**Visual basis:** `DESIGN.md`.
+
+**Evidence rule:** every narration claim appears on screen at the moment it is spoken.
+
+| Time        | Source                                        | Treatment                        | Required visible proof                                                                |
+| ----------- | --------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
+| 00:00–00:11 | Live production landing page                  | Clean capture, no browser chrome | Product purpose and the “what was tested” hook                                        |
+| 00:11–00:30 | Live Lite Check form                          | Restrained slow push             | Passive, read-only scope and public-surface boundary                                  |
+| 00:30–00:44 | Authorized live Lite Check result             | Restrained slow push             | `0 needs attention`, `0 worth reviewing`, `5 look OK`, and limitation                 |
+| 00:44–00:58 | Live methodology page                         | Slow scroll                      | Evidence states and explicit non-claim                                                |
+| 00:58–01:09 | Live sanitized sample report                  | Slow scroll                      | `Sanitized mock`, evidence receipt, approval-bound proposal, and retained uncertainty |
+| 01:09–01:21 | Local production-like authenticated workspace | Clean still sequence             | Configured target, `Needs evidence`, and blank score                                  |
+| 01:21–01:34 | Real scan setup                               | Restrained slow push             | Release Check, Code Review, Deep Security Review; no scan initiated                   |
+| 01:34–01:42 | Repository-backed architecture card           | Restrained slow push             | Deterministic public check versus controlled repository review                        |
+| 01:42–01:49 | Exact worker model-routing source             | Restrained slow push             | Luna/Terra routing in `apps/worker/src/engine/runner.ts`                              |
+| 01:49–02:10 | Current-revision Build Week verification card | Restrained slow push             | Codex task ID and exact passing test counts                                           |
+| 02:10–02:19 | LyraShield AI end card                        | Gentle close                     | Evidence-led positioning and canonical domain                                         |
 
 ## Capture gates
 
-1. Run the live Lite Check against `lyrashieldai.com` on recording day; revise the “five checks” sentence if the result differs.
-2. Use the actual local production-like app only for sign-up, workspace, and target setup; do not represent it as a completed production scan.
+1. The recorded Lite Check result is the actual authorized result for `lyrashieldai.com`; revise the narration if a replacement capture differs.
+2. The authenticated app footage proves workspace, target, and scan-setup UX only. It is not presented as a completed production scan.
 3. Never initiate a paid or unproven full scan merely for the video.
-4. Remove browser chrome from exported frames and do not include passwords, personal account data, or customer data.
+4. Keep browser chrome, credentials, private account data, and customer data out of the export.
 
 ## Caption rules
 
-- Generate captions from the final narration timestamps, not from this estimated storyboard.
-- Group conversational phrases in 3–5 words, maximum two lines, with a single visible group.
-- Keep captions in the lower safe area unless they cover product controls; move them to the upper safe area for dense dashboard shots.
+- Use the final narration timestamps.
+- Keep each cue to a short conversational phrase and no more than two lines.
+- Use one high-contrast caption group in the lower safe area.
 - Correct product names manually: LyraShield AI, Lite Check, Codex, GPT-5.6, Luna, Terra.
-- Export the embedded timed caption track and the identical SRT. Burn-in captions are optional when the renderer supports them.
+- Burn captions into the picture and also include the identical English timed-text track and SRT sidecar.
 
 ## Acceptance checks
 
-- “Lite Check” appears while the form is visible.
-- “Five checks” appears only while the live recorded count is visible.
-- The evidence-model claims are paired with the methodology or sanitized illustrative report, never framed as a live customer result.
-- The dashboard shows `Needs evidence` and an unscored workspace before the narration describes the proposed full loop.
-- “Codex,” “GPT-5.6,” “Luna,” and “Terra” are explicitly explained in narration.
+- The Lite Check form and exact result are legible at 1080p.
+- “Five checks” appears only while the recorded count is visible.
+- Methodology and sample-report claims remain visibly scoped and sanitized.
+- “Needs Evidence” is spoken while the dashboard verdict is on screen.
+- The scan-mode narration is paired with the real scan setup and no scan is started.
+- GPT-5.6 routing is paired with the exact current source excerpt.
+- The Build Week test counts match the current verified revision.
 - Muted playback remains understandable; audio-only playback remains coherent.

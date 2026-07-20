@@ -2,7 +2,7 @@
 
 ## Overview
 
-The video uses the real LyraShield AI marketing and dashboard interfaces as the primary visual evidence. HyperFrames only supplies a brief opener, a brief closer, restrained transitions, and captions; it must not recreate product screens or imply product behavior that the recording does not show.
+The video uses the real LyraShield AI marketing and dashboard interfaces as the primary visual evidence. Repository-backed architecture, source, and verification cards support the product captures without recreating product behavior or implying evidence the recording does not show.
 
 ## Colors
 
