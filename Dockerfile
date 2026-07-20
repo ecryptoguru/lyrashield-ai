@@ -22,15 +22,6 @@ COPY apps/agent/package.json ./apps/agent/
 
 RUN pnpm install --frozen-lockfile
 
-# ─── Cloudflare marketing static-artifact preview ────────────────────────────
-# Build apps/marketing first, then use this target to inspect the exact generated
-# client artifact in Docker. Worker/D1 behavior is verified with Wrangler.
-FROM busybox:1.37 AS marketing-preview
-
-COPY apps/marketing/dist/client /site
-EXPOSE 8787
-CMD ["httpd", "-f", "-p", "8787", "-h", "/site"]
-
 # ─── Stage 2: Build ────────────────────────────────────────────────────────────
 FROM node:22-alpine AS workspace-builder
 RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
@@ -54,6 +45,13 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     pnpm db:generate
 
 FROM workspace-builder AS web-builder
+
+# Docker build arguments are scoped per stage. Re-declare every value consumed
+# below so classic remote builders do not silently substitute empty strings.
+ARG BUILD_DATABASE_URL
+ARG BUILD_APP_URL
+ARG BUILD_PUBLIC_APP_URL
+ARG BUILD_TRUSTED_PROXY_IP_HEADER
 
 RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     BETTER_AUTH_SECRET="build-placeholder-not-used-at-runtime" \
