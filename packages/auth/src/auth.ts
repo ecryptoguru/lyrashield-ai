@@ -193,6 +193,13 @@ export const auth = betterAuth({
       disableSignUp: isProd,
     },
   },
+  account: {
+    encryptOAuthTokens: true,
+    accountLinking: {
+      enabled: true,
+      allowDifferentEmails: false,
+    },
+  },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days (rolling)
     updateAge: 60 * 60 * 24, // 1 day (refresh interval)
