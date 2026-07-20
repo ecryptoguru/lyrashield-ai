@@ -38,6 +38,7 @@ apps/marketing-motion/renders/
 apps/marketing-motion/renders/blog-masters/
 apps/marketing-motion/renders/blog-image-previews/
 apps/marketing/public/media-local/
+artifacts/devpost-video/
 .playwright-cli/
 output/playwright/
 

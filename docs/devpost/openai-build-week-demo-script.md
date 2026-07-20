@@ -1,7 +1,7 @@
 # LyraShield AI — OpenAI Build Week demo
 
-**Length:** 2 minutes 30 seconds to 2 minutes 55 seconds.  
-**Delivery:** public or unlisted YouTube video with spoken narration.  
+**Length:** under 3 minutes (current final export: 2 minutes 57.9 seconds).
+**Delivery:** public YouTube video with spoken narration.
 **Rule-critical:** show a working project and explain both Codex and GPT-5.6 use.
 
 ## Recording flow
@@ -45,7 +45,7 @@
 ## Before upload
 
 - Record at 1080p with audible narration.
-- Verify the YouTube URL in a private/incognito browser; public or unlisted is acceptable.
+- Verify the public YouTube URL in a private/incognito browser.
 - Keep the final video under three minutes.
 - Do not show API keys, database URLs, user email addresses, or unredacted target details.
 - Paste the YouTube URL into the Devpost project only after the private-window check passes.

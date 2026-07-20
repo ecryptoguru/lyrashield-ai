@@ -83,6 +83,9 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runner
+      args:
+        BUILD_APP_URL: "http://localhost:3000"
+        BUILD_PUBLIC_APP_URL: "http://localhost:3000"
       additional_contexts:
         engine: "${LYRASHIELD_ENGINE_SOURCE:-../lyrashield-engine}"
     container_name: lyrashield-web
