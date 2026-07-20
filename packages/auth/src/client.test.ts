@@ -10,14 +10,12 @@ const createAuthClient = vi.fn(() => ({
 }))
 
 vi.mock("better-auth/client", () => ({ createAuthClient }))
-vi.mock("better-auth/client/plugins", () => ({ genericOAuthClient: () => ({ id: "oauth" }) }))
-
 describe("auth client", () => {
   beforeEach(() => vi.clearAllMocks())
 
   it("uses Better Auth's same-origin endpoint instead of a build-time app URL", async () => {
     await import("./client")
 
-    expect(createAuthClient).toHaveBeenCalledWith({ plugins: [{ id: "oauth" }] })
+    expect(createAuthClient).toHaveBeenCalledWith()
   })
 })

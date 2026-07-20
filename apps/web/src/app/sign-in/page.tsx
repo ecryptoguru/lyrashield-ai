@@ -31,6 +31,22 @@ export default function SignInPage() {
   })
 
   useEffect(() => {
+    const oauthError = new URLSearchParams(window.location.search).get("error")
+    let oauthErrorTimer: number | undefined
+    if (oauthError) {
+      oauthErrorTimer = window.setTimeout(() => {
+        const normalizedError = oauthError.toLowerCase()
+        setError(
+          normalizedError === "beta_invite_required"
+            ? "This account is not on the production beta invite list."
+            : normalizedError === "signup_disabled"
+              ? "Sign in with your invited email first, then connect Microsoft from Settings."
+              : "Social sign in could not be completed. Please try again."
+        )
+      }, 0)
+      window.history.replaceState(null, "", "/sign-in")
+    }
+
     void fetch("/api/auth/providers")
       .then((response) => (response.ok ? response.json() : null))
       .then(
@@ -53,6 +69,10 @@ export default function SignInPage() {
         }
       )
       .catch(() => {})
+
+    return () => {
+      if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
+    }
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -89,10 +109,14 @@ export default function SignInPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "github",
         callbackURL: "/dashboard",
+        errorCallbackURL: "/sign-in",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "GitHub sign in failed. Please try again.")
+      }
     } catch {
       setError("GitHub sign in failed. Please try again.")
     } finally {
@@ -104,10 +128,14 @@ export default function SignInPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "google",
         callbackURL: "/dashboard",
+        errorCallbackURL: "/sign-in",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "Google sign in failed. Please try again.")
+      }
     } catch {
       setError("Google sign in failed. Please try again.")
     } finally {
@@ -119,10 +147,14 @@ export default function SignInPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.oauth2({
-        providerId: "microsoft-entra-id",
+      const { error: socialError } = await authClient.signIn.social({
+        provider: "microsoft",
         callbackURL: "/dashboard",
+        errorCallbackURL: "/sign-in",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "Microsoft sign in failed. Please try again.")
+      }
     } catch {
       setError("Microsoft sign in failed. Please try again.")
     } finally {

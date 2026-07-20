@@ -3,8 +3,9 @@ import { prisma } from "@lyrashield/db"
 
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const password = "E2e-password-123!"
-const ownerEmail = `owner-${suffix}@example.com`
-const otherEmail = `other-${suffix}@example.com`
+const ownerEmail = "e2e-owner@example.com"
+const otherEmail = "e2e-other@example.com"
+const uninvitedEmail = `uninvited-${suffix}@example.com`
 const workspaceName = `E2E ${suffix}`
 let createdWorkspaceId: string | null = null
 
@@ -96,6 +97,17 @@ test("auth forms recover from a network failure", async ({ page }) => {
     page.getByText("Could not create your account. Check your connection and try again.")
   ).toBeVisible()
   await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled()
+})
+
+test("production sign-up rejects identities outside the beta invite list", async ({ page }) => {
+  await page.goto("/sign-up")
+  await page.getByLabel("Name").fill("Uninvited User")
+  await page.getByLabel("Email").fill(uninvitedEmail)
+  await page.locator("#password").fill(password)
+  await page.getByRole("button", { name: "Create account" }).click()
+
+  await expect(page.locator('p[role="alert"]')).toContainText("Beta access is by invitation")
+  await expect.poll(() => prisma.user.findUnique({ where: { email: uninvitedEmail } })).toBeNull()
 })
 
 test("onboarding creates a target and tenant boundaries deny another user", async ({

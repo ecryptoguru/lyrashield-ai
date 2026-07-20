@@ -29,10 +29,24 @@ export default function SignUpPage() {
     google: false,
     microsoft: false,
     socialSignUp: false,
+    microsoftSignUp: false,
     emailVerification: false,
   })
 
   useEffect(() => {
+    const oauthError = new URLSearchParams(window.location.search).get("error")
+    let oauthErrorTimer: number | undefined
+    if (oauthError) {
+      oauthErrorTimer = window.setTimeout(() => {
+        setError(
+          oauthError.toLowerCase() === "beta_invite_required"
+            ? "This account is not on the production beta invite list."
+            : "Social sign up could not be completed. Please try again."
+        )
+      }, 0)
+      window.history.replaceState(null, "", "/sign-up")
+    }
+
     void fetch("/api/auth/providers")
       .then((response) => (response.ok ? response.json() : null))
       .then(
@@ -42,6 +56,7 @@ export default function SignUpPage() {
             google?: boolean
             microsoft?: boolean
             socialSignUp?: boolean
+            microsoftSignUp?: boolean
             emailVerification?: boolean
           } | null
         ) => {
@@ -51,12 +66,17 @@ export default function SignUpPage() {
               google: Boolean(data.google),
               microsoft: Boolean(data.microsoft),
               socialSignUp: Boolean(data.socialSignUp),
+              microsoftSignUp: Boolean(data.microsoftSignUp),
               emailVerification: Boolean(data.emailVerification),
             })
           }
         }
       )
       .catch(() => {})
+
+    return () => {
+      if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
+    }
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -103,10 +123,14 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "github",
         callbackURL: "/onboarding",
+        errorCallbackURL: "/sign-up",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "GitHub sign up failed. Please try again.")
+      }
     } catch {
       setError("GitHub sign up failed. Please try again.")
     } finally {
@@ -118,10 +142,14 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "google",
         callbackURL: "/onboarding",
+        errorCallbackURL: "/sign-up",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "Google sign up failed. Please try again.")
+      }
     } catch {
       setError("Google sign up failed. Please try again.")
     } finally {
@@ -133,10 +161,14 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.oauth2({
-        providerId: "microsoft-entra-id",
+      const { error: socialError } = await authClient.signIn.social({
+        provider: "microsoft",
         callbackURL: "/onboarding",
+        errorCallbackURL: "/sign-up",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "Microsoft sign up failed. Please try again.")
+      }
     } catch {
       setError("Microsoft sign up failed. Please try again.")
     } finally {
@@ -230,7 +262,9 @@ export default function SignUpPage() {
           </form>
 
           {providers.socialSignUp &&
-            (providers.github || providers.google || providers.microsoft) && (
+            (providers.github ||
+              providers.google ||
+              (providers.microsoft && providers.microsoftSignUp)) && (
               <>
                 <div className="my-6 flex items-center gap-3">
                   <div className="bg-border h-px flex-1" />
@@ -263,7 +297,7 @@ export default function SignUpPage() {
                       Sign up with Google
                     </Button>
                   )}
-                  {providers.microsoft && (
+                  {providers.microsoft && providers.microsoftSignUp && (
                     <Button
                       onClick={handleMicrosoft}
                       disabled={loading}

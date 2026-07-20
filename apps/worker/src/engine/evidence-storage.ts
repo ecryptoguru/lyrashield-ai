@@ -80,6 +80,17 @@ function computeChecksum(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex")
 }
 
+function isCloudflareR2Endpoint(endpoint: string | undefined): boolean {
+  if (!endpoint) return false
+
+  try {
+    const hostname = new URL(endpoint).hostname.toLowerCase()
+    return hostname === "r2.cloudflarestorage.com" || hostname.endsWith(".r2.cloudflarestorage.com")
+  } catch {
+    return false
+  }
+}
+
 function buildKey(
   workspaceId: string,
   findingId: string,
@@ -178,7 +189,12 @@ export async function uploadEvidence(params: UploadEvidenceParams): Promise<Uplo
         Key: key,
         Body: Buffer.from(content, "utf8"),
         ContentType: contentType,
-        ServerSideEncryption: "AES256",
+        // R2 applies AES-256 encryption at rest automatically and rejects the
+        // S3 per-object ServerSideEncryption option. Other S3-compatible stores
+        // retain the explicit fail-closed encryption request.
+        ...(isCloudflareR2Endpoint(env.S3_ENDPOINT)
+          ? {}
+          : { ServerSideEncryption: "AES256" as const }),
         ChecksumSHA256: Buffer.from(checksum, "hex").toString("base64"),
       })
     )

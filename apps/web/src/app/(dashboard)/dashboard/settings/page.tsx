@@ -13,6 +13,7 @@ import {
 import { prisma } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { DeleteAccount } from "./delete-account"
+import { ConnectedAccounts } from "./connected-accounts"
 
 const securityControls = [
   "Workspace-scoped RBAC",
@@ -142,6 +143,8 @@ export default async function SettingsPage() {
           </p>
         </CardContent>
       </Card>
+
+      <ConnectedAccounts />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SettingsLink

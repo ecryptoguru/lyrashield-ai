@@ -9,8 +9,8 @@ describe("OAuth provider configuration", () => {
     expect(isOAuthProviderConfigured(" ", "client-secret")).toBe(false)
   })
 
-  it("keeps production beta OAuth sign-up disabled", () => {
-    expect(socialSignUpEnabled(true)).toBe(false)
+  it("allows OAuth account creation for the database invite hook to authorize", () => {
+    expect(socialSignUpEnabled(true)).toBe(true)
     expect(socialSignUpEnabled(false)).toBe(true)
   })
 })

@@ -9,7 +9,11 @@ export function isOAuthProviderConfigured(
   return Boolean(clientId?.trim() && clientSecret?.trim())
 }
 
-/** Invite-only production uses OAuth only to sign in to existing beta accounts. */
-export function socialSignUpEnabled(isProduction: boolean): boolean {
-  return !isProduction
+/**
+ * OAuth user creation is available in every environment. Production access is
+ * still invite-only because the user database hook rejects every non-allowlisted
+ * identity before Better Auth persists it.
+ */
+export function socialSignUpEnabled(_isProduction: boolean): boolean {
+  return true
 }
