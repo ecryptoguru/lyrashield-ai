@@ -20,7 +20,7 @@ cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
 ```
 
 - Set `PUBLIC_SITE_URL` in `.env`.
-- Set `PUBLIC_SCANNER_URL` in `.env` to the public scanner origin. Set `PUBLIC_APP_URL` separately when the authenticated dashboard should be linked from marketing. The build strips trailing slashes from both. The invite-only app is deployed at `https://app.lyrashieldai.com`, but production marketing intentionally leaves `PUBLIC_APP_URL` empty while public sign-in navigation is deferred.
+- Set `PUBLIC_SCANNER_URL` in `.env` to the public scanner origin. Set `PUBLIC_APP_URL` separately when the authenticated dashboard should be linked from marketing. The build strips trailing slashes from both. Production sets `PUBLIC_APP_URL=https://app.lyrashieldai.com` after live GitHub authentication and application readiness passed, so the header exposes Sign in while account creation remains invite-gated.
 - Set `PUBLIC_TURNSTILE_SITE_KEY` for the production Lite Check. The scanner origin must set the matching `TURNSTILE_SECRET_KEY`; its endpoint fails closed in production when that secret is absent.
 - Set `PUBLIC_ABUSE_EMAIL` to the monitored abuse-report mailbox before enabling indexing. The address is rendered on `/terms`; the production build refuses `PUBLIC_INDEXABLE=true` without it.
 - Set `PUBLIC_POSTHOG_KEY`/`PUBLIC_POSTHOG_HOST` only for an approved analytics project. The production project authorizes `https://lyrashieldai.com` and uses the DNS-only managed proxy at `https://pulse.lyrashieldai.com`; set `ui_host` to the US PostHog application origin when the proxy is enabled. Manual `$pageview` capture sends only origin and pathname; PostHog's page-leave lifecycle capture retains scroll-depth metadata, and the final send hook strips query strings and fragments from URL/referrer properties on every event. Web Vitals capture is enabled for CLS, FCP, LCP, and INP. Automatic full-URL pageviews, general DOM autocapture, and session recording remain disabled; DNT and GPC opt out. Waitlist referral shares emit the coarse `waitlist_referral_share` event with an allowlisted channel; never add email, referral-code, query, or fragment properties.
@@ -183,7 +183,7 @@ curl -X POST -d "email=you@example.com" -d "source=landing" http://localhost:878
 ## Notes
 
 - `/tools` is a browser-local free-utility hub. The launch checklist, headers/CORS checker, secret scanner, Supabase RLS checker, and JWT/session inspector intentionally do not fetch a supplied target or upload pasted text/files. They are bounded heuristics, not security scans; see `docs/plans/2026-07-14-vibe-coder-security-seo-tools-plan.md` for the product and publishing boundaries.
-- The header intentionally hides Sign in when `PUBLIC_APP_URL` is unset. The invite-only app can be deployed separately; set this value only when marketing should expose that destination.
+- The header hides Sign in when `PUBLIC_APP_URL` is unset. Production now sets the live authenticated app origin after its auth/readiness gate passed, so desktop and mobile navigation expose the same Sign in destination.
 - No pricing, no fake metrics, no public mention of the forked engine.
 - Blog posts are `draft: true` by default. Only un-draft a post after founder sign-off.
 - Marketing share buttons promote the waitlist referral link. Product scorecards, grades, verified-fix cards, and README badges come from the app origin and must never be recreated or edited as marketing artwork.

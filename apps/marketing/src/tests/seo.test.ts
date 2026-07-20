@@ -83,11 +83,12 @@ describe("marketing SEO metadata", () => {
   it("keeps Cloudflare asset URLs aligned with no-trailing-slash canonicals", () => {
     const wranglerConfig = source("../../wrangler.jsonc")
     const parsed = parseJsonc<{
-      vars: { PUBLIC_SITE_URL: string; PUBLIC_INDEXABLE: string }
+      vars: { PUBLIC_SITE_URL: string; PUBLIC_APP_URL: string; PUBLIC_INDEXABLE: string }
     }>(wranglerConfig)
 
     expect(wranglerConfig).toContain('"html_handling": "drop-trailing-slash"')
     expect(parsed.vars.PUBLIC_SITE_URL).toBe("https://lyrashieldai.com")
+    expect(parsed.vars.PUBLIC_APP_URL).toBe("https://app.lyrashieldai.com")
     expect(parsed.vars.PUBLIC_INDEXABLE).toBe("true")
   })
 
@@ -122,6 +123,7 @@ describe("marketing SEO metadata", () => {
     const scanner = source("../pages/scan.astro")
 
     expect(header.match(/href="\/scan"/g)).toHaveLength(2)
+    expect(header.match(/\$\{appUrl\}\/sign-in/g)).toHaveLength(2)
     expect(header).not.toContain('href="/#free-scan"')
     expect(premiumHero).toContain('href="/scan" data-cta-id="premium-hero-lite-check"')
     expect(premiumHero).not.toContain('href="#free-scan"')
