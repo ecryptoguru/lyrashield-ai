@@ -56,6 +56,7 @@ async function sendVerificationEmail({
     // processed in a detached promise and errors are logged asynchronously.
     void fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
+      signal: AbortSignal.timeout(10_000),
       headers: {
         "Content-Type": "application/json",
         "api-key": env.BREVO_API_KEY,
@@ -71,25 +72,18 @@ async function sendVerificationEmail({
         if (!res.ok) {
           logger.error("Failed to send verification email via Brevo", {
             status: res.status,
-            email: user.email,
           })
         }
       })
       .catch((err) => {
         logger.error("Exception while sending verification email", {
           error: err instanceof Error ? err.message : String(err),
-          email: user.email,
         })
       })
   } else if (isProd && !env.BREVO_API_KEY) {
-    logger.error("BREVO_API_KEY is required to send verification emails in production", {
-      email: user.email,
-    })
+    logger.error("BREVO_API_KEY is required to send verification emails in production")
   } else {
-    logger.info("Email verification (dev mode — no email sent)", {
-      email: user.email,
-      verificationUrl: url,
-    })
+    logger.info("Email verification not sent in development")
   }
 }
 
@@ -103,6 +97,7 @@ async function sendResetPasswordEmail({
   if (isProd && env.BREVO_API_KEY) {
     void fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
+      signal: AbortSignal.timeout(10_000),
       headers: {
         "Content-Type": "application/json",
         "api-key": env.BREVO_API_KEY,
@@ -123,7 +118,7 @@ async function sendResetPasswordEmail({
   } else if (isProd) {
     logger.error("BREVO_API_KEY is required to send password reset emails")
   } else {
-    logger.info("Password reset (dev mode — no email sent)", { email: user.email, url })
+    logger.info("Password reset email not sent in development")
   }
 }
 

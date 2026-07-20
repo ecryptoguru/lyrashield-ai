@@ -45,24 +45,29 @@ export default function SignInPage() {
     setLoading(true)
     setError(null)
 
-    const { error: signInError } = await authClient.signIn.email({
-      email,
-      password,
-      callbackURL: "/dashboard",
-    })
+    try {
+      const { error: signInError } = await authClient.signIn.email({
+        email,
+        password,
+        callbackURL: "/dashboard",
+      })
 
-    if (signInError) {
-      if (isEmailNotVerifiedError(signInError)) {
-        setEmailSent(true)
-      } else {
-        setError(getAuthErrorMessage(signInError) ?? "Sign in failed")
+      if (signInError) {
+        if (isEmailNotVerifiedError(signInError)) {
+          setEmailSent(true)
+        } else {
+          setError(getAuthErrorMessage(signInError) ?? "Sign in failed")
+        }
+        return
       }
-      setLoading(false)
-      return
-    }
 
-    router.push("/dashboard")
-    router.refresh()
+      router.push("/dashboard")
+      router.refresh()
+    } catch {
+      setError("Could not sign in. Check your connection and try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleGitHub() {

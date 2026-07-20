@@ -38,7 +38,7 @@ async function removeWorkerReadiness(): Promise<void> {
   })
 }
 
-async function shutdown(signal: string): Promise<void> {
+async function shutdown(signal: string, exitCode = 0): Promise<void> {
   if (shuttingDown) return
   shuttingDown = true
 
@@ -95,7 +95,7 @@ async function shutdown(signal: string): Promise<void> {
     logger.info("Queue events closed")
   }
 
-  process.exit(0)
+  process.exit(exitCode)
 }
 
 process.on("SIGTERM", () => void shutdown("SIGTERM"))
@@ -137,6 +137,7 @@ async function main(): Promise<void> {
     logger.error("BullMQ worker stopped unexpectedly", {
       error: error instanceof Error ? error.message : String(error),
     })
+    void shutdown("BULLMQ_RUN_FAILURE", 1)
   })
   logger.info("Worker ready — processing scan jobs", {
     queue: SCAN_QUEUE_NAME,

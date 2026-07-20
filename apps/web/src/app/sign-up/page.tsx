@@ -61,29 +61,33 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
 
-    const { data, error: signUpError } = await authClient.signUp.email({
-      name,
-      email,
-      password,
-      callbackURL: "/onboarding",
-    })
+    try {
+      const { data, error: signUpError } = await authClient.signUp.email({
+        name,
+        email,
+        password,
+        callbackURL: "/onboarding",
+      })
 
-    if (signUpError) {
-      setError(getAuthErrorMessage(signUpError) ?? "Sign up failed")
+      if (signUpError) {
+        setError(getAuthErrorMessage(signUpError) ?? "Sign up failed")
+        return
+      }
+
+      // When email verification is required the server returns token: null;
+      // when auto-sign-in is allowed it returns a session token.
+      if (data?.token) {
+        router.push("/onboarding")
+        router.refresh()
+        return
+      }
+
+      setEmailSent(true)
+    } catch {
+      setError("Could not create your account. Check your connection and try again.")
+    } finally {
       setLoading(false)
-      return
     }
-
-    // When email verification is required the server returns token: null;
-    // when auto-sign-in is allowed it returns a session token.
-    if (data?.token) {
-      router.push("/onboarding")
-      router.refresh()
-      return
-    }
-
-    setEmailSent(true)
-    setLoading(false)
   }
 
   async function handleGitHub() {
