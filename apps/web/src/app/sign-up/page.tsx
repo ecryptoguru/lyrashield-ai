@@ -34,6 +34,19 @@ export default function SignUpPage() {
   })
 
   useEffect(() => {
+    const oauthError = new URLSearchParams(window.location.search).get("error")
+    let oauthErrorTimer: number | undefined
+    if (oauthError) {
+      oauthErrorTimer = window.setTimeout(() => {
+        setError(
+          oauthError.toLowerCase() === "beta_invite_required"
+            ? "This account is not on the production beta invite list."
+            : "Social sign up could not be completed. Please try again."
+        )
+      }, 0)
+      window.history.replaceState(null, "", "/sign-up")
+    }
+
     void fetch("/api/auth/providers")
       .then((response) => (response.ok ? response.json() : null))
       .then(
@@ -60,6 +73,10 @@ export default function SignUpPage() {
         }
       )
       .catch(() => {})
+
+    return () => {
+      if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
+    }
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -106,10 +123,14 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "github",
         callbackURL: "/onboarding",
+        errorCallbackURL: "/sign-up",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "GitHub sign up failed. Please try again.")
+      }
     } catch {
       setError("GitHub sign up failed. Please try again.")
     } finally {
@@ -121,10 +142,14 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "google",
         callbackURL: "/onboarding",
+        errorCallbackURL: "/sign-up",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "Google sign up failed. Please try again.")
+      }
     } catch {
       setError("Google sign up failed. Please try again.")
     } finally {
@@ -136,11 +161,14 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "microsoft",
         callbackURL: "/onboarding",
         errorCallbackURL: "/sign-up",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "Microsoft sign up failed. Please try again.")
+      }
     } catch {
       setError("Microsoft sign up failed. Please try again.")
     } finally {

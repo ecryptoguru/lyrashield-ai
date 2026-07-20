@@ -109,11 +109,14 @@ export default function SignInPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "github",
         callbackURL: "/dashboard",
         errorCallbackURL: "/sign-in",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "GitHub sign in failed. Please try again.")
+      }
     } catch {
       setError("GitHub sign in failed. Please try again.")
     } finally {
@@ -125,11 +128,14 @@ export default function SignInPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "google",
         callbackURL: "/dashboard",
         errorCallbackURL: "/sign-in",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "Google sign in failed. Please try again.")
+      }
     } catch {
       setError("Google sign in failed. Please try again.")
     } finally {
@@ -141,11 +147,14 @@ export default function SignInPage() {
     setLoading(true)
     setError(null)
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "microsoft",
         callbackURL: "/dashboard",
         errorCallbackURL: "/sign-in",
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "Microsoft sign in failed. Please try again.")
+      }
     } catch {
       setError("Microsoft sign in failed. Please try again.")
     } finally {
