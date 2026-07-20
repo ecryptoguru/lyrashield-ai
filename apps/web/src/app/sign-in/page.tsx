@@ -23,20 +23,35 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
-  const [providers, setProviders] = useState({ github: false, google: false, microsoft: false })
+  const [providers, setProviders] = useState({
+    github: false,
+    google: false,
+    microsoft: false,
+    passwordReset: false,
+  })
 
   useEffect(() => {
     void fetch("/api/auth/providers")
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { github?: boolean; google?: boolean; microsoft?: boolean } | null) => {
-        if (data) {
-          setProviders({
-            github: Boolean(data.github),
-            google: Boolean(data.google),
-            microsoft: Boolean(data.microsoft),
-          })
+      .then(
+        (
+          data: {
+            github?: boolean
+            google?: boolean
+            microsoft?: boolean
+            passwordReset?: boolean
+          } | null
+        ) => {
+          if (data) {
+            setProviders({
+              github: Boolean(data.github),
+              google: Boolean(data.google),
+              microsoft: Boolean(data.microsoft),
+              passwordReset: Boolean(data.passwordReset),
+            })
+          }
         }
-      })
+      )
       .catch(() => {})
   }, [])
 
@@ -182,14 +197,16 @@ export default function SignInPage() {
                 placeholder="••••••••"
               />
             </FormField>
-            <div className="flex justify-end">
-              <Link
-                href="/forgot-password"
-                className="text-primary min-h-11 py-2 text-sm font-medium hover:underline"
-              >
-                Forgot password?
-              </Link>
-            </div>
+            {providers.passwordReset && (
+              <div className="flex justify-end">
+                <Link
+                  href="/forgot-password"
+                  className="text-primary min-h-11 py-2 text-sm font-medium hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            )}
 
             {error && (
               <p className="text-destructive text-sm" role="alert">
