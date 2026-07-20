@@ -262,7 +262,9 @@ export default function SignUpPage() {
           </form>
 
           {providers.socialSignUp &&
-            (providers.github || providers.google || providers.microsoft) && (
+            (providers.github ||
+              providers.google ||
+              (providers.microsoft && providers.microsoftSignUp)) && (
               <>
                 <div className="my-6 flex items-center gap-3">
                   <div className="bg-border h-px flex-1" />

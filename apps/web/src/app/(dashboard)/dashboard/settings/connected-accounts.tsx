@@ -36,6 +36,19 @@ export function ConnectedAccounts() {
 
   useEffect(() => {
     let active = true
+    const callbackError = new URLSearchParams(window.location.search).get("error")
+    let callbackErrorTimer: number | undefined
+
+    if (callbackError) {
+      callbackErrorTimer = window.setTimeout(() => {
+        setError(
+          callbackError === "account_link_failed"
+            ? "Could not connect the account. Please try again."
+            : "Account linking could not be completed. Please try again."
+        )
+      }, 0)
+      window.history.replaceState(null, "", "/dashboard/settings")
+    }
 
     void Promise.all([
       fetch("/api/auth/providers", { cache: "no-store" }).then((response) => {
@@ -63,6 +76,7 @@ export function ConnectedAccounts() {
 
     return () => {
       active = false
+      if (callbackErrorTimer !== undefined) window.clearTimeout(callbackErrorTimer)
     }
   }, [])
 
