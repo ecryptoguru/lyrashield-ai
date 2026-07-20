@@ -38,13 +38,15 @@ export function ConnectedAccounts() {
     let active = true
 
     void Promise.all([
-      fetch("/api/auth/providers", { cache: "no-store" }).then((response) =>
-        response.ok ? response.json() : null
-      ),
+      fetch("/api/auth/providers", { cache: "no-store" }).then((response) => {
+        if (!response.ok) throw new Error("Provider discovery failed")
+        return response.json()
+      }),
       authClient.listAccounts(),
     ])
       .then(([providerData, accountResult]) => {
         if (!active) return
+        if (accountResult.error) throw accountResult.error
         setAvailable({
           github: Boolean(providerData?.github),
           google: Boolean(providerData?.google),
@@ -107,37 +109,41 @@ export function ConnectedAccounts() {
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-3">
-            {providerDetails
-              .filter((provider) => available[provider.id])
-              .map((provider) => {
-                const Icon = provider.icon
-                const isConnected = connected.has(provider.id)
-                return (
-                  <div
-                    key={provider.id}
-                    className="bg-card/50 flex min-w-0 items-center justify-between gap-3 rounded-xl border p-3"
-                  >
-                    <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span className="truncate">{provider.label}</span>
-                    </span>
-                    {isConnected ? (
-                      <Badge variant="success">Connected</Badge>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        disabled={connecting !== null}
-                        onClick={() => void connect(provider.id)}
-                      >
-                        {connecting === provider.id && <Spinner className="mr-2 h-4 w-4" />}
-                        Connect
-                      </Button>
-                    )}
-                  </div>
-                )
-              })}
+            {providerDetails.filter((provider) => available[provider.id]).length === 0 ? (
+              <p className="text-muted-foreground text-sm">No social providers are configured.</p>
+            ) : (
+              providerDetails
+                .filter((provider) => available[provider.id])
+                .map((provider) => {
+                  const Icon = provider.icon
+                  const isConnected = connected.has(provider.id)
+                  return (
+                    <div
+                      key={provider.id}
+                      className="bg-card/50 flex min-w-0 items-center justify-between gap-3 rounded-xl border p-3"
+                    >
+                      <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span className="truncate">{provider.label}</span>
+                      </span>
+                      {isConnected ? (
+                        <Badge variant="success">Connected</Badge>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={connecting !== null}
+                          onClick={() => void connect(provider.id)}
+                        >
+                          {connecting === provider.id && <Spinner className="mr-2 h-4 w-4" />}
+                          Connect
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })
+            )}
           </div>
         )}
       </CardContent>
