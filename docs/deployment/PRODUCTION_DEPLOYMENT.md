@@ -49,9 +49,13 @@ BETTER_AUTH_SECRET="..."
 BETTER_AUTH_URL="https://app.example.com"
 NEXT_PUBLIC_APP_URL="https://app.example.com"
 NEXT_PUBLIC_MARKETING_URL="https://www.example.com"
-BETTER_AUTH_COOKIE_DOMAIN=".example.com" # only when app and marketing share a parent domain
-ADDITIONAL_TRUSTED_ORIGINS="https://www.example.com"
-TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming copies
+# Keep both unset for host-only app sessions. Add only reviewed application
+# origins; the marketing site's Lite Check routes have separate CORS handling.
+BETTER_AUTH_COOKIE_DOMAIN=""
+ADDITIONAL_TRUSTED_ORIGINS=""
+# Azure Container Apps appends its authoritative hop and the app selects the
+# rightmost value. Document and test a different ingress contract before reuse.
+TRUSTED_PROXY_IP_HEADER="x-forwarded-for"
 
 # Email (optional during the initial no-email-verification beta)
 LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"
@@ -62,8 +66,10 @@ EMAIL_FROM="noreply@example.com"
 # https://<app-origin>/api/auth/callback/github
 # https://<app-origin>/api/auth/callback/google
 # https://<app-origin>/api/auth/callback/microsoft
-# The invite-only beta accepts OAuth only for existing invited users;
-# missing or partial credentials leave the corresponding button disabled.
+# GitHub and Google may create an account only when the provider email matches
+# LYRASHIELD_BETA_INVITE_EMAILS. Microsoft is link-only in production: create an
+# invited account first, then link Microsoft from authenticated Settings.
+# Missing or partial credentials leave the corresponding control disabled.
 GITHUB_CLIENT_ID="..."
 GITHUB_CLIENT_SECRET="..."
 GOOGLE_CLIENT_ID="..."
@@ -101,6 +107,9 @@ LYRASHIELD_TELEMETRY="0"
 # AZURE_API_VERSION="v1"
 
 # S3-compatible evidence storage (required before controlled scans)
+# Cloudflare R2 encrypts objects at rest automatically and rejects the S3
+# per-object ServerSideEncryption header. The worker omits that header only for
+# R2 endpoints while retaining SHA-256 upload and retrieval validation.
 S3_ENDPOINT="https://..."
 S3_BUCKET="lyrashield-evidence"
 S3_ACCESS_KEY="..."
@@ -160,7 +169,7 @@ git diff --check
 Then, in the target environment:
 
 1. Deploy all 21 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, `20260716151000_scorecard_share_active_snapshot_unique`, and `20260718110000_scan_cost_ledger`; run the migration-diff gate against a fresh shadow database.
-2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. The scan-specific endpoint must become `503` within 30 seconds of stopping every worker and recover only after a BullMQ-ready worker registers its lease.
+2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. A graceful worker stop unregisters immediately; a crash or network partition expires after the 135-second lease. Readiness recovers only after a BullMQ-ready worker registers.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.
 5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with medium reasoning and its cap is $15 or the selected positive policy override.
@@ -180,6 +189,8 @@ Operational queue rules:
 5. Retry a failed/orphaned scan only through an explicit user/operator action that creates a new scan ID. Reconciliation never recreates paid work.
 
 Alert when scan readiness remains 503 beyond the deployment window, every worker heartbeat expires, reconciliation reports drift, a queue-failure event is retained, queue depth grows without active workers, or the oldest waiting job exceeds the approved latency. Web `/api/ready` may remain healthy during a scan-service outage and must not mask this alert.
+
+The production VM implementation is versioned in `ops/worker/`. It loads secrets through the VM managed identity, requires immutable worker and sandbox digests, joins the worker to a restricted egress network plus an internal sandbox network, applies a `DOCKER-USER` destination allowlist, and refreshes approved DNS answers on a timer. Its negative connectivity tests are a release gate, not an optional smoke check.
 
 ## Public scorecard, referral, and sharing gate
 

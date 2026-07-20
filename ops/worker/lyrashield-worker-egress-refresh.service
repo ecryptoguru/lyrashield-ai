@@ -1,0 +1,8 @@
+[Unit]
+Description=Refresh resolved IPs in the LyraShield worker egress policy
+After=docker.service network-online.target lyrashield-worker-secrets.service
+Requires=docker.service lyrashield-worker-secrets.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/lyrashield-refresh-egress

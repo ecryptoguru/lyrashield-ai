@@ -146,9 +146,15 @@ async function main(): Promise<void> {
   heartbeatTimer = setInterval(() => {
     void registerScanWorker(workerId)
       .then(refreshWorkerReadiness)
-      .catch((error) => {
+      .catch(async (error) => {
         logger.error("Scan worker heartbeat failed", {
           error: error instanceof Error ? error.message : String(error),
+        })
+        await removeWorkerReadiness().catch((readinessError) => {
+          logger.warn("Could not clear worker readiness after heartbeat failure", {
+            error:
+              readinessError instanceof Error ? readinessError.message : String(readinessError),
+          })
         })
       })
   }, SCAN_WORKER_HEARTBEAT_MS)
