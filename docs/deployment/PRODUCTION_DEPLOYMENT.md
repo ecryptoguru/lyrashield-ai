@@ -1,6 +1,6 @@
 # LyraShield AI — Production Deployment Gate
 
-> This runbook is not a blanket production approval. The invite-only authenticated beta and fail-closed production worker are deployed, but a successful Safe and Deep controlled-scan pair is still required before the full-scan gate passes. Choose vendors and infrastructure only after founder approval; do not copy local Docker Compose into production.
+> No production deployment is approved by this document. It records the minimum gates that must be satisfied before a release. Choose vendors and infrastructure only after founder approval; do not copy local Docker Compose into production.
 
 `userguide.md` documents the end-user experience. This runbook owns only deployment, configuration, verification, and operational release boundaries.
 
@@ -19,9 +19,9 @@
 3. Redis is private/TLS-protected and reachable by both web and worker.
 4. All secrets are supplied through the platform's secret manager, never committed files.
 5. The worker runs as a dedicated non-root user with least-privilege filesystem and Docker access.
-6. The sandbox image is pinned to an inspected digest; mutable tags are not acceptable. The worker and each sandbox share a dedicated internal control-plane network that has no default external route.
+6. The sandbox image is pinned to an inspected digest; mutable tags are not acceptable.
 7. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
-8. Egress policy, DNS pinning, logs, alerts, and recovery ownership are defined. Backup and restore are explicitly deferred by founder decision for the invite-only hackathon beta even while controlled scans run; they remain required before general availability or any RPO/RTO claim. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
+8. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
 
 ## Full-scan resource checklist
 
@@ -30,12 +30,12 @@ The live Lite Scanner is a separate passive API and cannot be promoted into the 
 - migrated PostgreSQL for application and scan state;
 - a private/TLS `redis://` or `rediss://` service compatible with BullMQ and reachable by both web and worker—Upstash REST URL/token variables are for rate limiting and do not replace `REDIS_URL`;
 - a deployed authenticated Next.js application origin to create targets, authorize users, enqueue scans, and render retained results;
-- dedicated worker compute with Git, the `lyrashield` CLI, the inspected engine source, controlled access to the digest-pinned sandbox runtime, and a dedicated internal network shared only with scan sandboxes;
+- dedicated worker compute with Git, the `lyrashield` CLI, the inspected engine source, and controlled access to the digest-pinned sandbox runtime;
 - an authorized Luna/Terra/fallback model route and provider credentials;
 - private S3-compatible evidence storage configured through all five `S3_*` values;
-- secret management, TLS, monitoring, deployment-level egress enforcement, and backup/restore before general availability.
+- secret management, TLS, monitoring, backup/restore, and deployment-level egress enforcement.
 
-The initial invite-only beta uses password/OAuth access without email verification, so Brevo is not required for sign-up. Set `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="1"` only after Brevo and a verified sender are configured; password reset remains unavailable until then. GitHub App credentials are required for private-repository integration flows. Slack/Discord, billing, and product analytics are optional integrations and are not scan-runtime dependencies.
+Brevo is required when production email verification or invitations are enabled. GitHub App credentials are required for private-repository integration flows. Slack/Discord, billing, and product analytics are optional integrations and are not scan-runtime dependencies.
 
 ## Required application configuration
 
@@ -49,34 +49,13 @@ BETTER_AUTH_SECRET="..."
 BETTER_AUTH_URL="https://app.example.com"
 NEXT_PUBLIC_APP_URL="https://app.example.com"
 NEXT_PUBLIC_MARKETING_URL="https://www.example.com"
-# Keep both unset for host-only app sessions. Add only reviewed application
-# origins; the marketing site's Lite Check routes have separate CORS handling.
-BETTER_AUTH_COOKIE_DOMAIN=""
-ADDITIONAL_TRUSTED_ORIGINS=""
-# Azure Container Apps appends its authoritative hop and the app selects the
-# rightmost value. Document and test a different ingress contract before reuse.
-TRUSTED_PROXY_IP_HEADER="x-forwarded-for"
+BETTER_AUTH_COOKIE_DOMAIN=".example.com" # only when app and marketing share a parent domain
+ADDITIONAL_TRUSTED_ORIGINS="https://www.example.com"
+TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming copies
 
-# Email (optional during the initial no-email-verification beta)
-LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"
+# Email (required for email verification in production)
 BREVO_API_KEY="..."
 EMAIL_FROM="noreply@example.com"
-
-# Optional OAuth sign-in. Register these exact production callback paths:
-# https://<app-origin>/api/auth/callback/github
-# https://<app-origin>/api/auth/callback/google
-# https://<app-origin>/api/auth/callback/microsoft
-# GitHub and Google may create an account only when the provider email matches
-# LYRASHIELD_BETA_INVITE_EMAILS. Microsoft is link-only in production: create an
-# invited account first, then link Microsoft from authenticated Settings.
-# Missing or partial credentials leave the corresponding control disabled.
-GITHUB_CLIENT_ID="..."
-GITHUB_CLIENT_SECRET="..."
-GOOGLE_CLIENT_ID="..."
-GOOGLE_CLIENT_SECRET="..."
-AZURE_AD_CLIENT_ID="..."
-AZURE_AD_CLIENT_SECRET="..."
-AZURE_AD_TENANT_ID="common"
 
 LYRASHIELD_LLM="azure/gpt-5.6-terra"
 LYRASHIELD_LUNA_LLM="azure/gpt-5.6-luna"
@@ -84,10 +63,6 @@ LYRASHIELD_TERRA_LLM="azure/gpt-5.6-terra"
 LLM_API_KEY="..."
 LYRASHIELD_ENGINE_PATH="lyrashield"
 LYRASHIELD_IMAGE="ghcr.io/usestrix/strix-sandbox@sha256:<approved-digest>"
-LYRASHIELD_ENGINE_SANDBOX_NETWORK="lyrashield-sandbox"
-LYRASHIELD_WORKER_CONCURRENCY="1" # beta: one active sandboxed scan
-LYRASHIELD_BETA_INVITE_EMAILS="founder@example.com,approved-beta@example.com"
-PLATFORM_MAX_SCAN_BUDGET_USD="50"
 LYRASHIELD_TELEMETRY="0"
 
 # Azure OpenAI alternative (use these OR the generic LLM_API_KEY/LLM_API_BASE)
@@ -107,9 +82,6 @@ LYRASHIELD_TELEMETRY="0"
 # AZURE_API_VERSION="v1"
 
 # S3-compatible evidence storage (required before controlled scans)
-# Cloudflare R2 encrypts objects at rest automatically and rejects the S3
-# per-object ServerSideEncryption header. The worker omits that header only for
-# R2 endpoints while retaining SHA-256 upload and retrieval validation.
 S3_ENDPOINT="https://..."
 S3_BUCKET="lyrashield-evidence"
 S3_ACCESS_KEY="..."
@@ -126,8 +98,8 @@ The worker selects one profile before each engine subprocess:
 | Safe         | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $1.20 |
 | Quick        | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $1.20 |
 | Standard     | standard    | `LYRASHIELD_LUNA_LLM`  | medium    |       $3.20 |
-| Deep         | deep        | `LYRASHIELD_TERRA_LLM` | medium    |      $15.00 |
-| Custom       | deep        | `LYRASHIELD_TERRA_LLM` | medium    |      $15.00 |
+| Deep         | deep        | `LYRASHIELD_TERRA_LLM` | high      |      $15.00 |
+| Custom       | deep        | `LYRASHIELD_TERRA_LLM` | high      |      $15.00 |
 
 The worker permanently versions the official OpenAI GPT-5.6 rate card in `apps/worker/src/engine/gpt56-pricing.ts` (effective 2026-07-09; USD per 1 million tokens):
 
@@ -141,15 +113,15 @@ Source: OpenAI's official GPT-5.6 announcement and pricing, captured with its ef
 
 `LYRASHIELD_LLM` is mandatory as the backward-compatible fallback when a routed variable is absent or empty. Azure deployment names are operator-defined: if the Azure deployment is not literally named `gpt-5.6-luna` or `gpt-5.6-terra`, put the real deployment name after `azure/` or `azure_ai/`.
 
-A finite positive `Policy.maxBudgetUsd` overrides the default for that scan. Zero, negative, non-finite, missing, deleted, or cross-workspace policy values cannot remove the mode cap. The worker records `engine_start` with coordinator model/reasoning and retains accounting events privately. When the engine returns usage, the ledger retains provider telemetry, actual-model per-request buckets, the official rate-card calculation, calculation method, reconciliation status, request count, and normalized token counters. A numeric internal bill is written only when that rate-card amount is fully determined and agrees with provider-reported cost when one exists. Ambiguous long-context aggregates, missing billable dimensions, and mismatches remain unpriced and explicitly unreconciled; they do not turn a valid scan result into a fake failure. It never stores prompts or raw provider request payloads, and the dashboard renders no cost, spend, cap, or accounting-event value.
+A finite positive `Policy.maxBudgetUsd` overrides the default for that scan. Zero, negative, non-finite, missing, deleted, or cross-workspace policy values cannot remove the mode cap. The worker records `engine_start` with model/reasoning and retains accounting events privately. When the engine returns usage, the ledger retains provider telemetry, the official rate-card calculation when request buckets are complete, the calculation method, reconciliation status, request count, and normalized token counters. Ambiguous long-context aggregates remain unpriced. It never stores prompts or raw provider request payloads, and the dashboard renders no cost, spend, cap, or accounting-event value.
 
-These amounts are internal hard ceilings, not expected per-scan charges or user-facing prices. Engine-reported telemetry is retained for reconciliation even when it exceeds the approved ceiling; an unpriced or capped internal ledger cannot be presented as the provider invoice. Reconcile it against the Azure meter during the controlled gate; Azure billing remains the final expenditure source.
+These amounts are internal hard ceilings, not expected per-scan charges or user-facing prices. Engine-reported telemetry is retained for reconciliation even when it exceeds the approved ceiling; the capped internal ledger cannot be presented as the provider invoice. Reconcile it against the Azure meter during the controlled gate; Azure billing remains the final expenditure source.
 
 A durable scan event is recorded immediately before a repository scan enters the provider-billable engine phase. Preflight work remains retryable, while recovery after that boundary fails closed instead of replaying provider work; a failed billable invocation requires an explicit new scan or retest so the queue cannot silently duplicate model spend. Deterministic SCA, secret, URL, and agent-configuration findings use the Safe profile for targeted retests; engine-only findings retain their originating review depth.
 
-Safe/Quick/Standard are Luna-only. Deep/Custom use a deterministic two-tier invocation: Terra/medium is the root coordinator and Luna/medium handles child specialist work. The model cannot self-promote a child to Terra, and only the root can create or stop specialists.
+This is mode-level routing: a scan uses one model for its full engine invocation. It does not run Luna discovery followed by Terra validation inside the same scan.
 
-Engine PRs #6, #7, #11, and #14 are merged. The promoted engine compacts estimated input at 96k toward 64k, bounds inherited child history to 24 KiB, caps source-aware SAST targets, bounds direct dedupe input to 200 kB, limits output and agent concurrency, and reserves projected spend before each request. These controls do not replace provider-meter reconciliation or prove finding quality.
+Engine PRs #6 and #7 are merged. The promoted engine compacts estimated input at 240k toward 180k, bounds direct dedupe input to 200 kB, limits output and agent concurrency, and reserves projected spend before each request. These controls do not replace provider-meter reconciliation or prove finding quality.
 
 Add GitHub OAuth/App, email, notification, billing, and analytics variables only when those integrations are enabled. R2/S3 is mandatory before controlled full scans, and monitoring is mandatory before general availability. Use `.env.example` as the complete variable index, not as a production secret file.
 
@@ -169,16 +141,16 @@ git diff --check
 Then, in the target environment:
 
 1. Deploy all 21 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, `20260716151000_scorecard_share_active_snapshot_unique`, and `20260718110000_scan_cost_ledger`; run the migration-diff gate against a fresh shadow database.
-2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. A graceful worker stop unregisters immediately; a crash or network partition expires after the 135-second lease. Readiness recovers only after a BullMQ-ready worker registers.
+2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. The scan-specific endpoint must become `503` within 30 seconds of stopping every worker and recover only after a BullMQ-ready worker registers its lease.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.
-5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with medium reasoning and its cap is $15 or the selected positive policy override.
+5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with high reasoning and its cap is $15 or the selected positive policy override.
 6. Capture audit evidence, confirm the sandbox image digest used, reconcile provider billing with the retained usage/rate-card ledger without treating it as an invoice, and verify evidence artifacts are retrievable from the configured S3-compatible endpoint. Any placeholder or failed upload blocks the gate.
-7. Backup and restore are deferred by founder decision for the invite-only hackathon beta. The workflow is manual-dispatch only while deferred; do not claim an RPO/RTO or expand to general availability until a scheduled encrypted backup and isolated restore drill are accepted and pass.
+7. Exercise backup and restore on non-production data before claiming an RPO/RTO.
 8. Confirm URL targets use only the pinned deterministic URL scanner. Do not re-enable the external engine for URL targets until its transport is DNS-pinned and redirect-safe.
 9. Confirm GitHub callbacks can refresh only a pre-existing workspace binding. Fresh installation claims and client-authored Fix PR payloads must remain blocked until their provider-ownership and server-generated-patch gates are implemented.
 
-Queue recovery is deliberately fail-closed. Workers reconcile queue/database drift at startup and every 60 seconds under a renewable token-owned Redis lease. An active scan (`QUEUED`, `PREFLIGHT`, `RUNNING`, or `VERIFYING`) stale for more than five minutes without a processable job becomes `FAILED` with `QUEUE_ORPHANED`; operators must not automatically requeue it because the original attempt may have crossed a paid-provider boundary.
+Queue recovery is deliberately fail-closed. Workers reconcile queue/database drift at startup and every 60 seconds under a renewable token-owned Redis lease. A scan left `QUEUED` for more than five minutes without a processable job becomes `FAILED` with `QUEUE_ORPHANED`; operators must not automatically requeue it because the original attempt may have crossed a paid-provider boundary.
 
 Operational queue rules:
 
@@ -188,9 +160,7 @@ Operational queue rules:
 4. After restart, verify `/api/ready/scans`, worker logs, the same queue/database counts, and the absence of an unintended `engine_start` event.
 5. Retry a failed/orphaned scan only through an explicit user/operator action that creates a new scan ID. Reconciliation never recreates paid work.
 
-Alert when scan readiness remains 503 beyond the deployment window, every worker heartbeat expires, reconciliation reports drift, a queue-failure event is retained, queue depth grows without active workers, or the oldest waiting job exceeds the approved latency. Web `/api/ready` may remain healthy during a scan-service outage and must not mask this alert. Production Azure Monitor currently routes operator email for worker VM availability, sustained worker CPU, authenticated-app 5xx responses, container restarts, and loss of an active app replica; application-level queue/readiness and provider-usage alert delivery remain follow-up gates.
-
-The production VM implementation is versioned in `ops/worker/`. It loads secrets through the VM managed identity, requires immutable worker and sandbox digests, joins the worker to a restricted egress network plus an internal sandbox network, applies a `DOCKER-USER` destination allowlist, and refreshes approved DNS answers on a timer. Its negative connectivity tests are a release gate, not an optional smoke check.
+Alert when scan readiness remains 503 beyond the deployment window, every worker heartbeat expires, reconciliation reports drift, a queue-failure event is retained, queue depth grows without active workers, or the oldest waiting job exceeds the approved latency. Web `/api/ready` may remain healthy during a scan-service outage and must not mask this alert.
 
 ## Public scorecard, referral, and sharing gate
 
@@ -208,18 +178,13 @@ Monitor only coarse funnel stages: deduplicated scorecard view, share-button han
 
 ## Marketing deployment
 
-### Current production-beta deployment status — 2026-07-20
+### Current pre-launch deployment status — 2026-07-16
 
 - `https://lyrashieldai.com` is live on the `lyrashield-marketing` Worker. The apex and `www` custom domains are attached.
-- `https://app.lyrashieldai.com` is live as the separate invite-only authenticated beta. Password and configured OAuth access are available without email verification; password reset remains unavailable until an email provider is configured.
-- The authenticated app runs at min/max one replica after a live scale-to-zero request exceeded 15 seconds. Health, web readiness, and scan readiness subsequently returned in approximately 0.2–1.3 seconds during the verification window.
-- The dedicated worker runs the reviewed application tree merged as `f52712b` with engine commit `0dcca84` from immutable ACR digest `sha256:3307fadd4d2f2a31b06b2c8138e93795bb8db841115af721242a10fdf6b91477`. The sandbox has a separate inspected digest and no default external route. ACR admin credentials are disabled; the VM pulls through its scoped managed identity.
-- The authenticated app serves merged commit `3482355` as revision `lyrashield-app--rls3482355` from immutable digest `sha256:fe6b0924c7994b3135fe4d321a9112d612d83ddf69626b5ad7f0ce7e74d6c29c`. Ordinary requests use a dedicated `NOSUPERUSER NOBYPASSRLS` role. A separately configured system connection is limited in code to public share-token/scorecard resolution and signed GitHub-provider lookups. Zero-traffic canary health, database/Redis readiness, scan readiness, active-session `/sign-in` → dashboard routing, active/stopped scan details, and nine dashboard routes passed before 100% traffic moved to the revision. Trace-enabled restricted-role E2E and live logs confirm PR #143 removed the pg concurrent-query warning. The previous healthy restricted revision remains at zero traffic for rollback.
-- Worker health, 45-second heartbeat renewal, graceful unregister/restart, empty-queue recovery, approved-endpoint access, blocked unapproved/private/metadata access, and signed R2 put/head/get/checksum/delete passed. After the retained fail-closed diagnostic attempts, one Luna/Safe run completed in 13m04s with a manifested 50-control ledger and three findings. PR #139 remediated the two Docker build-default findings and the permissive-RLS finding after that scan, so a fresh Safe retest remains required. The first Terra/Deep attempt ended at the former 30-minute limit; the post-PR-#139 rerun must provide terminal proof.
 - Production D1, Rate Limit, and KV bindings are provisioned; migrations `0001`–`0003` are applied remotely; `WAITLIST_IP_SALT` is stored as a Worker secret.
 - `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. The marketing, methodology, browser-local tools, and passive `/scan` surface are indexable. `/terms` remains page-scoped `noindex` and excluded from the sitemap.
 - Live HTTPS, security headers, canonical/schema metadata, sitemap/robots/`llms.txt`, waitlist behavior, representative Lighthouse/Brave rendering, the permanent path/query-preserving `www`-to-apex redirect, and a production browser Lite Check pass.
-- Production sets `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` together because the separately protected scanner API and monitored abuse workflow are live. Keep all three configured as one availability gate. `PUBLIC_APP_URL=https://app.lyrashieldai.com` is independently configured after live authentication and readiness passed; it adds the desktop/mobile Sign in destination without broadening Better Auth trusted origins or cookie scope.
+- Production sets `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` together because the separately protected scanner API and monitored abuse workflow are live. Keep all three configured as one availability gate. `PUBLIC_APP_URL` remains independent, is intentionally unset, and controls only authenticated-app links.
 
 Before deploying the Cloudflare marketing Worker:
 
@@ -245,5 +210,5 @@ Before deploying the Cloudflare marketing Worker:
 - A local noindex marketing preview is not a live SEO verification.
 - A locally rendered scorecard image is not proof that external social caches have fetched the current canonical asset.
 - A scorecard share-button click is not a platform impression, signup, qualified referral, or customer claim.
-- A green application CI run is not evidence of configured production secrets, DNS, billing, or recovery readiness.
+- A green application CI run is not evidence of configured production secrets, DNS, billing, or backups.
 - A database uniqueness migration passing on an empty environment is not evidence that legacy duplicate provider bindings were reconciled.

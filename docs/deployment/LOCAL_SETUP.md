@@ -38,7 +38,7 @@ Next.js production builds read required values from `process.env`; the root `.en
 cp .env apps/web/.env
 ```
 
-The dashboard can run without evidence storage, but a scan worker requires durable evidence storage before it registers as ready: `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and `S3_REGION`. Local development may explicitly use `LYRASHIELD_LOCAL_EVIDENCE_STORAGE=1` outside production. Evidence persistence fails closed when storage is absent or an upload fails; the worker does not accept scans it cannot retain.
+The dashboard can run without evidence storage, but any scan that produces PoC or code-location evidence requires `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and `S3_REGION`. Evidence persistence fails closed when these values are absent or upload fails.
 
 ## 2. Start Postgres and Redis
 
@@ -68,7 +68,7 @@ pnpm build
 git diff --check
 ```
 
-The current local baseline is tracked in `PRD.md` Part C and `codebase.md` and currently reports **933 core tests in 105 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Chromium E2E tests** at a clean gate. Treat command output as the source of truth; historical PR #109 counts are retained for audit only. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+The merged PR #109 baseline passes 858 core tests in 94 files, 79 marketing tests in 12 files, 16 motion tests, and 2 Chromium E2E tests. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Verify scorecards and social sharing
 
@@ -112,18 +112,17 @@ Submit a disposable local waitlist address and verify the success state shows qu
 
 ```bash
 cd ~/Desktop/lyrashieldai
-docker compose build migrate web worker
-docker compose up -d --force-recreate migrate
+docker compose build worker
 docker compose up -d web worker
 docker compose exec worker lyrashield --version
 curl -fsS http://localhost:3000/api/ready/scans
 ```
 
-The worker image consumes the sibling engine source through its named Docker build context. Compose also creates the internal `lyrashield-sandbox` network shared by the worker and its dynamically created scan sandboxes. This network is required for the worker-to-Caido control plane and has no default external route. The worker exits before accepting scans if the resolved model, selected provider credential, or sandbox network name is missing.
+The worker image consumes the sibling engine source through its named Docker build context. It exits before sandbox setup if the resolved model or selected provider credential is missing.
 
 The web app accepts a scan only while a worker heartbeat is live. Workers refresh their Redis lease every 10 seconds; the lease expires after 30 seconds following a crash or lost Redis connection. `/api/ready/scans` returns `503` while no worker is available, and the UI asks the user to retry instead of leaving a scan permanently queued.
 
-The worker reconciles queue/database drift at startup and every minute. An active database scan (`QUEUED`, `PREFLIGHT`, `RUNNING`, or `VERIFYING`) stale for five minutes without a processable BullMQ job fails closed as `QUEUE_ORPHANED`; it is never re-enqueued automatically because that could repeat paid model work. Do not delete BullMQ keys or jobs directly in Redis. Remove a queued job only through an application/operator flow that also transitions its database scan to `CANCELLED` or `FAILED` and records a scan event.
+The worker reconciles queue/database drift at startup and every minute. A database scan that remains `QUEUED` for five minutes without a processable BullMQ job fails closed as `QUEUE_ORPHANED`; it is never re-enqueued automatically because that could repeat paid model work. Do not delete BullMQ keys or jobs directly in Redis. Remove a queued job only through an application/operator flow that also transitions its database scan to `CANCELLED` or `FAILED` and records a scan event.
 
 Exercise the readiness transition without creating a scan:
 
@@ -136,7 +135,7 @@ curl -fsS http://localhost:3000/api/ready/scans # ready after registration
 
 Use the dashboard/API cancellation action for queued or running scans. Never remove a Redis job directly: cancellation owns the database transition and event, active phases observe it, and reconciliation removes a remaining non-active job.
 
-The base `LYRASHIELD_LLM` is the fallback. During worker scans, Safe/Quick/Standard use `LYRASHIELD_LUNA_LLM` at medium reasoning. Deep/Custom use `LYRASHIELD_TERRA_LLM` at medium for the coordinator and `LYRASHIELD_LUNA_LLM` at medium for focused child specialists. The values after `azure/` or `azure_ai/` must be the real Azure deployment names.
+The base `LYRASHIELD_LLM` is the fallback. During worker scans, Safe/Quick/Standard use `LYRASHIELD_LUNA_LLM` at medium reasoning; Deep/Custom use `LYRASHIELD_TERRA_LLM` at high. The values after `azure/` or `azure_ai/` must be the real Azure deployment names.
 
 For Azure OpenAI, use the `azure/` prefix and endpoint or the Azure-specific variables:
 
@@ -187,11 +186,11 @@ docker compose exec worker sh -lc \
 After an authorized scan, inspect its timeline and confirm:
 
 - Safe/Quick/Standard: `engine_start` reports Luna and `medium`; `budget_cap` reports $1.20/$3.20 unless policy-overridden.
-- Deep/Custom: `engine_start` reports the Terra/medium coordinator; the run artifact records Luna/medium delegates and the versioned routing policy; `budget_cap` reports $15 unless policy-overridden.
+- Deep/Custom: `engine_start` reports Terra and `high`; `budget_cap` reports $15 unless policy-overridden.
 - `llm_usage` is present when the provider returned usage data.
 - When request entries are complete, `llm_usage` records `pricingMethod: per_request_buckets` and separates standard/long-context input, cached reads, cache writes, and output. Aggregate-only input above 272,000 tokens remains unavailable instead of being guessed.
 
-Deep/Custom use deterministic tiering rather than model-selected promotion: Terra coordinates and judges cross-file evidence, while Luna executes focused specialist tasks. Only the root can create or stop specialists, preventing recursive child fan-out. Safe/Quick/Standard remain Luna-only.
+One scan uses one selected model. A Luna-to-Terra cascade inside one scan is not implemented.
 
 Engine PRs #6 and #7 are merged. Current engine behavior compacts estimated input at 240,000 tokens toward about 180,000 tokens, bounds direct dedupe input to 200 kB, limits output/agent concurrency, and reserves projected spend before each request. These are code/build guarantees; they do not prove result quality or replace provider-meter reconciliation.
 

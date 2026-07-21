@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current release baseline — 2026-07-21:** 4 apps, 10 shared packages (including `packages/score`), 25 web page files, 43 API route files, 39 Prisma models, 18 enums, 23 migrations, and 21 strictly RLS-protected workspace tables. PRs #139–#143 pass lint, typecheck, restricted-role E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, and diff checks (933 core tests in 105 files, 80 marketing tests in 12 files, 16 motion tests, and 4 Playwright Chromium tests). Sections 17–54 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current merged baseline — 2026-07-18:** 4 apps, 10 shared packages (including `packages/score`), 25 web page files, 44 API route files, 39 Prisma models, 18 enums, 21 migrations, and 20 directly RLS-protected workspace tables. PR #115 passes lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks (881 core tests in 97 files, 79 marketing tests in 12 files, 16 motion tests, and 2 Playwright Chromium tests). Sections 17–54 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -29,7 +29,7 @@ The canonical engine repo is `ecryptoguru/lyrashield-engine`. It is a controlled
 - **Recorded upstream release/base:** `v1.1.0` / `7d5a67d234bd3faef34d22be8c6f5a9607de41a3`
 - **Adapter version:** `1.1.0.post1`
 - **Compatibility:** maps `LYRASHIELD_*` only when the corresponding `STRIX_*` value is unset; explicit upstream values win; the product entry point forces upstream telemetry to `0`
-- **Model config:** the engine accepts only GPT-5.6 Sol/Terra/Luna deployment names. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for the Deep/Custom coordinator, falling back to `LYRASHIELD_LLM`; Deep/Custom child specialists receive Luna/medium through the separate delegate route. Per-request receipts retain their actual model for mixed-model reconciliation. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel is not configured.
+- **Model config:** the engine accepts only GPT-5.6 Sol/Terra/Luna deployment names. It receives one resolved `LYRASHIELD_LLM`/`STRIX_LLM` per subprocess plus the bounded OpenAI/Azure credential surface. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for Deep/Custom, falling back to `LYRASHIELD_LLM`. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel is not configured.
 - **Artifacts:** worker accepts `strix_runs` and legacy `lyrashield_runs`, with `run.json` or `vulnerabilities.json`
 - **Sync model:** stable-release tree imports on review branches; human approval and green CI are required, with no force-push or automatic conflict resolution
 - **Verification:** 329 tests, Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox build/smoke, and public worker compatibility
@@ -68,7 +68,7 @@ Public copy uses **LyraShield AI**. Internal package scopes (`@lyrashield/*`), e
 | Component variants      | class-variance-authority (cva)   | 0.7.x                                                |
 | Icons                   | lucide-react                     | 1.23.x                                               |
 | Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                      |
-| Testing                 | Vitest + Playwright              | 933 core + 80 marketing + 16 motion + 4 Chromium E2E |
+| Testing                 | Vitest + Playwright              | 881 core + 79 marketing + 16 motion + 2 Chromium E2E |
 | Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration |
 | Job queue               | BullMQ                           | 5.80.x                                               |
 | Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate      |
@@ -431,19 +431,19 @@ This is the code-facing status summary. Product cutlines and release gates live 
 | Scorecards/referrals/distribution   | Complete                     | Versioned scores and immutable snapshots, frozen public scorecards, revocation/supersession, referrals/rewards, premium cards/badges, channel sharing, privacy-safe funnel events, dashboard metrics, waitlist sharing, and report handoff copy.                                                                                                      |
 | MCP (9.5)                           | Core complete                | API-backed tools, approval checks, hardened prompt-injection guard (input normalization + expanded pattern set), stdio transport. API-key lifecycle and broader client docs remain.                                                                                                                                                                   |
 | Billing/usage (10)                  | Not implemented              | `BillingAccount`, `UsageRecord`, permissions, and env values are schema/config foundations only.                                                                                                                                                                                                                                                      |
-| Launch polish (11)                  | Partial                      | UX, accessibility, security hardening, privacy lifecycle, browser E2E, health/readiness, instrumentation, Deep Review v4 remediation, docs, and production app/worker infrastructure are implemented. Successful reconciled Safe/Deep scans, application-level alerts, capacity, and deferred recovery proof remain.                                  |
+| Launch polish (11)                  | Partial                      | UX, accessibility, security hardening, privacy lifecycle, browser E2E, health/readiness, instrumentation, Deep Review v4 remediation, docs, and Docker proof are implemented; controlled scan, authenticated-app/worker infrastructure, egress, and operational monitoring remain.                                                                    |
 | Phase 2                             | Not implemented              | Enterprise identity, SCIM, advanced policy, private worker, VPC/self-hosting, BYOK/BYOM, and enterprise integrations remain roadmap items.                                                                                                                                                                                                            |
 
 ### Current Verification
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **933 core tests in 105 files**, **80 marketing tests in 12 files**, and **16 motion tests**, pass
-- `pnpm test:e2e`: **4 Chromium tests**, pass against a `NOBYPASSRLS` database role; covers anonymous denial, auth recovery/invite gates, onboarding, target/scan creation, and cross-tenant denial
+- `pnpm test`: **881 core tests in 97 files**, **79 marketing tests in 12 files**, and **16 motion tests**, pass
+- `pnpm test:e2e`: **2 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `pnpm format:check`: pass
 - `pnpm audit --prod --audit-level high`: pass, no known production vulnerabilities
-- Prisma validation, drift, deployment, and status: pass; the repository contains all 23 committed migrations
+- Prisma validation, drift, deployment, and status: pass; the repository contains all 21 committed migrations
 - `git diff --check`: pass
 - Engine gate: 329 tests + Ruff + formatting + headless mypy + Bandit + package/native-binary checks + sandbox smoke + public worker compatibility
 
@@ -453,7 +453,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 - The current engine-bearing worker image builds and exposes `lyrashield 1.1.0.post1`.
 - Missing engine model configuration fails before sandbox pull.
 - Historical Docker smoke in §§24–30 proves prior container health, routes, migrations, queue startup, and engine packaging. It does **not** prove a current authorized scan.
-- Marketing is deployed and indexable at `https://lyrashieldai.com` with production D1/Rate Limit/KV bindings, all D1 migrations, a Worker-secret IP salt, custom apex/`www` domains, an active canonical 301, sitemap/robots/`llms.txt`, security headers, privacy-bounded PostHog capture, and live waitlist/crawl/Lighthouse/Brave QA. The passive `/scan` route is live and indexable behind the separate scanner origin, Turnstile, rate limit, and monitored abuse route. `/terms` remains individually `noindex`. The authenticated beta is live at `https://app.lyrashieldai.com`; app-origin unfurl/referral proof and successful controlled Safe/Deep scans remain open release gates.
+- Marketing is deployed and indexable at `https://lyrashieldai.com` with production D1/Rate Limit/KV bindings, all D1 migrations, a Worker-secret IP salt, custom apex/`www` domains, an active canonical 301, sitemap/robots/`llms.txt`, security headers, privacy-bounded PostHog capture, and live waitlist/crawl/Lighthouse/Brave QA. The passive `/scan` route is live and indexable behind the separate scanner origin, Turnstile, rate limit, and monitored abuse route. `/terms` remains individually `noindex`; the authenticated app origin and app-origin unfurl/referral proof remain open gates.
 - PR #52 merged the social distribution loop; PR #53 merged GPT-5.6 routing/caps; PRs #54–#57 merged Deep Review v3; PR #59 preserved deletion/report compatibility; PR #60 added the premium UI; PR #79 merged Deep Review v4 correctness, worker-truth, UX, database, and PostHog remediation. Each merged implementation PR passes the applicable CI migration, lint, format, typecheck, test, build, Chromium E2E, SCA/secret, and security-diff gates. External social-network cache/unfurl behavior remains a real-domain release check.
 
 ---
@@ -941,7 +941,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
   6. Emits scan events for RUNNING, output capture, completion
   7. Reads `vulnerabilities.json` + `run.json` from output dir
   8. Returns `{ exitCode, output: ParsedScanOutput }`
-- **`resolveEngineProfile(mode)`** — routes Safe/Quick/Standard to Luna/medium throughout and Deep/Custom to a Terra/medium coordinator with Luna/medium specialists; missing routed deployments fall back to `LYRASHIELD_LLM`.
+- **`resolveEngineProfile(mode)`** — routes Safe/Quick/Standard to the configured Luna deployment at medium reasoning and Deep/Custom to Terra at high reasoning; a missing routed deployment falls back to `LYRASHIELD_LLM`.
 - **`interpretExitCode(code)`** — maps engine exit codes: 0 → COMPLETED (SUCCESS), 2 → COMPLETED (VULNERABILITIES_FOUND), all other codes → FAILED.
 - **`cleanupEngineWorkspace(dir)`** — removes temp workspace (best-effort, non-fatal).
 - Focused runner tests cover exit mapping, termination escalation, output discovery, every routing mode, and fallback selection.
@@ -1467,7 +1467,7 @@ Full-stack Docker deployment tested and verified:
 - **7 Prisma migrations** applied successfully (including `agent_approval_layer`), 30 tables created, 18 RLS-enabled
 - **All 12 dashboard pages** return 200 (authenticated): dashboard, projects, targets, scans, findings, reports, notifications, schedules, team, settings, integrations, launch-readiness, fixes
 - **All 10 API endpoints** return `success: true`: projects, targets, scans, findings, reports, notifications, schedules, team, launch-readiness, fix-proposals
-- **Auth flow**: sign-up → optional email verification (if enabled) → sign-in → session cookies set correctly
+- **Auth flow**: sign-up → email verification → sign-in → session cookies set correctly
 - **Scan lifecycle**: QUEUED → PREFLIGHT → RUNNING → FAILED (expected — engine binary not mounted in Docker)
 - **Security headers verified**: CSP with per-request nonce, X-Frame-Options DENY, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
 - **781 tests pass inside container** (at time of Agent Action Layer; see §26.5 and §27 for later verifications)
@@ -1898,11 +1898,11 @@ Implements the "LyraShield Score, Shareable Scorecard & Referral System — Engi
 
 ## §35 — GPT-5.6 mode routing and enforced scan budgets (2026-07-13)
 
-- `apps/worker/src/engine/runner.ts` resolves one engine profile per scan. Safe, Quick, and Standard use `LYRASHIELD_LUNA_LLM` with medium reasoning; Deep and Custom use `LYRASHIELD_TERRA_LLM` with medium reasoning. If the selected variable is empty, `LYRASHIELD_LLM` remains the backward-compatible fallback.
+- `apps/worker/src/engine/runner.ts` resolves one engine profile per scan. Safe, Quick, and Standard use `LYRASHIELD_LUNA_LLM` with medium reasoning; Deep and Custom use `LYRASHIELD_TERRA_LLM` with high reasoning. If the selected variable is empty, `LYRASHIELD_LLM` remains the backward-compatible fallback.
 - The resolved model and reasoning effort override only the spawned engine process. Azure credentials, endpoint, and API version continue through the existing generic/Azure allowlist; routing does not duplicate secrets or create separate queues.
 - `apps/worker/src/engine/command-builder.ts` applies positive default caps of $1.20 for Safe/Quick, $3.20 for Standard, and $15 for Deep/Custom. Unknown modes receive the conservative $15 fallback. A finite positive `Policy.maxBudgetUsd`, fetched with `workspaceId` and soft-delete scope, overrides the mode cap.
 - `run-scan.job.ts` passes the cap to the engine's `--max-budget-usd` guard and records private accounting events. The `engine_start` event records model and reasoning selection; normalized `llm_usage` remains separately persisted after execution. PR #109 supersedes the original aggregate fallback with the per-request accounting boundary in §51.
-- Deep/Custom now use a deterministic within-scan route: Terra/medium owns coordination and cross-file judgment while Luna/medium runs focused child work. Only the root can create or stop specialists, specialists start without copied parent history unless explicitly requested, stable per-scan prompt-cache keys improve repeated-prefix reuse, and per-request model buckets keep reconciliation exact. Adaptive evidence-triggered promotion, billing-plan quotas, and cross-workspace cost policy remain roadmap work.
+- This is mode-level routing, not a within-scan cascade: one engine invocation uses one model. Luna discovery followed by Terra validation inside the same scan, provider prompt-cache orchestration, billing-plan quotas, and cross-workspace cost policy remain roadmap work.
 - Configuration is propagated through `packages/config`, `turbo.json`, `docker-compose.yml`, `.env.example`, and the deployment runbooks. Regression tests cover every mode, fallback routing, policy overrides, invalid policy budgets, and CLI cap propagation. The full local gate passes 689 Vitest tests in 65 files, lint, typecheck, and production build.
 
 ## §36 — Deep Review v3 remediation (2026-07-14, PRs #54–#57)
@@ -2096,12 +2096,3 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - The target architecture is evolutionary: move LyraShield-owned policy behind explicit engine modules and a versioned JSON protocol when touching those paths, while preserving child-process isolation. Do not create a second runtime or speculative abstraction solely to make the repository look independent.
 - Result quality is not established by the inherited Strix v0.4 XBEN result. Before changing orchestration or making accuracy/coverage claims, add a private LyraShield corpus with expected findings and expected non-findings, evidence correctness, duplicate stability, control coverage, runtime, and token-use measurements for Luna and Terra.
 - Reconsider full independence only when upstream repeatedly blocks required product behavior, reviewed release imports become materially more expensive than ownership, or the LyraShield evaluation suite demonstrates a substrate-imposed result ceiling.
-
-## §55 — Invite-only production app and worker boundary (2026-07-21, app PRs #130–#142; engine through `0dcca84`)
-
-- `https://app.lyrashieldai.com` is the separately deployed authenticated beta origin. Password and configured GitHub/Google/Microsoft access do not depend on email delivery; invite gating remains authoritative, email verification/reset are disabled, and Microsoft is link-only in production. Marketing renders its Sign in path only from the configured `PUBLIC_APP_URL`.
-- The concurrency-one production worker runs on a private Azure VM with Key Vault managed identity, immutable ACR worker and sandbox digests, TLS Redis, Supabase Postgres, private R2, a `DOCKER-USER` destination allowlist, refreshed DNS pins, and an internal no-egress sandbox network. `ops/worker/` is the versioned service/firewall/secret boundary. ACR admin credentials are disabled after managed-identity `AcrPull` was proven.
-- The worker uses the reviewed application tree merged as `f52712b`, engine `0dcca84`, and immutable digest `sha256:3307fadd4d2f2a31b06b2c8138e93795bb8db841115af721242a10fdf6b91477`. The authenticated web revision `lyrashield-app--rls3482355` serves merged commit `3482355` from digest `sha256:fe6b0924c7994b3135fe4d321a9112d612d83ddf69626b5ad7f0ce7e74d6c29c`. Ordinary web queries use the dedicated `NOBYPASSRLS` role, and `DATABASE_SYSTEM_URL` is isolated to reviewed share-token/public-scorecard and verified GitHub webhook lookups. The app retains an engine-owned exception class while stderr streams without persisting raw content; the engine exits non-interactive failures without interpreter tracebacks that may carry target-derived values.
-- Zero-traffic canary health, database/Redis readiness, scan readiness, active-session `/sign-in` redirection, scan-detail access, and authenticated route smoke passed before traffic moved to the restricted revision. PR #143 replaced relation includes inside the scan-detail interactive transaction with sequential child reads, eliminating the pg 8 concurrent-query warning that pg 9 will reject; trace-enabled restricted-role E2E and live logs are clean. The prior restricted revision remains healthy at zero traffic for rollback.
-- Production verification covers GitHub sign-in/onboarding/target creation, app health/readiness, scan-service lease admission, 45-second heartbeat renewal, graceful unregister/restart, idle-queue recovery, approved endpoint access, blocked unapproved/private/metadata/sandbox-public egress, signed R2 put/head/get/checksum/delete, and baseline Azure alerts. Google/Microsoft share the tested provider contract but do not yet have separate live-identity proof.
-- Three early Luna/Safe attempts failed closed with no assurance result or replay and exposed a provider request-shape defect. After the bounded diagnostic and request corrections, a production Luna/Safe run completed in 13m04s with an immutable manifest, all 50 control receipts, two controls with findings, seven evidence-required controls, and three detected findings. Two build-default findings and the permissive-RLS finding were remediated in PR #139; a fresh retest is required because the completed scan predates that merge. The first Terra/Deep run ended at the former 30-minute timeout, and the post-PR-#139 rerun is the current terminal-proof gate. Backup/restore is founder-deferred and manual-dispatch only for this beta, so recovery, RPO/RTO, and general-availability claims remain blocked.
