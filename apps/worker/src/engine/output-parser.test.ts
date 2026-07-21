@@ -262,6 +262,28 @@ describe("output-parser", () => {
       expect(result?.llm_usage).toBeUndefined()
     })
 
+    it("does not promote nested agent cost when provider cost is unavailable", () => {
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-native-cost-unavailable",
+          status: "completed",
+          llm_usage: {
+            requests: 1,
+            input_tokens: 100,
+            output_tokens: 10,
+            agents: [{ agent_id: "root", cost: 0 }],
+          },
+        })
+      )
+
+      expect(result?.llm_usage).toMatchObject({
+        request_count: 1,
+        input_tokens: 100,
+        output_tokens: 10,
+      })
+      expect(result?.llm_usage).not.toHaveProperty("total_cost_usd")
+    })
+
     it("does not retain partial usage totals from payloads beyond the traversal limit", () => {
       const requests = Array.from({ length: 600 }, () => ({ usage: { input_tokens: 1 } }))
       const result = parseRunJson(
