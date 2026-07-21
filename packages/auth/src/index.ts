@@ -3,7 +3,7 @@ export { authClient, signIn, signOut, signUp, useSession, getClientSession } fro
 export type { AuthClient } from "./client"
 export { getAuthErrorMessage, getAuthErrorCode, isEmailNotVerifiedError } from "./client"
 export type { AuthClientError } from "./client"
-export { isOAuthProviderConfigured, socialSignUpEnabled } from "./oauth-providers"
+export { isOAuthProviderConfigured } from "./oauth-providers"
 
 export {
   PERMISSIONS,

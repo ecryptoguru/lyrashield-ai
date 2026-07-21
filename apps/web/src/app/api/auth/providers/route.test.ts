@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/config", () => ({
-  isProd: true,
   env: {
     GITHUB_CLIENT_ID: "github-client",
     GITHUB_CLIENT_SECRET: "github-secret",
@@ -15,13 +14,12 @@ vi.mock("@lyrashield/config", () => ({
 }))
 vi.mock("@lyrashield/auth/oauth-providers", () => ({
   isOAuthProviderConfigured: (id?: string, secret?: string) => Boolean(id && secret),
-  socialSignUpEnabled: () => true,
 }))
 
 const { GET } = await import("./route")
 
 describe("auth provider configuration", () => {
-  it("keeps the initial beta independent of Brevo", async () => {
+  it("returns configured providers and allows social registration", async () => {
     const response = await GET()
 
     await expect(response.json()).resolves.toMatchObject({
@@ -29,7 +27,6 @@ describe("auth provider configuration", () => {
       google: false,
       microsoft: false,
       socialSignUp: true,
-      microsoftSignUp: false,
       emailVerification: false,
       passwordReset: false,
     })

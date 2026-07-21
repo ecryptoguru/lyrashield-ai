@@ -1,52 +1,44 @@
 # LyraShield AI — OpenAI Build Week demo
 
-**Length:** 2 minutes 30 seconds to 2 minutes 55 seconds.  
-**Delivery:** public or unlisted YouTube video with spoken narration.  
+**Submitted video:** [YouTube](https://youtu.be/Wd7v5uOrhWI)\
+**Final runtime:** 2:46.656\
+**Delivery:** public YouTube video with spoken narration and an English subtitle track.\
 **Rule-critical:** show a working project and explain both Codex and GPT-5.6 use.
 
-## Recording flow
+## Final flow
 
-1. **0:00–0:15 — problem and impact**
+1. **0:00–0:13 — problem and impact**
 
-   Show `https://lyrashieldai.com`.
+   AI-built software can reach production before anyone can answer what was actually tested. LyraShield AI turns that uncertainty into an evidence-backed release decision.
 
-   > AI-assisted software can ship faster than teams can justify a release decision. LyraShield AI makes the evidence boundary visible: what was detected, independently verified, retest-confirmed, or remains inconclusive.
+2. **0:13–0:55 — working public product**
 
-2. **0:15–0:50 — working public product**
+   Show the live Lite Check against `https://lyrashieldai.com`, including the compressed wait and result.
 
-   Open the homepage Lite Check and run it against `https://lyrashieldai.com`.
+   > The public Lite Check is passive and read-only. It reviews an authorized public surface, keeps its limits visible, and does not present a clean result as a security guarantee.
 
-   > This is the working public Lite Check. It reviews an authorized public surface with deterministic checks and does not pretend it is a full authenticated scan. The progress UI shows what is being checked without inventing a completion percentage.
+3. **0:55–1:26 — evidence model**
 
-3. **0:50–1:20 — novel evidence model**
+   Show the public methodology and sanitized sample report.
 
-   Show the result, methodology page, then the report/sample-report page.
+   > A detected candidate, independent verification, approval-bound fix proposal, retest result, and inconclusive evidence are separate facts. LyraShield does not turn an AI confidence score into proof.
 
-   > The core product distinction is evidence state. A detected finding is not automatically verified. A clean deterministic retest is retest-confirmed only when its applicable coverage is complete; otherwise it remains inconclusive. That prevents an AI confidence score from becoming a security claim.
+4. **1:26–1:52 — authenticated workspace and review setup**
 
-4. **1:20–1:48 — complete product experience**
+   Show the authenticated workspace, its `Needs evidence` verdict, and Release Check, Code Review, and Deep Security Review. The workspace is open for registration; the recording does not initiate a full scan.
 
-   Show a recorded invite-only session from `https://app.lyrashieldai.com`: target list, scan detail, immutable manifest or coverage receipt, and report/scorecard view. Do not show credentials or customer data. If a retained scan is unavailable, use the public Lite Check and the synthetic sample report rather than presenting a local fixture as a production scan.
+   > The workspace connects targets, findings, receipts, reports, and approval-gated actions. Full-scan admission fails closed when the worker is unavailable, and risky actions do not accept client-authored patches.
 
-   > The invite-only workspace connects targets, findings, receipts, score snapshots, reports, schedules, and approval-gated actions. Scan admission fails closed when a worker is unavailable, and risky actions do not accept client-authored patches.
+5. **1:52–2:36 — architecture, Build Week, Codex, and GPT-5.6**
 
-5. **1:48–2:33 — Build Week, Codex, and GPT-5.6**
+   Show the deterministic public-check boundary, Luna/Terra routing, and Build Week verification card.
 
-   Show the README's dated Build Week section, the pull-request links, a recent green GitHub Actions run, and a safe excerpt of the worker model-routing or result-integrity code.
+   > GPT-5.6-powered Codex sessions traced cross-package flows, implemented evidence boundaries, diagnosed failures, reviewed UX, and hardened the release path. In the controlled full-scan contract, Luna handles focused work and Terra coordinates deep reviews, with bounded context, delegation, output, concurrency, and spend.
 
-   > The product existed before Build Week, so the README identifies the exact baseline and every meaningful extension added after it. GPT-5.6-powered Codex sessions helped trace the system, implement and test evidence receipts, build the public scanner and product UX, and harden CI and deployment. I made the product decisions: evidence state instead of confidence-as-proof, deterministic public checks, and risky paths failing closed. In the controlled full-scan contract, GPT-5.6 Luna handles focused work while Terra coordinates deep reviews. Before requests run, the system bounds context, agents, output, concurrency, and spend.
+6. **2:36–2:47 — close**
 
-6. **2:33–2:53 — close**
+   > LyraShield AI does not promise that everything is secure. It shows what evidence exists, what remains uncertain, and whether an AI-built app is ready to ship.
 
-   Return to the public site and repo.
+## Judge test path
 
-   > LyraShield AI is release assurance for AI-built software: not a claim that every issue is fixed, but a clear record of what evidence exists and what still needs review. The public Lite Check is live today; the authenticated workspace is an invite-only production beta.
-
-## Before upload
-
-- Record at 1080p with audible narration.
-- Verify the YouTube URL in a private/incognito browser; public or unlisted is acceptable.
-- Keep the final video under three minutes.
-- Do not show API keys, database URLs, user email addresses, or unredacted target details.
-- Paste the YouTube URL into the Devpost project only after the private-window check passes.
-- Generate the submission Session ID by running `/feedback` in the primary Codex build thread; do not substitute the visible task UUID unless `/feedback` returns it.
+No account, installation, paid service, or rebuild is required for the submitted public path. Open [the Lite Check](https://lyrashieldai.com/scan), enter `lyrashieldai.com`, confirm authorization and the Terms, inspect the result and its limitations, then compare it with the [methodology](https://lyrashieldai.com/methodology) and [synthetic sample report](https://lyrashieldai.com/sample-report). The public repository README contains local setup, supported-platform, and full-worker dependency guidance.

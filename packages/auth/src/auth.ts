@@ -1,12 +1,11 @@
 import { betterAuth } from "better-auth"
-import { APIError, createAuthMiddleware } from "better-auth/api"
 import { prismaAdapter } from "better-auth/adapters/prisma"
+import { genericOAuth, microsoftEntraId } from "better-auth/plugins"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
-import { isBetaInviteAllowed } from "./beta-invites"
-import { isOAuthProviderConfigured, socialSignUpEnabled } from "./oauth-providers"
+import { isOAuthProviderConfigured } from "./oauth-providers"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
 const GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET
@@ -19,6 +18,7 @@ const secureCookies = new URL(env.BETTER_AUTH_URL).protocol === "https:"
 const githubEnabled = isOAuthProviderConfigured(GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET)
 const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
 const microsoftEnabled = isOAuthProviderConfigured(AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)
+const emailVerificationEnabled = Boolean(env.BREVO_API_KEY)
 
 // Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; any origin
 // added here may initiate credentialed auth requests. Marketing and Lite Check
@@ -121,23 +121,8 @@ export const auth = betterAuth({
   trustedOrigins,
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: !isDev,
+    requireEmailVerification: emailVerificationEnabled,
     sendResetPassword: sendResetPasswordEmail,
-  },
-  hooks: {
-    before: createAuthMiddleware(async (ctx) => {
-      if (ctx.context.path !== "/sign-up/email" || !isProd) return
-      const email = (ctx.body as { email?: unknown } | undefined)?.email
-      if (
-        typeof email !== "string" ||
-        !isBetaInviteAllowed(email, env.LYRASHIELD_BETA_INVITE_EMAILS)
-      ) {
-        throw APIError.from("FORBIDDEN", {
-          code: "BETA_INVITE_REQUIRED",
-          message: "Beta access is by invitation.",
-        })
-      }
-    }),
   },
   emailVerification: {
     sendVerificationEmail,
@@ -145,22 +130,7 @@ export const auth = betterAuth({
     sendOnSignIn: true,
     autoSignInAfterVerification: true,
   },
-  databaseHooks: {
-    user: {
-      create: {
-        before: async (user) => {
-          if (!isBetaUserCreationAllowed(isProd, user.email, env.LYRASHIELD_BETA_INVITE_EMAILS)) {
-            throw APIError.from("FORBIDDEN", {
-              code: "BETA_INVITE_REQUIRED",
-              message: "Beta access is by invitation.",
-            })
-          }
-          return { data: user }
-        },
-      },
-    },
-  },
-  ...(!isDev
+  ...(emailVerificationEnabled && !isDev
     ? {
         emailVerification: {
           sendVerificationEmail,
@@ -175,15 +145,13 @@ export const auth = betterAuth({
       clientId: GITHUB_CLIENT_ID ?? "",
       clientSecret: GITHUB_CLIENT_SECRET ?? "",
       enabled: githubEnabled,
-      // Invited beta users create and verify an email account first. OAuth can
-      // then link only to that account; it must never be a public sign-up path.
-      disableSignUp: !socialSignUpEnabled(isProd),
+      disableSignUp: false,
     },
     google: {
       clientId: GOOGLE_CLIENT_ID ?? "",
       clientSecret: GOOGLE_CLIENT_SECRET ?? "",
       enabled: googleEnabled,
-      disableSignUp: !socialSignUpEnabled(isProd),
+      disableSignUp: false,
     },
   },
   plugins: microsoftEnabled
@@ -194,7 +162,7 @@ export const auth = betterAuth({
               clientId: AZURE_AD_CLIENT_ID ?? "",
               clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
               tenantId: AZURE_AD_TENANT_ID || "common",
-              disableSignUp: !socialSignUpEnabled(isProd),
+              disableSignUp: false,
             }),
           ],
         }),

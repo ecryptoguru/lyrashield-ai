@@ -1,6 +1,6 @@
 # LyraShield AI — final screen-capture storyboard
 
-**Format:** 1920×1080, 30 fps, 16:9; final export is 2:19.0.
+**Format:** 1920×1080, 30 fps, 16:9; final export is 2:46.656.
 
 **Audio:** clean spoken narration, no music.
 
@@ -10,17 +10,13 @@
 
 | Time        | Source                                        | Treatment                        | Required visible proof                                                                |
 | ----------- | --------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
-| 00:00–00:11 | Live production landing page                  | Clean capture, no browser chrome | Product purpose and the “what was tested” hook                                        |
-| 00:11–00:30 | Live Lite Check form                          | Restrained slow push             | Passive, read-only scope and public-surface boundary                                  |
-| 00:30–00:44 | Authorized live Lite Check result             | Restrained slow push             | `0 needs attention`, `0 worth reviewing`, `5 look OK`, and limitation                 |
-| 00:44–00:58 | Live methodology page                         | Slow scroll                      | Evidence states and explicit non-claim                                                |
-| 00:58–01:09 | Live sanitized sample report                  | Slow scroll                      | `Sanitized mock`, evidence receipt, approval-bound proposal, and retained uncertainty |
-| 01:09–01:21 | Local production-like authenticated workspace | Clean still sequence             | Configured target, `Needs evidence`, and blank score                                  |
-| 01:21–01:34 | Real scan setup                               | Restrained slow push             | Release Check, Code Review, Deep Security Review; no scan initiated                   |
-| 01:34–01:42 | Repository-backed architecture card           | Restrained slow push             | Deterministic public check versus controlled repository review                        |
-| 01:42–01:49 | Exact worker model-routing source             | Restrained slow push             | Luna/Terra routing in `apps/worker/src/engine/runner.ts`                              |
-| 01:49–02:10 | Current-revision Build Week verification card | Restrained slow push             | Codex task ID and exact passing test counts                                           |
-| 02:10–02:19 | LyraShield AI end card                        | Gentle close                     | Evidence-led positioning and canonical domain                                         |
+| 00:00–00:13 | Live production landing page                  | Clean capture, no browser chrome | Product purpose and the “what was tested” hook                                        |
+| 00:13–00:55 | Live Lite Check and compressed wait           | Restrained slow push             | Passive scope, actual result, and visible limitation                                   |
+| 00:55–01:26 | Methodology and sanitized sample report       | Slow scroll                      | Evidence states, `Sanitized mock`, and explicit non-claim                             |
+| 01:26–01:52 | Authenticated workspace and scan setup        | Clean still sequence             | Configured target, `Needs evidence`, named review modes; no scan initiated             |
+| 01:52–02:12 | Repository-backed architecture and source     | Restrained slow push             | Deterministic public check versus Luna/Terra controlled review                         |
+| 02:12–02:36 | Current-revision Build Week verification card | Restrained slow push             | Codex/GPT-5.6 contribution and exact passing test counts                               |
+| 02:36–02:47 | LyraShield AI end card                        | Gentle close                     | Evidence-led positioning and canonical domain                                         |
 
 ## Capture gates
 
@@ -35,7 +31,7 @@
 - Keep each cue to a short conversational phrase and no more than two lines.
 - Use one high-contrast caption group in the lower safe area.
 - Correct product names manually: LyraShield AI, Lite Check, Codex, GPT-5.6, Luna, Terra.
-- Burn captions into the picture and also include the identical English timed-text track and SRT sidecar.
+- Include the identical English timed-text track and SRT sidecar with the final export.
 
 ## Acceptance checks
 

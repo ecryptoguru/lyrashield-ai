@@ -12,16 +12,17 @@ It keeps detected findings, independently verified evidence, retest-confirmed re
 
 - Marketing and methodology: [lyrashieldai.com](https://lyrashieldai.com)
 - Public passive Lite Check: [lyrashieldai.com/scan](https://lyrashieldai.com/scan)
-- Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com) (invite-only production beta)
+- Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com) (open registration)
 
-The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. The invite-only beta app supports password and configured OAuth access without email verification. Production web requests use a restricted `NOBYPASSRLS` database role, and repository scans are admitted only while the dedicated production worker holds a live lease. The current release gate still requires a current-tree Safe retest and a successful, reconciled Deep run.
+The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. The workspace supports password and configured OAuth registration. Production web requests use a restricted `NOBYPASSRLS` database role, and repository scans are admitted only while the dedicated production worker holds a live lease. The current release gate still requires a current-tree Safe retest and a successful, reconciled Deep run.
 
 ## Judge and project links
 
-- [Public product site](https://lyrashieldai.com) · [public Lite Check](https://lyrashieldai.com/scan) · [authenticated beta](https://app.lyrashieldai.com) (invite-only)
+- [Public product site](https://lyrashieldai.com) · [public Lite Check](https://lyrashieldai.com/scan) · [workspace registration](https://app.lyrashieldai.com)
 - [Methodology](https://lyrashieldai.com/methodology) · [synthetic sample report](https://lyrashieldai.com/sample-report) · [Vibe Security 50](docs/vibe-security-50.md)
 - [Application source](https://github.com/ecryptoguru/lyrashield-ai) · [engine source](https://github.com/ecryptoguru/lyrashield-engine) · [engine ownership boundary](https://github.com/ecryptoguru/lyrashield-engine#ownership-boundary) · [engine upgrade ledger](https://github.com/ecryptoguru/lyrashield-engine/blob/main/UPGRADES.md)
-- [Build Week judge path](#openai-build-week-judge-path) · [engine derivative and upstream maintenance](#engine-derivative-and-upstream-maintenance) · [production-beta readiness plan](docs/plans/2026-07-20-production-beta-readiness.md)
+- [Submitted 2:46 demo video](https://youtu.be/Wd7v5uOrhWI) · [Build Week judge path](#openai-build-week-judge-path) · [user guide](userguide.md)
+- [Engine derivative and upstream maintenance](#engine-derivative-and-upstream-maintenance) · [production-beta readiness plan](docs/plans/2026-07-20-production-beta-readiness.md)
 
 ## OpenAI Build Week judge path
 
@@ -33,6 +34,12 @@ LyraShield AI is entered in the **Developer Tools** track. Judges can exercise t
 4. Compare the states with [the public methodology](https://lyrashieldai.com/methodology) and [synthetic sample report](https://lyrashieldai.com/sample-report).
 
 The public demo supports current desktop and mobile browsers and is automatically tested in Chromium. Local development and Docker validation target macOS and Linux with Node.js 24+, pnpm, and Docker. Windows/WSL2 is not a release-tested target.
+
+### Judge testing and local setup
+
+No installation, account, credential, or paid service is required to test the submitted public path. Use `lyrashieldai.com` as the authorized sample target; the public result and sample report make the review scope and limitations visible. The workspace is separately available through open registration at `app.lyrashieldai.com` for authorized targets.
+
+To run the repository locally, use Node.js 24+, pnpm, Docker, and an environment file based on `.env.example`; the commands in [Local setup](#local-setup) start the stack and the listed checks validate it. The full worker additionally requires private evidence storage, a BullMQ-compatible Redis connection, the controlled engine runtime, and authorized Azure model configuration. It fails closed rather than starting a scan when those dependencies are unavailable.
 
 ### What changed during Build Week
 
@@ -49,63 +56,7 @@ Judges should evaluate the meaningful post-baseline extensions:
 - **Working public product:** the passive Lite Scanner, direct-domain flow, truthful one-pass progress, privacy-bounded scorecards, and production deployment created the no-login judge path ([PR #71](https://github.com/ecryptoguru/lyrashield-ai/pull/71), [PR #76](https://github.com/ecryptoguru/lyrashield-ai/pull/76), [PR #84](https://github.com/ecryptoguru/lyrashield-ai/pull/84), [PR #86](https://github.com/ecryptoguru/lyrashield-ai/pull/86)).
 - **Complete product experience:** the premium dashboard, responsive navigation, evidence console, assurance reports, and guided review loop replaced proof-of-concept surfaces with an accessible end-to-end experience ([PR #60](https://github.com/ecryptoguru/lyrashield-ai/pull/60), [PR #99](https://github.com/ecryptoguru/lyrashield-ai/pull/99), [PR #107](https://github.com/ecryptoguru/lyrashield-ai/pull/107)).
 - **GPT-5.6 execution contract:** protected model routing, per-request accounting, bounded context/output/agents/spend, deterministic finding identity, explicit coverage controls, and fail-closed provider handling hardened the controlled full-scan path ([PR #109](https://github.com/ecryptoguru/lyrashield-ai/pull/109), [PR #113](https://github.com/ecryptoguru/lyrashield-ai/pull/113), [PR #119](https://github.com/ecryptoguru/lyrashield-ai/pull/119)).
-- **Operational reliability:** worker heartbeats, fail-closed scan admission, orphan reconciliation, queue cleanup, production readiness, and invite-only beta authentication made failure behavior explicit ([PR #115](https://github.com/ecryptoguru/lyrashield-ai/pull/115), [PR #120](https://github.com/ecryptoguru/lyrashield-ai/pull/120), [PR #123](https://github.com/ecryptoguru/lyrashield-ai/pull/123)).
-
-The dated Git history and linked pull requests are the audit trail. To inspect the same boundary locally:
-
-```bash
-git log --since='2026-07-13T16:00:00Z' --date=iso-strict --oneline
-git diff --stat 72ba1e2a54fdedf81989325031c781f41d14dec6..HEAD
-```
-
-## OpenAI Build Week judge path
-
-LyraShield AI is entered in the **Developer Tools** track. Judges can exercise the submitted public path without an account, rebuilding the repository, or using paid services:
-
-1. Open [the public Lite Check](https://lyrashieldai.com/scan).
-2. Enter `lyrashieldai.com`, confirm authorization and the Terms, and run the check.
-3. Inspect the result and its stated limitations; the interface does not convert an unavailable or inconclusive check into a pass.
-4. Compare the states with [the public methodology](https://lyrashieldai.com/methodology) and [synthetic sample report](https://lyrashieldai.com/sample-report).
-
-The public demo supports current desktop and mobile browsers and is automatically tested in Chromium. Local development and Docker validation target macOS and Linux with Node.js 24+, pnpm, and Docker. Windows/WSL2 is not a release-tested target.
-
-### What changed during Build Week
-
-LyraShield AI existed before the submission period. The pre-period baseline is commit [`72ba1e2`](https://github.com/ecryptoguru/lyrashield-ai/commit/72ba1e2a54fdedf81989325031c781f41d14dec6), authored before the official July 13, 2026 9:00 AM PT start. Judges should evaluate the meaningful extensions added after that baseline:
-
-- **Evidence integrity:** immutable result manifests, coverage receipts, finding candidates, independent verification receipts, and server-owned retests distinguish detected, independently verified, retest-confirmed, and inconclusive results ([PR #67](https://github.com/ecryptoguru/lyrashield-ai/pull/67), [PR #68](https://github.com/ecryptoguru/lyrashield-ai/pull/68)).
-- **Working public product:** the passive Lite Scanner, direct-domain flow, truthful one-pass progress, privacy-bounded scorecards, and production deployment created the no-login judge path ([PR #71](https://github.com/ecryptoguru/lyrashield-ai/pull/71), [PR #76](https://github.com/ecryptoguru/lyrashield-ai/pull/76), [PR #84](https://github.com/ecryptoguru/lyrashield-ai/pull/84), [PR #86](https://github.com/ecryptoguru/lyrashield-ai/pull/86)).
-- **Complete product experience:** the premium dashboard, responsive navigation, evidence console, assurance reports, and guided review loop replaced proof-of-concept surfaces with an accessible end-to-end experience ([PR #60](https://github.com/ecryptoguru/lyrashield-ai/pull/60), [PR #99](https://github.com/ecryptoguru/lyrashield-ai/pull/99), [PR #107](https://github.com/ecryptoguru/lyrashield-ai/pull/107)).
-- **GPT-5.6 execution contract:** protected model routing, per-request accounting, bounded context/output/agents/spend, deterministic finding identity, explicit coverage controls, and fail-closed provider handling hardened the controlled full-scan path ([PR #109](https://github.com/ecryptoguru/lyrashield-ai/pull/109), [PR #113](https://github.com/ecryptoguru/lyrashield-ai/pull/113), [PR #119](https://github.com/ecryptoguru/lyrashield-ai/pull/119)).
-- **Operational reliability:** worker heartbeats, fail-closed scan admission, orphan reconciliation, queue cleanup, production readiness, and invite-only beta authentication made failure behavior explicit ([PR #115](https://github.com/ecryptoguru/lyrashield-ai/pull/115), [PR #120](https://github.com/ecryptoguru/lyrashield-ai/pull/120), [PR #123](https://github.com/ecryptoguru/lyrashield-ai/pull/123)).
-
-The dated Git history and linked pull requests are the audit trail. To inspect the same boundary locally:
-
-```bash
-git log --since='2026-07-13T16:00:00Z' --date=iso-strict --oneline
-git diff --stat 72ba1e2a54fdedf81989325031c781f41d14dec6..HEAD
-```
-
-## OpenAI Build Week judge path
-
-LyraShield AI is entered in the **Developer Tools** track. Judges can exercise the submitted public path without an account, rebuilding the repository, or using paid services:
-
-1. Open [the public Lite Check](https://lyrashieldai.com/scan).
-2. Enter `lyrashieldai.com`, confirm authorization and the Terms, and run the check.
-3. Inspect the result and its stated limitations; the interface does not convert an unavailable or inconclusive check into a pass.
-4. Compare the states with [the public methodology](https://lyrashieldai.com/methodology) and [synthetic sample report](https://lyrashieldai.com/sample-report).
-
-The public demo supports current desktop and mobile browsers and is automatically tested in Chromium. Local development and Docker validation target macOS and Linux with Node.js 24+, pnpm, and Docker. Windows/WSL2 is not a release-tested target.
-
-### What changed during Build Week
-
-LyraShield AI existed before the submission period. The pre-period baseline is commit [`72ba1e2`](https://github.com/ecryptoguru/lyrashield-ai/commit/72ba1e2a54fdedf81989325031c781f41d14dec6), authored before the official July 13, 2026 9:00 AM PT start. Judges should evaluate the meaningful extensions added after that baseline:
-
-- **Evidence integrity:** immutable result manifests, coverage receipts, finding candidates, independent verification receipts, and server-owned retests distinguish detected, independently verified, retest-confirmed, and inconclusive results ([PR #67](https://github.com/ecryptoguru/lyrashield-ai/pull/67), [PR #68](https://github.com/ecryptoguru/lyrashield-ai/pull/68)).
-- **Working public product:** the passive Lite Scanner, direct-domain flow, truthful one-pass progress, privacy-bounded scorecards, and production deployment created the no-login judge path ([PR #71](https://github.com/ecryptoguru/lyrashield-ai/pull/71), [PR #76](https://github.com/ecryptoguru/lyrashield-ai/pull/76), [PR #84](https://github.com/ecryptoguru/lyrashield-ai/pull/84), [PR #86](https://github.com/ecryptoguru/lyrashield-ai/pull/86)).
-- **Complete product experience:** the premium dashboard, responsive navigation, evidence console, assurance reports, and guided review loop replaced proof-of-concept surfaces with an accessible end-to-end experience ([PR #60](https://github.com/ecryptoguru/lyrashield-ai/pull/60), [PR #99](https://github.com/ecryptoguru/lyrashield-ai/pull/99), [PR #107](https://github.com/ecryptoguru/lyrashield-ai/pull/107)).
-- **GPT-5.6 execution contract:** protected model routing, per-request accounting, bounded context/output/agents/spend, deterministic finding identity, explicit coverage controls, and fail-closed provider handling hardened the controlled full-scan path ([PR #109](https://github.com/ecryptoguru/lyrashield-ai/pull/109), [PR #113](https://github.com/ecryptoguru/lyrashield-ai/pull/113), [PR #119](https://github.com/ecryptoguru/lyrashield-ai/pull/119)).
-- **Operational reliability:** worker heartbeats, fail-closed scan admission, orphan reconciliation, queue cleanup, production readiness, and invite-only beta authentication made failure behavior explicit ([PR #115](https://github.com/ecryptoguru/lyrashield-ai/pull/115), [PR #120](https://github.com/ecryptoguru/lyrashield-ai/pull/120), [PR #123](https://github.com/ecryptoguru/lyrashield-ai/pull/123)).
+- **Operational reliability:** worker heartbeats, fail-closed scan admission, orphan reconciliation, queue cleanup, production readiness, and open-registration authentication made failure behavior explicit ([PR #115](https://github.com/ecryptoguru/lyrashield-ai/pull/115), [PR #120](https://github.com/ecryptoguru/lyrashield-ai/pull/120), [PR #123](https://github.com/ecryptoguru/lyrashield-ai/pull/123)).
 
 The dated Git history and linked pull requests are the audit trail. To inspect the same boundary locally:
 

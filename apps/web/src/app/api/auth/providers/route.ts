@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { env, isProd } from "@lyrashield/config"
-import { isOAuthProviderConfigured, socialSignUpEnabled } from "@lyrashield/auth/oauth-providers"
+import { env } from "@lyrashield/config"
+import { isOAuthProviderConfigured } from "@lyrashield/auth/oauth-providers"
 
 export async function GET() {
   return NextResponse.json(
@@ -8,9 +8,9 @@ export async function GET() {
       github: isOAuthProviderConfigured(env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET),
       google: isOAuthProviderConfigured(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET),
       microsoft: isOAuthProviderConfigured(env.AZURE_AD_CLIENT_ID, env.AZURE_AD_CLIENT_SECRET),
-      // Production is invite-only. OAuth is available to sign in to a
-      // previously invited, verified account but cannot create a new account.
-      socialSignUp: socialSignUpEnabled(isProd),
+      socialSignUp: true,
+      emailVerification: Boolean(env.BREVO_API_KEY),
+      passwordReset: Boolean(env.BREVO_API_KEY),
     },
     { headers: { "Cache-Control": "no-store" } }
   )

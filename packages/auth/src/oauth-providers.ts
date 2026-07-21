@@ -8,8 +8,3 @@ export function isOAuthProviderConfigured(
 ): boolean {
   return Boolean(clientId?.trim() && clientSecret?.trim())
 }
-
-/** Invite-only production uses OAuth only to sign in to existing beta accounts. */
-export function socialSignUpEnabled(isProduction: boolean): boolean {
-  return !isProduction
-}
