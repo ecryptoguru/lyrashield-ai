@@ -357,6 +357,23 @@ function detailInteger(value: unknown, key: string): number | undefined {
   return usageInteger((value as Record<string, unknown>)[key])
 }
 
+function sumRequestUsageDetail(value: unknown, key: string): number | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_LLM_USAGE_REQUESTS) {
+    return undefined
+  }
+  let total = 0
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return undefined
+    const details = (entry as Record<string, unknown>).input_tokens_details
+    const amount = detailInteger(details, key)
+    if (amount === undefined) return undefined
+    const nextTotal = usageInteger(total + amount)
+    if (nextTotal === undefined) return undefined
+    total = nextTotal
+  }
+  return total
+}
+
 function boundedGpt56Model(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length === 0 || value.length > 128) return undefined
   const normalized = value.toLowerCase().replaceAll("_", "-")
