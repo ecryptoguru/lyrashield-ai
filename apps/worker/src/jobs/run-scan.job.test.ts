@@ -362,7 +362,7 @@ describe("processScanJob", () => {
     )
   })
 
-  it("caps deep scan total runtime to the 30-minute target by balancing engine and scanner phases", async () => {
+  it("applies the policy deep scan timeout budget to engine and scanner phases", async () => {
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       maxBudgetUsd: { toNumber: () => 3.2 },
       maxDurationMinutes: 75,
@@ -389,11 +389,11 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 3.2 }),
       "scan-1",
-      20 * 60 * 1000,
+      75 * 60 * 1000,
       expect.any(Function)
     )
     expect(runScannerOrchestrator).toHaveBeenCalledWith(
-      expect.objectContaining({ scannerPhaseTimeoutMs: 10 * 60 * 1000 })
+      expect.objectContaining({ scannerPhaseTimeoutMs: 0 })
     )
   })
 
