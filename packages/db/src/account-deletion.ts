@@ -51,39 +51,9 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
   ]
 
   await prisma.$transaction(async (tx) => {
-    // The audit-chain rebuild below must observe the anonymized actor. Execute
-    // this mutation before the concurrent independent updates; query ordering
-    // inside Promise.all is not an ordering contract for an interactive Prisma
-    // transaction.
-    await tx.auditLog.updateMany({ where: { actorUserId: userId }, data: { actorUserId: null } })
-
+    // These models are deliberately not workspace-RLS scoped. Keep their user
+    // attribution cleanup outside the per-workspace context loop below.
     await Promise.all([
-      tx.project.updateMany({ where: { ownerUserId: userId }, data: { ownerUserId: null } }),
-      tx.credentialSet.updateMany({
-        where: { createdById: userId },
-        data: { createdById: DELETED_USER },
-      }),
-      tx.scan.updateMany({ where: { createdById: userId }, data: { createdById: DELETED_USER } }),
-      tx.apiKey.updateMany({ where: { createdById: userId }, data: { createdById: DELETED_USER } }),
-      tx.finding.updateMany({ where: { ownerUserId: userId }, data: { ownerUserId: null } }),
-      tx.report.updateMany({ where: { createdById: userId }, data: { createdById: DELETED_USER } }),
-      tx.notification.updateMany({ where: { userId }, data: { userId: null } }),
-      tx.schedule.updateMany({
-        where: { createdById: userId },
-        data: { createdById: DELETED_USER },
-      }),
-      tx.invitation.updateMany({
-        where: { invitedById: userId },
-        data: { invitedById: DELETED_USER },
-      }),
-      tx.agentApproval.updateMany({
-        where: { requestedById: userId },
-        data: { requestedById: DELETED_USER },
-      }),
-      tx.agentApproval.updateMany({
-        where: { approvedById: userId },
-        data: { approvedById: null },
-      }),
       // userId is UNIQUE, so retain a non-identifying per-row suffix. A shared
       // sentinel makes the second account deletion with a referral code fail.
       tx.$executeRaw`
@@ -122,7 +92,61 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
     ])
 
     for (const workspaceId of [...affectedWorkspaceIds].sort()) {
+      await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
+
+      // Every workspace-owned mutation carries an explicit tenant predicate
+      // and runs only after its matching transaction-local RLS context is set.
+      await tx.project.updateMany({
+        where: { workspaceId, ownerUserId: userId },
+        data: { ownerUserId: null },
+      })
+      await tx.credentialSet.updateMany({
+        where: { workspaceId, createdById: userId },
+        data: { createdById: DELETED_USER },
+      })
+      await tx.scan.updateMany({
+        where: { workspaceId, createdById: userId },
+        data: { createdById: DELETED_USER },
+      })
+      await tx.apiKey.updateMany({
+        where: { workspaceId, createdById: userId },
+        data: { createdById: DELETED_USER },
+      })
+      await tx.finding.updateMany({
+        where: { workspaceId, ownerUserId: userId },
+        data: { ownerUserId: null },
+      })
+      await tx.report.updateMany({
+        where: { workspaceId, createdById: userId },
+        data: { createdById: DELETED_USER },
+      })
+      await tx.notification.updateMany({
+        where: { workspaceId, userId },
+        data: { userId: null },
+      })
+      await tx.schedule.updateMany({
+        where: { workspaceId, createdById: userId },
+        data: { createdById: DELETED_USER },
+      })
+      await tx.invitation.updateMany({
+        where: { workspaceId, invitedById: userId },
+        data: { invitedById: DELETED_USER },
+      })
+      await tx.agentApproval.updateMany({
+        where: { workspaceId, requestedById: userId },
+        data: { requestedById: DELETED_USER },
+      })
+      await tx.agentApproval.updateMany({
+        where: { workspaceId, approvedById: userId },
+        data: { approvedById: null },
+      })
+      // The chain rebuild must observe anonymized attribution and must remain
+      // serialized with concurrent audit creation for this workspace.
+      await tx.auditLog.updateMany({
+        where: { workspaceId, actorUserId: userId },
+        data: { actorUserId: null },
+      })
       const entries = await tx.$queryRaw<AuditLog[]>`
         SELECT * FROM "AuditLog"
         WHERE "workspaceId" = ${workspaceId}

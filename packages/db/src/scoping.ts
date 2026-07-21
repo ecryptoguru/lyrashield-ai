@@ -96,16 +96,35 @@ const workspaceStore = new AsyncLocalStorage<{
   databaseRlsBound: boolean
 }>()
 
+function preserveContextForThenable<T>(value: T): T {
+  if (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function"
+  ) {
+    // PrismaPromise is lazy: its query starts when `then` is consumed, which
+    // can otherwise happen after AsyncLocalStorage.run has restored the caller
+    // context. Assimilate thenables inside this async resource so the workspace
+    // context remains active for the actual database operation.
+    return (async () => await value)() as T
+  }
+  return value
+}
+
 /**
  * Run `fn` with a workspace context bound for its entire async execution.
  * This is the safe primitive (wrapping) — prefer it in workers/jobs.
  */
 export function runWithWorkspaceContext<T>(workspaceId: string | null, fn: () => T): T {
-  return workspaceStore.run({ workspaceId, databaseRlsBound: false }, fn)
+  return workspaceStore.run({ workspaceId, databaseRlsBound: false }, () =>
+    preserveContextForThenable(fn())
+  )
 }
 
 export function runWithDatabaseRLSContext<T>(workspaceId: string, fn: () => T): T {
-  return workspaceStore.run({ workspaceId, databaseRlsBound: true }, fn)
+  return workspaceStore.run({ workspaceId, databaseRlsBound: true }, () =>
+    preserveContextForThenable(fn())
+  )
 }
 
 /**

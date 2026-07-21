@@ -24,6 +24,13 @@ export {
   runWithWorkspaceContext,
 }
 
+export function remapSoftDeleteOperation(model: string | undefined, operation: string): string {
+  if (!model || !SOFT_DELETE_MODELS.has(model)) return operation
+  if (operation === "delete") return "update"
+  if (operation === "deleteMany") return "updateMany"
+  return operation
+}
+
 export const workspaceExtension = Prisma.defineExtension((client) =>
   client.$extends({
     name: "workspace-rls",
@@ -39,15 +46,52 @@ export const workspaceExtension = Prisma.defineExtension((client) =>
           activeWorkspaceId
         )
 
-        const finalArgs =
+        const isSoftDelete =
           (operation === "delete" || operation === "deleteMany") &&
           model &&
           SOFT_DELETE_MODELS.has(model)
-            ? {
-                ...guardedArgs,
-                data: { deletedAt: new Date() },
-              }
-            : guardedArgs
+        const effectiveOperation = remapSoftDeleteOperation(model, operation)
+        const finalArgs = isSoftDelete
+          ? {
+              ...guardedArgs,
+              data: { deletedAt: new Date() },
+            }
+          : guardedArgs
+
+        const callDelegate = async (
+          delegateOwner: unknown,
+          delegateOperation: string,
+          delegateArgs: typeof finalArgs
+        ) => {
+          if (!model) throw new Error("Cannot dispatch a Prisma model operation without a model")
+          const delegateName = model[0]!.toLowerCase() + model.slice(1)
+          const delegate = (
+            delegateOwner as Record<
+              string,
+              Record<string, (queryArgs: typeof finalArgs) => Promise<unknown>>
+            >
+          )[delegateName]
+          const operationHandler = delegate?.[delegateOperation]
+          if (!operationHandler) {
+            throw new Error(`Unsupported scoped Prisma operation: ${model}.${delegateOperation}`)
+          }
+          return operationHandler.call(delegate, delegateArgs)
+        }
+
+        // Prisma's `query` continuation is fixed to the original operation.
+        // Dispatch soft deletes through update/updateMany explicitly so the
+        // rewritten deletedAt payload can never become a physical delete.
+        if (isSoftDelete) {
+          if (workspaceId && WORKSPACE_SCOPED_MODELS.has(model)) {
+            return client.$transaction(async (tx) => {
+              await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
+              return runWithDatabaseRLSContext(workspaceId, () =>
+                callDelegate(tx, effectiveOperation, finalArgs)
+              )
+            })
+          }
+          return callDelegate(client, effectiveOperation, finalArgs)
+        }
 
         if (!model || !workspaceId || !WORKSPACE_SCOPED_MODELS.has(model)) {
           return query(finalArgs)
@@ -70,18 +114,9 @@ export const workspaceExtension = Prisma.defineExtension((client) =>
         // recursively wrapping its own query.
         return client.$transaction(async (tx) => {
           await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
-          const delegateName = model[0]!.toLowerCase() + model.slice(1)
-          const delegate = (
-            tx as unknown as Record<
-              string,
-              Record<string, (queryArgs: typeof finalArgs) => Promise<unknown>>
-            >
-          )[delegateName]
-          const operationHandler = delegate?.[operation]
-          if (!operationHandler) {
-            throw new Error(`Unsupported scoped Prisma operation: ${model}.${operation}`)
-          }
-          return operationHandler.call(delegate, finalArgs)
+          return runWithDatabaseRLSContext(workspaceId, () =>
+            callDelegate(tx, effectiveOperation, finalArgs)
+          )
         })
       },
     },

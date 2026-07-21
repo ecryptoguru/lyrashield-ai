@@ -7,11 +7,19 @@ import {
   SOFT_DELETE_MODELS,
   WORKSPACE_SCOPED_MODELS,
 } from "./scoping"
+import { remapSoftDeleteOperation } from "./extension"
 
 // These tests exercise the REAL guard logic + model sets imported from
 // scoping.ts (no Prisma client needed — scoping.ts has no Prisma import).
 
 describe("Prisma Extension — Query Guards (soft-delete)", () => {
+  it("dispatches soft deletes as updates and preserves other operations", () => {
+    expect(remapSoftDeleteOperation("Finding", "delete")).toBe("update")
+    expect(remapSoftDeleteOperation("Finding", "deleteMany")).toBe("updateMany")
+    expect(remapSoftDeleteOperation("Finding", "findMany")).toBe("findMany")
+    expect(remapSoftDeleteOperation("User", "delete")).toBe("delete")
+  })
+
   it("adds deletedAt: null to soft-delete models on findMany", () => {
     expect(applyQueryGuards("Finding", "findMany", {}, null).where).toEqual({ deletedAt: null })
   })
@@ -182,6 +190,20 @@ describe("Prisma Extension — request-scoped context isolation", () => {
     expect(results.a).toEqual(["ws-A", "ws-A"])
     expect(results.b).toEqual(["ws-B", "ws-B"])
     // And context is cleared once the runs complete.
+    expect(getWorkspaceContext()).toBeNull()
+  })
+
+  it("retains context while a lazy thenable is consumed", async () => {
+    let observed: string | null = null
+    const result = await runWithWorkspaceContext("ws-lazy", () => ({
+      then(resolve: (value: string) => void) {
+        observed = getWorkspaceContext()
+        resolve("done")
+      },
+    }))
+
+    expect(result).toBe("done")
+    expect(observed).toBe("ws-lazy")
     expect(getWorkspaceContext()).toBeNull()
   })
 })
