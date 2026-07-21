@@ -1,7 +1,8 @@
 import { prisma } from "@lyrashield/db"
-import { notFound } from "next/navigation"
+import { Plug } from "lucide-react"
+import { EmptyState } from "@lyrashield/ui"
 import { GithubIntegration } from "./github-integration"
-import { getCachedSession, getCachedWorkspaces } from "@/lib/cache"
+import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 
 export default async function IntegrationsPage({
   searchParams,
@@ -11,17 +12,30 @@ export default async function IntegrationsPage({
   const session = await getCachedSession()
   if (!session) return null
 
-  const workspaces = await getCachedWorkspaces(session.userId)
-
-  if (workspaces.length === 0) {
-    notFound()
+  const workspaceId = await getCachedWorkspaceId(session.userId)
+  if (!workspaceId) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
+          <p className="text-muted-foreground text-sm">
+            Connect external services to your workspace.
+          </p>
+        </div>
+        <EmptyState
+          icon={Plug}
+          title="No workspace yet"
+          description="Create a workspace during onboarding to manage integrations."
+        />
+      </div>
+    )
   }
 
-  const firstWorkspace = workspaces[0]
-  if (!firstWorkspace) return null
-
-  const workspaceId = firstWorkspace.id
-  const workspaceName = firstWorkspace.name
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { name: true },
+  })
+  const workspaceName = workspace?.name ?? "your workspace"
 
   const integrations = await prisma.integration.findMany({
     where: { workspaceId, deletedAt: null },

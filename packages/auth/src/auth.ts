@@ -5,8 +5,9 @@ import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
-import { isBetaInviteAllowed } from "./beta-invites"
+import { isBetaInviteAllowed, isBetaUserCreationAllowed } from "./beta-invites"
 import { isOAuthProviderConfigured, socialSignUpEnabled } from "./oauth-providers"
+import { genericOAuth, microsoftEntraId } from "better-auth/plugins"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
 const GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET
@@ -19,6 +20,7 @@ const secureCookies = new URL(env.BETTER_AUTH_URL).protocol === "https:"
 const githubEnabled = isOAuthProviderConfigured(GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET)
 const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
 const microsoftEnabled = isOAuthProviderConfigured(AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)
+const requireEmailVerification = env.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION === "1"
 
 // Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; any origin
 // added here may initiate credentialed auth requests. Marketing and Lite Check

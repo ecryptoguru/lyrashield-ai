@@ -1,7 +1,14 @@
 import Link from "next/link"
 import type { ComponentType, SVGProps } from "react"
 import { Bell, CalendarClock, Plug, Settings, Users } from "lucide-react"
-import { Card, CardContent, EmptyState, buttonVariants } from "@lyrashield/ui"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  buttonVariants,
+} from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { DeleteAccount } from "./delete-account"

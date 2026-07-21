@@ -23,7 +23,13 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
-  const [providers, setProviders] = useState({ github: false, google: false, microsoft: false })
+  const [checkingSession, setCheckingSession] = useState(true)
+  const [providers, setProviders] = useState({
+    github: false,
+    google: false,
+    microsoft: false,
+    passwordReset: false,
+  })
 
   useEffect(() => {
     let active = true
@@ -60,15 +66,25 @@ export default function SignInPage() {
 
     void fetch("/api/auth/providers")
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { github?: boolean; google?: boolean; microsoft?: boolean } | null) => {
-        if (data) {
-          setProviders({
-            github: Boolean(data.github),
-            google: Boolean(data.google),
-            microsoft: Boolean(data.microsoft),
-          })
+      .then(
+        (
+          data: {
+            github?: boolean
+            google?: boolean
+            microsoft?: boolean
+            passwordReset?: boolean
+          } | null
+        ) => {
+          if (data) {
+            setProviders({
+              github: Boolean(data.github),
+              google: Boolean(data.google),
+              microsoft: Boolean(data.microsoft),
+              passwordReset: Boolean(data.passwordReset),
+            })
+          }
         }
-      })
+      )
       .catch(() => {})
 
     return () => {

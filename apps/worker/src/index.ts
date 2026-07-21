@@ -27,9 +27,6 @@ let reconciliationTimer: NodeJS.Timeout | null = null
 let shuttingDown = false
 const workerId = `${process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
-const MAX_SCAN_RUNTIME_MS = 30 * 60 * 1000
-const SCAN_JOB_LOCK_RENEW_MS = 15_000
-
 async function refreshWorkerReadiness(): Promise<void> {
   await writeFile(readinessPath, new Date().toISOString(), { mode: 0o600 })
 }

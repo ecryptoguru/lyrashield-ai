@@ -5,6 +5,8 @@
 **Audio:** clean spoken narration, no music.
 
 **Visual basis:** `DESIGN.md`.
+**Recording checklist:** `RECORDING.md`.
+**Narration source:** `SCRIPT.md`.
 
 **Evidence rule:** every narration claim appears on screen at the moment it is spoken.
 

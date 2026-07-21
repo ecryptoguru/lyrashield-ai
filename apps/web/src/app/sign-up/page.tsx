@@ -29,6 +29,7 @@ export default function SignUpPage() {
     google: false,
     microsoft: false,
     socialSignUp: false,
+    emailVerification: false,
   })
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export default function SignUpPage() {
             google?: boolean
             microsoft?: boolean
             socialSignUp?: boolean
+            emailVerification?: boolean
           } | null
         ) => {
           if (data) {
@@ -62,6 +64,7 @@ export default function SignUpPage() {
               google: Boolean(data.google),
               microsoft: Boolean(data.microsoft),
               socialSignUp: Boolean(data.socialSignUp),
+              emailVerification: Boolean(data.emailVerification),
             })
           }
         }

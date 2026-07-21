@@ -74,6 +74,8 @@ const envSchema = z
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_RUNTIME_BACKEND: z.enum(["docker"]).optional().or(z.literal("")),
     LYRASHIELD_ENGINE_SANDBOX_NETWORK: z.string().optional().or(z.literal("")),
+    LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
+    LYRASHIELD_BETA_INVITE_EMAILS: z.string().optional().or(z.literal("")),
     SCANNER_PHASE_TIMEOUT_MS: z.coerce.number().int().positive().max(3_600_000).default(600_000),
     PLATFORM_MAX_SCAN_BUDGET_USD: z.coerce.number().positive().max(1000).default(50),
 
@@ -98,6 +100,7 @@ const envSchema = z
     LYRASHIELD_LOCAL_EVIDENCE_DIR: z.string().optional().or(z.literal("")),
 
     // Email (Brevo)
+    LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: z.enum(["0", "1"]).optional().default("0"),
     BREVO_API_KEY: z.string().optional().or(z.literal("")),
     EMAIL_FROM: z.string().optional().or(z.literal("")),
 

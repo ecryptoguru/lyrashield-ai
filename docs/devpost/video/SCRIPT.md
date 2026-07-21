@@ -4,6 +4,9 @@
 
 **Language:** English.
 
+**Recording checklist:** `docs/devpost/video/RECORDING.md`
+**Visual storyboard:** `docs/devpost/video/STORYBOARD.md`
+**Caption draft:** `artifacts/devpost-video/captions-draft.srt` (retime to final narration)
 **Caption source of truth:** `artifacts/devpost-video/captions-final.srt`, timed from the final narration.
 
 ## 00:00–00:11 — Hook
@@ -40,7 +43,7 @@ The architecture keeps public URL checks deterministic and repository reviews be
 
 ## 01:49–02:10 — Build Week proof
 
-During Build Week, GPT-5.6-powered Codex sessions traced cross-package flows, implemented the evidence boundaries, diagnosed failures, reviewed the real UX, and hardened the release path. On this revision, nine hundred thirty-three core tests, eighty marketing tests, sixteen motion tests, and four Chromium end-to-end tests pass.
+During Build Week, GPT-5.6-powered Codex sessions traced cross-package flows, implemented the evidence boundaries, diagnosed failures, reviewed the real UX, and hardened the release path. On this revision, 881 core tests, 79 marketing tests, 16 motion tests, and 2 Chromium end-to-end tests pass.
 
 ## 02:10–02:19 — Close
 

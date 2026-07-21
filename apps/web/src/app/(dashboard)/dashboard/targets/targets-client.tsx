@@ -146,9 +146,8 @@ export function TargetsClient({
 
   useEffect(() => {
     if (initialData) return
-    queueMicrotask(() => {
-      void fetchTargets()
-    })
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, setState runs in promise callback
+    void fetchTargets()
   }, [fetchTargets, initialData])
 
   async function handleCreateRepo(e: React.FormEvent) {
@@ -383,7 +382,16 @@ export function TargetsClient({
                 </>
               )}
               <div className="flex gap-2">
-                <Button type="submit" disabled={creating || (!repoForm.name && !selectedRepoId)}>
+                <Button
+                  type="submit"
+                  disabled={
+                    creating ||
+                    (!repoForm.name && !selectedRepoId) ||
+                    (!githubConnected || repoMode === "manual"
+                      ? !repoForm.repoOwner || !repoForm.repoName
+                      : false)
+                  }
+                >
                   {creating ? "Creating..." : "Create Target"}
                 </Button>
                 <Button

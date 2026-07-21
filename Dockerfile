@@ -106,8 +106,8 @@ RUN python3 -m venv /opt/uv-bootstrap && \
 # isolated engine virtual environment.
 FROM node:22-alpine AS worker
 
-RUN corepack enable && corepack prepare pnpm@11.6.0 --activate && \
-    apk add --no-cache docker-cli git python3 && \
+RUN apk add --no-cache docker-cli git python3 && \
+    npm install -g pnpm@11.6.0 && \
     addgroup --system lyrashield && \
     adduser --system --ingroup lyrashield --home /app lyrashield
 
@@ -118,7 +118,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PATH="/opt/lyrashield-venv/bin:$PATH"
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=workspace-builder /app/package.json /app/pnpm-workspace.yaml /app/tsconfig.json ./
+COPY --from=workspace-builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/tsconfig.json ./
 COPY --from=workspace-builder /app/packages ./packages
 COPY --from=workspace-builder /app/apps/worker ./apps/worker
 COPY --from=worker-engine /opt/lyrashield-engine /opt/lyrashield-engine
@@ -127,4 +127,4 @@ COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
 RUN chown -R lyrashield:lyrashield /app /opt/lyrashield-engine /opt/lyrashield-venv
 
 USER lyrashield
-CMD ["pnpm", "--filter", "@lyrashield/worker", "exec", "tsx", "src/index.ts"]
+CMD ["./apps/worker/node_modules/.bin/tsx", "apps/worker/src/index.ts"]

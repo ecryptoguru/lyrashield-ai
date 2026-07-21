@@ -469,7 +469,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const scanStartedAtMs = Date.now()
       scanRuntimeBudgetMs = resolveScanRuntimeBudgetMs(policy?.maxDurationMinutes)
       const maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
-      const engineTimeoutMs = resolveEngineTimeoutMs(mode, policy?.maxDurationMinutes)
+      const engineTimeoutMs = resolveEngineTimeoutMs(policy?.maxDurationMinutes)
       const engineProfile = resolveEngineProfile(mode)
       const engineModel =
         target.type === "REPO" ? requireEngineModel(engineProfile.model) : engineProfile.model
