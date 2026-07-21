@@ -283,11 +283,9 @@ function normalizeLlmUsage(value: unknown): Record<string, number> | undefined {
     (inputTokens !== undefined || outputTokens !== undefined
       ? usageInteger((inputTokens ?? 0) + (outputTokens ?? 0))
       : undefined)
-  const totalCostUsd = findUsageMetric(
-    record,
-    new Set(["total_cost_usd", "cost_usd", "total_cost", "cost"]),
-    usageCost
-  )
+  const totalCostUsd = ["total_cost_usd", "cost_usd", "total_cost", "cost"]
+    .map((key) => usageCost(record[key]))
+    .find((candidate) => candidate !== undefined)
   const requestUsageBuckets = normalizeRequestUsageBuckets(record.request_usage_entries)
   const normalized = {
     ...(requestCount !== undefined ? { request_count: requestCount } : {}),
