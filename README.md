@@ -14,7 +14,14 @@ It keeps detected findings, independently verified evidence, retest-confirmed re
 - Public passive Lite Check: [lyrashieldai.com/scan](https://lyrashieldai.com/scan)
 - Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com) (invite-only production beta)
 
-The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. The beta app supports password and configured OAuth access without email verification; full-scan admission remains fail-closed until the dedicated worker and transport controls are independently proven.
+The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. The invite-only beta app supports password and configured OAuth access without email verification. Repository scans are admitted only while the dedicated production worker holds a live lease; the current release gate still requires successful, reconciled Safe and Deep runs.
+
+## Judge and project links
+
+- [Public product site](https://lyrashieldai.com) · [public Lite Check](https://lyrashieldai.com/scan) · [authenticated beta](https://app.lyrashieldai.com) (invite-only)
+- [Methodology](https://lyrashieldai.com/methodology) · [synthetic sample report](https://lyrashieldai.com/sample-report) · [Vibe Security 50](docs/vibe-security-50.md)
+- [Application source](https://github.com/ecryptoguru/lyrashield-ai) · [engine source](https://github.com/ecryptoguru/lyrashield-engine) · [engine ownership boundary](https://github.com/ecryptoguru/lyrashield-engine#ownership-boundary) · [engine upgrade ledger](https://github.com/ecryptoguru/lyrashield-engine/blob/main/UPGRADES.md)
+- [Build Week judge path](#openai-build-week-judge-path) · [engine derivative and upstream maintenance](#engine-derivative-and-upstream-maintenance) · [production-beta readiness plan](docs/plans/2026-07-20-production-beta-readiness.md)
 
 ## OpenAI Build Week judge path
 
@@ -29,7 +36,14 @@ The public demo supports current desktop and mobile browsers and is automaticall
 
 ### What changed during Build Week
 
-LyraShield AI existed before the submission period. The pre-period baseline is commit [`72ba1e2`](https://github.com/ecryptoguru/lyrashield-ai/commit/72ba1e2a54fdedf81989325031c781f41d14dec6), authored before the official July 13, 2026 9:00 AM PT start. Judges should evaluate the meaningful extensions added after that baseline:
+LyraShield AI existed before the submission period. The official start was **July 13, 2026, 9:00 AM PT (16:00 UTC)**. The pre-period baseline is commit [`72ba1e2`](https://github.com/ecryptoguru/lyrashield-ai/commit/72ba1e2a54fdedf81989325031c781f41d14dec6), authored at 15:48:53 UTC—before that start—and is not claimed as Build Week work.
+
+| Period                    | What to evaluate                                                                                                                                                                                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before July 13, 16:00 UTC | The repository state reachable at [`72ba1e2`](https://github.com/ecryptoguru/lyrashield-ai/tree/72ba1e2a54fdedf81989325031c781f41d14dec6). It is the disclosed starting point, including pre-existing product and engine infrastructure.                                              |
+| During Build Week         | The reviewed delta from [`72ba1e2..HEAD`](https://github.com/ecryptoguru/lyrashield-ai/compare/72ba1e2a54fdedf81989325031c781f41d14dec6...main), beginning with [`1f54eb0`](https://github.com/ecryptoguru/lyrashield-ai/commit/1f54eb0). The additions below are the submitted work. |
+
+Judges should evaluate the meaningful post-baseline extensions:
 
 - **Evidence integrity:** immutable result manifests, coverage receipts, finding candidates, independent verification receipts, and server-owned retests distinguish detected, independently verified, retest-confirmed, and inconclusive results ([PR #67](https://github.com/ecryptoguru/lyrashield-ai/pull/67), [PR #68](https://github.com/ecryptoguru/lyrashield-ai/pull/68)).
 - **Working public product:** the passive Lite Scanner, direct-domain flow, truthful one-pass progress, privacy-bounded scorecards, and production deployment created the no-login judge path ([PR #71](https://github.com/ecryptoguru/lyrashield-ai/pull/71), [PR #76](https://github.com/ecryptoguru/lyrashield-ai/pull/76), [PR #84](https://github.com/ecryptoguru/lyrashield-ai/pull/84), [PR #86](https://github.com/ecryptoguru/lyrashield-ai/pull/86)).
@@ -84,6 +98,16 @@ git diff --check
 ```
 
 The full worker requires a BullMQ-compatible Redis URL, private evidence storage, the controlled engine image/runtime, and Azure model configuration. It intentionally refuses scan admission if no live worker is registered.
+
+## Engine derivative and upstream maintenance
+
+Repository reviews run through [LyraShield Engine](https://github.com/ecryptoguru/lyrashield-engine), the separately versioned sandboxed analysis process used by the worker. It is a controlled derivative of [Strix](https://github.com/usestrix/strix), not a claim that upstream results or benchmarks apply to LyraShield.
+
+LyraShield owns the product-critical execution contract: GPT-5.6 model policy, bounded context/output/agent/spend controls, non-interactive lifecycle and telemetry-off behavior, deterministic finding identity, evidence/control metadata, and the bounded worker artifacts. The upstream substrate remains responsible for reviewed generic sandbox, tool, agent-SDK, and vulnerability-skill plumbing. Read the engine's [ownership boundary](https://github.com/ecryptoguru/lyrashield-engine#ownership-boundary) and [upstream-import ledger](https://github.com/ecryptoguru/lyrashield-engine/blob/main/UPGRADES.md) for the exact line.
+
+Upgrades are deliberately review-gated: the engine records its incorporated Strix base, compares stable releases, prepares a review PR, and requires human approval plus its read-only CI gate. It never auto-resolves conflicts, force-pushes history, or deploys from the sync workflow. The [engine verification and upgrade guidance](https://github.com/ecryptoguru/lyrashield-engine#verification) describes the checks; they prove implementation compatibility, not scan accuracy or universal coverage.
+
+Quick links: [judge path](#openai-build-week-judge-path) · [Codex and GPT-5.6 use](#built-with-codex-and-gpt-56) · [security and release boundaries](#security-and-release-boundaries).
 
 ## Built with Codex and GPT-5.6
 

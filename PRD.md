@@ -656,15 +656,15 @@ This separation allows:
 
 ### Engine Repo Status
 
-Status: **Controlled-derivative gate passed; one historical local Safe scan completed; production controlled-scan proof still pending**
+Status: **Controlled-derivative gate passed; invite-only production worker deployed; successful production Safe/Deep proof still pending**
 
 ```txt
 Repo: ecryptoguru/lyrashield-engine
 Upstream remote: https://github.com/usestrix/strix.git
 Recorded release/base: v1.1.0 / 7d5a67d234bd3faef34d22be8c6f5a9607de41a3
 Adapter version: 1.1.0.post1
-Offline proof: 329 tests, Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox smoke, and worker compatibility
-Worker proof: image builds, lyrashield --version succeeds, missing/unsupported model config exits before sandbox pull
+Offline proof: full Engine CI passes Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox smoke, and worker compatibility
+Worker proof: immutable Linux/amd64 image builds, lyrashield --version succeeds, missing/unsupported model config exits before sandbox pull, and non-interactive failures emit only a fixed class marker without a target-derived traceback
 ```
 
 Telemetry:
@@ -676,10 +676,10 @@ Explicit STRIX_* values take precedence over LYRASHIELD_* compatibility values e
 
 Current release gates:
 
-1. Configure founder-authorized Luna and Terra deployments (`LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`), a tested `LYRASHIELD_LLM` fallback, and the matching provider credentials.
-2. Pin and inspect the production sandbox image by digest.
-3. Run one approved target through the full worker lifecycle and retain audit evidence.
-4. Add transport-level egress enforcement before untrusted multi-tenant scanning at scale.
+1. **Complete:** founder-authorized Luna and Terra deployments (`LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`), the fallback, and matching provider credentials are configured; bounded provider probes pass.
+2. **Complete:** the production sandbox and worker images are independently pinned by immutable digest.
+3. Run one approved target through successful Safe and Deep production lifecycles and retain/reconcile their audit, usage, coverage, and evidence records. Three Safe attempts failed closed with no assurance result or replay. The repaired diagnostic identifies an initial Luna Chat Completions `BadRequestError`; its safe provider code classification is the current correction gate.
+4. **Complete for the invite-only beta:** the worker uses DNS-pinned deny-by-default egress and the sandbox has no default external route. Re-evaluate scope and capacity before untrusted multi-tenant scanning at scale.
 5. Build a private LyraShield evaluation corpus before changing orchestration for claimed quality gains or publishing result claims.
 6. Keep `engine-NOTICE.md` current whenever fork divergence or third-party notices change.
 
@@ -5389,9 +5389,9 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 ### C2.1 Required before a controlled product pilot
 
-1. **Controlled scan proof:** one pre-v4 local Safe scan against an approved public repository completed with Luna/medium routing, Docker sandbox execution, retained scan events, zero findings, and a persisted post-run budget-overage warning under behavior that PR #79 has since replaced with terminal/clamped handling. It is not a production proof and does not establish coverage of all controls. A production target, approved Terra/Deep run, production-pinned image provenance, retained artifacts when findings exist, and production egress enforcement are still required.
-2. **Transport-level egress control:** application SSRF checks are present, but untrusted multi-tenant scanning still requires a deployment-level proxy or equivalent DNS-pinned network enforcement.
-3. **Production infrastructure:** provision production PostgreSQL, a BullMQ-compatible TLS Redis endpoint (REST-only Upstash credentials do not operate the queue), mandatory private S3-compatible evidence storage, secrets, TLS, backups, monitoring, dedicated worker capacity with the engine and pinned sandbox, and the authenticated Next.js application origin. Apply and verify all 21 migrations on a fresh database, including scorecard events, single-use approvals, evidence idempotency, report snapshots, result-integrity receipts, scan-cost accounting, the public-score lookup index, global provider installation uniqueness, canonical GitHub installation IDs, and active-scorecard uniqueness. Reconcile legacy duplicate provider bindings before the uniqueness migration; evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
+1. **Controlled scan proof:** production image provenance, worker routing, private storage, retained failure lifecycle, and Luna/Terra provider access are proven. Three Luna/Safe attempts failed closed with no assurance result and no automatic replay. Azure recorded one `createChatCompletion` 400 for each attempt and no scan token processing; the third retained `BadRequestError` after the diagnostic fix. A successful Safe run and an approved Terra/Deep run with usage, coverage, findings/evidence when applicable, cleanup, and provider-meter reconciliation remain required.
+2. **Transport-level egress control:** the production worker enforces a refreshed DNS allowlist in `DOCKER-USER`; metadata, private, and unapproved destinations are blocked, and its sandbox network has no default external route. This is the invite-only beta boundary, not proof of capacity or safety for arbitrary multi-tenant scale.
+3. **Production infrastructure:** the authenticated app origin, production PostgreSQL, BullMQ-compatible TLS Redis, private R2 evidence storage, Key Vault secrets, TLS, dedicated non-root worker, pinned images, one warm web replica, and baseline Azure alerts are deployed. Migration, queue recovery, signed R2 lifecycle/checksum, 45-second heartbeat, graceful unregister/restart, and positive/negative egress checks pass. Application-level queue/readiness/provider alerts and capacity evidence remain. Backup/restore is explicitly deferred by founder decision for this invite-only hackathon beta; no recovery or RPO/RTO claim is made, and the gap blocks general availability.
 
 ### C2.2 Required before self-serve paid launch
 
@@ -5407,7 +5407,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 3. **Complete:** Astro's generated Worker configuration is deployed to the apex and `www` custom domains with `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. Live waitlist checks, canonical/schema metadata, sitemap/robots/`llms.txt`, headers, internal links, desktop Brave rendering, and representative mobile Lighthouse checks pass.
 4. **Complete:** the active permanent `www`-to-apex redirect preserves path and query strings.
 5. **Complete for the public marketing and Lite Scanner surface:** homepage, methodology, sample report, resource hub, five browser-local tools, and `/scan` are indexable. The scanner uses a separate protected Azure origin, Turnstile, origin-scoped CORS, rate limits, Supabase, Upstash, and a monitored abuse route. `/terms` remains excluded from the sitemap and individually `noindex`.
-6. Validate the authenticated app origin separately: scorecard canonical/OG/Twitter metadata, all three image formats, script-free badge response, revoked/expired 404s, referral continuity, and human-event deduplication. Do not treat the live passive scanner as the full worker/engine pipeline or external-platform unfurl proof. Submit the sitemap in selected webmaster accounts once ownership access is available.
+6. **Complete for auth/navigation:** `PUBLIC_APP_URL=https://app.lyrashieldai.com`; live GitHub sign-in, invite gating, onboarding, app readiness, and desktop Sign in navigation pass. **Still required:** scorecard canonical/OG/Twitter metadata, all three image formats, script-free badge response, revoked/expired 404s, referral continuity, and human-event deduplication. Do not treat the live passive scanner as the full worker/engine pipeline or external-platform unfurl proof. Submit the sitemap in selected webmaster accounts once ownership access is available.
 7. Publish only founder-approved posts and claims; no public pricing, unsupported metrics, exclusivity claims, or public naming of the upstream engine.
 8. The 100-article authority program is live through PR #88. Every future article batch requires the full content/image/link/completeness gate, Worker-backed crawl and browser QA, final local approval, a focused PR, green CI, guarded deployment, and live canonical/sitemap/RSS/tag/image/schema verification.
 
