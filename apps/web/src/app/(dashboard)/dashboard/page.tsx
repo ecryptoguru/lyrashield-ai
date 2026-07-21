@@ -5,9 +5,7 @@ import {
   Bug,
   CheckCircle2,
   Circle,
-  FileText,
   Play,
-  Radar,
   ShieldCheck,
   Wrench,
 } from "lucide-react"
@@ -53,7 +51,6 @@ export default async function DashboardPage() {
   const activeWorkspace = workspaces.find((workspace) => workspace.id === workspaceId)
   const [
     targetCount,
-    scanCount,
     openFindingCount,
     reportCount,
     findingGroups,
@@ -62,7 +59,6 @@ export default async function DashboardPage() {
     recentScans,
   ] = await Promise.all([
     prisma.target.count({ where: { workspaceId, deletedAt: null } }),
-    prisma.scan.count({ where: { workspaceId, deletedAt: null } }),
     prisma.finding.count({
       where: {
         workspaceId,
@@ -169,7 +165,6 @@ export default async function DashboardPage() {
     },
     { label: "Assurance shared", complete: reportCount > 0, href: "/dashboard/reports" },
   ]
-  const nextAssuranceStep = assuranceSteps.find((step) => !step.complete) ?? assuranceSteps.at(-1)!
 
   return (
     <div className="flex flex-col gap-6 lg:gap-8">
@@ -207,6 +202,26 @@ export default async function DashboardPage() {
             <p className="text-foreground/80 mt-2 max-w-2xl text-sm">
               {readinessConfig.description}
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {assuranceSteps.map((step) => {
+                const Icon = step.complete ? CheckCircle2 : Circle
+                return (
+                  <Link
+                    key={step.label}
+                    href={step.href}
+                    className="flex items-center gap-1.5 text-xs font-medium hover:underline"
+                  >
+                    <Icon
+                      className={
+                        step.complete ? "text-success size-4" : "text-muted-foreground size-4"
+                      }
+                      aria-hidden="true"
+                    />
+                    {step.label}
+                  </Link>
+                )
+              })}
+            </div>
           </div>
           <Link href={readinessConfig.href} className={buttonVariants({ variant: "secondary" })}>
             {readinessConfig.action}
@@ -215,7 +230,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Workspace metrics">
+      <section className="grid gap-4 sm:grid-cols-2" aria-label="Workspace metrics">
         <MetricCard
           label="Security score"
           value={latestScore?.score ?? "—"}
@@ -234,71 +249,7 @@ export default async function DashboardPage() {
           detail={`${severity.CRITICAL ?? 0} critical · ${severity.HIGH ?? 0} high`}
           icon={Bug}
         />
-        <MetricCard
-          label="Scans"
-          value={scanCount}
-          detail={`${completedScanCount} completed evidence run${completedScanCount === 1 ? "" : "s"}`}
-          icon={Radar}
-        />
-        <MetricCard
-          label="Reports"
-          value={reportCount}
-          detail="Immutable assurance snapshots"
-          icon={FileText}
-        />
       </section>
-
-      <Card className="overflow-hidden" aria-labelledby="assurance-progress-heading">
-        <div className="flex flex-col gap-4 border-b px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div>
-            <h2 id="assurance-progress-heading" className="font-semibold">
-              Assurance progress
-            </h2>
-            <p className="text-muted-foreground mt-1 text-xs">
-              A simple path from a configured target to evidence you can share.
-            </p>
-          </div>
-        </div>
-        <div className="bg-border grid gap-px sm:grid-cols-2 xl:grid-cols-4">
-          {assuranceSteps.map((step, index) => {
-            const Icon = step.complete ? CheckCircle2 : Circle
-            return (
-              <Link
-                key={step.label}
-                href={step.href}
-                className="bg-card hover:bg-accent/60 flex min-h-20 items-center gap-3 px-5 py-4 transition-colors sm:px-6"
-              >
-                <Icon
-                  className={step.complete ? "text-success size-5" : "text-muted-foreground size-5"}
-                  aria-hidden="true"
-                />
-                <span className="min-w-0">
-                  <span className="text-muted-foreground block text-xs">Step {index + 1}</span>
-                  <span className="block text-sm font-medium">{step.label}</span>
-                </span>
-              </Link>
-            )
-          })}
-        </div>
-        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p className="text-muted-foreground text-sm">
-            {assuranceSteps.every((step) => step.complete)
-              ? "Your core assurance loop is complete. Keep it current with a scheduled review."
-              : `Next: ${nextAssuranceStep.label}.`}
-          </p>
-          <Link
-            href={
-              assuranceSteps.every((step) => step.complete)
-                ? "/dashboard/schedules"
-                : nextAssuranceStep.href
-            }
-            className="text-primary inline-flex min-h-11 items-center gap-1 text-sm font-medium"
-          >
-            {assuranceSteps.every((step) => step.complete) ? "Schedule monitoring" : "Continue"}
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
-        </div>
-      </Card>
 
       <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <Card className="p-5 sm:p-6">

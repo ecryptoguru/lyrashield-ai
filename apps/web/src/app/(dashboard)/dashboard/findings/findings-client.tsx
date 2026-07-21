@@ -6,7 +6,6 @@ import {
   Bug,
   ShieldCheck,
   ShieldAlert,
-  Filter,
   ChevronRight,
   CheckCircle2,
   XCircle,
@@ -21,9 +20,9 @@ import {
   EmptyState,
   Spinner,
   LoadMore,
-  Select,
   Textarea,
   buttonVariants,
+  cn,
 } from "@lyrashield/ui"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
@@ -145,7 +144,13 @@ export function FindingsClient({
     [workspaceId, initialData, initialNextCursor]
   )
 
-  const filters = ["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW", "OPEN", "FIXED", "VERIFIED"]
+  const filterChips = [
+    { label: "All", value: "ALL" },
+    { label: "Open", value: "OPEN" },
+    { label: "Critical", value: "CRITICAL" },
+    { label: "High", value: "HIGH" },
+    { label: "Verified", value: "VERIFIED" },
+  ] as const
 
   return (
     <div>
@@ -157,19 +162,21 @@ export function FindingsClient({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="text-muted-foreground h-4 w-4" aria-hidden="true" />
-          <Select
-            value={filter}
-            onChange={(e) => void handleFilterChange(e.target.value)}
-            aria-label="Filter findings"
-            className="w-auto"
-          >
-            {filters.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </Select>
+          {filterChips.map((chip) => (
+            <button
+              key={chip.value}
+              type="button"
+              onClick={() => void handleFilterChange(chip.value)}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                filter === chip.value
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              )}
+            >
+              {chip.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -231,7 +238,7 @@ export function FindingsClient({
                       {finding.severity}
                     </Badge>
                     {finding.verified ? (
-                      <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                      <span className="flex items-center gap-1 text-xs text-emerald-500">
                         <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Verified
                       </span>
                     ) : (
@@ -666,67 +673,75 @@ function FindingDetailDrawer({
             )}
 
             {detail.plainLanguage && (
-              <div className="bg-muted/30 space-y-3 rounded-lg border p-4">
-                <h3 className="text-sm font-semibold">Plain-Language Explanation</h3>
-                <div>
-                  <p className="text-muted-foreground mb-0.5 text-xs font-medium">What it is</p>
-                  <p className="text-sm">{detail.plainLanguage.whatItIs}</p>
+              <details className="bg-muted/30 rounded-lg border p-4">
+                <summary className="cursor-pointer text-sm font-semibold">
+                  Plain-Language Explanation
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <p className="text-muted-foreground mb-0.5 text-xs font-medium">What it is</p>
+                    <p className="text-sm">{detail.plainLanguage.whatItIs}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground mb-0.5 text-xs font-medium">
+                      Why it matters
+                    </p>
+                    <p className="text-sm">{detail.plainLanguage.whyItMatters}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground mb-0.5 text-xs font-medium">How to fix</p>
+                    <p className="text-sm">{detail.plainLanguage.howToFix}</p>
+                  </div>
+                  <div className="text-muted-foreground flex items-center gap-3 pt-1 text-xs">
+                    <span>
+                      Difficulty:{" "}
+                      <span className="font-medium">{detail.plainLanguage.difficulty}</span>
+                    </span>
+                    <span>
+                      Est. time:{" "}
+                      <span className="font-medium">{detail.plainLanguage.estimatedTimeToFix}</span>
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-muted-foreground mb-0.5 text-xs font-medium">Why it matters</p>
-                  <p className="text-sm">{detail.plainLanguage.whyItMatters}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground mb-0.5 text-xs font-medium">How to fix</p>
-                  <p className="text-sm">{detail.plainLanguage.howToFix}</p>
-                </div>
-                <div className="text-muted-foreground flex items-center gap-3 pt-1 text-xs">
-                  <span>
-                    Difficulty:{" "}
-                    <span className="font-medium">{detail.plainLanguage.difficulty}</span>
-                  </span>
-                  <span>
-                    Est. time:{" "}
-                    <span className="font-medium">{detail.plainLanguage.estimatedTimeToFix}</span>
-                  </span>
-                </div>
-              </div>
+              </details>
             )}
 
             {detail.technicalDetail && (
-              <div>
-                <h3 className="mb-1 text-sm font-medium">Technical Details</h3>
-                <pre className="bg-muted overflow-x-auto rounded-lg p-3 text-xs whitespace-pre-wrap">
+              <details>
+                <summary className="cursor-pointer text-sm font-medium">Technical Details</summary>
+                <pre className="bg-muted mt-2 overflow-x-auto rounded-lg p-3 text-xs whitespace-pre-wrap">
                   {detail.technicalDetail}
                 </pre>
-              </div>
+              </details>
             )}
 
             {detail.exploitability && (
-              <div>
-                <h3 className="mb-1 text-sm font-medium">Exploitability</h3>
-                <p className="text-muted-foreground text-sm">{detail.exploitability}</p>
-              </div>
+              <details>
+                <summary className="cursor-pointer text-sm font-medium">Exploitability</summary>
+                <p className="text-muted-foreground mt-1 text-sm">{detail.exploitability}</p>
+              </details>
             )}
 
             {detail.recommendedFix && (
-              <div>
-                <h3 className="mb-1 text-sm font-medium">Recommended Fix</h3>
-                <p className="text-muted-foreground text-sm">{detail.recommendedFix}</p>
-              </div>
+              <details>
+                <summary className="cursor-pointer text-sm font-medium">Recommended Fix</summary>
+                <p className="text-muted-foreground mt-1 text-sm">{detail.recommendedFix}</p>
+              </details>
             )}
 
             {detail.businessImpact && (
-              <div>
-                <h3 className="mb-1 text-sm font-medium">Business Impact</h3>
-                <p className="text-muted-foreground text-sm">{detail.businessImpact}</p>
-              </div>
+              <details>
+                <summary className="cursor-pointer text-sm font-medium">Business Impact</summary>
+                <p className="text-muted-foreground mt-1 text-sm">{detail.businessImpact}</p>
+              </details>
             )}
 
             {detail.evidence && detail.evidence.length > 0 && (
-              <div>
-                <h3 className="mb-1 text-sm font-medium">Evidence ({detail.evidence.length})</h3>
-                <div className="space-y-2">
+              <details>
+                <summary className="cursor-pointer text-sm font-medium">
+                  Evidence ({detail.evidence.length})
+                </summary>
+                <div className="mt-2 space-y-2">
                   {detail.evidence.map((ev) => (
                     <div
                       key={ev.id}
@@ -746,15 +761,15 @@ function FindingDetailDrawer({
                     </div>
                   ))}
                 </div>
-              </div>
+              </details>
             )}
 
             {detail.fixProposals && detail.fixProposals.length > 0 && (
-              <div>
-                <h3 className="mb-1 text-sm font-medium">
+              <details>
+                <summary className="cursor-pointer text-sm font-medium">
                   Fix Proposals ({detail.fixProposals.length})
-                </h3>
-                <div className="space-y-2">
+                </summary>
+                <div className="mt-2 space-y-2">
                   {detail.fixProposals.map((fp) => (
                     <div key={fp.id} className="flex items-center gap-2 text-sm">
                       <Badge variant="info">{fp.status}</Badge>
@@ -762,13 +777,15 @@ function FindingDetailDrawer({
                     </div>
                   ))}
                 </div>
-              </div>
+              </details>
             )}
 
             {detail.retests && detail.retests.length > 0 && (
-              <div>
-                <h3 className="mb-1 text-sm font-medium">Retests ({detail.retests.length})</h3>
-                <div className="space-y-2">
+              <details>
+                <summary className="cursor-pointer text-sm font-medium">
+                  Retests ({detail.retests.length})
+                </summary>
+                <div className="mt-2 space-y-2">
                   {detail.retests.map((rt) => (
                     <div key={rt.id} className="flex items-center gap-2 text-sm">
                       <Badge
@@ -786,7 +803,7 @@ function FindingDetailDrawer({
                     </div>
                   ))}
                 </div>
-              </div>
+              </details>
             )}
           </div>
         ) : (

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Radar, Play, X, RefreshCw, ChevronRight } from "lucide-react"
+import { Radar, Play, X, RefreshCw, ChevronRight, ChevronDown } from "lucide-react"
 import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@lyrashield/ui"
 import { apiPost, apiGetPaginated } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
@@ -72,6 +72,7 @@ export function ScansClient({
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const [selectedTarget, setSelectedTarget] = useState("")
   const [selectedPreset, setSelectedPreset] = useState<ScanPresetId>("RELEASE_CHECK")
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<string | null>(null)
@@ -226,7 +227,7 @@ export function ScansClient({
       {showCreate && (
         <Card className="mb-6 p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Start New Scan</h2>
+            <h2 className="text-lg font-semibold">Start a scan</h2>
             <Button
               variant="ghost"
               size="sm"
@@ -251,25 +252,42 @@ export function ScansClient({
                 ))}
               </Select>
             </FormField>
-            <FormField label="Review depth" htmlFor="scan-preset">
-              <Select
-                id="scan-preset"
-                value={selectedPreset}
-                onChange={(e) => setSelectedPreset(e.target.value as ScanPresetId)}
-              >
-                {(["RELEASE_CHECK", "CODE_REVIEW", "DEEP_REVIEW"] as const).map((id) => (
-                  <option key={id} value={id}>
-                    {SCAN_PRESETS[id].label}
-                  </option>
-                ))}
-              </Select>
-              <p className="text-muted-foreground mt-1 text-xs">
-                {getScanPreset(selectedPreset).description}{" "}
-                {selectedTarget && !selectedTargetUsesEngine
-                  ? "This target uses deterministic scanners."
-                  : "A protected run limit is applied automatically."}
-              </p>
-            </FormField>
+          </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium"
+            >
+              <ChevronDown
+                className={`size-4 transition-transform duration-150 ${showAdvanced ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              />
+              Advanced
+            </button>
+            {showAdvanced && (
+              <div className="mt-3">
+                <FormField label="Review depth" htmlFor="scan-preset">
+                  <Select
+                    id="scan-preset"
+                    value={selectedPreset}
+                    onChange={(e) => setSelectedPreset(e.target.value as ScanPresetId)}
+                  >
+                    {(["RELEASE_CHECK", "CODE_REVIEW", "DEEP_REVIEW"] as const).map((id) => (
+                      <option key={id} value={id}>
+                        {SCAN_PRESETS[id].label}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {getScanPreset(selectedPreset).description}{" "}
+                    {selectedTarget && !selectedTargetUsesEngine
+                      ? "This target uses deterministic scanners."
+                      : "A protected run limit is applied automatically."}
+                  </p>
+                </FormField>
+              </div>
+            )}
           </div>
           <div className="mt-4 flex gap-2">
             <Button onClick={handleCreateScan} disabled={creating || !selectedTarget}>
@@ -315,7 +333,6 @@ export function ScansClient({
                       <span className="text-sm font-medium">
                         {GOAL_LABELS[scan.goal] ?? scan.goal}
                       </span>
-                      <span className="text-muted-foreground text-xs">{scan.mode}</span>
                     </div>
                     {scan.target && (
                       <p className="mb-1 truncate text-sm">

@@ -1,28 +1,11 @@
 import Link from "next/link"
 import type { ComponentType, SVGProps } from "react"
-import { Bell, CalendarClock, Plug, Settings, ShieldCheck, Users } from "lucide-react"
-import {
-  Badge,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  buttonVariants,
-} from "@lyrashield/ui"
+import { Bell, CalendarClock, Plug, Settings, Users } from "lucide-react"
+import { Card, CardContent, EmptyState, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { DeleteAccount } from "./delete-account"
 import { ConnectedAccounts } from "./connected-accounts"
-
-const securityControls = [
-  "Workspace-scoped RBAC",
-  "Request-scoped tenant filtering",
-  "Nonce-based CSP",
-  "PII-safe logging",
-  "Rate limiting",
-  "Audit logging",
-]
 
 export default async function SettingsPage() {
   const session = await getCachedSession()
@@ -47,16 +30,11 @@ export default async function SettingsPage() {
       where: { id: workspaceId },
       select: {
         name: true,
-        mode: true,
         plan: true,
         retentionDays: true,
-        telemetryEnabled: true,
         _count: {
           select: {
             members: true,
-            targets: true,
-            scans: true,
-            findings: true,
           },
         },
       },
@@ -74,115 +52,60 @@ export default async function SettingsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Workspace posture, access, automation, and connected services.
+            Workspace access, automation, and connected services.
           </p>
         </div>
-        <Badge variant="info">
-          <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-          Controls active
-        </Badge>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="min-w-0 lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Workspace</CardTitle>
-          </CardHeader>
-          <CardContent className="min-w-0">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Metric label="Name" value={workspace.name} />
-              <Metric label="Mode" value={workspace.mode} />
-              <Metric label="Plan" value={workspace.plan} />
-              <Metric label="Targets" value={workspace._count.targets.toString()} />
-              <Metric label="Scans" value={workspace._count.scans.toString()} />
-              <Metric label="Findings" value={workspace._count.findings.toString()} />
+      <Card>
+        <CardContent className="space-y-3 p-5">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <p className="text-muted-foreground text-xs font-medium uppercase">Workspace</p>
+              <p className="mt-1 truncate text-lg font-semibold">{workspace.name}</p>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="bg-card/50 rounded-xl border p-4">
-                <p className="text-sm font-medium">Data retention</p>
-                <p className="text-muted-foreground mt-1 text-sm">{workspace.retentionDays} days</p>
-              </div>
-              <div className="bg-card/50 rounded-xl border p-4">
-                <p className="text-sm font-medium">Product telemetry</p>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  {workspace.telemetryEnabled
-                    ? "Enabled for this workspace"
-                    : "Disabled for this workspace"}
-                </p>
-              </div>
+            <div>
+              <p className="text-muted-foreground text-xs font-medium uppercase">Plan</p>
+              <p className="mt-1 truncate text-lg font-semibold">{workspace.plan}</p>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="min-w-0">
-          <CardHeader>
-            <CardTitle>Security Controls</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {securityControls.map((control) => (
-              <div key={control} className="flex items-center gap-2 text-sm">
-                <ShieldCheck
-                  className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
-                  aria-hidden="true"
-                />
-                <span>{control}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="border-primary/30 bg-primary/5">
-        <CardHeader>
-          <CardTitle>Production beta</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground text-sm leading-6">
-            Access is limited while we validate the production service. Scan results are scoped
-            evidence, not a security guarantee. For beta support, reply to your invitation email.
-          </p>
+            <div>
+              <p className="text-muted-foreground text-xs font-medium uppercase">Retention</p>
+              <p className="mt-1 truncate text-lg font-semibold">{workspace.retentionDays} days</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       <ConnectedAccounts />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SettingsLink
           href="/dashboard/team"
           icon={Users}
-          title="Team Access"
-          description={`${workspace._count.members} active member${workspace._count.members === 1 ? "" : "s"}`}
+          title="Team"
+          description={`${workspace._count.members} member${workspace._count.members === 1 ? "" : "s"}`}
         />
         <SettingsLink
           href="/dashboard/integrations"
           icon={Plug}
           title="Integrations"
-          description={`${integrationCount} connected service${integrationCount === 1 ? "" : "s"}`}
+          description={`${integrationCount} connected`}
         />
         <SettingsLink
           href="/dashboard/notifications"
           icon={Bell}
           title="Notifications"
-          description={`${unreadNotifications} unread notification${unreadNotifications === 1 ? "" : "s"}`}
+          description={`${unreadNotifications} unread`}
         />
         <SettingsLink
           href="/dashboard/schedules"
           icon={CalendarClock}
           title="Schedules"
-          description={`${enabledSchedules} active schedule${enabledSchedules === 1 ? "" : "s"}`}
+          description={`${enabledSchedules} active`}
         />
       </div>
 
       <DeleteAccount />
-    </div>
-  )
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-card/50 min-w-0 rounded-xl border p-4">
-      <p className="text-muted-foreground text-xs font-medium uppercase">{label}</p>
-      <p className="mt-1 truncate text-lg font-semibold">{value}</p>
     </div>
   )
 }

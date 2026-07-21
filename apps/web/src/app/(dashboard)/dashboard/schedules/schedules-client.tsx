@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Calendar, Plus, AlertCircle, Trash2, Power } from "lucide-react"
+import { Calendar, Plus, AlertCircle, Trash2, Power, ChevronDown } from "lucide-react"
 import {
   Button,
   Badge,
@@ -58,6 +58,8 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   const [cron, setCron] = useState("0 0 * * 0")
   const [presetId, setPresetId] = useState<ScanPresetId>("WEEKLY_MONITOR")
   const [creating, setCreating] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [frequency, setFrequency] = useState("WEEKLY")
   const selectedTargetUsesEngine =
     targets.find((target) => target.id === selectedTargetId)?.type === "REPO"
 
@@ -124,6 +126,8 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       setSelectedTargetId("")
       setCron("0 0 * * 0")
       setPresetId("WEEKLY_MONITOR")
+      setFrequency("WEEKLY")
+      setShowAdvanced(false)
       await loadSchedules()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create schedule.")
@@ -174,7 +178,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       {showCreateForm && (
         <Card className="mb-4 p-4">
           <div className="space-y-3">
-            <h3 className="text-sm font-medium">Create Scheduled Scan</h3>
+            <h3 className="text-sm font-medium">New scheduled scan</h3>
             {targets.length > 0 ? (
               <FormField label="Target" htmlFor="schedule-target">
                 <Select
@@ -195,31 +199,79 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                 No targets available. Create a target first.
               </p>
             )}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <FormField label="Cron Expression" htmlFor="cron-expr">
-                <Input
-                  id="cron-expr"
-                  type="text"
-                  className="font-mono"
-                  placeholder="0 0 * * 0"
-                  value={cron}
-                  onChange={(e) => setCron(e.target.value)}
+            <FormField label="Frequency" htmlFor="frequency">
+              <Select
+                id="frequency"
+                value={frequency}
+                onChange={(e) => {
+                  setFrequency(e.target.value)
+                  const cronMap: Record<string, string> = {
+                    DAILY: "0 0 * * *",
+                    WEEKLY: "0 0 * * 0",
+                    MONTHLY: "0 0 1 * *",
+                  }
+                  const mapped = cronMap[e.target.value]
+                  if (mapped) setCron(mapped)
+                }}
+              >
+                <option value="DAILY">Daily</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="MONTHLY">Monthly</option>
+                <option value="CUSTOM" disabled>
+                  Custom cron
+                </option>
+              </Select>
+            </FormField>
+            <div className="mt-1">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium"
+              >
+                <ChevronDown
+                  className={`size-4 transition-transform duration-150 ${showAdvanced ? "rotate-180" : ""}`}
+                  aria-hidden="true"
                 />
-                <p className="text-muted-foreground mt-1 text-xs">{describeCron(cron)}</p>
-              </FormField>
-              <FormField label="Review depth" htmlFor="scan-preset">
-                <Select
-                  id="scan-preset"
-                  value={presetId}
-                  onChange={(e) => setPresetId(e.target.value as ScanPresetId)}
-                >
-                  {Object.entries(SCAN_PRESETS).map(([id, preset]) => (
-                    <option key={id} value={id}>
-                      {preset.label}
-                    </option>
-                  ))}
-                </Select>
-              </FormField>
+                Advanced
+              </button>
+              {showAdvanced && (
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <FormField label="Cron Expression" htmlFor="cron-expr">
+                    <Input
+                      id="cron-expr"
+                      type="text"
+                      className="font-mono"
+                      placeholder="0 0 * * 0"
+                      value={cron}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setCron(val)
+                        const reverseMap: Record<string, string> = {
+                          "0 0 * * *": "DAILY",
+                          "0 0 * * 0": "WEEKLY",
+                          "0 0 1 * *": "MONTHLY",
+                        }
+                        const matched = reverseMap[val.trim()]
+                        setFrequency(matched ?? "CUSTOM")
+                      }}
+                    />
+                    <p className="text-muted-foreground mt-1 text-xs">{describeCron(cron)}</p>
+                  </FormField>
+                  <FormField label="Review depth" htmlFor="scan-preset">
+                    <Select
+                      id="scan-preset"
+                      value={presetId}
+                      onChange={(e) => setPresetId(e.target.value as ScanPresetId)}
+                    >
+                      {Object.entries(SCAN_PRESETS).map(([id, preset]) => (
+                        <option key={id} value={id}>
+                          {preset.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                </div>
+              )}
             </div>
             <p className="text-muted-foreground text-xs">
               {getScanPreset(presetId).description}{" "}

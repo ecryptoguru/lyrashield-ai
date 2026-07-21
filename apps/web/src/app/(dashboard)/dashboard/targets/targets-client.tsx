@@ -9,11 +9,11 @@ import {
   EmptyState,
   FormField,
   Input,
-  Select,
   Spinner,
   LoadMore,
+  Select,
 } from "@lyrashield/ui"
-import { apiGetPaginated, apiPost } from "@/lib/api-client"
+import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 
 interface Target {
   id: string
@@ -31,23 +31,30 @@ interface Target {
   createdAt: string
 }
 
-interface Project {
-  id: string
+interface GithubRepo {
+  id: number
+  fullName: string
   name: string
+  owner: string
+  defaultBranch: string
+  private: boolean
+  htmlUrl: string
 }
 
 export function TargetsClient({
   workspaceId,
-  projects,
   initialProjectId,
   initialData,
   initialNextCursor,
+  githubConnected = false,
+  githubAccountLogin = null,
 }: {
   workspaceId: string
-  projects: Project[]
   initialProjectId?: string
   initialData?: Target[]
   initialNextCursor?: string | null
+  githubConnected?: boolean
+  githubAccountLogin?: string | null
 }) {
   const router = useRouter()
   const [targets, setTargets] = useState<Target[]>(initialData ?? [])
@@ -64,17 +71,62 @@ export function TargetsClient({
     name: "",
     repoOwner: "",
     repoName: "",
-    branch: "main",
-    projectId: "",
-    environment: "STAGING",
+    branch: "",
   })
   const [urlForm, setUrlForm] = useState({
     name: "",
     url: "",
-    type: "WEB_APP" as "WEB_APP" | "API",
-    projectId: "",
-    environment: "STAGING",
+    urlType: "WEB_APP" as "WEB_APP" | "API",
   })
+
+  const [githubRepos, setGithubRepos] = useState<GithubRepo[]>([])
+  const [reposLoading, setReposLoading] = useState(false)
+  const [repoMode, setRepoMode] = useState<"picker" | "manual">("picker")
+  const [selectedRepoId, setSelectedRepoId] = useState<string>("")
+
+  useEffect(() => {
+    if (
+      !githubConnected ||
+      formType !== "REPO" ||
+      !showForm ||
+      githubRepos.length > 0 ||
+      reposLoading
+    )
+      return
+    let cancelled = false
+    void (async () => {
+      try {
+        setReposLoading(true)
+        const repos = await apiGet<GithubRepo[]>(
+          `/api/integrations/github/repos?workspaceId=${workspaceId}`
+        )
+        if (cancelled) return
+        setGithubRepos(repos)
+      } catch {
+        if (cancelled) return
+        setRepoMode("manual")
+      } finally {
+        if (cancelled) return
+        setReposLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [githubConnected, formType, showForm, githubRepos.length, reposLoading, workspaceId])
+
+  function handleSelectRepo(repoId: string) {
+    setSelectedRepoId(repoId)
+    const repo = githubRepos.find((r) => String(r.id) === repoId)
+    if (repo) {
+      setRepoForm({
+        name: repo.fullName,
+        repoOwner: repo.owner,
+        repoName: repo.name,
+        branch: repo.defaultBranch,
+      })
+    }
+  }
 
   const fetchTargets = useCallback(async () => {
     setLoading(true)
@@ -110,18 +162,14 @@ export function TargetsClient({
         name: repoForm.name,
         repoOwner: repoForm.repoOwner,
         repoName: repoForm.repoName,
-        branch: repoForm.branch,
-        projectId: repoForm.projectId || undefined,
-        environment: repoForm.environment,
+        ...(repoForm.branch ? { branch: repoForm.branch } : {}),
       })
       setShowForm(false)
       setRepoForm({
         name: "",
         repoOwner: "",
         repoName: "",
-        branch: "main",
-        projectId: "",
-        environment: "STAGING",
+        branch: "",
       })
       await fetchTargets()
       router.refresh()
@@ -139,14 +187,12 @@ export function TargetsClient({
     try {
       await apiPost("/api/targets", {
         workspaceId,
-        type: urlForm.type,
+        type: urlForm.urlType,
         name: urlForm.name,
         url: urlForm.url,
-        projectId: urlForm.projectId || undefined,
-        environment: urlForm.environment,
       })
       setShowForm(false)
-      setUrlForm({ name: "", url: "", type: "WEB_APP", projectId: "", environment: "STAGING" })
+      setUrlForm({ name: "", url: "", urlType: "WEB_APP" })
       await fetchTargets()
       router.refresh()
     } catch (e) {
@@ -230,7 +276,7 @@ export function TargetsClient({
               size="sm"
             >
               <Globe className="h-4 w-4" aria-hidden="true" />
-              URL / API
+              URL
             </Button>
           </div>
 
@@ -245,81 +291,99 @@ export function TargetsClient({
 
           {formType === "REPO" ? (
             <form onSubmit={handleCreateRepo} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField label="Target Name" htmlFor="repo-name-input">
-                  <Input
-                    id="repo-name-input"
-                    type="text"
-                    value={repoForm.name}
-                    onChange={(e) => setRepoForm({ ...repoForm, name: e.target.value })}
-                    required
-                    maxLength={100}
-                    autoFocus
-                    placeholder="My App Backend"
-                  />
-                </FormField>
-                <FormField label="Project (optional)" htmlFor="repo-project">
-                  <Select
-                    id="repo-project"
-                    value={repoForm.projectId}
-                    onChange={(e) => setRepoForm({ ...repoForm, projectId: e.target.value })}
+              {githubConnected && repoMode === "picker" && (
+                <>
+                  <FormField label="Select repository" htmlFor="repo-select">
+                    {reposLoading ? (
+                      <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                        <Spinner className="h-4 w-4" />
+                        Loading repositories...
+                      </div>
+                    ) : githubRepos.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">
+                        No repositories found.{" "}
+                        <button
+                          type="button"
+                          onClick={() => setRepoMode("manual")}
+                          className="text-primary hover:underline"
+                        >
+                          Enter manually
+                        </button>
+                      </p>
+                    ) : (
+                      <Select
+                        id="repo-select"
+                        value={selectedRepoId}
+                        onChange={(e) => handleSelectRepo(e.target.value)}
+                      >
+                        <option value="">Choose a repository...</option>
+                        {githubRepos.map((repo) => (
+                          <option key={repo.id} value={String(repo.id)}>
+                            {repo.fullName}
+                            {repo.private ? " (private)" : ""}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </FormField>
+                  <button
+                    type="button"
+                    onClick={() => setRepoMode("manual")}
+                    className="text-muted-foreground hover:text-foreground text-xs underline"
                   >
-                    <option value="">No project</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </Select>
-                </FormField>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField label="Repo Owner" htmlFor="repo-owner">
-                  <Input
-                    id="repo-owner"
-                    type="text"
-                    value={repoForm.repoOwner}
-                    onChange={(e) => setRepoForm({ ...repoForm, repoOwner: e.target.value })}
-                    required
-                    placeholder="lyrashield"
-                  />
-                </FormField>
-                <FormField label="Repo Name" htmlFor="repo-name-field">
-                  <Input
-                    id="repo-name-field"
-                    type="text"
-                    value={repoForm.repoName}
-                    onChange={(e) => setRepoForm({ ...repoForm, repoName: e.target.value })}
-                    required
-                    placeholder="lyrashield"
-                  />
-                </FormField>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField label="Branch" htmlFor="repo-branch">
-                  <Input
-                    id="repo-branch"
-                    type="text"
-                    value={repoForm.branch}
-                    onChange={(e) => setRepoForm({ ...repoForm, branch: e.target.value })}
-                    placeholder="main"
-                  />
-                </FormField>
-                <FormField label="Environment" htmlFor="repo-env">
-                  <Select
-                    id="repo-env"
-                    value={repoForm.environment}
-                    onChange={(e) => setRepoForm({ ...repoForm, environment: e.target.value })}
-                  >
-                    <option value="LOCAL">Local</option>
-                    <option value="PREVIEW">Preview</option>
-                    <option value="STAGING">Staging</option>
-                    <option value="PRODUCTION">Production</option>
-                  </Select>
-                </FormField>
-              </div>
+                    Enter repository manually
+                  </button>
+                </>
+              )}
+              {(!githubConnected || repoMode === "manual") && (
+                <>
+                  <FormField label="Target Name" htmlFor="repo-name-input">
+                    <Input
+                      id="repo-name-input"
+                      type="text"
+                      value={repoForm.name}
+                      onChange={(e) => setRepoForm({ ...repoForm, name: e.target.value })}
+                      required
+                      maxLength={100}
+                      autoFocus
+                      placeholder="My App Backend"
+                    />
+                  </FormField>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <FormField label="Repo Owner" htmlFor="repo-owner">
+                      <Input
+                        id="repo-owner"
+                        type="text"
+                        value={repoForm.repoOwner}
+                        onChange={(e) => setRepoForm({ ...repoForm, repoOwner: e.target.value })}
+                        required
+                        placeholder={githubAccountLogin ?? "lyrashield"}
+                      />
+                    </FormField>
+                    <FormField label="Repo Name" htmlFor="repo-name-field">
+                      <Input
+                        id="repo-name-field"
+                        type="text"
+                        value={repoForm.repoName}
+                        onChange={(e) => setRepoForm({ ...repoForm, repoName: e.target.value })}
+                        required
+                        placeholder="lyrashield"
+                      />
+                    </FormField>
+                  </div>
+                  {githubConnected && repoMode === "manual" && (
+                    <button
+                      type="button"
+                      onClick={() => setRepoMode("picker")}
+                      className="text-muted-foreground hover:text-foreground text-xs underline"
+                    >
+                      Use repository picker
+                    </button>
+                  )}
+                </>
+              )}
               <div className="flex gap-2">
-                <Button type="submit" disabled={creating}>
+                <Button type="submit" disabled={creating || (!repoForm.name && !selectedRepoId)}>
                   {creating ? "Creating..." : "Create Target"}
                 </Button>
                 <Button
@@ -336,32 +400,39 @@ export function TargetsClient({
             </form>
           ) : (
             <form onSubmit={handleCreateUrl} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField label="Target Name" htmlFor="url-name">
-                  <Input
-                    id="url-name"
-                    type="text"
-                    value={urlForm.name}
-                    onChange={(e) => setUrlForm({ ...urlForm, name: e.target.value })}
-                    required
-                    maxLength={100}
-                    autoFocus
-                    placeholder="Staging API"
-                  />
-                </FormField>
-                <FormField label="Type" htmlFor="url-type">
-                  <Select
-                    id="url-type"
-                    value={urlForm.type}
-                    onChange={(e) =>
-                      setUrlForm({ ...urlForm, type: e.target.value as "WEB_APP" | "API" })
-                    }
+              <FormField label="Type" htmlFor="url-type">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={urlForm.urlType === "WEB_APP" ? "default" : "secondary"}
+                    size="sm"
+                    onClick={() => setUrlForm({ ...urlForm, urlType: "WEB_APP" })}
                   >
-                    <option value="WEB_APP">Web App</option>
-                    <option value="API">API</option>
-                  </Select>
-                </FormField>
-              </div>
+                    <Globe className="h-4 w-4" aria-hidden="true" />
+                    Web App
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={urlForm.urlType === "API" ? "default" : "secondary"}
+                    size="sm"
+                    onClick={() => setUrlForm({ ...urlForm, urlType: "API" })}
+                  >
+                    API
+                  </Button>
+                </div>
+              </FormField>
+              <FormField label="Target Name" htmlFor="url-name">
+                <Input
+                  id="url-name"
+                  type="text"
+                  value={urlForm.name}
+                  onChange={(e) => setUrlForm({ ...urlForm, name: e.target.value })}
+                  required
+                  maxLength={100}
+                  autoFocus
+                  placeholder={urlForm.urlType === "API" ? "Production API" : "Staging Site"}
+                />
+              </FormField>
               <FormField label="URL" htmlFor="url-input">
                 <Input
                   id="url-input"
@@ -369,37 +440,13 @@ export function TargetsClient({
                   value={urlForm.url}
                   onChange={(e) => setUrlForm({ ...urlForm, url: e.target.value })}
                   required
-                  placeholder="https://staging.example.com"
+                  placeholder={
+                    urlForm.urlType === "API"
+                      ? "https://api.example.com"
+                      : "https://staging.example.com"
+                  }
                 />
               </FormField>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField label="Project (optional)" htmlFor="url-project">
-                  <Select
-                    id="url-project"
-                    value={urlForm.projectId}
-                    onChange={(e) => setUrlForm({ ...urlForm, projectId: e.target.value })}
-                  >
-                    <option value="">No project</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </Select>
-                </FormField>
-                <FormField label="Environment" htmlFor="url-env">
-                  <Select
-                    id="url-env"
-                    value={urlForm.environment}
-                    onChange={(e) => setUrlForm({ ...urlForm, environment: e.target.value })}
-                  >
-                    <option value="LOCAL">Local</option>
-                    <option value="PREVIEW">Preview</option>
-                    <option value="STAGING">Staging</option>
-                    <option value="PRODUCTION">Production</option>
-                  </Select>
-                </FormField>
-              </div>
               <div className="flex gap-2">
                 <Button type="submit" disabled={creating}>
                   {creating ? "Creating..." : "Create Target"}
@@ -439,10 +486,6 @@ export function TargetsClient({
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Name</th>
                 <th className="px-4 py-3 text-left font-semibold">Type</th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Project</th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
-                  Environment
-                </th>
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Scans</th>
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Findings</th>
                 <th className="px-4 py-3 text-left font-semibold">Status</th>
@@ -480,12 +523,6 @@ export function TargetsClient({
                       )}
                       {t.type}
                     </Badge>
-                  </td>
-                  <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
-                    {t.project?.name ?? "—"}
-                  </td>
-                  <td className="hidden px-4 py-3 sm:table-cell">
-                    <span className="text-xs">{t.environment}</span>
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">{t.scanCount}</td>
                   <td className="hidden px-4 py-3 sm:table-cell">
