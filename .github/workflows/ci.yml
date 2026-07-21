@@ -126,6 +126,17 @@ jobs:
       - name: Run database migrations
         run: pnpm --filter @lyrashield/db migrate:deploy
 
+      - name: Use a restricted RLS runtime role
+        shell: bash
+        run: |
+          docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE app_runtime_ci LOGIN PASSWORD 'runtime-ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS" \
+            -c "GRANT CONNECT ON DATABASE lyrashield TO app_runtime_ci" \
+            -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
+            -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime_ci" \
+            -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci"
+          echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
+
       - name: Lint
         run: pnpm lint
 
@@ -145,7 +156,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Browser E2E
-        run: pnpm test:e2e
+        run: DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" pnpm test:e2e
 
   deploy-marketing:
     name: Deploy Marketing to Cloudflare

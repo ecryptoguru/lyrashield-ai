@@ -1,13 +1,14 @@
 import { prisma } from "./client"
+import { runWithDatabaseRLSContext } from "./scoping"
 
 /**
  * Run a callback inside a Prisma transaction with `SET LOCAL
  * app.current_workspace_id` so that Postgres Row Level Security (RLS)
  * policies can enforce workspace isolation at the database level.
  *
- * Status: scaffolding for the planned per-table RLS cutover. There are no
- * production call sites today, and policies are permissive while unset; do not
- * describe this as an active isolation control.
+ * Strict workspace policies deny access when this context is absent. Ordinary
+ * extended-client queries set the same transaction-local context automatically;
+ * use this helper for multi-query atomic operations.
  *
  * This is the connection-safe way to activate RLS with Prisma's pooled
  * adapter: `SET LOCAL` scopes the setting to the current transaction,
@@ -30,15 +31,15 @@ export async function withWorkspaceRLS<T>(
   fn: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SET LOCAL app.current_workspace_id = ${workspaceId}`
-    return fn(tx)
+    await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
+    return runWithDatabaseRLSContext(workspaceId, () => fn(tx))
   })
 }
 
 /**
- * Run a callback inside a Prisma transaction with RLS context cleared.
- * Useful for cross-workspace admin operations (e.g. workspace switcher).
- * The `RESET` ensures no stale context leaks from a pooled connection.
+ * Run a callback inside a Prisma transaction with RLS context cleared. Strict
+ * workspace tables remain inaccessible; only deliberately unscoped tables may
+ * be queried. The reset prevents stale pooled-connection context.
  */
 export async function withoutWorkspaceRLS<T>(
   fn: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>

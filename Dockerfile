@@ -33,7 +33,7 @@ COPY --from=deps /app/ .
 COPY . .
 
 # Prisma config needs env vars to load at build time
-ARG BUILD_DATABASE_URL="postgresql://lyrashield:build-placeholder@db.example.com:5432/lyrashield?schema=public"
+ARG BUILD_DATABASE_URL="postgresql://build@db.example.invalid:5432/lyrashield?schema=public"
 ARG BUILD_APP_URL="https://app.example.invalid"
 ARG BUILD_PUBLIC_APP_URL="https://app.example.invalid"
 ARG BUILD_TRUSTED_PROXY_IP_HEADER="x-forwarded-for"
@@ -48,7 +48,7 @@ FROM workspace-builder AS web-builder
 
 # Docker build arguments are scoped per stage. Re-declare every value consumed
 # below so classic remote builders do not silently substitute empty strings.
-ARG BUILD_DATABASE_URL="postgresql://lyrashield:build-placeholder@db.example.com:5432/lyrashield?schema=public"
+ARG BUILD_DATABASE_URL="postgresql://build@db.example.invalid:5432/lyrashield?schema=public"
 ARG BUILD_APP_URL="https://app.example.invalid"
 ARG BUILD_PUBLIC_APP_URL="https://app.example.invalid"
 ARG BUILD_TRUSTED_PROXY_IP_HEADER="x-forwarded-for"

@@ -1,16 +1,25 @@
 import { describe, it, expect } from "vitest"
 import {
   applyQueryGuards,
+  getExplicitWorkspaceId,
   runWithWorkspaceContext,
   getWorkspaceContext,
   SOFT_DELETE_MODELS,
   WORKSPACE_SCOPED_MODELS,
 } from "./scoping"
+import { remapSoftDeleteOperation } from "./extension"
 
 // These tests exercise the REAL guard logic + model sets imported from
 // scoping.ts (no Prisma client needed — scoping.ts has no Prisma import).
 
 describe("Prisma Extension — Query Guards (soft-delete)", () => {
+  it("dispatches soft deletes as updates and preserves other operations", () => {
+    expect(remapSoftDeleteOperation("Finding", "delete")).toBe("update")
+    expect(remapSoftDeleteOperation("Finding", "deleteMany")).toBe("updateMany")
+    expect(remapSoftDeleteOperation("Finding", "findMany")).toBe("findMany")
+    expect(remapSoftDeleteOperation("User", "delete")).toBe("delete")
+  })
+
   it("adds deletedAt: null to soft-delete models on findMany", () => {
     expect(applyQueryGuards("Finding", "findMany", {}, null).where).toEqual({ deletedAt: null })
   })
@@ -56,6 +65,16 @@ describe("Prisma Extension — Query Guards (soft-delete)", () => {
 })
 
 describe("Prisma Extension — Query Guards (workspace scoping)", () => {
+  it("recovers an explicit workspaceId from where or data", () => {
+    expect(getExplicitWorkspaceId({ where: { workspaceId: "ws-read" } })).toBe("ws-read")
+    expect(getExplicitWorkspaceId({ data: { workspaceId: "ws-write" } })).toBe("ws-write")
+  })
+
+  it("does not infer workspace context from unrelated or malformed fields", () => {
+    expect(getExplicitWorkspaceId({ where: { id: "row-id" } })).toBeNull()
+    expect(getExplicitWorkspaceId({ where: { workspaceId: { in: ["ws-a"] } } })).toBeNull()
+  })
+
   it("adds workspaceId when context is set", () => {
     expect(applyQueryGuards("Project", "findMany", {}, "ws-123").where).toEqual({
       deletedAt: null,
@@ -171,6 +190,20 @@ describe("Prisma Extension — request-scoped context isolation", () => {
     expect(results.a).toEqual(["ws-A", "ws-A"])
     expect(results.b).toEqual(["ws-B", "ws-B"])
     // And context is cleared once the runs complete.
+    expect(getWorkspaceContext()).toBeNull()
+  })
+
+  it("retains context while a lazy thenable is consumed", async () => {
+    let observed: string | null = null
+    const result = await runWithWorkspaceContext("ws-lazy", () => ({
+      then(resolve: (value: string) => void) {
+        observed = getWorkspaceContext()
+        resolve("done")
+      },
+    }))
+
+    expect(result).toBe("done")
+    expect(observed).toBe("ws-lazy")
     expect(getWorkspaceContext()).toBeNull()
   })
 })

@@ -42,14 +42,22 @@ function createPrismaClient() {
           const metadata = data.metadata ?? null
 
           return baseClient.$transaction(async (tx) => {
+            await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
-            const createdAt = (data.createdAt as Date | undefined) ?? new Date()
             const last = await tx.auditLog.findFirst({
               where: { workspaceId },
               orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              select: { hash: true },
+              select: { hash: true, createdAt: true },
             })
             const prevHash = last?.hash ?? null
+            const requestedCreatedAt = (data.createdAt as Date | undefined) ?? new Date()
+            // Concurrent events can land in the same millisecond. Make the
+            // locked chain order explicit so `(createdAt, id)` sorting cannot
+            // disagree with the predecessor chosen under the advisory lock.
+            const createdAt =
+              last && requestedCreatedAt <= last.createdAt
+                ? new Date(last.createdAt.getTime() + 1)
+                : requestedCreatedAt
             const hash = computeAuditHash(
               {
                 id,

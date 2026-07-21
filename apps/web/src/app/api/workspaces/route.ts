@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@lyrashield/db"
+import { randomUUID } from "node:crypto"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
 import { CreateWorkspaceSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
@@ -72,9 +73,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const workspaceId = randomUUID()
+    const result = await withWorkspaceRLS(workspaceId, async (tx) => {
       const workspace = await tx.workspace.create({
         data: {
+          id: workspaceId,
           name,
           slug,
           mode,

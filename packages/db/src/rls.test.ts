@@ -22,7 +22,7 @@ describe("RLS helpers", () => {
   })
 
   describe("withWorkspaceRLS", () => {
-    it("sets app.current_workspace_id via SET LOCAL inside a transaction", async () => {
+    it("sets app.current_workspace_id transaction-locally inside a transaction", async () => {
       const workspaceId = "ws-test-123"
       const callback = vi.fn().mockResolvedValue("result")
 

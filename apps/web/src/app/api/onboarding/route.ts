@@ -92,9 +92,37 @@ export async function PATCH(request: Request) {
 
     if (parsed.data.targetId !== undefined && parsed.data.targetId !== null) {
       // A targetId is only meaningful alongside a workspace the user belongs to.
-      // Resolve the target and confirm the caller is an active member of its workspace.
-      const target = await prisma.target.findUnique({
-        where: { id: parsed.data.targetId },
+      // Reuse the workspace already persisted by step one when this incremental
+      // update contains only targetId. Strict RLS must never perform an unscoped
+      // lookup by attacker-controlled target id.
+      const existingState = parsed.data.workspaceId
+        ? null
+        : await getOrCreateOnboardingState(session.userId)
+      const workspaceId = parsed.data.workspaceId ?? existingState?.workspaceId
+      if (!workspaceId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "Complete the workspace step before selecting a target",
+            },
+          },
+          { status: 400 }
+        )
+      }
+      const workspaceMembership = await getWorkspaceMembership(workspaceId, session.userId)
+      if (!workspaceMembership) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: { code: "FORBIDDEN", message: "You do not have access to this workspace" },
+          },
+          { status: 403 }
+        )
+      }
+      const target = await prisma.target.findFirst({
+        where: { id: parsed.data.targetId, workspaceId },
         select: { workspaceId: true },
       })
       const targetMembership = target
