@@ -23,6 +23,7 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
   const [providers, setProviders] = useState({ github: false, google: false, microsoft: false })
 
   useEffect(() => {
