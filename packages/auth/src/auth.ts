@@ -3,7 +3,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api"
 import { prismaAdapter } from "better-auth/adapters/prisma"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
-import { env, isProd } from "@lyrashield/config"
+import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { isBetaInviteAllowed } from "./beta-invites"
 import { isOAuthProviderConfigured, socialSignUpEnabled } from "./oauth-providers"
@@ -121,7 +121,7 @@ export const auth = betterAuth({
   trustedOrigins,
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification,
+    requireEmailVerification: !isDev,
     sendResetPassword: sendResetPasswordEmail,
   },
   hooks: {
@@ -160,7 +160,7 @@ export const auth = betterAuth({
       },
     },
   },
-  ...(requireEmailVerification
+  ...(!isDev
     ? {
         emailVerification: {
           sendVerificationEmail,
