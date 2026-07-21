@@ -14,7 +14,7 @@ It keeps detected findings, independently verified evidence, retest-confirmed re
 - Public passive Lite Check: [lyrashieldai.com/scan](https://lyrashieldai.com/scan)
 - Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com) (invite-only production beta)
 
-The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. The invite-only beta app supports password and configured OAuth access without email verification. Repository scans are admitted only while the dedicated production worker holds a live lease; the current release gate still requires successful, reconciled Safe and Deep runs.
+The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. The invite-only beta app supports password and configured OAuth access without email verification. Production web requests use a restricted `NOBYPASSRLS` database role, and repository scans are admitted only while the dedicated production worker holds a live lease. The current release gate still requires a current-tree Safe retest and a successful, reconciled Deep run.
 
 ## Judge and project links
 

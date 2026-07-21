@@ -410,7 +410,7 @@ Use the same supported scan modes as the API: SAFE, QUICK, STANDARD, DEEP, or CU
 
 ## 23. Current availability
 
-The public marketing site, Lite Check, browser-local tools, methodology, and content are live. The authenticated dashboard and dedicated BullMQ/engine worker are deployed as a separate invite-only production beta. Repository scan admission fails closed when the worker heartbeat is absent. A successful, reconciled Safe and Deep controlled-scan pair is still required before the full-scan release gate passes.
+The public marketing site, Lite Check, browser-local tools, methodology, and content are live. The authenticated dashboard and dedicated BullMQ/engine worker are deployed as a separate invite-only production beta. Ordinary web requests use a restricted `NOBYPASSRLS` database role, and repository scan admission fails closed when the worker heartbeat is absent. A current-tree Safe retest and a successful, reconciled Deep controlled scan are still required before the full-scan release gate passes.
 
 The production beta has an authenticated application origin, TLS Redis queue, private evidence storage, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. Broad availability still requires completed controlled-scan proof, application-level readiness/queue/provider alerts, capacity evidence, and backup/restore. Backup/restore is explicitly deferred for this invite-only hackathon beta, so no recovery or RPO/RTO claim is made.
 

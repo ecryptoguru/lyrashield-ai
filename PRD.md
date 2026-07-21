@@ -656,7 +656,7 @@ This separation allows:
 
 ### Engine Repo Status
 
-Status: **Controlled-derivative gate passed; invite-only production worker deployed; successful production Safe/Deep proof still pending**
+Status: **Controlled-derivative gate passed; invite-only production worker deployed; current-tree Safe retest and terminal Deep proof still pending**
 
 ```txt
 Repo: ecryptoguru/lyrashield-engine
@@ -678,7 +678,7 @@ Current release gates:
 
 1. **Complete:** founder-authorized Luna and Terra deployments (`LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`), the fallback, and matching provider credentials are configured; bounded provider probes pass.
 2. **Complete:** the production sandbox and worker images are independently pinned by immutable digest.
-3. Run one approved target through successful Safe and Deep production lifecycles and retain/reconcile their audit, usage, coverage, and evidence records. Three Safe attempts failed closed with no assurance result or replay. The repaired diagnostic identifies an initial Luna Chat Completions `BadRequestError`; its safe provider code classification is the current correction gate.
+3. Run one approved target through successful Safe and Deep production lifecycles and retain/reconcile their audit, usage, coverage, and evidence records. After the retained fail-closed diagnostic attempts, one Safe run completed with a manifested 50-control ledger and three findings. PR #139 remediated those findings after that scan; current-tree Safe retest proof and a terminal Deep rerun remain the gate.
 4. **Complete for the invite-only beta:** the worker uses DNS-pinned deny-by-default egress and the sandbox has no default external route. Re-evaluate scope and capacity before untrusted multi-tenant scanning at scale.
 5. Build a private LyraShield evaluation corpus before changing orchestration for claimed quality gains or publishing result claims.
 6. Keep `engine-NOTICE.md` current whenever fork divergence or third-party notices change.
@@ -5233,9 +5233,9 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
-- Merged PR #115 baseline: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, security diff gate, CodeRabbit, `git diff --check`, **881 core tests in 97 files**, **79 marketing tests in 12 files**, **16 motion tests**, and **2 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
+- Current PR #143 release gate: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, security diff gate, `git diff --check`, **933 core tests in 105 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 passing Playwright Chromium tests against a `NOBYPASSRLS` runtime role**. Historical checkpoint counts below remain dated evidence, not the current release gate.
 - Current product surface: **25 page route files** and **44 API route files** in `apps/web`.
-- Current data surface: **39 Prisma models**, **18 enums**, and **21 committed migrations**. Postgres RLS covers 20 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
+- Current data surface: **39 Prisma models**, **18 enums**, and **23 committed migrations**. Postgres strictly enforces and forces RLS on 21 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
 - Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
 - Current Docker proof: fresh web/worker images build; the web container passes health plus database/Redis readiness; scan readiness reports the live worker heartbeat; and the engine-bearing worker image reports CLI `1.1.0.post1`. The PR #115 smoke retained zero enabled schedules, queued database scans, waiting jobs, or active jobs before and after restart. Docker/runtime health remains separate from a paid controlled-scan result.
@@ -5389,9 +5389,9 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 ### C2.1 Required before a controlled product pilot
 
-1. **Controlled scan proof:** production image provenance, worker routing, private storage, retained failure lifecycle, and Luna/Terra provider access are proven. Three Luna/Safe attempts failed closed with no assurance result and no automatic replay. Azure recorded one `createChatCompletion` 400 for each attempt and no scan token processing; the third retained `BadRequestError` after the diagnostic fix. A successful Safe run and an approved Terra/Deep run with usage, coverage, findings/evidence when applicable, cleanup, and provider-meter reconciliation remain required.
+1. **Controlled scan proof:** production image provenance, worker routing, private storage, retained failure lifecycle, and Luna/Terra provider access are proven. A Luna/Safe run completed in 13m04s with an immutable manifest, all 50 control receipts, and three detected findings. PR #139 remediated the findings after that run, so a fresh Safe retest is required. The first Terra/Deep attempt ended at the former 30-minute timeout; the post-PR-#139 rerun must reach a truthful terminal state with usage, coverage, findings/evidence when applicable, cleanup, and provider-meter reconciliation.
 2. **Transport-level egress control:** the production worker enforces a refreshed DNS allowlist in `DOCKER-USER`; metadata, private, and unapproved destinations are blocked, and its sandbox network has no default external route. This is the invite-only beta boundary, not proof of capacity or safety for arbitrary multi-tenant scale.
-3. **Production infrastructure:** the authenticated app origin, production PostgreSQL, BullMQ-compatible TLS Redis, private R2 evidence storage, Key Vault secrets, TLS, dedicated non-root worker, pinned images, one warm web replica, and baseline Azure alerts are deployed. Migration, queue recovery, signed R2 lifecycle/checksum, 45-second heartbeat, graceful unregister/restart, and positive/negative egress checks pass. Application-level queue/readiness/provider alerts and capacity evidence remain. Backup/restore is explicitly deferred by founder decision for this invite-only hackathon beta; no recovery or RPO/RTO claim is made, and the gap blocks general availability.
+3. **Production infrastructure:** the authenticated app origin, production PostgreSQL, BullMQ-compatible TLS Redis, private R2 evidence storage, Key Vault secrets, TLS, dedicated non-root worker, pinned images, one warm web replica, and baseline Azure alerts are deployed. Ordinary web requests now use a dedicated `NOBYPASSRLS` role, while a separate system connection is limited in code to reviewed cross-workspace boundaries. Migration, restricted-role E2E, queue recovery, signed R2 lifecycle/checksum, 45-second heartbeat, graceful unregister/restart, and positive/negative egress checks pass. Application-level queue/readiness/provider alerts and capacity evidence remain. Backup/restore is explicitly deferred by founder decision for this invite-only hackathon beta; no recovery or RPO/RTO claim is made, and the gap blocks general availability.
 
 ### C2.2 Required before self-serve paid launch
 
