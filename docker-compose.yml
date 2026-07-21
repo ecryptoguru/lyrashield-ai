@@ -62,7 +62,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: builder
+      target: workspace-builder
       additional_contexts:
         engine: "${LYRASHIELD_ENGINE_SOURCE:-../lyrashield-engine}"
     container_name: lyrashield-migrate
@@ -203,7 +203,7 @@ services:
           memory: ${WORKER_MEMORY_LIMIT:-4G}
           pids: ${WORKER_PIDS_LIMIT:-512}
     working_dir: /app
-    command: ["pnpm", "--filter", "@lyrashield/worker", "exec", "tsx", "src/index.ts"]
+    command: ["./apps/worker/node_modules/.bin/tsx", "apps/worker/src/index.ts"]
     healthcheck:
       test:
         [

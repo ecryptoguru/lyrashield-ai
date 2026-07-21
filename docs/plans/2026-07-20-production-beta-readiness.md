@@ -1,13 +1,13 @@
 # LyraShield AI production beta readiness plan
 
-Status: **proposed — not implemented or approved for deployment**
+Status: **proposed — auth/worker environment controls and local Docker proof implemented; production deployment not approved**
 Date: 2026-07-20
-Target: invite-only production beta with a small number of real users
+Target: open-registration production beta with a controlled number of real users
 Primary constraints: production-grade safety, truthful beta UX, Supabase Free, Upstash Free, low Azure cost, and controlled GPT-5.6 spend without a material quality reduction.
 
 ## 1. Outcome
 
-Launch a real, invite-only LyraShield AI beta in which users can authenticate, create authorized repository targets, run bounded scans, inspect findings and evidence state, retest, and view reports. The marketing site remains on Cloudflare. The authenticated application, database, Redis queue, evidence storage, and sandbox-capable worker are deployed separately.
+Launch a real, open-registration LyraShield AI beta in which users can authenticate, create authorized repository targets, run bounded scans, inspect findings and evidence state, retest, and view reports. The marketing site remains on Cloudflare. The authenticated application, database, Redis queue, evidence storage, and sandbox-capable worker are deployed separately.
 
 The beta is ready only after:
 
@@ -16,7 +16,7 @@ The beta is ready only after:
 3. one approved Safe scan and one approved Deep scan complete through the production worker lifecycle;
 4. model usage, provider-billed cost, latency, evidence storage, and result quality are reconciled;
 5. the live marketing and dashboard surfaces visibly identify the product as Beta;
-6. the rollout remains invite-only with one scan executing at a time.
+6. the rollout has open registration with one scan executing at a time.
 
 ## 2. Scope and non-goals
 
@@ -24,7 +24,7 @@ The beta is ready only after:
 
 - Existing Cloudflare marketing site and passive Lite Check.
 - Authenticated Next.js dashboard.
-- Better Auth email verification and invited beta accounts.
+- Better Auth email verification and open-registration accounts.
 - Supabase Postgres for authenticated application data only.
 - Upstash Redis over TLS for BullMQ and distributed rate limiting.
 - One sandbox-capable worker host.
@@ -35,7 +35,7 @@ The beta is ready only after:
 
 ### Excluded from the first beta
 
-- Public self-service signup.
+- Closed or invite-only sign-up flows.
 - Billing and paid plans.
 - Unlimited scans or unlimited concurrency.
 - Automatic Fix PR execution.
@@ -49,7 +49,7 @@ The beta is ready only after:
 
 | Surface                  | Service                                         | Minimum beta configuration                                 |                              Expected base cost |
 | ------------------------ | ----------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------: |
-| Marketing and waitlist   | Existing Cloudflare Worker, D1, KV, Rate Limits | Keep current production deployment                         |                        Existing/free-tier usage |
+| Marketing and updates/referrals | Existing Cloudflare Worker, D1, KV, Rate Limits | Keep current production deployment                         |                        Existing/free-tier usage |
 | Passive Lite Check       | Existing Azure Container App                    | 0.5 vCPU, 1 GiB, min 0, max 1                              | Expected within shared ACA grant at low traffic |
 | Authenticated web/API    | Azure Container Apps Consumption                | 0.5 vCPU, 1 GiB, min 0, max 1                              | Expected within shared ACA grant at low traffic |
 | Application database     | Supabase Free Postgres                          | Runtime pooler URL; direct URL only for migrations/backups |                     $0 while within Free limits |
@@ -193,7 +193,7 @@ No full scan is admitted if evidence storage is missing or a required artifact c
 - Scan readiness monitored separately through `/api/ready/scans`.
 - Use managed identity for image pulls; disable ACR admin credentials if ACR is temporarily retained.
 
-Accept an initial cold start for the invite-only beta. Move to minimum one replica only if measured user-facing cold starts are unacceptable.
+Accept an initial cold start for the open-registration beta. Move to minimum one replica only if measured user-facing cold starts are unacceptable.
 
 ### Worker
 
@@ -254,7 +254,7 @@ Reconsider RAG only if evaluation shows all of the following:
 
 1. Add a compact `Beta` badge next to the LyraShield AI brand in the shared header.
 2. Change the homepage eyebrow to `Production beta · Release assurance for AI-built apps`.
-3. Replace `Full platform in active development` with `Full platform available to invited beta users` only when authenticated beta access is actually deployed.
+3. Replace `Full platform in active development` with `Full platform open for registration` only when authenticated beta access is actually deployed.
 4. Keep the passive Lite Check boundary and no-account wording unchanged.
 5. Link sign-in only when `PUBLIC_APP_URL` points to the live authenticated origin.
 
@@ -444,12 +444,12 @@ Rollback:
 
 - Disable scan admission, retain audit/accounting evidence, and investigate without automatically replaying provider work.
 
-### Phase 7 — invite-only rollout
+### Phase 7 — open-registration rollout
 
 Actions:
 
-- Invite two internal/founder accounts first.
-- Expand to five users after 48 healthy hours.
+- Open registration to all users.
+- Monitor first two internal/founder accounts, then expand to five users after 48 healthy hours.
 - Expand to ten users after seven healthy days and a successful backup restore.
 - Review Upstash, Supabase, Azure, R2, email, and model meters daily during week one.
 
@@ -467,7 +467,7 @@ Exit criteria:
 | Source quality | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, formatting, `git diff --check`                    |
 | Database       | Prisma generation, migration diff, deploy to empty DB, deploy to production, restricted-role checks         |
 | Browser        | Marketing and dashboard at desktop, 390 px, and 320 px; keyboard, focus, reduced motion, empty/error states |
-| Auth           | Signup/invite, email verification, signin, signout, session expiry, cross-tenant denial                     |
+| Auth           | Signup/sign-in, email verification, signin, signout, session expiry, cross-tenant denial                  |
 | Queue          | Admission, one concurrency, heartbeat expiry/recovery, cancellation, failure callback, reconciliation       |
 | Storage        | Evidence upload/download/checksum, missing-storage failure, encrypted backup and isolated restore           |
 | Models         | Luna Safe and Terra/Luna Deep routes, reasoning level, token buckets, provider cost reconciliation          |
@@ -482,7 +482,7 @@ Exit criteria:
 - All P0/P1 gates pass.
 - Backup and restore are proven.
 - One Safe and one Deep production scan are reconciled.
-- The app is invite-only and one scan runs at a time.
+- The app has open registration and one scan runs at a time.
 - Free-tier projections retain headroom or cheap PAYG fallback is ready.
 - Known unavailable features remain disabled and truthfully described.
 

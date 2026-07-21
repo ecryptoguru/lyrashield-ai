@@ -520,7 +520,7 @@ lyrashield/
     web/          Next.js 16 product app and REST route handlers
     worker/       BullMQ scan worker, schedulers, scanners, engine runner
     agent/        Headless Agent Action Layer and approval-aware actions
-    marketing/    Astro 7 site on Cloudflare Workers with D1 waitlist
+    marketing/    Astro 7 site on Cloudflare Workers with D1 waitlist/referrals
   packages/
     auth/
     config/
@@ -5233,7 +5233,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
-- Merged PR #115 baseline: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, security diff gate, CodeRabbit, `git diff --check`, **881 core tests in 97 files**, **79 marketing tests in 12 files**, **16 motion tests**, and **2 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
+- Merged PR #115 baseline: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, security diff gate, CodeRabbit, `git diff --check`, **934 core tests in 105 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
 - Current product surface: **25 page route files** and **44 API route files** in `apps/web`.
 - Current data surface: **39 Prisma models**, **18 enums**, and **21 committed migrations**. Postgres RLS covers 20 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
@@ -5346,7 +5346,7 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 - The Astro landing page now describes a bounded release-assurance record rather than a generic scanner or a security guarantee. It preserves the control/coverage boundary: detected, independently verified, retest-confirmed, and inconclusive are separate outcome states.
 - `/methodology` presents the operating loop, evidence record, scanner coverage, and non-claims in one public reference. `/tools` remains a privacy-first acquisition surface: its five browser-local utilities never upload supplied files or pasted text and do not substitute for a scan.
-- The marketing claim suite prevents regressions to universal-verification, automatic-Fix-PR, offensive-scanning, or "provably gone" language. Current call-to-actions request a design-partner conversation; no pricing, customer, benchmark, production-coverage, or upstream-engine claims are published.
+- The marketing claim suite prevents regressions to universal-verification, automatic-Fix-PR, offensive-scanning, or "provably gone" language. Current call-to-actions route to open registration and product updates; no pricing, customer, benchmark, production-coverage, or upstream-engine claims are published.
 
 ### C1.12 Deep Review v4 remediation (2026-07-16, PR #79)
 
@@ -5404,10 +5404,10 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 1. **Complete:** `lyrashieldai.com` is the canonical HTTPS marketing domain; trademark clearance remains a founder/legal decision.
 2. **Complete:** production Cloudflare D1, Rate Limit, KV, and `WAITLIST_IP_SALT` bindings are provisioned; migrations `0001`–`0003` are applied remotely.
-3. **Complete:** Astro's generated Worker configuration is deployed to the apex and `www` custom domains with `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. Live waitlist checks, canonical/schema metadata, sitemap/robots/`llms.txt`, headers, internal links, desktop Brave rendering, and representative mobile Lighthouse checks pass.
+3. **Complete:** Astro's generated Worker configuration is deployed to the apex and `www` custom domains with `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. Live waitlist/referral checks, canonical/schema metadata, sitemap/robots/`llms.txt`, headers, internal links, desktop Brave rendering, and representative mobile Lighthouse checks pass.
 4. **Complete:** the active permanent `www`-to-apex redirect preserves path and query strings.
 5. **Complete for the public marketing and Lite Scanner surface:** homepage, methodology, sample report, resource hub, five browser-local tools, and `/scan` are indexable. The scanner uses a separate protected Azure origin, Turnstile, origin-scoped CORS, rate limits, Supabase, Upstash, and a monitored abuse route. `/terms` remains excluded from the sitemap and individually `noindex`.
-6. Validate the authenticated app origin separately: scorecard canonical/OG/Twitter metadata, all three image formats, script-free badge response, revoked/expired 404s, referral continuity, and human-event deduplication. Do not treat the live passive scanner as the full worker/engine pipeline or external-platform unfurl proof. Submit the sitemap in selected webmaster accounts once ownership access is available.
+6. **Complete for open registration:** the authenticated app origin `https://app.lyrashieldai.com` accepts email and configured OAuth sign-up, and marketing links to sign-up/sign-in. Separately validate scorecard canonical/OG/Twitter metadata, all three image formats, script-free badge response, revoked/expired 404s, referral continuity, and human-event deduplication. Do not treat the live passive scanner as the full worker/engine pipeline or external-platform unfurl proof. Submit the sitemap in selected webmaster accounts once ownership access is available.
 7. Publish only founder-approved posts and claims; no public pricing, unsupported metrics, exclusivity claims, or public naming of the upstream engine.
 8. The 100-article authority program is live through PR #88. Every future article batch requires the full content/image/link/completeness gate, Worker-backed crawl and browser QA, final local approval, a focused PR, green CI, guarded deployment, and live canonical/sitemap/RSS/tag/image/schema verification.
 

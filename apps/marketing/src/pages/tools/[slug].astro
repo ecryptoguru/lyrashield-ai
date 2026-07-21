@@ -29,7 +29,7 @@ const labelClass = "block text-sm font-medium text-text"
         </div>
         <div class="space-y-2.5">
           {LAUNCH_CHECKS.map((item, index) => (
-            <label class="flex cursor-pointer gap-3 rounded-lg border border-border p-3 text-sm text-text transition-colors hover:border-accent/60 has-[:checked]:border-accent has-[:checked]:bg-accent-dim/30">
+            <label class="flex cursor-pointer gap-3 rounded-lg border border-border p-3 text-sm text-text transition-colors hover:border-accent/60 has-checked:border-accent has-checked:bg-accent-dim/30">
               <input type="checkbox" name="check" value={index} class="mt-0.5 size-4 shrink-0 accent-accent" />
               <span>{item}</span>
             </label>

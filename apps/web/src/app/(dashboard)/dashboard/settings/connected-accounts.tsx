@@ -32,21 +32,20 @@ export function ConnectedAccounts() {
   const [connected, setConnected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState<ProviderId | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null
+    const callbackError = new URLSearchParams(window.location.search).get("error")
+    if (!callbackError) return null
+    return callbackError === "account_link_failed"
+      ? "Could not connect the account. Please try again."
+      : "Account linking could not be completed. Please try again."
+  })
 
   useEffect(() => {
     let active = true
-    const callbackError = new URLSearchParams(window.location.search).get("error")
-    let callbackErrorTimer: number | undefined
 
+    const callbackError = new URLSearchParams(window.location.search).get("error")
     if (callbackError) {
-      callbackErrorTimer = window.setTimeout(() => {
-        setError(
-          callbackError === "account_link_failed"
-            ? "Could not connect the account. Please try again."
-            : "Account linking could not be completed. Please try again."
-        )
-      }, 0)
       window.history.replaceState(null, "", "/dashboard/settings")
     }
 
@@ -76,7 +75,6 @@ export function ConnectedAccounts() {
 
     return () => {
       active = false
-      if (callbackErrorTimer !== undefined) window.clearTimeout(callbackErrorTimer)
     }
   }, [])
 

@@ -53,16 +53,16 @@ BETTER_AUTH_COOKIE_DOMAIN=".example.com" # only when app and marketing share a p
 ADDITIONAL_TRUSTED_ORIGINS="https://www.example.com"
 TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming copies
 
-# Email (required for email verification in production)
+# Email (required when LYRASHIELD_REQUIRE_EMAIL_VERIFICATION is set)
+LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"
 BREVO_API_KEY="..."
 EMAIL_FROM="noreply@example.com"
 
-# Optional OAuth sign-in. Register these exact production callback paths:
+# Optional OAuth sign-in/sign-up. Register these exact production callback paths:
 # https://<app-origin>/api/auth/callback/github
 # https://<app-origin>/api/auth/callback/google
 # https://<app-origin>/api/auth/callback/microsoft
-# The invite-only beta accepts OAuth only for existing invited, verified users;
-# missing or partial credentials leave the corresponding button disabled.
+# OAuth sign-up is open when the provider is configured and credentials are complete.
 GITHUB_CLIENT_ID="..."
 GITHUB_CLIENT_SECRET="..."
 GOOGLE_CLIENT_ID="..."
@@ -80,6 +80,7 @@ LYRASHIELD_IMAGE="ghcr.io/usestrix/strix-sandbox@sha256:<approved-digest>"
 LYRASHIELD_ENGINE_SANDBOX_NETWORK="lyrashield-sandbox"
 PLATFORM_MAX_SCAN_BUDGET_USD="50"
 LYRASHIELD_TELEMETRY="0"
+LYRASHIELD_WORKER_CONCURRENCY="1"
 
 # Azure OpenAI alternative (use these OR the generic LLM_API_KEY/LLM_API_BASE)
 # LYRASHIELD_LLM="azure/gpt-5.6-terra" # fallback
@@ -200,12 +201,12 @@ Monitor only coarse funnel stages: deduplicated scorecard view, share-button han
 - Production D1, Rate Limit, and KV bindings are provisioned; migrations `0001`–`0003` are applied remotely; `WAITLIST_IP_SALT` is stored as a Worker secret.
 - `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. The marketing, methodology, browser-local tools, and passive `/scan` surface are indexable. `/terms` remains page-scoped `noindex` and excluded from the sitemap.
 - Live HTTPS, security headers, canonical/schema metadata, sitemap/robots/`llms.txt`, waitlist behavior, representative Lighthouse/Brave rendering, the permanent path/query-preserving `www`-to-apex redirect, and a production browser Lite Check pass.
-- Production sets `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` together because the separately protected scanner API and monitored abuse workflow are live. Keep all three configured as one availability gate. `PUBLIC_APP_URL` remains independent, is intentionally unset, and controls only authenticated-app links.
+- Production sets `PUBLIC_SCANNER_URL`, `PUBLIC_TURNSTILE_SITE_KEY`, and `PUBLIC_ABUSE_EMAIL` together because the separately protected scanner API and monitored abuse workflow are live. Keep all three configured as one availability gate. `PUBLIC_APP_URL` is set to the authenticated app origin so marketing CTAs can link to open sign-up and sign-in.
 
 Before deploying the Cloudflare marketing Worker:
 
 1. Replace the D1 database ID and Rate Limit namespace placeholder in `apps/marketing/wrangler.jsonc`.
-2. Apply all D1 migrations in `apps/marketing/migrations/` (including `0003_waitlist_referrals.sql`, which adds the waitlist referral columns) with `wrangler d1 migrations apply` before serving traffic.
+2. Apply all D1 migrations in `apps/marketing/migrations/` (including `0003_waitlist_referrals.sql`, which adds the waitlist referral columns) with `wrangler d1 migrations apply` before serving traffic. The waitlist API remains available for the homepage referral flow if configured.
 3. Set `WAITLIST_IP_SALT` with `wrangler secret put`; do not retain the example value.
 4. Build with the intended public origins. `PUBLIC_INDEXABLE=true` is rejected unless `PUBLIC_SITE_URL` is public HTTPS.
 5. Deploy using Astro's generated configuration:

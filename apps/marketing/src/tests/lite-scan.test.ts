@@ -47,11 +47,11 @@ describe("Lite Check marketing surface", () => {
     expect(page).toContain('source: "lite_scanner"')
   })
 
-  it("routes invited users from a Lite result into the live authenticated beta", () => {
+  it("routes users from a Lite result into the live authenticated app", () => {
     expect(page).toContain("PUBLIC_APP_URL")
-    expect(page).toContain("Full loop · invite-only production beta")
-    expect(page).toContain("Sign in to the invited beta")
-    expect(page).toContain("href={`${dashboardOrigin}/sign-in`}")
+    expect(page).toContain("Full loop · open registration")
+    expect(page).toContain("Create free account")
+    expect(page).toContain("href={`${dashboardOrigin}/sign-up`}")
     expect(page).not.toContain("Want us to run it when it's live?")
   })
 

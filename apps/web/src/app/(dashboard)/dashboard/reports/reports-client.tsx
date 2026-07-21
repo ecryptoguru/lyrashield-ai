@@ -72,27 +72,9 @@ export function ReportsClient({
   }, [workspaceId])
 
   useEffect(() => {
-    let cancelled = false
-    apiGetPaginated<ReportItem>(`/api/reports`, { workspaceId })
-      .then((res) => {
-        if (cancelled) return
-        setReports(res.items)
-        setNextCursor(res.nextCursor)
-        setError(null)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setReports([])
-        setError("Failed to load reports. Please try again.")
-      })
-      .finally(() => {
-        if (cancelled) return
-        setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [workspaceId])
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, setState runs in promise callback
+    void loadReports()
+  }, [loadReports])
 
   const [showCreateForm, setShowCreateForm] = useState(Boolean(initialScanId))
   const [reportTitle, setReportTitle] = useState("")

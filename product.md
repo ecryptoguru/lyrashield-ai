@@ -57,7 +57,7 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 
 Implemented: core workspaces/targets/scans, existing GitHub integration refresh, scan orchestration, findings normalization, source-aware SCA/secret/agent-config handling, pinned deterministic URL scanning, fix proposals, queued retests, reports, notifications, schedules, MCP, single-use agent approvals, the GitHub diff gate, audit hash chaining, S3-compatible evidence upload with checksum-first retry deduplication, hardened prompt-injection detection, shared queue/Redis helpers, email verification, split marketing/app origin routing, LyraShield Score, cross-admin-idempotent public scorecards, referrals, premium social sharing, Azure AI / GPT 5.6 mode routing, and an evidence-backed marketing surface with a public methodology page plus five browser-local no-upload tools. Full-scan admission fails closed unless a live worker heartbeat exists; every enqueue path shares the same unavailable response, enqueue races fail the created scan with retained history, and conservative reconciliation never silently replays a paid scan. New scans retain a manifest, coverage receipts, candidate provenance, verification receipts, and private usage telemetry: detected, validated, and independently verified are separate states. Safe/Quick/Standard scans use Luna with medium reasoning; Deep/Custom use Terra/medium coordination with Luna/medium specialists. Protected run limits and versioned per-request GPT-5.6 accounting remain internal; the dashboard shows neither model costs nor spend. Engine findings are not self-verified.
 
-Live acquisition status: the passive Lite Scanner and browser-local tools are public, and privacy-bounded PostHog funnel/pageview analytics are configured for the canonical domain. The authenticated application and full BullMQ/engine worker are separate deployment surfaces and are not public production capabilities yet.
+Live status: the passive Lite Scanner, browser-local tools, and authenticated application with open registration are public. The authenticated app and full BullMQ/engine worker are a separate deployment surface; full repository scans require the worker pipeline and configured evidence storage.
 
 Not implemented: billing/plan quotas, provider-backed proof for a fresh GitHub installation claim, server-generated approval-bound PR patches, constrained intrusive sandbox exploit replay, a within-scan Luna-to-Terra validation cascade, prompt-cache orchestration, Security Copilot sidebar, visual security plan, and enterprise deployment/identity capabilities. Production full scans additionally require private evidence storage, BullMQ-compatible TLS Redis, dedicated sandbox-capable worker compute, the authenticated application origin, monitoring/recovery, and transport-level egress enforcement. See `PRD.md` for the authoritative roadmap.
 
@@ -72,9 +72,9 @@ Not implemented: billing/plan quotas, provider-backed proof for a fresh GitHub i
 
 URL/API targets skip the external engine. QUICK and CUSTOM remain backend/API modes rather than extra one-off dashboard choices; Sol remains an internal accounting model but is not assigned to a preset. Protected limits and provider reconciliation are operator concerns and are not displayed in the product UI. See `userguide.md` for the complete workflow and option reference.
 
-## Pre-launch GTM
+## Launch and growth
 
-- Start with a small number of design partners, prioritizing teams that can provide structured feedback.
+- Open registration is live at `app.lyrashieldai.com`; acquisition flows through the public Lite Check, browser-local tools, public scorecards, referrals, and technical content.
 - Use reports, fix proposals, retests, the public methodology, browser-local tools, and MCP read workflows as demonstrations; do not promise automatic PR creation or use unverified marketing claims.
 - Publish answer-first technical content for AI-built-app security only after founder approval.
 - Keep sample blog posts as drafts until their claims, sources, author, and launch timing are approved.
@@ -88,7 +88,7 @@ Initial themes: secure AI-generated code, security review before SaaS launch, de
 1. Trademark clearance for the confirmed `lyrashieldai.com` domain and LyraShield AI name.
 2. Whether the Lyra prefix remains the public brand.
 3. Pricing, usage metric, payment-provider scope, and free-tier policy.
-4. Design-partner target, launch timing, and build-in-public voice.
+4. Public-launch timing and build-in-public voice.
 5. Approved model/provider and first controlled scan.
 
 ## Document map

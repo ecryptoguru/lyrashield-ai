@@ -26,6 +26,11 @@ pnpm install --frozen-lockfile
 
 Set a real local `BETTER_AUTH_SECRET` in `.env`. When using Compose, set `REDIS_URL` to the password-protected local endpoint shown in `.env.example`.
 
+Optional auth/worker toggles in `.env`:
+
+- `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` — set to `1` to require verified email before sign-in. Requires `BREVO_API_KEY` and `EMAIL_FROM` to send verification and password-reset emails.
+- `LYRASHIELD_WORKER_CONCURRENCY` — BullMQ worker concurrency (default `1`).
+
 The web app expects `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_MARKETING_URL` (and optionally `PORT`) in `apps/web/.env`:
 
 ```bash
@@ -68,7 +73,7 @@ pnpm build
 git diff --check
 ```
 
-The merged PR #109 baseline passes 858 core tests in 94 files, 79 marketing tests in 12 files, 16 motion tests, and 2 Chromium E2E tests. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+Current `main` passes **934 core tests in 105 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Verify scorecards and social sharing
 
@@ -106,7 +111,7 @@ pnpm --filter @lyrashield/marketing preview -- --port 8787
 
 That preview is intentionally noindex. It should return 200 for `/`, `/robots.txt`, and `/sitemap-index.xml`, and 404 for `/llms.txt` before launch.
 
-Submit a disposable local waitlist address and verify the success state shows queue position plus Copy/LinkedIn/X/WhatsApp referral actions. Reopening `/?ref=<returned-code>` and submitting a second disposable address should increment the first code's referral count without changing the API's non-leaking success shape.
+Open the local app, sign up for a new account, and complete onboarding. Any email works. The waitlist endpoint remains available for the homepage referral flow if still configured.
 
 ## 5. Build the worker image and engine
 
@@ -224,4 +229,4 @@ docker compose down
 - If Prisma reports drift, run the migration checks; do not use `db:push` as a production repair.
 - If a database applied the first local draft of `20260713170000_scorecard_events`, its unique index may end in `dayBucket_`; current schema truth ends in `dayBuc_key`. Fresh databases are correct. For an old disposable local database, reset/redeploy migrations or rename only that index after confirming the exact drift—never edit an already-deployed production migration ad hoc.
 - If the worker cannot find `lyrashield`, confirm the sibling repository path or `LYRASHIELD_ENGINE_SOURCE` before rebuilding.
-- If the waitlist returns 500 locally, set a non-placeholder `WAITLIST_IP_SALT` in `apps/marketing/.dev.vars`.
+- If the homepage waitlist endpoint returns 500 locally, set a non-placeholder `WAITLIST_IP_SALT` in `apps/marketing/.dev.vars`.

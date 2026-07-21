@@ -27,7 +27,6 @@ const envSchema = z
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
-    LYRASHIELD_BETA_INVITE_EMAILS: z.string().optional().or(z.literal("")),
     S3_ENDPOINT: z.string().optional().or(z.literal("")),
     S3_ACCESS_KEY: z.string().optional().or(z.literal("")),
     S3_SECRET_KEY: z.string().optional().or(z.literal("")),

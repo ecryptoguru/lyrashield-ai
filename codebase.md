@@ -68,7 +68,7 @@ Public copy uses **LyraShield AI**. Internal package scopes (`@lyrashield/*`), e
 | Component variants      | class-variance-authority (cva)   | 0.7.x                                                |
 | Icons                   | lucide-react                     | 1.23.x                                               |
 | Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                      |
-| Testing                 | Vitest + Playwright              | 881 core + 79 marketing + 16 motion + 2 Chromium E2E |
+| Testing                 | Vitest + Playwright              | 934 core + 80 marketing + 16 motion + 4 Chromium E2E |
 | Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration |
 | Job queue               | BullMQ                           | 5.80.x                                               |
 | Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate      |
@@ -438,8 +438,8 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **881 core tests in 97 files**, **79 marketing tests in 12 files**, and **16 motion tests**, pass
-- `pnpm test:e2e`: **2 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
+- `pnpm test`: **934 core tests in 105 files**, **80 marketing tests in 12 files**, and **16 motion tests**, pass
+- `pnpm test:e2e`: **4 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `pnpm format:check`: pass
 - `pnpm audit --prod --audit-level high`: pass, no known production vulnerabilities
@@ -1016,7 +1016,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 
 ### 21.13 Dockerfile Cleanup
 
-- Removed 15 lines of unused worker/shared-package copies from the runner stage. The runner stage is for the web app only (`CMD ["node", "server.js"]`). The worker runs from the builder stage via docker-compose `target: builder` (workspace packages export TypeScript source, requiring `tsx` at runtime).
+- Removed 15 lines of unused worker/shared-package copies from the runner stage. The runner stage is for the web app only (`CMD ["node", "server.js"]`). The worker uses its own dedicated `worker` stage with a vendored TypeScript runner (`CMD ["./apps/worker/node_modules/.bin/tsx", "apps/worker/src/index.ts"]`); it does not invoke Corepack. Docker Compose builds the `migrate` service from the `workspace-builder` stage.
 
 ### 21.14 CSP Request Header Fix (`apps/web/src/proxy.ts`)
 
@@ -1764,17 +1764,17 @@ Focused remediation after a fresh full-repository review.
 
 ### Marketing app overview
 
-`apps/marketing` is the Astro 7 public site for LyraShield AI. It is built with the `@astrojs/cloudflare` adapter and deployed to Cloudflare Workers. It is separate from the Next.js platform (`apps/web`) and includes its own D1 waitlist database, Cloudflare Rate Limits binding, and PostHog analytics.
+`apps/marketing` is the Astro 7 public site for LyraShield AI. It is built with the `@astrojs/cloudflare` adapter and deployed to Cloudflare Workers. It is separate from the Next.js platform (`apps/web`) and includes its own D1 waitlist/referrals database, Cloudflare Rate Limits binding, and PostHog analytics.
 
 ### Stack
 
 - **Framework:** Astro 7 + `@astrojs/cloudflare` (output: `server` / adapter: `cloudflare`)
 - **Runtime:** Cloudflare Workers with `workerd` (nodejs_compat enabled)
 - **Database:** Cloudflare D1 (`DB` binding), with `0001_waitlist.sql` and `0002_rate_limit_fallback.sql`
-- **Rate limiting:** Cloudflare Rate Limits (`WAITLIST_RL` binding) for the waitlist API
+- **Rate limiting:** Cloudflare Rate Limits (`WAITLIST_RL` binding) for the waitlist/referral API
 - **Styling:** TailwindCSS v4 CSS-first configuration in `src/styles/global.css`
 - **Analytics:** `posthog-js` client-side capture
-- **Validation:** Zod v4 for waitlist input; `astro:env/server` for `getSecret("WAITLIST_IP_SALT")`
+- **Validation:** Zod v4 for waitlist/referral input; `astro:env/server` for `getSecret("WAITLIST_IP_SALT")`
 - **Type generation:** `wrangler types` runs in `predev`/`prebuild`/`prepreview`/`pretypecheck` scripts
 
 ### Waitlist API (`src/pages/api/waitlist.ts`)
@@ -2008,7 +2008,7 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 
 ## §44 — Production Lite Scanner launch (2026-07-16, PR #76)
 
-- Marketing now treats `PUBLIC_SCANNER_URL` as a separate origin from `PUBLIC_APP_URL`. The former enables only the passive Lite Scanner; the latter remains unset until the authenticated dashboard is intentionally launched. Indexable builds require the scanner origin, Turnstile site key, and monitored abuse address together, and `/scan` enters the sitemap only when that gate is complete.
+- Marketing now treats `PUBLIC_SCANNER_URL` as a separate origin from `PUBLIC_APP_URL`. The former enables only the passive Lite Scanner; the latter is now set to `https://app.lyrashieldai.com` to enable open-registration sign-up and sign-in links. Indexable builds require the scanner origin, Turnstile site key, and monitored abuse address together, and `/scan` enters the sitemap only when that gate is complete.
 - `https://scanner.lyrashieldai.com` runs the Next.js API on Azure Container Apps with managed TLS, scale-to-zero consumption capacity, a Basic Azure Container Registry, Supabase Postgres with all 18 Prisma migrations, Upstash Redis/REST rate limiting, and Cloudflare Turnstile. Cloudflare DNS keeps the Azure validation CNAME DNS-only, and Cloudflare Email Routing forwards `abuse@lyrashieldai.com` to a verified monitored destination.
 - Production checks returned healthy database and Redis readiness, correct origin-scoped CORS, and a fail-closed `bot_check_failed` response without Turnstile. Brave completed Turnstile and a real passive scan of `https://lyrashieldai.com`; the rendered result reported five outside-only surface checks as looking OK with explicit non-guarantee language. All five browser-local tools returned 200, the waitlist validation boundary returned 400 for invalid input, and the honeypot returned the normal success shape without inserting a D1 row.
 - PR #76 merged as `6e0a225`; main CI run `29464836490` passed lint, formatting, typecheck, 822 Vitest tests in 86 files, two Chromium E2E tests, build, migration drift/application, SCA, secret scanning, Cloudflare deployment, and production smoke checks. This launch does not expose the full BullMQ worker/external-engine scan pipeline. At that checkpoint Deep Review worker correctness remained open; PR #79 later closed the code defects while production worker infrastructure and controlled-scan proof remained separate gates.
@@ -2026,7 +2026,7 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 
 ## §46 — Homepage Lite Check funnel and marketing navigation cleanup (2026-07-16, PR #84)
 
-- `apps/marketing/src/components/landing/HomeLiteScan.astro` places the live passive Lite Check immediately below the homepage hero. The primary hero, header, and footer actions route to the form; design-partner access remains the secondary product action.
+- `apps/marketing/src/components/landing/HomeLiteScan.astro` places the live passive Lite Check immediately below the homepage hero. The primary hero, header, and footer actions route to the form; product-updates signup remains the secondary product action.
 - The form keeps the scanner trust boundary intact: `PUBLIC_SCANNER_URL` still controls availability, authorization and Terms acceptance are required, embedded-credential URLs fail inline, and the target crosses to `/scan?start=1` through session storage rather than appearing in query parameters. The existing `/scan` route remains the only Turnstile/API/results implementation and auto-starts only after a token is available.
 - Visible breadcrumb navigation is removed from the scanner, methodology, tools hub and detail layouts, resources, article layout, sample report, and Terms. Their existing `BreadcrumbList` JSON-LD remains unchanged, and a regression test locks the metadata-only presentation.
 - Desktop 1440×1000 and mobile 390×844 browser QA covered hero-to-form scroll, native validation, authorization, responsive layout, target handoff, scan-page prefill, and the absence of visible breadcrumbs. The final branch gate passed the production dependency audit, Prisma generation, lint, formatting, typecheck, 841 Vitest tests in 90 files, every production build, two Chromium E2E flows, and `git diff --check`.

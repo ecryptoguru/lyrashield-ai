@@ -96,7 +96,7 @@ function isTrustedOrigin(request: Request, siteOrigin: string): boolean {
 
 function htmlResponse(status: number, body: string): Response {
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LyraShield AI — Waitlist</title></head><body style="background:#0a0c0e;color:#e6e9ec;font-family:system-ui,sans-serif;max-width:600px;margin:3rem auto;padding:0 1rem;line-height:1.6">${body}<p style="margin-top:2rem"><a href="/" style="color:#2dd4a7">Back to home</a></p></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LyraShield AI — Product updates</title></head><body style="background:#0a0c0e;color:#e6e9ec;font-family:system-ui,sans-serif;max-width:600px;margin:3rem auto;padding:0 1rem;line-height:1.6">${body}<p style="margin-top:2rem"><a href="/" style="color:#2dd4a7">Back to home</a></p></body></html>`,
     {
       status,
       headers: { "Content-Type": "text/html; charset=utf-8" },
@@ -109,7 +109,10 @@ function successResponse(request: Request, referralCode: string): Response {
   // A referralCode is ALWAYS present: real for inserts, the existing row's code for
   // duplicates, and a decoy for honeypots, so the response is indistinguishable.
   if (acceptsHtml(request)) {
-    return htmlResponse(201, "<p>You're on the list. One email when your invite is ready.</p>")
+    return htmlResponse(
+      201,
+      "<p>You're subscribed. We'll email product updates and new feature announcements.</p>"
+    )
   }
   return new Response(JSON.stringify({ success: true, referralCode }), {
     status: 201,

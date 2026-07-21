@@ -102,44 +102,32 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadReport = useCallback(() => {
-    setLoading(true)
-    apiGet<LaunchReadinessReport>(
-      `/api/launch-readiness?workspaceId=${encodeURIComponent(workspaceId)}`
-    )
-      .then((data) => {
-        setReport(data)
-        setError(null)
-      })
-      .catch(() => {
-        setError("Failed to load launch readiness report. Please try again.")
-        setReport(null)
-      })
-      .finally(() => setLoading(false))
-  }, [workspaceId])
+  const loadReport = useCallback(
+    (signal?: AbortSignal) => {
+      setLoading(true)
+      apiGet<LaunchReadinessReport>(
+        `/api/launch-readiness?workspaceId=${encodeURIComponent(workspaceId)}`,
+        signal ? { signal } : undefined
+      )
+        .then((data) => {
+          setReport(data)
+          setError(null)
+        })
+        .catch(() => {
+          setError("Failed to load launch readiness report. Please try again.")
+          setReport(null)
+        })
+        .finally(() => setLoading(false))
+    },
+    [workspaceId]
+  )
 
   useEffect(() => {
-    let cancelled = false
-    apiGet<LaunchReadinessReport>(
-      `/api/launch-readiness?workspaceId=${encodeURIComponent(workspaceId)}`
-    )
-      .then((data) => {
-        if (cancelled) return
-        setReport(data)
-        setError(null)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setError("Failed to load launch readiness report. Please try again.")
-        setReport(null)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [workspaceId])
+    const controller = new AbortController()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, setState runs in promise callback
+    loadReport(controller.signal)
+    return () => controller.abort()
+  }, [loadReport])
 
   if (loading) {
     return (
@@ -157,7 +145,7 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
         title="Could not load report"
         description={error}
         action={
-          <Button variant="outline" size="sm" onClick={loadReport}>
+          <Button variant="outline" size="sm" onClick={() => loadReport()}>
             Try again
           </Button>
         }

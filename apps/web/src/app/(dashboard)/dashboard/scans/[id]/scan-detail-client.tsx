@@ -247,6 +247,7 @@ export function ScanDetailClient({
         ) {
           refreshedFindings = []
           let cursor: string | undefined
+          let pages = 0
           do {
             const page = await apiGetPaginated<FindingItem>(
               "/api/findings",
@@ -255,7 +256,8 @@ export function ScanDetailClient({
             )
             refreshedFindings.push(...page.items)
             cursor = page.nextCursor ?? undefined
-          } while (cursor && !signal.aborted)
+            pages++
+          } while (cursor && !signal.aborted && pages < 50)
         }
         if (!signal.aborted) {
           // Commit the terminal status and its finding list together. If the
@@ -505,10 +507,7 @@ export function ScanDetailClient({
           className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4"
         >
           <div className="flex items-start gap-3">
-            <ShieldAlert
-              className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300"
-              aria-hidden="true"
-            />
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
             <div className="min-w-0">
               <h2 id="coverage-warning-heading" className="font-semibold">
                 Some scanner coverage was limited
@@ -665,7 +664,7 @@ export function ScanDetailClient({
                   Review all 50 control receipts
                   <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
                 </summary>
-                <div className="border-t">
+                <div className="divide-y border-t">
                   {controlCoverage.map((receipt) => {
                     const rank =
                       typeof receipt.metadata?.rank === "number" ? receipt.metadata.rank : null
@@ -688,7 +687,7 @@ export function ScanDetailClient({
                     return (
                       <div
                         key={receipt.controlId}
-                        className="grid gap-2 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                        className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                       >
                         <div className="min-w-0">
                           <p className="text-sm font-medium">
@@ -756,9 +755,7 @@ export function ScanDetailClient({
                           <Badge variant="muted">{finding.severity}</Badge>
                           {finding.cwe && <span>CWE: {finding.cwe}</span>}
                           {finding.cvssScore !== null && <span>CVSS: {finding.cvssScore}</span>}
-                          {finding.verified && (
-                            <span className="text-emerald-600 dark:text-emerald-400">Verified</span>
-                          )}
+                          {finding.verified && <span className="text-emerald-600">Verified</span>}
                           {!finding.verified && (
                             <span>{finding.verificationStatus.replaceAll("_", " ")}</span>
                           )}
@@ -833,12 +830,9 @@ export function ScanDetailClient({
             />
           ) : (
             <Card className="p-4">
-              <div className="space-y-2">
+              <div className="divide-border space-y-0 divide-y">
                 {visibleEvents.map((event, idx) => (
-                  <div
-                    key={event.id}
-                    className="flex items-start gap-3 border-b pb-2 text-sm last:border-0 last:pb-0"
-                  >
+                  <div key={event.id} className="flex items-start gap-3 py-2 text-sm">
                     <span className="text-muted-foreground shrink-0 text-xs">
                       {formatTime(event.createdAt)}
                     </span>

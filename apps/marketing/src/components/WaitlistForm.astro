@@ -69,16 +69,16 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
       class="w-full rounded-lg bg-accent px-5 py-3 text-sm font-medium text-bg hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
       data-cta-id="final"
     >
-      Request early access
+      Get product updates
     </button>
   </div>
 
   <p class="mt-4 text-center text-xs text-text-muted">
-    We store your email to send exactly one invite notification. No sharing, no marketing blasts.
+    We store your email for product updates and scorecard notifications. No sharing, no marketing blasts.
   </p>
 
   <div id="waitlist-status" class="mt-4 hidden text-center" aria-live="polite" role="status" tabindex="-1">
-    <p class="font-medium text-accent">You're on the early-access list. One email when your invite is ready.</p>
+    <p class="font-medium text-accent">You're subscribed. We'll email product updates and new feature announcements.</p>
     <p class="mt-1 text-sm text-text-muted">
       Building in public
       {xUrl ? (
@@ -89,7 +89,7 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
     </p>
     <p id="waitlist-position" class="mt-3 hidden text-sm font-medium text-text"></p>
     <p id="waitlist-referral" class="mt-2 hidden text-sm text-text-muted">
-      Move up when a friend joins from your link.
+      Share LyraShield with others.
     </p>
     <div id="waitlist-share-actions" class="mt-4 hidden flex-wrap justify-center gap-2" aria-label="Share your referral link">
       <button type="button" data-waitlist-share="copy" class="min-h-11 rounded-lg border border-border px-3 text-xs font-medium text-text hover:border-accent">Copy link</button>
@@ -134,7 +134,7 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
     const statusEl = document.getElementById("waitlist-status")
     const submitButton = form.querySelector('button[type="submit"]') as HTMLButtonElement
     const formFields = document.getElementById("form-fields")
-    const originalButtonText = submitButton?.textContent?.trim() || "Request early access"
+    const originalButtonText = submitButton?.textContent?.trim() || "Get product updates"
     let formStarted = false
     let waitlistShareLink = ""
 
@@ -142,7 +142,7 @@ const xUrl = (import.meta.env.PUBLIC_X_URL as string | undefined) || ""
       button.addEventListener("click", async () => {
         if (!waitlistShareLink) return
         const channel = button.dataset.waitlistShare || "copy"
-        const text = `I'm joining LyraShield AI early access to check AI-built apps before launch. ${waitlistShareLink}`
+        const text = `I'm using LyraShield AI to check AI-built apps before launch. ${waitlistShareLink}`
         if (channel === "copy") {
           try {
             await navigator.clipboard.writeText(waitlistShareLink)
