@@ -1,6 +1,6 @@
-> **CURRENT SOURCE OF TRUTH — 2026-07-18:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
+> **CURRENT SOURCE OF TRUTH — 2026-07-21:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
-> The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, the Vitest suite, and the Playwright suite (current counts: see C0). Core auth (with email verification), tenancy, targets, scanning, findings, fix proposals, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, the GitHub diff gate, and the LyraShield Score / public scorecard / referral / social-distribution layer are implemented. Fresh GitHub installation claims and Fix PR execution remain fail-closed until their provider-ownership and server-generated-patch security proofs exist. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, real-domain sharing validation, and marketing gates.
+> The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, the Vitest suite, and the Playwright suite (current counts: see C0). The auth stack supports password + social providers; email verification and password reset are optional and disabled by default in this hackathon beta until a transactional provider is configured. Tenancy, targets, scanning, findings, fix proposals, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, the GitHub diff gate, and the LyraShield Score / public scorecard / referral / social-distribution layer are implemented. Fresh GitHub installation claims and Fix PR execution remain fail-closed until their provider-ownership and server-generated-patch security proofs exist. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, real-domain sharing validation, and marketing gates.
 
 ---
 
@@ -5226,7 +5226,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 
 # PART C — Current Implementation and Release Readiness
 
-> **Status date:** 2026-07-18. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
+> **Status date:** 2026-07-21. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
 
 ## C0. Verified repository baseline
 
@@ -5234,7 +5234,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
 - Current PR #143 release gate: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, security diff gate, `git diff --check`, **933 core tests in 105 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 passing Playwright Chromium tests against a `NOBYPASSRLS` runtime role**. Historical checkpoint counts below remain dated evidence, not the current release gate.
-- Current product surface: **25 page route files** and **44 API route files** in `apps/web`.
+- Current product surface: **25 page route files** and **43 API route files** in `apps/web`.
 - Current data surface: **39 Prisma models**, **18 enums**, and **23 committed migrations**. Postgres strictly enforces and forces RLS on 21 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
 - Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
@@ -5249,7 +5249,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 
 ### C1.1 Identity, tenancy, and access
 
-- Better Auth email/password, GitHub OAuth, optional Google OAuth, and email verification.
+- Better Auth email/password, GitHub OAuth, optional Google OAuth, and optional email verification for providers that support it.
 - Workspace creation, active-workspace persistence in an HttpOnly cookie, membership, invitations, and role management.
 - Permission checks on protected operations, tenant-scoped queries, AsyncLocalStorage workspace context, and Postgres RLS defense in depth.
 - Signed short-lived agent service tokens, secret/PII-redacting structured logs, rate limits, audit events, and audit hash chaining. The `ApiKey` model is schema foundation; a user-facing API-key lifecycle is not yet shipped.

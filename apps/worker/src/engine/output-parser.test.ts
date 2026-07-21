@@ -46,9 +46,23 @@ describe("output-parser", () => {
     })
 
     it("retains only bounded Vibe Security control identifiers", () => {
-      const raw = JSON.stringify([{ ...SAMPLE_VULN, control_ids: [11, 11, 0, 51, 14, "3"] }])
+      const raw = JSON.stringify([
+        { ...SAMPLE_VULN, control_ids: [11, 11, 0, 51, 14, "3", "x", "05", " 10"] },
+      ])
 
-      expect(parseVulnerabilitiesJson(raw)[0]?.control_ids).toEqual([11, 14])
+      expect(parseVulnerabilitiesJson(raw)[0]?.control_ids).toEqual([11, 14, 3, 5, 10])
+    })
+
+    it("parses control identifiers from a string list", () => {
+      const raw = JSON.stringify([{ ...SAMPLE_VULN, control_ids: "11, 14; 27" }])
+
+      expect(parseVulnerabilitiesJson(raw)[0]?.control_ids).toEqual([11, 14, 27])
+    })
+
+    it("parses control identifiers from a JSON array string", () => {
+      const raw = JSON.stringify([{ ...SAMPLE_VULN, control_ids: "[11, \"14\", 0, \"x\", [3, 4]]" }])
+
+      expect(parseVulnerabilitiesJson(raw)[0]?.control_ids).toEqual([11, 14, 3, 4])
     })
 
     it("retains bounded evidence and dependency context", () => {

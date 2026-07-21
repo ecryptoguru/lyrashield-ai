@@ -90,6 +90,7 @@ const MAX_DB_INTEGER = 2_147_483_647
 const MAX_DB_DECIMAL_12_6 = 1_000_000
 const MAX_LLM_USAGE_REQUESTS = 10_000
 const GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
+const CONTROL_ID_TOKEN_PATTERN = /^-?\d+$/
 
 function boundedString(value: unknown): string | undefined {
   return typeof value === "string" && value.length <= MAX_TEXT_FIELD_LENGTH ? value : undefined
@@ -142,16 +143,70 @@ function validateCodeLocations(value: unknown): EngineVulnerability["code_locati
   return locations
 }
 
+function parseControlIdTokens(value: string): number[] {
+  const trimmed = value.trim()
+  if (!trimmed) return []
+
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      return parseControlIds(parsed)
+    } catch (err) {
+      logger.warn("Engine output: invalid control_id JSON string", {
+        value: trimmed.slice(0, 80),
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return []
+    }
+  }
+
+  if (!CONTROL_ID_TOKEN_PATTERN.test(trimmed)) return []
+  const parsed = Number.parseInt(trimmed, 10)
+  return Number.isInteger(parsed) ? [parsed] : []
+}
+
+function parseControlIds(value: unknown, depth = 0): number[] {
+  if (depth > 1) return []
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        return parseControlIds(JSON.parse(trimmed), depth)
+      } catch {
+        return []
+      }
+    }
+    if (trimmed.includes(",") || trimmed.includes(";")) {
+      return value
+        .split(/[,;]/)
+        .flatMap((token) => parseControlIds(token, depth + 1))
+    }
+    return parseControlIdTokens(value)
+  }
+  if (!Array.isArray(value)) return []
+  if (value.length > MAX_CONTROL_IDS) return []
+
+  return value.flatMap((candidate) => {
+    if (typeof candidate === "string") {
+      const tokenized = parseControlIds(candidate, depth + 1)
+      if (tokenized.length > 0) {
+        return tokenized
+      }
+      return []
+    }
+    if (typeof candidate === "number" && Number.isInteger(candidate)) {
+      return [candidate]
+    }
+    return parseControlIds(candidate, depth + 1)
+  })
+}
+
 function validateControlIds(value: unknown): number[] | undefined {
-  if (!Array.isArray(value) || value.length > MAX_CONTROL_IDS) return undefined
+  const normalizedIds = parseControlIds(value)
   const controlIds = [
     ...new Set(
-      value.filter(
-        (candidate): candidate is number =>
-          typeof candidate === "number" &&
-          Number.isInteger(candidate) &&
-          candidate >= 1 &&
-          candidate <= 50
+      normalizedIds.filter(
+        (candidate) => candidate >= 1 && candidate <= 50
       )
     ),
   ]

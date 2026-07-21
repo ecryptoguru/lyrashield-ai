@@ -34,7 +34,7 @@
 
    Show the repository-backed architecture card, the exact Luna/Terra routing excerpt from `apps/worker/src/engine/runner.ts`, and the current-revision verification card with the Codex task ID and passing test counts.
 
-   > Public URL checks stay deterministic while repository reviews use the controlled GPT-5.6 runtime. The worker routes focused work to Luna and deep coordination to Terra. During Build Week, GPT-5.6-powered Codex sessions traced cross-package flows, implemented evidence boundaries, diagnosed failures, reviewed the real UX, and hardened the release path. On this revision, 908 core, 79 marketing, 16 motion, and 3 Chromium end-to-end tests pass.
+   > Public URL checks stay deterministic while repository reviews use the controlled GPT-5.6 runtime. The worker routes focused work to Luna and deep coordination to Terra. During Build Week, GPT-5.6-powered Codex sessions traced cross-package flows, implemented evidence boundaries, diagnosed failures, reviewed the real UX, and hardened the release path. On the current verified revision, 933 core tests, 80 marketing tests, 16 motion tests, and 4 Chromium end-to-end tests pass.
 
 6. **2:10–2:19 — close**
 

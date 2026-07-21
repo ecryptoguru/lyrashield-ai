@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current release baseline — 2026-07-21:** 4 apps, 10 shared packages (including `packages/score`), 25 web page files, 44 API route files, 39 Prisma models, 18 enums, 23 migrations, and 21 strictly RLS-protected workspace tables. PRs #139–#143 pass lint, typecheck, restricted-role E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, and diff checks (933 core tests in 105 files, 80 marketing tests in 12 files, 16 motion tests, and 4 Playwright Chromium tests). Sections 17–54 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current release baseline — 2026-07-21:** 4 apps, 10 shared packages (including `packages/score`), 25 web page files, 43 API route files, 39 Prisma models, 18 enums, 23 migrations, and 21 strictly RLS-protected workspace tables. PRs #139–#143 pass lint, typecheck, restricted-role E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, and diff checks (933 core tests in 105 files, 80 marketing tests in 12 files, 16 motion tests, and 4 Playwright Chromium tests). Sections 17–54 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -1467,7 +1467,7 @@ Full-stack Docker deployment tested and verified:
 - **7 Prisma migrations** applied successfully (including `agent_approval_layer`), 30 tables created, 18 RLS-enabled
 - **All 12 dashboard pages** return 200 (authenticated): dashboard, projects, targets, scans, findings, reports, notifications, schedules, team, settings, integrations, launch-readiness, fixes
 - **All 10 API endpoints** return `success: true`: projects, targets, scans, findings, reports, notifications, schedules, team, launch-readiness, fix-proposals
-- **Auth flow**: sign-up → email verification → sign-in → session cookies set correctly
+- **Auth flow**: sign-up → optional email verification (if enabled) → sign-in → session cookies set correctly
 - **Scan lifecycle**: QUEUED → PREFLIGHT → RUNNING → FAILED (expected — engine binary not mounted in Docker)
 - **Security headers verified**: CSP with per-request nonce, X-Frame-Options DENY, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
 - **781 tests pass inside container** (at time of Agent Action Layer; see §26.5 and §27 for later verifications)

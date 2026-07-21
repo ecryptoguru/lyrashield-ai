@@ -68,7 +68,7 @@ pnpm build
 git diff --check
 ```
 
-The merged PR #109 baseline passes 858 core tests in 94 files, 79 marketing tests in 12 files, 16 motion tests, and 2 Chromium E2E tests. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+The current local baseline is tracked in `PRD.md` Part C and `codebase.md` and currently reports **933 core tests in 105 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Chromium E2E tests** at a clean gate. Treat command output as the source of truth; historical PR #109 counts are retained for audit only. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Verify scorecards and social sharing
 

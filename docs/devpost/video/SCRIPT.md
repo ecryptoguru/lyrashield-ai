@@ -40,7 +40,7 @@ The architecture keeps public URL checks deterministic and repository reviews be
 
 ## 01:49–02:10 — Build Week proof
 
-During Build Week, GPT-5.6-powered Codex sessions traced cross-package flows, implemented the evidence boundaries, diagnosed failures, reviewed the real UX, and hardened the release path. On this revision, nine hundred eight core tests, seventy-nine marketing tests, sixteen motion tests, and three Chromium end-to-end tests pass.
+During Build Week, GPT-5.6-powered Codex sessions traced cross-package flows, implemented the evidence boundaries, diagnosed failures, reviewed the real UX, and hardened the release path. On this revision, nine hundred thirty-three core tests, eighty marketing tests, sixteen motion tests, and four Chromium end-to-end tests pass.
 
 ## 02:10–02:19 — Close
 

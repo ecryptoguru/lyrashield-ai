@@ -655,6 +655,11 @@ export function ScanDetailClient({
                 “No finding returned” means an applicable scanner completed without reporting this
                 issue. It is not an independent verification or a security guarantee.
               </p>
+              <p className="text-muted-foreground mt-2 text-xs">
+                “Inconclusive” is expected for many engine-led controls where the run completed but
+                no explicit control mapping was returned. It indicates a coverage gap by design, not
+                a failed scan.
+              </p>
               <details className="mt-4 rounded-md border">
                 <summary className="hover:bg-muted/50 flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
                   Review all 50 control receipts

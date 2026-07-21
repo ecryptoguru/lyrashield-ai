@@ -320,7 +320,7 @@ describe("processScanJob", () => {
     })
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({
-        maxBudgetUsd: 3.2,
+        maxBudgetUsd: 1.2,
         instruction: expect.stringContaining("vibe-security-50/1.0.0"),
       }),
       "scan-1",
@@ -445,8 +445,8 @@ describe("processScanJob", () => {
       where: { id: "scan-1" },
       data: {
         providerCostUsd: "3.500000",
-        billedCostUsd: "3.200000",
-        actualCostCents: 320,
+        billedCostUsd: "1.200000",
+        actualCostCents: 120,
         llmRequestCount: 1,
         llmInputTokens: 3_500_000,
         llmCachedInputTokens: 0,
@@ -458,13 +458,13 @@ describe("processScanJob", () => {
       data: {
         errorCategory: "BUDGET_EXCEEDED",
         errorMessage: "Protected run limit reached",
-        actualCostCents: 320,
+        actualCostCents: 120,
       },
     })
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
       errorCategory: "BUDGET_EXCEEDED",
       errorMessage: "Protected run limit reached",
-      actualCostCents: 320,
+      actualCostCents: 120,
     })
     expect(persistFindings).toHaveBeenCalled()
     expect(persistResultManifest).toHaveBeenCalled()
@@ -775,7 +775,9 @@ describe("processScanJob", () => {
   })
 
   it("maps scanner timeout errors to TIMEOUT", async () => {
-    vi.mocked(runScannerOrchestrator).mockRejectedValueOnce(new Error("Scanner phase timed out") as never)
+    vi.mocked(runScannerOrchestrator).mockRejectedValueOnce(
+      new Error("Scanner phase timed out") as never
+    )
 
     const result = await processScanJob(mockJob)
 
