@@ -256,6 +256,7 @@ function normalizeLlmUsage(value: unknown): Record<string, number> | undefined {
   const cachedInputTokens =
     usageInteger(inputTokenDetails?.cached_tokens) ??
     directInteger("cached_input_tokens") ??
+    sumRequestUsageDetail(record.request_usage_entries, "cached_tokens") ??
     findUsageMetric(record, new Set(["cached_input_tokens", "cached_tokens"]), usageInteger)
   const cacheWriteInputTokens =
     usageInteger(inputTokenDetails?.cache_write_tokens) ??
@@ -307,6 +308,23 @@ function detailInteger(value: unknown, key: string): number | undefined {
   if (Array.isArray(value)) return detailInteger(value[0], key)
   if (typeof value !== "object" || value === null) return undefined
   return usageInteger((value as Record<string, unknown>)[key])
+}
+
+function sumRequestUsageDetail(value: unknown, key: string): number | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_LLM_USAGE_REQUESTS) {
+    return undefined
+  }
+  let total = 0
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return undefined
+    const details = (entry as Record<string, unknown>).input_tokens_details
+    const amount = detailInteger(details, key)
+    if (amount === undefined) return undefined
+    const nextTotal = usageInteger(total + amount)
+    if (nextTotal === undefined) return undefined
+    total = nextTotal
+  }
+  return total
 }
 
 function boundedGpt56Model(value: unknown): string | undefined {

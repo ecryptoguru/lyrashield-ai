@@ -203,7 +203,7 @@ describe("command-builder", () => {
 
   describe("resolveScanBudgetUsd", () => {
     it.each([
-      ["SAFE", 1.2],
+      ["SAFE", 3.2],
       ["QUICK", 1.2],
       ["STANDARD", 3.2],
       ["DEEP", 15],
