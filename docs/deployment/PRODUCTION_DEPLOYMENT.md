@@ -19,7 +19,7 @@
 3. Redis is private/TLS-protected and reachable by both web and worker.
 4. All secrets are supplied through the platform's secret manager, never committed files.
 5. The worker runs as a dedicated non-root user with least-privilege filesystem and Docker access.
-6. The sandbox image is pinned to an inspected digest; mutable tags are not acceptable.
+6. The sandbox image is pinned to an inspected digest; mutable tags are not acceptable. The worker and each sandbox share a dedicated internal control-plane network that has no default external route.
 7. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
 8. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
 
@@ -30,7 +30,7 @@ The live Lite Scanner is a separate passive API and cannot be promoted into the 
 - migrated PostgreSQL for application and scan state;
 - a private/TLS `redis://` or `rediss://` service compatible with BullMQ and reachable by both web and worker—Upstash REST URL/token variables are for rate limiting and do not replace `REDIS_URL`;
 - a deployed authenticated Next.js application origin to create targets, authorize users, enqueue scans, and render retained results;
-- dedicated worker compute with Git, the `lyrashield` CLI, the inspected engine source, and controlled access to the digest-pinned sandbox runtime;
+- dedicated worker compute with Git, the `lyrashield` CLI, the inspected engine source, controlled access to the digest-pinned sandbox runtime, and a dedicated internal network shared only with scan sandboxes;
 - an authorized Luna/Terra/fallback model route and provider credentials;
 - private S3-compatible evidence storage configured through all five `S3_*` values;
 - secret management, TLS, monitoring, backup/restore, and deployment-level egress enforcement.
@@ -78,8 +78,6 @@ LLM_API_KEY="..."
 LYRASHIELD_ENGINE_PATH="lyrashield"
 LYRASHIELD_IMAGE="ghcr.io/usestrix/strix-sandbox@sha256:<approved-digest>"
 LYRASHIELD_ENGINE_SANDBOX_NETWORK="lyrashield-sandbox"
-LYRASHIELD_WORKER_CONCURRENCY="1" # beta: one active sandboxed scan
-LYRASHIELD_BETA_INVITE_EMAILS="founder@example.com,approved-beta@example.com"
 PLATFORM_MAX_SCAN_BUDGET_USD="50"
 LYRASHIELD_TELEMETRY="0"
 
@@ -116,8 +114,8 @@ The worker selects one profile before each engine subprocess:
 | Safe         | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $1.20 |
 | Quick        | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $1.20 |
 | Standard     | standard    | `LYRASHIELD_LUNA_LLM`  | medium    |       $3.20 |
-| Deep         | deep        | `LYRASHIELD_TERRA_LLM` | high      |      $15.00 |
-| Custom       | deep        | `LYRASHIELD_TERRA_LLM` | high      |      $15.00 |
+| Deep         | deep        | `LYRASHIELD_TERRA_LLM` | medium    |      $15.00 |
+| Custom       | deep        | `LYRASHIELD_TERRA_LLM` | medium    |      $15.00 |
 
 The worker permanently versions the official OpenAI GPT-5.6 rate card in `apps/worker/src/engine/gpt56-pricing.ts` (effective 2026-07-09; USD per 1 million tokens):
 
@@ -131,13 +129,13 @@ Source: OpenAI's official GPT-5.6 announcement and pricing, captured with its ef
 
 `LYRASHIELD_LLM` is mandatory as the backward-compatible fallback when a routed variable is absent or empty. Azure deployment names are operator-defined: if the Azure deployment is not literally named `gpt-5.6-luna` or `gpt-5.6-terra`, put the real deployment name after `azure/` or `azure_ai/`.
 
-A finite positive `Policy.maxBudgetUsd` overrides the default for that scan. Zero, negative, non-finite, missing, deleted, or cross-workspace policy values cannot remove the mode cap. The worker records `engine_start` with model/reasoning and retains accounting events privately. When the engine returns usage, the ledger retains provider telemetry, the official rate-card calculation when request buckets are complete, the calculation method, reconciliation status, request count, and normalized token counters. Ambiguous long-context aggregates remain unpriced. It never stores prompts or raw provider request payloads, and the dashboard renders no cost, spend, cap, or accounting-event value.
+A finite positive `Policy.maxBudgetUsd` overrides the default for that scan. Zero, negative, non-finite, missing, deleted, or cross-workspace policy values cannot remove the mode cap. The worker records `engine_start` with coordinator model/reasoning and retains accounting events privately. When the engine returns usage, the ledger retains provider telemetry, actual-model per-request buckets, the official rate-card calculation, calculation method, reconciliation status, request count, and normalized token counters. A numeric internal bill is written only when that rate-card amount is fully determined and agrees with provider-reported cost when one exists. Ambiguous long-context aggregates, missing billable dimensions, and mismatches remain unpriced and explicitly unreconciled; they do not turn a valid scan result into a fake failure. It never stores prompts or raw provider request payloads, and the dashboard renders no cost, spend, cap, or accounting-event value.
 
 These amounts are internal hard ceilings, not expected per-scan charges or user-facing prices. Engine-reported telemetry is retained for reconciliation even when it exceeds the approved ceiling; the capped internal ledger cannot be presented as the provider invoice. Reconcile it against the Azure meter during the controlled gate; Azure billing remains the final expenditure source.
 
 A durable scan event is recorded immediately before a repository scan enters the provider-billable engine phase. Preflight work remains retryable, while recovery after that boundary fails closed instead of replaying provider work; a failed billable invocation requires an explicit new scan or retest so the queue cannot silently duplicate model spend. Deterministic SCA, secret, URL, and agent-configuration findings use the Safe profile for targeted retests; engine-only findings retain their originating review depth.
 
-This is mode-level routing: a scan uses one model for its full engine invocation. It does not run Luna discovery followed by Terra validation inside the same scan.
+Safe/Quick/Standard are Luna-only. Deep/Custom use a deterministic two-tier invocation: Terra/medium is the root coordinator and Luna/medium handles child specialist work. The model cannot self-promote a child to Terra, and only the root can create or stop specialists.
 
 Engine PRs #6 and #7 are merged. The promoted engine compacts estimated input at 240k toward 180k, bounds direct dedupe input to 200 kB, limits output and agent concurrency, and reserves projected spend before each request. These controls do not replace provider-meter reconciliation or prove finding quality.
 
@@ -162,7 +160,7 @@ Then, in the target environment:
 2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. The scan-specific endpoint must become `503` within 30 seconds of stopping every worker and recover only after a BullMQ-ready worker registers its lease.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.
-5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with high reasoning and its cap is $15 or the selected positive policy override.
+5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with medium reasoning and its cap is $15 or the selected positive policy override.
 6. Capture audit evidence, confirm the sandbox image digest used, reconcile provider billing with the retained usage/rate-card ledger without treating it as an invoice, and verify evidence artifacts are retrievable from the configured S3-compatible endpoint. Any placeholder or failed upload blocks the gate.
 7. Exercise backup and restore on non-production data before claiming an RPO/RTO.
 8. Confirm URL targets use only the pinned deterministic URL scanner. Do not re-enable the external engine for URL targets until its transport is DNS-pinned and redirect-safe.

@@ -559,8 +559,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                 maxBudgetUsd,
               },
               scanId,
-              engineTimeoutMs,
-              isCancelledOrTimedOut
+              resolveEngineTimeoutMs(policy?.maxDurationMinutes),
+              async () => {
+                const current = await prisma.scan.findUnique({
+                  where: { id: scanId },
+                  select: { status: true },
+                })
+                return current?.status === "CANCELLED"
+              }
             )
           : {
               exitCode: 0,

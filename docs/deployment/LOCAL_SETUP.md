@@ -118,7 +118,7 @@ docker compose exec worker lyrashield --version
 curl -fsS http://localhost:3000/api/ready/scans
 ```
 
-The worker image consumes the sibling engine source through its named Docker build context. It exits before sandbox setup if the resolved model or selected provider credential is missing.
+The worker image consumes the sibling engine source through its named Docker build context. Compose also creates the internal `lyrashield-sandbox` network shared by the worker and its dynamically created scan sandboxes. This network is required for the worker-to-Caido control plane and has no default external route. The worker exits before accepting scans if the resolved model, selected provider credential, or sandbox network name is missing.
 
 The web app accepts a scan only while a worker heartbeat is live. Workers refresh their Redis lease every 10 seconds; the lease expires after 30 seconds following a crash or lost Redis connection. `/api/ready/scans` returns `503` while no worker is available, and the UI asks the user to retry instead of leaving a scan permanently queued.
 
@@ -135,7 +135,7 @@ curl -fsS http://localhost:3000/api/ready/scans # ready after registration
 
 Use the dashboard/API cancellation action for queued or running scans. Never remove a Redis job directly: cancellation owns the database transition and event, active phases observe it, and reconciliation removes a remaining non-active job.
 
-The base `LYRASHIELD_LLM` is the fallback. During worker scans, Safe/Quick/Standard use `LYRASHIELD_LUNA_LLM` at medium reasoning; Deep/Custom use `LYRASHIELD_TERRA_LLM` at high. The values after `azure/` or `azure_ai/` must be the real Azure deployment names.
+The base `LYRASHIELD_LLM` is the fallback. During worker scans, Safe/Quick/Standard use `LYRASHIELD_LUNA_LLM` at medium reasoning. Deep/Custom use `LYRASHIELD_TERRA_LLM` at medium for the coordinator and `LYRASHIELD_LUNA_LLM` at medium for focused child specialists. The values after `azure/` or `azure_ai/` must be the real Azure deployment names.
 
 For Azure OpenAI, use the `azure/` prefix and endpoint or the Azure-specific variables:
 
@@ -186,11 +186,11 @@ docker compose exec worker sh -lc \
 After an authorized scan, inspect its timeline and confirm:
 
 - Safe/Quick/Standard: `engine_start` reports Luna and `medium`; `budget_cap` reports $1.20/$3.20 unless policy-overridden.
-- Deep/Custom: `engine_start` reports Terra and `high`; `budget_cap` reports $15 unless policy-overridden.
+- Deep/Custom: `engine_start` reports the Terra/medium coordinator; the run artifact records Luna/medium delegates and the versioned routing policy; `budget_cap` reports $15 unless policy-overridden.
 - `llm_usage` is present when the provider returned usage data.
 - When request entries are complete, `llm_usage` records `pricingMethod: per_request_buckets` and separates standard/long-context input, cached reads, cache writes, and output. Aggregate-only input above 272,000 tokens remains unavailable instead of being guessed.
 
-One scan uses one selected model. A Luna-to-Terra cascade inside one scan is not implemented.
+Deep/Custom use deterministic tiering rather than model-selected promotion: Terra coordinates and judges cross-file evidence, while Luna executes focused specialist tasks. Only the root can create or stop specialists, preventing recursive child fan-out. Safe/Quick/Standard remain Luna-only.
 
 Engine PRs #6 and #7 are merged. Current engine behavior compacts estimated input at 240,000 tokens toward about 180,000 tokens, bounds direct dedupe input to 200 kB, limits output/agent concurrency, and reserves projected spend before each request. These are code/build guarantees; they do not prove result quality or replace provider-meter reconciliation.
 

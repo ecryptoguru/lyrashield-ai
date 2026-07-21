@@ -16,25 +16,18 @@ export interface EngineRunResult {
   sourceCheckoutPath: string | null
 }
 
-const DEFAULT_ENGINE_TIMEOUT_MS = 20 * 60 * 1000
-const DEFAULT_DEEP_ENGINE_TIMEOUT_MS = 20 * 60 * 1000
-const MAX_ENGINE_TIMEOUT_MS = 20 * 60 * 1000
+const DEFAULT_ENGINE_TIMEOUT_MS = 30 * 60 * 1000
+const MAX_ENGINE_TIMEOUT_MS = 24 * 60 * 60 * 1000
 
-export function resolveEngineTimeoutMs(mode: string, maxDurationMinutes?: number | null): number {
+export function resolveEngineTimeoutMs(maxDurationMinutes?: number | null): number {
   if (
     typeof maxDurationMinutes !== "number" ||
     !Number.isFinite(maxDurationMinutes) ||
     maxDurationMinutes <= 0
   ) {
-    return mode === "DEEP" || mode === "CUSTOM"
-      ? DEFAULT_DEEP_ENGINE_TIMEOUT_MS
-      : DEFAULT_ENGINE_TIMEOUT_MS
+    return DEFAULT_ENGINE_TIMEOUT_MS
   }
-  const maxDurationMs = Math.floor(maxDurationMinutes * 60 * 1000)
-  if (mode === "DEEP" || mode === "CUSTOM") {
-    return Math.min(maxDurationMs, DEFAULT_DEEP_ENGINE_TIMEOUT_MS)
-  }
-  return Math.min(maxDurationMs, MAX_ENGINE_TIMEOUT_MS)
+  return Math.min(Math.floor(maxDurationMinutes * 60 * 1000), MAX_ENGINE_TIMEOUT_MS)
 }
 
 const EXIT_CODE_MAP: Record<
