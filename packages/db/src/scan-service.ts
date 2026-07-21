@@ -185,19 +185,33 @@ export async function getScanWithEvents(
   scanId: string,
   workspaceId: string
 ): Promise<ScanWithEvents | null> {
-  const scan = await prisma.scan.findFirst({
-    where: { id: scanId, workspaceId, deletedAt: null },
-    include: {
-      events: {
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 200,
-      },
-      resultManifest: true,
-      coverageReceipts: { orderBy: { controlId: "asc" } },
-    },
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const scan = await tx.scan.findFirst({
+      where: { id: scanId, workspaceId, deletedAt: null },
+    })
+    if (!scan) return null
+
+    // Keep relation reads sequential on the transaction connection. Prisma's
+    // relation include planner can issue concurrent pg queries; pg 8 warns and
+    // pg 9 will reject that usage on a single interactive transaction client.
+    const events = await tx.scanEvent.findMany({
+      where: { scanId, deletedAt: null },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 200,
+    })
+    const resultManifest = await tx.scanResultManifest.findUnique({ where: { scanId } })
+    const coverageReceipts = await tx.scanCoverageReceipt.findMany({
+      where: { scanId },
+      orderBy: { controlId: "asc" },
+    })
+
+    return {
+      ...scan,
+      events: events.reverse(),
+      resultManifest,
+      coverageReceipts,
+    }
   })
-  if (scan) scan.events.reverse()
-  return scan
 }
 
 /**
