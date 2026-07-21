@@ -9,6 +9,10 @@ The worker container joins two Docker networks:
 
 Sandbox containers join only the internal network and therefore have no default external route. The egress policy permits DNS-only access to Azure's virtual resolver and resolves and permits only Postgres, Redis, Azure AI, R2, GitHub, OSV, CISA KEV, and FIRST EPSS endpoints. Worker startup stores the complete approved IPv4 answer set and injects it into the container's hosts file, closing the resolver-to-connect race for CDN and anycast endpoints. Metadata, private, loopback, benchmark, and multicast ranges are rejected before the final deny. A timer refreshes firewall answers every five minutes while retaining the running container's pinned set; a failed refresh leaves the last complete policy in place. Restart the worker to promote a refreshed pin set.
 
+## Worker image contract
+
+The production worker image must run from its own `worker` stage. The container entrypoint is expected to be the vendored TypeScript runner bundled with the workspace, for example `./apps/worker/node_modules/.bin/tsx apps/worker/src/index.ts`. Do not rely on Corepack or `pnpm install` at container startup; images run as the non-root `lyrashield` user without a TTY.
+
 ## Install
 
 Copy the three scripts to `/usr/local/libexec/`, the units to `/etc/systemd/system/`, and make the scripts root-executable. Create `/etc/lyrashield/worker-runtime.conf` with mode `0600`:
@@ -18,6 +22,8 @@ LYRASHIELD_WORKER_IMAGE=lyrashieldprod.azurecr.io/worker@sha256:<approved-worker
 LYRASHIELD_SANDBOX_IMAGE=ghcr.io/usestrix/strix-sandbox@sha256:<approved-sandbox-digest>
 LYRASHIELD_SANDBOX_NETWORK=lyrashield-sandbox
 ```
+
+`/etc/lyrashield/worker.env` supplies the remaining runtime variables. Defaults in `run-worker.sh` set `NODE_ENV=production`, `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0`, and `LYRASHIELD_WORKER_CONCURRENCY=1`; override these there if the deployment requires email verification or a different concurrency.
 
 Then reload systemd and enable the policy refresh and worker:
 

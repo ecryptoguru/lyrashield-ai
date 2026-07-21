@@ -53,7 +53,8 @@ BETTER_AUTH_COOKIE_DOMAIN=".example.com" # only when app and marketing share a p
 ADDITIONAL_TRUSTED_ORIGINS="https://www.example.com"
 TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming copies
 
-# Email (required for email verification in production)
+# Email (required when LYRASHIELD_REQUIRE_EMAIL_VERIFICATION is set)
+LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"
 BREVO_API_KEY="..."
 EMAIL_FROM="noreply@example.com"
 
@@ -80,6 +81,11 @@ LYRASHIELD_IMAGE="ghcr.io/usestrix/strix-sandbox@sha256:<approved-digest>"
 LYRASHIELD_ENGINE_SANDBOX_NETWORK="lyrashield-sandbox"
 PLATFORM_MAX_SCAN_BUDGET_USD="50"
 LYRASHIELD_TELEMETRY="0"
+LYRASHIELD_WORKER_CONCURRENCY="1"
+
+# Invite-only beta allowlist. In production, only these comma-separated emails can create accounts.
+# OAuth sign-in/linking remains invite-gated regardless of this value.
+LYRASHIELD_BETA_INVITE_EMAILS=""
 
 # Azure OpenAI alternative (use these OR the generic LLM_API_KEY/LLM_API_BASE)
 # LYRASHIELD_LLM="azure/gpt-5.6-terra" # fallback

@@ -1,6 +1,6 @@
 # LyraShield AI production beta readiness plan
 
-Status: **proposed — not implemented or approved for deployment**
+Status: **proposed — auth/worker environment controls and local Docker proof implemented; production deployment not approved**
 Date: 2026-07-20
 Target: invite-only production beta with a small number of real users
 Primary constraints: production-grade safety, truthful beta UX, Supabase Free, Upstash Free, low Azure cost, and controlled GPT-5.6 spend without a material quality reduction.

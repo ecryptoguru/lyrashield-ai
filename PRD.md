@@ -5233,7 +5233,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Canonical application repository: `ecryptoguru/lyrashield-ai`, local source at `lyrashieldai`.
 - Canonical engine repository: `ecryptoguru/lyrashield-engine`, local source at `lyrashield-engine`.
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
-- Merged PR #115 baseline: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, security diff gate, CodeRabbit, `git diff --check`, **881 core tests in 97 files**, **79 marketing tests in 12 files**, **16 motion tests**, and **2 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
+- Merged PR #115 baseline: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, security diff gate, CodeRabbit, `git diff --check`, **934 core tests in 105 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
 - Current product surface: **25 page route files** and **44 API route files** in `apps/web`.
 - Current data surface: **39 Prisma models**, **18 enums**, and **21 committed migrations**. Postgres RLS covers 20 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).

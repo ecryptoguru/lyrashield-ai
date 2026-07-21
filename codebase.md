@@ -68,7 +68,7 @@ Public copy uses **LyraShield AI**. Internal package scopes (`@lyrashield/*`), e
 | Component variants      | class-variance-authority (cva)   | 0.7.x                                                |
 | Icons                   | lucide-react                     | 1.23.x                                               |
 | Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                      |
-| Testing                 | Vitest + Playwright              | 881 core + 79 marketing + 16 motion + 2 Chromium E2E |
+| Testing                 | Vitest + Playwright              | 934 core + 80 marketing + 16 motion + 4 Chromium E2E |
 | Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration |
 | Job queue               | BullMQ                           | 5.80.x                                               |
 | Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate      |
@@ -438,8 +438,8 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **881 core tests in 97 files**, **79 marketing tests in 12 files**, and **16 motion tests**, pass
-- `pnpm test:e2e`: **2 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
+- `pnpm test`: **934 core tests in 105 files**, **80 marketing tests in 12 files**, and **16 motion tests**, pass
+- `pnpm test:e2e`: **4 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `pnpm format:check`: pass
 - `pnpm audit --prod --audit-level high`: pass, no known production vulnerabilities
@@ -1016,7 +1016,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 
 ### 21.13 Dockerfile Cleanup
 
-- Removed 15 lines of unused worker/shared-package copies from the runner stage. The runner stage is for the web app only (`CMD ["node", "server.js"]`). The worker runs from the builder stage via docker-compose `target: builder` (workspace packages export TypeScript source, requiring `tsx` at runtime).
+- Removed 15 lines of unused worker/shared-package copies from the runner stage. The runner stage is for the web app only (`CMD ["node", "server.js"]`). The worker uses its own dedicated `worker` stage with a vendored TypeScript runner (`CMD ["./apps/worker/node_modules/.bin/tsx", "apps/worker/src/index.ts"]`); it does not invoke Corepack. Docker Compose builds the `migrate` service from the `workspace-builder` stage.
 
 ### 21.14 CSP Request Header Fix (`apps/web/src/proxy.ts`)
 

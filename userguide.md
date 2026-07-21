@@ -65,9 +65,9 @@ Use the public methodology page to understand scoring, evidence states, and limi
 1. Open [https://app.lyrashieldai.com](https://app.lyrashieldai.com) for the invite-only beta.
 2. Select **Sign up**.
 3. Enter your name, email, and password.
-4. Sign in and continue through onboarding. Email verification is disabled for the current beta.
+4. Sign in and continue through onboarding. Email verification is off by default in local development; it is enabled in production by setting `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1` and configuring a Brevo email provider.
 
-The initial invite-only beta intentionally runs without an email provider: email verification and password reset are unavailable. The application preserves the intended destination through authentication. When an email provider is configured later, complete verification when required and use **Forgot password** for a reset.
+Account creation is invite-gated when `NODE_ENV=production` and `LYRASHIELD_BETA_INVITE_EMAILS` is set: only the listed comma-separated emails can sign up. OAuth sign-in and sign-up remain invite-gated in production regardless of email verification state. Email verification and **Forgot password** require `BREVO_API_KEY` and `EMAIL_FROM`; when they are not configured, those flows are unavailable and the sign-in/sign-up pages hide the corresponding controls.
 
 ### 3.2 Sign in, sign out, and theme
 

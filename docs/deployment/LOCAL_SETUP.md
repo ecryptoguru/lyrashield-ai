@@ -26,6 +26,12 @@ pnpm install --frozen-lockfile
 
 Set a real local `BETTER_AUTH_SECRET` in `.env`. When using Compose, set `REDIS_URL` to the password-protected local endpoint shown in `.env.example`.
 
+Optional auth/worker toggles in `.env`:
+
+- `LYRASHIELD_BETA_INVITE_EMAILS` — comma-separated allowlist for production (`NODE_ENV=production`) sign-up. Leave empty to allow any sign-up in development.
+- `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` — set to `1` to require verified email before sign-in. Requires `BREVO_API_KEY` and `EMAIL_FROM` to send verification and password-reset emails.
+- `LYRASHIELD_WORKER_CONCURRENCY` — BullMQ worker concurrency (default `1`).
+
 The web app expects `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_MARKETING_URL` (and optionally `PORT`) in `apps/web/.env`:
 
 ```bash
@@ -68,7 +74,7 @@ pnpm build
 git diff --check
 ```
 
-The merged PR #109 baseline passes 858 core tests in 94 files, 79 marketing tests in 12 files, 16 motion tests, and 2 Chromium E2E tests. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+Current `main` passes **934 core tests in 105 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Verify scorecards and social sharing
 
