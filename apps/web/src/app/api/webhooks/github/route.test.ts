@@ -5,15 +5,15 @@ const tx = {
   webhookEvent: { create: vi.fn() },
   integration: { update: vi.fn() },
   target: { updateMany: vi.fn() },
-  auditLog: { create: vi.fn() },
 }
-const prisma = {
-  webhookEvent: { findUnique: vi.fn() },
+const systemPrisma = {
+  webhookEvent: { findUnique: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
   integration: { findFirst: vi.fn() },
   $transaction: vi.fn(),
 }
+const prisma = { auditLog: { create: vi.fn() } }
 
-vi.mock("@lyrashield/db", () => ({ prisma }))
+vi.mock("@lyrashield/db", () => ({ getSystemPrisma: () => systemPrisma, prisma }))
 vi.mock("@lyrashield/integrations", () => ({ verifyWebhookSignature }))
 vi.mock("@lyrashield/logger", () => ({ logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 
@@ -38,12 +38,12 @@ describe("GitHub installation webhook", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     verifyWebhookSignature.mockReturnValue(true)
-    prisma.webhookEvent.findUnique.mockResolvedValue(null)
-    prisma.integration.findFirst.mockResolvedValue({
+    systemPrisma.webhookEvent.findUnique.mockResolvedValue(null)
+    systemPrisma.integration.findFirst.mockResolvedValue({
       id: "integration-1",
       workspaceId: "workspace-1",
     })
-    prisma.$transaction.mockImplementation(async (callback) => callback(tx))
+    systemPrisma.$transaction.mockImplementation(async (callback) => callback(tx))
   })
 
   it("records the delivery atomically before disconnecting an installation", async () => {
@@ -61,16 +61,27 @@ describe("GitHub installation webhook", () => {
     )
     expect(tx.integration.update).toHaveBeenCalled()
     expect(tx.target.updateMany).toHaveBeenCalled()
-    expect(tx.auditLog.create).toHaveBeenCalled()
+    expect(prisma.auditLog.create).toHaveBeenCalled()
   })
 
   it("treats a concurrent delivery as an idempotent success", async () => {
-    prisma.$transaction.mockRejectedValue({ code: "P2002" })
+    systemPrisma.$transaction.mockRejectedValue({ code: "P2002" })
 
     const response = await POST(installationDeletedRequest() as never)
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ data: { duplicate: true } })
+  })
+
+  it("removes the delivery marker and retries when audit retention fails", async () => {
+    prisma.auditLog.create.mockRejectedValueOnce(new Error("audit unavailable"))
+
+    const response = await POST(installationDeletedRequest() as never)
+
+    expect(response.status).toBe(500)
+    expect(systemPrisma.webhookEvent.deleteMany).toHaveBeenCalledWith({
+      where: { provider: "github", externalId: "delivery-1" },
+    })
   })
 
   it("rejects a signed malformed pull request payload without retrying", async () => {
@@ -88,7 +99,7 @@ describe("GitHub installation webhook", () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({ error: { code: "INVALID_PAYLOAD" } })
-    expect(prisma.webhookEvent.findUnique).toHaveBeenCalled()
-    expect(prisma.$transaction).not.toHaveBeenCalled()
+    expect(systemPrisma.webhookEvent.findUnique).toHaveBeenCalled()
+    expect(systemPrisma.$transaction).not.toHaveBeenCalled()
   })
 })

@@ -157,8 +157,8 @@ export const getScanStatusAction: AgentActionDefinition<z.infer<typeof GetScanSt
     auditAction: "agent.action.get_scan_status",
     auditResourceType: "scan",
     handler: async (input) => {
-      const scan = await getScanWithEvents(input.scanId)
-      if (!scan || scan.workspaceId !== input.workspaceId) {
+      const scan = await getScanWithEvents(input.scanId, input.workspaceId)
+      if (!scan) {
         throw new Error("Scan not found in this workspace")
       }
 

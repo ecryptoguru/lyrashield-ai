@@ -5,6 +5,10 @@ const envSchema = z
     // Database
     DATABASE_URL: z.string().url("DATABASE_URL must be a valid PostgreSQL connection URL"),
     DATABASE_DIRECT_URL: z.string().url().optional().or(z.literal("")),
+    // Privileged cross-workspace/system operations only (public share-token
+    // resolution and verified provider webhooks). Ordinary app queries must
+    // use the NOBYPASSRLS DATABASE_URL role.
+    DATABASE_SYSTEM_URL: z.string().url().optional().or(z.literal("")),
 
     // Redis (redis:// URL — reserved for the BullMQ job queue, Sprint 4+)
     REDIS_URL: z.string().url().optional().or(z.literal("")),

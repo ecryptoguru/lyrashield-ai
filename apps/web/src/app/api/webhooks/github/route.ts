@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
-import { prisma } from "@lyrashield/db"
+import { getSystemPrisma, prisma } from "@lyrashield/db"
 import { verifyWebhookSignature } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 
@@ -76,13 +76,14 @@ export async function POST(request: NextRequest) {
     body && typeof body === "object" && !Array.isArray(body)
       ? (body as Record<string, unknown>)
       : null
+  const systemPrisma = getSystemPrisma()
 
   // Idempotency: GitHub retries any delivery that doesn't return 2xx (and can
   // redeliver on its own). The X-GitHub-Delivery id is unique per delivery, and
   // WebhookEvent has @@unique([provider, externalId]) built for exactly this.
   // If we've already recorded this delivery, treat it as a processed no-op so
   // retries don't 500-loop or duplicate side effects.
-  const alreadyProcessed = await prisma.webhookEvent.findUnique({
+  const alreadyProcessed = await systemPrisma.webhookEvent.findUnique({
     where: { provider_externalId: { provider: "github", externalId: String(deliveryId) } },
   })
   if (alreadyProcessed) {
@@ -99,13 +100,13 @@ export async function POST(request: NextRequest) {
         const parsedEvent = GitHubInstallationDeletedEventSchema.safeParse(body)
         if (!parsedEvent.success) return invalidPayloadResponse()
         const { installation } = parsedEvent.data
-        const integration = await prisma.integration.findFirst({
+        const integration = await systemPrisma.integration.findFirst({
           where: { type: "GITHUB", externalId: String(installation.id) },
         })
 
         if (integration) {
           try {
-            await prisma.$transaction(async (tx) => {
+            await systemPrisma.$transaction(async (tx) => {
               // Persist the unique delivery before side effects so retries cannot
               // duplicate the disconnect audit event or target mutation.
               await tx.webhookEvent.create({
@@ -139,17 +140,34 @@ export async function POST(request: NextRequest) {
                 },
                 data: { deletedAt: new Date() },
               })
+            })
 
-              await tx.auditLog.create({
+            try {
+              // The extended client owns the advisory-locked audit chain.
+              // Never create audit rows through the broader provider mutation
+              // transaction or a raw/system client.
+              await prisma.auditLog.create({
                 data: {
                   workspaceId: integration.workspaceId,
                   action: "integration.github.disconnected",
                   resourceType: "integration",
                   resourceId: integration.id,
-                  metadata: { installationId: installation.id, reason: "installation.deleted" },
+                  metadata: {
+                    installationId: installation.id,
+                    deliveryId,
+                    reason: "installation.deleted",
+                  },
                 },
               })
-            })
+            } catch (auditError) {
+              // Let GitHub retry the idempotent provider mutation if the audit
+              // chain could not be retained. Removing only this delivery marker
+              // avoids accepting an unaudited disconnect as complete.
+              await systemPrisma.webhookEvent.deleteMany({
+                where: { provider: "github", externalId: deliveryId },
+              })
+              throw auditError
+            }
           } catch (err) {
             if (err && typeof err === "object" && (err as { code?: string }).code === "P2002") {
               logger.info("Concurrent duplicate GitHub delivery ignored", { deliveryId })
@@ -171,13 +189,13 @@ export async function POST(request: NextRequest) {
       if (!parsedEvent.success) return invalidPayloadResponse()
       const { action, pull_request: pullRequest, repository, installation } = parsedEvent.data
 
-      const integration = await prisma.integration.findFirst({
+      const integration = await systemPrisma.integration.findFirst({
         where: { type: "GITHUB", externalId: String(installation.id) },
       })
 
       if (integration) {
         try {
-          await prisma.webhookEvent.create({
+          await systemPrisma.webhookEvent.create({
             data: {
               workspaceId: integration.workspaceId,
               provider: "github",

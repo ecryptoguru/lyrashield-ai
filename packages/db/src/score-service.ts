@@ -2,6 +2,8 @@ import { createHash, randomBytes } from "node:crypto"
 import { computeScore, SCORE_MODEL_VERSION, type ScoreGrade } from "@lyrashield/score"
 import { prisma } from "./client"
 import { logger } from "@lyrashield/logger"
+import { getSystemPrisma } from "./system-client"
+import { withWorkspaceRLS } from "./rls"
 
 const SCORE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const SHARE_SCOPE = "agentic pentest + SCA + secrets"
@@ -312,7 +314,7 @@ export async function revokeScorecardShare(id: string, workspaceId: string, user
 }
 
 export async function getPublicScorecard(slug: string) {
-  const share = await prisma.scorecardShare.findFirst({
+  const share = await getSystemPrisma().scorecardShare.findFirst({
     where: { slug, revokedAt: null, snapshot: { expiresAt: { gt: new Date() } } },
     select: {
       id: true,
@@ -360,16 +362,16 @@ export type ScorecardEventInput = {
 }
 
 export async function recordScorecardEvent(slug: string, event: ScorecardEventInput) {
-  const share = await prisma.scorecardShare.findFirst({
+  const share = await getSystemPrisma().scorecardShare.findFirst({
     where: { slug, revokedAt: null, snapshot: { expiresAt: { gt: new Date() } } },
-    select: { id: true },
+    select: { id: true, snapshot: { select: { workspaceId: true } } },
   })
   if (!share) return null
 
   const now = new Date()
   const dayBucket = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const visitorHash = createHash("sha256").update(event.visitorId).digest("hex")
-  return prisma.$transaction(async (tx) => {
+  return withWorkspaceRLS(share.snapshot.workspaceId, async (tx) => {
     const inserted = await tx.scorecardEvent.createMany({
       data: {
         shareId: share.id,

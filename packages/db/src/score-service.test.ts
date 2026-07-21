@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("./client", () => ({
   prisma: {
     $transaction: vi.fn(),
+    $executeRaw: vi.fn(),
     scan: { findUnique: vi.fn(), update: vi.fn() },
     scoreSnapshot: {
       findUnique: vi.fn(),
@@ -29,6 +30,11 @@ vi.mock("./client", () => ({
     workspaceMember: { findFirst: vi.fn() },
   },
 }))
+
+vi.mock("./system-client", async () => {
+  const { prisma } = await import("./client")
+  return { getSystemPrisma: () => prisma }
+})
 
 import { prisma } from "./client"
 import {
@@ -143,7 +149,10 @@ describe("score-service", () => {
 
   describe("recordScorecardEvent", () => {
     it("deduplicates human views and increments the legacy counter only once", async () => {
-      mockPrisma.scorecardShare.findFirst.mockResolvedValue({ id: "share-1" })
+      mockPrisma.scorecardShare.findFirst.mockResolvedValue({
+        id: "share-1",
+        snapshot: { workspaceId: "workspace-1" },
+      })
       mockPrisma.scorecardEvent.createMany.mockResolvedValue({ count: 1 })
       mockPrisma.scorecardShare.update.mockResolvedValue({})
       mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))

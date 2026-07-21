@@ -108,7 +108,7 @@ export function ScansClient({
     try {
       const result = await apiPost<{ id: string; status: string; endedAt: string | null }>(
         `/api/scans/${scanId}`,
-        {}
+        { workspaceId }
       )
       setScans((prev) =>
         prev.map((s) =>

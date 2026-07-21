@@ -201,7 +201,10 @@ export function ScanDetailClient({
   const refresh = useCallback(
     async (signal: AbortSignal) => {
       try {
-        const updated = await apiGet<ScanPollData>(`/api/scans/${scan.id}`, { signal })
+        const updated = await apiGet<ScanPollData>(
+          `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}`,
+          { signal }
+        )
         const nextScan: ScanData = {
           id: updated.id,
           workspaceId: updated.workspaceId,
@@ -265,7 +268,7 @@ export function ScanDetailClient({
         // Network errors during polling are non-fatal — keep showing stale data
       }
     },
-    [scan.id, scan.target]
+    [scan.id, scan.target, scan.workspaceId]
   )
 
   useEffect(() => {

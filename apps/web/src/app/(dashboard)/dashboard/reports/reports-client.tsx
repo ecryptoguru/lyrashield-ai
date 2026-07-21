@@ -122,7 +122,7 @@ export function ReportsClient({
               id: string
               target: { name: string }
               status: string
-            }>(`/api/scans/${initialScanId}`)
+            }>(`/api/scans/${initialScanId}?workspaceId=${encodeURIComponent(workspaceId)}`)
             if (linkedScan.status === "COMPLETED") {
               completedScans.unshift(linkedScan)
               linkedScanAvailable = true
