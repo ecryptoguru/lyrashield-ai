@@ -299,6 +299,40 @@ describe("output-parser", () => {
       })
     })
 
+    it("retains cache-read totals when Azure omits cache-write receipts", () => {
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-cache-read-only",
+          status: "completed",
+          llm_usage: {
+            requests: 2,
+            input_tokens: 4_014,
+            output_tokens: 63,
+            request_usage_entries: [
+              {
+                model: "azure_ai/gpt-5.6-luna",
+                input_tokens: 2_007,
+                output_tokens: 31,
+                input_tokens_details: { cached_tokens: 0 },
+              },
+              {
+                model: "azure_ai/gpt-5.6-luna",
+                input_tokens: 2_007,
+                output_tokens: 32,
+                input_tokens_details: { cached_tokens: 1_792 },
+              },
+            ],
+          },
+        })
+      )
+
+      expect(result?.llm_usage).toMatchObject({
+        cached_input_tokens: 1_792,
+      })
+      expect(result?.llm_usage).not.toHaveProperty("cache_write_input_tokens")
+      expect(result?.llm_usage).not.toHaveProperty("standard_input_tokens")
+    })
+
     it("separates long-context request usage from standard request usage", () => {
       const result = parseRunJson(
         JSON.stringify({

@@ -314,7 +314,7 @@ describe("processScanJob", () => {
     })
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({
-        maxBudgetUsd: 1.2,
+        maxBudgetUsd: 3.2,
         instruction: expect.stringContaining("vibe-security-50/1.0.0"),
       }),
       "scan-1",
@@ -374,11 +374,11 @@ describe("processScanJob", () => {
           status: "completed",
           llm_usage: {
             request_count: 1,
-            input_tokens: 2_750_000,
+            input_tokens: 3_500_000,
             cached_input_tokens: 0,
             cache_write_input_tokens: 0,
             output_tokens: 0,
-            standard_input_tokens: 2_750_000,
+            standard_input_tokens: 3_500_000,
             standard_cached_input_tokens: 0,
             standard_cache_write_input_tokens: 0,
             standard_output_tokens: 0,
@@ -386,7 +386,7 @@ describe("processScanJob", () => {
             long_cached_input_tokens: 0,
             long_cache_write_input_tokens: 0,
             long_output_tokens: 0,
-            total_cost_usd: 2.75,
+            total_cost_usd: 3.5,
           },
         },
         summary: "Engine completed above budget",
@@ -403,11 +403,11 @@ describe("processScanJob", () => {
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: {
-        providerCostUsd: "2.750000",
-        billedCostUsd: "1.200000",
-        actualCostCents: 120,
+        providerCostUsd: "3.500000",
+        billedCostUsd: "3.200000",
+        actualCostCents: 320,
         llmRequestCount: 1,
-        llmInputTokens: 2_750_000,
+        llmInputTokens: 3_500_000,
         llmCachedInputTokens: 0,
         llmOutputTokens: 0,
       },
@@ -417,13 +417,13 @@ describe("processScanJob", () => {
       data: {
         errorCategory: "BUDGET_EXCEEDED",
         errorMessage: "Protected run limit reached",
-        actualCostCents: 120,
+        actualCostCents: 320,
       },
     })
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
       errorCategory: "BUDGET_EXCEEDED",
       errorMessage: "Protected run limit reached",
-      actualCostCents: 120,
+      actualCostCents: 320,
     })
     expect(persistFindings).toHaveBeenCalled()
     expect(persistResultManifest).toHaveBeenCalled()
