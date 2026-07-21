@@ -177,9 +177,7 @@ function parseControlIds(value: unknown, depth = 0): number[] {
       }
     }
     if (trimmed.includes(",") || trimmed.includes(";")) {
-      return value
-        .split(/[,;]/)
-        .flatMap((token) => parseControlIds(token, depth + 1))
+      return value.split(/[,;]/).flatMap((token) => parseControlIds(token, depth + 1))
     }
     return parseControlIdTokens(value)
   }
@@ -204,11 +202,7 @@ function parseControlIds(value: unknown, depth = 0): number[] {
 function validateControlIds(value: unknown): number[] | undefined {
   const normalizedIds = parseControlIds(value)
   const controlIds = [
-    ...new Set(
-      normalizedIds.filter(
-        (candidate) => candidate >= 1 && candidate <= 50
-      )
-    ),
+    ...new Set(normalizedIds.filter((candidate) => candidate >= 1 && candidate <= 50)),
   ]
   return controlIds.length > 0 ? controlIds : undefined
 }

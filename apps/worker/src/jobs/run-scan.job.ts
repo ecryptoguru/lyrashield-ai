@@ -147,10 +147,7 @@ function resolveScanRuntimeBudgetMs(maxDurationMinutes: number | null | undefine
   return Math.min(configuredMaxMs, MAX_SCAN_RUNTIME_MS)
 }
 
-function resolveScannerPhaseTimeoutMs(
-  engineTimeoutMs: number,
-  globalScanBudgetMs: number
-): number {
+function resolveScannerPhaseTimeoutMs(engineTimeoutMs: number, globalScanBudgetMs: number): number {
   const totalRuntimeBudgetMs = Math.min(
     globalScanBudgetMs,
     env.SCANNER_PHASE_TIMEOUT_MS + engineTimeoutMs

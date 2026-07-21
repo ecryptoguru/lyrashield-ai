@@ -60,7 +60,7 @@ describe("output-parser", () => {
     })
 
     it("parses control identifiers from a JSON array string", () => {
-      const raw = JSON.stringify([{ ...SAMPLE_VULN, control_ids: "[11, \"14\", 0, \"x\", [3, 4]]" }])
+      const raw = JSON.stringify([{ ...SAMPLE_VULN, control_ids: '[11, "14", 0, "x", [3, 4]]' }])
 
       expect(parseVulnerabilitiesJson(raw)[0]?.control_ids).toEqual([11, 14, 3, 4])
     })
