@@ -10,7 +10,16 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params
   const workspaceId = await getCachedWorkspaceId(session.userId)
 
-  const scan = await getScanWithEvents(id)
+  if (!workspaceId) {
+    return (
+      <div className="rounded-lg border border-dashed p-12 text-center">
+        <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
+        <p className="text-muted-foreground text-sm">Create a workspace before viewing scans.</p>
+      </div>
+    )
+  }
+
+  const scan = await getScanWithEvents(id, workspaceId)
   if (!scan) {
     return (
       <div className="rounded-lg border border-dashed p-12 text-center">
@@ -18,15 +27,6 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
         <p className="text-muted-foreground text-sm">
           This scan may have been deleted or you don&apos;t have access to it.
         </p>
-      </div>
-    )
-  }
-
-  if (scan.workspaceId !== workspaceId) {
-    return (
-      <div className="rounded-lg border border-dashed p-12 text-center">
-        <h2 className="mb-2 text-lg font-semibold">Access denied</h2>
-        <p className="text-muted-foreground text-sm">This scan belongs to a different workspace.</p>
       </div>
     )
   }

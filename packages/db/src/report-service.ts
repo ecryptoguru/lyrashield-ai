@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "crypto"
 import { logger } from "@lyrashield/logger"
 import type { Report } from "./generated/prisma"
 import { gatherReportData } from "./report-generator"
+import { getSystemPrisma } from "./system-client"
 
 export interface CreateReportParams {
   workspaceId: string
@@ -211,7 +212,7 @@ export async function revokeShareToken(reportId: string): Promise<Date> {
 export async function getReportByShareToken(token: string): Promise<Report | null> {
   const tokenHash = createHash("sha256").update(token).digest("hex")
 
-  const report = await prisma.report.findFirst({
+  const report = await getSystemPrisma().report.findFirst({
     where: { shareTokenHash: tokenHash, revokedAt: null, deletedAt: null },
   })
 

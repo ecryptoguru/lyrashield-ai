@@ -9,6 +9,7 @@ import type {
 import { logger } from "@lyrashield/logger"
 import { DeterminismModeSchema, type DeterminismMode } from "@lyrashield/types"
 import { isValidTransition } from "./scan-transitions"
+import { withWorkspaceRLS } from "./rls"
 
 export interface CreateScanParams {
   workspaceId: string
@@ -37,7 +38,7 @@ const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
 
 export async function createScan(params: CreateScanParams): Promise<Scan> {
   const determinismMode = DeterminismModeSchema.parse(params.determinismMode ?? "default")
-  const scan = await prisma.$transaction(async (tx) => {
+  const scan = await withWorkspaceRLS(params.workspaceId, async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.targetId}))`
 
     const activeScans = await tx.scan.count({
@@ -97,9 +98,12 @@ export async function updateScanStatus(
     summary?: string
     riskScoreAfter?: number
     actualCostCents?: number
-  }
+  },
+  workspaceId?: string
 ): Promise<Scan> {
-  const { updated, currentStatus } = await prisma.$transaction(async (tx) => {
+  const updateInTransaction = async (
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+  ) => {
     const scan = await tx.scan.findUnique({ where: { id: scanId } })
     if (!scan) throw new Error(`Scan not found: ${scanId}`)
 
@@ -150,7 +154,10 @@ export async function updateScanStatus(
       },
     })
     return { updated, currentStatus }
-  })
+  }
+  const { updated, currentStatus } = workspaceId
+    ? await withWorkspaceRLS(workspaceId, updateInTransaction)
+    : await prisma.$transaction(updateInTransaction)
 
   logger.info("Scan status updated", { scanId, from: currentStatus, to: newStatus })
   return updated
@@ -174,9 +181,12 @@ export async function addScanEvent(
   })
 }
 
-export async function getScanWithEvents(scanId: string): Promise<ScanWithEvents | null> {
-  const scan = await prisma.scan.findUnique({
-    where: { id: scanId },
+export async function getScanWithEvents(
+  scanId: string,
+  workspaceId: string
+): Promise<ScanWithEvents | null> {
+  const scan = await prisma.scan.findFirst({
+    where: { id: scanId, workspaceId, deletedAt: null },
     include: {
       events: {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -243,8 +253,10 @@ export async function listScans(params: ListScansParams): Promise<{
   return { items, nextCursor }
 }
 
-export async function cancelScan(scanId: string): Promise<Scan> {
-  const scan = await prisma.scan.findUnique({ where: { id: scanId } })
+export async function cancelScan(scanId: string, workspaceId: string): Promise<Scan> {
+  const scan = await prisma.scan.findFirst({
+    where: { id: scanId, workspaceId, deletedAt: null },
+  })
   if (!scan) throw new Error(`Scan not found: ${scanId}`)
 
   const status = scan.status as ScanStatus
@@ -258,5 +270,5 @@ export async function cancelScan(scanId: string): Promise<Scan> {
     throw new Error(`Cannot cancel scan in terminal state: ${status}`)
   }
 
-  return updateScanStatus(scanId, "CANCELLED")
+  return updateScanStatus(scanId, "CANCELLED", undefined, workspaceId)
 }

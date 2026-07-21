@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+const simulatedClientOctet =
+  (Array.from(suffix).reduce((total, character) => total + character.charCodeAt(0), 0) % 250) + 1
 const password = "E2e-password-123!"
 const ownerEmail = "e2e-owner@example.com"
 const otherEmail = "e2e-other@example.com"
@@ -125,7 +127,7 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
   // ingress. Give repeated E2E workers distinct simulated clients so the
   // production auth limiter is exercised without unrelated fixtures sharing
   // a single IP bucket.
-  const forwardedFor = `198.51.100.${testInfo.workerIndex + 1}`
+  const forwardedFor = `198.51.100.${((simulatedClientOctet + testInfo.workerIndex) % 250) + 1}`
   await page.setExtraHTTPHeaders({ "x-forwarded-for": forwardedFor })
   await signUp(page, ownerEmail, "E2E Owner")
 
@@ -150,6 +152,30 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
   const targetId = targetBody.data.id as string
   await expect(page.getByRole("heading", { name: "Review and start" })).toBeVisible()
 
+  const owner = await prisma.user.findUniqueOrThrow({ where: { email: ownerEmail } })
+  const scan = await withWorkspaceRLS(workspaceId, async (tx) => {
+    const created = await tx.scan.create({
+      data: {
+        workspaceId,
+        targetId,
+        goal: "LAUNCH_REVIEW",
+        mode: "SAFE",
+        status: "QUEUED",
+        createdById: owner.id,
+      },
+    })
+    await tx.scanEvent.create({
+      data: { scanId: created.id, stage: "queued", level: "info", message: "Scan queued" },
+    })
+    return created
+  })
+  const skipOwnerOnboarding = await page.request.patch("/api/onboarding", {
+    data: { skipped: true },
+  })
+  await expect(skipOwnerOnboarding).toBeOK()
+  await page.goto(`/dashboard/scans/${scan.id}`)
+  await expect(page.getByRole("heading", { name: "Scan queued" })).toBeVisible()
+
   const other = await browser.newContext({
     extraHTTPHeaders: { "x-forwarded-for": forwardedFor },
   })
@@ -165,6 +191,8 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
     await expect(skipOtherOnboarding).toBeOK()
     await otherPage.goto(`/dashboard/targets/${targetId}`)
     await expect(otherPage.getByRole("heading", { name: "404" })).toBeVisible()
+    await otherPage.goto(`/dashboard/scans/${scan.id}`)
+    await expect(otherPage.getByRole("heading", { name: "No workspace yet" })).toBeVisible()
   } finally {
     await other.close()
   }

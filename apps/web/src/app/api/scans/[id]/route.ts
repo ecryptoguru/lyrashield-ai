@@ -4,17 +4,27 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { z } from "zod"
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+const WorkspaceSchema = z.string().min(1)
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const parsedWorkspace = WorkspaceSchema.safeParse(
+    new URL(request.url).searchParams.get("workspaceId")
+  )
+
+  if (!parsedWorkspace.success) {
+    return apiError("MISSING_PARAM", "workspaceId is required", 400)
+  }
+  const workspaceId = parsedWorkspace.data
 
   try {
-    const scan = await getScanWithEvents(id)
+    await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const scan = await getScanWithEvents(id, workspaceId)
     if (!scan) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
-
-    await requirePermission(scan.workspaceId, PERMISSIONS.scan.view)
 
     return apiSuccess(scan)
   } catch (error) {
@@ -25,18 +35,28 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 }
 
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return apiError("INVALID_JSON", "Request body must be valid JSON", 400)
+  }
+  const parsed = z.object({ workspaceId: WorkspaceSchema }).safeParse(body)
+  if (!parsed.success) {
+    return apiError("VALIDATION_ERROR", "workspaceId is required", 400)
+  }
+  const { workspaceId } = parsed.data
 
   try {
-    const scan = await getScanWithEvents(id)
+    await requirePermission(workspaceId, PERMISSIONS.scan.cancel)
+    const scan = await getScanWithEvents(id, workspaceId)
     if (!scan) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
 
-    await requirePermission(scan.workspaceId, PERMISSIONS.scan.cancel)
-
-    const cancelled = await cancelScan(id)
+    const cancelled = await cancelScan(id, workspaceId)
     return apiSuccess({
       id: cancelled.id,
       status: cancelled.status,

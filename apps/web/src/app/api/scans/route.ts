@@ -42,14 +42,17 @@ export async function POST(request: Request) {
       return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
     }
 
-    if (data.policyId) {
-      const policy = await prisma.policy.findFirst({
-        where: { id: data.policyId, workspaceId, deletedAt: null },
-      })
-      if (!policy) {
-        return apiError("POLICY_NOT_FOUND", "Policy not found in this workspace", 404)
-      }
+    const policy = await prisma.policy.findFirst({
+      where: data.policyId
+        ? { id: data.policyId, workspaceId, deletedAt: null }
+        : { workspaceId, name: "Default Policy", deletedAt: null },
+      orderBy: data.policyId ? undefined : { createdAt: "asc" },
+      select: { id: true },
+    })
+    if (data.policyId && !policy) {
+      return apiError("POLICY_NOT_FOUND", "Policy not found in this workspace", 404)
     }
+    const policyId = policy?.id
 
     const activeScans = await prisma.scan.count({
       where: {
@@ -84,7 +87,7 @@ export async function POST(request: Request) {
       targetId: data.targetId,
       goal: data.goal,
       mode: data.mode,
-      policyId: data.policyId,
+      policyId,
       createdById: session.userId,
     })
 
@@ -95,7 +98,7 @@ export async function POST(request: Request) {
         targetId: data.targetId,
         goal: data.goal,
         mode: data.mode,
-        policyId: data.policyId,
+        policyId,
       })
     } catch (enqueueErr) {
       logger.error("Failed to enqueue scan job", {

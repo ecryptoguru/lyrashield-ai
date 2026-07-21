@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { prisma } from "./client"
 import { isDatabaseRLSContextBound, runWithWorkspaceContext } from "./scoping"
 import { withWorkspaceRLS } from "./rls"
+import { createScan } from "./scan-service"
 
 const suffix = `${Date.now()}`
 const workspaceId = `soft-delete-workspace-${suffix}`
@@ -32,6 +33,21 @@ describe("Prisma extension soft delete", () => {
     }
     await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspaceId}`
     await prisma.$disconnect()
+  })
+
+  it("creates a scan and its initial event inside strict workspace RLS", async () => {
+    const scan = await createScan({
+      workspaceId,
+      targetId,
+      goal: "LAUNCH_REVIEW",
+      createdById: "strict-rls-test-user",
+    })
+
+    expect(scan.workspaceId).toBe(workspaceId)
+    const eventCount = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.scanEvent.count({ where: { scanId: scan.id } })
+    )
+    expect(eventCount).toBe(1)
   })
 
   it("maps delete to update and retains the row with deletedAt", async () => {

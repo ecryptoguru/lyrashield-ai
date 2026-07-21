@@ -70,6 +70,7 @@ describe("POST /api/scans", () => {
     vi.clearAllMocks()
     defaultAuthMock()
     vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue({ id: "default-policy" } as never)
   })
 
   it("returns 400 for invalid JSON body", async () => {
@@ -195,8 +196,10 @@ describe("POST /api/scans", () => {
         scanId: "scan-1",
         workspaceId: "ws-1",
         targetId: "t1",
+        policyId: "default-policy",
       })
     )
+    expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ policyId: "default-policy" }))
     expect(prisma.auditLog.create).toHaveBeenCalled()
   })
 

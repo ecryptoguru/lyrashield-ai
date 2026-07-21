@@ -5,6 +5,7 @@ vi.mock("./client", () => ({
     $transaction: vi.fn(),
     scan: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       updateMany: vi.fn(),
     },
     scanEvent: { create: vi.fn() },
@@ -18,7 +19,11 @@ import { createScan, getScanWithEvents, updateScanStatus } from "./scan-service"
 
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
-  scan: { findUnique: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> }
+  scan: {
+    findUnique: ReturnType<typeof vi.fn>
+    findFirst: ReturnType<typeof vi.fn>
+    updateMany: ReturnType<typeof vi.fn>
+  }
   scanEvent: { create: ReturnType<typeof vi.fn> }
 }
 
@@ -92,17 +97,18 @@ describe("createScan", () => {
 
 describe("getScanWithEvents", () => {
   it("retains the newest bounded events in chronological display order", async () => {
-    mockPrisma.scan.findUnique.mockResolvedValue({
+    mockPrisma.scan.findFirst.mockResolvedValue({
       id: "scan-1",
       events: [{ id: "new" }, { id: "old" }],
       resultManifest: null,
       coverageReceipts: [],
     })
 
-    const scan = await getScanWithEvents("scan-1")
+    const scan = await getScanWithEvents("scan-1", "ws-1")
 
-    expect(mockPrisma.scan.findUnique).toHaveBeenCalledWith(
+    expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: { id: "scan-1", workspaceId: "ws-1", deletedAt: null },
         include: expect.objectContaining({
           events: {
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
