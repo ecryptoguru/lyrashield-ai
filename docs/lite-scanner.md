@@ -1,12 +1,12 @@
 # LyraShield AI Lite Check
 
-Status: deployed at `https://lyrashieldai.com/scan` with the scanner API isolated at `https://scanner.lyrashieldai.com`. Production Turnstile, origin-scoped CORS, rate limiting, monitored abuse routing, health/readiness, and a real browser Lite Check have passed. The separate invite-only app is live at `https://app.lyrashieldai.com`; this status does not include the full worker/engine scan pipeline.
+Status: deployed at `https://lyrashieldai.com/scan` with the scanner API isolated at `https://scanner.lyrashieldai.com`. Production Turnstile, origin-scoped CORS, rate limiting, monitored abuse routing, health/readiness, and a real browser Lite Check have passed. The authenticated app with open registration is live at `https://app.lyrashieldai.com`; this status does not include the full worker/engine scan pipeline.
 
 For the end-user walkthrough, target rules, result interpretation, and the difference between Lite Check and authenticated scans, see `userguide.md` §§2 and 23.
 
 ## Product boundary
 
-The public route is `/scan`. It returns a distinct **Lite Check**, never the official deterministic LyraShield Score. Findings appear without signup. Email is used only for the waitlist and optional saved scorecard.
+The public route is `/scan`. It returns a distinct **Lite Check**, never the official deterministic LyraShield Score. Findings appear without signup. Email on the public page is used only for optional saved scorecards or the referral flow if still configured.
 
 The check is passive and outside-only:
 
@@ -69,7 +69,7 @@ Automated coverage includes:
 
 The passive Lite Check launch gate is complete: the canonical site, isolated scanner origin, Turnstile, abuse address, Upstash limiter, PostHog project, CORS, fail-closed bot check, five browser-local tools, waitlist boundaries, and a real scan are live and verified. Keep the following separate:
 
-1. The authenticated app is separately deployed at `https://app.lyrashieldai.com`. `PUBLIC_APP_URL` remains intentionally unset on the marketing Worker while the invite-only beta does not expose a public marketing navigation link; that does not change the Lite Check boundary.
+1. The authenticated app is separately deployed at `https://app.lyrashieldai.com` with open registration. `PUBLIC_APP_URL` is set on the marketing Worker so CTAs and navigation can link to sign-up and sign-in; that does not change the Lite Check boundary.
 2. Full repository scans require BullMQ-compatible TLS Redis, private evidence storage, dedicated sandbox-capable worker compute, authorized models, and controlled egress; the Lite Scanner's Supabase/Upstash/Azure Container App deployment does not supply that pipeline.
 3. Public app scorecards still require real-origin card/badge, revocation, referral, human-event deduplication, and external-network unfurl checks.
 4. Logs must continue to exclude submitted query data, matched values, response bodies, and raw client IPs. Any change to the payload or crawl boundary requires a fresh privacy/security review.

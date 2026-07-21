@@ -28,7 +28,6 @@ Set a real local `BETTER_AUTH_SECRET` in `.env`. When using Compose, set `REDIS_
 
 Optional auth/worker toggles in `.env`:
 
-- `LYRASHIELD_BETA_INVITE_EMAILS` — comma-separated allowlist for production (`NODE_ENV=production`) sign-up. Leave empty to allow any sign-up in development.
 - `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` — set to `1` to require verified email before sign-in. Requires `BREVO_API_KEY` and `EMAIL_FROM` to send verification and password-reset emails.
 - `LYRASHIELD_WORKER_CONCURRENCY` — BullMQ worker concurrency (default `1`).
 
@@ -112,7 +111,7 @@ pnpm --filter @lyrashield/marketing preview -- --port 8787
 
 That preview is intentionally noindex. It should return 200 for `/`, `/robots.txt`, and `/sitemap-index.xml`, and 404 for `/llms.txt` before launch.
 
-Submit a disposable local waitlist address and verify the success state shows queue position plus Copy/LinkedIn/X/WhatsApp referral actions. Reopening `/?ref=<returned-code>` and submitting a second disposable address should increment the first code's referral count without changing the API's non-leaking success shape.
+Open the local app, sign up for a new account, and complete onboarding. Any email works. The waitlist endpoint remains available for the homepage referral flow if still configured.
 
 ## 5. Build the worker image and engine
 
@@ -230,4 +229,4 @@ docker compose down
 - If Prisma reports drift, run the migration checks; do not use `db:push` as a production repair.
 - If a database applied the first local draft of `20260713170000_scorecard_events`, its unique index may end in `dayBucket_`; current schema truth ends in `dayBuc_key`. Fresh databases are correct. For an old disposable local database, reset/redeploy migrations or rename only that index after confirming the exact drift—never edit an already-deployed production migration ad hoc.
 - If the worker cannot find `lyrashield`, confirm the sibling repository path or `LYRASHIELD_ENGINE_SOURCE` before rebuilding.
-- If the waitlist returns 500 locally, set a non-placeholder `WAITLIST_IP_SALT` in `apps/marketing/.dev.vars`.
+- If the homepage waitlist endpoint returns 500 locally, set a non-placeholder `WAITLIST_IP_SALT` in `apps/marketing/.dev.vars`.

@@ -37,11 +37,7 @@ export default function SignUpPage() {
     let oauthErrorTimer: number | undefined
     if (oauthError) {
       oauthErrorTimer = window.setTimeout(() => {
-        setError(
-          oauthError.toLowerCase() === "beta_invite_required"
-            ? "This account is not on the production beta invite list."
-            : "Social sign up could not be completed. Please try again."
-        )
+        setError("Social sign up could not be completed. Please try again.")
       }, 0)
       window.history.replaceState(null, "", "/sign-up")
     }
@@ -95,7 +91,7 @@ export default function SignUpPage() {
       }
 
       // When email verification is required the server returns token: null;
-      // otherwise Better Auth signs the invited beta user in immediately.
+      // otherwise Better Auth signs the new user in immediately.
       if (data?.token) {
         router.push("/onboarding")
         router.refresh()
@@ -201,8 +197,8 @@ export default function SignUpPage() {
           <div className="gradient-primary shadow-primary-glow mb-3 flex h-12 w-12 items-center justify-center rounded-xl">
             <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Create your beta account</h1>
-          <p className="text-muted-foreground text-sm">LyraShield AI is currently invite-only.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Create your account</h1>
+          <p className="text-muted-foreground text-sm">Start securing your AI-built software.</p>
         </div>
 
         <div className="bg-card rounded-xl border p-6 shadow-lg sm:p-8">

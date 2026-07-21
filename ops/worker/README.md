@@ -1,6 +1,6 @@
 # Production worker runtime
 
-These files define the dedicated production worker boundary used by the invite-only beta. The worker image and sandbox image must both be immutable digests. Secrets are retrieved at every service start from Azure Key Vault by the VM's system-assigned managed identity and are written only to a root-readable runtime file. Worker startup also reapplies the egress policy after refreshing those endpoints.
+These files define the dedicated production worker boundary used by the open-registration beta. The worker image and sandbox image must both be immutable digests. Secrets are retrieved at every service start from Azure Key Vault by the VM's system-assigned managed identity and are written only to a root-readable runtime file. Worker startup also reapplies the egress policy after refreshing those endpoints.
 
 The worker container joins two Docker networks:
 

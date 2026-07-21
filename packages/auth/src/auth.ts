@@ -1,11 +1,9 @@
 import { betterAuth } from "better-auth"
-import { APIError, createAuthMiddleware } from "better-auth/api"
 import { prismaAdapter } from "better-auth/adapters/prisma"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
-import { isBetaInviteAllowed, isBetaUserCreationAllowed } from "./beta-invites"
 import { isOAuthProviderConfigured, socialSignUpEnabled } from "./oauth-providers"
 import { genericOAuth, microsoftEntraId } from "better-auth/plugins"
 
@@ -126,41 +124,11 @@ export const auth = betterAuth({
     requireEmailVerification,
     sendResetPassword: sendResetPasswordEmail,
   },
-  hooks: {
-    before: createAuthMiddleware(async (ctx) => {
-      if (ctx.context.path !== "/sign-up/email" || !isProd) return
-      const email = (ctx.body as { email?: unknown } | undefined)?.email
-      if (
-        typeof email !== "string" ||
-        !isBetaInviteAllowed(email, env.LYRASHIELD_BETA_INVITE_EMAILS)
-      ) {
-        throw APIError.from("FORBIDDEN", {
-          code: "BETA_INVITE_REQUIRED",
-          message: "Beta access is by invitation.",
-        })
-      }
-    }),
-  },
   emailVerification: {
     sendVerificationEmail,
     sendOnSignUp: true,
     sendOnSignIn: true,
     autoSignInAfterVerification: true,
-  },
-  databaseHooks: {
-    user: {
-      create: {
-        before: async (user) => {
-          if (!isBetaUserCreationAllowed(isProd, user.email, env.LYRASHIELD_BETA_INVITE_EMAILS)) {
-            throw APIError.from("FORBIDDEN", {
-              code: "BETA_INVITE_REQUIRED",
-              message: "Beta access is by invitation.",
-            })
-          }
-          return { data: user }
-        },
-      },
-    },
   },
   ...(requireEmailVerification
     ? {
@@ -177,8 +145,6 @@ export const auth = betterAuth({
       clientId: GITHUB_CLIENT_ID ?? "",
       clientSecret: GITHUB_CLIENT_SECRET ?? "",
       enabled: githubEnabled,
-      // Invited beta users create and verify an email account first. OAuth can
-      // then link only to that account; it must never be a public sign-up path.
       disableSignUp: !socialSignUpEnabled(isProd),
     },
     google: {

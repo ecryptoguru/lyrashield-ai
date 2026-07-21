@@ -21,7 +21,7 @@ vi.mock("@lyrashield/auth/oauth-providers", () => ({
 const { GET } = await import("./route")
 
 describe("auth provider configuration", () => {
-  it("keeps the initial beta independent of Brevo", async () => {
+  it("keeps sign-up open independent of Brevo", async () => {
     const response = await GET()
 
     await expect(response.json()).resolves.toMatchObject({

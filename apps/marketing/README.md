@@ -1,6 +1,6 @@
 # LyraShield AI Marketing Site
 
-Astro 7 marketing site for the future LyraShield AI domain. Lives at `apps/marketing` in the monorepo.
+Astro 7 marketing site for LyraShield AI. Lives at `apps/marketing` in the monorepo.
 
 ## Public claim boundary
 
@@ -20,7 +20,7 @@ cp apps/marketing/.dev.vars.example apps/marketing/.dev.vars
 ```
 
 - Set `PUBLIC_SITE_URL` in `.env`.
-- Set `PUBLIC_SCANNER_URL` in `.env` to the public scanner origin. Set `PUBLIC_APP_URL` separately when the authenticated dashboard should be linked from marketing. The build strips trailing slashes from both. Production sets `PUBLIC_APP_URL=https://app.lyrashieldai.com` after live GitHub authentication and application readiness passed, so the header exposes Sign in while account creation remains invite-gated.
+- Set `PUBLIC_SCANNER_URL` in `.env` to the public scanner origin. Set `PUBLIC_APP_URL` separately when the authenticated dashboard should be linked from marketing. The build strips trailing slashes from both. Production sets `PUBLIC_APP_URL=https://app.lyrashieldai.com` so the header exposes Sign in/Sign up and CTAs can link to the open-registration app.
 - Set `PUBLIC_TURNSTILE_SITE_KEY` for the production Lite Check. The scanner origin must set the matching `TURNSTILE_SECRET_KEY`; its endpoint fails closed in production when that secret is absent.
 - Set `PUBLIC_ABUSE_EMAIL` to the monitored abuse-report mailbox before enabling indexing. The address is rendered on `/terms`; the production build refuses `PUBLIC_INDEXABLE=true` without it.
 - Set `PUBLIC_POSTHOG_KEY`/`PUBLIC_POSTHOG_HOST` only for an approved analytics project. The production project authorizes `https://lyrashieldai.com` and uses the DNS-only managed proxy at `https://pulse.lyrashieldai.com`; set `ui_host` to the US PostHog application origin when the proxy is enabled. Manual `$pageview` capture sends only origin and pathname; PostHog's page-leave lifecycle capture retains scroll-depth metadata, and the final send hook strips query strings and fragments from URL/referrer properties on every event. Web Vitals capture is enabled for CLS, FCP, LCP, and INP. Automatic full-URL pageviews, general DOM autocapture, and session recording remain disabled; DNT and GPC opt out. Waitlist referral shares emit the coarse `waitlist_referral_share` event with an allowlisted channel; never add email, referral-code, query, or fragment properties.
@@ -48,7 +48,7 @@ pnpm --filter @lyrashield/marketing build
 pnpm --filter @lyrashield/marketing preview
 ```
 
-The preview command applies local D1 migrations to Astro's generated Worker configuration before starting, so waitlist submissions work in the Worker-backed preview.
+The preview command applies local D1 migrations to Astro's generated Worker configuration before starting, so waitlist/referral submissions work in the Worker-backed preview.
 
 Use the URL Wrangler prints (normally `http://localhost:8787`) for Worker-backed API checks. Astro dev at `http://localhost:4321` is useful for UI iteration but does not prove generated Worker bindings or D1 migrations.
 
@@ -60,7 +60,7 @@ curl -fsS http://localhost:8787/
 docker compose --profile marketing down
 ```
 
-This Docker target proves the generated static pages and assets. The Worker-backed preview above separately proves Wrangler routing, D1 migrations, and waitlist API behavior because Astro's Cloudflare prerender subprocess is not reliable inside Docker Desktop's VM.
+This Docker target proves the generated static pages and assets. The Worker-backed preview above separately proves Wrangler routing, D1 migrations, and waitlist/referral API behavior because Astro's Cloudflare prerender subprocess is not reliable inside Docker Desktop's VM.
 
 ## Authority blog and premium assurance world release
 
@@ -183,10 +183,10 @@ curl -X POST -d "email=you@example.com" -d "source=landing" http://localhost:878
 ## Notes
 
 - `/tools` is a browser-local free-utility hub. The launch checklist, headers/CORS checker, secret scanner, Supabase RLS checker, and JWT/session inspector intentionally do not fetch a supplied target or upload pasted text/files. They are bounded heuristics, not security scans; see `docs/plans/2026-07-14-vibe-coder-security-seo-tools-plan.md` for the product and publishing boundaries.
-- The header hides Sign in when `PUBLIC_APP_URL` is unset. Production now sets the live authenticated app origin after its auth/readiness gate passed, so desktop and mobile navigation expose the same Sign in destination.
-- Completed Lite Check results describe the full loop as an invite-only production beta and show **Sign in to the invited beta** only when that same app origin is configured. The no-account scan, waitlist, and sample-report paths remain available alongside it.
+- The header hides Sign in/Sign up when `PUBLIC_APP_URL` is unset. Production sets `PUBLIC_APP_URL=https://app.lyrashieldai.com` so desktop and mobile navigation expose the same sign-in destination.
+- Completed Lite Check results describe the full release-assurance loop and link to **Create free account** when the app origin is configured. The no-account scan, product-updates signup, and sample-report paths remain available alongside it.
 - No pricing, no fake metrics, no public mention of the forked engine.
 - Blog posts are `draft: true` by default. Only un-draft a post after founder sign-off.
-- Marketing share buttons promote the waitlist referral link. Product scorecards, grades, verified-fix cards, and README badges come from the app origin and must never be recreated or edited as marketing artwork.
+- Marketing share buttons promote the product-updates/referral link. Product scorecards, grades, verified-fix cards, and README badges come from the app origin and must never be recreated or edited as marketing artwork.
 - See `BLOG_AUTHORING.md` for content rules.
 - See `../../userguide.md` for the complete public Lite Check and authenticated-product user guide; keep public copy within the availability boundaries documented there.

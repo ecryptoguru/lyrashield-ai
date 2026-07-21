@@ -26,9 +26,9 @@
 
 4. **1:20–1:48 — complete product experience**
 
-   Show a recorded invite-only session from `https://app.lyrashieldai.com`: target list, scan detail, immutable manifest or coverage receipt, and report/scorecard view. Do not show credentials or customer data. If a retained scan is unavailable, use the public Lite Check and the synthetic sample report rather than presenting a local fixture as a production scan.
+   Show a recorded session from `https://app.lyrashieldai.com`: target list, scan detail, immutable manifest or coverage receipt, and report/scorecard view. Do not show credentials or customer data. If a retained scan is unavailable, use the public Lite Check and the synthetic sample report rather than presenting a local fixture as a production scan.
 
-   > The invite-only workspace connects targets, findings, receipts, score snapshots, reports, schedules, and approval-gated actions. Scan admission fails closed when a worker is unavailable, and risky actions do not accept client-authored patches.
+   > The authenticated workspace connects targets, findings, receipts, score snapshots, reports, schedules, and approval-gated actions. Scan admission fails closed when a worker is unavailable, and risky actions do not accept client-authored patches.
 
 5. **1:48–2:33 — Build Week, Codex, and GPT-5.6**
 
@@ -40,7 +40,7 @@
 
    Return to the public site and repo.
 
-   > LyraShield AI is release assurance for AI-built software: not a claim that every issue is fixed, but a clear record of what evidence exists and what still needs review. The public Lite Check is live today; the authenticated workspace is an invite-only production beta.
+   > LyraShield AI is release assurance for AI-built software: not a claim that every issue is fixed, but a clear record of what evidence exists and what still needs review. The public Lite Check is live today; the authenticated workspace is an open-registration production beta.
 
 ## Before upload
 

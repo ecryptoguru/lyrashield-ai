@@ -39,11 +39,9 @@ export default function SignInPage() {
       oauthErrorTimer = window.setTimeout(() => {
         const normalizedError = oauthError.toLowerCase()
         setError(
-          normalizedError === "beta_invite_required"
-            ? "This account is not on the production beta invite list."
-            : normalizedError === "signup_disabled"
-              ? "Sign in with your invited email first, then connect Microsoft from Settings."
-              : "Social sign in could not be completed. Please try again."
+          normalizedError === "signup_disabled"
+            ? "Sign in with your email first, then connect Microsoft from Settings."
+            : "Social sign in could not be completed. Please try again."
         )
       }, 0)
       window.history.replaceState(null, "", "/sign-in")
