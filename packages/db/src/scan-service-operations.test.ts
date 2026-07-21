@@ -3,12 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("./client", () => ({
   prisma: {
     $transaction: vi.fn(),
+    $executeRaw: vi.fn(),
     scan: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
       updateMany: vi.fn(),
     },
-    scanEvent: { create: vi.fn() },
+    scanEvent: { create: vi.fn(), findMany: vi.fn() },
+    scanResultManifest: { findUnique: vi.fn() },
+    scanCoverageReceipt: { findMany: vi.fn() },
   },
 }))
 
@@ -24,7 +27,9 @@ const mockPrisma = prisma as unknown as {
     findFirst: ReturnType<typeof vi.fn>
     updateMany: ReturnType<typeof vi.fn>
   }
-  scanEvent: { create: ReturnType<typeof vi.fn> }
+  scanEvent: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> }
+  scanResultManifest: { findUnique: ReturnType<typeof vi.fn> }
+  scanCoverageReceipt: { findMany: ReturnType<typeof vi.fn> }
 }
 
 describe("updateScanStatus", () => {
@@ -96,27 +101,39 @@ describe("createScan", () => {
 })
 
 describe("getScanWithEvents", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+    mockPrisma.scanResultManifest.findUnique.mockResolvedValue(null)
+    mockPrisma.scanCoverageReceipt.findMany.mockResolvedValue([])
+  })
+
   it("retains the newest bounded events in chronological display order", async () => {
-    mockPrisma.scan.findFirst.mockResolvedValue({
-      id: "scan-1",
-      events: [{ id: "new" }, { id: "old" }],
-      resultManifest: null,
-      coverageReceipts: [],
-    })
+    mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1" })
+    mockPrisma.scanEvent.findMany.mockResolvedValue([{ id: "new" }, { id: "old" }])
 
     const scan = await getScanWithEvents("scan-1", "ws-1")
 
     expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "scan-1", workspaceId: "ws-1", deletedAt: null },
-        include: expect.objectContaining({
-          events: {
-            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-            take: 200,
-          },
-        }),
       })
     )
+    expect(mockPrisma.scanEvent.findMany).toHaveBeenCalledWith({
+      where: { scanId: "scan-1", deletedAt: null },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 200,
+    })
     expect(scan?.events.map((event) => event.id)).toEqual(["old", "new"])
+  })
+
+  it("does not query child records when the scoped scan is absent", async () => {
+    mockPrisma.scan.findFirst.mockResolvedValue(null)
+
+    await expect(getScanWithEvents("scan-1", "ws-1")).resolves.toBeNull()
+
+    expect(mockPrisma.scanEvent.findMany).not.toHaveBeenCalled()
+    expect(mockPrisma.scanResultManifest.findUnique).not.toHaveBeenCalled()
+    expect(mockPrisma.scanCoverageReceipt.findMany).not.toHaveBeenCalled()
   })
 })
