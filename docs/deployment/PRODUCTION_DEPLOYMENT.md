@@ -57,12 +57,30 @@ TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming c
 BREVO_API_KEY="..."
 EMAIL_FROM="noreply@example.com"
 
+# Optional OAuth sign-in. Register these exact production callback paths:
+# https://<app-origin>/api/auth/callback/github
+# https://<app-origin>/api/auth/callback/google
+# https://<app-origin>/api/auth/callback/microsoft
+# The invite-only beta accepts OAuth only for existing invited, verified users;
+# missing or partial credentials leave the corresponding button disabled.
+GITHUB_CLIENT_ID="..."
+GITHUB_CLIENT_SECRET="..."
+GOOGLE_CLIENT_ID="..."
+GOOGLE_CLIENT_SECRET="..."
+AZURE_AD_CLIENT_ID="..."
+AZURE_AD_CLIENT_SECRET="..."
+AZURE_AD_TENANT_ID="common"
+
 LYRASHIELD_LLM="azure/gpt-5.6-terra"
 LYRASHIELD_LUNA_LLM="azure/gpt-5.6-luna"
 LYRASHIELD_TERRA_LLM="azure/gpt-5.6-terra"
 LLM_API_KEY="..."
 LYRASHIELD_ENGINE_PATH="lyrashield"
 LYRASHIELD_IMAGE="ghcr.io/usestrix/strix-sandbox@sha256:<approved-digest>"
+LYRASHIELD_ENGINE_SANDBOX_NETWORK="lyrashield-sandbox"
+LYRASHIELD_WORKER_CONCURRENCY="1" # beta: one active sandboxed scan
+LYRASHIELD_BETA_INVITE_EMAILS="founder@example.com,approved-beta@example.com"
+PLATFORM_MAX_SCAN_BUDGET_USD="50"
 LYRASHIELD_TELEMETRY="0"
 
 # Azure OpenAI alternative (use these OR the generic LLM_API_KEY/LLM_API_BASE)

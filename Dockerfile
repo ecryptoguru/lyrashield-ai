@@ -46,13 +46,6 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
 
 FROM workspace-builder AS web-builder
 
-# Docker build arguments are scoped per stage. Re-declare every value consumed
-# below so classic remote builders do not silently substitute empty strings.
-ARG BUILD_DATABASE_URL="postgresql://build@db.example.invalid:5432/lyrashield?schema=public"
-ARG BUILD_APP_URL="https://app.example.invalid"
-ARG BUILD_PUBLIC_APP_URL="https://app.example.invalid"
-ARG BUILD_TRUSTED_PROXY_IP_HEADER="x-forwarded-for"
-
 RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     BETTER_AUTH_SECRET="build-placeholder-not-used-at-runtime" \
     BETTER_AUTH_URL="$BUILD_APP_URL" \
@@ -113,7 +106,8 @@ RUN python3 -m venv /opt/uv-bootstrap && \
 # isolated engine virtual environment.
 FROM node:22-alpine AS worker
 
-RUN apk add --no-cache docker-cli git python3 && \
+RUN corepack enable && corepack prepare pnpm@11.6.0 --activate && \
+    apk add --no-cache docker-cli git python3 && \
     addgroup --system lyrashield && \
     adduser --system --ingroup lyrashield --home /app lyrashield
 
@@ -133,7 +127,4 @@ COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
 RUN chown -R lyrashield:lyrashield /app /opt/lyrashield-engine /opt/lyrashield-venv
 
 USER lyrashield
-# Invoke the dependency copied into the image directly. Going through Corepack
-# can make a cold production start attempt to download pnpm from the registry,
-# which violates the worker's fail-closed egress policy.
-CMD ["./apps/worker/node_modules/.bin/tsx", "apps/worker/src/index.ts"]
+CMD ["pnpm", "--filter", "@lyrashield/worker", "exec", "tsx", "src/index.ts"]

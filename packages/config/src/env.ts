@@ -78,9 +78,6 @@ const envSchema = z
     // Production beta account creation is denied unless this server-only
     // comma-separated allowlist contains the normalized email address.
     LYRASHIELD_BETA_INVITE_EMAILS: z.string().optional().or(z.literal("")),
-    // The initial invite-only beta can use password sign-in without an email
-    // provider. Enable this only after transactional email is configured.
-    LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: z.enum(["0", "1"]).default("0"),
     SCANNER_PHASE_TIMEOUT_MS: z.coerce.number().int().positive().max(3_600_000).default(600_000),
     PLATFORM_MAX_SCAN_BUDGET_USD: z.coerce.number().positive().max(1000).default(50),
 

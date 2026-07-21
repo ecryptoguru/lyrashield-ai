@@ -5,7 +5,7 @@ import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
-import { isBetaUserCreationAllowed } from "./beta-invites"
+import { isBetaInviteAllowed } from "./beta-invites"
 import { isOAuthProviderConfigured, socialSignUpEnabled } from "./oauth-providers"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
@@ -19,7 +19,6 @@ const secureCookies = new URL(env.BETTER_AUTH_URL).protocol === "https:"
 const githubEnabled = isOAuthProviderConfigured(GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET)
 const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
 const microsoftEnabled = isOAuthProviderConfigured(AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)
-const requireEmailVerification = env.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION === "1"
 
 // Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; any origin
 // added here may initiate credentialed auth requests. Marketing and Lite Check
@@ -131,7 +130,7 @@ export const auth = betterAuth({
       const email = (ctx.body as { email?: unknown } | undefined)?.email
       if (
         typeof email !== "string" ||
-        !isBetaUserCreationAllowed(isProd, email, env.LYRASHIELD_BETA_INVITE_EMAILS)
+        !isBetaInviteAllowed(email, env.LYRASHIELD_BETA_INVITE_EMAILS)
       ) {
         throw APIError.from("FORBIDDEN", {
           code: "BETA_INVITE_REQUIRED",
@@ -139,6 +138,12 @@ export const auth = betterAuth({
         })
       }
     }),
+  },
+  emailVerification: {
+    sendVerificationEmail,
+    sendOnSignUp: true,
+    sendOnSignIn: true,
+    autoSignInAfterVerification: true,
   },
   databaseHooks: {
     user: {
@@ -170,8 +175,8 @@ export const auth = betterAuth({
       clientId: GITHUB_CLIENT_ID ?? "",
       clientSecret: GITHUB_CLIENT_SECRET ?? "",
       enabled: githubEnabled,
-      // OAuth account creation is authorized by the production user.create
-      // database hook, so only invited identities can be persisted.
+      // Invited beta users create and verify an email account first. OAuth can
+      // then link only to that account; it must never be a public sign-up path.
       disableSignUp: !socialSignUpEnabled(isProd),
     },
     google: {
@@ -180,26 +185,21 @@ export const auth = betterAuth({
       enabled: googleEnabled,
       disableSignUp: !socialSignUpEnabled(isProd),
     },
-    microsoft: {
-      clientId: AZURE_AD_CLIENT_ID ?? "",
-      clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
-      tenantId: AZURE_AD_TENANT_ID || "common",
-      enabled: microsoftEnabled,
-      prompt: "select_account",
-      disableProfilePhoto: true,
-      // Microsoft explicitly does not treat its mutable email claim as an
-      // authorization boundary. Production users first create an invited
-      // account and then link Microsoft from authenticated settings.
-      disableSignUp: isProd,
-    },
   },
-  account: {
-    encryptOAuthTokens: true,
-    accountLinking: {
-      enabled: true,
-      allowDifferentEmails: false,
-    },
-  },
+  plugins: microsoftEnabled
+    ? [
+        genericOAuth({
+          config: [
+            microsoftEntraId({
+              clientId: AZURE_AD_CLIENT_ID ?? "",
+              clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
+              tenantId: AZURE_AD_TENANT_ID || "common",
+              disableSignUp: !socialSignUpEnabled(isProd),
+            }),
+          ],
+        }),
+      ]
+    : [],
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days (rolling)
     updateAge: 60 * 60 * 24, // 1 day (refresh interval)

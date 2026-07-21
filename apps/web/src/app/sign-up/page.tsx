@@ -29,8 +29,6 @@ export default function SignUpPage() {
     google: false,
     microsoft: false,
     socialSignUp: false,
-    microsoftSignUp: false,
-    emailVerification: false,
   })
 
   useEffect(() => {
@@ -56,8 +54,6 @@ export default function SignUpPage() {
             google?: boolean
             microsoft?: boolean
             socialSignUp?: boolean
-            microsoftSignUp?: boolean
-            emailVerification?: boolean
           } | null
         ) => {
           if (data) {
@@ -66,8 +62,6 @@ export default function SignUpPage() {
               google: Boolean(data.google),
               microsoft: Boolean(data.microsoft),
               socialSignUp: Boolean(data.socialSignUp),
-              microsoftSignUp: Boolean(data.microsoftSignUp),
-              emailVerification: Boolean(data.emailVerification),
             })
           }
         }
@@ -142,14 +136,10 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
     try {
-      const { error: socialError } = await authClient.signIn.social({
+      await authClient.signIn.social({
         provider: "google",
         callbackURL: "/onboarding",
-        errorCallbackURL: "/sign-up",
       })
-      if (socialError) {
-        setError(getAuthErrorMessage(socialError) ?? "Google sign up failed. Please try again.")
-      }
     } catch {
       setError("Google sign up failed. Please try again.")
     } finally {
@@ -262,9 +252,7 @@ export default function SignUpPage() {
           </form>
 
           {providers.socialSignUp &&
-            (providers.github ||
-              providers.google ||
-              (providers.microsoft && providers.microsoftSignUp)) && (
+            (providers.github || providers.google || providers.microsoft) && (
               <>
                 <div className="my-6 flex items-center gap-3">
                   <div className="bg-border h-px flex-1" />
@@ -297,7 +285,7 @@ export default function SignUpPage() {
                       Sign up with Google
                     </Button>
                   )}
-                  {providers.microsoft && providers.microsoftSignUp && (
+                  {providers.microsoft && (
                     <Button
                       onClick={handleMicrosoft}
                       disabled={loading}

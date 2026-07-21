@@ -114,9 +114,6 @@ async function main(): Promise<void> {
       maxRetriesPerRequest: null,
     },
     concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
-    lockDuration: MAX_SCAN_RUNTIME_MS + 60_000,
-    lockRenewTime: SCAN_JOB_LOCK_RENEW_MS,
-    maxStalledCount: 1,
     autorun: false,
   })
 

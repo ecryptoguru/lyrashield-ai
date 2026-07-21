@@ -78,7 +78,19 @@ export default async function SettingsPage() {
 
       <ConnectedAccounts />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader>
+          <CardTitle>Production beta</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground text-sm leading-6">
+            Access is limited while we validate the production service. Scan results are scoped
+            evidence, not a security guarantee. For beta support, reply to your invitation email.
+          </p>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SettingsLink
           href="/dashboard/team"
           icon={Users}
