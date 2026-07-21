@@ -71,10 +71,12 @@ vi.mock("../engine/runner", () => ({
   })),
   resolveEngineTimeoutMs: vi.fn((mode: string, minutes?: number | null) =>
     typeof minutes === "number" && minutes > 0
-      ? minutes * 60 * 1000
+      ? mode === "DEEP" || mode === "CUSTOM"
+        ? Math.min(minutes * 60 * 1000, 20 * 60 * 1000)
+        : Math.min(minutes * 60 * 1000, 20 * 60 * 1000)
       : mode === "DEEP" || mode === "CUSTOM"
-        ? 60 * 60 * 1000
-        : 30 * 60 * 1000
+        ? 20 * 60 * 1000
+        : 20 * 60 * 1000
   ),
   interpretExitCode: vi.fn((code: number) => {
     if (code === 0) return { status: "COMPLETED", category: "SUCCESS" }
@@ -322,7 +324,7 @@ describe("processScanJob", () => {
         instruction: expect.stringContaining("vibe-security-50/1.0.0"),
       }),
       "scan-1",
-      30 * 60 * 1000,
+      20 * 60 * 1000,
       expect.any(Function)
     )
     expect(addScanEvent).toHaveBeenCalledWith(
@@ -361,8 +363,43 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 6.5 }),
       "scan-1",
-      75 * 60 * 1000,
+      20 * 60 * 1000,
       expect.any(Function)
+    )
+  })
+
+  it("caps deep scan total runtime to the 30-minute target by balancing engine and scanner phases", async () => {
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue({
+      maxBudgetUsd: { toNumber: () => 3.2 },
+      maxDurationMinutes: 75,
+    } as never)
+    const deepPolicyJob = {
+      id: "job-deep-policy-1",
+      discard: vi.fn(),
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "DEEP",
+        policyId: "policy-deep",
+      },
+    } as never
+
+    await processScanJob(deepPolicyJob)
+
+    expect(prisma.policy.findFirst).toHaveBeenCalledWith({
+      where: { id: "policy-deep", workspaceId: "ws-1", deletedAt: null },
+      select: { maxBudgetUsd: true, maxDurationMinutes: true },
+    })
+    expect(runEngine).toHaveBeenCalledWith(
+      expect.objectContaining({ maxBudgetUsd: 3.2 }),
+      "scan-1",
+      20 * 60 * 1000,
+      expect.any(Function)
+    )
+    expect(runScannerOrchestrator).toHaveBeenCalledWith(
+      expect.objectContaining({ scannerPhaseTimeoutMs: 10 * 60 * 1000 })
     )
   })
 
@@ -730,6 +767,19 @@ describe("processScanJob", () => {
     expect(result).toMatchObject({ status: "failed", errorCategory: "TIMEOUT" })
     // Timeout is terminal — it must not fall through to the scanner/verify phase.
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "VERIFYING")
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({ errorCategory: "TIMEOUT" })
+    )
+  })
+
+  it("maps scanner timeout errors to TIMEOUT", async () => {
+    vi.mocked(runScannerOrchestrator).mockRejectedValueOnce(new Error("Scanner phase timed out") as never)
+
+    const result = await processScanJob(mockJob)
+
+    expect(result).toMatchObject({ status: "failed", errorCategory: "TIMEOUT" })
     expect(updateScanStatus).toHaveBeenCalledWith(
       "scan-1",
       "FAILED",

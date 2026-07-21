@@ -1,20 +1,31 @@
 # LyraShield AI production beta readiness plan
 
-Status: **partially implemented — not a full-scan or general-availability approval**
+Status: **invite-only production beta deployed — controlled full-scan verification in progress; not a general-availability approval**
 Date: 2026-07-20
 Target: invite-only production beta with a small number of real users
 Primary constraints: production-grade safety, truthful beta UX, Supabase Free, Upstash Free, low Azure cost, and controlled GPT-5.6 spend without a material quality reduction.
 
-Current state: the marketing site, passive Lite Check, and separate invite-only authenticated app at `https://app.lyrashieldai.com` are deployed. The beta currently uses password/configured OAuth access without email verification or password reset. By founder decision, backup/restore work is deferred for this limited no-full-scan phase; this exception does not establish recovery readiness, permit an RPO/RTO claim, or satisfy the gates for general availability. The full worker remains deliberately unregistered until deployment-level egress controls and an approved controlled scan are proven.
+Current state: the marketing site, passive Lite Check, and separate invite-only authenticated app at `https://app.lyrashieldai.com` are deployed. The beta uses password/configured OAuth access without email verification or password reset. The dedicated production worker is registered at concurrency one behind deny-by-default, DNS-pinned egress, an internal no-egress sandbox network, private R2 evidence storage, TLS Redis, and Supabase Postgres. By founder decision, backup/restore remains deferred for this invite-only hackathon beta even while controlled scans are exercised. That is an explicitly accepted recovery risk: it creates no RPO/RTO claim and remains a blocker for general availability.
+
+### Production verification record — 2026-07-21
+
+- Authenticated GitHub sign-in, invite gating, onboarding, workspace creation, and repository-target creation passed on the live origin. Google and Microsoft follow the same Better Auth callback contract and pass provider/configuration tests; they were not used to create additional production identities.
+- The marketing header exposes `Sign in` only because `PUBLIC_APP_URL=https://app.lyrashieldai.com` is configured. The guarded Cloudflare deployment and live desktop navigation passed.
+- Worker image `sha256:3307fadd4d2f2a31b06b2c8138e93795bb8db841115af721242a10fdf6b91477` combines the reviewed application tree merged as `f52712b` with engine commit `0dcca84`; the sandbox remains separately digest-pinned. ACR admin credentials are disabled after managed-identity pull was confirmed. The authenticated app serves merged commit `3482355` as revision `lyrashield-app--rls3482355` from digest `sha256:fe6b0924c7994b3135fe4d321a9112d612d83ddf69626b5ad7f0ce7e74d6c29c`.
+- Ordinary production web requests use the dedicated `NOBYPASSRLS` role; the reviewed cross-workspace boundary uses a separate system connection. Zero-traffic canary health/readiness and authenticated scan detail passed before traffic moved, followed by active-session `/sign-in` redirection and nine dashboard route smokes. PR #143 serializes transaction-bound scan-detail child reads; trace-enabled E2E and live logs no longer emit the pg concurrent-query warning. The former healthy restricted revision remains available at zero traffic for rollback.
+- Worker startup, exact image identity, container health, `/api/ready/scans`, a full 45-second heartbeat observation, graceful unregister to `503`, restart to `200`, and zero-job recovery passed. Approved Postgres, Redis, Azure AI, GitHub, and R2 connectivity passed; unapproved public, metadata, private, and sandbox-public egress remained blocked.
+- A signed R2 put/head/get/checksum/delete drill passed. The passive Lite Check against `lyrashieldai.com` completed with five `Looks OK` surface checks and its limitations intact.
+- Three approved Safe attempts ended `FAILED / ENGINE_ERROR` with no assurance result and were retained without automatic replay while the bounded diagnostic identified a provider request-shape problem. Two later attempts stopped at their protected budget cap and were likewise not promoted as coverage. The corrected Luna/Safe run then completed in 13m04s with manifest `0703916ec66cf1ce6197d4e3599519eb1c8984e02164a77ec73b3e5cc211e541`, all 50 control receipts, two controls with findings, seven evidence-required controls, and three detected findings. PR #139 remediated the two Docker build-default findings and the permissive-RLS finding after that run; a current-tree Safe retest is required. The first Terra/Deep run failed at the former 30-minute timeout, and the post-PR-#139 rerun is the current terminal-proof gate.
+- Azure Monitor now routes operator email alerts for worker VM availability and sustained CPU, authenticated-app 5xx responses, container restarts, and loss of an active app replica. The authenticated app keeps one warm replica after a measured 15-second scale-to-zero timeout.
 
 ## 1. Outcome
 
-The target end state is an invite-only LyraShield AI beta in which users can authenticate, create authorized repository targets, run bounded scans, inspect findings and evidence state, retest, and view reports. The marketing site remains on Cloudflare. The authenticated application, database, Redis queue, evidence storage, and sandbox-capable worker are deployed separately. The currently deployed beta does not offer full repository scans.
+The target end state is an invite-only LyraShield AI beta in which users can authenticate, create authorized repository targets, run bounded scans, inspect findings and evidence state, retest, and view reports. The marketing site remains on Cloudflare. The authenticated application, database, Redis queue, evidence storage, and sandbox-capable worker are deployed separately. Repository scan admission is live but fail-closed on the worker lease; successful Safe and Deep terminal proof is still required.
 
 The beta is ready only after:
 
 1. all release-blocking security and tenant-integrity findings are closed or explicitly removed from the beta surface;
-2. production migrations, health checks, queue recovery, and rollback are proven; backup/restore is deferred only for the current no-full-scan invite-only phase and remains a general-availability gate;
+2. production migrations, health checks, queue recovery, and rollback are proven; the founder accepts deferred backup/restore as a beta risk while it remains a general-availability gate;
 3. one approved Safe scan and one approved Deep scan complete through the production worker lifecycle;
 4. model usage, provider-billed cost, latency, evidence storage, and result quality are reconciled;
 5. the live marketing and dashboard surfaces visibly identify the product as Beta;
@@ -53,12 +64,12 @@ The beta is ready only after:
 | ---------------------- | ----------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------: |
 | Marketing and waitlist | Existing Cloudflare Worker, D1, KV, Rate Limits | Keep current production deployment                   |                        Existing/free-tier usage |
 | Passive Lite Check     | Existing Azure Container App                    | 0.5 vCPU, 1 GiB, min 0, max 1                        | Expected within shared ACA grant at low traffic |
-| Authenticated web/API  | Azure Container Apps Consumption                | 0.5 vCPU, 1 GiB, min 0, max 1                        | Expected within shared ACA grant at low traffic |
+| Authenticated web/API  | Azure Container Apps Consumption                | 0.5 vCPU, 1 GiB, min 1, max 1                        | Expected within shared ACA grant at low traffic |
 | Application database   | Supabase Free Postgres                          | Runtime pooler URL; direct URL only for migrations   |                     $0 while within Free limits |
 | Queue and rate limits  | Upstash Free Redis                              | TLS Redis URL, one worker, measured command budget   |            $0 below Free command/storage limits |
 | Evidence storage       | Private Cloudflare R2                           | Scoped evidence bucket and credentials               |                        $0 within R2 Free limits |
 | Worker                 | Azure D2as v5 Linux VM                          | 2 vCPU, 8 GiB, 64 GB Standard SSD, one active scan   |         About $45.87/month continuously running |
-| Container images       | Public GHCR packages                            | Immutable image digests                              |                          $0 for public packages |
+| Container images       | Private Azure Container Registry                | Managed-identity pull; immutable image digests       |                    Approximately $5/month Basic |
 | Transactional email    | Deferred                                        | No email verification or password reset in this beta |                                               — |
 | CI                     | GitHub Actions standard public-repo runners     | Pinned actions and release jobs                      |        $0 for standard runners on a public repo |
 | Models                 | Azure-hosted GPT-5.6 Luna and Terra             | Luna specialists; Terra only as Deep coordinator     |                Usage-based, reported separately |
@@ -155,9 +166,9 @@ Required configuration:
 7. Track database size and alert at 350 MB; stop nonessential retention growth before 450 MB.
 8. Store no scan artifacts or raw engine output in Postgres.
 
-### Backup and restore requirement
+### Deferred backup and restore — accepted beta risk
 
-Supabase Free has no managed backups. Before storing beta data:
+Supabase Free has no managed backups. The founder has explicitly deferred the following work for the invite-only hackathon beta. Do not describe the current environment as recovery-ready and do not attach an RPO/RTO claim. Before general availability:
 
 1. Run a nightly `pg_dump --format=custom --schema=public --no-owner --no-acl` from the direct URL.
 2. Encrypt the dump client-side with a dedicated backup encryption secret.
@@ -169,6 +180,8 @@ Supabase Free has no managed backups. Before storing beta data:
 8. Define beta targets of RPO 24 hours and manual RTO 4 hours. Do not advertise stronger recovery until measured.
 
 Backup logs must not print database URLs, encryption secrets, target names, user email addresses, or dump content.
+
+The versioned backup/restore workflow remains available for explicit operator dispatch, but its scheduled triggers are disabled while this gate is deferred. Re-enable a reviewed schedule only when the R2 backup credentials, encryption secret, ownership, retention, and alerting are accepted together.
 
 ## 7. Evidence storage
 
@@ -189,13 +202,13 @@ No full scan is admitted if evidence storage is missing or a required artifact c
 
 - Azure Container Apps Consumption.
 - 0.5 vCPU and 1 GiB RAM.
-- Minimum replicas 0, maximum replicas 1.
+- Minimum replicas 1, maximum replicas 1. A live 15-second timeout from scale-to-zero was unacceptable for auth and readiness UX, so the beta now keeps one warm replica.
 - HTTP concurrency limit chosen after a small load test.
 - Startup/readiness probes for `/api/health` and `/api/ready`.
 - Scan readiness monitored separately through `/api/ready/scans`.
 - Use managed identity for image pulls; disable ACR admin credentials if ACR is temporarily retained.
 
-Accept an initial cold start for the invite-only beta. Move to minimum one replica only if measured user-facing cold starts are unacceptable.
+Retain minimum one replica during the hackathon and beta. Reconsider scale-to-zero only after measuring a cold-start path that stays inside the accepted user-facing timeout.
 
 ### Worker
 
@@ -209,7 +222,7 @@ Accept an initial cold start for the invite-only beta. Move to minimum one repli
 - Automatic security updates during a defined maintenance window.
 - VM logs and disk alerts with no raw target content.
 
-The current worker concurrency of three is too aggressive for the minimum VM. Add a bounded production configuration and set beta concurrency to one before deployment.
+Production sets bounded worker concurrency to one on the minimum VM. Do not raise it without measured CPU, memory, queue, sandbox, and provider-capacity evidence.
 
 ## 9. AI routing and deep cost optimization
 
@@ -288,7 +301,7 @@ Before external invitations, re-verify and close these known risk families again
 9. Evidence uploads fail closed and never use placeholders.
 10. Audit chains, deletion attribution, referral boundaries, and private usage accounting pass their regression suites.
 
-Any confirmed cross-tenant access, fail-open RLS, exposed secret, unsafe migration, missing backup restore, or unbounded provider call blocks deployment.
+Any confirmed cross-tenant access, fail-open RLS, exposed secret, unsafe migration, or unbounded provider call blocks this beta. Missing backup/restore proof is an accepted beta risk but continues to block any recovery or general-availability claim.
 
 ## 12. Observability and operational controls
 
@@ -302,11 +315,11 @@ Minimum beta alerts:
 - VM CPU above 85%, memory above 85%, or disk above 75% for a sustained period.
 - Upstash projected monthly commands exceed 350,000.
 - Supabase database exceeds 350 MB or connection utilization exceeds 70%.
-- Backup missing for 30 hours or restore drill missing for eight days.
+- Backup/restore alerts remain pending with the explicitly deferred recovery work; their absence must stay visible in readiness reporting.
 - Evidence upload/retrieval failure.
 - Provider usage mismatch or scan safety-cap stop.
 
-Operational ownership must name one person for deployment, incident response, backup restore, provider cost review, and user support. For the first beta these may all be the founder, but the responsibility and response path must be written down.
+Operational ownership names the founder for deployment, incident response, provider cost review, and user support. Backup-restore ownership begins when the deferred recovery gate is accepted for implementation.
 
 ## 13. Implementation phases
 
@@ -371,8 +384,8 @@ Actions:
 - Apply all migrations using the direct URL.
 - Create restricted runtime role and verify RLS.
 - Create Upstash Free Redis and configure `REDIS_URL` over TLS.
-- Create private R2 evidence and backup storage with scoped credentials and lifecycle rules.
-- Configure nightly encrypted backup and weekly isolated restore drill.
+- Create private R2 evidence storage with scoped credentials and lifecycle rules. This is complete and independently exercised.
+- Keep database backup storage, nightly encrypted backup, and weekly isolated restore drill explicitly deferred until the founder reopens the recovery gate.
 
 Exit criteria:
 
@@ -390,7 +403,7 @@ Rollback:
 Actions:
 
 - Build and publish an immutable public GHCR image.
-- Deploy Azure Container App at min 0/max 1.
+- Deploy Azure Container App at min 1/max 1 after the measured scale-to-zero timeout.
 - Configure secrets, origins, email, database, Redis, and proxy trust.
 - Add the application hostname and TLS.
 - Set marketing `PUBLIC_APP_URL` only after auth and readiness pass.
@@ -429,7 +442,7 @@ Rollback:
 
 Actions:
 
-- Run one approved Safe scan using Luna/medium.
+- Run one approved Safe scan using Luna/medium. Retain the first terminal failure as evidence and require a fresh explicit scan after diagnosis.
 - Inspect lifecycle events, findings, coverage, evidence, cleanup, latency, tokens, and Azure meter cost.
 - Run one approved Deep scan using Terra/medium coordinator and Luna/medium specialists.
 - Compare result quality and cost against the prior controlled baseline.
@@ -452,7 +465,7 @@ Actions:
 
 - Invite two internal/founder accounts first.
 - Expand to five users after 48 healthy hours.
-- Expand to ten users after seven healthy days and a successful backup restore.
+- Expand to ten users only after seven healthy days and a founder review of the still-deferred recovery risk.
 - Review Upstash, Supabase, Azure, R2, email, and model meters daily during week one.
 
 Exit criteria:
@@ -464,25 +477,25 @@ Exit criteria:
 
 ## 14. Verification matrix
 
-| Gate           | Required evidence                                                                                           |
-| -------------- | ----------------------------------------------------------------------------------------------------------- |
-| Source quality | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, formatting, `git diff --check`                    |
-| Database       | Prisma generation, migration diff, deploy to empty DB, deploy to production, restricted-role checks         |
-| Browser        | Marketing and dashboard at desktop, 390 px, and 320 px; keyboard, focus, reduced motion, empty/error states |
-| Auth           | Signup/invite, email verification, signin, signout, session expiry, cross-tenant denial                     |
-| Queue          | Admission, one concurrency, heartbeat expiry/recovery, cancellation, failure callback, reconciliation       |
-| Storage        | Evidence upload/download/checksum, missing-storage failure, encrypted backup and isolated restore           |
-| Models         | Luna Safe and Terra/Luna Deep routes, reasoning level, token buckets, provider cost reconciliation          |
-| Security       | Secrets/SCA gates, prompt-injection guard, engine-output bounds, target allowlist, no URL-engine execution  |
-| Deployment     | Immutable digests, health/readiness, logs/alerts, rollback to prior revision, VM deallocation recovery      |
-| Live truth     | Marketing Beta label, dashboard Beta label, app link only when live, no unsupported claims                  |
+| Gate           | Required evidence                                                                                                 |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Source quality | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, formatting, `git diff --check`                          |
+| Database       | Prisma generation, migration diff, deploy to empty DB, deploy to production, restricted-role checks               |
+| Browser        | Marketing and dashboard at desktop, 390 px, and 320 px; keyboard, focus, reduced motion, empty/error states       |
+| Auth           | Invite-gated signup with verification disabled, signin, signout, session expiry, cross-tenant denial              |
+| Queue          | Admission, one concurrency, heartbeat expiry/recovery, cancellation, failure callback, reconciliation             |
+| Storage        | Evidence upload/download/checksum and missing-storage failure; backup/restore remains a separate deferred GA gate |
+| Models         | Luna Safe and Terra/Luna Deep routes, reasoning level, token buckets, provider cost reconciliation                |
+| Security       | Secrets/SCA gates, prompt-injection guard, engine-output bounds, target allowlist, no URL-engine execution        |
+| Deployment     | Immutable digests, health/readiness, logs/alerts, rollback to prior revision, VM deallocation recovery            |
+| Live truth     | Marketing Beta label, dashboard Beta label, app link only when live, no unsupported claims                        |
 
 ## 15. Go/no-go decision
 
 ### Go for limited production beta
 
 - All P0/P1 gates pass.
-- Backup and restore are proven.
+- Backup/restore risk is explicitly accepted for this limited beta and is not misrepresented as proven.
 - One Safe and one Deep production scan are reconciled.
 - The app is invite-only and one scan runs at a time.
 - Free-tier projections retain headroom or cheap PAYG fallback is ready.
@@ -493,7 +506,7 @@ Exit criteria:
 - Cross-tenant or RLS failure.
 - Missing restricted database role.
 - Missing/retrieval-failing evidence storage.
-- No verified backup restore.
+- Any recovery, RPO/RTO, or general-availability claim while backup/restore remains unverified.
 - Worker cannot cleanly stop or expires without scan admission failing closed.
 - Provider usage cannot be reconciled or requests can run without finite safety limits.
 - Scorecards can overstate blocked/incomplete coverage.
@@ -511,4 +524,4 @@ After two weeks or 50 completed scans, whichever comes first:
 6. Evaluate context-slicing improvements before RAG or a higher model tier.
 7. Expand beyond ten users only after capacity, recovery, and untrusted-target egress controls are proven.
 
-This plan intentionally chooses the smallest production path that preserves tenant safety, evidence integrity, recovery, and bounded provider spend. It does not treat free-tier availability as a substitute for monitoring or a paid fallback.
+This plan intentionally chooses the smallest production path that preserves tenant safety, evidence integrity, and bounded provider spend while documenting the founder-accepted recovery gap. It does not treat free-tier availability as a substitute for monitoring, a paid fallback, or eventual backup/restore proof.

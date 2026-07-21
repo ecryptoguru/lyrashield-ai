@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last verified against the application code and invite-only beta deployment: 2026-07-20
+Last verified against the application code and invite-only beta deployment: 2026-07-21
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked. The product workflow is:
 
@@ -38,6 +38,8 @@ The Lite Check can:
 
 It does not authenticate, exploit, fuzz, brute-force, enumerate a database, actively test row-level security, crawl arbitrary paths, or fetch exposed environment-file paths. It is separate from the authenticated full-scan pipeline and does not produce the official LyraShield Score.
 
+After a result, invited beta users can choose **Sign in to the invited beta** to continue to the authenticated app. Other visitors can join the waitlist or inspect the synthetic sample report. The result keeps its passive-check limitations visible even when all five surface checks look OK.
+
 Before submitting a target, confirm that you own it or are authorized to test it and accept the displayed terms. Bare domains are normalized to HTTPS. URLs containing credentials, query strings, fragments, private addresses, or unsupported protocols are rejected.
 
 ### 2.2 Browser-local tools
@@ -63,14 +65,13 @@ Use the public methodology page to understand scoring, evidence states, and limi
 1. Open [https://app.lyrashieldai.com](https://app.lyrashieldai.com) for the invite-only beta.
 2. Select **Sign up**.
 3. Enter your name, email, and password.
-4. Complete email verification when required by the deployment.
-5. Sign in and continue through onboarding.
+4. Sign in and continue through onboarding. Email verification is disabled for the current beta.
 
 The initial invite-only beta intentionally runs without an email provider: email verification and password reset are unavailable. The application preserves the intended destination through authentication. When an email provider is configured later, complete verification when required and use **Forgot password** for a reset.
 
 ### 3.2 Sign in, sign out, and theme
 
-- Use **Sign in** with your registered email and password.
+- Use **Sign in** with your registered email and password, or a configured GitHub, Google, or Microsoft identity. Social sign-up remains invite-gated; Microsoft is link-only in the current production configuration.
 - Use the theme control in the sidebar account area to switch between supported light and dark themes.
 - Use **Sign out** at the bottom of the sidebar to end the current session.
 
@@ -409,9 +410,9 @@ Use the same supported scan modes as the API: SAFE, QUICK, STANDARD, DEEP, or CU
 
 ## 23. Current availability
 
-The public marketing site, Lite Check, browser-local tools, methodology, and content are live. The authenticated dashboard and full BullMQ/engine worker remain separate deployment surfaces and are not yet a public production capability.
+The public marketing site, Lite Check, browser-local tools, methodology, and content are live. The authenticated dashboard and dedicated BullMQ/engine worker are deployed as a separate invite-only production beta. Ordinary web requests use a restricted `NOBYPASSRLS` database role, and repository scan admission fails closed when the worker heartbeat is absent. A current-tree Safe retest and a successful, reconciled Deep controlled scan are still required before the full-scan release gate passes.
 
-An operator must provision the authenticated application origin, TLS Redis queue, private evidence storage, sandbox-capable worker compute, authorized models, monitoring/recovery, and transport-level egress controls before offering full scans broadly.
+The production beta has an authenticated application origin, TLS Redis queue, private evidence storage, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. Broad availability still requires completed controlled-scan proof, application-level readiness/queue/provider alerts, capacity evidence, and backup/restore. Backup/restore is explicitly deferred for this invite-only hackathon beta, so no recovery or RPO/RTO claim is made.
 
 Billing plans, plan quotas, automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
 
@@ -420,9 +421,9 @@ Billing plans, plan quotas, automatic server-generated Fix PRs, intrusive exploi
 ### Sign-in keeps loading
 
 - Confirm the authenticated app origin and Better Auth URL match the deployment.
-- Confirm the account has completed email verification when required.
+- Email verification and password reset are intentionally unavailable in the current beta.
 - Clear the site session and sign in again.
-- Use password reset if the password is uncertain.
+- If a password is uncertain, use an enabled social provider or ask the operator for invite/account help; never share the password.
 - Ask the operator to inspect the authentication API and application logs without sharing your password.
 
 ### A scan will not start

@@ -134,6 +134,36 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
   }
 }
 
+const MAX_SCAN_RUNTIME_MS = 30 * 60 * 1000
+
+function resolveScanRuntimeBudgetMs(maxDurationMinutes: number | null | undefined): number {
+  const configuredMaxMs =
+    typeof maxDurationMinutes === "number" &&
+    Number.isFinite(maxDurationMinutes) &&
+    maxDurationMinutes > 0
+      ? Math.floor(maxDurationMinutes * 60 * 1000)
+      : MAX_SCAN_RUNTIME_MS
+
+  return Math.min(configuredMaxMs, MAX_SCAN_RUNTIME_MS)
+}
+
+function resolveScannerPhaseTimeoutMs(
+  engineTimeoutMs: number,
+  globalScanBudgetMs: number
+): number {
+  const totalRuntimeBudgetMs = Math.min(
+    globalScanBudgetMs,
+    env.SCANNER_PHASE_TIMEOUT_MS + engineTimeoutMs
+  )
+  const remainingForScannersMs = Math.max(0, totalRuntimeBudgetMs - engineTimeoutMs)
+
+  if (remainingForScannersMs <= 0) {
+    return 0
+  }
+
+  return Math.min(env.SCANNER_PHASE_TIMEOUT_MS, remainingForScannersMs)
+}
+
 function requireEngineModel(model: string | undefined): string {
   if (!model) {
     throw new Error(
@@ -141,6 +171,19 @@ function requireEngineModel(model: string | undefined): string {
     )
   }
   return model
+}
+
+function timeoutErrorMessage(totalRuntimeMs: number): string {
+  const minutes = Math.max(1, Math.ceil(totalRuntimeMs / 60_000))
+  return `Scan exceeded the configured runtime limit of ${minutes} minute(s)`
+}
+
+function isTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  if (error.name === "TimeoutError") return true
+
+  const message = error.message.toLowerCase()
+  return message.includes("timeout") || message.includes("timed out")
 }
 
 export async function persistEngineUsageCheckpoint(params: {
@@ -311,6 +354,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
   // auto-scoping safety net is active for all DB queries. Without this, a
   // missed manual workspaceId filter could leak cross-tenant data.
   return runWithWorkspaceContext(workspaceId, async () => {
+    let globalScanTimeoutReached = false
+    let scanRuntimeBudgetMs = MAX_SCAN_RUNTIME_MS
     let billablePhaseStarted = false
     try {
       // A manifest is the immutable checkpoint after findings and retests have
@@ -424,7 +469,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           })
         : null
       const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
+      const scanStartedAtMs = Date.now()
+      scanRuntimeBudgetMs = resolveScanRuntimeBudgetMs(policy?.maxDurationMinutes)
       const maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
+      const engineTimeoutMs = resolveEngineTimeoutMs(mode, policy?.maxDurationMinutes)
       const engineProfile = resolveEngineProfile(mode)
       const engineModel =
         target.type === "REPO" ? requireEngineModel(engineProfile.model) : engineProfile.model
@@ -461,6 +509,41 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         billablePhaseStarted = true
       }
 
+      const hasGlobalScanTimeout = (): boolean => {
+        if (Date.now() - scanStartedAtMs >= scanRuntimeBudgetMs) {
+          globalScanTimeoutReached = true
+          return true
+        }
+        return false
+      }
+
+      const isCancelledOrTimedOut = async () => {
+        if (hasGlobalScanTimeout()) return true
+        const current = await prisma.scan.findUnique({
+          where: { id: scanId },
+          select: { status: true },
+        })
+        return current?.status === "CANCELLED"
+      }
+
+      const failWithScanTimeout = async (timeoutMessage: string) => {
+        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+          errorCategory: "TIMEOUT",
+          errorMessage: timeoutMessage,
+        })
+        try {
+          await notifyScanFailed(workspaceId, scanId, timeoutMessage)
+        } catch (notificationError) {
+          log.warn("Failed to send scan timeout notification", {
+            scanId,
+            error:
+              notificationError instanceof Error
+                ? notificationError.message
+                : String(notificationError),
+          })
+        }
+      }
+
       const engineResult: EngineRunResult =
         target.type === "REPO"
           ? await runEngine(
@@ -479,14 +562,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                 maxBudgetUsd,
               },
               scanId,
-              resolveEngineTimeoutMs(mode, policy?.maxDurationMinutes),
-              async () => {
-                const current = await prisma.scan.findUnique({
-                  where: { id: scanId },
-                  select: { status: true },
-                })
-                return current?.status === "CANCELLED"
-              }
+              engineTimeoutMs,
+              isCancelledOrTimedOut
             )
           : {
               exitCode: 0,
@@ -501,6 +578,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                 findingsComplete: true,
               },
             }
+
+      if (globalScanTimeoutReached) {
+        const timeoutMessage = timeoutErrorMessage(scanRuntimeBudgetMs)
+        await failWithScanTimeout(timeoutMessage)
+        return { status: "failed", errorCategory: "TIMEOUT", errorMessage: timeoutMessage }
+      }
 
       if (target.type !== "REPO") {
         await addScanEvent(
@@ -628,6 +711,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
       await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
+      const scannerPhaseTimeoutMs = resolveScannerPhaseTimeoutMs(
+        engineTimeoutMs,
+        scanRuntimeBudgetMs
+      )
 
       const orchestratorResult = await runScannerOrchestrator({
         scanId,
@@ -644,13 +731,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         mode,
         engineFindings: engineResult.output.vulnerabilities,
         workspaceDir: engineResult.sourceCheckoutPath ?? undefined,
-        isCancelled: async () => {
-          const current = await prisma.scan.findUnique({
-            where: { id: scanId },
-            select: { status: true },
-          })
-          return current?.status === "CANCELLED"
-        },
+        scannerPhaseTimeoutMs,
+        isCancelled: isCancelledOrTimedOut,
       })
 
       try {
@@ -848,6 +930,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       const errorCategory = error instanceof Error ? error.name : "UNKNOWN"
+      const finalErrorCategory =
+        globalScanTimeoutReached || isTimeoutError(error) ? "TIMEOUT" : errorCategory
+      const finalErrorMessage =
+        finalErrorCategory === "TIMEOUT" &&
+        !errorMessage.includes("Scan exceeded the configured runtime limit")
+          ? timeoutErrorMessage(scanRuntimeBudgetMs)
+          : errorMessage
 
       log.error("Scan job failed", { scanId, error: errorMessage })
 
@@ -858,6 +947,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
         .catch(() => null)
       if (currentScan?.status === "CANCELLED") {
+        if (globalScanTimeoutReached) {
+          return {
+            status: "failed",
+            errorCategory: "TIMEOUT",
+            errorMessage: timeoutErrorMessage(scanRuntimeBudgetMs),
+          }
+        }
         return {
           status: "failed",
           errorCategory: "CANCELLED",
@@ -889,8 +985,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       try {
         await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory,
-          errorMessage,
+          errorCategory: finalErrorCategory,
+          errorMessage: finalErrorMessage,
         })
       } catch (updateErr) {
         log.error("Failed to update scan status on error", {
@@ -901,8 +997,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       return {
         status: "failed",
-        errorCategory,
-        errorMessage,
+        errorCategory: finalErrorCategory,
+        errorMessage: finalErrorMessage,
       }
     } finally {
       try {

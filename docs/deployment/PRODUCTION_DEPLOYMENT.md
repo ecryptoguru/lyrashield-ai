@@ -1,6 +1,6 @@
 # LyraShield AI — Production Deployment Gate
 
-> This runbook is not a blanket production approval. The invite-only authenticated beta is deployed at `https://app.lyrashieldai.com`, while full repository scans remain unavailable until their dedicated worker, egress, and controlled-scan gates are independently proven. Choose vendors and infrastructure only after founder approval; do not copy local Docker Compose into production.
+> This runbook is not a blanket production approval. The invite-only authenticated beta and fail-closed production worker are deployed, but a successful Safe and Deep controlled-scan pair is still required before the full-scan gate passes. Choose vendors and infrastructure only after founder approval; do not copy local Docker Compose into production.
 
 `userguide.md` documents the end-user experience. This runbook owns only deployment, configuration, verification, and operational release boundaries.
 
@@ -21,7 +21,7 @@
 5. The worker runs as a dedicated non-root user with least-privilege filesystem and Docker access.
 6. The sandbox image is pinned to an inspected digest; mutable tags are not acceptable. The worker and each sandbox share a dedicated internal control-plane network that has no default external route.
 7. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
-8. Egress policy, DNS pinning/proxying, logs, alerts, and recovery ownership are defined. Backup and restore are explicitly deferred for the current no-full-scan invite-only beta; they remain required before general availability, any RPO/RTO claim, or broad scan availability. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
+8. Egress policy, DNS pinning, logs, alerts, and recovery ownership are defined. Backup and restore are explicitly deferred by founder decision for the invite-only hackathon beta even while controlled scans run; they remain required before general availability or any RPO/RTO claim. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
 
 ## Full-scan resource checklist
 
@@ -149,7 +149,7 @@ A durable scan event is recorded immediately before a repository scan enters the
 
 Safe/Quick/Standard are Luna-only. Deep/Custom use a deterministic two-tier invocation: Terra/medium is the root coordinator and Luna/medium handles child specialist work. The model cannot self-promote a child to Terra, and only the root can create or stop specialists.
 
-Engine PRs #6 and #7 are merged. The promoted engine compacts estimated input at 240k toward 180k, bounds direct dedupe input to 200 kB, limits output and agent concurrency, and reserves projected spend before each request. These controls do not replace provider-meter reconciliation or prove finding quality.
+Engine PRs #6, #7, #11, and #14 are merged. The promoted engine compacts estimated input at 96k toward 64k, bounds inherited child history to 24 KiB, caps source-aware SAST targets, bounds direct dedupe input to 200 kB, limits output and agent concurrency, and reserves projected spend before each request. These controls do not replace provider-meter reconciliation or prove finding quality.
 
 Add GitHub OAuth/App, email, notification, billing, and analytics variables only when those integrations are enabled. R2/S3 is mandatory before controlled full scans, and monitoring is mandatory before general availability. Use `.env.example` as the complete variable index, not as a production secret file.
 
@@ -174,7 +174,7 @@ Then, in the target environment:
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.
 5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with medium reasoning and its cap is $15 or the selected positive policy override.
 6. Capture audit evidence, confirm the sandbox image digest used, reconcile provider billing with the retained usage/rate-card ledger without treating it as an invoice, and verify evidence artifacts are retrievable from the configured S3-compatible endpoint. Any placeholder or failed upload blocks the gate.
-7. Backup and restore are deferred by founder decision for the current no-full-scan beta. Do not claim an RPO/RTO or expand to general availability until an isolated restore drill passes.
+7. Backup and restore are deferred by founder decision for the invite-only hackathon beta. The workflow is manual-dispatch only while deferred; do not claim an RPO/RTO or expand to general availability until a scheduled encrypted backup and isolated restore drill are accepted and pass.
 8. Confirm URL targets use only the pinned deterministic URL scanner. Do not re-enable the external engine for URL targets until its transport is DNS-pinned and redirect-safe.
 9. Confirm GitHub callbacks can refresh only a pre-existing workspace binding. Fresh installation claims and client-authored Fix PR payloads must remain blocked until their provider-ownership and server-generated-patch gates are implemented.
 
@@ -188,7 +188,7 @@ Operational queue rules:
 4. After restart, verify `/api/ready/scans`, worker logs, the same queue/database counts, and the absence of an unintended `engine_start` event.
 5. Retry a failed/orphaned scan only through an explicit user/operator action that creates a new scan ID. Reconciliation never recreates paid work.
 
-Alert when scan readiness remains 503 beyond the deployment window, every worker heartbeat expires, reconciliation reports drift, a queue-failure event is retained, queue depth grows without active workers, or the oldest waiting job exceeds the approved latency. Web `/api/ready` may remain healthy during a scan-service outage and must not mask this alert.
+Alert when scan readiness remains 503 beyond the deployment window, every worker heartbeat expires, reconciliation reports drift, a queue-failure event is retained, queue depth grows without active workers, or the oldest waiting job exceeds the approved latency. Web `/api/ready` may remain healthy during a scan-service outage and must not mask this alert. Production Azure Monitor currently routes operator email for worker VM availability, sustained worker CPU, authenticated-app 5xx responses, container restarts, and loss of an active app replica; application-level queue/readiness and provider-usage alert delivery remain follow-up gates.
 
 The production VM implementation is versioned in `ops/worker/`. It loads secrets through the VM managed identity, requires immutable worker and sandbox digests, joins the worker to a restricted egress network plus an internal sandbox network, applies a `DOCKER-USER` destination allowlist, and refreshes approved DNS answers on a timer. Its negative connectivity tests are a release gate, not an optional smoke check.
 
@@ -212,6 +212,10 @@ Monitor only coarse funnel stages: deduplicated scorecard view, share-button han
 
 - `https://lyrashieldai.com` is live on the `lyrashield-marketing` Worker. The apex and `www` custom domains are attached.
 - `https://app.lyrashieldai.com` is live as the separate invite-only authenticated beta. Password and configured OAuth access are available without email verification; password reset remains unavailable until an email provider is configured.
+- The authenticated app runs at min/max one replica after a live scale-to-zero request exceeded 15 seconds. Health, web readiness, and scan readiness subsequently returned in approximately 0.2–1.3 seconds during the verification window.
+- The dedicated worker runs the reviewed application tree merged as `f52712b` with engine commit `0dcca84` from immutable ACR digest `sha256:3307fadd4d2f2a31b06b2c8138e93795bb8db841115af721242a10fdf6b91477`. The sandbox has a separate inspected digest and no default external route. ACR admin credentials are disabled; the VM pulls through its scoped managed identity.
+- The authenticated app serves merged commit `3482355` as revision `lyrashield-app--rls3482355` from immutable digest `sha256:fe6b0924c7994b3135fe4d321a9112d612d83ddf69626b5ad7f0ce7e74d6c29c`. Ordinary requests use a dedicated `NOSUPERUSER NOBYPASSRLS` role. A separately configured system connection is limited in code to public share-token/scorecard resolution and signed GitHub-provider lookups. Zero-traffic canary health, database/Redis readiness, scan readiness, active-session `/sign-in` → dashboard routing, active/stopped scan details, and nine dashboard routes passed before 100% traffic moved to the revision. Trace-enabled restricted-role E2E and live logs confirm PR #143 removed the pg concurrent-query warning. The previous healthy restricted revision remains at zero traffic for rollback.
+- Worker health, 45-second heartbeat renewal, graceful unregister/restart, empty-queue recovery, approved-endpoint access, blocked unapproved/private/metadata access, and signed R2 put/head/get/checksum/delete passed. After the retained fail-closed diagnostic attempts, one Luna/Safe run completed in 13m04s with a manifested 50-control ledger and three findings. PR #139 remediated the two Docker build-default findings and the permissive-RLS finding after that scan, so a fresh Safe retest remains required. The first Terra/Deep attempt ended at the former 30-minute limit; the post-PR-#139 rerun must provide terminal proof.
 - Production D1, Rate Limit, and KV bindings are provisioned; migrations `0001`–`0003` are applied remotely; `WAITLIST_IP_SALT` is stored as a Worker secret.
 - `PUBLIC_SITE_URL=https://lyrashieldai.com` and `PUBLIC_INDEXABLE=true`. The marketing, methodology, browser-local tools, and passive `/scan` surface are indexable. `/terms` remains page-scoped `noindex` and excluded from the sitemap.
 - Live HTTPS, security headers, canonical/schema metadata, sitemap/robots/`llms.txt`, waitlist behavior, representative Lighthouse/Brave rendering, the permanent path/query-preserving `www`-to-apex redirect, and a production browser Lite Check pass.

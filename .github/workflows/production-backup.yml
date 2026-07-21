@@ -1,9 +1,6 @@
 name: Production database backup
 
 on:
-  schedule:
-    - cron: "20 2 * * *"
-    - cron: "40 3 * * 0"
   workflow_dispatch:
     inputs:
       restore:
@@ -83,7 +80,7 @@ jobs:
   restore:
     name: Weekly isolated restore drill
     needs: backup
-    if: ${{ github.event.schedule == '40 3 * * 0' || inputs.restore }}
+    if: ${{ inputs.restore }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
