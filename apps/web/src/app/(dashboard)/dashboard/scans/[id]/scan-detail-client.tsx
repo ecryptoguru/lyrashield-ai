@@ -202,7 +202,7 @@ export function ScanDetailClient({
     async (signal: AbortSignal) => {
       try {
         const updated = await apiGet<ScanPollData>(`/api/scans/${scan.id}`, { signal })
-        setScan({
+        const nextScan: ScanData = {
           id: updated.id,
           workspaceId: updated.workspaceId,
           status: updated.status,
@@ -235,13 +235,14 @@ export function ScanDetailClient({
               metadata: asMetadata(receipt.metadata),
             })),
           },
-        })
+        }
+        let refreshedFindings: FindingItem[] | null = null
         if (
           ["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(
             updated.status
           )
         ) {
-          const refreshedFindings: FindingItem[] = []
+          refreshedFindings = []
           let cursor: string | undefined
           do {
             const page = await apiGetPaginated<FindingItem>(
@@ -252,7 +253,13 @@ export function ScanDetailClient({
             refreshedFindings.push(...page.items)
             cursor = page.nextCursor ?? undefined
           } while (cursor && !signal.aborted)
-          if (!signal.aborted) setCurrentFindings(refreshedFindings)
+        }
+        if (!signal.aborted) {
+          // Commit the terminal status and its finding list together. If the
+          // finding request fails transiently, the active poll remains alive
+          // and retries instead of rendering a false zero until page reload.
+          setScan(nextScan)
+          if (refreshedFindings) setCurrentFindings(refreshedFindings)
         }
       } catch {
         // Network errors during polling are non-fatal — keep showing stale data
@@ -481,8 +488,11 @@ export function ScanDetailClient({
 
       {scan.summary && presentation.assuranceAvailable && (
         <Card className="mb-6 p-4">
-          <h2 className="mb-1 text-sm font-semibold">Summary</h2>
+          <h2 className="mb-1 text-sm font-semibold">Engine summary</h2>
           <p className="text-muted-foreground text-sm">{scan.summary}</p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Deterministic scanner findings are included in the total and the findings list below.
+          </p>
         </Card>
       )}
 
