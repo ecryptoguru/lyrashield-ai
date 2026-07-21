@@ -91,14 +91,21 @@ export const READ_OPS = new Set<string>([
 // cases. (S7)
 export const WRITE_SCOPE_OPS = new Set<string>(["updateMany", "deleteMany"])
 
-const workspaceStore = new AsyncLocalStorage<{ workspaceId: string | null }>()
+const workspaceStore = new AsyncLocalStorage<{
+  workspaceId: string | null
+  databaseRlsBound: boolean
+}>()
 
 /**
  * Run `fn` with a workspace context bound for its entire async execution.
  * This is the safe primitive (wrapping) — prefer it in workers/jobs.
  */
 export function runWithWorkspaceContext<T>(workspaceId: string | null, fn: () => T): T {
-  return workspaceStore.run({ workspaceId }, fn)
+  return workspaceStore.run({ workspaceId, databaseRlsBound: false }, fn)
+}
+
+export function runWithDatabaseRLSContext<T>(workspaceId: string, fn: () => T): T {
+  return workspaceStore.run({ workspaceId, databaseRlsBound: true }, fn)
 }
 
 /**
@@ -108,18 +115,37 @@ export function runWithWorkspaceContext<T>(workspaceId: string | null, fn: () =>
  * across requests the way a module-level variable would.
  *
  * Auto-scoping is ACTIVE: `requireWorkspaceAccess` calls this after resolving
- * the workspace. The Prisma client extension auto-injects `workspaceId` on all
- * workspace-scoped models. RLS policies remain permissive when their context is
- * unset, and no request/job path currently calls `withWorkspaceRLS()`. Active
- * isolation is explicit query filters plus this AsyncLocalStorage guard; new
- * services should use `withWorkspaceRLS()` for an incremental strict cutover.
+ * the workspace. The Prisma client extension auto-injects `workspaceId` and
+ * binds the matching transaction-local PostgreSQL RLS context for every
+ * workspace-scoped model operation. Multi-query atomic operations must use
+ * `withWorkspaceRLS()` so all statements retain one scoped connection.
  */
 export function setWorkspaceContext(workspaceId: string | null): void {
-  workspaceStore.enterWith({ workspaceId })
+  workspaceStore.enterWith({ workspaceId, databaseRlsBound: false })
 }
 
 export function getWorkspaceContext(): string | null {
   return workspaceStore.getStore()?.workspaceId ?? null
+}
+
+export function isDatabaseRLSContextBound(): boolean {
+  return workspaceStore.getStore()?.databaseRlsBound ?? false
+}
+
+/**
+ * Recover the workspace already present in a server-owned Prisma operation
+ * when no request/job context survived to the query's async resource. This is
+ * not an authorization decision: PostgreSQL is bound to the same workspaceId
+ * that the query already filters or writes.
+ */
+export function getExplicitWorkspaceId(args: Record<string, unknown>): string | null {
+  const where = args.where as Record<string, unknown> | undefined
+  if (typeof where?.workspaceId === "string" && where.workspaceId) return where.workspaceId
+
+  const data = args.data as Record<string, unknown> | undefined
+  if (typeof data?.workspaceId === "string" && data.workspaceId) return data.workspaceId
+
+  return null
 }
 
 /**

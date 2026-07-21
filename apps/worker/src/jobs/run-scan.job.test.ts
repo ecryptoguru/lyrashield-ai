@@ -69,8 +69,12 @@ vi.mock("../engine/runner", () => ({
     delegateModel: "azure_ai/gpt-5.6-luna",
     delegateReasoningEffort: "medium",
   })),
-  resolveEngineTimeoutMs: vi.fn((minutes?: number | null) =>
-    typeof minutes === "number" && minutes > 0 ? minutes * 60 * 1000 : 30 * 60 * 1000
+  resolveEngineTimeoutMs: vi.fn((mode: string, minutes?: number | null) =>
+    typeof minutes === "number" && minutes > 0
+      ? minutes * 60 * 1000
+      : mode === "DEEP" || mode === "CUSTOM"
+        ? 60 * 60 * 1000
+        : 30 * 60 * 1000
   ),
   interpretExitCode: vi.fn((code: number) => {
     if (code === 0) return { status: "COMPLETED", category: "SUCCESS" }

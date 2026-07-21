@@ -479,7 +479,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                 maxBudgetUsd,
               },
               scanId,
-              resolveEngineTimeoutMs(policy?.maxDurationMinutes),
+              resolveEngineTimeoutMs(mode, policy?.maxDurationMinutes),
               async () => {
                 const current = await prisma.scan.findUnique({
                   where: { id: scanId },

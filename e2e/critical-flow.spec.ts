@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const password = "E2e-password-123!"
@@ -40,21 +40,21 @@ test.afterAll(async () => {
       })
       if (workspace) {
         const now = new Date()
-        await prisma.$transaction([
-          prisma.scan.updateMany({
+        await withWorkspaceRLS(workspace.id, async (tx) => {
+          await tx.scan.updateMany({
             where: { workspaceId: workspace.id, status: "QUEUED" },
             data: { status: "CANCELLED", endedAt: now, deletedAt: now },
-          }),
-          prisma.target.updateMany({
+          })
+          await tx.target.updateMany({
             where: { workspaceId: workspace.id },
             data: { deletedAt: now },
-          }),
-          prisma.workspace.updateMany({
+          })
+          await tx.workspace.updateMany({
             where: { id: workspace.id, name: workspaceName },
             data: { deletedAt: now },
-          }),
-          prisma.workspaceMember.deleteMany({ where: { workspaceId: workspace.id } }),
-        ])
+          })
+          await tx.workspaceMember.deleteMany({ where: { workspaceId: workspace.id } })
+        })
       }
     }
     if (testUserIds.length) {

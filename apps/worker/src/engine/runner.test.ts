@@ -247,18 +247,22 @@ describe("repository scan runtime configuration", () => {
 
 describe("resolveEngineTimeoutMs", () => {
   it("uses the policy duration when configured", () => {
-    expect(resolveEngineTimeoutMs(60)).toBe(60 * 60 * 1000)
+    expect(resolveEngineTimeoutMs("SAFE", 60)).toBe(60 * 60 * 1000)
   })
 
   it.each([undefined, null, 0, -1, Number.NaN])(
-    "uses the safe default for invalid duration %s",
+    "uses the bounded release-check default for invalid duration %s",
     (duration) => {
-      expect(resolveEngineTimeoutMs(duration)).toBe(30 * 60 * 1000)
+      expect(resolveEngineTimeoutMs("SAFE", duration)).toBe(30 * 60 * 1000)
     }
   )
 
+  it.each(["DEEP", "CUSTOM"])("allows one hour by default for %s", (mode) => {
+    expect(resolveEngineTimeoutMs(mode)).toBe(60 * 60 * 1000)
+  })
+
   it("caps an excessive duration at 24 hours", () => {
-    expect(resolveEngineTimeoutMs(10_000)).toBe(24 * 60 * 60 * 1000)
+    expect(resolveEngineTimeoutMs("DEEP", 10_000)).toBe(24 * 60 * 60 * 1000)
   })
 })
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   applyQueryGuards,
+  getExplicitWorkspaceId,
   runWithWorkspaceContext,
   getWorkspaceContext,
   SOFT_DELETE_MODELS,
@@ -56,6 +57,16 @@ describe("Prisma Extension — Query Guards (soft-delete)", () => {
 })
 
 describe("Prisma Extension — Query Guards (workspace scoping)", () => {
+  it("recovers an explicit workspaceId from where or data", () => {
+    expect(getExplicitWorkspaceId({ where: { workspaceId: "ws-read" } })).toBe("ws-read")
+    expect(getExplicitWorkspaceId({ data: { workspaceId: "ws-write" } })).toBe("ws-write")
+  })
+
+  it("does not infer workspace context from unrelated or malformed fields", () => {
+    expect(getExplicitWorkspaceId({ where: { id: "row-id" } })).toBeNull()
+    expect(getExplicitWorkspaceId({ where: { workspaceId: { in: ["ws-a"] } } })).toBeNull()
+  })
+
   it("adds workspaceId when context is set", () => {
     expect(applyQueryGuards("Project", "findMany", {}, "ws-123").where).toEqual({
       deletedAt: null,

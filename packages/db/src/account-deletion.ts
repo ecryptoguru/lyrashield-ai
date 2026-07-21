@@ -1,5 +1,6 @@
 import { prisma } from "./client"
 import { computeAuditHash } from "./audit-hash"
+import type { AuditLog } from "./generated/prisma"
 
 const DELETED_USER = "deleted-user"
 
@@ -50,6 +51,12 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
   ]
 
   await prisma.$transaction(async (tx) => {
+    // The audit-chain rebuild below must observe the anonymized actor. Execute
+    // this mutation before the concurrent independent updates; query ordering
+    // inside Promise.all is not an ordering contract for an interactive Prisma
+    // transaction.
+    await tx.auditLog.updateMany({ where: { actorUserId: userId }, data: { actorUserId: null } })
+
     await Promise.all([
       tx.project.updateMany({ where: { ownerUserId: userId }, data: { ownerUserId: null } }),
       tx.credentialSet.updateMany({
@@ -59,7 +66,6 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
       tx.scan.updateMany({ where: { createdById: userId }, data: { createdById: DELETED_USER } }),
       tx.apiKey.updateMany({ where: { createdById: userId }, data: { createdById: DELETED_USER } }),
       tx.finding.updateMany({ where: { ownerUserId: userId }, data: { ownerUserId: null } }),
-      tx.auditLog.updateMany({ where: { actorUserId: userId }, data: { actorUserId: null } }),
       tx.report.updateMany({ where: { createdById: userId }, data: { createdById: DELETED_USER } }),
       tx.notification.updateMany({ where: { userId }, data: { userId: null } }),
       tx.schedule.updateMany({
@@ -117,14 +123,17 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
 
     for (const workspaceId of [...affectedWorkspaceIds].sort()) {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
-      const entries = await tx.auditLog.findMany({
-        where: { workspaceId },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      })
+      const entries = await tx.$queryRaw<AuditLog[]>`
+        SELECT * FROM "AuditLog"
+        WHERE "workspaceId" = ${workspaceId}
+        ORDER BY "createdAt" ASC, id ASC`
       let prevHash: string | null = null
       for (const entry of entries) {
         const hash = computeAuditHash(entry, prevHash)
-        await tx.auditLog.update({ where: { id: entry.id }, data: { prevHash, hash } })
+        await tx.$executeRaw`
+          UPDATE "AuditLog"
+          SET "prevHash" = ${prevHash}, "hash" = ${hash}
+          WHERE id = ${entry.id} AND "workspaceId" = ${workspaceId}`
         prevHash = hash
       }
     }
