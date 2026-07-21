@@ -17,10 +17,17 @@ async function signUp(page: import("@playwright/test").Page, email: string, name
   await page.getByRole("button", { name: "Create account" }).click()
   await expect.poll(() => prisma.user.findUnique({ where: { email } })).not.toBeNull()
   await prisma.user.update({ where: { email }, data: { emailVerified: true } })
+  const signOutResponse = await page.request.post("/api/auth/sign-out", {
+    data: {},
+    headers: { Origin: "http://127.0.0.1:3100" },
+  })
+  await expect(signOutResponse).toBeOK()
   await page.goto("/sign-in")
   await page.getByLabel("Email").fill(email)
   await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "Sign in" }).click()
+  await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
+  await page.goto("/sign-in")
   await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
   await page.goto("/onboarding")
   await expect(page).toHaveURL(/\/onboarding/)
