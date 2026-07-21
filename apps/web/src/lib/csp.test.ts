@@ -197,4 +197,15 @@ describe("CSP nonce proxy", () => {
     expect(csp).toBeTruthy()
     expect(csp).toContain("nonce-")
   })
+
+  it("does not charge session lookups against the auth mutation limit", async () => {
+    const { checkApiRateLimit, checkAuthRateLimit } = await import("@/lib/rate-limit")
+
+    const req = makeRequest("/api/auth/get-session")
+    const res = await proxy(req)
+
+    expect(res.status).toBe(200)
+    expect(checkApiRateLimit).toHaveBeenCalledOnce()
+    expect(checkAuthRateLimit).not.toHaveBeenCalled()
+  })
 })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { checkAuthRateLimit, checkApiRateLimit, checkLiteScanRateLimit } from "@/lib/rate-limit"
 
 let warnedUnknownIp = false
+const READ_ONLY_AUTH_PATHS = new Set(["/api/auth/providers", "/api/auth/get-session"])
 
 function generateNonce(): string {
   return Buffer.from(crypto.randomUUID()).toString("base64")
@@ -79,10 +80,10 @@ export async function proxy(request: NextRequest) {
 
   const ip = getClientIP(request)
 
-  // Provider discovery is a public configuration read. Keep mutation endpoints
-  // behind the tighter auth bucket without charging this page-render helper
-  // against a user's sign-up/sign-in attempts.
-  if (pathname.startsWith("/api/auth/") && pathname !== "/api/auth/providers") {
+  // Provider discovery and session lookup are read-only page-render helpers.
+  // Keep auth mutations behind the tighter bucket without charging ordinary
+  // page loads against a user's sign-up/sign-in attempts.
+  if (pathname.startsWith("/api/auth/") && !READ_ONLY_AUTH_PATHS.has(pathname)) {
     const result = await checkAuthRateLimit(ip)
     if (result.limited) {
       const response = NextResponse.json(

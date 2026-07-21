@@ -23,6 +23,7 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
   const [providers, setProviders] = useState({
     github: false,
     google: false,
@@ -31,6 +32,7 @@ export default function SignInPage() {
   })
 
   useEffect(() => {
+    let active = true
     const oauthError = new URLSearchParams(window.location.search).get("error")
     let oauthErrorTimer: number | undefined
     if (oauthError) {
@@ -47,6 +49,21 @@ export default function SignInPage() {
       window.history.replaceState(null, "", "/sign-in")
     }
 
+    void authClient
+      .getSession()
+      .then(({ data }) => {
+        if (!active) return
+        if (data?.session) {
+          router.replace("/dashboard")
+          router.refresh()
+          return
+        }
+        setCheckingSession(false)
+      })
+      .catch(() => {
+        if (active) setCheckingSession(false)
+      })
+
     void fetch("/api/auth/providers")
       .then((response) => (response.ok ? response.json() : null))
       .then(
@@ -58,7 +75,7 @@ export default function SignInPage() {
             passwordReset?: boolean
           } | null
         ) => {
-          if (data) {
+          if (active && data) {
             setProviders({
               github: Boolean(data.github),
               google: Boolean(data.google),
@@ -71,9 +88,10 @@ export default function SignInPage() {
       .catch(() => {})
 
     return () => {
+      active = false
       if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
     }
-  }, [])
+  }, [router])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -160,6 +178,19 @@ export default function SignInPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (checkingSession) {
+    return (
+      <main className="relative flex min-h-screen items-center justify-center px-4">
+        <ThemeToggle className="fixed top-4 right-4 z-10" />
+        <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
+        <div className="relative flex flex-col items-center gap-3" role="status">
+          <Spinner className="h-6 w-6" />
+          <p className="text-muted-foreground text-sm">Opening your workspace…</p>
+        </div>
+      </main>
+    )
   }
 
   if (emailSent) {
