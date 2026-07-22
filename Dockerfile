@@ -124,7 +124,10 @@ COPY --from=workspace-builder /app/apps/worker ./apps/worker
 COPY --from=worker-engine /opt/lyrashield-engine /opt/lyrashield-engine
 COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
 
-RUN chown -R lyrashield:lyrashield /app /opt/lyrashield-engine /opt/lyrashield-venv
+# Named volumes are initialized from the image, so create and own these
+# runtime directories before the user switch so the worker can write to them.
+RUN mkdir -p /app/lyrashield_runs /app/.lyrashield/evidence && \
+    chown -R lyrashield:lyrashield /app /opt/lyrashield-engine /opt/lyrashield-venv
 
 USER lyrashield
 CMD ["./apps/worker/node_modules/.bin/tsx", "apps/worker/src/index.ts"]

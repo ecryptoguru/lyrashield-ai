@@ -17,8 +17,8 @@ export interface EngineRunResult {
   sourceCheckoutPath: string | null
 }
 
-const DEFAULT_ENGINE_TIMEOUT_MS = 30 * 60 * 1000
-const MAX_ENGINE_TIMEOUT_MS = 24 * 60 * 60 * 1000
+const DEFAULT_ENGINE_TIMEOUT_MS = 25 * 60 * 1000
+const MAX_ENGINE_TIMEOUT_MS = 25 * 60 * 1000
 
 export function resolveEngineTimeoutMs(maxDurationMinutes?: number | null): number {
   if (

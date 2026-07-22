@@ -187,6 +187,10 @@ services:
       AZURE_AI_API_BASE: "${AZURE_AI_API_BASE:-}"
       AZURE_API_VERSION: "${AZURE_API_VERSION:-}"
       AZURE_OPENAI_API_VERSION: "${AZURE_OPENAI_API_VERSION:-}"
+    # DEV ONLY: the Docker socket is owned by root:root; add root group
+    # so the non-root lyrashield user can access it for sandbox creation.
+    group_add:
+      - "0"
     volumes:
       # DEV ONLY: the engine launches its isolated sandbox through Docker.
       - /var/run/docker.sock:/var/run/docker.sock
@@ -225,4 +229,6 @@ volumes:
 networks:
   scan_sandbox:
     name: "${LYRASHIELD_ENGINE_SANDBOX_NETWORK:-lyrashield-sandbox}"
-    internal: true
+    # DEV ONLY: allow sandbox egress so repository scans can clone public repos.
+    # Production must run on an egress-restricted network with an approved proxy.
+    internal: false
