@@ -142,13 +142,13 @@ const stableFrontmatter = {
 describe("blog validator", () => {
   it("rejects prohibited punctuation, placeholders, and product claims", () => {
     const errors = validateArticleText(
-      "Automatic fixes guarantee security — for every app. TODO: remove this."
+      "Automatic fixes guarantee security — for every app. lorem ipsum"
     )
 
     expect(errors).toContain("prohibited em dash")
     expect(errors).toContain("prohibited product claim: guarantee security")
     expect(errors).toContain("prohibited product claim: automatic fixes")
-    expect(errors).toContain("unresolved placeholder: TODO")
+    expect(errors).toContain("unresolved placeholder: lorem ipsum")
   })
 
   it("enforces the final shared-image distribution", () => {

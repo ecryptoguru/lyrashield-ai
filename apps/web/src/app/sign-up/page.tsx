@@ -42,7 +42,7 @@ export default function SignUpPage() {
       window.history.replaceState(null, "", "/sign-up")
     }
 
-    void fetch("/api/auth/providers")
+    void fetch("/api/auth/providers", { signal: AbortSignal.timeout(5_000) })
       .then((response) => (response.ok ? response.json() : null))
       .then(
         (

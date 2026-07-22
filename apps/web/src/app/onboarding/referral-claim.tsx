@@ -4,7 +4,10 @@ import { useEffect } from "react"
 
 export function ReferralClaim() {
   useEffect(() => {
-    void fetch("/api/referrals/claim", { method: "POST" })
+    fetch("/api/referrals/claim", {
+      method: "POST",
+      signal: AbortSignal.timeout(5_000),
+    }).catch(() => {})
   }, [])
   return null
 }

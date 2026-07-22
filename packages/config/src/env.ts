@@ -9,6 +9,8 @@ const envSchema = z
     // resolution and verified provider webhooks). Ordinary app queries must
     // use the NOBYPASSRLS DATABASE_URL role.
     DATABASE_SYSTEM_URL: z.string().url().optional().or(z.literal("")),
+    // Prisma shadow DB for migration development; unused in production deployments.
+    SHADOW_DATABASE_URL: z.string().url().optional().or(z.literal("")),
 
     // Redis (redis:// URL — reserved for the BullMQ job queue, Sprint 4+)
     REDIS_URL: z.string().url().optional().or(z.literal("")),
@@ -55,9 +57,15 @@ const envSchema = z
       ),
     GITHUB_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
 
+    // MCP / Agent Action Layer
+    LYRASHIELD_API_URL: z.string().url().optional().or(z.literal("")),
+    LYRASHIELD_API_KEY: z.string().optional().or(z.literal("")),
+
     // App
     NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
     NEXT_PUBLIC_MARKETING_URL: z.string().url().optional().or(z.literal("")),
+    // Cloudflare Turnstile secret (server-side). Public site key lives in apps/marketing/.env.example.
+    TURNSTILE_SECRET_KEY: z.string().optional().or(z.literal("")),
     TRUSTED_PROXY_IP_HEADER: z
       .enum(["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"])
       .optional()
@@ -77,6 +85,10 @@ const envSchema = z
     LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
     SCANNER_PHASE_TIMEOUT_MS: z.coerce.number().int().positive().max(3_600_000).default(600_000),
     PLATFORM_MAX_SCAN_BUDGET_USD: z.coerce.number().positive().max(1000).default(50),
+    // Docker sandbox resource limits passed to the Strix engine (e.g. "4g", "2", "512").
+    STRIX_SANDBOX_MEM_LIMIT: z.string().optional().default("4g"),
+    STRIX_SANDBOX_CPUS: z.string().optional().default("2"),
+    STRIX_SANDBOX_PIDS_LIMIT: z.string().optional().default("512"),
 
     // Azure OpenAI (optional — use these OR the generic LLM_API_KEY/LLM_API_BASE)
     AZURE_OPENAI_API_KEY: z.string().optional().or(z.literal("")),
@@ -120,6 +132,7 @@ const envSchema = z
 
     // Runtime
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+    LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).optional().default("info"),
   })
   .refine(
     // If an Upstash REST URL is configured, a token must accompany it — a URL

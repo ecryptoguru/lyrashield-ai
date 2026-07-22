@@ -99,6 +99,7 @@ export function ScorecardShareComposer({
           source,
           visitorId: visitorId(),
         }),
+        signal: AbortSignal.timeout(5_000),
       })
     } catch {
       // Analytics must never block sharing.
@@ -132,7 +133,7 @@ export function ScorecardShareComposer({
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch(cardPath)
+      const response = await fetch(cardPath, { signal: AbortSignal.timeout(15_000) })
       if (!response.ok) throw new Error("Card unavailable")
       const blobUrl = URL.createObjectURL(await response.blob())
       const anchor = document.createElement("a")
@@ -160,7 +161,9 @@ export function ScorecardShareComposer({
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch(`/api/og/score/${slug}?variant=${variant}&format=square`)
+      const response = await fetch(`/api/og/score/${slug}?variant=${variant}&format=square`, {
+        signal: AbortSignal.timeout(15_000),
+      })
       const file = response.ok
         ? new File([await response.blob()], `lyrashield-${variant}.png`, { type: "image/png" })
         : null
@@ -212,7 +215,7 @@ export function ScorecardShareComposer({
               ))}
             </div>
           </div>
-          <div className="relative aspect-[1200/630] overflow-hidden rounded-lg border bg-[#07110f] shadow-lg">
+          <div className="relative aspect-1200/630 overflow-hidden rounded-lg border bg-[#07110f] shadow-lg">
             <Image
               key={cardPath}
               src={cardPath}

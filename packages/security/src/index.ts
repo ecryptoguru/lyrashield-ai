@@ -37,3 +37,11 @@ export {
   type VibeCoverageStrategy,
   type VibeSecurityControl,
 } from "./vibe-security-controls"
+
+export {
+  checkInstructionSafety,
+  sanitizeInstructionInput,
+  containsPromptInjection,
+  checkOutputSafety,
+  type InstructionSafetyResult,
+} from "./instruction-safety"

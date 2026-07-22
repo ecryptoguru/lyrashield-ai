@@ -1,3 +1,5 @@
+import { checkInstructionSafety } from "./instruction-safety"
+
 export const VIBE_SECURITY_COVERAGE_VERSION = "vibe-security-50/1.0.0"
 
 export type VibeCoverageStrategy = "deterministic" | "hybrid" | "engine" | "evidence"
@@ -332,6 +334,10 @@ export interface VibeCoverageFinding {
 }
 
 export function buildVibeSecurityInstruction(goal: string): string {
+  const safety = checkInstructionSafety(goal)
+  if (!safety.safe) {
+    throw new Error(`Unsafe scan goal rejected: ${safety.reason}`)
+  }
   const machineControls = VIBE_SECURITY_CONTROLS.filter(
     (control) => control.strategy !== "evidence"
   )

@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "child_process"
 import { rm, mkdir, readdir, stat, lstat, realpath, open } from "fs/promises"
 import { join, relative, resolve, sep } from "path"
 import { tmpdir } from "os"
+import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
 import { buildEngineCommand, type ScanConfig, type EngineCommand } from "./command-builder"
@@ -276,9 +277,9 @@ function buildEngineEnv(profile: EngineProfile): Record<string, string> {
   if (profile.delegateModel) filtered.LYRASHIELD_DELEGATE_LLM = profile.delegateModel
   filtered.LYRASHIELD_DELEGATE_REASONING_EFFORT = profile.delegateReasoningEffort
   filtered.STRIX_DOCKER_SANDBOX_NETWORK = resolveEngineSandboxNetwork()
-  filtered.STRIX_SANDBOX_MEM_LIMIT = process.env.STRIX_SANDBOX_MEM_LIMIT?.trim() || "4g"
-  filtered.STRIX_SANDBOX_CPUS = process.env.STRIX_SANDBOX_CPUS?.trim() || "2"
-  filtered.STRIX_SANDBOX_PIDS_LIMIT = process.env.STRIX_SANDBOX_PIDS_LIMIT?.trim() || "512"
+  filtered.STRIX_SANDBOX_MEM_LIMIT = env.STRIX_SANDBOX_MEM_LIMIT.trim() || "4g"
+  filtered.STRIX_SANDBOX_CPUS = env.STRIX_SANDBOX_CPUS.trim() || "2"
+  filtered.STRIX_SANDBOX_PIDS_LIMIT = env.STRIX_SANDBOX_PIDS_LIMIT.trim() || "512"
   return filtered
 }
 

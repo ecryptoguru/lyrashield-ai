@@ -207,4 +207,75 @@ describe("persistFindings", () => {
       })
     )
   })
+
+  it("marks engine-only claims without deterministic corroboration as inconclusive", async () => {
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+    vi.mocked(prisma.finding.create).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    const engineOnly: NormalizedFinding = {
+      id: "vuln-1",
+      title: "Missing authorization",
+      severity: "high",
+      timestamp: "2026-07-14T00:00:00Z",
+      scannerSource: "engine",
+      normalizedSeverity: "HIGH",
+      normalizedCwe: "CWE-862",
+      normalizedCvss: 7.5,
+      confidenceScore: 70,
+      falsePositiveRisk: "low",
+      dedupeKey: "engine-key",
+      enrichment: { cweCategory: "Access Control" },
+    }
+
+    await persistFindings({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: [engineOnly],
+    })
+
+    expect(prisma.finding.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        verificationStatus: "INCONCLUSIVE",
+        verificationMethod: "ENGINE_CLAIM",
+        verified: false,
+      }),
+    })
+  })
+
+  it("marks corroborated engine findings as detected", async () => {
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+    vi.mocked(prisma.finding.create).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    const corroborated: NormalizedFinding = {
+      id: "vuln-1",
+      title: "Exposed token",
+      severity: "critical",
+      timestamp: "2026-07-14T00:00:00Z",
+      scannerSource: "engine",
+      normalizedSeverity: "CRITICAL",
+      normalizedCwe: "CWE-798",
+      normalizedCvss: 9.8,
+      confidenceScore: 95,
+      falsePositiveRisk: "low",
+      dedupeKey: "secret-key",
+      corroboratingSources: ["engine", "secrets"],
+      enrichment: { cweCategory: "Authentication" },
+    }
+
+    await persistFindings({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: [corroborated],
+    })
+
+    expect(prisma.finding.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        verificationStatus: "DETECTED",
+        verificationMethod: "SCANNER_DETECTION",
+        verified: false,
+      }),
+    })
+  })
 })

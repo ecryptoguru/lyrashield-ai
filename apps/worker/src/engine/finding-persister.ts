@@ -146,13 +146,24 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
     // A scanner's confidence is useful triage data, not proof. Verification is
     // only granted by a separate immutable verification receipt.
     const verified = false
-    const scannerSource = isNormalized ? (vuln as NormalizedFinding).scannerSource : "engine"
-    const verificationMethod = scannerSource === "engine" ? "ENGINE_CLAIM" : "SCANNER_DETECTION"
-    const verificationReason =
-      scannerSource === "engine"
-        ? "Engine claim recorded; independent validation is required before verification."
-        : "Scanner detection recorded; an independent validation receipt is required before verification."
     const normalized = isNormalized ? (vuln as NormalizedFinding) : null
+    const scannerSource = normalized?.scannerSource ?? "engine"
+    const sources = normalized?.corroboratingSources ?? (scannerSource ? [scannerSource] : [])
+    const hasDeterministicCorroboration = sources.some((source) => source !== "engine")
+    const isEngineOnlyClaim = !hasDeterministicCorroboration && scannerSource === "engine"
+    const verificationMethod = hasDeterministicCorroboration
+      ? "SCANNER_DETECTION"
+      : scannerSource === "engine"
+        ? "ENGINE_CLAIM"
+        : "SCANNER_DETECTION"
+    const verificationStatus = isEngineOnlyClaim ? "INCONCLUSIVE" : "DETECTED"
+    const verificationReason = isEngineOnlyClaim
+      ? "Engine-only claim with no deterministic corroboration; treated as inconclusive until independently validated."
+      : hasDeterministicCorroboration
+        ? "Corroborated by one or more deterministic scanners; independent validation still required for verification."
+        : scannerSource === "engine"
+          ? "Engine claim recorded; independent validation is required before verification."
+          : "Scanner detection recorded; an independent validation receipt is required before verification."
     const category =
       normalized?.scannerSource === "secrets" ? "Secrets" : normalized?.enrichment.cweCategory
     const owaspCategory = normalized?.enrichment.owaspCategory
@@ -194,7 +205,7 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
           exploitability: vuln.poc_description ?? null,
           ...(reopen ? { status: "OPEN" as const, fixedAt: null } : {}),
           verified,
-          verificationStatus: "DETECTED",
+          verificationStatus,
           verificationMethod,
           verificationReason,
         },
@@ -230,7 +241,7 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
         severity,
         confidence,
         verified,
-        verificationStatus: "DETECTED",
+        verificationStatus,
         verificationMethod,
         verificationReason,
         dedupeKey,

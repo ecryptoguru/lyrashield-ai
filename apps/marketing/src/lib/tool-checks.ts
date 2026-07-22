@@ -173,7 +173,12 @@ function decodeBase64UrlJson(part: string): Record<string, unknown> {
     .replace(/_/g, "/")
     .padEnd(Math.ceil(part.length / 4) * 4, "=")
   const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0))
-  const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes))
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes))
+  } catch {
+    throw new Error("JWT segment is not valid JSON.")
+  }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("JWT header and claims must be JSON objects.")
   }

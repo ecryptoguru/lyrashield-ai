@@ -2,7 +2,11 @@ import type { Job } from "bullmq"
 import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
-import { buildVibeSecurityInstruction, summarizeVibeSecurityCoverage } from "@lyrashield/security"
+import {
+  buildVibeSecurityInstruction,
+  summarizeVibeSecurityCoverage,
+  checkInstructionSafety,
+} from "@lyrashield/security"
 import {
   updateScanStatus,
   addScanEvent,
@@ -451,6 +455,28 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       }
 
+      // Reject prompt-injection patterns in user-controlled fields before they
+      // reach the engine prompt. This is fail-fast, before any provider spend.
+      const goalSafety = checkInstructionSafety(goal)
+      const targetNameSafety = checkInstructionSafety(target.name ?? "")
+      if (!goalSafety.safe || !targetNameSafety.safe) {
+        const patterns = [
+          ...new Set([...goalSafety.detectedPatterns, ...targetNameSafety.detectedPatterns]),
+        ]
+        const reason = `Prompt injection risk detected in scan input: ${patterns.join(", ")}`
+        log.warn("Scan rejected due to prompt injection risk", {
+          scanId,
+          patterns,
+          goalSafe: goalSafety.safe,
+          targetNameSafe: targetNameSafety.safe,
+        })
+        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+          errorCategory: "PROMPT_INJECTION",
+          errorMessage: reason,
+        })
+        return { status: "failed", errorCategory: "PROMPT_INJECTION", errorMessage: reason }
+      }
+
       // Evidence is part of the result contract. Refuse before provider work
       // when it cannot be retained durably.
       assertEvidenceStorageConfigured()
@@ -654,40 +680,41 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         return { status: "failed", errorCategory: "TIMEOUT", errorMessage: timeoutMessage }
       }
 
-      // Preserve the engine's real terminal cause. Usage is checkpointed above
-      // for reconciliation, but a non-success exit must never be relabelled as
-      // an accounting problem.
+      // Capture the engine's real terminal cause, but do not return early.
+      // Deterministic scanners can still provide value from a partial engine run
+      // (for example, when the engine cloned the repository but stopped for a
+      // budget or model error). Usage is checkpointed above for reconciliation.
+      let engineTerminalError: {
+        status: ScanStatus
+        errorCategory: string
+        errorMessage: string
+      } | null = null
+
       if (target.type === "REPO" && exitInterpretation.status === "FAILED") {
         const stoppedForBudget = exitInterpretation.category === "BUDGET_EXCEEDED"
-        await updateScanStatus(
-          scanId,
-          (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanStatus,
-          {
-            errorCategory: exitInterpretation.category,
-            errorMessage: exitInterpretation.message,
-            summary: engineResult.output.summary,
-            ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
-          }
-        )
-        try {
-          await notifyScanFailed(workspaceId, scanId, exitInterpretation.message)
-        } catch (notificationError) {
-          log.warn("Failed to send scan failure notification", {
-            scanId,
-            error:
-              notificationError instanceof Error
-                ? notificationError.message
-                : String(notificationError),
-          })
-        }
-        return {
-          status: "failed",
+        engineTerminalError = {
+          status: (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanStatus,
           errorCategory: exitInterpretation.category,
           errorMessage: exitInterpretation.message,
         }
-      }
-
-      if (
+        try {
+          await addScanEvent(
+            scanId,
+            "engine_terminal",
+            stoppedForBudget ? "error" : "warning",
+            `Engine stopped (${exitInterpretation.category}); continuing with deterministic scanners`,
+            {
+              exitCode: engineResult.exitCode,
+              errorCategory: exitInterpretation.category,
+            }
+          )
+        } catch (eventErr) {
+          log.warn("Failed to persist engine_terminal event", {
+            scanId,
+            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+          })
+        }
+      } else if (
         target.type === "REPO" &&
         (!engineResult.output.findingsComplete ||
           !runRecord ||
@@ -700,16 +727,25 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         const errorMessage = stoppedForBudget
           ? "Protected run limit reached"
           : "Engine did not produce a completed, valid result receipt"
-        await updateScanStatus(
-          scanId,
-          (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanStatus,
-          {
-            errorCategory,
-            errorMessage,
-            ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
-          }
-        )
-        return { status: "failed", errorCategory, errorMessage }
+        engineTerminalError = {
+          status: (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanStatus,
+          errorCategory,
+          errorMessage,
+        }
+        try {
+          await addScanEvent(
+            scanId,
+            "engine_incomplete",
+            "warning",
+            `Engine result incomplete; continuing with deterministic scanners`,
+            { errorCategory }
+          )
+        } catch (eventErr) {
+          log.warn("Failed to persist engine_incomplete event", {
+            scanId,
+            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+          })
+        }
       }
 
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
@@ -807,46 +843,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
 
-      if (budgetExceeded) {
-        await prisma.scan.update({
-          where: { id: scanId },
-          data: { summary: engineResult.output.summary },
-        })
-        await persistResultManifest({
-          scanId,
-          target: {
-            id: target.id,
-            type: target.type,
-            repoFullName: target.repoFullName,
-            branch: target.branch,
-            url: target.url,
-          },
-          sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
-          engineFindingCount: orchestratorResult.engineFindings.length,
-          coverageIssues: orchestratorResult.coverageIssues,
-          matchedControlRanks: coverage.matchedControlRanks,
-          engineExecution,
-        })
-        await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
-          errorCategory: "BUDGET_EXCEEDED",
-          errorMessage: "Protected run limit reached",
-          actualCostCents: Math.round(billedCostUsd! * 100),
-        })
-        return {
-          status: "failed",
-          errorCategory: "BUDGET_EXCEEDED",
-          errorMessage: "Protected run limit reached",
-        }
-      }
-
       await completeRetestsForScan({
         scanId,
         workspaceId,
         persistedFindingIds: persistedFindings.map((finding) => finding.id),
         coverageIssues: orchestratorResult.coverageIssues,
       })
-      // Persist the user-facing summary before the immutable checkpoint so a
-      // resumed finalization retains the completed scan's original context.
+
+      // Persist the result manifest for every outcome, including a failed or
+      // incomplete engine, so coverage receipts are always available.
       await prisma.scan.update({
         where: { id: scanId },
         data: { summary: engineResult.output.summary },
@@ -866,6 +871,43 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         matchedControlRanks: coverage.matchedControlRanks,
         engineExecution,
       })
+
+      if (engineTerminalError) {
+        await updateScanStatus(scanId, engineTerminalError.status, {
+          errorCategory: engineTerminalError.errorCategory,
+          errorMessage: engineTerminalError.errorMessage,
+          ...(billedCostUsd !== null ? { actualCostCents: Math.round(billedCostUsd * 100) } : {}),
+        })
+        try {
+          await notifyScanFailed(workspaceId, scanId, engineTerminalError.errorMessage)
+        } catch (notificationError) {
+          log.warn("Failed to send scan failure notification", {
+            scanId,
+            error:
+              notificationError instanceof Error
+                ? notificationError.message
+                : String(notificationError),
+          })
+        }
+        return {
+          status: "failed",
+          errorCategory: engineTerminalError.errorCategory,
+          errorMessage: engineTerminalError.errorMessage,
+        }
+      }
+
+      if (budgetExceeded) {
+        await updateScanStatus(scanId, "STOPPED_BUDGET" as ScanStatus, {
+          errorCategory: "BUDGET_EXCEEDED",
+          errorMessage: "Protected run limit reached",
+          actualCostCents: Math.round(billedCostUsd! * 100),
+        })
+        return {
+          status: "failed",
+          errorCategory: "BUDGET_EXCEEDED",
+          errorMessage: "Protected run limit reached",
+        }
+      }
       // Retests may validate a pending fix and change the target's scoreable
       // state. Freeze the score only after those outcomes are persisted.
       await completeScanWithScore(scanId, engineResult.output.summary)

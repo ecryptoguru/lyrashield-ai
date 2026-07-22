@@ -18,7 +18,8 @@
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "bullmq": "^5.80.1",
-    "ioredis": "^5.4.0"
+    "ioredis": "^5.4.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

@@ -51,6 +51,7 @@ export function ScorecardControls({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId }),
+        signal: AbortSignal.timeout(10_000),
       })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error?.message ?? "Could not create scorecard")
@@ -78,6 +79,7 @@ export function ScorecardControls({
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId }),
+        signal: AbortSignal.timeout(10_000),
       })
       if (!response.ok) throw new Error("Could not revoke scorecard")
       setShare(undefined)

@@ -50,7 +50,10 @@ export function ConnectedAccounts() {
     }
 
     void Promise.all([
-      fetch("/api/auth/providers", { cache: "no-store" }).then((response) => {
+      fetch("/api/auth/providers", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(5_000),
+      }).then((response) => {
         if (!response.ok) throw new Error("Provider discovery failed")
         return response.json()
       }),

@@ -55,7 +55,13 @@ async function fetchJson(
     }
     const body = await response.text()
     if (body.length > MAX_RESPONSE_BYTES) throw new Error("response exceeded size limit")
-    return JSON.parse(body) as unknown
+    try {
+      return JSON.parse(body) as unknown
+    } catch (err) {
+      throw new Error(
+        `Invalid JSON response from ${url}: ${err instanceof Error ? err.message : String(err)}`
+      )
+    }
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener("abort", onAbort)

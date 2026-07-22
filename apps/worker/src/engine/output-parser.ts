@@ -1,5 +1,7 @@
 import { createHash } from "crypto"
 import { logger } from "@lyrashield/logger"
+import { checkOutputSafety } from "@lyrashield/security"
+import { engineRunRecordSchema, engineVulnerabilitySchema } from "./engine-output-schema"
 
 export interface EngineVulnerability {
   id: string
@@ -486,6 +488,31 @@ function validateVulnerability(v: Record<string, unknown>): EngineVulnerability 
   const dependencyMetadata = boundedStringRecord(v.dependency_metadata)
   const controlIds = validateControlIds(v.control_ids)
   const codeLocations = validateCodeLocations(v.code_locations)
+
+  // Detect prompt-injection artifacts that the model may have echoed or acted on.
+  const textFields = [
+    title,
+    boundedString(v.description),
+    boundedString(v.impact),
+    boundedString(v.technical_analysis),
+    boundedString(v.evidence),
+    boundedString(v.assumptions),
+    boundedString(v.poc_description),
+    boundedString(v.poc_script_code),
+    boundedString(v.remediation_steps),
+  ]
+    .filter((field): field is string => typeof field === "string")
+    .join("\n")
+  const safety = checkOutputSafety(textFields)
+  if (!safety.safe) {
+    logger.warn("Engine output: filtering finding with prompt-injection artifacts", {
+      id,
+      detectedPatterns: safety.detectedPatterns,
+      reason: safety.reason,
+    })
+    return null
+  }
+
   return {
     id,
     title,
@@ -541,7 +568,18 @@ function parseVulnerabilitiesArtifact(raw: string): {
     for (const item of data) {
       if (typeof item !== "object" || item === null) continue
       const vuln = validateVulnerability(item as Record<string, unknown>)
-      if (vuln) validated.push(vuln)
+      if (!vuln) continue
+      // Strict schema contract: reject anything that survived coercion but
+      // still violates the expected shape or value bounds.
+      const parsed = engineVulnerabilitySchema.safeParse(vuln)
+      if (!parsed.success) {
+        logger.warn("Engine output: vulnerability failed strict schema validation", {
+          id: vuln.id,
+          errors: parsed.error.issues.map((issue) => issue.message),
+        })
+        continue
+      }
+      validated.push(vuln)
     }
     return { vulnerabilities: validated, complete: true }
   } catch (err) {
@@ -583,7 +621,7 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
     const maxOutputTokens = usageInteger(record.max_output_tokens)
     const maxAgents = usageInteger(record.max_agents)
 
-    return {
+    const runRecord: EngineRunRecord = {
       run_id: runId,
       run_name: boundedString(record.run_name) ?? null,
       start_time: boundedString(record.start_time) ?? "",
@@ -608,6 +646,17 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
         ? { terminal_reason: boundedString(record.terminal_reason) }
         : {}),
     }
+
+    const parsed = engineRunRecordSchema.safeParse(runRecord)
+    if (!parsed.success) {
+      logger.warn("Engine output: run.json failed strict schema validation", {
+        runId,
+        errors: parsed.error.issues.map((issue) => issue.message),
+      })
+      return null
+    }
+
+    return runRecord
   } catch (err) {
     logger.error("Failed to parse run.json", {
       error: err instanceof Error ? err.message : String(err),

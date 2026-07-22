@@ -57,7 +57,7 @@ export default function SignInPage() {
         if (active) setCheckingSession(false)
       })
 
-    void fetch("/api/auth/providers")
+    void fetch("/api/auth/providers", { signal: AbortSignal.timeout(5_000) })
       .then((response) => (response.ok ? response.json() : null))
       .then(
         (
