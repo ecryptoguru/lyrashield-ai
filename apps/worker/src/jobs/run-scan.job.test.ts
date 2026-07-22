@@ -70,7 +70,9 @@ vi.mock("../engine/runner", () => ({
     delegateReasoningEffort: "medium",
   })),
   resolveEngineTimeoutMs: vi.fn((minutes?: number | null) =>
-    typeof minutes === "number" && minutes > 0 ? minutes * 60 * 1000 : 30 * 60 * 1000
+    typeof minutes === "number" && minutes > 0
+      ? Math.min(minutes * 60 * 1000, 25 * 60 * 1000)
+      : 25 * 60 * 1000
   ),
   interpretExitCode: vi.fn((code: number) => {
     if (code === 0) return { status: "COMPLETED", category: "SUCCESS" }
@@ -318,7 +320,7 @@ describe("processScanJob", () => {
         instruction: expect.stringContaining("vibe-security-50/1.0.0"),
       }),
       "scan-1",
-      30 * 60 * 1000,
+      25 * 60 * 1000,
       expect.any(Function)
     )
     expect(addScanEvent).toHaveBeenCalledWith(
@@ -357,7 +359,7 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 6.5 }),
       "scan-1",
-      75 * 60 * 1000,
+      25 * 60 * 1000,
       expect.any(Function)
     )
   })
@@ -389,11 +391,11 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 3.2 }),
       "scan-1",
-      75 * 60 * 1000,
+      25 * 60 * 1000,
       expect.any(Function)
     )
     expect(runScannerOrchestrator).toHaveBeenCalledWith(
-      expect.objectContaining({ scannerPhaseTimeoutMs: 0 })
+      expect.objectContaining({ scannerPhaseTimeoutMs: 5 * 60 * 1000 })
     )
   })
 

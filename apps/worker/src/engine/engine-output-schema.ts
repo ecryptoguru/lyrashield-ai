@@ -1,8 +1,18 @@
 import { z } from "zod"
 
-const nonEmptyString = z.string().min(1).max(64 * 1024)
-const boundedString = z.string().max(64 * 1024).optional()
-const nullableBoundedString = z.string().max(64 * 1024).nullable().optional()
+const nonEmptyString = z
+  .string()
+  .min(1)
+  .max(64 * 1024)
+const boundedString = z
+  .string()
+  .max(64 * 1024)
+  .optional()
+const nullableBoundedString = z
+  .string()
+  .max(64 * 1024)
+  .nullable()
+  .optional()
 
 const severitySchema = z
   .string()
@@ -35,7 +45,11 @@ export const engineVulnerabilitySchema = z
     endpoint: boundedString,
     method: boundedString,
     cve: boundedString,
-    cwe: z.string().max(64 * 1024).regex(/^CWE-\d+$/, "CWE must be CWE-NNN").optional(),
+    cwe: z
+      .string()
+      .max(64 * 1024)
+      .regex(/^CWE-\d+$/, "CWE must be CWE-NNN")
+      .optional(),
     cvss: z.number().min(0).max(10).optional(),
     cvss_breakdown: z.record(z.string(), z.string().max(64 * 1024)).optional(),
     description: boundedString,
@@ -84,7 +98,10 @@ const usageEntrySchema = z
   })
   .strip()
 
-const sha256Hash = z.string().regex(/^[a-f0-9]{64}$/i, "Expected SHA-256 hex").optional()
+const sha256Hash = z
+  .string()
+  .regex(/^[a-f0-9]{64}$/i, "Expected SHA-256 hex")
+  .optional()
 
 export const engineRunRecordSchema = z
   .object({
@@ -95,10 +112,7 @@ export const engineRunRecordSchema = z
     status: nonEmptyString,
     targets_info: z.array(targetInfoSchema).max(10).optional(),
     llm_usage: z
-      .union([
-        z.array(usageEntrySchema).max(1000),
-        z.record(z.string(), z.unknown()),
-      ])
+      .union([z.array(usageEntrySchema).max(1000), z.record(z.string(), z.unknown())])
       .optional(),
     engine_version: boundedString,
     prompt_bundle_hash: sha256Hash,
