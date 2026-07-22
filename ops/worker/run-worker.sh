@@ -37,6 +37,16 @@ case "$LYRASHIELD_SANDBOX_IMAGE" in
     ;;
 esac
 
+acr_name=${LYRASHIELD_WORKER_IMAGE%%.*}
+if ! command -v az >/dev/null 2>&1; then
+  echo "Azure CLI is required to authenticate the worker image pull" >&2
+  exit 1
+fi
+if ! az login --identity --allow-no-subscriptions >/dev/null 2>&1 || ! az acr login --name "$acr_name" >/dev/null 2>&1; then
+  echo "Unable to authenticate the worker image pull through the VM managed identity" >&2
+  exit 1
+fi
+
 socket_group=$(stat -c '%g' /var/run/docker.sock)
 pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"
 if [ ! -s "$pin_file" ]; then
