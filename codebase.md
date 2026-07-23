@@ -919,7 +919,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 ### 21.1 Scan Queue (BullMQ)
 
 - **`apps/web/src/lib/queue.ts`** — scan job producer. `enqueueScanJob()` adds jobs to the `scans` queue with default options (3 attempts, exponential backoff, 100 complete / 200 fail retention). Imports `SCAN_QUEUE_NAME` and `ScanJobData` from `@lyrashield/types` (single source of truth).
-- **`apps/worker/src/queue.ts`** — worker-side queue utilities. `getScanQueue()`, `getScanQueueEvents()`, `enqueueScan()`. Re-exports `SCAN_QUEUE_NAME`, `ScanJobData`, `ScanJobResult` from `@lyrashield/types`.
+- **`apps/worker/src/queue.ts`** — worker-side queue utilities. `getScanQueue()` and `enqueueScan()`. Re-exports `SCAN_QUEUE_NAME`, `ScanJobData`, `ScanJobResult` from `@lyrashield/types`.
 - **`apps/worker/src/types.ts`** — thin re-export layer: `export { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "@lyrashield/types"`.
 - **`packages/types/src/index.ts`** — **single source of truth** for `SCAN_QUEUE_NAME`, `ScanJobData` (scanId, workspaceId, targetId, goal, mode, policyId?), `ScanJobResult` (status, summary?, errorCategory?, errorMessage?). Both web and worker import from here to prevent drift.
 

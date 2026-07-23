@@ -27,7 +27,6 @@ export {
 export { getRedis, closeRedis } from "./redis"
 export {
   getScanQueue,
-  getScanQueueEvents,
   enqueueScan,
   registerScanWorker,
   unregisterScanWorker,

@@ -51,7 +51,6 @@ vi.mock("bullmq", () => ({
   Queue: class {
     add = mocks.queueAdd
   },
-  QueueEvents: class {},
 }))
 
 import {
@@ -71,7 +70,7 @@ describe("scan worker availability", () => {
   })
 
   it("supports multiple workers and expires stale heartbeats", async () => {
-    expect(SCAN_WORKER_HEARTBEAT_MS).toBe(45_000)
+    expect(SCAN_WORKER_HEARTBEAT_MS).toBe(90_000)
     expect(SCAN_WORKER_TTL_MS).toBe(SCAN_WORKER_HEARTBEAT_MS * 3)
 
     await registerScanWorker("worker-1", 1_000)
@@ -80,7 +79,7 @@ describe("scan worker availability", () => {
     expect(await isScanWorkerAvailable(20_000)).toBe(true)
     await unregisterScanWorker("worker-1")
     expect(await isScanWorkerAvailable(20_000)).toBe(true)
-    expect(await isScanWorkerAvailable(140_000)).toBe(false)
+    expect(await isScanWorkerAvailable(280_000)).toBe(false)
   })
 
   it("refuses queue submission without a live worker", async () => {

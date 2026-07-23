@@ -1,11 +1,11 @@
-import { Queue, QueueEvents } from "bullmq"
+import { Queue } from "bullmq"
 import { env } from "@lyrashield/config"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "@lyrashield/types"
 import { getRedis } from "./redis"
 
 const SCAN_WORKER_REGISTRY_KEY = "lyrashield:scan-workers"
-export const SCAN_WORKER_HEARTBEAT_MS = 45_000
-export const SCAN_WORKER_TTL_MS = 135_000
+export const SCAN_WORKER_HEARTBEAT_MS = 90_000
+export const SCAN_WORKER_TTL_MS = 270_000
 
 export class ScanWorkerUnavailableError extends Error {
   readonly code = "SCAN_SERVICE_UNAVAILABLE"
@@ -84,17 +84,6 @@ export function getScanQueue(): Queue<ScanJobData, ScanJobResult> {
     })
   }
   return scanQueue
-}
-
-let scanQueueEvents: QueueEvents | null = null
-
-export function getScanQueueEvents(): QueueEvents {
-  if (!scanQueueEvents) {
-    scanQueueEvents = new QueueEvents(SCAN_QUEUE_NAME, {
-      connection: getConnectionOpts(),
-    })
-  }
-  return scanQueueEvents
 }
 
 export async function enqueueScan(data: ScanJobData): Promise<string> {
