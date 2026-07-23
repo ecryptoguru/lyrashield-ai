@@ -3,11 +3,7 @@ import { unlink, writeFile } from "node:fs/promises"
 import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
-import {
-  registerScanWorker,
-  unregisterScanWorker,
-  SCAN_WORKER_HEARTBEAT_MS,
-} from "./queue"
+import { registerScanWorker, unregisterScanWorker, SCAN_WORKER_HEARTBEAT_MS } from "./queue"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
 import { startScheduleRunner } from "./schedules"
