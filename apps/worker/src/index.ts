@@ -3,12 +3,7 @@ import { unlink, writeFile } from "node:fs/promises"
 import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
-import {
-  getScanQueueEvents,
-  registerScanWorker,
-  unregisterScanWorker,
-  SCAN_WORKER_HEARTBEAT_MS,
-} from "./queue"
+import { registerScanWorker, unregisterScanWorker, SCAN_WORKER_HEARTBEAT_MS } from "./queue"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
 import { startScheduleRunner } from "./schedules"
@@ -20,7 +15,6 @@ import { reconcileFailedQueueJob, reconcileScanQueue } from "./queue-reconciliat
 import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
-let queueEvents: ReturnType<typeof getScanQueueEvents> | null = null
 let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
@@ -89,11 +83,6 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     logger.info("BullMQ worker closed")
   }
 
-  if (queueEvents) {
-    await queueEvents.close()
-    logger.info("Queue events closed")
-  }
-
   process.exit(exitCode)
 }
 
@@ -115,14 +104,12 @@ async function main(): Promise<void> {
   })
 
   await worker.waitUntilReady()
-  queueEvents = getScanQueueEvents()
-  await queueEvents.waitUntilReady()
-  queueEvents.on("completed", ({ jobId, returnvalue }) => {
-    logger.info("Job completed", { jobId, result: returnvalue })
+  worker.on("completed", (job, result) => {
+    logger.info("Job completed", { jobId: job.id, result })
   })
-  queueEvents.on("failed", ({ jobId, failedReason }) => {
-    logger.error("Job failed in queue", { jobId, reason: failedReason })
-    if (jobId) void reconcileFailedQueueJob(jobId, failedReason)
+  worker.on("failed", (job, error) => {
+    logger.error("Job failed in queue", { jobId: job?.id, reason: error.message })
+    if (job?.id) void reconcileFailedQueueJob(job.id, error.message)
   })
 
   worker.on("error", (error) => {
@@ -164,7 +151,7 @@ async function main(): Promise<void> {
         error: error instanceof Error ? error.message : String(error),
       })
     })
-  }, 60_000)
+  }, 300_000)
 
   scheduleRunner = startScheduleRunner()
   logger.info("Schedule runner started", { intervalMs: 60_000 })
