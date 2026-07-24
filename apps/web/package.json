@@ -21,6 +21,8 @@
     "@lyrashield/types": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/config": "workspace:*",
+    "@lyrashield/mcp": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-dialog": "^1.1.19",
     "@radix-ui/react-tabs": "^1.1.17",
     "@radix-ui/react-tooltip": "^1.2.12",

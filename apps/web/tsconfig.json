@@ -16,7 +16,9 @@
       "@lyrashield/logger": ["../../packages/logger/src/index.ts"],
       "@lyrashield/logger/*": ["../../packages/logger/src/*"],
       "@lyrashield/config": ["../../packages/config/src/index.ts"],
-      "@lyrashield/config/*": ["../../packages/config/src/*"]
+      "@lyrashield/config/*": ["../../packages/config/src/*"],
+      "@lyrashield/mcp": ["../../packages/mcp/src/index.ts"],
+      "@lyrashield/mcp/*": ["../../packages/mcp/src/*"]
     }
   },
   "include": [
@@ -37,7 +39,8 @@
     "../../packages/logger/src/**/*.ts",
     "../../packages/logger/src/**/*.tsx",
     "../../packages/config/src/**/*.ts",
-    "../../packages/config/src/**/*.tsx"
+    "../../packages/config/src/**/*.tsx",
+    "../../packages/mcp/src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
