@@ -29,7 +29,12 @@ export const getCachedProjects = cache(async (workspaceId: string) => {
 export const getCachedWorkspaces = cache(async (userId: string) => {
   const memberships = await prisma.workspaceMember.findMany({
     where: { userId, status: "active" },
-    include: { workspace: true },
+    select: {
+      role: true,
+      workspace: {
+        select: { id: true, name: true, slug: true, mode: true, plan: true },
+      },
+    },
   })
   return memberships.map((m) => ({
     id: m.workspace.id,

@@ -67,7 +67,6 @@ export function ScansClient({
   const [scans, setScans] = useState<ScanItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [hasLoadedMore, setHasLoadedMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const [selectedTarget, setSelectedTarget] = useState("")
@@ -133,7 +132,6 @@ export function ScansClient({
       })
       setScans((prev) => [...prev, ...result.items])
       setNextCursor(result.nextCursor)
-      setHasLoadedMore(true)
     } catch {
       setError("Failed to load more scans")
     } finally {
@@ -148,7 +146,6 @@ export function ScansClient({
       const result = await apiGetPaginated<ScanItem>("/api/scans", { workspaceId })
       setScans(result.items)
       setNextCursor(result.nextCursor)
-      setHasLoadedMore(false)
     } catch {
       setError("Failed to refresh scans")
     } finally {
@@ -160,22 +157,23 @@ export function ScansClient({
   const selectedTargetUsesEngine =
     targets.find((target) => target.id === selectedTarget)?.type === "REPO"
 
+  const ACTIVE_STATUS_PARAM = "QUEUED,PREFLIGHT,RUNNING,VERIFYING,REQUIRES_APPROVAL"
+
   useEffect(() => {
     if (!hasActiveScans) return
     const controller = new AbortController()
     let timeoutId: number | undefined
     const poll = async () => {
       try {
+        // Poll only active-status scans to keep the payload small. Merge the
+        // refreshed active rows into the full list so completed scans are preserved.
         const result = await apiGetPaginated<ScanItem>(
           "/api/scans",
-          { workspaceId },
+          { workspaceId, status: ACTIVE_STATUS_PARAM },
           { signal: controller.signal }
         )
         if (!controller.signal.aborted) {
-          setScans((current) =>
-            hasLoadedMore ? mergePolledScans(current, result.items) : result.items
-          )
-          if (!hasLoadedMore) setNextCursor(result.nextCursor)
+          setScans((current) => mergePolledScans(current, result.items))
         }
       } catch {
         // Keep the current list visible; the manual refresh action reports errors.
@@ -187,7 +185,7 @@ export function ScansClient({
       controller.abort()
       if (timeoutId !== undefined) window.clearTimeout(timeoutId)
     }
-  }, [hasActiveScans, hasLoadedMore, workspaceId])
+  }, [hasActiveScans, workspaceId])
 
   return (
     <div>

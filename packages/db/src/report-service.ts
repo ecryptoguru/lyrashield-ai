@@ -252,14 +252,17 @@ export async function getShareableReport(
     })
 
     if (scan) {
-      const findings = await prisma.finding.findMany({
+      const severityGroups = await prisma.finding.groupBy({
+        by: ["severity"],
         where: { scanId: scan.id, workspaceId, deletedAt: null },
-        select: { severity: true },
+        _count: { _all: true },
       })
 
       const bySeverity: Record<string, number> = {}
-      for (const f of findings) {
-        bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1
+      let findingsCount = 0
+      for (const g of severityGroups) {
+        bySeverity[g.severity] = g._count._all
+        findingsCount += g._count._all
       }
 
       scanSummary = {
@@ -267,7 +270,7 @@ export async function getShareableReport(
         status: scan.status,
         summary: scan.summary,
         targetName: "Private target",
-        findingsCount: findings.length,
+        findingsCount,
         findingsBySeverity: bySeverity,
       }
     }

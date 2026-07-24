@@ -104,26 +104,34 @@ describe("getScanWithEvents", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
-    mockPrisma.scanResultManifest.findUnique.mockResolvedValue(null)
-    mockPrisma.scanCoverageReceipt.findMany.mockResolvedValue([])
   })
 
   it("retains the newest bounded events in chronological display order", async () => {
-    mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1" })
-    mockPrisma.scanEvent.findMany.mockResolvedValue([{ id: "new" }, { id: "old" }])
+    // getScanWithEvents now uses a single findFirst with include, so the mock
+    // must return the full nested shape that Prisma would resolve.
+    mockPrisma.scan.findFirst.mockResolvedValue({
+      id: "scan-1",
+      events: [{ id: "new" }, { id: "old" }],
+      resultManifest: null,
+      coverageReceipts: [],
+      target: null,
+    })
 
     const scan = await getScanWithEvents("scan-1", "ws-1")
 
     expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "scan-1", workspaceId: "ws-1", deletedAt: null },
+        include: expect.objectContaining({
+          events: expect.objectContaining({
+            where: { deletedAt: null },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 200,
+          }),
+        }),
       })
     )
-    expect(mockPrisma.scanEvent.findMany).toHaveBeenCalledWith({
-      where: { scanId: "scan-1", deletedAt: null },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: 200,
-    })
+    // Events are reversed from desc to chronological order.
     expect(scan?.events.map((event) => event.id)).toEqual(["old", "new"])
   })
 
@@ -132,6 +140,8 @@ describe("getScanWithEvents", () => {
 
     await expect(getScanWithEvents("scan-1", "ws-1")).resolves.toBeNull()
 
+    // With the include approach a single findFirst call is made;
+    // separate relation queries are no longer issued.
     expect(mockPrisma.scanEvent.findMany).not.toHaveBeenCalled()
     expect(mockPrisma.scanResultManifest.findUnique).not.toHaveBeenCalled()
     expect(mockPrisma.scanCoverageReceipt.findMany).not.toHaveBeenCalled()

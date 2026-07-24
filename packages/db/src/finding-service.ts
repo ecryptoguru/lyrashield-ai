@@ -164,25 +164,29 @@ export async function getFindingStats(
     ...(targetId ? { targetId } : {}),
   }
 
-  const findings = await prisma.finding.findMany({
+  const groups = await prisma.finding.groupBy({
+    by: ["severity", "status", "verified"],
     where,
-    select: { severity: true, status: true, verified: true },
+    _count: { _all: true },
   })
 
   const bySeverity: Record<string, number> = {}
   const byStatus: Record<string, number> = {}
+  let total = 0
   let verified = 0
   let unverified = 0
 
-  for (const f of findings) {
-    bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1
-    byStatus[f.status] = (byStatus[f.status] ?? 0) + 1
-    if (f.verified) verified++
-    else unverified++
+  for (const g of groups) {
+    const count = g._count._all
+    total += count
+    bySeverity[g.severity] = (bySeverity[g.severity] ?? 0) + count
+    byStatus[g.status] = (byStatus[g.status] ?? 0) + count
+    if (g.verified) verified += count
+    else unverified += count
   }
 
   return {
-    total: findings.length,
+    total,
     bySeverity,
     byStatus,
     verified,
@@ -190,9 +194,25 @@ export async function getFindingStats(
   }
 }
 
-export async function listFindingsByScan(scanId: string, workspaceId: string): Promise<Finding[]> {
+export type FindingForScore = Pick<
+  Finding,
+  "id" | "severity" | "status" | "verified" | "verificationStatus" | "category"
+>
+
+export async function listFindingsByScan(
+  scanId: string,
+  workspaceId: string
+): Promise<FindingForScore[]> {
   return prisma.finding.findMany({
     where: { scanId, workspaceId, deletedAt: null },
     orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      severity: true,
+      status: true,
+      verified: true,
+      verificationStatus: true,
+      category: true,
+    },
   })
 }

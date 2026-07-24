@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
 import {
   Rocket,
   ShieldCheck,
@@ -97,9 +97,15 @@ function SeverityBreakdown({ bySeverity }: { bySeverity: Record<string, number> 
   )
 }
 
-export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) {
-  const [report, setReport] = useState<LaunchReadinessReport | null>(null)
-  const [loading, setLoading] = useState(true)
+export function LaunchReadinessClient({
+  workspaceId,
+  initialReport,
+}: {
+  workspaceId: string
+  initialReport: LaunchReadinessReport
+}) {
+  const [report, setReport] = useState<LaunchReadinessReport>(initialReport)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const loadReport = useCallback(
@@ -115,19 +121,11 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
         })
         .catch(() => {
           setError("Failed to load launch readiness report. Please try again.")
-          setReport(null)
         })
         .finally(() => setLoading(false))
     },
     [workspaceId]
   )
-
-  useEffect(() => {
-    const controller = new AbortController()
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, setState runs in promise callback
-    loadReport(controller.signal)
-    return () => controller.abort()
-  }, [loadReport])
 
   if (loading) {
     return (
@@ -152,8 +150,6 @@ export function LaunchReadinessClient({ workspaceId }: { workspaceId: string }) 
       />
     )
   }
-
-  if (!report) return null
 
   const config = VERDICT_CONFIG[report.verdict] ?? VERDICT_CONFIG.NO_GO
   const VerdictIcon = config.icon

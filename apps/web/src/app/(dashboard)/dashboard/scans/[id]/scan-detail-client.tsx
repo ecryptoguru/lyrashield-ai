@@ -245,19 +245,14 @@ export function ScanDetailClient({
             updated.status
           )
         ) {
-          refreshedFindings = []
-          let cursor: string | undefined
-          let pages = 0
-          do {
-            const page = await apiGetPaginated<FindingItem>(
-              "/api/findings",
-              { workspaceId: updated.workspaceId, scanId: scan.id, cursor, limit: "100" },
-              { signal }
-            )
-            refreshedFindings.push(...page.items)
-            cursor = page.nextCursor ?? undefined
-            pages++
-          } while (cursor && !signal.aborted && pages < 50)
+          // A single bounded fetch (limit 100) is sufficient for the scan detail
+          // view. Very large finding sets are navigated via the findings page.
+          const page = await apiGetPaginated<FindingItem>(
+            "/api/findings",
+            { workspaceId: updated.workspaceId, scanId: scan.id, limit: "100" },
+            { signal }
+          )
+          refreshedFindings = page.items
         }
         if (!signal.aborted) {
           // Commit the terminal status and its finding list together. If the
