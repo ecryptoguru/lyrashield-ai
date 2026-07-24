@@ -3,6 +3,16 @@ export {
   createGetFindingsTool,
   createGetLaunchReadinessTool,
   createCreateReportTool,
+  createListWorkspacesTool,
+  createListTargetsTool,
+  createGetScanStatusTool,
+  createCheckDiffTool,
+  createRunPrScanTool,
+  createExplainFindingTool,
+  createGenerateFixPlanTool,
+  createRecordFixProposalTool,
+  createVerifyFixTool,
+  createPrSecurityRecapTool,
   createAllTools,
   type McpTool,
   type McpToolResult,
@@ -10,3 +20,9 @@ export {
 } from "./tools"
 export { PromptInjectionGuard, type GuardResult } from "./prompt-injection-guard"
 export { McpServer, type McpServerOptions, type ApprovalGate } from "./server"
+export {
+  createLyraShieldServer,
+  SERVER_NAME,
+  SERVER_VERSION,
+  type CreateServerOptions,
+} from "./create-server"

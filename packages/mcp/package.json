@@ -1,25 +1,55 @@
 {
   "name": "@lyrashield/mcp",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
+  "description": "LyraShield AI MCP server — run verified security scans, review findings, and drive the fix/verify loop from your AI coding tool.",
+  "license": "UNLICENSED",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
-    "lyrashield-mcp": "./src/stdio-transport.ts"
+    "lyrashield-mcp": "./dist/stdio-transport.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "security",
+    "appsec",
+    "lyrashield",
+    "ai-coding"
+  ],
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc",
+    "build": "tsup",
+    "prepublishOnly": "tsup",
     "test": "vitest run"
   },
   "dependencies": {
-    "@lyrashield/types": "workspace:*",
-    "@lyrashield/logger": "workspace:*"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "typescript": "6.0.3",
+    "@lyrashield/logger": "workspace:*",
+    "@lyrashield/types": "workspace:*",
     "@types/node": "^22.20.1",
+    "tsup": "^8.5.1",
+    "typescript": "6.0.3",
     "vitest": "^3.2.7"
   }
 }
