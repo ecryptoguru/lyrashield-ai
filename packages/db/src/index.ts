@@ -173,3 +173,17 @@ export {
   type CreateApprovalParams,
   type ListApprovalsParams,
 } from "./agent-approval-service"
+export {
+  createApiKey,
+  listApiKeys,
+  revokeApiKey,
+  verifyApiKey,
+  hashApiKey,
+  isApiKeyFormat,
+  API_KEY_PREFIX,
+  API_KEY_SCOPES,
+  type ApiKeyScope,
+  type CreatedApiKey,
+  type PublicApiKey,
+  type VerifiedApiKey,
+} from "./api-key-service"

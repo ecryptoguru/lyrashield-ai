@@ -13,6 +13,7 @@ import { prisma } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { DeleteAccount } from "./delete-account"
 import { ConnectedAccounts } from "./connected-accounts"
+import { ApiKeysSection } from "./api-keys"
 
 export default async function SettingsPage() {
   const session = await getCachedSession()
@@ -32,24 +33,34 @@ export default async function SettingsPage() {
     )
   }
 
-  const [workspace, integrationCount, unreadNotifications, enabledSchedules] = await Promise.all([
-    prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: {
-        name: true,
-        plan: true,
-        retentionDays: true,
-        _count: {
-          select: {
-            members: true,
+  const [workspace, integrationCount, unreadNotifications, enabledSchedules, membership] =
+    await Promise.all([
+      prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: {
+          name: true,
+          plan: true,
+          retentionDays: true,
+          _count: {
+            select: {
+              members: true,
+            },
           },
         },
-      },
-    }),
-    prisma.integration.count({ where: { workspaceId, deletedAt: null } }),
-    prisma.notification.count({ where: { workspaceId, status: { not: "read" }, deletedAt: null } }),
-    prisma.schedule.count({ where: { workspaceId, enabled: true, deletedAt: null } }),
-  ])
+      }),
+      prisma.integration.count({ where: { workspaceId, deletedAt: null } }),
+      prisma.notification.count({
+        where: { workspaceId, status: { not: "read" }, deletedAt: null },
+      }),
+      prisma.schedule.count({ where: { workspaceId, enabled: true, deletedAt: null } }),
+      prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: session.userId } },
+        select: { role: true, status: true },
+      }),
+    ])
+
+  const canManageApiKeys =
+    membership?.status === "active" && ["OWNER", "ADMIN"].includes(membership.role)
 
   if (!workspace) return null
 
@@ -84,6 +95,8 @@ export default async function SettingsPage() {
       </Card>
 
       <ConnectedAccounts />
+
+      <ApiKeysSection workspaceId={workspaceId} canManage={canManageApiKeys} />
 
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader>
