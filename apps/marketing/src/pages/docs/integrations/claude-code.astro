@@ -1,0 +1,143 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/claude-code", origin).toString()
+const title = "LyraShield MCP for Claude Code — Setup Guide"
+const description =
+  "Add the LyraShield MCP server to Claude Code in under two minutes. Configure .mcp.json or use the claude mcp add command to run security checks inline while you build."
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Set up LyraShield MCP in Claude Code",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Create or open .mcp.json",
+        text: "In your project root, create or open the file .mcp.json.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Add the mcpServers entry",
+        text: 'Add an mcpServers key with the lyrashield entry using command "npx" and args ["-y","@lyrashield/mcp"].',
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Set your API key",
+        text: "Add LYRASHIELD_API_KEY to the env block inside the server entry.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 4,
+        name: "Reload Claude Code",
+        text: "Reload the window or restart Claude Code. The lyrashield MCP server should appear in the MCP servers list.",
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Claude Code", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/claude-code"
+>
+  <h1>Claude Code</h1>
+  <p>
+    Claude Code reads MCP servers from a <code>.mcp.json</code> file in your project root, or you
+    can register a server with the <code>claude mcp add</code> CLI command.
+  </p>
+
+  <h2>Option A — .mcp.json (recommended for teams)</h2>
+  <p>
+    Create or open <code>.mcp.json</code> in your project root and add the following. Commit the
+    file to share the configuration with your team; each developer supplies their own API key via
+    the environment variable.
+  </p>
+
+  <pre><code>{`{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "lsk_your_key_here",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}`}</code></pre>
+
+  <div class="callout">
+    <strong>API key:</strong> Create a workspace key under Settings → API keys in the LyraShield
+    app. Keys begin with <code>lsk_</code>. Use a read-only key for inspection tools and a
+    read-and-write key if you need to trigger scans or submit findings.
+  </div>
+
+  <h2>Option B — claude mcp add CLI</h2>
+  <p>
+    Run the following command in a terminal. Claude Code stores this globally and it applies across
+    all projects for the current user.
+  </p>
+
+  <pre><code>{`claude mcp add lyrashield \\
+  --command npx \\
+  --args "-y,@lyrashield/mcp" \\
+  --env LYRASHIELD_API_KEY=lsk_your_key_here \\
+  --env LYRASHIELD_API_URL=https://app.lyrashieldai.com`}</code></pre>
+
+  <h2>Verify the connection</h2>
+  <p>
+    After reloading Claude Code, open the MCP servers panel. You should see <strong
+      >lyrashield</strong
+    > listed as connected. Ask Claude: <em>"What LyraShield tools are available?"</em> to confirm
+    the tools surface correctly.
+  </p>
+
+  <h2>Agent rules</h2>
+  <p>
+    Add a <code>CLAUDE.md</code> snippet to teach Claude when to run LyraShield checks automatically.
+    See the <a href="/docs/integrations/agent-rules">Agent Rules Snippets</a> page for ready-to-paste
+    instructions.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Package rollout:</strong> The <code>@lyrashield/mcp</code> package is rolling out
+    progressively. If <code>npx -y @lyrashield/mcp</code> fails to resolve, check the LyraShield
+    changelog for the latest availability status.
+  </div>
+</DocsLayout>

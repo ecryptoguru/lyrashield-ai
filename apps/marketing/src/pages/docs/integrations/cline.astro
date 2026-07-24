@@ -1,0 +1,103 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/cline", origin).toString()
+const title = "LyraShield MCP for Cline — Setup Guide"
+const description =
+  'Connect LyraShield to Cline (VS Code extension). Configure cline_mcp_settings.json with the stdio server for local use, or use "type":"streamableHttp" for the remote endpoint.'
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Cline", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/cline"
+>
+  <h1>Cline</h1>
+  <p>
+    Cline reads MCP servers from <code>cline_mcp_settings.json</code>, which you can edit directly
+    in VS Code via the Cline MCP settings panel.
+  </p>
+
+  <h2>Local stdio setup</h2>
+  <pre><code>{`{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "lsk_your_key_here",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}`}</code></pre>
+
+  <h2>Remote Streamable-HTTP setup</h2>
+  <p>
+    For environments where you prefer not to run a local process, connect to the remote endpoint.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Gotcha — set type explicitly:</strong> Cline defaults to legacy SSE transport when{" "}
+    <code>type</code> is omitted. For the LyraShield remote endpoint you must set{" "}
+    <code>"type": "streamableHttp"</code> explicitly.
+  </div>
+
+  <pre><code>{`{
+  "mcpServers": {
+    "lyrashield": {
+      "type": "streamableHttp",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_your_key_here"
+      }
+    }
+  }
+}`}</code></pre>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Open the Cline panel in VS Code and check the MCP server status. Ask Cline: <em
+      >"What LyraShield tools are available?"</em
+    > to confirm the server is connected.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Package rollout:</strong> The <code>@lyrashield/mcp</code> package is rolling out
+    progressively. If <code>npx -y @lyrashield/mcp</code> fails to resolve, check the LyraShield
+    changelog for the latest availability status.
+  </div>
+</DocsLayout>

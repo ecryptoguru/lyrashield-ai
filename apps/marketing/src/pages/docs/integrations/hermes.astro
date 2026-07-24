@@ -1,0 +1,86 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/hermes", origin).toString()
+const title = "LyraShield MCP for Hermes (Nous Research) — Setup Guide"
+const description =
+  "Connect LyraShield to Hermes by Nous Research. Configure the mcp_servers: block in your profile YAML for stdio transport. Hermes also supports ACP for editor integrations."
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Hermes", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/hermes"
+>
+  <h1>Hermes (Nous Research)</h1>
+  <p>
+    Hermes by Nous Research reads MCP server configuration from a profile YAML file under the{" "}
+    <code>mcp_servers:</code> key.
+  </p>
+
+  <h2>Profile YAML configuration</h2>
+  <p>Add the following to your Hermes profile YAML:</p>
+
+  <pre><code>{`mcp_servers:
+  lyrashield:
+    transport: stdio
+    command: npx
+    args:
+      - "-y"
+      - "@lyrashield/mcp"
+    env:
+      LYRASHIELD_API_KEY: "lsk_your_key_here"
+      LYRASHIELD_API_URL: "https://app.lyrashieldai.com"`}</code></pre>
+
+  <h2>ACP for editor integrations</h2>
+  <p>
+    When using Hermes with editor integrations via the Agent Communication Protocol (ACP), the MCP
+    tools registered in your profile are available to the connected editor. Follow your editor's ACP
+    setup instructions to connect Hermes, then the LyraShield tools will surface automatically.
+  </p>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Start Hermes with your profile and list available tools. The LyraShield MCP tools should appear
+    in the tool registry. Ask the agent: <em>"What LyraShield security tools do you have?"</em>
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Package rollout:</strong> The <code>@lyrashield/mcp</code> package is rolling out
+    progressively. If <code>npx -y @lyrashield/mcp</code> fails to resolve, check the LyraShield
+    changelog for the latest availability status.
+  </div>
+</DocsLayout>

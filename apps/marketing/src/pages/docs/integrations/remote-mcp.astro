@@ -1,0 +1,207 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/remote-mcp", origin).toString()
+const title = "LyraShield Remote MCP Endpoint — Cloud Editor Setup"
+const description =
+  "Connect Lovable, Bolt.new, Replit, and v0 to LyraShield via the remote Streamable-HTTP MCP endpoint at https://app.lyrashieldai.com/api/mcp. No local process required."
+const updatedDate = "2026-07-24"
+
+const faqItems = [
+  {
+    q: "Can cloud editors run mutating LyraShield tools?",
+    a: "Remote mutating tools (scan triggers, finding submissions) are refused by default for safety. They require an explicit trusted-automation opt-in. Read-only inspection and reporting tools work everywhere via the remote endpoint.",
+  },
+  {
+    q: "What is the difference between remote MCP and the GitHub Action?",
+    a: "Remote MCP connects your cloud editor's AI assistant to LyraShield tools for interactive use. The GitHub Action runs automated checks in CI on every pull request without any AI editor involved. For cloud-hosted workflows, using both together is recommended.",
+  },
+]
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Remote MCP", item: canonical },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqItems.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/remote-mcp"
+>
+  <h1>Remote MCP endpoint</h1>
+  <p>
+    Cloud-hosted editors — Lovable, Bolt.new (hosted), Replit, and v0 — cannot run local processes.
+    Use the LyraShield remote Streamable-HTTP MCP endpoint to connect these editors to LyraShield
+    tools.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Read-only by default:</strong> Remote mutating tools (scan triggers, finding
+    submissions) are refused unless a trusted automation explicitly opts in. Read-only inspection
+    and reporting tools work everywhere.
+  </div>
+
+  <h2>Endpoint details</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Property</th>
+        <th>Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>URL</td>
+        <td><code>https://app.lyrashieldai.com/api/mcp</code></td>
+      </tr>
+      <tr>
+        <td>Transport</td>
+        <td>Streamable HTTP</td>
+      </tr>
+      <tr>
+        <td>Authentication</td>
+        <td>
+          <code>Authorization: Bearer lsk_your_key_here</code>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Lovable</h2>
+  <p>
+    In Lovable, open <strong>Settings → Integrations → Custom MCP</strong>. Add a new remote MCP
+    server with the URL <code>https://app.lyrashieldai.com/api/mcp</code> and set the
+    Authorization header to <code>Bearer lsk_your_key_here</code>.
+  </p>
+
+  <h2>Bolt.new (hosted)</h2>
+  <p>
+    In the Bolt.new hosted environment, navigate to <strong>Settings → MCP Servers</strong> and add
+    a custom remote server. Use the endpoint URL and Bearer token auth. Note: Bolt.new Desktop
+    supports local stdio — see the other editor guides for that setup.
+  </p>
+
+  <h2>Replit</h2>
+  <p>Replit supports MCP connections via the integrations panel.</p>
+  <ol>
+    <li>
+      Open your Repl and go to <strong>Tools → MCP Servers</strong> (or the equivalent integrations
+      UI in your Replit version).
+    </li>
+    <li>Add a new server with the remote endpoint URL.</li>
+    <li>Set the Authorization header with your Bearer API key.</li>
+  </ol>
+  <p>
+    For automated checks on every push, the <a href="/docs/integrations/github-action"
+      >GitHub Action</a
+    > is the recommended complement. Sync your Repl to a GitHub repository and add the LyraShield
+    Action to your workflow.
+  </p>
+
+  <h2>v0 (Vercel)</h2>
+  <p>
+    In v0, open <strong>Settings → Integrations → MCP</strong> and add a custom remote MCP server.
+    Supply the endpoint URL and set the Bearer authorization header with your API key.
+  </p>
+
+  <h2>GitHub Action as a complement</h2>
+  <p>
+    For any cloud editor that syncs to a GitHub repository, the{" "}
+    <a href="/docs/integrations/github-action">LyraShield GitHub Action</a> provides automated
+    security checks on every pull request without relying on the editor's MCP connection. This is
+    the recommended path for production assurance.
+  </p>
+
+  <h2>Frequently asked questions</h2>
+  <div class="faq-list">
+    {
+      faqItems.map((item, i) => (
+        <details class="faq-item" data-question-id={`remote-mcp-faq-${i + 1}`}>
+          <summary class="faq-item__q">{item.q}</summary>
+          <p class="faq-item__a">{item.a}</p>
+        </details>
+      ))
+    }
+  </div>
+</DocsLayout>
+
+<style>
+  .faq-list {
+    margin-top: 1.25rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .faq-item {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .faq-item__q {
+    padding: 1rem 0;
+    font-weight: 600;
+    color: var(--color-text);
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .faq-item__q::-webkit-details-marker {
+    display: none;
+  }
+
+  .faq-item__q::after {
+    content: "▼";
+    font-size: 0.65rem;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    transition: transform 0.15s;
+  }
+
+  .faq-item[open] .faq-item__q::after {
+    transform: rotate(180deg);
+  }
+
+  .faq-item__a {
+    padding-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+</style>

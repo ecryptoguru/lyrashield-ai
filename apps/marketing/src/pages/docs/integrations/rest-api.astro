@@ -1,0 +1,126 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/rest-api", origin).toString()
+const title = "LyraShield REST API & API Keys — Reference"
+const description =
+  "Create and manage LyraShield workspace API keys (lsk_ prefix) in Settings → API keys. Use keys for Bearer auth on the REST API and remote MCP endpoint. Read-only and read-and-write scopes."
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "REST API & API Keys", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/rest-api"
+>
+  <h1>REST API &amp; API keys</h1>
+  <p>
+    LyraShield workspace API keys authenticate requests to the REST API, the remote MCP endpoint,
+    and the GitHub Action.
+  </p>
+
+  <h2>Creating an API key</h2>
+  <ol>
+    <li>Sign in to the LyraShield app at <code>https://app.lyrashieldai.com</code>.</li>
+    <li>
+      Navigate to <strong>Settings → API keys</strong>.
+    </li>
+    <li>Click <strong>New key</strong> and choose a name and scope.</li>
+    <li>
+      Copy the key immediately — it will not be shown again after you close the dialog.
+    </li>
+  </ol>
+
+  <div class="callout callout--warn">
+    <strong>Copy immediately:</strong> The full key value is only shown once at creation time. Store
+    it securely in a secrets manager, a CI secret, or an environment variable. Never commit an API
+    key to source control.
+  </div>
+
+  <h2>Key format and scopes</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Property</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Prefix</td>
+        <td><code>lsk_</code></td>
+      </tr>
+      <tr>
+        <td>Read-only scope</td>
+        <td>Inspect findings, retrieve reports, list targets</td>
+      </tr>
+      <tr>
+        <td>Read-and-write scope</td>
+        <td>Trigger scans, submit findings, manage targets</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Authentication</h2>
+  <p>
+    Pass the key as a Bearer token in the <code>Authorization</code> header on every request:
+  </p>
+
+  <pre><code>{`Authorization: Bearer lsk_your_key_here`}</code></pre>
+
+  <h2>Example: REST API request</h2>
+  <pre><code>{`curl -X GET https://app.lyrashieldai.com/api/v1/targets \\
+  -H "Authorization: Bearer lsk_your_key_here" \\
+  -H "Accept: application/json"`}</code></pre>
+
+  <h2>Example: Remote MCP endpoint</h2>
+  <pre><code>{`# Headers to add when configuring the remote MCP endpoint:
+Authorization: Bearer lsk_your_key_here`}</code></pre>
+
+  <h2>Key rotation</h2>
+  <p>
+    To rotate a key, create a new key with the same scope, update all integrations to use the new
+    key, then revoke the old key from <strong>Settings → API keys</strong>. Keys can be revoked at
+    any time from the settings panel.
+  </p>
+
+  <h2>Security recommendations</h2>
+  <ul>
+    <li>Use a read-only key for MCP server connections in editors — it is sufficient for most use cases.</li>
+    <li>Use a read-and-write key only for CI pipelines that need to trigger scans or submit findings.</li>
+    <li>Store keys in a secrets manager or CI secret store, not in environment files committed to source control.</li>
+    <li>Create separate keys per integration so you can revoke individual access without disrupting others.</li>
+  </ul>
+</DocsLayout>

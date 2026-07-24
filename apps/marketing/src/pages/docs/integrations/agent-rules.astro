@@ -1,0 +1,149 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/agent-rules", origin).toString()
+const title = "LyraShield Agent Rules Snippets — CLAUDE.md, AGENTS.md, .cursorrules"
+const description =
+  "Ready-to-paste agent rules for CLAUDE.md, AGENTS.md, and .cursorrules. Teach your AI coding assistant to run LyraShield check_diff before a PR and verify_fix after applying a security patch."
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Agent Rules Snippets", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/agent-rules"
+>
+  <h1>Agent rules snippets</h1>
+  <p>
+    Paste these snippets into your agent rules file to teach your AI coding assistant when and how
+    to invoke LyraShield checks automatically. Adapt the section headings to match your project's
+    existing conventions.
+  </p>
+
+  <div class="callout">
+    <strong>Prerequisite:</strong> The LyraShield MCP server must be configured in your editor
+    before agent rules can invoke it. See the{" "}
+    <a href="/docs/integrations">integrations overview</a> for setup instructions.
+  </div>
+
+  <h2>CLAUDE.md (Claude Code)</h2>
+  <p>
+    Add this section to your <code>CLAUDE.md</code> file in the project root. Claude Code reads this
+    file at the start of every session.
+  </p>
+
+  <pre><code>{`## LyraShield security checks
+
+LyraShield is available as an MCP tool. Use it to verify security posture before
+creating a pull request and after applying a security fix.
+
+### Before creating a PR
+Run \`check_diff\` on the staged changes to identify security issues introduced
+by this work item:
+1. Use the \`lyrashield\` MCP tool \`check_diff\` with the diff of staged changes.
+2. Review any findings before committing.
+3. If findings are reported, address them or document why each is acceptable.
+
+### After applying a security patch
+Run \`verify_fix\` to confirm that the fix resolves the reported condition:
+1. Apply the fix.
+2. Use the \`lyrashield\` MCP tool \`verify_fix\` with the finding ID.
+3. Include the verification result in the PR description.
+
+### When not to run checks
+- Do not run checks on files you do not have permission to scan.
+- Do not run scans against third-party URLs without explicit authorization.
+- A clean check result does not guarantee the absence of all vulnerabilities.`}</code></pre>
+
+  <h2>AGENTS.md (JetBrains Junie, OpenAI Codex, Hermes)</h2>
+  <p>
+    <code>AGENTS.md</code> is read by JetBrains Junie, OpenAI Codex, and other agents that follow
+    the OpenAI Agents spec. Place it in your project root.
+  </p>
+
+  <pre><code>{`## LyraShield security workflow
+
+The LyraShield MCP server is available as a registered tool.
+
+### Pre-PR check
+Before opening a pull request, run check_diff on the changes in this branch.
+Report any findings and wait for resolution or explicit acceptance before proceeding.
+
+### Post-fix verification
+After applying a fix for a security finding, run verify_fix with the finding ID.
+Include the verification receipt in the PR description.
+
+### Scope limits
+Only run security checks against targets that are owned by this workspace and
+explicitly listed as authorized targets in the LyraShield settings.`}</code></pre>
+
+  <h2>.cursorrules (Cursor)</h2>
+  <p>
+    Cursor reads <code>.cursorrules</code> from the project root for project-specific AI behavior.
+    Add this block to your existing file or create a new one.
+  </p>
+
+  <pre><code>{`# LyraShield security checks
+
+When preparing a pull request:
+- Use the lyrashield MCP check_diff tool to scan staged changes for security issues.
+- Do not create the PR until findings are reviewed.
+
+When fixing a reported security issue:
+- After applying the fix, use lyrashield verify_fix with the finding ID.
+- Include the verification result in the PR description.
+
+Constraints:
+- Only scan authorized targets listed in the LyraShield workspace.
+- A passing check is not a guarantee of zero vulnerabilities.`}</code></pre>
+
+  <h2>Tips for effective agent rules</h2>
+  <ul>
+    <li>
+      Keep the rules focused on <em>when</em> to run checks — the agent will use the MCP tool
+      descriptions to understand <em>how</em>.
+    </li>
+    <li>
+      Add an explicit scope constraint to prevent the agent from scanning targets it does not own.
+    </li>
+    <li>
+      Include a note that a passing check is not a guarantee — this keeps expectations accurate and
+      prevents over-reliance on automated results.
+    </li>
+    <li>
+      For teams, commit the rules file to the repository so all developers share the same behavior.
+    </li>
+  </ul>
+</DocsLayout>

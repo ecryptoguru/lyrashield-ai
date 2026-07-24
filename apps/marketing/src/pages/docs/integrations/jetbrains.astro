@@ -1,0 +1,137 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/jetbrains", origin).toString()
+const title = "LyraShield MCP for JetBrains AI & Junie — Setup Guide"
+const description =
+  "Add the LyraShield MCP server to JetBrains AI Assistant and Junie. Configure via Settings → Tools → AI Assistant → MCP Servers, and add AGENTS.md agent rules to your project."
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Set up LyraShield MCP in JetBrains AI Assistant",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Open MCP Servers settings",
+        text: "Open Settings → Tools → AI Assistant → MCP Servers.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Add a new MCP server",
+        text: "Click + to add a new server. Set the command to npx and args to -y @lyrashield/mcp.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Set environment variables",
+        text: "Add LYRASHIELD_API_KEY and LYRASHIELD_API_URL in the environment variables section.",
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "JetBrains AI", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/jetbrains"
+>
+  <h1>JetBrains AI & Junie</h1>
+  <p>
+    JetBrains AI Assistant (available across IntelliJ IDEA, PyCharm, WebStorm, and other JetBrains
+    IDEs) and the Junie agent mode both support MCP servers. Configuration is done through the IDE
+    settings UI.
+  </p>
+
+  <h2>Adding the MCP server</h2>
+  <ol>
+    <li>
+      Open <strong>Settings</strong> (<code>Ctrl/Cmd + ,</code>) → <strong>Tools</strong> →{" "}
+      <strong>AI Assistant</strong> → <strong>MCP Servers</strong>.
+    </li>
+    <li>Click <strong>+</strong> to add a new server.</li>
+    <li>
+      Set the following values:
+      <ul>
+        <li>
+          <strong>Command:</strong> <code>npx</code>
+        </li>
+        <li>
+          <strong>Arguments:</strong> <code>-y @lyrashield/mcp</code>
+        </li>
+      </ul>
+    </li>
+    <li>
+      In the <strong>Environment variables</strong> section, add:
+      <ul>
+        <li>
+          <code>LYRASHIELD_API_KEY</code> = <code>lsk_your_key_here</code>
+        </li>
+        <li>
+          <code>LYRASHIELD_API_URL</code> = <code>https://app.lyrashieldai.com</code>
+        </li>
+      </ul>
+    </li>
+    <li>Click <strong>OK</strong> and apply settings.</li>
+  </ol>
+
+  <div class="callout">
+    <strong>Config file location:</strong> JetBrains stores the MCP config in the IDE's settings
+    directory. The UI is the recommended way to manage it; direct file editing is also possible but
+    the path varies by IDE and OS.
+  </div>
+
+  <h2>AGENTS.md agent rules</h2>
+  <p>
+    JetBrains Junie reads <code>AGENTS.md</code> from your project root to understand project
+    conventions. Add an LyraShield snippet to instruct Junie when to run security checks
+    automatically. See the <a href="/docs/integrations/agent-rules">Agent Rules Snippets</a> page
+    for ready-to-paste instructions.
+  </p>
+
+  <h2>Verify the connection</h2>
+  <p>
+    After applying settings, open the AI Assistant chat. The LyraShield tools should be available.
+    Ask: <em>"What tools does LyraShield provide?"</em> to confirm.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Package rollout:</strong> The <code>@lyrashield/mcp</code> package is rolling out
+    progressively. If <code>npx -y @lyrashield/mcp</code> fails to resolve, check the LyraShield
+    changelog for the latest availability status.
+  </div>
+</DocsLayout>

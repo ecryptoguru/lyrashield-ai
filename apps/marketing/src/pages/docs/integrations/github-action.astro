@@ -1,0 +1,167 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/github-action", origin).toString()
+const title = "LyraShield GitHub Action — CI Security Checks"
+const description =
+  "Run LyraShield security checks on every pull request with the GitHub Action. Store your lsk_ API key as a GitHub secret and add the workflow step to your CI pipeline."
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Set up LyraShield GitHub Action",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Add the API key as a GitHub secret",
+        text: "Go to your repository Settings → Secrets and variables → Actions. Add a secret named LYRASHIELD_API_KEY with your lsk_ workspace key.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Create the workflow file",
+        text: "Create .github/workflows/lyrashield.yml in your repository and add the LyraShield action step.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Configure check targets",
+        text: "Set the targets input to the URL or scope you want to check. Configure the fail-on-findings option to control whether the check blocks the PR.",
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "GitHub Action", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/github-action"
+>
+  <h1>GitHub Action</h1>
+  <p>
+    The LyraShield GitHub Action runs security checks in your CI pipeline on every pull request. It
+    is the recommended integration for teams using cloud editors and for any workflow that needs
+    automated, auditable security checks without an AI editor present.
+  </p>
+
+  <h2>Step 1 — Add your API key as a secret</h2>
+  <p>
+    Go to your GitHub repository <strong>Settings → Secrets and variables → Actions</strong> and
+    add a repository secret:
+  </p>
+  <ul>
+    <li>
+      <strong>Name:</strong> <code>LYRASHIELD_API_KEY</code>
+    </li>
+    <li>
+      <strong>Value:</strong> your <code>lsk_</code>-prefixed workspace key
+    </li>
+  </ul>
+
+  <div class="callout">
+    <strong>Key scope:</strong> The GitHub Action requires a read-and-write key if you want it to
+    submit findings to your LyraShield workspace. A read-only key is sufficient for reporting-only
+    runs.
+  </div>
+
+  <h2>Step 2 — Create the workflow file</h2>
+  <p>
+    Create <code>.github/workflows/lyrashield.yml</code> in your repository with the following
+    content. Adjust the <code>on:</code> triggers and inputs to match your project.
+  </p>
+
+  <pre><code>{`name: LyraShield security checks
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+jobs:
+  lyrashield:
+    name: Run security checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: LyraShield check
+        uses: lyrashield/action@v1
+        with:
+          api-key: \${{ secrets.LYRASHIELD_API_KEY }}
+          # Optional: target URL or workspace scope
+          # target: "https://your-staging-url.example.com"
+          # Optional: fail the workflow if findings are detected
+          # fail-on-findings: "true"`}</code></pre>
+
+  <h2>Workflow inputs reference</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Input</th>
+        <th>Required</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>api-key</code></td>
+        <td>Yes</td>
+        <td>Your <code>lsk_</code> workspace API key</td>
+      </tr>
+      <tr>
+        <td><code>target</code></td>
+        <td>No</td>
+        <td>URL or workspace scope to check</td>
+      </tr>
+      <tr>
+        <td><code>fail-on-findings</code></td>
+        <td>No</td>
+        <td>
+          Set to <code>true</code> to block the PR on findings (default: <code>false</code>)
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Cloud editor complement</h2>
+  <p>
+    For teams using cloud editors like Lovable, Bolt.new, Replit, or v0, the GitHub Action provides
+    automated CI checks on the synced repository. The action runs independently of the editor's MCP
+    connection and works even if the editor does not support custom remote MCP.
+  </p>
+</DocsLayout>

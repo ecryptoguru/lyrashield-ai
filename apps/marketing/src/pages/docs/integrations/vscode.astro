@@ -1,0 +1,133 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/vscode", origin).toString()
+const title = "LyraShield MCP for VS Code — Setup Guide"
+const description =
+  'Add the LyraShield MCP server to VS Code with GitHub Copilot agent mode. The critical difference: VS Code uses the root key "servers" — not "mcpServers" — in .vscode/mcp.json.'
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Set up LyraShield MCP in VS Code",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Create .vscode/mcp.json",
+        text: "In your project root, create .vscode/mcp.json. Note the root key is 'servers' (not 'mcpServers') — this is the most common VS Code copy-paste error.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Add the lyrashield entry with type:stdio",
+        text: 'Add the servers key with the lyrashield entry. Set "type": "stdio", command to "npx", and args to ["-y","@lyrashield/mcp"].',
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Set your API key in env",
+        text: "Add LYRASHIELD_API_KEY to the env object within the lyrashield entry.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 4,
+        name: "Reload VS Code",
+        text: "Reload the window. Confirm the server appears in the Copilot MCP servers view.",
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "VS Code", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/vscode"
+>
+  <h1>VS Code</h1>
+  <p>
+    VS Code (with the GitHub Copilot extension in agent mode) reads MCP servers from{" "}
+    <code>.vscode/mcp.json</code> in your project root.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Critical gotcha:</strong> VS Code uses the root key <code>servers</code>, not{" "}
+    <code>mcpServers</code>. Using <code>mcpServers</code> silently fails. Every entry also
+    requires a <code>"type": "stdio"</code> field.
+  </div>
+
+  <h2>Configuration</h2>
+  <p>
+    Create or open <code>.vscode/mcp.json</code> in your project root. Use <code>servers</code> as
+    the top-level key.
+  </p>
+
+  <pre><code>{`{
+  "servers": {
+    "lyrashield": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "lsk_your_key_here",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}`}</code></pre>
+
+  <h2>User-level global config</h2>
+  <p>
+    To register the server globally for all projects, open VS Code settings (<code>
+      Ctrl/Cmd + Shift + P
+    </code> → <em>Preferences: Open User Settings (JSON)</em>) and add the same <code>
+      servers
+    </code> block at the top level under the <code>github.copilot.chat.agent.mcpServers</code> or equivalent
+    user-level MCP key.
+  </p>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Reload the window (<code>Ctrl/Cmd + Shift + P</code> → <em>Developer: Reload Window</em>).
+    Open the Copilot Chat panel, switch to agent mode, and confirm that LyraShield tools appear in
+    the tool list.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Package rollout:</strong> The <code>@lyrashield/mcp</code> package is rolling out
+    progressively. If <code>npx -y @lyrashield/mcp</code> fails to resolve, check the LyraShield
+    changelog for the latest availability status.
+  </div>
+</DocsLayout>

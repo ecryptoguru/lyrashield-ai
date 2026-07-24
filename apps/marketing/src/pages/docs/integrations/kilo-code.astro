@@ -1,0 +1,100 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/kilo-code", origin).toString()
+const title = "LyraShield MCP for Kilo Code — Setup Guide"
+const description =
+  'Connect LyraShield to Kilo Code. Configure kilo.jsonc with the mcp key and type:"local". Uses the same single-brace {env:VAR} interpolation as OpenCode.'
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Kilo Code", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/kilo-code"
+>
+  <h1>Kilo Code</h1>
+  <p>
+    Kilo Code reads MCP servers from <code>kilo.jsonc</code> in your project root (JSONC — JSON
+    with comments). The root key is <code>mcp</code>.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Env interpolation:</strong> Like OpenCode, Kilo Code uses single-brace{" "}
+    <code>{"{env:VAR}"}</code> for environment variable interpolation — not{" "}
+    <code>{"${VAR}"}</code>.
+  </div>
+
+  <h2>Local stdio setup</h2>
+  <pre><code>{`{
+  // kilo.jsonc
+  "mcp": {
+    "lyrashield": {
+      "type": "local",
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}`}</code></pre>
+
+  <h2>Remote endpoint</h2>
+  <pre><code>{`{
+  "mcp": {
+    "lyrashield": {
+      "type": "remote",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:LYRASHIELD_API_KEY}"
+      }
+    }
+  }
+}`}</code></pre>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Reload the Kilo Code window and open the MCP servers panel. Confirm that the lyrashield server
+    shows a connected status.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Package rollout:</strong> The <code>@lyrashield/mcp</code> package is rolling out
+    progressively. If <code>npx -y @lyrashield/mcp</code> fails to resolve, check the LyraShield
+    changelog for the latest availability status.
+  </div>
+</DocsLayout>

@@ -1,0 +1,253 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations", origin).toString()
+const title = "Connect LyraShield to AI Coding Tools | Integrations"
+const description =
+  "Connect LyraShield AI to Claude Code, Cursor, Windsurf, VS Code, GitHub Actions, and more. Step-by-step MCP server setup, REST API keys, and agent rules for every AI coding environment."
+
+const updatedDate = "2026-07-24"
+
+const faqItems = [
+  {
+    q: "What is the LyraShield MCP server?",
+    a: "LyraShield ships a Model Context Protocol (MCP) server that exposes security-check tools to AI coding assistants. You can run it locally via npx (stdio transport) or connect to the hosted remote endpoint for cloud editors that cannot run local processes.",
+  },
+  {
+    q: "Do I need an API key to use the MCP server?",
+    a: "Yes. Set the LYRASHIELD_API_KEY environment variable to a workspace key created in LyraShield under Settings → API keys. Keys are prefixed lsk_ and carry either read-only or read-and-write scopes.",
+  },
+  {
+    q: "Which editors use the remote MCP endpoint instead of the local stdio server?",
+    a: "Cloud-hosted editors that cannot run local processes — such as Lovable, Bolt.new, Replit, and v0 — use the remote Streamable-HTTP endpoint at https://app.lyrashieldai.com/api/mcp with a Bearer API key. Read-only MCP tools work everywhere; remote mutating tools require an explicit opt-in.",
+  },
+  {
+    q: "Is the @lyrashield/mcp package available on npm now?",
+    a: "The package is rolling out progressively. The npx -y @lyrashield/mcp install command is the intended path and will resolve as availability expands. If you encounter a resolution error, check the LyraShield changelog for the current status.",
+  },
+  {
+    q: "Can I use LyraShield in a CI pipeline without an AI editor?",
+    a: "Yes. The GitHub Action integration runs LyraShield checks directly in your workflow without any AI assistant. It is the recommended path for cloud-only editors and for teams that want automated checks on every pull request.",
+  },
+]
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: "Connect LyraShield to AI Coding Tools",
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+    isPartOf: { "@id": `${origin}/docs/integrations` },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Docs", item: `${origin}/docs/integrations` },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: "Integrations",
+        item: canonical,
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqItems.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations"
+>
+  <h1>Integrations</h1>
+  <p>
+    Connect LyraShield to your AI coding environment to run security checks inline while you build.
+    Choose the setup that matches your editor or workflow.
+  </p>
+
+  <h2>Local MCP server (stdio)</h2>
+  <p>
+    For editors that can run local processes, install the LyraShield MCP server via <code
+      >npx -y @lyrashield/mcp</code
+    >. The server uses stdio transport and exposes LyraShield tools directly inside your AI
+    assistant.
+  </p>
+  <div class="nav-cards">
+    <a href="/docs/integrations/claude-code" class="nav-card">
+      <span class="nav-card__label">Claude Code</span>
+      <span class="nav-card__sub">.mcp.json or claude mcp add</span>
+    </a>
+    <a href="/docs/integrations/cursor" class="nav-card">
+      <span class="nav-card__label">Cursor</span>
+      <span class="nav-card__sub">.cursor/mcp.json</span>
+    </a>
+    <a href="/docs/integrations/windsurf" class="nav-card">
+      <span class="nav-card__label">Windsurf</span>
+      <span class="nav-card__sub">mcp_config.json</span>
+    </a>
+    <a href="/docs/integrations/vscode" class="nav-card">
+      <span class="nav-card__label">VS Code</span>
+      <span class="nav-card__sub">.vscode/mcp.json — key: servers</span>
+    </a>
+    <a href="/docs/integrations/openai-codex" class="nav-card">
+      <span class="nav-card__label">OpenAI Codex</span>
+      <span class="nav-card__sub">~/.codex/config.toml</span>
+    </a>
+    <a href="/docs/integrations/cline" class="nav-card">
+      <span class="nav-card__label">Cline</span>
+      <span class="nav-card__sub">cline_mcp_settings.json</span>
+    </a>
+    <a href="/docs/integrations/opencode" class="nav-card">
+      <span class="nav-card__label">OpenCode</span>
+      <span class="nav-card__sub">opencode.json, key: mcp</span>
+    </a>
+    <a href="/docs/integrations/kilo-code" class="nav-card">
+      <span class="nav-card__label">Kilo Code</span>
+      <span class="nav-card__sub">kilo.jsonc, key: mcp</span>
+    </a>
+    <a href="/docs/integrations/zed" class="nav-card">
+      <span class="nav-card__label">Zed</span>
+      <span class="nav-card__sub">settings.json — key: context_servers</span>
+    </a>
+    <a href="/docs/integrations/gemini-cli" class="nav-card">
+      <span class="nav-card__label">Gemini CLI</span>
+      <span class="nav-card__sub">~/.gemini/settings.json</span>
+    </a>
+    <a href="/docs/integrations/jetbrains" class="nav-card">
+      <span class="nav-card__label">JetBrains AI</span>
+      <span class="nav-card__sub">Settings → AI Assistant → MCP</span>
+    </a>
+    <a href="/docs/integrations/amp" class="nav-card">
+      <span class="nav-card__label">Amp</span>
+      <span class="nav-card__sub">amp mcp add CLI</span>
+    </a>
+    <a href="/docs/integrations/picode" class="nav-card">
+      <span class="nav-card__label">PiCode</span>
+      <span class="nav-card__sub">mcpServers config</span>
+    </a>
+    <a href="/docs/integrations/openclaw" class="nav-card">
+      <span class="nav-card__label">OpenClaw</span>
+      <span class="nav-card__sub">MCPorter YAML</span>
+    </a>
+    <a href="/docs/integrations/hermes" class="nav-card">
+      <span class="nav-card__label">Hermes</span>
+      <span class="nav-card__sub">Profile YAML</span>
+    </a>
+  </div>
+
+  <h2>Remote MCP endpoint</h2>
+  <p>
+    Cloud editors that cannot run local processes connect to the remote Streamable-HTTP endpoint at
+    <code>https://app.lyrashieldai.com/api/mcp</code> with a Bearer API key. The
+    <a href="/docs/integrations/github-action">GitHub Action</a> is the recommended complement for
+    automated PR checks.
+  </p>
+  <div class="nav-cards">
+    <a href="/docs/integrations/remote-mcp" class="nav-card">
+      <span class="nav-card__label">Remote MCP</span>
+      <span class="nav-card__sub">Lovable · Bolt.new · Replit · v0</span>
+    </a>
+  </div>
+
+  <h2>Cross-cutting setup</h2>
+  <div class="nav-cards">
+    <a href="/docs/integrations/github-action" class="nav-card">
+      <span class="nav-card__label">GitHub Action</span>
+      <span class="nav-card__sub">CI/CD security checks on every PR</span>
+    </a>
+    <a href="/docs/integrations/rest-api" class="nav-card">
+      <span class="nav-card__label">REST API & API Keys</span>
+      <span class="nav-card__sub">Workspace keys, scopes, lsk_ prefix</span>
+    </a>
+    <a href="/docs/integrations/agent-rules" class="nav-card">
+      <span class="nav-card__label">Agent Rules Snippets</span>
+      <span class="nav-card__sub">CLAUDE.md · AGENTS.md · .cursorrules</span>
+    </a>
+    <a href="/docs/integrations/troubleshooting" class="nav-card">
+      <span class="nav-card__label">Troubleshooting</span>
+      <span class="nav-card__sub">Common gotchas and fixes</span>
+    </a>
+  </div>
+
+  <h2>Frequently asked questions</h2>
+  <div class="faq-list">
+    {
+      faqItems.map((item, i) => (
+        <details class="faq-item" data-question-id={`integrations-faq-${i + 1}`}>
+          <summary class="faq-item__q">{item.q}</summary>
+          <p class="faq-item__a">{item.a}</p>
+        </details>
+      ))
+    }
+  </div>
+</DocsLayout>
+
+<style>
+  .faq-list {
+    margin-top: 1.25rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .faq-item {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .faq-item__q {
+    padding: 1rem 0;
+    font-weight: 600;
+    color: var(--color-text);
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .faq-item__q::-webkit-details-marker {
+    display: none;
+  }
+
+  .faq-item__q::after {
+    content: "▼";
+    font-size: 0.65rem;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    transition: transform 0.15s;
+  }
+
+  .faq-item[open] .faq-item__q::after {
+    transform: rotate(180deg);
+  }
+
+  .faq-item__a {
+    padding-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+
+  .faq-item:focus-within .faq-item__q {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 0.2rem;
+  }
+</style>
