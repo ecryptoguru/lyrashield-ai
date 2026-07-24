@@ -165,7 +165,10 @@ export function ScanInProgress({
                 </p>
               </div>
 
-              <h2 className="mt-2 text-xl leading-tight font-semibold sm:text-2xl">
+              <h2
+                className="mt-2 text-xl leading-tight font-semibold sm:text-2xl"
+                aria-label={`Current stage: ${currentStage}`}
+              >
                 {currentStage}
               </h2>
 
