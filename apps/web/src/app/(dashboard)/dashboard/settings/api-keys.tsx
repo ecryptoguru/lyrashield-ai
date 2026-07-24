@@ -73,6 +73,17 @@ export function ApiKeysSection({
 
   if (!canManage) return null
 
+  /**
+   * Reset the create form to its defaults. Scope MUST be reset along with the
+   * name: leaving the previous selection sticky silently grants write access to
+   * a key the user believes is read-only (least-privilege default is "read").
+   */
+  function closeCreateForm() {
+    setShowCreate(false)
+    setName("")
+    setScope("read")
+  }
+
   async function handleCreate() {
     if (!name.trim()) return
     setCreating(true)
@@ -84,8 +95,7 @@ export function ApiKeysSection({
         scopes: scope === "write" ? ["read", "write"] : ["read"],
       })
       setCreatedKey(created)
-      setName("")
-      setShowCreate(false)
+      closeCreateForm()
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create API key")
@@ -127,7 +137,13 @@ export function ApiKeysSection({
           <KeyRound className="size-4" aria-hidden="true" />
           API keys
         </CardTitle>
-        <Button size="sm" variant="outline" onClick={() => setShowCreate((v) => !v)}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => (showCreate ? closeCreateForm() : setShowCreate(true))}
+          aria-expanded={showCreate}
+          aria-controls="api-key-create-form"
+        >
           <Plus className="mr-1 size-4" aria-hidden="true" />
           New key
         </Button>
@@ -170,7 +186,7 @@ export function ApiKeysSection({
         ) : null}
 
         {showCreate ? (
-          <div className="space-y-3 rounded-md border p-4">
+          <div id="api-key-create-form" className="space-y-3 rounded-md border p-4">
             <div className="space-y-1">
               <label htmlFor="api-key-name" className="text-sm font-medium">
                 Key name
@@ -186,7 +202,7 @@ export function ApiKeysSection({
             </div>
             <fieldset className="space-y-1">
               <legend className="text-sm font-medium">Access</legend>
-              <div className="flex gap-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="radio"
@@ -194,7 +210,7 @@ export function ApiKeysSection({
                     checked={scope === "read"}
                     onChange={() => setScope("read")}
                   />
-                  Read-only
+                  Read-only <span className="text-muted-foreground">(recommended)</span>
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -206,6 +222,12 @@ export function ApiKeysSection({
                   Read &amp; write (can start scans, create reports)
                 </label>
               </div>
+              {scope === "write" ? (
+                <p className="text-muted-foreground text-xs">
+                  This key will be able to start scans and create reports in this workspace. Prefer
+                  read-only unless a tool needs to make changes.
+                </p>
+              ) : null}
             </fieldset>
             <div className="flex gap-2">
               <Button
@@ -216,7 +238,7 @@ export function ApiKeysSection({
                 {creating ? <Spinner className="mr-1 size-4" /> : null}
                 Create key
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)}>
+              <Button size="sm" variant="ghost" onClick={closeCreateForm}>
                 Cancel
               </Button>
             </div>
