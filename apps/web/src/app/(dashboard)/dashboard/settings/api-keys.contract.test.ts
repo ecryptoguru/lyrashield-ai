@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs"
  * contract, matching the existing source-contract test precedent in the repo.)
  */
 describe("API keys create-form scope reset", () => {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const source = readFileSync(new URL("./api-keys.tsx", import.meta.url), "utf8")
 
   it("resets name AND scope to the least-privilege default when closing the form", () => {
