@@ -160,16 +160,40 @@ export async function revokeApiKey(keyId: string, workspaceId: string): Promise<
  * soft-deleted, or malformed keys — the caller treats null as UNAUTHORIZED.
  * Updates lastUsedAt best-effort (never blocks or fails the request).
  */
+interface VerifyApiKeyRow {
+  id: string
+  workspaceId: string
+  scopes: string[]
+  createdById: string
+  prefix: string
+  hashedKey: string
+  revokedAt: Date | null
+  expiresAt: Date | null
+  deletedAt: Date | null
+  lastUsedAt: Date | null
+}
+
 export async function verifyApiKey(rawKey: string): Promise<VerifiedApiKey | null> {
   if (!isApiKeyFormat(rawKey)) return null
 
   const hashed = hashApiKey(rawKey)
-  const key = await prisma.apiKey.findUnique({ where: { hashedKey: hashed } })
+
+  // Pre-auth, cross-tenant lookup: the workspace is unknown until the key is
+  // resolved, so no workspace RLS context can be set here. "ApiKey" is under
+  // FORCE row-level security with a strict workspace policy, which would filter
+  // this by-hash lookup to zero rows for the restricted (NOBYPASSRLS) app role.
+  // app.verify_api_key is a SECURITY DEFINER function that performs exactly this
+  // one narrow lookup with the owner's privileges — see migration
+  // 20260724170000_api_key_verify_definer.
+  const rows = await prisma.$queryRaw<VerifyApiKeyRow[]>`
+    SELECT * FROM app.verify_api_key(${hashed})
+  `
+  const key = rows[0]
   if (!key) return null
 
   // Defense-in-depth: constant-time re-comparison of the stored hash. The
-  // unique lookup above is already exact; this guards against any future
-  // change that loosens the lookup.
+  // lookup above is already exact; this guards against any future change that
+  // loosens the lookup.
   const stored = Buffer.from(key.hashedKey, "utf8")
   const candidate = Buffer.from(hashed, "utf8")
   if (stored.length !== candidate.length || !timingSafeEqual(stored, candidate)) {
@@ -181,14 +205,13 @@ export async function verifyApiKey(rawKey: string): Promise<VerifiedApiKey | nul
   if (key.expiresAt && key.expiresAt.getTime() <= Date.now()) return null
 
   // Best-effort usage tracking; throttled to once per minute per key to avoid
-  // a write per request.
+  // a write per request. Uses the SECURITY DEFINER touch function for the same
+  // pre-auth RLS reason as the lookup above.
   const now = Date.now()
   if (!key.lastUsedAt || now - key.lastUsedAt.getTime() > 60_000) {
-    void prisma.apiKey
-      .updateMany({ where: { id: key.id }, data: { lastUsedAt: new Date() } })
-      .catch(() => {
-        /* usage tracking must never fail a request */
-      })
+    void prisma.$executeRaw`SELECT app.touch_api_key_last_used(${key.id})`.catch(() => {
+      /* usage tracking must never fail a request */
+    })
   }
 
   return {
