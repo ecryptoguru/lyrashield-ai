@@ -15,6 +15,7 @@ COPY packages/integrations/package.json ./packages/integrations/
 COPY packages/logger/package.json ./packages/logger/
 COPY packages/types/package.json ./packages/types/
 COPY packages/ui/package.json ./packages/ui/
+COPY packages/score/package.json ./packages/score/
 COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/security/package.json ./packages/security/
 COPY apps/worker/package.json ./apps/worker/
@@ -46,6 +47,11 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
 
 FROM workspace-builder AS web-builder
 
+ARG BUILD_DATABASE_URL="postgresql://build@db.example.invalid:5432/lyrashield?schema=public"
+ARG BUILD_APP_URL="https://app.example.invalid"
+ARG BUILD_PUBLIC_APP_URL="https://app.example.invalid"
+ARG BUILD_TRUSTED_PROXY_IP_HEADER="x-forwarded-for"
+
 RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     BETTER_AUTH_SECRET="build-placeholder-not-used-at-runtime" \
     BETTER_AUTH_URL="$BUILD_APP_URL" \
@@ -55,7 +61,6 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
 
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
-RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
 RUN addgroup --system lyrashield && \
     adduser --system --ingroup lyrashield --home /app lyrashield
 
