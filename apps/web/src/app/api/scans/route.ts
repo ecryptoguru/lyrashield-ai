@@ -167,13 +167,33 @@ export async function GET(request: Request) {
     const workspaceId = searchParams.get("workspaceId")
     const targetId = searchParams.get("targetId")
     const rawStatus = searchParams.get("status")
-    const status = rawStatus ? ScanStatusSchema.safeParse(rawStatus) : undefined
 
     if (!workspaceId) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
-    if (status && !status.success) {
-      return apiError("INVALID_PARAM", "status must be a valid scan status", 400)
+
+    // Support a single status value or a comma-separated list of statuses.
+    let statusFilter: Parameters<typeof listScans>[0]["statuses"] | undefined
+    let singleStatus: Parameters<typeof listScans>[0]["status"] | undefined
+    if (rawStatus) {
+      const parts = rawStatus
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+      if (parts.length > 1) {
+        const parsed = parts.map((s) => ScanStatusSchema.safeParse(s))
+        const invalid = parsed.find((r) => !r.success)
+        if (invalid) {
+          return apiError("INVALID_PARAM", "status contains an invalid scan status value", 400)
+        }
+        statusFilter = parsed.map((r) => (r as { success: true; data: typeof singleStatus }).data!)
+      } else {
+        const parsed = ScanStatusSchema.safeParse(parts[0])
+        if (!parsed.success) {
+          return apiError("INVALID_PARAM", "status must be a valid scan status", 400)
+        }
+        singleStatus = parsed.data
+      }
     }
 
     await requirePermission(workspaceId, PERMISSIONS.scan.view)
@@ -183,7 +203,7 @@ export async function GET(request: Request) {
     const { items, nextCursor } = await listScans({
       workspaceId,
       ...(targetId ? { targetId } : {}),
-      ...(status?.success ? { status: status.data } : {}),
+      ...(statusFilter ? { statuses: statusFilter } : singleStatus ? { status: singleStatus } : {}),
       ...(cursor ? { cursor } : {}),
       limit,
     })

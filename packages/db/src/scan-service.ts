@@ -26,6 +26,13 @@ export interface ScanWithEvents extends Scan {
   events: ScanEvent[]
   resultManifest: ScanResultManifest | null
   coverageReceipts: ScanCoverageReceipt[]
+  target: {
+    id: string
+    name: string
+    type: string
+    url: string | null
+    repoFullName: string | null
+  } | null
 }
 
 const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
@@ -188,28 +195,29 @@ export async function getScanWithEvents(
   return withWorkspaceRLS(workspaceId, async (tx) => {
     const scan = await tx.scan.findFirst({
       where: { id: scanId, workspaceId, deletedAt: null },
+      include: {
+        events: {
+          where: { deletedAt: null },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 200,
+        },
+        resultManifest: true,
+        coverageReceipts: {
+          orderBy: { controlId: "asc" },
+        },
+        target: {
+          select: { id: true, name: true, type: true, url: true, repoFullName: true },
+        },
+      },
     })
     if (!scan) return null
 
-    // Keep relation reads sequential on the transaction connection. Prisma's
-    // relation include planner can issue concurrent pg queries; pg 8 warns and
-    // pg 9 will reject that usage on a single interactive transaction client.
-    const events = await tx.scanEvent.findMany({
-      where: { scanId, deletedAt: null },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: 200,
-    })
-    const resultManifest = await tx.scanResultManifest.findUnique({ where: { scanId } })
-    const coverageReceipts = await tx.scanCoverageReceipt.findMany({
-      where: { scanId },
-      orderBy: { controlId: "asc" },
-    })
-
     return {
       ...scan,
-      events: events.reverse(),
-      resultManifest,
-      coverageReceipts,
+      events: scan.events.reverse(),
+      resultManifest: scan.resultManifest,
+      coverageReceipts: scan.coverageReceipts,
+      target: scan.target,
     }
   })
 }
@@ -233,6 +241,7 @@ export interface ListScansParams {
   workspaceId: string
   targetId?: string
   status?: ScanStatus
+  statuses?: ScanStatus[]
   cursor?: string
   limit?: number
 }
@@ -242,11 +251,17 @@ export async function listScans(params: ListScansParams): Promise<{
   nextCursor: string | null
 }> {
   const limit = Math.min(Math.max(params.limit ?? 50, 1), 100)
+  const statusFilter =
+    params.statuses && params.statuses.length > 0
+      ? { status: { in: params.statuses } }
+      : params.status
+        ? { status: params.status }
+        : {}
   const where: Record<string, unknown> = {
     workspaceId: params.workspaceId,
     deletedAt: null,
     ...(params.targetId ? { targetId: params.targetId } : {}),
-    ...(params.status ? { status: params.status } : {}),
+    ...statusFilter,
   }
 
   const scans = await prisma.scan.findMany({

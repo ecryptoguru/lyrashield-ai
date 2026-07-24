@@ -764,6 +764,8 @@ model ScoreSnapshot {
   shares        ScorecardShare[]
 
   @@index([workspaceId])
+  @@index([workspaceId, computedAt])
+  @@index([workspaceId, targetId, computedAt])
   @@index([targetId, computedAt])
   @@index([targetId, shareEligible, computedAt])
 }

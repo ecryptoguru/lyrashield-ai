@@ -52,18 +52,6 @@ function checkInMemory(
 
 type Duration = `${number} ${"ms" | "s" | "m" | "h" | "d"}`
 
-let ratelimit: {
-  slidingWindow: (
-    limit: number,
-    window: Duration,
-    identifier: string
-  ) => Promise<{
-    success: boolean
-    remaining: number
-    reset: number
-  }>
-} | null = null
-
 // Distributed rate limiting requires Upstash's HTTP REST endpoint + token.
 // (Note: REDIS_URL is a redis:// URL reserved for the BullMQ job queue and is
 // NOT a valid Upstash REST URL — conflating the two silently broke prod limiting.)
@@ -83,7 +71,22 @@ function warnDegradedOnce() {
   }
 }
 
-async function initUpstash() {
+// Pre-created Ratelimit instances keyed by "limit:window" to avoid rebuilding
+// per call. Populated once during initUpstash.
+type RatelimitInstance = {
+  limit: (identifier: string) => Promise<{ success: boolean; remaining: number; reset: number }>
+}
+const ratelimitInstances = new Map<string, RatelimitInstance>()
+
+type UpstashClient = {
+  getOrCreate: (lim: number, window: Duration) => RatelimitInstance
+} | null
+
+let upstashClient: UpstashClient = null
+// Single in-flight init promise so concurrent callers share one initialization.
+let initPromise: Promise<UpstashClient> | null = null
+
+async function initUpstash(): Promise<UpstashClient> {
   if (!upstashConfigured()) {
     warnDegradedOnce()
     return null
@@ -98,20 +101,19 @@ async function initUpstash() {
       token: env.UPSTASH_REDIS_REST_TOKEN,
     })
 
-    return {
-      slidingWindow: async (lim: number, window: Duration, identifier: string) => {
-        const rl = new Ratelimit({
-          redis,
-          limiter: Ratelimit.slidingWindow(lim, window),
-        })
-        const result = await rl.limit(identifier)
-        return {
-          success: result.success,
-          remaining: result.remaining,
-          reset: result.reset,
-        }
-      },
+    // Pre-create one Ratelimit instance per (limit, window) pair.
+    function getOrCreate(lim: number, window: Duration): RatelimitInstance {
+      const key = `${lim}:${window}`
+      let rl = ratelimitInstances.get(key)
+      if (!rl) {
+        const instance = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(lim, window) })
+        rl = { limit: (id) => instance.limit(id) }
+        ratelimitInstances.set(key, rl)
+      }
+      return rl
     }
+
+    return { getOrCreate }
   } catch (error) {
     // Fail loud: a misconfigured Upstash client silently degrading to
     // per-instance limiting is a security-control failure, not a warning.
@@ -122,50 +124,43 @@ async function initUpstash() {
   }
 }
 
-export async function checkAuthRateLimit(ip: string) {
-  if (isProd && upstashConfigured()) {
-    if (!ratelimit) ratelimit = await initUpstash()
-    if (ratelimit) {
-      const result = await ratelimit.slidingWindow(AUTH_MAX, "60 s", `auth:${ip}`)
-      return {
-        limited: !result.success,
-        remaining: result.remaining,
-        retryAfter: Math.ceil((result.reset - Date.now()) / 1000),
-      }
-    }
-  }
+async function getUpstashClient(): Promise<UpstashClient> {
+  if (upstashClient !== null) return upstashClient
+  if (!initPromise) initPromise = initUpstash().then((client) => (upstashClient = client))
+  return initPromise
+}
 
+async function checkUpstash(
+  lim: number,
+  window: Duration,
+  identifier: string
+): Promise<{ limited: boolean; remaining: number; retryAfter: number } | null> {
+  if (!isProd || !upstashConfigured()) return null
+  const client = await getUpstashClient()
+  if (!client) return null
+  const rl = client.getOrCreate(lim, window)
+  const result = await rl.limit(identifier)
+  return {
+    limited: !result.success,
+    remaining: result.remaining,
+    retryAfter: Math.ceil((result.reset - Date.now()) / 1000),
+  }
+}
+
+export async function checkAuthRateLimit(ip: string) {
+  const upstash = await checkUpstash(AUTH_MAX, "60 s", `auth:${ip}`)
+  if (upstash) return upstash
   return checkInMemory(`auth:${ip}`, AUTH_MAX, WINDOW_MS)
 }
 
 export async function checkApiRateLimit(ip: string) {
-  if (isProd && upstashConfigured()) {
-    if (!ratelimit) ratelimit = await initUpstash()
-    if (ratelimit) {
-      const result = await ratelimit.slidingWindow(API_MAX, "60 s", `api:${ip}`)
-      return {
-        limited: !result.success,
-        remaining: result.remaining,
-        retryAfter: Math.ceil((result.reset - Date.now()) / 1000),
-      }
-    }
-  }
-
+  const upstash = await checkUpstash(API_MAX, "60 s", `api:${ip}`)
+  if (upstash) return upstash
   return checkInMemory(`api:${ip}`, API_MAX, WINDOW_MS)
 }
 
 export async function checkLiteScanRateLimit(ipHash: string) {
-  if (isProd && upstashConfigured()) {
-    if (!ratelimit) ratelimit = await initUpstash()
-    if (ratelimit) {
-      const result = await ratelimit.slidingWindow(LITE_SCAN_MAX, "60 s", `lite-scan:${ipHash}`)
-      return {
-        limited: !result.success,
-        remaining: result.remaining,
-        retryAfter: Math.ceil((result.reset - Date.now()) / 1000),
-      }
-    }
-  }
-
+  const upstash = await checkUpstash(LITE_SCAN_MAX, "60 s", `lite-scan:${ipHash}`)
+  if (upstash) return upstash
   return checkInMemory(`lite-scan:${ipHash}`, LITE_SCAN_MAX, WINDOW_MS)
 }

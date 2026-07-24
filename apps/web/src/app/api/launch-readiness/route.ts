@@ -43,7 +43,9 @@ export async function GET(request: Request) {
       completedScanCount > 0
     )
 
-    return apiSuccess(report)
+    const response = apiSuccess(report)
+    response.headers.set("Cache-Control", "private, max-age=30, stale-while-revalidate=60")
+    return response
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

@@ -1,4 +1,4 @@
-import { prisma, getScanWithEvents } from "@lyrashield/db"
+import { getScanWithEvents, prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { ScanDetailClient } from "./scan-detail-client"
@@ -31,30 +31,26 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     )
   }
 
-  const [target, findings] = await Promise.all([
-    prisma.target.findFirst({
-      where: { id: scan.targetId ?? "", workspaceId, deletedAt: null },
-      select: { id: true, name: true, type: true, url: true, repoFullName: true },
-    }),
-    prisma.finding.findMany({
-      where: { scanId: id, workspaceId, deletedAt: null },
-      select: {
-        id: true,
-        title: true,
-        severity: true,
-        status: true,
-        cwe: true,
-        cvssScore: true,
-        summary: true,
-        verified: true,
-        verificationStatus: true,
-        verificationMethod: true,
-        verificationReason: true,
-        createdAt: true,
-      },
-      orderBy: { severity: "desc" },
-    }),
-  ])
+  const findings = await prisma.finding.findMany({
+    where: { scanId: id, workspaceId, deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      severity: true,
+      status: true,
+      cwe: true,
+      cvssScore: true,
+      summary: true,
+      verified: true,
+      verificationStatus: true,
+      verificationMethod: true,
+      verificationReason: true,
+      createdAt: true,
+    },
+    orderBy: { severity: "desc" },
+  })
+
+  const target = scan.target
 
   const scanData = {
     id: scan.id,
