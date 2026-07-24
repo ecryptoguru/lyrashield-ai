@@ -1,0 +1,25 @@
+# LyraShield Security Scan — one-step quickstart.
+# Copy this file to .github/workflows/lyrashield.yml in your repository.
+#
+# It runs LyraShield's diff-aware security gate on every pull request:
+# secret detection, risky-pattern checks, and SARIF output. Pin @v1 to a
+# released tag (or a commit SHA) for supply-chain safety.
+name: LyraShield
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  # Only needed to publish results to GitHub Code Scanning (optional).
+  security-events: write
+
+jobs:
+  lyrashield:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ecryptoguru/lyrashield-ai@v1
+        with:
+          scan_mode: SAFE
+          fail_on_severity: HIGH
