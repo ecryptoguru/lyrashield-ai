@@ -2,7 +2,7 @@
 
 The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an AI coding tool run verified security scans, read findings, and drive the fix → verify loop against your LyraShield workspace — without leaving the editor.
 
-Built on the official `@modelcontextprotocol/sdk`. Ships as a stdio server today; a hosted remote (Streamable HTTP) endpoint is on the roadmap for cloud editors.
+Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0).
 
 ## What it can do
 
@@ -83,6 +83,24 @@ env_vars = ["LYRASHIELD_API_KEY", "LYRASHIELD_API_URL"]
 ```
 
 Per-client config for OpenCode, Kilo Code, Cline, Zed, and the cloud platforms lives in the LyraShield docs.
+
+### Remote (Streamable HTTP) — for cloud editors
+
+Point any remote-MCP-capable client at the hosted endpoint and authenticate with the same `lsk_` key as a Bearer token:
+
+```json
+{
+  "mcpServers": {
+    "lyrashield": {
+      "type": "http",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": { "Authorization": "Bearer lsk_your_key" }
+    }
+  }
+}
+```
+
+The remote endpoint runs the same guard and tools as stdio. Because a stateless HTTP request has no way to prompt a human, **mutating tools are refused over remote by default** — run those from the local stdio server (which prompts you), or use a pre-authorized trusted automation. Read-only tools work everywhere.
 
 ## Approval behavior
 

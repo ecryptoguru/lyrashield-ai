@@ -14,6 +14,15 @@ export interface CreateServerOptions {
   allowMutations?: boolean
   /** Override the engine's tool context (API base URL / key / fetch). */
   toolContext?: McpServerOptions["toolContext"]
+  /**
+   * How mutating tools obtain human approval:
+   * - "interactive" (default): elicitation → controlling-TTY → fail-closed.
+   *   Right for the local stdio server, where a human is present.
+   * - "deny": no approval channel exists (e.g. the stateless remote HTTP
+   *   endpoint, where server→client elicitation can't round-trip). Mutating
+   *   tools are refused with a clear reason unless allowMutations is set.
+   */
+  approvalMode?: "interactive" | "deny"
 }
 
 /**
@@ -89,11 +98,19 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
     }
   }
 
-  const approvalGate: ApprovalGate = async (toolName) => {
+  const denyGate: ApprovalGate = () => ({
+    approved: false,
+    reason:
+      "This LyraShield endpoint has no interactive approval channel. Run the mutating tool from the local stdio MCP server (which prompts for approval), or use a trusted automation configured with allowMutations.",
+  })
+
+  const interactiveGate: ApprovalGate = async (toolName) => {
     const elicited = await elicitApproval(toolName)
     if (elicited) return elicited
     return ttyApproval(toolName)
   }
+
+  const approvalGate = options.approvalMode === "deny" ? denyGate : interactiveGate
 
   const engine = new McpServer({
     ...(options.allowMutations ? { allowMutations: true } : { approvalGate }),

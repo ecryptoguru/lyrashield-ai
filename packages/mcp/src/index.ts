@@ -26,3 +26,4 @@ export {
   SERVER_VERSION,
   type CreateServerOptions,
 } from "./create-server"
+export { handleRemoteMcpRequest, type RemoteMcpOptions } from "./http-transport"
