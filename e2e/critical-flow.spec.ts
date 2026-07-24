@@ -162,7 +162,7 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
   })
   await expect(skipOwnerOnboarding).toBeOK()
   await page.goto(`/dashboard/scans/${scan.id}`)
-  await expect(page.getByRole("heading", { name: "Scan queued" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Scan queued", level: 1 })).toBeVisible()
 
   const other = await browser.newContext({
     extraHTTPHeaders: { "x-forwarded-for": forwardedFor },
