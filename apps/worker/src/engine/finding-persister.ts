@@ -124,7 +124,13 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
   })
   const existingMap = new Map(existingFindings.map((f) => [f.dedupeKey, f]))
 
-  for (const vuln of vulnerabilities) {
+  // Persist each finding's create/update + evidence + detection receipt as an
+  // atomic per-finding sequence, but overlap findings with bounded concurrency
+  // so a scan with many findings doesn't serialize hundreds of R2 uploads and
+  // DB round-trips. Correctness is preserved: each finding is independent (keyed
+  // by its own dedupeKey), the reopen logic and verification receipts are
+  // unchanged, and results are collected in stable input order.
+  const persistOne = async (vuln: (typeof vulnerabilities)[number]): Promise<PersistedFinding> => {
     const isNormalized = "dedupeKey" in vuln && "normalizedSeverity" in vuln
     const dedupeKey = isNormalized
       ? (vuln as NormalizedFinding).dedupeKey
@@ -221,14 +227,13 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
         dedupeKey,
       })
 
-      results.push({
+      return {
         id: existing.id,
         title: vuln.title,
         severity,
         dedupeKey,
         isNew: false,
-      })
-      continue
+      }
     }
 
     const finding = await prisma.finding.create({
@@ -268,14 +273,31 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
       dedupeKey,
     })
 
-    results.push({
+    return {
       id: finding.id,
       title: vuln.title,
       severity,
       dedupeKey,
       isNew: true,
-    })
+    }
   }
+
+  // Bounded-concurrency map preserving input order. Concurrency of 5 overlaps
+  // the I/O-bound evidence uploads without overwhelming the DB pool or R2.
+  const CONCURRENCY = 5
+  const ordered: PersistedFinding[] = new Array(vulnerabilities.length)
+  let cursor = 0
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = cursor++
+      if (index >= vulnerabilities.length) return
+      ordered[index] = await persistOne(vulnerabilities[index]!)
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, vulnerabilities.length) }, () => worker())
+  )
+  results.push(...ordered)
 
   const newCount = results.filter((r) => r.isNew).length
   const dupCount = results.length - newCount

@@ -540,13 +540,29 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         return false
       }
 
-      const isCancelledOrTimedOut = async () => {
-        if (hasGlobalScanTimeout()) return true
+      // Cancellation is polled frequently (the scanner orchestrator checks on a
+      // ~1s interval), so memoize the CANCELLED lookup for a short window to
+      // avoid a DB query every second per active scan. A cancel is still
+      // detected within CANCEL_CACHE_MS; correctness only requires timely
+      // detection, not instantaneous.
+      const CANCEL_CACHE_MS = 3000
+      let cancelCacheAt = 0
+      let cancelCacheValue = false
+      const isScanCancelled = async (): Promise<boolean> => {
+        const now = Date.now()
+        if (now - cancelCacheAt < CANCEL_CACHE_MS) return cancelCacheValue
         const current = await prisma.scan.findUnique({
           where: { id: scanId },
           select: { status: true },
         })
-        return current?.status === "CANCELLED"
+        cancelCacheValue = current?.status === "CANCELLED"
+        cancelCacheAt = now
+        return cancelCacheValue
+      }
+
+      const isCancelledOrTimedOut = async () => {
+        if (hasGlobalScanTimeout()) return true
+        return isScanCancelled()
       }
 
       const failWithScanTimeout = async (timeoutMessage: string) => {
@@ -586,13 +602,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               },
               scanId,
               resolveEngineTimeoutMs(policy?.maxDurationMinutes),
-              async () => {
-                const current = await prisma.scan.findUnique({
-                  where: { id: scanId },
-                  select: { status: true },
-                })
-                return current?.status === "CANCELLED"
-              }
+              isScanCancelled
             )
           : {
               exitCode: 0,

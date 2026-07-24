@@ -278,4 +278,45 @@ describe("persistFindings", () => {
       }),
     })
   })
+
+  it("persists many findings with bounded concurrency, preserving input order and completeness", async () => {
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+    // Each create resolves after a jittered delay so out-of-order completion is
+    // possible — the ordered-result guarantee must still hold.
+    vi.mocked(prisma.finding.create).mockImplementation((async (args: {
+      data: { dedupeKey: string }
+    }) => {
+      await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 15)))
+      return { id: `finding-${args.data.dedupeKey}` }
+    }) as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "c" } as never)
+
+    const vulns: NormalizedFinding[] = Array.from({ length: 25 }, (_, i) => ({
+      id: `v-${i}`,
+      title: `Finding ${i}`,
+      severity: "high",
+      timestamp: "2026-07-24T00:00:00Z",
+      scannerSource: "secrets",
+      normalizedSeverity: "HIGH",
+      normalizedCwe: "CWE-79",
+      normalizedCvss: 7.5,
+      confidenceScore: 90,
+      falsePositiveRisk: "low",
+      dedupeKey: `key-${String(i).padStart(2, "0")}`,
+      enrichment: { cweCategory: "XSS" },
+    }))
+
+    const results = await persistFindings({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: vulns,
+    })
+
+    expect(results).toHaveLength(25)
+    // Order preserved despite concurrent, jittered completion.
+    expect(results.map((r) => r.dedupeKey)).toEqual(vulns.map((v) => v.dedupeKey))
+    expect(results.every((r) => r.isNew)).toBe(true)
+    expect(prisma.finding.create).toHaveBeenCalledTimes(25)
+  })
 })
