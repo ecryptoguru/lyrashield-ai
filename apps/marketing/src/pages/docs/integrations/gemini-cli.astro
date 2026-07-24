@@ -1,0 +1,103 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/gemini-cli", origin).toString()
+const title = "LyraShield MCP for Gemini CLI — Setup Guide"
+const description =
+  "Connect LyraShield to Gemini CLI. Two important gotchas: declare LYRASHIELD_API_KEY in the env block (Gemini CLI strips env vars containing KEY/TOKEN/SECRET from subprocesses) and avoid underscores in the server name."
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Gemini CLI", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/gemini-cli"
+>
+  <h1>Gemini CLI</h1>
+  <p>
+    Gemini CLI reads MCP servers from <code>~/.gemini/settings.json</code> under the{" "}
+    <code>mcpServers</code> key.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Two critical gotchas for Gemini CLI:</strong>
+    <ol>
+      <li>
+        <strong>Env var stripping:</strong> Gemini CLI strips environment variables whose names
+        contain <code>KEY</code>, <code>TOKEN</code>, or <code>SECRET</code> from subprocess
+        environments as a security measure. You <em>must</em> declare <code>LYRASHIELD_API_KEY</code>
+        explicitly in the <code>env</code> block inside the server entry — inheriting it from the shell
+        is not sufficient.
+      </li>
+      <li>
+        <strong>No underscores in server name:</strong> Use a name without underscores (e.g.{" "}
+        <code>lyrashield</code>, not <code>lyra_shield</code>) to avoid Gemini CLI parsing issues.
+      </li>
+    </ol>
+  </div>
+
+  <h2>Configuration</h2>
+  <p>
+    Open or create <code>~/.gemini/settings.json</code> and add the following. Note the{" "}
+    <code>LYRASHIELD_API_KEY</code> is declared in the <code>env</code> block, not inherited from
+    the environment.
+  </p>
+
+  <pre><code>{`{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "lsk_your_key_here",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}`}</code></pre>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Start Gemini CLI and run <code>gemini --list-tools</code> or ask: <em
+      >"What LyraShield tools do you have?"</em
+    > to confirm the server is connected.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Package rollout:</strong> The <code>@lyrashield/mcp</code> package is rolling out
+    progressively. If <code>npx -y @lyrashield/mcp</code> fails to resolve, check the LyraShield
+    changelog for the latest availability status.
+  </div>
+</DocsLayout>

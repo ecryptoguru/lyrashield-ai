@@ -1,0 +1,231 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/troubleshooting", origin).toString()
+const title = "LyraShield MCP Troubleshooting & Gotchas"
+const description =
+  "Fix common LyraShield MCP integration problems: VS Code uses 'servers' not 'mcpServers', Gemini CLI strips KEY/TOKEN/SECRET env vars, Zed uses context_servers, OpenCode uses {env:VAR} interpolation."
+const updatedDate = "2026-07-24"
+
+const faqItems = [
+  {
+    q: "The MCP server connects but no tools appear",
+    a: "This usually means the package has not yet resolved via npx or the API key is missing or invalid. Check that LYRASHIELD_API_KEY is set in the env block (not just the shell), that your key starts with lsk_, and that the package is available. See the package rollout note below.",
+  },
+  {
+    q: "VS Code does not show my MCP server",
+    a: 'VS Code uses the root key "servers" (not "mcpServers") in .vscode/mcp.json. Every entry also requires a "type": "stdio" field. Check both. Using mcpServers silently fails without an error message.',
+  },
+  {
+    q: "Gemini CLI does not pass my API key to the server",
+    a: 'Gemini CLI strips environment variables whose names contain KEY, TOKEN, or SECRET from subprocess environments. You must declare LYRASHIELD_API_KEY explicitly in the env block inside the server entry in ~/.gemini/settings.json. Inheriting it from the shell is not sufficient.',
+  },
+  {
+    q: "OpenCode or Kilo Code passes the literal string {env:VAR} instead of my key",
+    a: "These editors use single-brace interpolation: {env:LYRASHIELD_API_KEY}. Using ${VAR} or $VAR will result in the literal string being passed. Check your config for the correct syntax.",
+  },
+  {
+    q: "Zed does not recognize my MCP server config",
+    a: 'Zed uses the root key "context_servers" — not "mcpServers". Place this key at the top level of your settings.json. The structure also differs from other editors — check the Zed setup page for the exact schema.',
+  },
+  {
+    q: "Cline connects but uses the wrong transport type",
+    a: 'For the remote LyraShield endpoint, set "type": "streamableHttp" explicitly in cline_mcp_settings.json. Omitting the type defaults to legacy SSE transport, which is not compatible with the LyraShield remote endpoint.',
+  },
+  {
+    q: "The npx install fails with a package not found error",
+    a: "The @lyrashield/mcp package is rolling out progressively. If npx -y @lyrashield/mcp fails to resolve, the package may not yet be available in your region or for your npm registry configuration. Check the LyraShield changelog for the current availability status.",
+  },
+]
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqItems.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Troubleshooting", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/troubleshooting"
+>
+  <h1>Troubleshooting &amp; gotchas</h1>
+  <p>
+    The most common integration problems come from editor-specific configuration differences.
+    Here is a quick reference for each known gotcha, followed by detailed answers.
+  </p>
+
+  <h2>Quick reference — per-editor gotchas</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Editor</th>
+        <th>Gotcha</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>VS Code</td>
+        <td>
+          Root key is <code>servers</code>, not <code>mcpServers</code>. Every entry needs{" "}
+          <code>"type": "stdio"</code>.
+        </td>
+      </tr>
+      <tr>
+        <td>Gemini CLI</td>
+        <td>
+          Strips env vars with <code>KEY</code>/<code>TOKEN</code>/<code>SECRET</code> in the name.
+          Declare explicitly in the <code>env</code> block. No underscores in server name.
+        </td>
+      </tr>
+      <tr>
+        <td>Zed</td>
+        <td>
+          Root key is <code>context_servers</code>, not <code>mcpServers</code>.
+        </td>
+      </tr>
+      <tr>
+        <td>OpenCode</td>
+        <td>
+          Root key is <code>mcp</code>. Env interpolation is <code>{"{env:VAR}"}</code>, not{" "}
+          <code>{"${VAR}"}</code>.
+        </td>
+      </tr>
+      <tr>
+        <td>Kilo Code</td>
+        <td>
+          Same as OpenCode: <code>mcp</code> key, <code>{"{env:VAR}"}</code> interpolation.
+        </td>
+      </tr>
+      <tr>
+        <td>OpenAI Codex</td>
+        <td>
+          TOML format. Env key is <code>env_vars</code>, not <code>env</code>.
+        </td>
+      </tr>
+      <tr>
+        <td>Cline (remote)</td>
+        <td>
+          Must set <code>"type": "streamableHttp"</code> explicitly. Omitting defaults to legacy
+          SSE.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Frequently asked questions</h2>
+  <div class="faq-list">
+    {
+      faqItems.map((item, i) => (
+        <details class="faq-item" data-question-id={`troubleshooting-faq-${i + 1}`}>
+          <summary class="faq-item__q">{item.q}</summary>
+          <p class="faq-item__a">{item.a}</p>
+        </details>
+      ))
+    }
+  </div>
+
+  <h2>General debugging steps</h2>
+  <ol>
+    <li>
+      Confirm the <code>LYRASHIELD_API_KEY</code> environment variable is set <em>inside the server
+        entry's <code>env</code> block</em> — not just in the shell.
+    </li>
+    <li>
+      Verify the key starts with <code>lsk_</code> and has not been accidentally truncated.
+    </li>
+    <li>
+      Check that the root config key matches your editor's spec (<code>mcpServers</code>,{" "}
+      <code>servers</code>, <code>mcp</code>, or <code>context_servers</code>).
+    </li>
+    <li>
+      Try running the server manually to see raw output: <code>
+        LYRASHIELD_API_KEY=lsk_... npx -y @lyrashield/mcp
+      </code>.
+    </li>
+    <li>
+      If the package fails to resolve, the <code>@lyrashield/mcp</code> package may not yet be
+      available. Check the LyraShield changelog.
+    </li>
+  </ol>
+</DocsLayout>
+
+<style>
+  .faq-list {
+    margin-top: 1.25rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .faq-item {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .faq-item__q {
+    padding: 1rem 0;
+    font-weight: 600;
+    color: var(--color-text);
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .faq-item__q::-webkit-details-marker {
+    display: none;
+  }
+
+  .faq-item__q::after {
+    content: "▼";
+    font-size: 0.65rem;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    transition: transform 0.15s;
+  }
+
+  .faq-item[open] .faq-item__q::after {
+    transform: rotate(180deg);
+  }
+
+  .faq-item__a {
+    padding-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+</style>

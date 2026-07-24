@@ -1,0 +1,84 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/picode", origin).toString()
+const title = "LyraShield MCP for PiCode — Setup Guide"
+const description =
+  "Connect LyraShield to PiCode using the standard mcpServers configuration. Add the npx stdio server entry with your API key to enable inline security checks."
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "PiCode", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/picode"
+>
+  <h1>PiCode</h1>
+  <p>
+    PiCode uses the standard <code>mcpServers</code> configuration format. Add the LyraShield entry
+    to your PiCode MCP settings file.
+  </p>
+
+  <h2>Configuration</h2>
+  <pre><code>{`{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "lsk_your_key_here",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}`}</code></pre>
+
+  <div class="callout">
+    <strong>API key:</strong> Create a workspace key under Settings → API keys in the LyraShield
+    app. Keys begin with <code>lsk_</code>. Use a read-only key for inspection tools.
+  </div>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Reload PiCode and confirm the lyrashield server appears in the MCP servers list. Ask the AI
+    assistant to list available tools to verify the connection.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Package rollout:</strong> The <code>@lyrashield/mcp</code> package is rolling out
+    progressively. If <code>npx -y @lyrashield/mcp</code> fails to resolve, check the LyraShield
+    changelog for the latest availability status.
+  </div>
+</DocsLayout>

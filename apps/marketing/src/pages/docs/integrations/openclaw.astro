@@ -1,0 +1,101 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/openclaw", origin).toString()
+const title = "LyraShield MCP for OpenClaw — Setup Guide"
+const description =
+  "Connect LyraShield to OpenClaw agent runtime using MCPorter YAML. Define the stdio transport under mcp_servers: and optionally add a skill.md to teach OpenClaw when to invoke LyraShield."
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "OpenClaw", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/openclaw"
+>
+  <h1>OpenClaw</h1>
+  <p>
+    OpenClaw uses MCPorter YAML to configure MCP server connections. Define the LyraShield server
+    under the <code>mcp_servers:</code> key with stdio transport.
+  </p>
+
+  <h2>MCPorter YAML configuration</h2>
+  <p>
+    Add the following to your MCPorter YAML configuration file (typically <code>
+      mcporter.yaml
+    </code> or your OpenClaw agent profile YAML):
+  </p>
+
+  <pre><code>{`mcp_servers:
+  lyrashield:
+    transport: stdio
+    command: npx
+    args:
+      - "-y"
+      - "@lyrashield/mcp"
+    env:
+      LYRASHIELD_API_KEY: "lsk_your_key_here"
+      LYRASHIELD_API_URL: "https://app.lyrashieldai.com"`}</code></pre>
+
+  <h2>Skill definition (optional)</h2>
+  <p>
+    Create a <code>skill.md</code> file in your OpenClaw skills directory to teach the agent when
+    to invoke LyraShield automatically. For example:
+  </p>
+
+  <pre><code>{`# LyraShield Security Checks
+
+Run LyraShield checks before submitting a pull request or after applying a fix.
+
+## When to use
+- Before creating a PR: run check_diff on the staged changes
+- After applying a security fix: run verify_fix to confirm resolution
+- When reviewing dependency updates: run supply chain checks
+
+## How to invoke
+Use the lyrashield MCP tools available in the tool registry.`}</code></pre>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Start OpenClaw and list available tools. The LyraShield tools from the MCP server should appear
+    in the tool registry.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Package rollout:</strong> The <code>@lyrashield/mcp</code> package is rolling out
+    progressively. If <code>npx -y @lyrashield/mcp</code> fails to resolve, check the LyraShield
+    changelog for the latest availability status.
+  </div>
+</DocsLayout>

@@ -1,0 +1,86 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/amp", origin).toString()
+const title = "LyraShield MCP for Amp (Sourcegraph) — Setup Guide"
+const description =
+  "Add the LyraShield MCP server to Amp by Sourcegraph using the amp mcp add CLI command. Amp stores MCP config globally — there is no per-project config file."
+const updatedDate = "2026-07-24"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Amp", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/amp"
+>
+  <h1>Amp (Sourcegraph)</h1>
+  <p>
+    Amp uses a CLI command to register MCP servers. The config is stored globally — there is no
+    per-project MCP config file.
+  </p>
+
+  <div class="callout">
+    <strong>Global only:</strong> Amp MCP config applies across all projects for the current user.
+    Set your API key as a shell environment variable rather than hardcoding it in the command.
+  </div>
+
+  <h2>Register via CLI</h2>
+  <p>
+    Run the following command in your terminal. Export <code>LYRASHIELD_API_KEY</code> in your
+    shell profile (<code>~/.bashrc</code>, <code>~/.zshrc</code>, etc.) so it is available when
+    Amp starts the server.
+  </p>
+
+  <pre><code>{`# Export your key in your shell profile first:
+# export LYRASHIELD_API_KEY=lsk_your_key_here
+# export LYRASHIELD_API_URL=https://app.lyrashieldai.com
+
+amp mcp add lyrashield \\
+  --command npx \\
+  --args "-y,@lyrashield/mcp"`}</code></pre>
+
+  <h2>Verify the connection</h2>
+  <p>
+    List registered servers with <code>amp mcp list</code>. The lyrashield server should appear.
+    Start Amp and ask: <em>"What LyraShield tools are available?"</em> to confirm tools surface
+    correctly.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Package rollout:</strong> The <code>@lyrashield/mcp</code> package is rolling out
+    progressively. If <code>npx -y @lyrashield/mcp</code> fails to resolve, check the LyraShield
+    changelog for the latest availability status.
+  </div>
+</DocsLayout>
