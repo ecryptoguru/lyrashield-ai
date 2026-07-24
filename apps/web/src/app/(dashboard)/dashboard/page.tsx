@@ -355,8 +355,18 @@ export default async function DashboardPage() {
               ))}
             </div>
           ) : (
-            <div className="text-muted-foreground flex min-h-48 items-center justify-center px-6 text-sm">
-              No scan activity yet.
+            <div className="px-5 py-6 sm:px-6">
+              <EmptyState
+                icon={Activity}
+                title="No scan activity yet"
+                description="Run your first scan to see activity here."
+                action={
+                  <Link href="/dashboard/scans" className={buttonVariants({ size: "sm" })}>
+                    <Play className="size-4" aria-hidden="true" />
+                    Start a scan
+                  </Link>
+                }
+              />
             </div>
           )}
         </Card>

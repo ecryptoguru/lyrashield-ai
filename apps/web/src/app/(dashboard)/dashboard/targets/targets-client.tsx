@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft } from "lucide-react"
 import {
   Button,
@@ -497,24 +498,14 @@ export function TargetsClient({
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Scans</th>
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Findings</th>
                 <th className="px-4 py-3 text-left font-semibold">Status</th>
+                <th className="px-4 py-3 text-left font-semibold">
+                  <span className="sr-only">View</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {targets.map((t) => (
-                <tr
-                  key={t.id}
-                  className="hover:bg-muted/30 cursor-pointer border-b last:border-0"
-                  onClick={() => router.push(`/dashboard/targets/${t.id}`)}
-                  tabIndex={0}
-                  role="link"
-                  aria-label={`View target ${t.name}`}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      router.push(`/dashboard/targets/${t.id}`)
-                    }
-                  }}
-                >
+                <tr key={t.id} className="hover:bg-muted/30 border-b last:border-0">
                   <td className="px-4 py-3">
                     <div className="font-medium">{t.name}</div>
                     {t.repoFullName && (
@@ -545,6 +536,15 @@ export function TargetsClient({
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant={t.status === "active" ? "success" : "muted"}>{t.status}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/dashboard/targets/${t.id}`}
+                      className="text-primary text-xs font-medium hover:underline"
+                      aria-label={`View target ${t.name}`}
+                    >
+                      View
+                    </Link>
                   </td>
                 </tr>
               ))}

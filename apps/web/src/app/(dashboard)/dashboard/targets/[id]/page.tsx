@@ -234,6 +234,9 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
                 <th className="px-4 py-3 text-left font-semibold">Mode</th>
                 <th className="px-4 py-3 text-left font-semibold">Status</th>
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Date</th>
+                <th className="px-4 py-3 text-left font-semibold">
+                  <span className="sr-only">View</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -258,6 +261,14 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
                   </td>
                   <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
                     {formatDateTime(scan.createdAt)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/dashboard/scans/${scan.id}`}
+                      className="text-primary text-xs font-medium hover:underline"
+                    >
+                      View
+                    </Link>
                   </td>
                 </tr>
               ))}

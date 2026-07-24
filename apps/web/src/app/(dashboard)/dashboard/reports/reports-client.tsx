@@ -27,6 +27,7 @@ import { writeClipboard } from "@/components/scorecard-share-composer"
 import { formatDate } from "@/lib/date-format"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
+import { InlineConfirm } from "@/components/ui/inline-confirm"
 
 interface ReportItem {
   id: string
@@ -184,9 +185,6 @@ export function ReportsClient({
   }
 
   const handleRevoke = async (reportId: string) => {
-    if (!window.confirm("Revoke this report link? Anyone using it will immediately lose access.")) {
-      return
-    }
     try {
       const result = await apiPost<{ revoked: true; revokedAt: string }>(
         `/api/reports/${reportId}`,
@@ -449,14 +447,13 @@ export function ReportsClient({
                     </Button>
                   )}
                   {!report.revokedAt && report.shareTokenHash && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
+                    <InlineConfirm
+                      triggerIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
                       aria-label="Revoke share link"
-                      onClick={() => void handleRevoke(report.id)}
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
-                    </Button>
+                      message="Revoke link?"
+                      confirmLabel="Revoke"
+                      onConfirm={() => handleRevoke(report.id)}
+                    />
                   )}
                 </div>
               </div>
