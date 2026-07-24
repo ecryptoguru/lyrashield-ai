@@ -69,7 +69,7 @@ export function FixesClient({
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Fixes</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Fix proposals</h1>
           <p className="text-muted-foreground mt-1 text-sm">
             Review fix proposals and track pull requests for your findings.
           </p>

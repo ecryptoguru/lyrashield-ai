@@ -411,11 +411,19 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
             <dl className="divide-y border text-sm">
               <div className="flex justify-between gap-4 p-4">
                 <dt className="text-muted-foreground">Workspace</dt>
-                <dd className="font-medium">Ready</dd>
+                <dd className="font-medium">{workspaceName.trim() || "Ready"}</dd>
               </div>
               <div className="flex justify-between gap-4 p-4">
                 <dt className="text-muted-foreground">Target</dt>
-                <dd className="font-medium">Configured</dd>
+                <dd className="text-right font-medium wrap-break-word">
+                  {replaceTarget
+                    ? targetName.trim()
+                      ? targetType === "REPO"
+                        ? `${targetName.trim()}${repoOwner.trim() && repoName.trim() ? ` (${repoOwner.trim()}/${repoName.trim()})` : ""}`
+                        : targetName.trim()
+                      : "Configured"
+                    : "Configured"}
+                </dd>
               </div>
               <div className="flex justify-between gap-4 p-4">
                 <dt className="text-muted-foreground">Goal</dt>

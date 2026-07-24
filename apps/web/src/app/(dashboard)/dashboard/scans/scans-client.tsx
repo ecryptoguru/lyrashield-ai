@@ -9,6 +9,7 @@ import { formatDateTime } from "@/lib/date-format"
 import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanPreset, SCAN_PRESETS, type ScanPresetId } from "@/lib/scan-presets"
+import { InlineConfirm } from "@/components/ui/inline-confirm"
 
 interface ScanItem {
   id: string
@@ -102,7 +103,6 @@ export function ScansClient({
   }
 
   async function handleCancelScan(scanId: string) {
-    if (!window.confirm("Cancel this scan? Any active scanner work will be stopped.")) return
     setCancelling(scanId)
     setError(null)
     try {
@@ -361,21 +361,23 @@ export function ScansClient({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {isActiveScan(scan.status) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCancelScan(scan.id)}
-                        disabled={cancelling === scan.id}
-                      >
-                        {cancelling === scan.id ? (
+                    {isActiveScan(scan.status) &&
+                      (cancelling === scan.id ? (
+                        <Button variant="outline" size="sm" disabled>
                           <Spinner className="h-4 w-4" />
-                        ) : (
-                          <X className="h-4 w-4" aria-hidden="true" />
-                        )}
-                        <span className="ml-1">Cancel</span>
-                      </Button>
-                    )}
+                          <span className="ml-1">Cancelling…</span>
+                        </Button>
+                      ) : (
+                        <InlineConfirm
+                          triggerLabel="Cancel"
+                          triggerIcon={<X className="mr-1 h-4 w-4" aria-hidden="true" />}
+                          triggerVariant="outline"
+                          confirmLabel="Stop scan"
+                          message="Stop this scan?"
+                          aria-label="Cancel this scan"
+                          onConfirm={() => handleCancelScan(scan.id)}
+                        />
+                      ))}
                     <Link
                       href={`/dashboard/scans/${scan.id}`}
                       aria-label={`View details for ${scan.target?.name ?? "scan"}`}

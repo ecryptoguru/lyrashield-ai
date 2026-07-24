@@ -24,6 +24,9 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [resendStatus, setResendStatus] = useState<"idle" | "success" | "error">("idle")
   const [providers, setProviders] = useState({
     github: false,
     google: false,
@@ -165,6 +168,28 @@ export default function SignUpPage() {
     }
   }
 
+  async function handleResend() {
+    setResendLoading(true)
+    setResendStatus("idle")
+    try {
+      await authClient.sendVerificationEmail({ email, callbackURL: "/onboarding" })
+      setResendStatus("success")
+      setResendCooldown(30)
+      const tick = () => {
+        setResendCooldown((prev) => {
+          if (prev <= 1) return 0
+          window.setTimeout(tick, 1000)
+          return prev - 1
+        })
+      }
+      window.setTimeout(tick, 1000)
+    } catch {
+      setResendStatus("error")
+    } finally {
+      setResendLoading(false)
+    }
+  }
+
   if (emailSent) {
     return (
       <main className="relative flex min-h-screen items-center justify-center px-4">
@@ -176,6 +201,31 @@ export default function SignUpPage() {
             <p className="text-muted-foreground mt-2 text-sm">
               We sent a verification link to {email}. Click it to verify your account and continue.
             </p>
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={resendLoading || resendCooldown > 0}
+                onClick={() => void handleResend()}
+              >
+                {resendLoading
+                  ? "Sending…"
+                  : resendCooldown > 0
+                    ? `Resend in ${resendCooldown}s`
+                    : "Resend verification email"}
+              </Button>
+              {resendStatus === "success" && (
+                <p className="text-sm text-emerald-600" role="status">
+                  Verification email resent.
+                </p>
+              )}
+              {resendStatus === "error" && (
+                <p className="text-destructive text-sm" role="alert">
+                  Could not resend. Please try again.
+                </p>
+              )}
+            </div>
             <p className="text-muted-foreground mt-4 text-sm">
               Already verified?{" "}
               <Link href="/sign-in" className="text-primary font-medium hover:underline">
