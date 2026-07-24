@@ -8,4 +8,4 @@ export {
   requireWorkspaceAccess,
   requirePermission,
 } from "./session"
-export type { AuthSession, WorkspaceContext } from "./session"
+export type { AuthSession, WorkspaceContext, ApiKeyAuthContext } from "./session"
