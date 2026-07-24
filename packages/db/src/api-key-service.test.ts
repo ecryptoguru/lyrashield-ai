@@ -5,10 +5,13 @@ vi.mock("./client", () => ({
     apiKey: {
       create: vi.fn(),
       count: vi.fn(),
-      findUnique: vi.fn(),
       findMany: vi.fn(),
       updateMany: vi.fn(),
     },
+    // verifyApiKey uses SECURITY DEFINER SQL functions (RLS pre-auth bypass),
+    // not the model API — see migration 20260724170000.
+    $queryRaw: vi.fn(),
+    $executeRaw: vi.fn(),
   },
 }))
 
@@ -26,10 +29,11 @@ const mockPrisma = prisma as unknown as {
   apiKey: {
     create: ReturnType<typeof vi.fn>
     count: ReturnType<typeof vi.fn>
-    findUnique: ReturnType<typeof vi.fn>
     findMany: ReturnType<typeof vi.fn>
     updateMany: ReturnType<typeof vi.fn>
   }
+  $queryRaw: ReturnType<typeof vi.fn>
+  $executeRaw: ReturnType<typeof vi.fn>
 }
 
 function storedKey(overrides: Record<string, unknown> = {}) {
@@ -129,51 +133,54 @@ describe("createApiKey", () => {
 describe("verifyApiKey", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockPrisma.apiKey.updateMany.mockResolvedValue({ count: 1 })
+    mockPrisma.$executeRaw.mockResolvedValue(1)
   })
 
-  it("verifies a live key and returns its workspace binding", async () => {
+  it("verifies a live key via the SECURITY DEFINER lookup and returns its workspace binding", async () => {
     const { rawKey, row } = storedKey()
-    mockPrisma.apiKey.findUnique.mockResolvedValue(row)
+    mockPrisma.$queryRaw.mockResolvedValue([row])
     const verified = await verifyApiKey(rawKey)
     expect(verified).toMatchObject({ keyId: "key-1", workspaceId: "ws-1" })
-    expect(mockPrisma.apiKey.findUnique).toHaveBeenCalledWith({
-      where: { hashedKey: hashApiKey(rawKey) },
-    })
+    // The lookup goes through the definer function (raw SQL), never the
+    // RLS-scoped model API, so it works pre-auth with no workspace context.
+    expect(mockPrisma.$queryRaw).toHaveBeenCalledTimes(1)
+    const [strings, hashArg] = mockPrisma.$queryRaw.mock.calls[0]
+    expect(String(strings.join("?"))).toContain("app.verify_api_key")
+    expect(hashArg).toBe(hashApiKey(rawKey))
   })
 
   it("returns null for unknown, revoked, expired, and soft-deleted keys", async () => {
-    mockPrisma.apiKey.findUnique.mockResolvedValue(null)
+    mockPrisma.$queryRaw.mockResolvedValue([])
     expect(await verifyApiKey(`${API_KEY_PREFIX}${"b".repeat(43)}`)).toBeNull()
 
     const revoked = storedKey({ revokedAt: new Date() })
-    mockPrisma.apiKey.findUnique.mockResolvedValue(revoked.row)
+    mockPrisma.$queryRaw.mockResolvedValue([revoked.row])
     expect(await verifyApiKey(revoked.rawKey)).toBeNull()
 
     const expired = storedKey({ expiresAt: new Date(Date.now() - 1000) })
-    mockPrisma.apiKey.findUnique.mockResolvedValue(expired.row)
+    mockPrisma.$queryRaw.mockResolvedValue([expired.row])
     expect(await verifyApiKey(expired.rawKey)).toBeNull()
 
     const deleted = storedKey({ deletedAt: new Date() })
-    mockPrisma.apiKey.findUnique.mockResolvedValue(deleted.row)
+    mockPrisma.$queryRaw.mockResolvedValue([deleted.row])
     expect(await verifyApiKey(deleted.rawKey)).toBeNull()
   })
 
   it("rejects malformed input without touching the database", async () => {
     expect(await verifyApiKey("not-a-key")).toBeNull()
-    expect(mockPrisma.apiKey.findUnique).not.toHaveBeenCalled()
+    expect(mockPrisma.$queryRaw).not.toHaveBeenCalled()
   })
 
   it("throttles lastUsedAt writes to once per minute", async () => {
     const recent = storedKey({ lastUsedAt: new Date() })
-    mockPrisma.apiKey.findUnique.mockResolvedValue(recent.row)
+    mockPrisma.$queryRaw.mockResolvedValue([recent.row])
     await verifyApiKey(recent.rawKey)
-    expect(mockPrisma.apiKey.updateMany).not.toHaveBeenCalled()
+    expect(mockPrisma.$executeRaw).not.toHaveBeenCalled()
 
     const stale = storedKey({ lastUsedAt: new Date(Date.now() - 120_000) })
-    mockPrisma.apiKey.findUnique.mockResolvedValue(stale.row)
+    mockPrisma.$queryRaw.mockResolvedValue([stale.row])
     await verifyApiKey(stale.rawKey)
-    expect(mockPrisma.apiKey.updateMany).toHaveBeenCalledTimes(1)
+    expect(mockPrisma.$executeRaw).toHaveBeenCalledTimes(1)
   })
 })
 
