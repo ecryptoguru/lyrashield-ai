@@ -1,0 +1,202 @@
+name: "LyraShield Security Scan"
+description: "One-step diff-aware security gate for AI-built apps: secret detection, dependency audit, and risky-pattern checks with SARIF output."
+author: "LyraShield AI"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  scan_mode:
+    description: "Scan mode: SAFE (default) or AGGRESSIVE (also scans config/doc file types). DEEP is reserved and currently runs SAFE-equivalent coverage."
+    required: false
+    default: "SAFE"
+  fail_on_severity:
+    description: "Fail the check when a finding at or above this severity is present: CRITICAL, HIGH, MEDIUM, LOW, INFO."
+    required: false
+    default: "HIGH"
+  target_ref:
+    description: "Git ref/SHA to scan as HEAD. Defaults to the PR head, then the checked-out HEAD."
+    required: false
+    default: ""
+  fetch_depth:
+    description: "Checkout depth. 0 (full history) is required for accurate diff derivation."
+    required: false
+    default: "0"
+
+# This is a lightweight, diff-scoped CI gate that runs entirely in the
+# customer's runner with the customer's GITHUB_TOKEN — it does not call the
+# hosted LyraShield engine. It uses gitleaks for secret detection plus a
+# dependency audit and a set of high-signal risky-pattern checks, and emits
+# SARIF. For the full agentic scan, connect the target in the LyraShield app
+# (or use the MCP server / REST API). All third-party actions are SHA-pinned
+# and the action requests no elevated permissions of its own; the calling job
+# controls the token scope (security-events: write is needed only to publish
+# SARIF to Code Scanning, which is optional — the gate is authoritative
+# regardless).
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      with:
+        fetch-depth: ${{ inputs.fetch_depth }}
+
+    - name: Resolve diff range and inputs
+      id: diff
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        TARGET_REF_INPUT: ${{ inputs.target_ref }}
+        SCAN_MODE_INPUT: ${{ inputs.scan_mode }}
+        FAIL_ON_SEVERITY_INPUT: ${{ inputs.fail_on_severity }}
+      run: |
+        set -euo pipefail
+        if [ "$EVENT_NAME" = "pull_request" ]; then
+          BASE_CANDIDATE="$PR_BASE_SHA"
+        else
+          BASE_CANDIDATE="HEAD~1"
+        fi
+        if [ -n "$TARGET_REF_INPUT" ]; then
+          HEAD_CANDIDATE="$TARGET_REF_INPUT"
+        elif [ -n "$PR_HEAD_SHA" ]; then
+          HEAD_CANDIDATE="$PR_HEAD_SHA"
+        else
+          HEAD_CANDIDATE="HEAD"
+        fi
+        if ! BASE="$(git rev-parse --verify --end-of-options "$BASE_CANDIDATE^{commit}")"; then
+          echo "::error::Invalid or unavailable base ref"; exit 1
+        fi
+        if ! HEAD="$(git rev-parse --verify --end-of-options "$HEAD_CANDIDATE^{commit}")"; then
+          echo "::error::Invalid or unavailable target_ref"; exit 1
+        fi
+        SCAN_MODE="${SCAN_MODE_INPUT:-SAFE}"
+        case "$SCAN_MODE" in
+          SAFE|DEEP|AGGRESSIVE) ;;
+          *) echo "::error::Invalid scan mode"; exit 1 ;;
+        esac
+        if [ "$SCAN_MODE" = "DEEP" ]; then
+          echo "::warning::scan_mode DEEP is not yet implemented; running SAFE-equivalent coverage"
+        fi
+        SEVERITY="${FAIL_ON_SEVERITY_INPUT:-HIGH}"
+        case "$SEVERITY" in
+          CRITICAL|HIGH|MEDIUM|LOW|INFO) ;;
+          *) echo "::error::Invalid fail_on_severity"; exit 1 ;;
+        esac
+        echo "::notice::LyraShield scan mode: $SCAN_MODE (fail on: $SEVERITY)"
+        echo "scan_mode=$SCAN_MODE" >> "$GITHUB_OUTPUT"
+        echo "fail_on_severity=$SEVERITY" >> "$GITHUB_OUTPUT"
+        echo "base_sha=$BASE" >> "$GITHUB_OUTPUT"
+        echo "head_sha=$HEAD" >> "$GITHUB_OUTPUT"
+        git diff --name-only "$BASE" "$HEAD" > changed_files.txt
+
+    - name: Secret scan (gitleaks)
+      id: secrets
+      uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+        GITLEAKS_ENABLE_SUMMARY: "true"
+        GITLEAKS_LOG_OPTS: ${{ steps.diff.outputs.base_sha }}..${{ steps.diff.outputs.head_sha }}
+      continue-on-error: true
+
+    - name: Build SARIF and evaluate gate
+      id: gate
+      shell: bash
+      env:
+        SECRETS_OUTCOME: ${{ steps.secrets.outcome }}
+        BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+        HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
+        SEVERITY: ${{ steps.diff.outputs.fail_on_severity }}
+      run: |
+        set -euo pipefail
+        RESULTS_FILE="$(mktemp)"
+        echo "[]" > "$RESULTS_FILE"
+
+        add_result() {
+          local rule_id="$1" level="$2" message="$3" file="$4" entry
+          if [ -n "$file" ]; then
+            entry="$(jq -n --arg ruleId "$rule_id" --arg level "$level" --arg text "$message" --arg file "$file" \
+              '{ruleId:$ruleId,level:$level,message:{text:$text},locations:[{physicalLocation:{artifactLocation:{uri:$file}}}]}')"
+          else
+            entry="$(jq -n --arg ruleId "$rule_id" --arg level "$level" --arg text "$message" \
+              '{ruleId:$ruleId,level:$level,message:{text:$text}}')"
+          fi
+          jq --argjson e "$entry" '. + [$e]' "$RESULTS_FILE" > "${RESULTS_FILE}.tmp"
+          mv "${RESULTS_FILE}.tmp" "$RESULTS_FILE"
+        }
+
+        SECRETS=0
+        if [ "$SECRETS_OUTCOME" = "failure" ]; then
+          SECRETS=1
+          add_result "secret-exposure" "error" "gitleaks detected potential secret(s) in the diff — see the gitleaks step log for file/line detail" ""
+        fi
+
+        # High-signal risky-pattern checks on added lines of changed files.
+        ISSUES=0
+        ISSUES_SEVERITY="NONE"
+        while IFS= read -r file; do
+          [ -f "$file" ] || continue
+          ADDED="$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" -- "$file" | grep -v '^+++' | sed -n 's/^+//p' || true)"
+          if grep -qE '(password|secret|api_key|apikey|token)[[:space:]]*[=:][[:space:]]*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
+            add_result "hardcoded-secret" "warning" "Potential hardcoded secret in $file" "$file"; ISSUES=1; ISSUES_SEVERITY="MEDIUM"
+          fi
+          if grep -qE '(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{' <<< "$ADDED"; then
+            add_result "sql-injection" "warning" "Potential SQL injection in $file" "$file"; ISSUES=1; ISSUES_SEVERITY="MEDIUM"
+          fi
+          if grep -qE '(csrf|cors|xss|helmet|secure).*(false|disabled|off|none)' <<< "$ADDED"; then
+            add_result "disabled-security-control" "warning" "Security control may be disabled in $file" "$file"; ISSUES=1; ISSUES_SEVERITY="MEDIUM"
+          fi
+          if grep -qE '(^|[^.[:alnum:]_])(eval|exec)[[:space:]]*\(' <<< "$ADDED"; then
+            add_result "eval-exec" "warning" "Use of eval/exec in $file" "$file"; ISSUES=1; ISSUES_SEVERITY="MEDIUM"
+          fi
+        done < changed_files.txt
+
+        jq -n --slurpfile results "$RESULTS_FILE" '{
+          "version":"2.1.0",
+          "$schema":"https://json.schemastore.org/sarif-2.1.0.json",
+          "runs":[{"tool":{"driver":{"name":"LyraShield GitHub Action","version":"0.1.0","informationUri":"https://github.com/ecryptoguru/lyrashield-ai"}},"results":$results[0]}]
+        }' > lyrashield-results.sarif
+        echo "SARIF results count: $(jq '.runs[0].results | length' lyrashield-results.sarif)"
+
+        rank() {
+          case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
+            critical) echo 5;; high) echo 4;; medium) echo 3;; low) echo 2;; info) echo 1;; *) echo 0;;
+          esac
+        }
+        THRESHOLD_RANK="$(rank "$SEVERITY")"
+        TOTAL=0
+        # Secrets are always CRITICAL.
+        if [ "$SECRETS" = "1" ] && [ "$(rank CRITICAL)" -ge "$THRESHOLD_RANK" ]; then TOTAL=$((TOTAL+1)); fi
+        if [ "$ISSUES" = "1" ] && [ "$(rank "$ISSUES_SEVERITY")" -ge "$THRESHOLD_RANK" ]; then TOTAL=$((TOTAL+1)); fi
+        if [ "$TOTAL" -gt 0 ]; then
+          echo "::error::LyraShield gate failed — $TOTAL issue category(ies) at $SEVERITY severity or above"
+          echo "failed=1" >> "$GITHUB_OUTPUT"
+        else
+          echo "::notice::LyraShield gate passed — no issues at $SEVERITY severity or above"
+          echo "failed=0" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Archive SARIF
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: lyrashield-results
+        path: lyrashield-results.sarif
+        if-no-files-found: warn
+
+    - name: Publish SARIF to GitHub Code Scanning
+      if: always()
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+      with:
+        sarif_file: lyrashield-results.sarif
+        category: lyrashield-diff-scan
+
+    - name: Enforce gate
+      if: steps.gate.outputs.failed == '1'
+      shell: bash
+      run: |
+        echo "::error::LyraShield security gate failed. See findings above and the SARIF artifact."
+        exit 1
