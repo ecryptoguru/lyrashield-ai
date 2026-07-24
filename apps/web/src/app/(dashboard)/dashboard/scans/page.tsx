@@ -62,6 +62,9 @@ export default async function ScansPage({
     createdAt: s.createdAt.toISOString(),
   }))
 
+  const params = await searchParams
+  const autoOpen = params.new === "1" || (initialData.length === 0 && targets.length > 0)
+
   return (
     <ScansClient
       workspaceId={workspaceId}
@@ -74,7 +77,7 @@ export default async function ScansPage({
       }))}
       initialData={initialData}
       initialNextCursor={nextCursor}
-      initialShowCreate={(await searchParams).new === "1"}
+      initialShowCreate={autoOpen}
     />
   )
 }

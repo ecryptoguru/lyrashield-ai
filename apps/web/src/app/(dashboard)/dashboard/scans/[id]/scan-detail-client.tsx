@@ -15,6 +15,7 @@ import {
   XCircle,
   ChevronDown,
   ChevronRight,
+  Activity,
 } from "lucide-react"
 import { Card, Badge, Button, EmptyState, buttonVariants } from "@lyrashield/ui"
 import { formatTime } from "@/lib/date-format"
@@ -162,6 +163,24 @@ const SCANNER_LABELS: Record<string, string> = {
   url: "URL scan",
 }
 
+/** Strip leading [stage] mono prefixes like "[preflight] Starting…" → "Starting…" */
+function stripStagePrefix(msg: string): string {
+  return msg.replace(/^\[[^\]]+\]\s*/, "")
+}
+
+/** Ticking elapsed time from a start timestamp, returning a formatted string. */
+function useElapsedTime(startedAt: string | null): string {
+  const [elapsed, setElapsed] = useState(() => formatDuration(startedAt, null))
+  useEffect(() => {
+    if (!startedAt) return
+    const tick = () => setElapsed(formatDuration(startedAt, null))
+    tick()
+    const id = window.setInterval(tick, 1000)
+    return () => window.clearInterval(id)
+  }, [startedAt])
+  return elapsed
+}
+
 function formatDuration(start: string | null, end: string | null): string {
   if (!start) return "—"
   const startMs = new Date(start).getTime()
@@ -194,8 +213,8 @@ export function ScanDetailClient({
   const [currentFindings, setCurrentFindings] = useState<FindingItem[]>(findings)
   const [expandedEvents, setExpandedEvents] = useState(false)
   const [expandedFindings, setExpandedFindings] = useState<Set<string>>(new Set())
-
   const isActive = isActiveScan(scan.status)
+  const elapsedTime = useElapsedTime(isActive ? scan.startedAt : null)
   const presentation = getScanPresentation(scan.status)
 
   const refresh = useCallback(
@@ -372,6 +391,45 @@ export function ScanDetailClient({
         </div>
       </div>
 
+      {isActive && (
+        <section
+          aria-labelledby="scan-live-banner-heading"
+          className="mb-6 rounded-lg border border-green-500/40 bg-green-500/10 p-4"
+        >
+          <div className="flex items-start gap-3">
+            <Activity
+              className="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400"
+              aria-hidden="true"
+            />
+            <div className="min-w-0 flex-1">
+              <h2 id="scan-live-banner-heading" className="text-sm font-semibold">
+                {displayEvents.length > 0
+                  ? stripStagePrefix(displayEvents[displayEvents.length - 1]!.message)
+                  : "Scan is starting…"}
+              </h2>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Elapsed: {elapsedTime} · Scans typically take a few minutes; deeper goals take
+                longer.
+              </p>
+              {displayEvents.length > 0 && (
+                <ul className="mt-3 space-y-1" aria-label="Recent activity">
+                  {displayEvents.slice(-5).map((event) => (
+                    <li key={event.id} className="flex items-start gap-2 text-xs">
+                      <span className="text-muted-foreground shrink-0">
+                        {formatTime(event.createdAt)}
+                      </span>
+                      <span className="text-foreground/80 wrap-break-word">
+                        {stripStagePrefix(event.message)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
       <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-5">
         <Card className="border-0 p-4 shadow-none">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
@@ -406,12 +464,15 @@ export function ScanDetailClient({
           <p className="mt-1 text-lg font-semibold">{presentation.label}</p>
         </Card>
         <Card className="border-0 p-4 shadow-none">
-          <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <div
+            className="text-muted-foreground flex items-center gap-2 text-sm"
+            title="The scan result is sealed into a verifiable manifest"
+          >
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Result integrity
+            Tamper-evident record
           </div>
           <p className="mt-1 text-lg font-semibold">
-            {scan.integrity.manifestChecksum ? "Manifested" : "Pending"}
+            {scan.integrity.manifestChecksum ? "Saved" : "Pending"}
           </p>
         </Card>
       </div>

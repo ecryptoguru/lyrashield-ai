@@ -149,6 +149,8 @@ export function FindingsClient({
     { label: "Open", value: "OPEN" },
     { label: "Critical", value: "CRITICAL" },
     { label: "High", value: "HIGH" },
+    { label: "Medium", value: "MEDIUM" },
+    { label: "Fixed", value: "FIXED" },
     { label: "Verified", value: "VERIFIED" },
   ] as const
 
@@ -673,10 +675,8 @@ function FindingDetailDrawer({
             )}
 
             {detail.plainLanguage && (
-              <details className="bg-muted/30 rounded-lg border p-4">
-                <summary className="cursor-pointer text-sm font-semibold">
-                  Plain-Language Explanation
-                </summary>
+              <div className="bg-muted/30 rounded-lg border p-4">
+                <p className="text-sm font-semibold">Plain-Language Explanation</p>
                 <div className="mt-3 space-y-3">
                   <div>
                     <p className="text-muted-foreground mb-0.5 text-xs font-medium">What it is</p>
@@ -703,7 +703,7 @@ function FindingDetailDrawer({
                     </span>
                   </div>
                 </div>
-              </details>
+              </div>
             )}
 
             {detail.technicalDetail && (

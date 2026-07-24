@@ -17,6 +17,7 @@ import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { formatDate, formatDateTime } from "@/lib/date-format"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getScanPreset, SCAN_PRESETS, type ScanPresetId } from "@/lib/scan-presets"
+import { InlineConfirm } from "@/components/ui/inline-confirm"
 
 interface ScheduleItem {
   id: string
@@ -151,7 +152,6 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   }
 
   const handleDelete = async (scheduleId: string) => {
-    if (!window.confirm("Are you sure you want to delete this schedule?")) return
     try {
       await apiDelete(`/api/schedules/${scheduleId}?workspaceId=${workspaceId}`)
       setSchedules((prev) => prev.filter((s) => s.id !== scheduleId))
@@ -344,7 +344,8 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                       {schedule.enabled ? "active" : "disabled"}
                     </Badge>
                   </div>
-                  <p className="text-muted-foreground font-mono text-sm">{schedule.cron}</p>
+                  <p className="text-sm">{describeCron(schedule.cron)}</p>
+                  <p className="text-muted-foreground font-mono text-xs">{schedule.cron}</p>
                   <p className="text-muted-foreground mt-1 text-xs">
                     Created {formatDate(schedule.createdAt)}
                     {schedule.lastRunAt && <> · Last run {formatDateTime(schedule.lastRunAt)}</>}
@@ -360,14 +361,13 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                   >
                     <Power className="h-4 w-4" aria-hidden="true" />
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
+                  <InlineConfirm
+                    triggerIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
                     aria-label="Delete schedule"
-                    onClick={() => void handleDelete(schedule.id)}
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  </Button>
+                    message="Delete this schedule?"
+                    confirmLabel="Delete"
+                    onConfirm={() => handleDelete(schedule.id)}
+                  />
                 </div>
               </div>
             </Card>
