@@ -11,11 +11,9 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "ignoreDeprecations": "6.0",
-    "baseUrl": "..",
     "typeRoots": ["../node_modules/.pnpm/node_modules/@types"],
     "paths": {
-      "@lyrashield/db": ["packages/db/src/index.ts"]
+      "@lyrashield/db": ["../packages/db/src/index.ts"]
     }
   },
   "include": ["**/*.ts"],
