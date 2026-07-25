@@ -31,7 +31,7 @@ The beta is ready only after:
 - Private Cloudflare R2 evidence storage.
 - Luna/medium for focused work and Terra/medium for the Deep coordinator.
 - Safe, Standard, and founder-approved Deep repository scans.
-- Findings, evidence state, retests, reports, readiness, audit logs, and internal usage accounting.
+- Findings, evidence state, retests, reports, readiness, audit logs, and internal usage accounting. Finding status transitions to accepted risk or false positive require an audited reason that is persisted and visible in the finding detail.
 
 ### Excluded from the first beta
 
