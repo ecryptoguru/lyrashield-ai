@@ -515,6 +515,7 @@ model Finding {
   technicalDetail     String?
   recommendedFix      String?
   status              FindingStatus   @default(OPEN)
+  statusReason        String?
   dedupeKey           String
   ownerUserId         String?
   ownerTeam           String?

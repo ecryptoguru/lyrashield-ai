@@ -121,7 +121,8 @@ export async function getFinding(
 export async function updateFindingStatus(
   findingId: string,
   workspaceId: string,
-  status: FindingStatus
+  status: FindingStatus,
+  reason?: string
 ): Promise<Finding> {
   const finding = await prisma.finding.findFirst({
     where: { id: findingId, workspaceId, deletedAt: null },
@@ -136,6 +137,9 @@ export async function updateFindingStatus(
   if (resolvedStatus === "FIXED_PENDING_RETEST") {
     updateData.fixedAt = new Date()
   }
+  if (reason !== undefined) {
+    updateData.statusReason = reason
+  }
 
   const updated = await prisma.finding.update({
     where: { id: findingId },
@@ -146,12 +150,20 @@ export async function updateFindingStatus(
   return updated
 }
 
-export async function markFalsePositive(findingId: string, workspaceId: string): Promise<Finding> {
-  return updateFindingStatus(findingId, workspaceId, "FALSE_POSITIVE")
+export async function markFalsePositive(
+  findingId: string,
+  workspaceId: string,
+  reason?: string
+): Promise<Finding> {
+  return updateFindingStatus(findingId, workspaceId, "FALSE_POSITIVE", reason)
 }
 
-export async function acceptRisk(findingId: string, workspaceId: string): Promise<Finding> {
-  return updateFindingStatus(findingId, workspaceId, "ACCEPTED_RISK")
+export async function acceptRisk(
+  findingId: string,
+  workspaceId: string,
+  reason?: string
+): Promise<Finding> {
+  return updateFindingStatus(findingId, workspaceId, "ACCEPTED_RISK", reason)
 }
 
 export async function getFindingStats(

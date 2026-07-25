@@ -514,6 +514,7 @@ interface FindingDetail {
   verificationStatus?: string
   verificationMethod?: string | null
   verificationReason?: string | null
+  statusReason?: string | null
   verificationReceipts?: Array<{
     id: string
     status: string
@@ -534,11 +535,8 @@ interface FindingDetail {
 
 /**
  * Inline confirm panel for status-transition actions (accept risk / false positive).
- * The comment field is required client-side for intentionality. NOTE: the current
- * /api/findings/[id] PATCH contract does not persist comments — it accepts only
- * { workspaceId, action }. The comment is collected here for UX clarity but is
- * NOT sent to the server. When the API gains a comment/reason field, wire it into
- * the patch body here.
+ * The comment field is required client-side for intentionality and is persisted
+ * as the finding's statusReason via the /api/findings/[id] PATCH body.
  */
 function StatusActionConfirm({
   label,
@@ -679,16 +677,14 @@ function FindingDetailDrawer({
     }
   }
 
-  async function handleAcceptRisk(_comment: string) {
-    // NOTE: comment is collected client-side for intentionality but the current
-    // PATCH contract ({ workspaceId, action: "accept_risk" }) does not accept a
-    // comment/reason field. Wire _comment into the body once the API supports it.
+  async function handleAcceptRisk(comment: string) {
     setPatchLoading(true)
     setPatchError(null)
     try {
       const result = await apiPatch<{ id: string; status: string }>(`/api/findings/${finding.id}`, {
         workspaceId,
         action: "accept_risk",
+        reason: comment,
       })
       onStatusChange(finding.id, result.status)
       setShowAcceptRisk(false)
@@ -703,14 +699,14 @@ function FindingDetailDrawer({
     }
   }
 
-  async function handleFalsePositive(_comment: string) {
-    // NOTE: see handleAcceptRisk — comment not yet sent to API.
+  async function handleFalsePositive(comment: string) {
     setPatchLoading(true)
     setPatchError(null)
     try {
       const result = await apiPatch<{ id: string; status: string }>(`/api/findings/${finding.id}`, {
         workspaceId,
         action: "false_positive",
+        reason: comment,
       })
       onStatusChange(finding.id, result.status)
       setShowFalsePositive(false)
@@ -1222,6 +1218,15 @@ function FindingDetailDrawer({
                     <h3 className="text-sm font-medium">Verification state</h3>
                     <p className="text-muted-foreground mt-1 text-sm">
                       {detail.verificationReason}
+                    </p>
+                  </div>
+                )}
+
+                {detail.statusReason && (
+                  <div className="bg-muted/30 rounded-lg border p-3">
+                    <h3 className="text-sm font-medium">Status reason</h3>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      {detail.statusReason}
                     </p>
                   </div>
                 )}
