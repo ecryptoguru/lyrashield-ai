@@ -33,6 +33,6 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@prisma/client-runtime-utils": "7.8.0"
+    "@prisma/client-runtime-utils": "7.9.0"
   }
 }
