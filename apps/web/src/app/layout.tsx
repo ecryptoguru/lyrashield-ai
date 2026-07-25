@@ -14,6 +14,13 @@ export const metadata: Metadata = {
   title: "LyraShield — AI AppSec Agent Platform",
   description:
     "Connect a GitHub repo or paste an app URL. LyraShield safely scans it, verifies real vulnerabilities, explains the risk, and helps create fix PRs.",
+  openGraph: {
+    title: "LyraShield — AI AppSec Agent Platform",
+    description:
+      "Connect a GitHub repo or paste an app URL. LyraShield safely scans it, verifies real vulnerabilities, explains the risk, and helps create fix PRs.",
+    type: "website",
+    siteName: "LyraShield AI",
+  },
 }
 
 export default async function RootLayout({

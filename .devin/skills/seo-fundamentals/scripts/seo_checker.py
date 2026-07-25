@@ -34,7 +34,8 @@ except:
 SKIP_DIRS = {
     'node_modules', '.next', 'dist', 'build', '.git', '.github',
     '__pycache__', '.vscode', '.idea', 'coverage', 'test', 'tests',
-    '__tests__', 'spec', 'docs', 'documentation', 'examples'
+    '__tests__', 'spec', 'docs', 'documentation', 'examples',
+    'artifacts', 'renders', 'marketing-motion'
 }
 
 # Files to skip (not pages)
@@ -103,20 +104,43 @@ def check_page(file_path: Path) -> dict:
         return {"file": str(file_path.name), "issues": [f"Error: {e}"]}
     
     # Detect if this is a layout/template file (has Head component)
-    is_layout = 'Head>' in content or '<head' in content.lower()
-    
+    is_layout = 'Head>' in content or re.search(r'<head\b', content, re.IGNORECASE)
+    has_next_meta = bool(
+        re.search(
+            r'export\s+(?:const|async\s+function)\s+metadata|export\s+async\s+function\s+generateMetadata|const\s+metadata\s*:\s*Metadata|metadata\s*:\s*Metadata',
+            content,
+        )
+    )
+    has_astro_fm = bool(re.search(r'^---\s*\n.*?^---\s*\n', content, re.M | re.S))
+
     # 1. Title tag
-    has_title = '<title' in content.lower() or 'title=' in content or 'Head>' in content
+    has_title = (
+        '<title' in content.lower()
+        or 'title=' in content
+        or 'Head>' in content
+        or (has_next_meta and re.search(r'\btitle\s*:', content))
+        or (has_astro_fm and re.search(r'^title\s*:', content, re.M))
+    )
     if not has_title and is_layout:
         issues.append("Missing <title> tag")
-    
+
     # 2. Meta description
-    has_description = 'name="description"' in content.lower() or 'name=\'description\'' in content.lower()
+    has_description = (
+        'name="description"' in content.lower()
+        or 'name=\'description\'' in content.lower()
+        or (has_next_meta and re.search(r'\bdescription\s*:', content))
+        or (has_astro_fm and re.search(r'^description\s*:', content, re.M))
+    )
     if not has_description and is_layout:
         issues.append("Missing meta description")
-    
+
     # 3. Open Graph tags
-    has_og = 'og:' in content or 'property="og:' in content.lower()
+    has_og = (
+        'og:' in content
+        or 'property="og:' in content.lower()
+        or (has_next_meta and re.search(r'\bopenGraph\s*:|\bog:\s*', content))
+        or (has_astro_fm and re.search(r'^openGraph\s*:', content, re.M))
+    )
     if not has_og and is_layout:
         issues.append("Missing Open Graph tags")
     

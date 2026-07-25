@@ -25,6 +25,7 @@ import {
   Spinner,
   LoadMore,
   Textarea,
+  FormField,
   buttonVariants,
   cn,
 } from "@lyrashield/ui"
@@ -569,17 +570,18 @@ function StatusActionConfirm({
       role="group"
       aria-label={label}
     >
-      <p className="text-sm font-medium">{label}</p>
-      <Textarea
-        rows={2}
-        placeholder="Add a comment explaining your decision (required)…"
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-        aria-required="true"
-        aria-label="Comment"
-        className="w-full"
-        autoFocus
-      />
+      <FormField label={label} htmlFor="status-comment">
+        <Textarea
+          id="status-comment"
+          rows={2}
+          placeholder="Add a comment explaining your decision (required)…"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          aria-required="true"
+          className="w-full"
+          autoFocus
+        />
+      </FormField>
       {error && <p className="text-destructive text-xs">{error}</p>}
       <div className="flex gap-2">
         <Button
@@ -897,13 +899,16 @@ function FindingDetailDrawer({
                           change your code.
                         </p>
                       </div>
-                      <Textarea
-                        className="w-full"
-                        rows={4}
-                        placeholder="Describe the change you intend to make..."
-                        value={fixSummary}
-                        onChange={(e) => setFixSummary(e.target.value)}
-                      />
+                      <FormField label="Fix summary" htmlFor="fix-summary">
+                        <Textarea
+                          id="fix-summary"
+                          className="w-full"
+                          rows={4}
+                          placeholder="Describe the change you intend to make..."
+                          value={fixSummary}
+                          onChange={(e) => setFixSummary(e.target.value)}
+                        />
+                      </FormField>
                       {fixError && <p className="text-destructive text-xs">{fixError}</p>}
                       <div className="flex gap-2">
                         <Button
