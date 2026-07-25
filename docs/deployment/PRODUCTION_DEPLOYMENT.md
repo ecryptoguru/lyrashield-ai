@@ -82,9 +82,13 @@ PLATFORM_MAX_SCAN_BUDGET_USD="50"
 LYRASHIELD_TELEMETRY="0"
 LYRASHIELD_WORKER_CONCURRENCY="1"
 # Optional per-request engine limits; leave unset for engine defaults.
+# MAX_OUTPUT_TOKENS caps tokens generated per request (replaces the engine's
+# per-scan-mode default; also tightens the budget reservation). MAX_INPUT_TOKENS
+# is the compaction ceiling, not a hard reject -- crossing it compacts history
+# instead of failing the scan, and the engine clamps values above the 272k
+# long-context boundary. Requires an engine build with cap enforcement.
 # LYRASHIELD_MAX_OUTPUT_TOKENS="4096"
 # LYRASHIELD_MAX_INPUT_TOKENS="200000"
-# LYRASHIELD_ENABLE_LOCAL_COMPACTION="0"
 
 # Azure OpenAI alternative (use these OR the generic LLM_API_KEY/LLM_API_BASE)
 # LYRASHIELD_LLM="azure/gpt-5.6-terra" # fallback
