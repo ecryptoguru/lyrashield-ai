@@ -26,11 +26,6 @@ const envSchema = z
     LLM_API_KEY: z.string().optional().or(z.literal("")),
     LYRASHIELD_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
-    LYRASHIELD_ENABLE_LOCAL_COMPACTION: z
-      .string()
-      .optional()
-      .default("0")
-      .transform((v) => /^(1|true|yes|on)$/i.test(v?.trim() || "")),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
