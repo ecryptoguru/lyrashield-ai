@@ -81,6 +81,10 @@ LYRASHIELD_ENGINE_SANDBOX_NETWORK="lyrashield-sandbox"
 PLATFORM_MAX_SCAN_BUDGET_USD="50"
 LYRASHIELD_TELEMETRY="0"
 LYRASHIELD_WORKER_CONCURRENCY="1"
+# Optional per-request engine limits; leave unset for engine defaults.
+# LYRASHIELD_MAX_OUTPUT_TOKENS="4096"
+# LYRASHIELD_MAX_INPUT_TOKENS="200000"
+# LYRASHIELD_ENABLE_LOCAL_COMPACTION="0"
 
 # Azure OpenAI alternative (use these OR the generic LLM_API_KEY/LLM_API_BASE)
 # LYRASHIELD_LLM="azure/gpt-5.6-terra" # fallback
@@ -122,7 +126,6 @@ The worker permanently versions the official OpenAI GPT-5.6 rate card in `apps/w
 
 | Model         | Input | Cached input read | Cache write | Output |
 | ------------- | ----: | ----------------: | ----------: | -----: |
-| GPT-5.6 Sol   | $5.00 |             $0.50 |       $6.25 | $30.00 |
 | GPT-5.6 Terra | $2.50 |             $0.25 |      $3.125 | $15.00 |
 | GPT-5.6 Luna  | $1.00 |             $0.10 |       $1.25 |  $6.00 |
 

@@ -4,6 +4,7 @@
     "composite": true,
     "declaration": true,
     "declarationMap": true,
+    "types": ["node"],
     "outDir": "./dist",
     "rootDir": "./src"
   },

@@ -37,15 +37,64 @@ case "$LYRASHIELD_SANDBOX_IMAGE" in
     ;;
 esac
 
-acr_name=${LYRASHIELD_WORKER_IMAGE%%.*}
-if ! command -v az >/dev/null 2>&1; then
-  echo "Azure CLI is required to authenticate the worker image pull" >&2
-  exit 1
-fi
-if ! az login --identity --allow-no-subscriptions >/dev/null 2>&1 || ! az acr login --name "$acr_name" >/dev/null 2>&1; then
-  echo "Unable to authenticate the worker image pull through the VM managed identity" >&2
-  exit 1
-fi
+extract_env_value() {
+  var="$1"
+  file="$2"
+  if [ -r "$file" ]; then
+    sed -n "s/^${var}=//p" "$file" | head -n 1
+  fi
+}
+
+login_to_registry() {
+  image="$1"
+  registry_host=${image%%/*}
+  case "$registry_host" in
+    *.azurecr.io)
+      acr_name=${registry_host%%.*}
+      if ! command -v az >/dev/null 2>&1; then
+        echo "Azure CLI is required to authenticate $registry_host" >&2
+        exit 1
+      fi
+      if ! az login --identity --allow-no-subscriptions >/dev/null 2>&1 || ! az acr login --name "$acr_name" >/dev/null 2>&1; then
+        echo "Unable to authenticate $registry_host through the VM managed identity" >&2
+        exit 1
+      fi
+      ;;
+    ghcr.io)
+      if [ -z "${GHCR_TOKEN:-}" ]; then
+        GHCR_TOKEN=$(extract_env_value GHCR_TOKEN "$environment_file")
+      fi
+      if [ -z "${GHCR_TOKEN:-}" ]; then
+        echo "GHCR_TOKEN is required to authenticate $image from GHCR" >&2
+        exit 1
+      fi
+      if [ -z "${GHCR_USERNAME:-}" ]; then
+        GHCR_USERNAME=$(extract_env_value GHCR_USERNAME "$environment_file")
+      fi
+      if [ -z "${GHCR_USERNAME:-}" ]; then
+        echo "GHCR_USERNAME is required to authenticate $image from GHCR" >&2
+        exit 1
+      fi
+      if ! printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin >/dev/null 2>&1; then
+        echo "Unable to authenticate ghcr.io for $image" >&2
+        exit 1
+      fi
+      ;;
+    *)
+      echo "Unsupported container registry: $registry_host (image: $image)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+logged_in=""
+for image in "$LYRASHIELD_WORKER_IMAGE" "$LYRASHIELD_SANDBOX_IMAGE"; do
+  registry_host=${image%%/*}
+  case " $logged_in " in
+    *" $registry_host "*) ;;
+    *) login_to_registry "$image"; logged_in="$logged_in $registry_host" ;;
+  esac
+done
 
 socket_group=$(stat -c '%g' /var/run/docker.sock)
 pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"

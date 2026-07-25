@@ -217,6 +217,12 @@ describe("resolveEngineProfile", () => {
       "require a GPT-5.6"
     )
   })
+
+  it("rejects GPT-5.6 Sol deployments", () => {
+    expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.6-sol" })).toThrow(
+      "Terra or Luna"
+    )
+  })
 })
 
 describe("repository scan runtime configuration", () => {

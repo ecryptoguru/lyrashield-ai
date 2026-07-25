@@ -25,6 +25,7 @@ import {
 } from "../engine/runner"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
 import {
+  calculateGpt56CostUsd,
   calculateGpt56CostUsdFromBuckets,
   calculateGpt56CostUsdFromModelBuckets,
   GPT_56_PRICING_EFFECTIVE_DATE,
@@ -167,9 +168,7 @@ function resolveScannerPhaseTimeoutMs(engineTimeoutMs: number, globalScanBudgetM
 
 function requireEngineModel(model: string | undefined): string {
   if (!model) {
-    throw new Error(
-      "A GPT-5.6 Sol, Terra, or Luna deployment must be configured for repository scans"
-    )
+    throw new Error("A GPT-5.6 Terra or Luna deployment must be configured for repository scans")
   }
   return model
 }
@@ -227,13 +226,24 @@ export async function persistEngineUsageCheckpoint(params: {
   }
 
   const usage = extractUsageSummary(llmUsage)
-  // Aggregate totals cannot prove whether an individual request crossed the
-  // long-context boundary. Only complete per-request buckets are priceable.
+  // Per-request buckets are the only way to price mixed-context scans
+  // accurately. When they are unavailable, fall back to aggregate counters
+  // only if the total input is below the long-context threshold, so we do
+  // not invent a long-context multiplier from an aggregate.
+  const aggregateCostUsd =
+    usage.inputTokens !== null && usage.cachedInputTokens !== null && usage.outputTokens !== null
+      ? calculateGpt56CostUsd(model, {
+          inputTokens: usage.inputTokens,
+          cachedInputTokens: usage.cachedInputTokens,
+          cacheWriteInputTokens: usage.cacheWriteInputTokens,
+          outputTokens: usage.outputTokens,
+        })
+      : null
   const rateCardCostUsd = usage.modelPricingBuckets
     ? calculateGpt56CostUsdFromModelBuckets(usage.modelPricingBuckets)
     : usage.pricingBuckets
       ? calculateGpt56CostUsdFromBuckets(model, usage.pricingBuckets)
-      : null
+      : aggregateCostUsd
   const costsMatch =
     rateCardCostUsd !== null &&
     (usage.engineReportedCostUsd === null ||
@@ -269,7 +279,9 @@ export async function persistEngineUsageCheckpoint(params: {
         ? "per_request_model_buckets"
         : usage.pricingBuckets
           ? "per_request_buckets"
-          : "unavailable",
+          : aggregateCostUsd !== null
+            ? "aggregate_tokens"
+            : "unavailable",
       billedCostUsd,
       costSource,
       reconciliationStatus,

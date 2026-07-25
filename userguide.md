@@ -2,9 +2,9 @@
 
 Last verified against the application code and open-registration deployment: 2026-07-22
 
-LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked. The product workflow is:
+LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
-**Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report**
+## Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report
 
 This guide covers the public Lite Check, authenticated dashboard, scan choices, findings, fixes, reports, scorecards, teams, integrations, schedules, notifications, MCP tools, and current limitations.
 
@@ -189,7 +189,7 @@ The authenticated dashboard exposes three one-off review depths. Weekly Monitor 
 | Deep Security Review | DEEP         | GPT-5.6 Terra               | Medium    |
 | Weekly Monitor       | SAFE         | GPT-5.6 Luna                | Medium    |
 
-The backend also supports QUICK (Luna/medium) and CUSTOM (Terra/medium coordination with Luna/medium specialists) for approved API or agent workflows. They are not additional one-off dashboard choices. GPT-5.6 Sol is retained in internal accounting but is not currently assigned to a scan preset.
+The backend also supports QUICK (Luna/medium) and CUSTOM (Terra/medium coordination with Luna/medium specialists) for approved API or agent workflows. They are not additional one-off dashboard choices.
 
 LyraShield applies protected internal run limits automatically. The dashboard does not display model costs, spend, or accounting events. If a protected limit is reached, the scan ends with a neutral limit message while operators retain the internal usage record for reconciliation.
 

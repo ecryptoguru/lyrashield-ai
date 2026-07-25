@@ -64,3 +64,6 @@ docker-data/
 docs/
 artifacts/
 scripts/
+
+# Engine source belongs in the sibling ../lyrashield-engine repo; never commit an extracted copy here.
+extracted-engine/

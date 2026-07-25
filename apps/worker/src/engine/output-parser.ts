@@ -379,7 +379,7 @@ function sumRequestUsageDetail(value: unknown, key: string): number | undefined 
 function boundedGpt56Model(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length === 0 || value.length > 128) return undefined
   const normalized = value.toLowerCase().replaceAll("_", "-")
-  return /(?:^|[/.-])gpt-5\.6-(?:sol|terra|luna)(?:$|[/.-])/.test(normalized) ? value : undefined
+  return /(?:^|[/.-])gpt-5\.6-(?:terra|luna)(?:$|[/.-])/.test(normalized) ? value : undefined
 }
 
 function normalizeRequestUsageBuckets(value: unknown): Record<string, unknown> {

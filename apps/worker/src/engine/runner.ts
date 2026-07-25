@@ -173,11 +173,8 @@ export interface EngineProfile {
 
 function assertSupportedRepositoryModel(model: string | undefined): void {
   const normalizedModel = model?.toLowerCase().replaceAll("_", "-")
-  if (
-    normalizedModel &&
-    !/(?:^|[/.-])gpt-5\.6-(?:sol|terra|luna)(?:$|[/.-])/.test(normalizedModel)
-  ) {
-    throw new Error("LyraShield scans require a GPT-5.6 Sol, Terra, or Luna deployment")
+  if (normalizedModel && !/(?:^|[/.-])gpt-5\.6-(?:terra|luna)(?:$|[/.-])/.test(normalizedModel)) {
+    throw new Error("LyraShield scans require a GPT-5.6 Terra or Luna deployment")
   }
 }
 
@@ -228,7 +225,7 @@ export function assertRepositoryScanRuntimeConfigured(
 
 function requireRepositoryModel(model: string | undefined): string {
   if (!model) {
-    throw new Error("A GPT-5.6 Sol, Terra, or Luna deployment must be configured")
+    throw new Error("A GPT-5.6 Terra or Luna deployment must be configured")
   }
   return model
 }
@@ -250,6 +247,9 @@ function buildEngineEnv(profile: EngineProfile): Record<string, string> {
     "LLM_API_BASE",
     "LLM_API_VERSION",
     "LLM_TIMEOUT",
+    "LYRASHIELD_MAX_OUTPUT_TOKENS",
+    "LYRASHIELD_MAX_INPUT_TOKENS",
+    "LYRASHIELD_ENABLE_LOCAL_COMPACTION",
     "LYRASHIELD_IMAGE",
     "LYRASHIELD_RUNTIME_BACKEND",
     "LYRASHIELD_MAX_LOCAL_COPY_MB",
