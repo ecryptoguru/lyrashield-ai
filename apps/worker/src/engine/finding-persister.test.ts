@@ -322,13 +322,13 @@ describe("persistFindings", () => {
 
   it("waits for all workers and cleanly rethrows the first mid-batch failure", async () => {
     vi.mocked(prisma.finding.findMany).mockResolvedValue([])
-    vi.mocked(prisma.finding.create).mockImplementation(
-      (async (args: { data: { dedupeKey: string } }) => {
-        await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 10)))
-        if (args.data.dedupeKey === "key-01") throw new Error("mid-batch failure")
-        return { id: `finding-${args.data.dedupeKey}` }
-      }) as never
-    )
+    vi.mocked(prisma.finding.create).mockImplementation((async (args: {
+      data: { dedupeKey: string }
+    }) => {
+      await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 10)))
+      if (args.data.dedupeKey === "key-01") throw new Error("mid-batch failure")
+      return { id: `finding-${args.data.dedupeKey}` }
+    }) as never)
     vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
     vi.mocked(uploadEvidence).mockResolvedValue({
       storageUri: "s3://bucket/evidence",

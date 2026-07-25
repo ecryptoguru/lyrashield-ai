@@ -127,10 +127,11 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
     longOutputTokens: usageCount(usage, "long_output_tokens"),
   }
   const modelPricingBuckets = extractModelPricingBuckets(usage)
-  const bucketModels = modelPricingBuckets ? [...new Set(modelPricingBuckets.map((b) => b.model))] : []
+  const bucketModels = modelPricingBuckets
+    ? [...new Set(modelPricingBuckets.map((b) => b.model))]
+    : []
   const rootModel = typeof usage["model"] === "string" ? (usage["model"] as string) : null
-  const singleModel =
-    bucketModels.length === 1 ? bucketModels[0]! : rootModel
+  const singleModel = bucketModels.length === 1 ? bucketModels[0]! : rootModel
 
   return {
     requestCount: usageCount(usage, "request_count"),
@@ -865,7 +866,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           errorCategory: "CANCELLED",
           errorMessage: "Scan cancelled by user",
         })
-        return { status: "failed", errorCategory: "CANCELLED", errorMessage: "Scan cancelled by user" }
+        return {
+          status: "failed",
+          errorCategory: "CANCELLED",
+          errorMessage: "Scan cancelled by user",
+        }
       }
 
       // 5. Persist normalized findings

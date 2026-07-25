@@ -152,15 +152,22 @@ export function FindingsClient({
     []
   )
 
-  const updateQueryParams = useCallback((updates: { filter?: string; sort?: SortMode }) => {
-    const params = readQueryParams()
-    if (updates.filter && updates.filter !== "ALL") params.set("filter", updates.filter)
-    else params.delete("filter")
-    if (updates.sort && updates.sort !== "severity") params.set("sort", updates.sort)
-    else params.delete("sort")
-    const search = params.toString()
-    window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`)
-  }, [readQueryParams])
+  const updateQueryParams = useCallback(
+    (updates: { filter?: string; sort?: SortMode }) => {
+      const params = readQueryParams()
+      if (updates.filter && updates.filter !== "ALL") params.set("filter", updates.filter)
+      else params.delete("filter")
+      if (updates.sort && updates.sort !== "severity") params.set("sort", updates.sort)
+      else params.delete("sort")
+      const search = params.toString()
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${search ? `?${search}` : ""}`
+      )
+    },
+    [readQueryParams]
+  )
 
   const [findings, setFindings] = useState<FindingListItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
@@ -739,10 +746,7 @@ function FindingDetailDrawer({
               <li aria-hidden="true">
                 <ChevronRight className="h-3 w-3" />
               </li>
-              <li
-                className="text-foreground max-w-50 truncate font-medium"
-                title={finding.title}
-              >
+              <li className="text-foreground max-w-50 truncate font-medium" title={finding.title}>
                 {finding.title}
               </li>
             </ol>
@@ -1225,9 +1229,7 @@ function FindingDetailDrawer({
                 {detail.statusReason && (
                   <div className="bg-muted/30 rounded-lg border p-3">
                     <h3 className="text-sm font-medium">Status reason</h3>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                      {detail.statusReason}
-                    </p>
+                    <p className="text-muted-foreground mt-1 text-sm">{detail.statusReason}</p>
                   </div>
                 )}
 

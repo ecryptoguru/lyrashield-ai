@@ -11,7 +11,15 @@ vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
 import { createScorecardShare } from "@lyrashield/db"
 import { POST } from "./route"
 
-function makeRequest({ workspaceId = "workspace-1", role = "OWNER", apiKey }: { workspaceId?: string; role?: string; apiKey?: { keyId: string; workspaceId: string; scopes: string[] } } = {}) {
+function makeRequest({
+  workspaceId = "workspace-1",
+  role = "OWNER",
+  apiKey,
+}: {
+  workspaceId?: string
+  role?: string
+  apiKey?: { keyId: string; workspaceId: string; scopes: string[] }
+} = {}) {
   requireWorkspaceAccess.mockResolvedValue({
     session: { userId: "user-1", apiKey },
     workspace: { role },
@@ -47,7 +55,9 @@ describe("POST target scorecard", () => {
       referredSignups: 0,
     } as never)
     const response = await POST(
-      makeRequest({ apiKey: { keyId: "k-1", workspaceId: "workspace-1", scopes: ["read", "write"] } }),
+      makeRequest({
+        apiKey: { keyId: "k-1", workspaceId: "workspace-1", scopes: ["read", "write"] },
+      }),
       { params: Promise.resolve({ id: "target-1" }) }
     )
     expect(response.status).toBe(201)

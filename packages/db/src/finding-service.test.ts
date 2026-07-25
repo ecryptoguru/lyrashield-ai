@@ -36,9 +36,17 @@ describe("updateFindingStatus", () => {
 
   it("persists an optional statusReason", async () => {
     vi.mocked(prisma.finding.findFirst).mockResolvedValue({ id: "finding-1" } as never)
-    vi.mocked(prisma.finding.update).mockResolvedValue({ id: "finding-1", status: "ACCEPTED_RISK" } as never)
+    vi.mocked(prisma.finding.update).mockResolvedValue({
+      id: "finding-1",
+      status: "ACCEPTED_RISK",
+    } as never)
 
-    await updateFindingStatus("finding-1", "workspace-1", "ACCEPTED_RISK", "Accepted by security lead")
+    await updateFindingStatus(
+      "finding-1",
+      "workspace-1",
+      "ACCEPTED_RISK",
+      "Accepted by security lead"
+    )
 
     expect(prisma.finding.update).toHaveBeenCalledWith({
       where: { id: "finding-1" },
@@ -51,7 +59,10 @@ describe("updateFindingStatus", () => {
 
   it("passes reason through acceptRisk", async () => {
     vi.mocked(prisma.finding.findFirst).mockResolvedValue({ id: "finding-1" } as never)
-    vi.mocked(prisma.finding.update).mockResolvedValue({ id: "finding-1", status: "ACCEPTED_RISK" } as never)
+    vi.mocked(prisma.finding.update).mockResolvedValue({
+      id: "finding-1",
+      status: "ACCEPTED_RISK",
+    } as never)
 
     await acceptRisk("finding-1", "workspace-1", "Risk accepted per SLA")
 
@@ -66,7 +77,10 @@ describe("updateFindingStatus", () => {
 
   it("passes reason through markFalsePositive", async () => {
     vi.mocked(prisma.finding.findFirst).mockResolvedValue({ id: "finding-1" } as never)
-    vi.mocked(prisma.finding.update).mockResolvedValue({ id: "finding-1", status: "FALSE_POSITIVE" } as never)
+    vi.mocked(prisma.finding.update).mockResolvedValue({
+      id: "finding-1",
+      status: "FALSE_POSITIVE",
+    } as never)
 
     await markFalsePositive("finding-1", "workspace-1", "Confirmed test artifact")
 

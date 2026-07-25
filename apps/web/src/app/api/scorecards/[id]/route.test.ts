@@ -11,7 +11,15 @@ vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
 import { revokeScorecardShare } from "@lyrashield/db"
 import { DELETE } from "./route"
 
-function makeRequest({ workspaceId = "workspace-1", role = "OWNER", apiKey }: { workspaceId?: string; role?: string; apiKey?: { keyId: string; workspaceId: string; scopes: string[] } } = {}) {
+function makeRequest({
+  workspaceId = "workspace-1",
+  role = "OWNER",
+  apiKey,
+}: {
+  workspaceId?: string
+  role?: string
+  apiKey?: { keyId: string; workspaceId: string; scopes: string[] }
+} = {}) {
   requireWorkspaceAccess.mockResolvedValue({
     session: { userId: "user-1", apiKey },
     workspace: { role },
@@ -37,7 +45,9 @@ describe("DELETE /api/scorecards/[id]", () => {
   it("allows a write-scope API key to revoke a share", async () => {
     vi.mocked(revokeScorecardShare).mockResolvedValue({ id: "share-1" } as never)
     const response = await DELETE(
-      makeRequest({ apiKey: { keyId: "k-1", workspaceId: "workspace-1", scopes: ["read", "write"] } }),
+      makeRequest({
+        apiKey: { keyId: "k-1", workspaceId: "workspace-1", scopes: ["read", "write"] },
+      }),
       { params: Promise.resolve({ id: "share-1" }) }
     )
     expect(response.status).toBe(200)

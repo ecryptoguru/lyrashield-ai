@@ -47,7 +47,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return new Response(null, { status: 304, headers: { ETag: etag } })
     }
 
-    return NextResponse.json({ success: true, data: scan }, { status: 200, headers: { ETag: etag } })
+    return NextResponse.json(
+      { success: true, data: scan },
+      { status: 200, headers: { ETag: etag } }
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

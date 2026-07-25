@@ -54,30 +54,30 @@ Public copy uses **LyraShield AI**. Internal package scopes (`@lyrashield/*`), e
 
 ## 2. Tech Stack
 
-| Layer                   | Technology                       | Version                                              |
-| ----------------------- | -------------------------------- | ---------------------------------------------------- |
-| Web framework           | Next.js (App Router, Turbopack)  | 16.2.x                                               |
-| Language                | TypeScript                       | 6.0.x                                                |
-| Runtime                 | React                            | 19.x                                                 |
-| ORM                     | Prisma (with @prisma/adapter-pg) | 7.8.x                                                |
-| Database                | PostgreSQL                       | 16 (Docker)                                          |
-| Cache/Queue             | Redis                            | 7 (Docker)                                           |
-| Auth                    | Better Auth                      | 1.6.x                                                |
-| Validation              | Zod                              | 4.x                                                  |
-| Styling                 | TailwindCSS (CSS-first config)   | 4.3.x                                                |
-| Component variants      | class-variance-authority (cva)   | 0.7.x                                                |
-| Icons                   | lucide-react                     | 1.23.x                                               |
-| Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                      |
+| Layer                   | Technology                       | Version                                               |
+| ----------------------- | -------------------------------- | ----------------------------------------------------- |
+| Web framework           | Next.js (App Router, Turbopack)  | 16.2.x                                                |
+| Language                | TypeScript                       | 6.0.x                                                 |
+| Runtime                 | React                            | 19.x                                                  |
+| ORM                     | Prisma (with @prisma/adapter-pg) | 7.8.x                                                 |
+| Database                | PostgreSQL                       | 16 (Docker)                                           |
+| Cache/Queue             | Redis                            | 7 (Docker)                                            |
+| Auth                    | Better Auth                      | 1.6.x                                                 |
+| Validation              | Zod                              | 4.x                                                   |
+| Styling                 | TailwindCSS (CSS-first config)   | 4.3.x                                                 |
+| Component variants      | class-variance-authority (cva)   | 0.7.x                                                 |
+| Icons                   | lucide-react                     | 1.23.x                                                |
+| Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                       |
 | Testing                 | Vitest + Playwright              | 1013 core + 80 marketing + 16 motion + 4 Chromium E2E |
-| Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration |
-| Job queue               | BullMQ                           | 5.80.x                                               |
-| Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate      |
-| MCP                     | JSON-RPC over stdio              | API-backed tools + prompt-injection guard            |
-| Scan engine             | Python controlled derivative     | 1.1.0.post1 over pinned Strix v1.1.0 substrate       |
-| Marketing site          | Astro 7 + @astrojs/cloudflare    | Server output on Cloudflare Workers                  |
-| Marketing storage       | Cloudflare D1                    | Waitlist + fallback-rate-limit migrations            |
-| Marketing rate limiting | Cloudflare Rate Limits           | WAITLIST_RL binding for waitlist API                 |
-| Marketing analytics     | PostHog                          | posthog-js client-side capture                       |
+| Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration  |
+| Job queue               | BullMQ                           | 5.80.x                                                |
+| Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate       |
+| MCP                     | JSON-RPC over stdio              | API-backed tools + prompt-injection guard             |
+| Scan engine             | Python controlled derivative     | 1.1.0.post1 over pinned Strix v1.1.0 substrate        |
+| Marketing site          | Astro 7 + @astrojs/cloudflare    | Server output on Cloudflare Workers                   |
+| Marketing storage       | Cloudflare D1                    | Waitlist + fallback-rate-limit migrations             |
+| Marketing rate limiting | Cloudflare Rate Limits           | WAITLIST_RL binding for waitlist API                  |
+| Marketing analytics     | PostHog                          | posthog-js client-side capture                        |
 
 **Key version notes**:
 

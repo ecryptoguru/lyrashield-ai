@@ -132,7 +132,11 @@ export async function apiGetConditional<T>(
   } catch (err) {
     if (typeof err === "object" && err !== null && "name" in err && err.name === "AbortError") {
       if (!timedOut) throw new ApiError("ABORTED", "Request was cancelled", 0)
-      throw new ApiError("TIMEOUT", `Request timed out after ${options.timeout ?? DEFAULT_TIMEOUT_MS}ms`, 0)
+      throw new ApiError(
+        "TIMEOUT",
+        `Request timed out after ${options.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
+        0
+      )
     }
     if (err instanceof ApiError) throw err
     throw new ApiError("NETWORK_ERROR", "Network request failed", 0)

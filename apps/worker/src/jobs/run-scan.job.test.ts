@@ -1074,20 +1074,14 @@ describe("processScanJob", () => {
   })
 
   it("finalizes as CANCELLED when a cancel arrives after the engine returns", async () => {
-    vi.mocked(prisma.scan.findUnique).mockImplementation(
-      (async (args: unknown) => {
-        const query = args as { select?: Record<string, unknown> | null }
-        // The isScanCancelled() check uses a status-only select; simulate a late cancel there.
-        if (
-          query?.select &&
-          Object.keys(query.select).length === 1 &&
-          query.select.status === true
-        ) {
-          return { status: "CANCELLED" } as never
-        }
-        return { status: "RUNNING" } as never
-      }) as never
-    )
+    vi.mocked(prisma.scan.findUnique).mockImplementation((async (args: unknown) => {
+      const query = args as { select?: Record<string, unknown> | null }
+      // The isScanCancelled() check uses a status-only select; simulate a late cancel there.
+      if (query?.select && Object.keys(query.select).length === 1 && query.select.status === true) {
+        return { status: "CANCELLED" } as never
+      }
+      return { status: "RUNNING" } as never
+    }) as never)
 
     const result = await processScanJob(mockJob)
 
@@ -1099,7 +1093,10 @@ describe("processScanJob", () => {
     expect(updateScanStatus).toHaveBeenCalledWith(
       "scan-1",
       "CANCELLED",
-      expect.objectContaining({ errorCategory: "CANCELLED", errorMessage: "Scan cancelled by user" })
+      expect.objectContaining({
+        errorCategory: "CANCELLED",
+        errorMessage: "Scan cancelled by user",
+      })
     )
     expect(persistFindings).not.toHaveBeenCalled()
     expect(completeRetestsForScan).not.toHaveBeenCalled()

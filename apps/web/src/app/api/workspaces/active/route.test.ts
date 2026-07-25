@@ -11,7 +11,13 @@ vi.mock("@lyrashield/auth/server", () => ({
 
 import { POST } from "./route"
 
-function makeRequest({ workspaceId = "workspace-1", apiKey }: { workspaceId?: string; apiKey?: { keyId: string; workspaceId: string; scopes: string[] } } = {}) {
+function makeRequest({
+  workspaceId = "workspace-1",
+  apiKey,
+}: {
+  workspaceId?: string
+  apiKey?: { keyId: string; workspaceId: string; scopes: string[] }
+} = {}) {
   requireWorkspaceAccess.mockResolvedValue({
     session: { userId: "user-1", apiKey },
     workspace: { role: "MEMBER" },
@@ -43,7 +49,9 @@ describe("POST /api/workspaces/active", () => {
 
   it("allows a write-scope API key to set the active workspace", async () => {
     const response = await POST(
-      makeRequest({ apiKey: { keyId: "k-1", workspaceId: "workspace-1", scopes: ["read", "write"] } })
+      makeRequest({
+        apiKey: { keyId: "k-1", workspaceId: "workspace-1", scopes: ["read", "write"] },
+      })
     )
     expect(response.status).toBe(200)
   })
