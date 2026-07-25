@@ -90,7 +90,7 @@ CMD ["node", "server.js"]
 # engine repository.
 FROM node:22-alpine AS worker-engine
 
-RUN apk add --no-cache python3 py3-pip
+RUN apk add --no-cache python3 py3-pip build-base python3-dev
 
 COPY --from=engine . /opt/lyrashield-engine
 
