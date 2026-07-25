@@ -121,6 +121,7 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
   })
   const existingFindings = await prisma.finding.findMany({
     where: { targetId, dedupeKey: { in: dedupeKeys }, deletedAt: null },
+    select: { id: true, dedupeKey: true, status: true },
   })
   const existingMap = new Map(existingFindings.map((f) => [f.dedupeKey, f]))
 
@@ -174,25 +175,35 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
       normalized?.scannerSource === "secrets" ? "Secrets" : normalized?.enrichment.cweCategory
     const owaspCategory = normalized?.enrichment.owaspCategory
 
-    const existing = existingMap.get(dedupeKey)
+    function isPrismaUniqueConstraintViolation(err: unknown): boolean {
+      return (
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        (err as { code: unknown }).code === "P2002"
+      )
+    }
 
-    if (existing) {
-      // Regression handling: if a previously resolved finding is re-detected, it
-      // has reappeared and must be reopened — otherwise the dashboard shows a
-      // "fixed" state for an actively-present vulnerability. Only auto-reopen
-      // engine-resolved states (FIXED, FIXED_PENDING_RETEST); permanent human
-      // dispositions (ACCEPTED_RISK, FALSE_POSITIVE, DUPLICATE) are intentional
-      // and must NOT be silently overridden by a re-detection.
-      const reopen = existing.status === "FIXED" || existing.status === "FIXED_PENDING_RETEST"
-      if (reopen) {
-        logger.info("Reopening regressed finding", {
-          findingId: existing.id,
-          scanId,
-          previousStatus: existing.status,
-        })
-      }
+    function isReopenableStatus(status?: string | null): boolean {
+      return status === "FIXED" || status === "FIXED_PENDING_RETEST"
+    }
+
+    async function finalizeFinding(findingId: string): Promise<void> {
+      await persistEvidence(findingId, workspaceId, vuln)
+      await persistDetectionReceipt({
+        scanId,
+        workspaceId,
+        targetId,
+        findingId,
+        finding: vuln,
+        severity,
+        dedupeKey,
+      })
+    }
+
+    async function updateFindingRecord(findingId: string, reopen: boolean): Promise<void> {
       await prisma.finding.update({
-        where: { id: existing.id },
+        where: { id: findingId },
         data: {
           scanId,
           lastSeenAt: new Date(),
@@ -216,16 +227,27 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
           verificationReason,
         },
       })
-      await persistEvidence(existing.id, workspaceId, vuln)
-      await persistDetectionReceipt({
-        scanId,
-        workspaceId,
-        targetId,
-        findingId: existing.id,
-        finding: vuln,
-        severity,
-        dedupeKey,
-      })
+      await finalizeFinding(findingId)
+    }
+
+    const existing = existingMap.get(dedupeKey)
+
+    if (existing) {
+      // Regression handling: if a previously resolved finding is re-detected, it
+      // has reappeared and must be reopened — otherwise the dashboard shows a
+      // "fixed" state for an actively-present vulnerability. Only auto-reopen
+      // engine-resolved states (FIXED, FIXED_PENDING_RETEST); permanent human
+      // dispositions (ACCEPTED_RISK, FALSE_POSITIVE, DUPLICATE) are intentional
+      // and must NOT be silently overridden by a re-detection.
+      const reopen = isReopenableStatus(existing.status)
+      if (reopen) {
+        logger.info("Reopening regressed finding", {
+          findingId: existing.id,
+          scanId,
+          previousStatus: existing.status,
+        })
+      }
+      await updateFindingRecord(existing.id, reopen)
 
       return {
         id: existing.id,
@@ -236,68 +258,89 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
       }
     }
 
-    const finding = await prisma.finding.create({
-      data: {
-        workspaceId,
-        targetId,
-        scanId,
-        title: vuln.title,
-        summary,
-        severity,
-        confidence,
-        verified,
-        verificationStatus,
-        verificationMethod,
-        verificationReason,
-        dedupeKey,
-        ...(cwe ? { cwe } : {}),
-        ...(category ? { category } : {}),
-        ...(owaspCategory ? { owaspCategory } : {}),
-        ...(vuln.cve ? { sarifRuleId: vuln.cve } : {}),
-        ...(cvss != null ? { cvssScore: cvss } : {}),
-        ...(vuln.technical_analysis ? { technicalDetail: vuln.technical_analysis } : {}),
-        ...(vuln.remediation_steps ? { recommendedFix: vuln.remediation_steps } : {}),
-        ...(vuln.impact ? { businessImpact: vuln.impact } : {}),
-        ...(vuln.poc_description ? { exploitability: vuln.poc_description } : {}),
-      },
-    })
+    let findingId: string
+    let isNew = true
+    try {
+      const finding = await prisma.finding.create({
+        data: {
+          workspaceId,
+          targetId,
+          scanId,
+          title: vuln.title,
+          summary,
+          severity,
+          confidence,
+          verified,
+          verificationStatus,
+          verificationMethod,
+          verificationReason,
+          dedupeKey,
+          ...(cwe ? { cwe } : {}),
+          ...(category ? { category } : {}),
+          ...(owaspCategory ? { owaspCategory } : {}),
+          ...(vuln.cve ? { sarifRuleId: vuln.cve } : {}),
+          ...(cvss != null ? { cvssScore: cvss } : {}),
+          ...(vuln.technical_analysis ? { technicalDetail: vuln.technical_analysis } : {}),
+          ...(vuln.remediation_steps ? { recommendedFix: vuln.remediation_steps } : {}),
+          ...(vuln.impact ? { businessImpact: vuln.impact } : {}),
+          ...(vuln.poc_description ? { exploitability: vuln.poc_description } : {}),
+        },
+      })
+      findingId = finding.id
+    } catch (err) {
+      // The targetId+dedupeKey unique constraint may race with another worker.
+      // Recover by updating the finding that was just inserted by the winner.
+      if (!isPrismaUniqueConstraintViolation(err)) throw err
+      const recovered = await prisma.finding.findUnique({
+        where: { targetId_dedupeKey: { targetId, dedupeKey } },
+        select: { id: true, status: true },
+      })
+      if (!recovered) throw err
+      logger.info("Recovered from dedupe race", { findingId: recovered.id, scanId, dedupeKey })
+      findingId = recovered.id
+      isNew = false
+      await updateFindingRecord(recovered.id, isReopenableStatus(recovered.status))
+    }
 
-    await persistEvidence(finding.id, workspaceId, vuln)
-    await persistDetectionReceipt({
-      scanId,
-      workspaceId,
-      targetId,
-      findingId: finding.id,
-      finding: vuln,
-      severity,
-      dedupeKey,
-    })
+    if (isNew) {
+      await finalizeFinding(findingId)
+    }
 
     return {
-      id: finding.id,
+      id: findingId,
       title: vuln.title,
       severity,
       dedupeKey,
-      isNew: true,
+      isNew,
     }
   }
 
   // Bounded-concurrency map preserving input order. Concurrency of 5 overlaps
   // the I/O-bound evidence uploads without overwhelming the DB pool or R2.
+  // Each finding is wrapped in its own try/catch so a single failure does not
+  // leave sibling workers dangling or emit undefined holes into the result.
   const CONCURRENCY = 5
-  const ordered: PersistedFinding[] = new Array(vulnerabilities.length)
+  const ordered: (PersistedFinding | undefined)[] = new Array(vulnerabilities.length)
+  const errors: Error[] = []
   let cursor = 0
   async function worker(): Promise<void> {
     while (true) {
       const index = cursor++
       if (index >= vulnerabilities.length) return
-      ordered[index] = await persistOne(vulnerabilities[index]!)
+      try {
+        ordered[index] = await persistOne(vulnerabilities[index]!)
+      } catch (err) {
+        errors.push(err instanceof Error ? err : new Error(String(err)))
+      }
     }
   }
   await Promise.all(
     Array.from({ length: Math.min(CONCURRENCY, vulnerabilities.length) }, () => worker())
   )
-  results.push(...ordered)
+  if (errors.length > 0) {
+    throw errors[0]
+  }
+  results.push(...ordered.filter((r): r is PersistedFinding => r !== undefined))
 
   const newCount = results.filter((r) => r.isNew).length
   const dupCount = results.length - newCount

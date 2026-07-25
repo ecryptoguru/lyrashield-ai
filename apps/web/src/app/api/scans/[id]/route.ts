@@ -1,10 +1,25 @@
+import { createHash } from "crypto"
 import { getScanWithEvents, cancelScan } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { NextResponse } from "next/server"
 import { z } from "zod"
+
+function scanEtag(scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>>>): string {
+  const events = scan.events ?? []
+  const lastEvent = events[events.length - 1]
+  const payload = JSON.stringify({
+    id: scan.id,
+    status: scan.status,
+    updatedAt: scan.updatedAt,
+    eventsCount: events.length,
+    lastEventAt: lastEvent?.createdAt,
+  })
+  return `"${createHash("sha256").update(payload).digest("hex")}"`
+}
 
 const WorkspaceSchema = z.string().min(1)
 
@@ -26,7 +41,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
 
-    return apiSuccess(scan)
+    const etag = scanEtag(scan)
+    const ifNoneMatch = request.headers.get("if-none-match")
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      return new Response(null, { status: 304, headers: { ETag: etag } })
+    }
+
+    return NextResponse.json({ success: true, data: scan }, { status: 200, headers: { ETag: etag } })
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

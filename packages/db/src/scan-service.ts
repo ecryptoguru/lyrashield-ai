@@ -285,6 +285,7 @@ export async function listScans(params: ListScansParams): Promise<{
 export async function cancelScan(scanId: string, workspaceId: string): Promise<Scan> {
   const scan = await prisma.scan.findFirst({
     where: { id: scanId, workspaceId, deletedAt: null },
+    select: { status: true },
   })
   if (!scan) throw new Error(`Scan not found: ${scanId}`)
 

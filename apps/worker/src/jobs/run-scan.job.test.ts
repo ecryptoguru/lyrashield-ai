@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const completeUsage = vi.hoisted(() => ({
+  model: "azure_ai/gpt-5.6-luna",
   request_count: 1,
   input_tokens: 1_000,
   cached_input_tokens: 0,
@@ -221,6 +222,7 @@ it("extracts a privacy-bounded provider usage summary", () => {
     outputTokens: 678,
     pricingBuckets: null,
     modelPricingBuckets: null,
+    singleModel: null,
     engineReportedCostUsd: 1.234567,
   })
   expect(extractUsageSummary({ request_count: 1.5, input_tokens: 2_147_483_648 })).toEqual({
@@ -231,6 +233,7 @@ it("extracts a privacy-bounded provider usage summary", () => {
     outputTokens: null,
     pricingBuckets: null,
     modelPricingBuckets: null,
+    singleModel: null,
     engineReportedCostUsd: null,
   })
 })
@@ -410,6 +413,7 @@ describe("processScanJob", () => {
           run_name: "scan-1",
           status: "completed",
           llm_usage: {
+            model: "azure_ai/gpt-5.6-luna",
             request_count: 1,
             input_tokens: 3_500_000,
             cached_input_tokens: 0,
@@ -478,6 +482,7 @@ describe("processScanJob", () => {
           run_name: "scan-1",
           status: "completed",
           llm_usage: {
+            model: "azure_ai/gpt-5.6-luna",
             request_count: 7,
             input_tokens: 18_420,
             cached_input_tokens: 6_100,
@@ -537,6 +542,7 @@ describe("processScanJob", () => {
           run_name: "scan-1",
           status: "completed",
           llm_usage: {
+            model: "azure_ai/gpt-5.6-luna",
             request_count: 7,
             input_tokens: 18_420,
             cached_input_tokens: 6_100,
@@ -619,6 +625,7 @@ describe("processScanJob", () => {
           run_name: "scan-1",
           status: "completed",
           llm_usage: {
+            model: "azure_ai/gpt-5.6-luna",
             request_count: 1,
             input_tokens: 1_000,
             cached_input_tokens: 0,
@@ -1012,5 +1019,90 @@ describe("processScanJob", () => {
       targetId: "target-1",
       vulnerabilities: [],
     })
+  })
+
+  it("does not bill aggregate usage when the payload names no model", async () => {
+    vi.mocked(runEngine).mockResolvedValue({
+      exitCode: 0,
+      output: {
+        vulnerabilities: [],
+        findingsComplete: true,
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "completed",
+          llm_usage: {
+            request_count: 1,
+            input_tokens: 1_000,
+            cached_input_tokens: 0,
+            cache_write_input_tokens: 0,
+            output_tokens: 100,
+            standard_input_tokens: 1_000,
+            standard_cached_input_tokens: 0,
+            standard_cache_write_input_tokens: 0,
+            standard_output_tokens: 100,
+            long_input_tokens: 0,
+            long_cached_input_tokens: 0,
+            long_cache_write_input_tokens: 0,
+            long_output_tokens: 0,
+          },
+        },
+        summary: "Engine completed without model signal",
+        findingCount: 0,
+      },
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+
+    expect(prisma.scan.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "scan-1" },
+        data: expect.objectContaining({ billedCostUsd: null, actualCostCents: null }),
+      })
+    )
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "llm_usage",
+      "info",
+      "AI usage counters recorded",
+      expect.objectContaining({
+        calculatedCostUsd: null,
+        pricingMethod: "model_mix_unpriceable",
+        reconciliationStatus: "model_mix_unpriceable",
+      })
+    )
+  })
+
+  it("finalizes as CANCELLED when a cancel arrives after the engine returns", async () => {
+    vi.mocked(prisma.scan.findUnique).mockImplementation(
+      (async (args: unknown) => {
+        const query = args as { select?: Record<string, unknown> | null }
+        // The isScanCancelled() check uses a status-only select; simulate a late cancel there.
+        if (
+          query?.select &&
+          Object.keys(query.select).length === 1 &&
+          query.select.status === true
+        ) {
+          return { status: "CANCELLED" } as never
+        }
+        return { status: "RUNNING" } as never
+      }) as never
+    )
+
+    const result = await processScanJob(mockJob)
+
+    expect(result).toMatchObject({
+      status: "failed",
+      errorCategory: "CANCELLED",
+      errorMessage: "Scan cancelled by user",
+    })
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "CANCELLED",
+      expect.objectContaining({ errorCategory: "CANCELLED", errorMessage: "Scan cancelled by user" })
+    )
+    expect(persistFindings).not.toHaveBeenCalled()
+    expect(completeRetestsForScan).not.toHaveBeenCalled()
+    expect(notifyScanCompleted).not.toHaveBeenCalled()
   })
 })

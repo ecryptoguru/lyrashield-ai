@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -21,7 +21,7 @@ import { formatTime } from "@/lib/date-format"
 import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanReviewProfile } from "@/lib/scan-review-profile"
-import { apiGet, apiGetPaginated } from "@/lib/api-client"
+import { apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import { ScanInProgress } from "./scan-in-progress"
 
 interface ScanEvent {
@@ -211,14 +211,19 @@ export function ScanDetailClient({
   const isActive = isActiveScan(scan.status)
   const elapsedTime = useElapsedTime(isActive ? scan.startedAt : null)
   const presentation = getScanPresentation(scan.status)
+  const etagRef = useRef<string | undefined>(undefined)
 
   const refresh = useCallback(
     async (signal: AbortSignal) => {
       try {
-        const updated = await apiGet<ScanPollData>(
+        const { data, etag } = await apiGetConditional<ScanPollData>(
           `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}`,
-          { signal }
+          { signal, etag: etagRef.current }
         )
+        etagRef.current = etag
+        if (!data || signal.aborted) return
+
+        const updated = data
         const nextScan: ScanData = {
           id: updated.id,
           workspaceId: updated.workspaceId,
@@ -286,16 +291,43 @@ export function ScanDetailClient({
     if (!isActive) return
     const controller = new AbortController()
     let timeoutId: number | undefined
-    const poll = async () => {
-      await refresh(controller.signal)
-      if (!controller.signal.aborted) timeoutId = window.setTimeout(poll, 5000)
+    let isAborted = false
+
+    const nextInterval = (elapsedMs: number): number => {
+      if (elapsedMs < 60_000) return 5_000
+      if (elapsedMs < 5 * 60_000) return 10_000
+      return 60_000
     }
-    timeoutId = window.setTimeout(poll, 5000)
+
+    const poll = async () => {
+      if (document.hidden) {
+        timeoutId = window.setTimeout(poll, 1000)
+        return
+      }
+      await refresh(controller.signal)
+      if (isAborted) return
+      const startedAtMs = scan.startedAt ? new Date(scan.startedAt).getTime() : Date.now()
+      const elapsed = Date.now() - startedAtMs
+      timeoutId = window.setTimeout(poll, nextInterval(elapsed))
+    }
+
+    timeoutId = window.setTimeout(poll, 5_000)
+
+    const onVisibility = () => {
+      if (!document.hidden && isActive && !isAborted) {
+        window.clearTimeout(timeoutId)
+        timeoutId = window.setTimeout(poll, 0)
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+
     return () => {
+      isAborted = true
       controller.abort()
+      document.removeEventListener("visibilitychange", onVisibility)
       if (timeoutId !== undefined) window.clearTimeout(timeoutId)
     }
-  }, [isActive, refresh])
+  }, [isActive, refresh, scan.startedAt])
 
   const sortedFindings = [...currentFindings].sort(
     (a, b) => (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99)

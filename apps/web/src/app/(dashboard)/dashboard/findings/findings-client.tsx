@@ -147,10 +147,28 @@ export function FindingsClient({
   initialNextCursor: string | null
   initialSelectedFindingId?: string
 }) {
+  const readQueryParams = useCallback(
+    () => new URLSearchParams(typeof window !== "undefined" ? window.location.search : ""),
+    []
+  )
+
+  const updateQueryParams = useCallback((updates: { filter?: string; sort?: SortMode }) => {
+    const params = readQueryParams()
+    if (updates.filter && updates.filter !== "ALL") params.set("filter", updates.filter)
+    else params.delete("filter")
+    if (updates.sort && updates.sort !== "severity") params.set("sort", updates.sort)
+    else params.delete("sort")
+    const search = params.toString()
+    window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`)
+  }, [readQueryParams])
+
   const [findings, setFindings] = useState<FindingListItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
-  const [filter, setFilter] = useState<string>("ALL")
-  const [sortMode, setSortMode] = useState<SortMode>("severity")
+  const [filter, setFilter] = useState<string>(() => readQueryParams().get("filter") ?? "ALL")
+  const [sortMode, setSortMode] = useState<SortMode>(() => {
+    const sort = readQueryParams().get("sort")
+    return sort === "severity" || sort === "newest" ? sort : "severity"
+  })
   const [selectedFinding, setSelectedFinding] = useState<FindingListItem | null>(() =>
     initialSelectedFindingId
       ? (initialData.find((finding) => finding.id === initialSelectedFindingId) ?? null)
@@ -162,6 +180,7 @@ export function FindingsClient({
   const handleFilterChange = useCallback(
     async (newFilter: string) => {
       setFilter(newFilter)
+      updateQueryParams({ filter: newFilter, sort: sortMode })
       if (newFilter === "ALL") {
         setFindings(initialData)
         setNextCursor(initialNextCursor)
@@ -189,7 +208,7 @@ export function FindingsClient({
         setLoading(false)
       }
     },
-    [workspaceId, initialData, initialNextCursor]
+    [workspaceId, initialData, initialNextCursor, sortMode, updateQueryParams]
   )
 
   // Client-side sort — severity high-first or newest first
@@ -262,7 +281,11 @@ export function FindingsClient({
             )}
             <select
               value={sortMode}
-              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              onChange={(e) => {
+                const next = e.target.value as SortMode
+                setSortMode(next)
+                updateQueryParams({ filter, sort: next })
+              }}
               aria-label="Sort findings"
               className="text-muted-foreground cursor-pointer bg-transparent text-xs font-medium focus:outline-none"
             >
@@ -721,7 +744,7 @@ function FindingDetailDrawer({
                 <ChevronRight className="h-3 w-3" />
               </li>
               <li
-                className="text-foreground max-w-[200px] truncate font-medium"
+                className="text-foreground max-w-50 truncate font-medium"
                 title={finding.title}
               >
                 {finding.title}

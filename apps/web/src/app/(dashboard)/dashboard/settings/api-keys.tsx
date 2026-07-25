@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Check, Copy, KeyRound, Plus, ShieldAlert } from "lucide-react"
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Spinner } from "@lyrashield/ui"
+import { writeClipboard } from "@/components/scorecard-share-composer"
 import { apiDelete, apiGet, apiPost, ApiError } from "@/lib/api-client"
 
 interface ApiKeyRow {
@@ -119,10 +120,11 @@ export function ApiKeysSection({
   async function copyKey() {
     if (!createdKey) return
     try {
-      await navigator.clipboard.writeText(createdKey.rawKey)
+      await writeClipboard(createdKey.rawKey)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
+      setError("Failed to copy API key. Copy it manually or check your browser permissions.")
       setCopied(false)
     }
   }

@@ -19,7 +19,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    await requireWorkspaceAccess(parsed.data.workspaceId)
+    const { session } = await requireWorkspaceAccess(parsed.data.workspaceId)
+    if (session.apiKey && !session.apiKey.scopes.includes("write")) {
+      return apiError("FORBIDDEN", "You do not have permission to perform this action", 403)
+    }
     const cookieStore = await cookies()
     cookieStore.set("activeWorkspaceId", parsed.data.workspaceId, {
       httpOnly: true,

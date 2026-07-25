@@ -21,6 +21,7 @@ export async function runPreflight(scanId: string, targetId: string): Promise<Pr
 
   const target = await prisma.target.findFirst({
     where: { id: targetId, deletedAt: null },
+    select: { type: true, name: true, url: true, repoFullName: true },
   })
 
   if (!target) {

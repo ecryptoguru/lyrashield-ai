@@ -319,4 +319,48 @@ describe("persistFindings", () => {
     expect(results.every((r) => r.isNew)).toBe(true)
     expect(prisma.finding.create).toHaveBeenCalledTimes(25)
   })
+
+  it("waits for all workers and cleanly rethrows the first mid-batch failure", async () => {
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+    vi.mocked(prisma.finding.create).mockImplementation(
+      (async (args: { data: { dedupeKey: string } }) => {
+        await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 10)))
+        if (args.data.dedupeKey === "key-01") throw new Error("mid-batch failure")
+        return { id: `finding-${args.data.dedupeKey}` }
+      }) as never
+    )
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    vi.mocked(uploadEvidence).mockResolvedValue({
+      storageUri: "s3://bucket/evidence",
+      checksum: "sha256-checksum",
+      encryptionKeyRef: "vault://test",
+    })
+
+    const vulns: NormalizedFinding[] = Array.from({ length: 5 }, (_, i) => ({
+      id: `v-${i}`,
+      title: `Finding ${i}`,
+      severity: "high",
+      timestamp: "2026-07-24T00:00:00Z",
+      scannerSource: "secrets",
+      normalizedSeverity: "HIGH",
+      normalizedCwe: "CWE-79",
+      normalizedCvss: 7.5,
+      confidenceScore: 90,
+      falsePositiveRisk: "low",
+      dedupeKey: `key-${String(i).padStart(2, "0")}`,
+      enrichment: { cweCategory: "XSS" },
+    }))
+
+    await expect(
+      persistFindings({
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        vulnerabilities: vulns,
+      })
+    ).rejects.toThrow("mid-batch failure")
+
+    // All workers drain; the returned promise never resolves with partial/undefined entries.
+    expect(prisma.finding.create).toHaveBeenCalledTimes(5)
+  })
 })
