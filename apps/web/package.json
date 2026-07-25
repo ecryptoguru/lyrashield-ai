@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "^16.2.10",
+    "next": "^16.2.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "better-auth": "1.6.23",
@@ -47,7 +47,7 @@
     "@types/react-dom": "^19.0.0",
     "tailwindcss": "^4.3.3",
     "@tailwindcss/postcss": "^4.3.3",
-    "postcss": "^8.5.19",
+    "postcss": "^8.5.23",
     "tw-animate-css": "^1.2.0"
   }
 }
