@@ -91,7 +91,11 @@ export function interpretExitCode(
 const MAX_ENGINE_VULNERABILITIES_BYTES = 10 * 1024 * 1024
 const MAX_ENGINE_RUN_BYTES = 1 * 1024 * 1024
 const SIGKILL_GRACE_MS = 5000
-const ENGINE_HEARTBEAT_MS = 30_000
+// Purely informational "still running" ScanEvent row. Each tick is a Postgres
+// insert competing with finding writes, and the UI polls on its own (slower)
+// cadence, so 30s bought nothing: 2 minutes keeps the feed alive for a long scan
+// at a quarter of the writes.
+const ENGINE_HEARTBEAT_MS = 120_000
 const MAX_ENGINE_ERROR_TAIL_BYTES = 4096
 const MAX_ENGINE_FAILURE_MARKER_WINDOW = 512
 

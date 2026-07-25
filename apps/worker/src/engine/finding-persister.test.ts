@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     finding: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
-    evidence: { createMany: vi.fn(), findUnique: vi.fn() },
+    evidence: { createMany: vi.fn(), findMany: vi.fn() },
     findingCandidate: { upsert: vi.fn() },
     findingVerification: { upsert: vi.fn() },
   },
@@ -26,7 +26,7 @@ import { generateDedupeKey } from "./output-parser"
 describe("persistFindings", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(prisma.evidence.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue([])
   })
 
   it("records secret-scanner output as a detection, not verified proof", async () => {
@@ -120,7 +120,11 @@ describe("persistFindings", () => {
     ] as never)
     vi.mocked(prisma.finding.update).mockResolvedValue({ id: "finding-1" } as never)
     vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
-    vi.mocked(prisma.evidence.findUnique).mockResolvedValue({ id: "evidence-1" } as never)
+    // Existence is now resolved with ONE batched findMany per finding: echo back
+    // every checksum it asks about, i.e. all artifacts already stored.
+    vi.mocked(prisma.evidence.findMany).mockImplementation((async (args: {
+      where: { checksum: { in: string[] } }
+    }) => args.where.checksum.in.map((checksum) => ({ checksum }))) as never)
 
     await persistFindings({
       scanId: "scan-2",

@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react"
 import { Check, Copy, KeyRound, Plus, ShieldAlert } from "lucide-react"
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Spinner } from "@lyrashield/ui"
+import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { apiDelete, apiGet, apiPost, ApiError } from "@/lib/api-client"
+import { formatDate } from "@/lib/date-format"
 
 interface ApiKeyRow {
   id: string
@@ -40,7 +42,9 @@ export function ApiKeysSection({
   const [creating, setCreating] = useState(false)
   const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null)
   const [copied, setCopied] = useState(false)
-  const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null)
+  // Sticky "has copied at least once" flag — `copied` resets after the icon
+  // flash, but the dismiss gate must stay open once the key has been copied.
+  const [hasCopiedKey, setHasCopiedKey] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -96,6 +100,7 @@ export function ApiKeysSection({
         scopes: scope === "write" ? ["read", "write"] : ["read"],
       })
       setCreatedKey(created)
+      setHasCopiedKey(false)
       closeCreateForm()
       await load()
     } catch (err) {
@@ -109,7 +114,6 @@ export function ApiKeysSection({
     setError(null)
     try {
       await apiDelete(`/api/api-keys/${id}?workspaceId=${workspaceId}`)
-      setConfirmRevoke(null)
       if (createdKey?.id === id) setCreatedKey(null)
       await load()
     } catch (err) {
@@ -122,10 +126,15 @@ export function ApiKeysSection({
     try {
       await writeClipboard(createdKey.rawKey)
       setCopied(true)
+      setHasCopiedKey(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
       setError("Failed to copy API key. Copy it manually or check your browser permissions.")
       setCopied(false)
+      // Clipboard access can be denied outright. Unlock the dismiss button so a
+      // user who copies the key by hand is not trapped with an undismissable
+      // banner — the warning above still tells them it is shown only once.
+      setHasCopiedKey(true)
     }
   }
 
@@ -181,9 +190,20 @@ export function ApiKeysSection({
                 <span className="sr-only">Copy API key</span>
               </Button>
             </div>
-            <Button size="sm" variant="ghost" onClick={() => setCreatedKey(null)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!hasCopiedKey}
+              aria-describedby={hasCopiedKey ? undefined : "api-key-copy-hint"}
+              onClick={() => setCreatedKey(null)}
+            >
               I&apos;ve stored it safely
             </Button>
+            {!hasCopiedKey ? (
+              <p id="api-key-copy-hint" className="text-xs text-amber-600 dark:text-amber-400">
+                Copy the key first — dismissing this notice discards the only copy.
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -263,9 +283,7 @@ export function ApiKeysSection({
                   <p className="text-muted-foreground font-mono text-xs">
                     {key.prefix}…
                     <span className="ml-2 font-sans">
-                      {key.lastUsedAt
-                        ? `last used ${new Date(key.lastUsedAt).toLocaleDateString()}`
-                        : "never used"}
+                      {key.lastUsedAt ? `last used ${formatDate(key.lastUsedAt)}` : "never used"}
                     </span>
                   </p>
                 </div>
@@ -273,24 +291,13 @@ export function ApiKeysSection({
                   <Badge variant="muted">
                     {key.scopes.includes("write") ? "read & write" : "read-only"}
                   </Badge>
-                  {confirmRevoke === key.id ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => void handleRevoke(key.id)}
-                      >
-                        Confirm revoke
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setConfirmRevoke(null)}>
-                        Keep
-                      </Button>
-                    </>
-                  ) : (
-                    <Button size="sm" variant="ghost" onClick={() => setConfirmRevoke(key.id)}>
-                      Revoke
-                    </Button>
-                  )}
+                  <InlineConfirm
+                    triggerLabel="Revoke"
+                    confirmLabel="Confirm revoke"
+                    message={`Revoke “${key.name}”?`}
+                    aria-label={`Revoke API key ${key.name}`}
+                    onConfirm={() => handleRevoke(key.id)}
+                  />
                 </div>
               </li>
             ))}

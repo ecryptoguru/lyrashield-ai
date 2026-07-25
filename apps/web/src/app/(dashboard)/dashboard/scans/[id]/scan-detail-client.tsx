@@ -208,10 +208,42 @@ export function ScanDetailClient({
   const [currentFindings, setCurrentFindings] = useState<FindingItem[]>(findings)
   const [expandedEvents, setExpandedEvents] = useState(false)
   const [expandedFindings, setExpandedFindings] = useState<Set<string>>(new Set())
+  const [completionNotice, setCompletionNotice] = useState<{
+    status: string
+    message: string
+  } | null>(null)
   const isActive = isActiveScan(scan.status)
   const elapsedTime = useElapsedTime(isActive ? scan.startedAt : null)
   const presentation = getScanPresentation(scan.status)
   const etagRef = useRef<string | undefined>(undefined)
+  const prevStatusRef = useRef(initialScan.status)
+
+  // Announce the active→terminal transition. Polling swaps the in-progress view
+  // for the stat grid silently otherwise, so users who looked away (or use a
+  // screen reader) never learn the scan finished.
+  useEffect(() => {
+    const prevStatus = prevStatusRef.current
+    prevStatusRef.current = scan.status
+    if (!isActiveScan(prevStatus) || isActiveScan(scan.status)) return
+    setCompletionNotice({
+      status: scan.status,
+      message:
+        scan.status === "COMPLETED"
+          ? // Deliberately no count: the terminal fetch is capped at one page, so
+            // a scan with more findings than that would be announced with the
+            // page size as if it were the total.
+            "Scan completed — findings are ready to review"
+          : getScanPresentation(scan.status).headline,
+    })
+  }, [scan.status])
+
+  // Auto-dismiss the completion banner after 6s; the outcome stays visible in
+  // the status badge and stat grid.
+  useEffect(() => {
+    if (!completionNotice) return
+    const id = window.setTimeout(() => setCompletionNotice(null), 6000)
+    return () => window.clearTimeout(id)
+  }, [completionNotice])
 
   const refresh = useCallback(
     async (signal: AbortSignal) => {
@@ -378,6 +410,13 @@ export function ScanDetailClient({
 
   return (
     <div>
+      {/* Sole announcer for the scan-completion message. Always mounted, because
+          a live region inserted at the same moment as its content is announced
+          unreliably. The visible banner below is therefore presentational only —
+          giving it live semantics too would double-announce. */}
+      <div aria-live="assertive" aria-atomic="true" className="sr-only">
+        {completionNotice?.message}
+      </div>
       <div className="mb-6">
         <Link
           href="/dashboard/scans"
@@ -429,6 +468,37 @@ export function ScanDetailClient({
       {/* Completed / terminal layout — rendered only once the scan is no longer active */}
       {!isActive && (
         <>
+          {completionNotice && (
+            // Presentational only — the always-mounted sr-only live region above
+            // owns the announcement, so no role="status" here (that would make
+            // screen readers read the completion twice).
+            <div
+              className={`mb-6 flex items-center gap-2 rounded-md border p-3 text-sm ${
+                completionNotice.status === "COMPLETED"
+                  ? "border-primary/30 bg-primary/5"
+                  : ["FAILED", "TIMED_OUT"].includes(completionNotice.status)
+                    ? "border-destructive/50 bg-destructive/10"
+                    : "border-amber-500/50 bg-amber-500/10"
+              }`}
+            >
+              {completionNotice.status === "COMPLETED" ? (
+                <CheckCircle2 className="text-primary h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : ["FAILED", "TIMED_OUT"].includes(completionNotice.status) ? (
+                <XCircle className="text-destructive h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : (
+                <ShieldAlert className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+              )}
+              <span className="min-w-0 flex-1 font-medium">{completionNotice.message}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="shrink-0"
+                onClick={() => setCompletionNotice(null)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          )}
           <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-5">
             <Card className="border-0 p-4 shadow-none">
               <div className="text-muted-foreground flex items-center gap-2 text-sm">

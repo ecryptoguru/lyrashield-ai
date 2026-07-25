@@ -295,7 +295,7 @@ export function FindingsClient({
                 updateQueryParams({ filter, sort: next })
               }}
               aria-label="Sort findings"
-              className="text-muted-foreground cursor-pointer bg-transparent text-xs font-medium focus:outline-none"
+              className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
             >
               <option value="severity">Severity (high first)</option>
               <option value="newest">Newest</option>

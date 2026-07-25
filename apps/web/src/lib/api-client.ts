@@ -96,6 +96,16 @@ export async function apiGetConditional<T>(
     controller.abort()
   }, options.timeout ?? DEFAULT_TIMEOUT_MS)
 
+  // This function owns `signal` (it needs its own for the timeout), so the
+  // caller's signal must be forwarded explicitly — otherwise it is silently
+  // dropped by the spread below and a polling effect's cleanup cannot cancel an
+  // in-flight request, which then runs until the timeout fires.
+  const onCallerAbort = () => controller.abort()
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort()
+    else options.signal.addEventListener("abort", onCallerAbort, { once: true })
+  }
+
   const headers = new Headers(options.headers)
   if (options.etag) {
     headers.set("If-None-Match", options.etag)
@@ -142,6 +152,7 @@ export async function apiGetConditional<T>(
     throw new ApiError("NETWORK_ERROR", "Network request failed", 0)
   } finally {
     clearTimeout(timeoutId)
+    options.signal?.removeEventListener("abort", onCallerAbort)
   }
 }
 
@@ -187,4 +198,27 @@ export async function apiGetPaginated<T>(
   const fullUrl = searchParams.toString() ? `${url}?${searchParams}` : url
 
   return request<PaginatedResponse<T>>(fullUrl, { ...options, method: "GET" })
+}
+
+/**
+ * Paginated GET with ETag revalidation. Used by polling surfaces: pass the ETag
+ * from the previous tick and a 304 comes back with `data: null`, so an unchanged
+ * list costs no response body and no JSON parse.
+ */
+export async function apiGetPaginatedConditional<T>(
+  url: string,
+  params?: Record<string, string | undefined>,
+  options: FetchOptions & { etag?: string } = {}
+): Promise<ConditionalResponse<PaginatedResponse<T>>> {
+  const searchParams = new URLSearchParams()
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) {
+        searchParams.set(key, value)
+      }
+    }
+  }
+  const fullUrl = searchParams.toString() ? `${url}?${searchParams}` : url
+
+  return apiGetConditional<PaginatedResponse<T>>(fullUrl, options)
 }

@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Radar, Play, X, RefreshCw, ChevronRight, ChevronDown } from "lucide-react"
 import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
-import { apiPost, apiGetPaginated } from "@/lib/api-client"
+import { apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
 import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
@@ -165,6 +165,7 @@ export function ScansClient({
     const controller = new AbortController()
     let timeoutId: number | undefined
     let isAborted = false
+    let pollEtag: string | undefined
     const pollStartedAt = Date.now()
 
     const nextInterval = (elapsedMs: number): number => {
@@ -181,13 +182,15 @@ export function ScansClient({
       try {
         // Poll only active-status scans to keep the payload small. Merge the
         // refreshed active rows into the full list so completed scans are preserved.
-        const result = await apiGetPaginated<ScanItem>(
+        // The ETag from the previous tick makes an unchanged list a bodyless 304.
+        const { data, etag } = await apiGetPaginatedConditional<ScanItem>(
           "/api/scans",
           { workspaceId, status: ACTIVE_STATUS_PARAM },
-          { signal: controller.signal }
+          { signal: controller.signal, ...(pollEtag ? { etag: pollEtag } : {}) }
         )
-        if (!controller.signal.aborted) {
-          setScans((current) => mergePolledScans(current, result.items))
+        if (etag) pollEtag = etag
+        if (data && !controller.signal.aborted) {
+          setScans((current) => mergePolledScans(current, data.items))
         }
       } catch {
         // Keep the current list visible; the manual refresh action reports errors.
