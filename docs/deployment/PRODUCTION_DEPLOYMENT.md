@@ -141,7 +141,7 @@ A durable scan event is recorded immediately before a repository scan enters the
 
 Safe/Quick/Standard are Luna-only. Deep/Custom use a deterministic two-tier invocation: Terra/medium is the root coordinator and Luna/medium handles child specialist work. The model cannot self-promote a child to Terra, and only the root can create or stop specialists.
 
-Engine PRs #6 and #7 are merged. The promoted engine compacts estimated input at 240k toward 180k, bounds direct dedupe input to 200 kB, limits output and agent concurrency, and reserves projected spend before each request. These controls do not replace provider-meter reconciliation or prove finding quality.
+Engine PRs #6, #7, and #20 are merged. The promoted engine compacts estimated input at 240k toward 180k, bounds direct dedupe input to 200 kB, limits output and agent concurrency, reserves projected spend before each request, and accounts for provider-reported cache-read tokens with dict/object usage extraction. These controls do not replace provider-meter reconciliation or prove finding quality.
 
 Add GitHub OAuth/App, email, notification, billing, and analytics variables only when those integrations are enabled. R2/S3 is mandatory before controlled full scans, and monitoring is mandatory before general availability. Use `.env.example` as the complete variable index, not as a production secret file.
 
@@ -160,7 +160,7 @@ git diff --check
 
 Then, in the target environment:
 
-1. Deploy all 21 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, `20260716151000_scorecard_share_active_snapshot_unique`, and `20260718110000_scan_cost_ledger`; run the migration-diff gate against a fresh shadow database.
+1. Deploy all 26 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, `20260716151000_scorecard_share_active_snapshot_unique`, `20260718110000_scan_cost_ledger`, and `20260725132208_add_finding_status_reason`; run the migration-diff gate against a fresh shadow database.
 2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. The scan-specific endpoint must become `503` within 30 seconds of stopping every worker and recover only after a BullMQ-ready worker registers its lease.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.

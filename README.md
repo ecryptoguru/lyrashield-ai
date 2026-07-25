@@ -91,6 +91,7 @@ Prerequisites: Node.js 24+, pnpm, Docker, and an environment file based on `.env
 ```bash
 pnpm install
 pnpm --filter @lyrashield/db generate
+pnpm db:migrate
 pnpm dev
 ```
 

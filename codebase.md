@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current merged baseline — 2026-07-18:** 4 apps, 10 shared packages (including `packages/score`), 25 web page files, 44 API route files, 39 Prisma models, 18 enums, 21 migrations, and 20 directly RLS-protected workspace tables. PR #115 passes lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks (881 core tests in 97 files, 79 marketing tests in 12 files, 16 motion tests, and 2 Playwright Chromium tests). Sections 17–54 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current merged baseline — 2026-07-25:** 4 apps, 10 shared packages (including `packages/score`), 25 web page files, 44 API route files, 39 Prisma models, 18 enums, 26 migrations, and 20 directly RLS-protected workspace tables. PR #115 passes lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks (881 core tests in 97 files, 79 marketing tests in 12 files, 16 motion tests, and 2 Playwright Chromium tests). The follow-up merge adds `Finding.statusReason`, engine PR #20 on the sibling repo, dashboard polling/ETag/API hardening, and reaches **1013 core tests in 115 files**. Sections 17–55 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -438,12 +438,12 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **934 core tests in 105 files**, **80 marketing tests in 12 files**, and **16 motion tests**, pass
+- `pnpm test`: **1013 core tests in 115 files**, **80 marketing tests in 12 files**, and **16 motion tests**, pass
 - `pnpm test:e2e`: **4 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `pnpm format:check`: pass
 - `pnpm audit --prod --audit-level high`: pass, no known production vulnerabilities
-- Prisma validation, drift, deployment, and status: pass; the repository contains all 21 committed migrations
+- Prisma validation, drift, deployment, and status: pass; the repository contains all 26 committed migrations
 - `git diff --check`: pass
 - Engine gate: 329 tests + Ruff + formatting + headless mypy + Bandit + package/native-binary checks + sandbox smoke + public worker compatibility
 
@@ -481,7 +481,7 @@ Most routes live under `apps/web/src/app/api`; public scorecard OG and badge rou
 | GET, POST          | `/api/scans`                        | Paginated scan list / create and enqueue            |
 | GET, POST          | `/api/scans/[id]`                   | Scan with events / cancel scan                      |
 | GET                | `/api/findings`                     | Paginated finding list                              |
-| GET, PATCH         | `/api/findings/[id]`                | Finding detail / update status                      |
+| GET, PATCH         | `/api/findings/[id]`                | Finding detail / update status (`reason` optional)  |
 | POST               | `/api/findings/[id]/fix-proposals`  | Create fix proposal                                 |
 | POST               | `/api/findings/[id]/retests`        | Queue retest                                        |
 | GET                | `/api/fix-proposals`                | List proposals                                      |
@@ -2096,3 +2096,12 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - The target architecture is evolutionary: move LyraShield-owned policy behind explicit engine modules and a versioned JSON protocol when touching those paths, while preserving child-process isolation. Do not create a second runtime or speculative abstraction solely to make the repository look independent.
 - Result quality is not established by the inherited Strix v0.4 XBEN result. Before changing orchestration or making accuracy/coverage claims, add a private LyraShield corpus with expected findings and expected non-findings, evidence correctness, duplicate stability, control coverage, runtime, and token-use measurements for Luna and Terra.
 - Reconsider full independence only when upstream repeatedly blocks required product behavior, reviewed release imports become materially more expensive than ownership, or the LyraShield evaluation suite demonstrates a substrate-imposed result ceiling.
+
+## §55 — Engine PR #20 and finding statusReason (2026-07-25)
+
+- **Engine PR #20 merged:** the controlled derivative now carries the `reduce-root-context` work on `main` along with GPT-5.6 rate fixes. `strix/core/hooks.py` returns a 2-tuple from `_model_rates`, handles provider-reported cache-read tokens, and extracts `input_tokens`/`output_tokens` from either dict or object usage entries. `strix/interface/main.py` passes explicit telemetry keyword arguments to `posthog.start` and `scarf.start`. `tests/conftest.py` clears LLM-related environment variables before each test to avoid leaked Azure endpoints. The `Makefile` type-check and security targets now match `scripts/verify-thin-fork.sh` (mypy excludes `strix/interface/tui`, bandit covers `strix` and `lyrashield_adapter`). Engine CI passes 329 tests plus ruff, mypy, bandit, native-binary, sandbox, and worker-compatibility checks.
+- **Finding statusReason:** `Finding` gained an optional `statusReason` column (migration `20260725132208_add_finding_status_reason`). `packages/db/src/finding-service.ts` accepts an optional `reason` on `updateFindingStatus`, `acceptRisk`, and `markFalsePositive`. `apps/web/src/app/api/findings/[id]/route.ts` validates an optional `reason` field in the PATCH schema and passes it to the DB. The findings client (`apps/web/src/app/(dashboard)/dashboard/findings/findings-client.tsx`) sends the collected comment and renders `statusReason` in the detail drawer. Unit tests in `packages/db/src/finding-service.test.ts` cover the reason persistence path.
+- **Worker hardening:** `apps/worker/src/jobs/run-scan.job.ts` adds a single-model cost fallback for mixed-model usage, post-engine cancellation check, and target field projection before preflight. `apps/worker/src/engine/finding-persister.ts` recovers from unique-constraint races during finding creation by updating the recovered row.
+- **Dashboard UX:** the scans list (`apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx`) uses adaptive polling backoff and `visibilitychange` handling. Findings list syncs filter/sort with URL query params. `api-keys.tsx` uses a shared clipboard helper and surfaces copy errors. `inline-confirm.tsx` restores focus after confirm/cancel.
+- **API hardening:** `apps/web/src/app/api/scans/[id]/route.ts` returns an ETag based on scan status/events and respects `If-None-Match`. Scorecard create/revoke routes enforce write scope for API keys. `apps/web/src/lib/api-client.ts` adds `apiGetConditional` for ETag-aware conditional GETs with timeouts.
+- **Verification:** the merged `main` passes `pnpm lint`, `pnpm typecheck`, `pnpm test` (1013 core tests in 115 files, 80 marketing tests, 16 motion tests), `pnpm build`, `git diff --check`, and 26 applied Prisma migrations.

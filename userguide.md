@@ -257,7 +257,7 @@ Threat-intelligence enrichment prioritizes review but does not change severity o
 5. Review whether the retest is validated, independently verified, blocked, or inconclusive.
 6. Generate an assurance report from the retained retest when appropriate.
 
-Depending on your permission, you may also mark a finding as accepted risk or false positive. These are audited decisions, not silent deletion.
+Depending on your permission, you may also mark a finding as accepted risk or false positive. These are audited decisions, not silent deletion. When you do, the UI requires a short reason; the reason is stored as the finding's status reason and is shown on the finding detail for future reviewers.
 
 ## 12. Fix proposals and pull requests
 
