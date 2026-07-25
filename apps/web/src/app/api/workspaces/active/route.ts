@@ -1,6 +1,6 @@
 import { cookies } from "next/headers"
 import { requireWorkspaceAccess } from "@lyrashield/auth/server"
-import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { apiError, apiSuccess } from "@/lib/api-response"
 import { z } from "zod"
 
 const ActiveWorkspaceSchema = z.object({ workspaceId: z.string().min(1) })
