@@ -7,6 +7,7 @@ vi.mock("./client", () => ({
     scan: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       updateMany: vi.fn(),
     },
     scanEvent: { create: vi.fn(), findMany: vi.fn() },
@@ -18,13 +19,14 @@ vi.mock("./client", () => ({
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn() } }))
 
 import { prisma } from "./client"
-import { createScan, getScanWithEvents, updateScanStatus } from "./scan-service"
+import { createScan, getScanWithEvents, listScans, updateScanStatus } from "./scan-service"
 
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
   scan: {
     findUnique: ReturnType<typeof vi.fn>
     findFirst: ReturnType<typeof vi.fn>
+    findMany: ReturnType<typeof vi.fn>
     updateMany: ReturnType<typeof vi.fn>
   }
   scanEvent: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> }
@@ -135,6 +137,29 @@ describe("getScanWithEvents", () => {
     expect(scan?.events.map((event) => event.id)).toEqual(["old", "new"])
   })
 
+  it("projects only the manifest checksum, never the manifest blob", async () => {
+    mockPrisma.scan.findFirst.mockResolvedValue({
+      id: "scan-1",
+      events: [],
+      resultManifest: { checksum: "abc123" },
+      coverageReceipts: [],
+      target: null,
+    })
+
+    const scan = await getScanWithEvents("scan-1", "ws-1")
+
+    // This shape is returned on every scan-detail poll; fetching the manifest's
+    // Json column here would move tens of KB per tick for a field nothing reads.
+    expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          resultManifest: { select: { checksum: true } },
+        }),
+      })
+    )
+    expect(scan?.resultManifest?.checksum).toBe("abc123")
+  })
+
   it("does not query child records when the scoped scan is absent", async () => {
     mockPrisma.scan.findFirst.mockResolvedValue(null)
 
@@ -145,5 +170,40 @@ describe("getScanWithEvents", () => {
     expect(mockPrisma.scanEvent.findMany).not.toHaveBeenCalled()
     expect(mockPrisma.scanResultManifest.findUnique).not.toHaveBeenCalled()
     expect(mockPrisma.scanCoverageReceipt.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("listScans", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("selects a narrow list projection and flattens findingCount", async () => {
+    mockPrisma.scan.findMany.mockResolvedValue([
+      { id: "scan-1", status: "COMPLETED", _count: { findings: 3 }, target: null },
+    ])
+
+    const { items } = await listScans({ workspaceId: "ws-1" })
+
+    // The Scan row carries ~10 further columns (LLM token counters, provider and
+    // billed cost, risk scores) that no list surface renders; this query runs on
+    // every scans-page load and active-scan poll tick, so it must stay projected.
+    const args = mockPrisma.scan.findMany.mock.calls[0]![0]
+    expect(args.select).toBeDefined()
+    expect(args.include).toBeUndefined()
+    expect(args.select.providerCostUsd).toBeUndefined()
+    expect(args.select.llmInputTokens).toBeUndefined()
+
+    // `_count` is flattened so API and SSR callers share one shape.
+    expect(items[0]!.findingCount).toBe(3)
+    expect("_count" in items[0]!).toBe(false)
+  })
+
+  it("treats a missing _count as zero findings", async () => {
+    mockPrisma.scan.findMany.mockResolvedValue([{ id: "scan-1", target: null }])
+
+    const { items } = await listScans({ workspaceId: "ws-1" })
+
+    expect(items[0]!.findingCount).toBe(0)
   })
 })

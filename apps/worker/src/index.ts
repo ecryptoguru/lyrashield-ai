@@ -101,6 +101,13 @@ async function main(): Promise<void> {
     },
     concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
     autorun: false,
+    // Managed Redis bills per command, and scans are long-running jobs measured
+    // in minutes — BullMQ's defaults (5s drain poll, 30s stalled check) spend
+    // ~18 commands/minute at idle for latency this queue does not need. Stalled
+    // jobs are additionally caught by reconcileScanQueue() on its own interval,
+    // so a slower stalled check costs no safety.
+    drainDelay: 30,
+    stalledInterval: 90_000,
   })
 
   await worker.waitUntilReady()

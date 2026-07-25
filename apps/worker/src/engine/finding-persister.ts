@@ -74,13 +74,25 @@ async function persistEvidence(
       contentType: "application/json; charset=utf-8",
     })
   }
-  for (const artifact of artifacts) {
-    const checksum = createHash("sha256").update(artifact.content, "utf8").digest("hex")
-    const existingEvidence = await prisma.evidence.findUnique({
-      where: { findingId_checksum: { findingId, checksum } },
-      select: { id: true },
-    })
-    if (existingEvidence) continue
+  if (artifacts.length === 0) return
+
+  // Resolve which artifacts already exist in ONE query instead of a findUnique
+  // per artifact. The checksum guard exists to avoid re-uploading bytes to R2 on
+  // a retry (the DB row itself is protected by the findingId+checksum unique
+  // constraint and createMany's skipDuplicates), so a single batched read is
+  // equivalent — and turns 3+ round-trips per finding into 1.
+  const artifactChecksums = artifacts.map((artifact) => ({
+    artifact,
+    checksum: createHash("sha256").update(artifact.content, "utf8").digest("hex"),
+  }))
+  const existing = await prisma.evidence.findMany({
+    where: { findingId, checksum: { in: artifactChecksums.map((entry) => entry.checksum) } },
+    select: { checksum: true },
+  })
+  const existingChecksums = new Set(existing.map((row) => row.checksum))
+
+  for (const { artifact, checksum } of artifactChecksums) {
+    if (existingChecksums.has(checksum)) continue
 
     const uploaded = await uploadEvidence({
       workspaceId,

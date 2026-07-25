@@ -46,17 +46,6 @@ export const getCachedWorkspaces = cache(async (userId: string) => {
   }))
 })
 
-export const getCachedDashboardStats = cache(async (workspaceIdsKey: string) => {
-  const workspaceIds = workspaceIdsKey.split(",").filter(Boolean)
-  if (workspaceIds.length === 0) return { scanCount: 0, findingCount: 0, projectCount: 0 }
-  const [scanCount, findingCount, projectCount] = await Promise.all([
-    prisma.scan.count({ where: { workspaceId: { in: workspaceIds } } }),
-    prisma.finding.count({ where: { workspaceId: { in: workspaceIds } } }),
-    prisma.project.count({ where: { workspaceId: { in: workspaceIds } } }),
-  ])
-  return { scanCount, findingCount, projectCount }
-})
-
 export const getCachedOnboardingState = cache(async (userId: string) => {
   return prisma.onboardingState.findUnique({
     where: { userId },

@@ -188,3 +188,26 @@ export async function apiGetPaginated<T>(
 
   return request<PaginatedResponse<T>>(fullUrl, { ...options, method: "GET" })
 }
+
+/**
+ * Paginated GET with ETag revalidation. Used by polling surfaces: pass the ETag
+ * from the previous tick and a 304 comes back with `data: null`, so an unchanged
+ * list costs no response body and no JSON parse.
+ */
+export async function apiGetPaginatedConditional<T>(
+  url: string,
+  params?: Record<string, string | undefined>,
+  options: FetchOptions & { etag?: string } = {}
+): Promise<ConditionalResponse<PaginatedResponse<T>>> {
+  const searchParams = new URLSearchParams()
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) {
+        searchParams.set(key, value)
+      }
+    }
+  }
+  const fullUrl = searchParams.toString() ? `${url}?${searchParams}` : url
+
+  return apiGetConditional<PaginatedResponse<T>>(fullUrl, options)
+}

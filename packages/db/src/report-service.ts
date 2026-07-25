@@ -243,12 +243,13 @@ export async function getShareableReport(
     // Scope the scan lookup to the report's workspace. This is the public share
     // path (no request-scoped workspace context is set), so we must NOT rely on
     // the Prisma extension's implicit read-scoping — filter explicitly. (S4)
+    // Only these three fields are used below: the finding count comes from the
+    // groupBy (not from a `_count` subquery), and the target name is deliberately
+    // replaced with "Private target" on this public path — so neither relation is
+    // fetched.
     const scan = await prisma.scan.findFirst({
       where: { id: report.scanId, workspaceId, deletedAt: null },
-      include: {
-        target: { select: { name: true } },
-        _count: { select: { findings: { where: { deletedAt: null } } } },
-      },
+      select: { id: true, status: true, summary: true },
     })
 
     if (scan) {
@@ -291,12 +292,46 @@ export async function getShareableReport(
   }
 }
 
+/**
+ * List-view projection for a report row. `contentJson` holds the entire
+ * generated report body (assurance data, score trends, finding summaries) and
+ * `storageUri` is only needed on download — neither is rendered in the list, so
+ * projecting them away keeps this request from moving hundreds of KB per page
+ * load. Single-report reads go through getShareableReport/generateReport.
+ */
+const REPORT_LIST_SELECT = {
+  id: true,
+  title: true,
+  type: true,
+  status: true,
+  format: true,
+  scanId: true,
+  shareTokenHash: true,
+  shareExpiresAt: true,
+  revokedAt: true,
+  createdAt: true,
+} as const
+
+export type ReportListItem = Pick<
+  Report,
+  | "id"
+  | "title"
+  | "type"
+  | "status"
+  | "format"
+  | "scanId"
+  | "shareTokenHash"
+  | "shareExpiresAt"
+  | "revokedAt"
+  | "createdAt"
+>
+
 export async function listReports(
   workspaceId: string,
   cursor?: string,
   limit?: number
 ): Promise<{
-  items: Report[]
+  items: ReportListItem[]
   nextCursor: string | null
 }> {
   const lim = Math.min(Math.max(limit ?? 50, 1), 100)
@@ -306,6 +341,7 @@ export async function listReports(
     orderBy: { createdAt: "desc" },
     take: lim + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    select: REPORT_LIST_SELECT,
   })
 
   const hasMore = reports.length > lim

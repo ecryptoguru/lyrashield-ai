@@ -449,6 +449,9 @@ model Scan {
   @@index([status])
   @@index([createdAt])
   @@index([workspaceId, createdAt])
+  // Covers the active-scan poll (workspaceId + status IN (...) ORDER BY
+  // createdAt DESC) — the most frequent automated query in the app.
+  @@index([workspaceId, status, createdAt])
 }
 
 model ScanEvent {

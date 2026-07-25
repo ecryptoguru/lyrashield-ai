@@ -58,6 +58,25 @@ function makeGetRequest(params: Record<string, string>): Request {
   return new Request(url, { method: "GET" })
 }
 
+/** A listScans() row as the service now returns it: Date objects, flat findingCount. */
+function scanListItem(id: string) {
+  return {
+    id,
+    status: "COMPLETED",
+    goal: "audit",
+    mode: "SAFE",
+    triggerType: "manual",
+    startedAt: null,
+    endedAt: null,
+    summary: null,
+    errorCategory: null,
+    errorMessage: null,
+    createdAt: new Date("2026-07-25T10:00:00.000Z"),
+    findingCount: 0,
+    target: null,
+  }
+}
+
 function defaultAuthMock() {
   vi.mocked(requirePermission).mockResolvedValue({
     session: { userId: "user-1" },
@@ -285,7 +304,7 @@ describe("GET /api/scans", () => {
 
   it("returns paginated scans", async () => {
     vi.mocked(listScans).mockResolvedValue({
-      items: [{ id: "scan-1" }, { id: "scan-2" }],
+      items: [scanListItem("scan-1"), scanListItem("scan-2")],
       nextCursor: "scan-2",
     } as never)
 
@@ -295,6 +314,30 @@ describe("GET /api/scans", () => {
     expect(json.success).toBe(true)
     expect(json.data.items).toHaveLength(2)
     expect(json.data.nextCursor).toBe("scan-2")
+    // Dates are serialized to ISO strings so the polled payload matches the
+    // SSR-rendered shape the client's ScanItem type expects.
+    expect(json.data.items[0].createdAt).toBe("2026-07-25T10:00:00.000Z")
+    expect(json.data.items[0].startedAt).toBeNull()
+    expect(json.data.items[0].findingCount).toBe(0)
+  })
+
+  it("returns 304 when the client's ETag still matches the list", async () => {
+    vi.mocked(listScans).mockResolvedValue({
+      items: [scanListItem("scan-1")],
+      nextCursor: null,
+    } as never)
+
+    const first = await GET(makeGetRequest({ workspaceId: "ws-1" }))
+    expect(first.status).toBe(200)
+    const etag = first.headers.get("ETag")
+    expect(etag).toBeTruthy()
+
+    const request = new Request(`http://localhost/api/scans?workspaceId=ws-1`, {
+      headers: { "if-none-match": etag! },
+    })
+    const second = await GET(request)
+    expect(second.status).toBe(304)
+    expect(second.headers.get("ETag")).toBe(etag)
   })
 
   it("passes targetId and status filters to listScans", async () => {

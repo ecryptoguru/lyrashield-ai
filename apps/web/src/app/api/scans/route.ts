@@ -1,20 +1,43 @@
-import { prisma, createScan, listScans, updateScanStatus } from "@lyrashield/db"
+import { createHash } from "crypto"
+import { prisma, createScan, listScans, updateScanStatus, type ScanListItem } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateScanSchema, ScanStatusSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
+import { NextResponse } from "next/server"
 import { authErrorResponse } from "../../../lib/api-auth"
-import {
-  apiError,
-  apiPaginated,
-  apiSuccess,
-  parsePaginationParams,
-} from "../../../lib/api-response"
+import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
 import {
   assertScanWorkerAvailable,
   enqueueScanJob,
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
+
+/**
+ * Serialize a scan list row for the client. Dates become ISO strings so the
+ * polled payload matches the SSR-rendered shape exactly (the client's ScanItem
+ * type expects strings, and `findingCount` is already flattened by listScans).
+ */
+function serializeScanListItem(scan: ScanListItem) {
+  return {
+    ...scan,
+    startedAt: scan.startedAt ? scan.startedAt.toISOString() : null,
+    endedAt: scan.endedAt ? scan.endedAt.toISOString() : null,
+    createdAt: scan.createdAt.toISOString(),
+  }
+}
+
+/**
+ * Weak-validator ETag over the fields the list actually renders. The active-scan
+ * poll re-requests this list on an interval; when nothing has moved the client
+ * gets a 304 with no body to parse.
+ */
+function scanListEtag(items: ReturnType<typeof serializeScanListItem>[]): string {
+  const payload = JSON.stringify(
+    items.map((scan) => [scan.id, scan.status, scan.endedAt, scan.findingCount])
+  )
+  return `"${createHash("sha256").update(payload).digest("hex")}"`
+}
 
 export async function POST(request: Request) {
   let body: unknown
@@ -208,7 +231,16 @@ export async function GET(request: Request) {
       limit,
     })
 
-    return apiPaginated(items, nextCursor)
+    const serialized = items.map(serializeScanListItem)
+    const etag = scanListEtag(serialized)
+    if (request.headers.get("if-none-match") === etag) {
+      return new Response(null, { status: 304, headers: { ETag: etag } })
+    }
+
+    return NextResponse.json(
+      { success: true, data: { items: serialized, nextCursor } },
+      { status: 200, headers: { ETag: etag } }
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
