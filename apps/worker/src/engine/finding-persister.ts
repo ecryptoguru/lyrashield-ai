@@ -85,8 +85,15 @@ async function persistEvidence(
     artifact,
     checksum: createHash("sha256").update(artifact.content, "utf8").digest("hex"),
   }))
+  // Reached through the tenant-scoped Finding rather than by findingId alone:
+  // Evidence has no workspaceId of its own, so the relation predicate is what
+  // ties this read to the caller's workspace.
   const existing = await prisma.evidence.findMany({
-    where: { findingId, checksum: { in: artifactChecksums.map((entry) => entry.checksum) } },
+    where: {
+      findingId,
+      finding: { id: findingId, workspaceId },
+      checksum: { in: artifactChecksums.map((entry) => entry.checksum) },
+    },
     select: { checksum: true },
   })
   const existingChecksums = new Set(existing.map((row) => row.checksum))
@@ -132,7 +139,9 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
     return generateDedupeKey(v, targetId)
   })
   const existingFindings = await prisma.finding.findMany({
-    where: { targetId, dedupeKey: { in: dedupeKeys }, deletedAt: null },
+    // workspaceId is explicit: a targetId is caller-supplied, and dedupe must
+    // never match a row belonging to another tenant.
+    where: { workspaceId, targetId, dedupeKey: { in: dedupeKeys }, deletedAt: null },
     select: { id: true, dedupeKey: true, status: true },
   })
   const existingMap = new Map(existingFindings.map((f) => [f.dedupeKey, f]))

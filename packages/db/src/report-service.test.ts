@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("./client", () => ({
   prisma: {
+    $transaction: vi.fn(),
+    $executeRaw: vi.fn(),
     report: { findFirst: vi.fn() },
     scan: { findFirst: vi.fn() },
-    finding: { findMany: vi.fn() },
+    finding: { findMany: vi.fn(), groupBy: vi.fn() },
   },
 }))
 
@@ -12,14 +14,22 @@ import { prisma } from "./client"
 import { getShareableReport } from "./report-service"
 
 const mockPrisma = prisma as unknown as {
+  $transaction: ReturnType<typeof vi.fn>
+  $executeRaw: ReturnType<typeof vi.fn>
   report: { findFirst: ReturnType<typeof vi.fn> }
   scan: { findFirst: ReturnType<typeof vi.fn> }
-  finding: { findMany: ReturnType<typeof vi.fn> }
+  finding: { findMany: ReturnType<typeof vi.fn>; groupBy: ReturnType<typeof vi.fn> }
 }
 
 describe("getShareableReport", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // The read sequence runs inside withWorkspaceRLS: "Report", "Scan" and
+    // "Finding" are all FORCE ROW LEVEL SECURITY, so the transaction-local
+    // context is the isolation boundary on this public share path.
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+    mockPrisma.$executeRaw.mockResolvedValue(1)
+    mockPrisma.finding.groupBy.mockResolvedValue([])
   })
 
   it("does not load a scan outside the report workspace", async () => {
@@ -112,5 +122,29 @@ describe("getShareableReport", () => {
         fixedCount: 1,
       })
     )
+  })
+  it("runs the public-share read sequence inside workspace RLS", async () => {
+    mockPrisma.report.findFirst.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      scanId: null,
+      title: "Shared report",
+      type: "developer",
+      status: "generated",
+      format: "html",
+      shareTokenHash: "hash",
+      shareExpiresAt: null,
+      revokedAt: null,
+      createdAt: new Date(),
+      contentJson: null,
+    })
+
+    await getShareableReport("report-1", "ws-1")
+
+    // No request-scoped workspace context exists on the public share path, so the
+    // Prisma extension will not inject RLS context — this helper must, or the
+    // FORCE-RLS policy returns zero rows for the restricted production role.
+    expect(mockPrisma.$transaction).toHaveBeenCalled()
+    expect(mockPrisma.$executeRaw).toHaveBeenCalled()
   })
 })

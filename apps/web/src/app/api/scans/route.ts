@@ -28,14 +28,19 @@ function serializeScanListItem(scan: ScanListItem) {
 }
 
 /**
- * Weak-validator ETag over the fields the list actually renders. The active-scan
- * poll re-requests this list on an interval; when nothing has moved the client
- * gets a 304 with no body to parse.
+ * ETag over the entire response representation. The active-scan poll re-requests
+ * this list on an interval; when nothing has moved the client gets a 304 with no
+ * body to parse.
+ *
+ * Hashing the full payload (not a subset of fields) is deliberate: a summary,
+ * error message, or target rename can change while status and counts stay put,
+ * and a partial hash would then serve a 304 and freeze stale data on screen.
  */
-function scanListEtag(items: ReturnType<typeof serializeScanListItem>[]): string {
-  const payload = JSON.stringify(
-    items.map((scan) => [scan.id, scan.status, scan.endedAt, scan.findingCount])
-  )
+function scanListEtag(
+  items: ReturnType<typeof serializeScanListItem>[],
+  nextCursor: string | null
+): string {
+  const payload = JSON.stringify({ items, nextCursor })
   return `"${createHash("sha256").update(payload).digest("hex")}"`
 }
 
@@ -232,7 +237,7 @@ export async function GET(request: Request) {
     })
 
     const serialized = items.map(serializeScanListItem)
-    const etag = scanListEtag(serialized)
+    const etag = scanListEtag(serialized, nextCursor)
     if (request.headers.get("if-none-match") === etag) {
       return new Response(null, { status: 304, headers: { ETag: etag } })
     }

@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 const mockFetch = vi.fn()
 vi.stubGlobal("fetch", mockFetch)
 
-const { apiGet, apiPost, apiPatch, apiDelete, apiGetPaginated, ApiError } =
+const { apiGet, apiPost, apiPatch, apiDelete, apiGetPaginated, apiGetConditional, ApiError } =
   await import("./api-client")
 
 function jsonResponse(data: unknown, success = true, status = 200) {
@@ -171,6 +171,64 @@ describe("api-client", () => {
         code: "NETWORK_ERROR",
         status: 0,
       })
+    })
+  })
+  describe("apiGetConditional", () => {
+    it("sends If-None-Match and returns a null body on 304", async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 304,
+        headers: { get: (h: string) => (h === "ETag" ? '"abc"' : null) },
+        json: async () => ({}),
+      })
+
+      const result = await apiGetConditional("/api/test", { etag: '"abc"' })
+
+      expect(result).toEqual({ data: null, etag: '"abc"', status: 304 })
+      const headers = mockFetch.mock.calls[0]![1].headers as Headers
+      expect(headers.get("If-None-Match")).toBe('"abc"')
+    })
+
+    it("aborts in flight when the caller's signal aborts", async () => {
+      // The function owns `signal` for its own timeout, so a caller signal must be
+      // forwarded explicitly — otherwise a polling effect's cleanup cannot cancel
+      // the request and it runs on until the timeout fires.
+      const controller = new AbortController()
+      mockFetch.mockImplementation(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () => {
+              const err = new Error("aborted")
+              err.name = "AbortError"
+              reject(err)
+            })
+          })
+      )
+
+      const pending = apiGetConditional("/api/test", { signal: controller.signal })
+      controller.abort()
+
+      await expect(pending).rejects.toMatchObject({ code: "ABORTED" })
+    })
+
+    it("does not issue a request when the caller's signal is already aborted", async () => {
+      const controller = new AbortController()
+      controller.abort()
+      mockFetch.mockImplementation(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            if (init.signal?.aborted) {
+              const err = new Error("aborted")
+              err.name = "AbortError"
+              reject(err)
+              return
+            }
+          })
+      )
+
+      await expect(
+        apiGetConditional("/api/test", { signal: controller.signal })
+      ).rejects.toMatchObject({ code: "ABORTED" })
     })
   })
 })

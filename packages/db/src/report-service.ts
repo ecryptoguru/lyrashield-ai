@@ -4,6 +4,7 @@ import { logger } from "@lyrashield/logger"
 import type { Report } from "./generated/prisma"
 import { gatherReportData } from "./report-generator"
 import { getSystemPrisma } from "./system-client"
+import { withWorkspaceRLS } from "./rls"
 
 export interface CreateReportParams {
   workspaceId: string
@@ -230,52 +231,62 @@ export async function getShareableReport(
   reportId: string,
   workspaceId: string
 ): Promise<ShareableReport | null> {
-  const report = await prisma.report.findFirst({
-    where: { id: reportId, workspaceId, deletedAt: null },
-  })
-
-  if (!report) return null
-
-  let scanSummary: ShareableReport["scanSummary"] =
-    getSnapshotScanSummary(report.contentJson) ?? null
-
-  if (report.scanId && !scanSummary) {
-    // Scope the scan lookup to the report's workspace. This is the public share
-    // path (no request-scoped workspace context is set), so we must NOT rely on
-    // the Prisma extension's implicit read-scoping — filter explicitly. (S4)
-    // Only these three fields are used below: the finding count comes from the
-    // groupBy (not from a `_count` subquery), and the target name is deliberately
-    // replaced with "Private target" on this public path — so neither relation is
-    // fetched.
-    const scan = await prisma.scan.findFirst({
-      where: { id: report.scanId, workspaceId, deletedAt: null },
-      select: { id: true, status: true, summary: true },
+  // Public share path: no request-scoped workspace context is set, so the Prisma
+  // extension does not inject RLS context on its own. "Report", "Scan" and
+  // "Finding" are all under FORCE ROW LEVEL SECURITY, which makes the database
+  // policy the real isolation boundary — the explicit workspaceId predicates
+  // below are defence-in-depth, not a substitute. Wrapping the whole read
+  // sequence keeps `SET LOCAL` and every query on one connection. (S4)
+  const result = await withWorkspaceRLS(workspaceId, async (tx) => {
+    const report = await tx.report.findFirst({
+      where: { id: reportId, workspaceId, deletedAt: null },
     })
 
-    if (scan) {
-      const severityGroups = await prisma.finding.groupBy({
-        by: ["severity"],
-        where: { scanId: scan.id, workspaceId, deletedAt: null },
-        _count: { _all: true },
+    if (!report) return null
+
+    let scanSummary: ShareableReport["scanSummary"] =
+      getSnapshotScanSummary(report.contentJson) ?? null
+
+    if (report.scanId && !scanSummary) {
+      // Only these three fields are used below: the finding count comes from the
+      // groupBy (not from a `_count` subquery), and the target name is
+      // deliberately replaced with "Private target" on this public path — so
+      // neither relation is fetched.
+      const scan = await tx.scan.findFirst({
+        where: { id: report.scanId, workspaceId, deletedAt: null },
+        select: { id: true, status: true, summary: true },
       })
 
-      const bySeverity: Record<string, number> = {}
-      let findingsCount = 0
-      for (const g of severityGroups) {
-        bySeverity[g.severity] = g._count._all
-        findingsCount += g._count._all
-      }
+      if (scan) {
+        const severityGroups = await tx.finding.groupBy({
+          by: ["severity"],
+          where: { scanId: scan.id, workspaceId, deletedAt: null },
+          _count: { _all: true },
+        })
 
-      scanSummary = {
-        scanId: scan.id,
-        status: scan.status,
-        summary: scan.summary,
-        targetName: "Private target",
-        findingsCount,
-        findingsBySeverity: bySeverity,
+        const bySeverity: Record<string, number> = {}
+        let findingsCount = 0
+        for (const g of severityGroups) {
+          bySeverity[g.severity] = g._count._all
+          findingsCount += g._count._all
+        }
+
+        scanSummary = {
+          scanId: scan.id,
+          status: scan.status,
+          summary: scan.summary,
+          targetName: "Private target",
+          findingsCount,
+          findingsBySeverity: bySeverity,
+        }
       }
     }
-  }
+
+    return { report, scanSummary }
+  })
+
+  if (!result) return null
+  const { report, scanSummary } = result
 
   return {
     id: report.id,
@@ -336,13 +347,17 @@ export async function listReports(
 }> {
   const lim = Math.min(Math.max(limit ?? 50, 1), 100)
 
-  const reports = await prisma.report.findMany({
-    where: { workspaceId, deletedAt: null },
-    orderBy: { createdAt: "desc" },
-    take: lim + 1,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    select: REPORT_LIST_SELECT,
-  })
+  // "Report" is under FORCE ROW LEVEL SECURITY, so the transaction-local context
+  // is the isolation boundary — the workspaceId predicate alone is not.
+  const reports = await withWorkspaceRLS(workspaceId, (tx) =>
+    tx.report.findMany({
+      where: { workspaceId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: lim + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: REPORT_LIST_SELECT,
+    })
+  )
 
   const hasMore = reports.length > lim
   const items = hasMore ? reports.slice(0, lim) : reports

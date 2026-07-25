@@ -176,6 +176,21 @@ describe("getScanWithEvents", () => {
 describe("listScans", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // listScans runs inside withWorkspaceRLS, so the transaction must be driven
+    // for the query to execute at all.
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+    mockPrisma.$executeRaw.mockResolvedValue(1)
+  })
+
+  it("runs the query inside a workspace-RLS transaction", async () => {
+    mockPrisma.scan.findMany.mockResolvedValue([])
+
+    await listScans({ workspaceId: "ws-1" })
+
+    // "Scan" is under FORCE ROW LEVEL SECURITY: the workspaceId predicate alone
+    // is not the isolation boundary, the transaction-local context is.
+    expect(mockPrisma.$transaction).toHaveBeenCalled()
+    expect(mockPrisma.$executeRaw).toHaveBeenCalled()
   })
 
   it("selects a narrow list projection and flattens findingCount", async () => {

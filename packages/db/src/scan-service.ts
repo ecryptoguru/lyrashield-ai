@@ -325,13 +325,19 @@ export async function listScans(params: ListScansParams): Promise<{
     ...statusFilter,
   }
 
-  const scans = await prisma.scan.findMany({
-    where,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit + 1,
-    ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
-    select: SCAN_LIST_SELECT,
-  })
+  // Run inside withWorkspaceRLS so `SET LOCAL app.current_workspace_id` and the
+  // query share one connection. The workspaceId predicate above is not a
+  // substitute: "Scan" is under FORCE ROW LEVEL SECURITY, so the database policy
+  // is the actual isolation boundary and it needs the transaction-local context.
+  const scans = await withWorkspaceRLS(params.workspaceId, (tx) =>
+    tx.scan.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+      select: SCAN_LIST_SELECT,
+    })
+  )
 
   const hasMore = scans.length > limit
   const page = hasMore ? scans.slice(0, limit) : scans

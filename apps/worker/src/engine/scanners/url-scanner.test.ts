@@ -371,7 +371,14 @@ describe("scanUrl", () => {
       text: async () => "",
     })
 
-    const findings = await scanUrl({ targetUrl: "https://example.com", fetchFn: mockFetch })
+    // resolver is required like every other case in this file: without it the
+    // initial host resolution hits real DNS, so the scan aborts before fetching
+    // and this assertion fails for an unrelated reason in offline environments.
+    const findings = await scanUrl({
+      targetUrl: "https://example.com",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
 
     expect(findings).toHaveLength(0)
     expect(mockFetch).toHaveBeenCalledTimes(1)

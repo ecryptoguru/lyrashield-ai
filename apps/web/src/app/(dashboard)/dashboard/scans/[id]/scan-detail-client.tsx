@@ -225,15 +225,17 @@ export function ScanDetailClient({
     const prevStatus = prevStatusRef.current
     prevStatusRef.current = scan.status
     if (!isActiveScan(prevStatus) || isActiveScan(scan.status)) return
-    const count = currentFindings.length
     setCompletionNotice({
       status: scan.status,
       message:
         scan.status === "COMPLETED"
-          ? `Scan completed — ${count} finding${count === 1 ? "" : "s"} found`
+          ? // Deliberately no count: the terminal fetch is capped at one page, so
+            // a scan with more findings than that would be announced with the
+            // page size as if it were the total.
+            "Scan completed — findings are ready to review"
           : getScanPresentation(scan.status).headline,
     })
-  }, [scan.status, currentFindings.length])
+  }, [scan.status])
 
   // Auto-dismiss the completion banner after 6s; the outcome stays visible in
   // the status badge and stat grid.
@@ -408,8 +410,10 @@ export function ScanDetailClient({
 
   return (
     <div>
-      {/* Always rendered so screen readers announce the scan-completion message
-          the moment polling flips the status to a terminal state. */}
+      {/* Sole announcer for the scan-completion message. Always mounted, because
+          a live region inserted at the same moment as its content is announced
+          unreliably. The visible banner below is therefore presentational only —
+          giving it live semantics too would double-announce. */}
       <div aria-live="assertive" aria-atomic="true" className="sr-only">
         {completionNotice?.message}
       </div>
@@ -465,8 +469,10 @@ export function ScanDetailClient({
       {!isActive && (
         <>
           {completionNotice && (
+            // Presentational only — the always-mounted sr-only live region above
+            // owns the announcement, so no role="status" here (that would make
+            // screen readers read the completion twice).
             <div
-              role="status"
               className={`mb-6 flex items-center gap-2 rounded-md border p-3 text-sm ${
                 completionNotice.status === "COMPLETED"
                   ? "border-primary/30 bg-primary/5"

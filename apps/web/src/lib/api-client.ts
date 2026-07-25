@@ -96,6 +96,16 @@ export async function apiGetConditional<T>(
     controller.abort()
   }, options.timeout ?? DEFAULT_TIMEOUT_MS)
 
+  // This function owns `signal` (it needs its own for the timeout), so the
+  // caller's signal must be forwarded explicitly — otherwise it is silently
+  // dropped by the spread below and a polling effect's cleanup cannot cancel an
+  // in-flight request, which then runs until the timeout fires.
+  const onCallerAbort = () => controller.abort()
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort()
+    else options.signal.addEventListener("abort", onCallerAbort, { once: true })
+  }
+
   const headers = new Headers(options.headers)
   if (options.etag) {
     headers.set("If-None-Match", options.etag)
@@ -142,6 +152,7 @@ export async function apiGetConditional<T>(
     throw new ApiError("NETWORK_ERROR", "Network request failed", 0)
   } finally {
     clearTimeout(timeoutId)
+    options.signal?.removeEventListener("abort", onCallerAbort)
   }
 }
 

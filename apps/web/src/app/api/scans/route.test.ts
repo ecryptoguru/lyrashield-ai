@@ -340,6 +340,42 @@ describe("GET /api/scans", () => {
     expect(second.headers.get("ETag")).toBe(etag)
   })
 
+  it("changes the ETag when any rendered field changes, not just status", async () => {
+    // The ETag hashes the whole representation. A summary or error message can
+    // change while status/counts stay put; a partial hash would serve a 304 and
+    // freeze stale text on screen.
+    vi.mocked(listScans).mockResolvedValue({
+      items: [scanListItem("scan-1")],
+      nextCursor: null,
+    } as never)
+    const first = await GET(makeGetRequest({ workspaceId: "ws-1" }))
+    const firstEtag = first.headers.get("ETag")
+
+    vi.mocked(listScans).mockResolvedValue({
+      items: [{ ...scanListItem("scan-1"), summary: "now has a summary" }],
+      nextCursor: null,
+    } as never)
+    const second = await GET(makeGetRequest({ workspaceId: "ws-1" }))
+
+    expect(second.headers.get("ETag")).not.toBe(firstEtag)
+  })
+
+  it("changes the ETag when only nextCursor changes", async () => {
+    vi.mocked(listScans).mockResolvedValue({
+      items: [scanListItem("scan-1")],
+      nextCursor: null,
+    } as never)
+    const firstEtag = (await GET(makeGetRequest({ workspaceId: "ws-1" }))).headers.get("ETag")
+
+    vi.mocked(listScans).mockResolvedValue({
+      items: [scanListItem("scan-1")],
+      nextCursor: "scan-1",
+    } as never)
+    const secondEtag = (await GET(makeGetRequest({ workspaceId: "ws-1" }))).headers.get("ETag")
+
+    expect(secondEtag).not.toBe(firstEtag)
+  })
+
   it("passes targetId and status filters to listScans", async () => {
     vi.mocked(listScans).mockResolvedValue({ items: [], nextCursor: null } as never)
 
