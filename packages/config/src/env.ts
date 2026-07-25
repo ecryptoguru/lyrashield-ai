@@ -78,6 +78,8 @@ const envSchema = z
     LLM_API_KEY: z.string().optional().or(z.literal("")),
     LLM_API_BASE: z.string().optional().or(z.literal("")),
     LLM_API_VERSION: z.string().optional().or(z.literal("")),
+    LYRASHIELD_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
+    LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_RUNTIME_BACKEND: z.enum(["docker"]).optional().or(z.literal("")),

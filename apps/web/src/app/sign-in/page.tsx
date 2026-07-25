@@ -192,7 +192,7 @@ export default function SignInPage() {
             <div className="gradient-primary shadow-primary-glow mb-3 flex h-12 w-12 items-center justify-center rounded-xl">
               <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">Check your email</h1>
+            <h2 className="text-2xl font-bold tracking-tight">Check your email</h2>
           </div>
 
           <div className="bg-card rounded-xl border p-6 text-center shadow-lg sm:p-8">

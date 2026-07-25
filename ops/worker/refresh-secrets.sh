@@ -11,6 +11,16 @@ azure_config_dir="${AZURE_CONFIG_DIR:-/var/lib/lyrashield-azure}"
 mkdir -p "$environment_dir" "$azure_config_dir"
 chmod 700 "$environment_dir" "$azure_config_dir"
 
+runtime_config="${LYRASHIELD_WORKER_RUNTIME_CONFIG:-/etc/lyrashield/worker-runtime.conf}"
+if [ ! -r "$runtime_config" ]; then
+  echo "Worker runtime configuration is unavailable: $runtime_config" >&2
+  exit 1
+fi
+set -a
+# shellcheck disable=SC1090
+. "$runtime_config"
+set +a
+
 export AZURE_CONFIG_DIR="$azure_config_dir"
 az login --identity --allow-no-subscriptions --output none >/dev/null
 
@@ -55,6 +65,17 @@ write_secret S3_ENDPOINT worker-r2-endpoint
 write_secret S3_BUCKET worker-r2-bucket
 write_secret S3_ACCESS_KEY worker-r2-access-key
 write_secret S3_SECRET_KEY worker-r2-secret-key
+
+uses_ghcr=false
+for image in "${LYRASHIELD_WORKER_IMAGE:-}" "${LYRASHIELD_SANDBOX_IMAGE:-}"; do
+  case "$image" in
+    ghcr.io/*) uses_ghcr=true ;;
+  esac
+done
+if [ "$uses_ghcr" = true ]; then
+  write_secret GHCR_TOKEN ghcr-token
+fi
+
 printf '%s\n' 'S3_REGION=auto' >>"$temporary_file"
 
 chmod 600 "$temporary_file"

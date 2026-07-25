@@ -82,6 +82,7 @@ export {
   type CreateScanParams,
   type ScanWithEvents,
   type ListScansParams,
+  type ScanListItem,
 } from "./scan-service"
 export { isValidTransition, VALID_TRANSITIONS } from "./scan-transitions"
 export {
@@ -118,6 +119,7 @@ export {
   listReports,
   type CreateReportParams,
   type ShareableReport,
+  type ReportListItem,
 } from "./report-service"
 export {
   createFixProposal,

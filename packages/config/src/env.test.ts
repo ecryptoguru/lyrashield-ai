@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { describe, it, expect } from "vitest"
 import { z } from "zod"
 
 // Test the Zod schema directly without importing the module
@@ -24,6 +24,8 @@ const envSchema = z
     LYRASHIELD_LUNA_LLM: z.string().optional().or(z.literal("")),
     LYRASHIELD_TERRA_LLM: z.string().optional().or(z.literal("")),
     LLM_API_KEY: z.string().optional().or(z.literal("")),
+    LYRASHIELD_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
+    LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
@@ -111,6 +113,7 @@ describe("Env Validation Schema", () => {
   describe("missing required fields", () => {
     it("should fail when DATABASE_URL is missing", () => {
       const { DATABASE_URL, ...rest } = validEnv
+      void DATABASE_URL
       const result = envSchema.safeParse(rest)
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -120,6 +123,7 @@ describe("Env Validation Schema", () => {
 
     it("should fail when BETTER_AUTH_SECRET is missing", () => {
       const { BETTER_AUTH_SECRET, ...rest } = validEnv
+      void BETTER_AUTH_SECRET
       const result = envSchema.safeParse(rest)
       expect(result.success).toBe(false)
       if (!result.success) {
@@ -129,12 +133,14 @@ describe("Env Validation Schema", () => {
 
     it("should fail when BETTER_AUTH_URL is missing", () => {
       const { BETTER_AUTH_URL, ...rest } = validEnv
+      void BETTER_AUTH_URL
       const result = envSchema.safeParse(rest)
       expect(result.success).toBe(false)
     })
 
     it("should fail when NEXT_PUBLIC_APP_URL is missing", () => {
       const { NEXT_PUBLIC_APP_URL, ...rest } = validEnv
+      void NEXT_PUBLIC_APP_URL
       const result = envSchema.safeParse(rest)
       expect(result.success).toBe(false)
     })

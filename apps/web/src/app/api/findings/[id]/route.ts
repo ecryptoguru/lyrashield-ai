@@ -23,6 +23,7 @@ const PatchFindingSchema = z.object({
   workspaceId: z.string().min(1),
   action: z.enum(["false_positive", "accept_risk", "update_status"]),
   status: z.enum(VALID_STATUSES).optional(),
+  reason: z.string().max(1000).optional(),
 })
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -91,9 +92,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }
 
+    const reason = parsed.data.reason
+
     switch (action) {
       case "false_positive": {
-        const updated = await markFalsePositive(id, workspaceId)
+        const updated = await markFalsePositive(id, workspaceId, reason)
         await prisma.auditLog.create({
           data: {
             workspaceId,
@@ -106,7 +109,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return apiSuccess({ id: updated.id, status: updated.status })
       }
       case "accept_risk": {
-        const updated = await acceptRisk(id, workspaceId)
+        const updated = await acceptRisk(id, workspaceId, reason)
         await prisma.auditLog.create({
           data: {
             workspaceId,
@@ -123,7 +126,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (!status) {
           return apiError("MISSING_PARAM", "status is required for update_status action", 400)
         }
-        const updated = await updateFindingStatus(id, workspaceId, status)
+        const updated = await updateFindingStatus(id, workspaceId, status, reason)
         await prisma.auditLog.create({
           data: {
             workspaceId,

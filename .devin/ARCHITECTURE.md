@@ -332,9 +332,9 @@ For details, see [scripts/README.md](scripts/README.md)
 
 | Metric               | Value                             |
 | -------------------- | --------------------------------- |
-| **Total Agents**     | 26                                |
+| **Total Agents**     | 27                                |
 | **Total Skills**     | 69                                |
-| **Total Workflows**  | 16                                |
+| **Total Workflows**  | 17                                |
 | **Total Scripts**    | 2 (master) + skill-level          |
 | **Coverage**         | ~95% web/mobile + orchestration   |
 | **Token Efficiency** | 13-33% better than v2 (2026.5.13) |

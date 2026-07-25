@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import {
   Rocket,
   ShieldCheck,
@@ -109,8 +109,9 @@ export function LaunchReadinessClient({
   const [error, setError] = useState<string | null>(null)
 
   const loadReport = useCallback(
-    (signal?: AbortSignal) => {
-      setLoading(true)
+    (signal?: AbortSignal, options?: { silent?: boolean }) => {
+      const silent = options?.silent === true
+      if (!silent) setLoading(true)
       apiGet<LaunchReadinessReport>(
         `/api/launch-readiness?workspaceId=${encodeURIComponent(workspaceId)}`,
         signal ? { signal } : undefined
@@ -120,12 +121,28 @@ export function LaunchReadinessClient({
           setError(null)
         })
         .catch(() => {
-          setError("Failed to load launch readiness report. Please try again.")
+          // A silent background refresh must not replace a perfectly good report
+          // with an error screen; the explicit Refresh action still surfaces it.
+          if (!silent) setError("Failed to load launch readiness report. Please try again.")
         })
-        .finally(() => setLoading(false))
+        .finally(() => {
+          if (!silent) setLoading(false)
+        })
     },
     [workspaceId]
   )
+
+  // This page does not poll (readiness only moves when a scan finishes), so it
+  // can otherwise show an SSR snapshot indefinitely. Revalidate quietly when the
+  // tab regains focus — the API's 30s max-age/stale-while-revalidate makes this
+  // cheap, and `silent` keeps the current report on screen while it refreshes.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (!document.hidden) loadReport(undefined, { silent: true })
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => document.removeEventListener("visibilitychange", onVisibility)
+  }, [loadReport])
 
   if (loading) {
     return (

@@ -13,6 +13,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const parsed = Body.safeParse(await request.json())
     if (!parsed.success) return apiError("INVALID_PARAM", "workspaceId is required", 400)
     const { session, workspace } = await requireWorkspaceAccess(parsed.data.workspaceId)
+    if (session.apiKey && !session.apiKey.scopes.includes("write")) {
+      throw new Error("FORBIDDEN")
+    }
     if (!PUBLISHERS.has(workspace.role)) throw new Error("FORBIDDEN")
     const { id } = await params
     const share = await revokeScorecardShare(id, parsed.data.workspaceId, session.userId)

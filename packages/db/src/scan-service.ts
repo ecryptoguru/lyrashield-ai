@@ -24,7 +24,13 @@ export interface CreateScanParams {
 
 export interface ScanWithEvents extends Scan {
   events: ScanEvent[]
-  resultManifest: ScanResultManifest | null
+  /**
+   * Checksum only. The manifest's `manifest` Json column can reach tens of KB,
+   * and this shape is returned on every scan-detail poll, so fetching the whole
+   * row would pull that blob out of Postgres every few seconds for a field no
+   * consumer reads — every caller uses `checksum` alone.
+   */
+  resultManifest: Pick<ScanResultManifest, "checksum"> | null
   coverageReceipts: ScanCoverageReceipt[]
   target: {
     id: string
@@ -201,7 +207,7 @@ export async function getScanWithEvents(
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 200,
         },
-        resultManifest: true,
+        resultManifest: { select: { checksum: true } },
         coverageReceipts: {
           orderBy: { controlId: "asc" },
         },
@@ -246,8 +252,63 @@ export interface ListScansParams {
   limit?: number
 }
 
+/**
+ * List-view projection for a scan row.
+ *
+ * Deliberately narrow: the Scan model carries ~10 further columns (LLM token
+ * counters, provider/billed cost, risk scores, sarifUri, policyId) that no list
+ * surface renders. This list is fetched on every scans-page load and on every
+ * active-scan poll tick, so those columns would be read and serialized
+ * continuously for nothing.
+ */
+export const SCAN_LIST_SELECT = {
+  id: true,
+  status: true,
+  goal: true,
+  mode: true,
+  triggerType: true,
+  startedAt: true,
+  endedAt: true,
+  summary: true,
+  errorCategory: true,
+  errorMessage: true,
+  createdAt: true,
+  target: { select: { id: true, name: true, type: true, url: true, repoFullName: true } },
+  _count: { select: { findings: { where: { deletedAt: null } } } },
+} as const
+
+export interface ScanListItem {
+  id: string
+  status: string
+  goal: string
+  mode: string
+  triggerType: string
+  startedAt: Date | null
+  endedAt: Date | null
+  summary: string | null
+  errorCategory: string | null
+  errorMessage: string | null
+  createdAt: Date
+  findingCount: number
+  target: {
+    id: string
+    name: string
+    type: string
+    url: string | null
+    repoFullName: string | null
+  } | null
+}
+
+/** Flatten Prisma's `_count` into the `findingCount` the list surfaces render. */
+export function toScanListItem(
+  scan: Omit<ScanListItem, "findingCount"> & { _count?: { findings: number } | null }
+): ScanListItem {
+  const { _count, ...rest } = scan
+  return { ...rest, findingCount: _count?.findings ?? 0 }
+}
+
 export async function listScans(params: ListScansParams): Promise<{
-  items: Scan[]
+  items: ScanListItem[]
   nextCursor: string | null
 }> {
   const limit = Math.min(Math.max(params.limit ?? 50, 1), 100)
@@ -264,19 +325,23 @@ export async function listScans(params: ListScansParams): Promise<{
     ...statusFilter,
   }
 
-  const scans = await prisma.scan.findMany({
-    where,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit + 1,
-    ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
-    include: {
-      target: { select: { id: true, name: true, type: true, url: true, repoFullName: true } },
-      _count: { select: { findings: { where: { deletedAt: null } } } },
-    },
-  })
+  // Run inside withWorkspaceRLS so `SET LOCAL app.current_workspace_id` and the
+  // query share one connection. The workspaceId predicate above is not a
+  // substitute: "Scan" is under FORCE ROW LEVEL SECURITY, so the database policy
+  // is the actual isolation boundary and it needs the transaction-local context.
+  const scans = await withWorkspaceRLS(params.workspaceId, (tx) =>
+    tx.scan.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+      select: SCAN_LIST_SELECT,
+    })
+  )
 
   const hasMore = scans.length > limit
-  const items = hasMore ? scans.slice(0, limit) : scans
+  const page = hasMore ? scans.slice(0, limit) : scans
+  const items = page.map(toScanListItem)
   const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
   return { items, nextCursor }
@@ -285,6 +350,7 @@ export async function listScans(params: ListScansParams): Promise<{
 export async function cancelScan(scanId: string, workspaceId: string): Promise<Scan> {
   const scan = await prisma.scan.findFirst({
     where: { id: scanId, workspaceId, deletedAt: null },
+    select: { status: true },
   })
   if (!scan) throw new Error(`Scan not found: ${scanId}`)
 

@@ -25,6 +25,7 @@ import {
 } from "../engine/runner"
 import { resolveScanBudgetUsd, type TargetType } from "../engine/command-builder"
 import {
+  calculateGpt56CostUsd,
   calculateGpt56CostUsdFromBuckets,
   calculateGpt56CostUsdFromModelBuckets,
   GPT_56_PRICING_EFFECTIVE_DATE,
@@ -74,6 +75,7 @@ type UsageSummary = {
     longOutputTokens: number | null
   } | null
   modelPricingBuckets: Gpt56ModelUsageBuckets[] | null
+  singleModel: string | null
   engineReportedCostUsd: number | null
 }
 
@@ -124,6 +126,13 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
     longCacheWriteInputTokens: usageCount(usage, "long_cache_write_input_tokens"),
     longOutputTokens: usageCount(usage, "long_output_tokens"),
   }
+  const modelPricingBuckets = extractModelPricingBuckets(usage)
+  const bucketModels = modelPricingBuckets
+    ? [...new Set(modelPricingBuckets.map((b) => b.model))]
+    : []
+  const rootModel = typeof usage["model"] === "string" ? (usage["model"] as string) : null
+  const singleModel = bucketModels.length === 1 ? bucketModels[0]! : rootModel
+
   return {
     requestCount: usageCount(usage, "request_count"),
     inputTokens: usageCount(usage, "input_tokens"),
@@ -133,7 +142,8 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
     pricingBuckets: Object.values(pricingBuckets).every((value) => value !== null)
       ? pricingBuckets
       : null,
-    modelPricingBuckets: extractModelPricingBuckets(usage),
+    modelPricingBuckets,
+    singleModel,
     engineReportedCostUsd: extractActualCostUsd(usage),
   }
 }
@@ -167,9 +177,7 @@ function resolveScannerPhaseTimeoutMs(engineTimeoutMs: number, globalScanBudgetM
 
 function requireEngineModel(model: string | undefined): string {
   if (!model) {
-    throw new Error(
-      "A GPT-5.6 Sol, Terra, or Luna deployment must be configured for repository scans"
-    )
+    throw new Error("A GPT-5.6 Terra or Luna deployment must be configured for repository scans")
   }
   return model
 }
@@ -189,7 +197,6 @@ function isTimeoutError(error: unknown): boolean {
 
 export async function persistEngineUsageCheckpoint(params: {
   scanId: string
-  model: string
   maxBudgetUsd: number
   llmUsage?: Record<string, unknown>
   usageExpected: boolean
@@ -199,7 +206,7 @@ export async function persistEngineUsageCheckpoint(params: {
   costReconciled: boolean
   reconciliationReason?: string
 }> {
-  const { scanId, model, maxBudgetUsd, llmUsage, usageExpected } = params
+  const { scanId, maxBudgetUsd, llmUsage, usageExpected } = params
   if (!llmUsage) {
     if (usageExpected) {
       try {
@@ -227,13 +234,45 @@ export async function persistEngineUsageCheckpoint(params: {
   }
 
   const usage = extractUsageSummary(llmUsage)
-  // Aggregate totals cannot prove whether an individual request crossed the
-  // long-context boundary. Only complete per-request buckets are priceable.
-  const rateCardCostUsd = usage.modelPricingBuckets
-    ? calculateGpt56CostUsdFromModelBuckets(usage.modelPricingBuckets)
-    : usage.pricingBuckets
-      ? calculateGpt56CostUsdFromBuckets(model, usage.pricingBuckets)
+  // Per-request buckets are the only way to price mixed-context scans
+  // accurately. When they are unavailable, fall back to aggregate counters
+  // only if the usage payload names a single model, so we do not misprice a
+  // Terra/Luna mix at the configured model rate.
+  const aggregateCostUsd =
+    usage.inputTokens !== null &&
+    usage.cachedInputTokens !== null &&
+    usage.outputTokens !== null &&
+    usage.singleModel
+      ? calculateGpt56CostUsd(usage.singleModel, {
+          inputTokens: usage.inputTokens,
+          cachedInputTokens: usage.cachedInputTokens,
+          cacheWriteInputTokens: usage.cacheWriteInputTokens,
+          outputTokens: usage.outputTokens,
+        })
       : null
+
+  let pricingMethod: string
+  let modelMixUnpriceable = false
+  let rateCardCostUsd: number | null = null
+
+  if (usage.modelPricingBuckets) {
+    rateCardCostUsd = calculateGpt56CostUsdFromModelBuckets(usage.modelPricingBuckets)
+    pricingMethod = "per_request_model_buckets"
+  } else if (usage.pricingBuckets) {
+    if (usage.singleModel) {
+      rateCardCostUsd = calculateGpt56CostUsdFromBuckets(usage.singleModel, usage.pricingBuckets)
+      pricingMethod = "per_request_buckets"
+    } else {
+      modelMixUnpriceable = true
+      pricingMethod = "model_mix_unpriceable"
+    }
+  } else if (aggregateCostUsd !== null) {
+    rateCardCostUsd = aggregateCostUsd
+    pricingMethod = "aggregate_tokens"
+  } else {
+    pricingMethod = "unavailable"
+  }
+
   const costsMatch =
     rateCardCostUsd !== null &&
     (usage.engineReportedCostUsd === null ||
@@ -252,8 +291,9 @@ export async function persistEngineUsageCheckpoint(params: {
         : usage.engineReportedCostUsd !== null
           ? "engine_reported_unreconciled"
           : "unavailable"
-  const reconciliationStatus =
-    rateCardCostUsd === null
+  const reconciliationStatus = modelMixUnpriceable
+    ? "model_mix_unpriceable"
+    : rateCardCostUsd === null
       ? "unavailable"
       : usage.engineReportedCostUsd === null
         ? "rate_card_only"
@@ -265,11 +305,7 @@ export async function persistEngineUsageCheckpoint(params: {
     await addScanEvent(scanId, "llm_usage", "info", "AI usage counters recorded", {
       ...usage,
       calculatedCostUsd: rateCardCostUsd,
-      pricingMethod: usage.modelPricingBuckets
-        ? "per_request_model_buckets"
-        : usage.pricingBuckets
-          ? "per_request_buckets"
-          : "unavailable",
+      pricingMethod,
       billedCostUsd,
       costSource,
       reconciliationStatus,
@@ -441,6 +477,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // 2. Fetch target details for the engine
       const target = await prisma.target.findFirst({
         where: { id: targetId, deletedAt: null },
+        select: { id: true, type: true, name: true, url: true, repoFullName: true, branch: true },
       })
 
       if (!target) {
@@ -545,7 +582,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // avoid a DB query every second per active scan. A cancel is still
       // detected within CANCEL_CACHE_MS; correctness only requires timely
       // detection, not instantaneous.
-      const CANCEL_CACHE_MS = 3000
+      const CANCEL_CACHE_MS = 2000
       let cancelCacheAt = 0
       let cancelCacheValue = false
       const isScanCancelled = async (): Promise<boolean> => {
@@ -638,7 +675,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // fail, so provider spend is never lost behind a downstream error.
       const { budgetExceeded, billedCostUsd } = await persistEngineUsageCheckpoint({
         scanId,
-        model: engineModel ?? "",
         maxBudgetUsd,
         llmUsage: engineResult.output.runRecord?.llm_usage,
         usageExpected: target.type === "REPO",
@@ -821,6 +857,20 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           scanId,
           error: eventErr instanceof Error ? eventErr.message : String(eventErr),
         })
+      }
+
+      // A cancel may have arrived while the engine/scanners were finishing.
+      // Finalize as CANCELLED without persisting findings or retests.
+      if (await isScanCancelled()) {
+        await updateScanStatus(scanId, "CANCELLED" as ScanStatus, {
+          errorCategory: "CANCELLED",
+          errorMessage: "Scan cancelled by user",
+        })
+        return {
+          status: "failed",
+          errorCategory: "CANCELLED",
+          errorMessage: "Scan cancelled by user",
+        }
       }
 
       // 5. Persist normalized findings

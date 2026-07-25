@@ -81,6 +81,14 @@ LYRASHIELD_ENGINE_SANDBOX_NETWORK="lyrashield-sandbox"
 PLATFORM_MAX_SCAN_BUDGET_USD="50"
 LYRASHIELD_TELEMETRY="0"
 LYRASHIELD_WORKER_CONCURRENCY="1"
+# Optional per-request engine limits; leave unset for engine defaults.
+# MAX_OUTPUT_TOKENS caps tokens generated per request (replaces the engine's
+# per-scan-mode default; also tightens the budget reservation). MAX_INPUT_TOKENS
+# is the compaction ceiling, not a hard reject -- crossing it compacts history
+# instead of failing the scan, and the engine clamps values above the 272k
+# long-context boundary. Requires an engine build with cap enforcement.
+# LYRASHIELD_MAX_OUTPUT_TOKENS="4096"
+# LYRASHIELD_MAX_INPUT_TOKENS="200000"
 
 # Azure OpenAI alternative (use these OR the generic LLM_API_KEY/LLM_API_BASE)
 # LYRASHIELD_LLM="azure/gpt-5.6-terra" # fallback
@@ -122,7 +130,6 @@ The worker permanently versions the official OpenAI GPT-5.6 rate card in `apps/w
 
 | Model         | Input | Cached input read | Cache write | Output |
 | ------------- | ----: | ----------------: | ----------: | -----: |
-| GPT-5.6 Sol   | $5.00 |             $0.50 |       $6.25 | $30.00 |
 | GPT-5.6 Terra | $2.50 |             $0.25 |      $3.125 | $15.00 |
 | GPT-5.6 Luna  | $1.00 |             $0.10 |       $1.25 |  $6.00 |
 
@@ -138,7 +145,7 @@ A durable scan event is recorded immediately before a repository scan enters the
 
 Safe/Quick/Standard are Luna-only. Deep/Custom use a deterministic two-tier invocation: Terra/medium is the root coordinator and Luna/medium handles child specialist work. The model cannot self-promote a child to Terra, and only the root can create or stop specialists.
 
-Engine PRs #6 and #7 are merged. The promoted engine compacts estimated input at 240k toward 180k, bounds direct dedupe input to 200 kB, limits output and agent concurrency, and reserves projected spend before each request. These controls do not replace provider-meter reconciliation or prove finding quality.
+Engine PRs #6, #7, and #20 are merged. The promoted engine compacts estimated input at 240k toward 180k, bounds direct dedupe input to 200 kB, limits output and agent concurrency, reserves projected spend before each request, and accounts for provider-reported cache-read tokens with dict/object usage extraction. These controls do not replace provider-meter reconciliation or prove finding quality.
 
 Add GitHub OAuth/App, email, notification, billing, and analytics variables only when those integrations are enabled. R2/S3 is mandatory before controlled full scans, and monitoring is mandatory before general availability. Use `.env.example` as the complete variable index, not as a production secret file.
 
@@ -157,7 +164,7 @@ git diff --check
 
 Then, in the target environment:
 
-1. Deploy all 21 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, `20260716151000_scorecard_share_active_snapshot_unique`, and `20260718110000_scan_cost_ledger`; run the migration-diff gate against a fresh shadow database.
+1. Deploy all 26 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, `20260716151000_scorecard_share_active_snapshot_unique`, `20260718110000_scan_cost_ledger`, and `20260725132208_add_finding_status_reason`; run the migration-diff gate against a fresh shadow database.
 2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. The scan-specific endpoint must become `503` within 30 seconds of stopping every worker and recover only after a BullMQ-ready worker registers its lease.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.

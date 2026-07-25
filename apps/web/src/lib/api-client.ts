@@ -79,6 +79,83 @@ export async function apiGet<T>(url: string, options?: FetchOptions): Promise<T>
   return request<T>(url, { ...options, method: "GET" })
 }
 
+interface ConditionalResponse<T> {
+  data: T | null
+  etag: string | undefined
+  status: number
+}
+
+export async function apiGetConditional<T>(
+  url: string,
+  options: FetchOptions & { etag?: string } = {}
+): Promise<ConditionalResponse<T>> {
+  const controller = new AbortController()
+  let timedOut = false
+  const timeoutId = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, options.timeout ?? DEFAULT_TIMEOUT_MS)
+
+  // This function owns `signal` (it needs its own for the timeout), so the
+  // caller's signal must be forwarded explicitly — otherwise it is silently
+  // dropped by the spread below and a polling effect's cleanup cannot cancel an
+  // in-flight request, which then runs until the timeout fires.
+  const onCallerAbort = () => controller.abort()
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort()
+    else options.signal.addEventListener("abort", onCallerAbort, { once: true })
+  }
+
+  const headers = new Headers(options.headers)
+  if (options.etag) {
+    headers.set("If-None-Match", options.etag)
+  }
+
+  try {
+    const res = await fetch(url, {
+      ...options,
+      method: "GET",
+      headers,
+      signal: controller.signal,
+    })
+
+    const etag = res.headers.get("ETag") ?? undefined
+
+    if (res.status === 304) {
+      return { data: null, etag, status: 304 }
+    }
+
+    if (!res.ok) {
+      throw new ApiError("HTTP_ERROR", `Request failed with status ${res.status}`, res.status)
+    }
+
+    const json = (await res.json()) as ApiResponse<T>
+    if (!json.success) {
+      throw new ApiError(
+        json.error?.code ?? "UNKNOWN_ERROR",
+        json.error?.message ?? "An unknown error occurred",
+        res.status
+      )
+    }
+
+    return { data: json.data as T, etag, status: res.status }
+  } catch (err) {
+    if (typeof err === "object" && err !== null && "name" in err && err.name === "AbortError") {
+      if (!timedOut) throw new ApiError("ABORTED", "Request was cancelled", 0)
+      throw new ApiError(
+        "TIMEOUT",
+        `Request timed out after ${options.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
+        0
+      )
+    }
+    if (err instanceof ApiError) throw err
+    throw new ApiError("NETWORK_ERROR", "Network request failed", 0)
+  } finally {
+    clearTimeout(timeoutId)
+    options.signal?.removeEventListener("abort", onCallerAbort)
+  }
+}
+
 export async function apiPost<T>(url: string, body?: unknown, options?: FetchOptions): Promise<T> {
   return request<T>(url, {
     ...options,
@@ -121,4 +198,27 @@ export async function apiGetPaginated<T>(
   const fullUrl = searchParams.toString() ? `${url}?${searchParams}` : url
 
   return request<PaginatedResponse<T>>(fullUrl, { ...options, method: "GET" })
+}
+
+/**
+ * Paginated GET with ETag revalidation. Used by polling surfaces: pass the ETag
+ * from the previous tick and a 304 comes back with `data: null`, so an unchanged
+ * list costs no response body and no JSON parse.
+ */
+export async function apiGetPaginatedConditional<T>(
+  url: string,
+  params?: Record<string, string | undefined>,
+  options: FetchOptions & { etag?: string } = {}
+): Promise<ConditionalResponse<PaginatedResponse<T>>> {
+  const searchParams = new URLSearchParams()
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) {
+        searchParams.set(key, value)
+      }
+    }
+  }
+  const fullUrl = searchParams.toString() ? `${url}?${searchParams}` : url
+
+  return apiGetConditional<PaginatedResponse<T>>(fullUrl, options)
 }

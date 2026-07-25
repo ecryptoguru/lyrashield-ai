@@ -4,7 +4,8 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Radar, Play, X, RefreshCw, ChevronRight, ChevronDown } from "lucide-react"
 import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@lyrashield/ui"
-import { apiPost, apiGetPaginated } from "@/lib/api-client"
+import { Skeleton } from "@/components/ui/skeleton"
+import { apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
 import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
@@ -163,26 +164,56 @@ export function ScansClient({
     if (!hasActiveScans) return
     const controller = new AbortController()
     let timeoutId: number | undefined
+    let isAborted = false
+    let pollEtag: string | undefined
+    const pollStartedAt = Date.now()
+
+    const nextInterval = (elapsedMs: number): number => {
+      if (elapsedMs < 60_000) return 10_000
+      if (elapsedMs < 5 * 60_000) return 30_000
+      return 60_000
+    }
+
     const poll = async () => {
+      if (document.hidden) {
+        timeoutId = window.setTimeout(poll, 1000)
+        return
+      }
       try {
         // Poll only active-status scans to keep the payload small. Merge the
         // refreshed active rows into the full list so completed scans are preserved.
-        const result = await apiGetPaginated<ScanItem>(
+        // The ETag from the previous tick makes an unchanged list a bodyless 304.
+        const { data, etag } = await apiGetPaginatedConditional<ScanItem>(
           "/api/scans",
           { workspaceId, status: ACTIVE_STATUS_PARAM },
-          { signal: controller.signal }
+          { signal: controller.signal, ...(pollEtag ? { etag: pollEtag } : {}) }
         )
-        if (!controller.signal.aborted) {
-          setScans((current) => mergePolledScans(current, result.items))
+        if (etag) pollEtag = etag
+        if (data && !controller.signal.aborted) {
+          setScans((current) => mergePolledScans(current, data.items))
         }
       } catch {
         // Keep the current list visible; the manual refresh action reports errors.
       }
-      if (!controller.signal.aborted) timeoutId = window.setTimeout(poll, 10_000)
+      if (isAborted) return
+      const elapsed = Date.now() - pollStartedAt
+      timeoutId = window.setTimeout(poll, nextInterval(elapsed))
     }
+
     timeoutId = window.setTimeout(poll, 10_000)
+
+    const onVisibility = () => {
+      if (!document.hidden && hasActiveScans && !isAborted) {
+        window.clearTimeout(timeoutId)
+        timeoutId = window.setTimeout(poll, 0)
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+
     return () => {
+      isAborted = true
       controller.abort()
+      document.removeEventListener("visibilitychange", onVisibility)
       if (timeoutId !== undefined) window.clearTimeout(timeoutId)
     }
   }, [hasActiveScans, workspaceId])
@@ -308,7 +339,13 @@ export function ScansClient({
         </Card>
       )}
 
-      {scans.length === 0 ? (
+      {refreshing && scans.length === 0 ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Loading scans">
+          {[0, 1, 2].map((item) => (
+            <Skeleton key={item} className="h-32 w-full" />
+          ))}
+        </div>
+      ) : scans.length === 0 ? (
         <EmptyState
           icon={Radar}
           title="No scans yet"
@@ -324,7 +361,7 @@ export function ScansClient({
             const presentation = getScanPresentation(scan.status)
             return (
               <Card key={scan.id} className="p-4">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
                   <div className="min-w-0 flex-1">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <Badge variant={presentation.badgeVariant}>{presentation.label}</Badge>

@@ -73,7 +73,7 @@ pnpm build
 git diff --check
 ```
 
-Current `main` passes **934 core tests in 105 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+Current `main` passes **1013 core tests in 115 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Verify scorecards and social sharing
 
@@ -197,7 +197,7 @@ After an authorized scan, inspect its timeline and confirm:
 
 Deep/Custom use deterministic tiering rather than model-selected promotion: Terra coordinates and judges cross-file evidence, while Luna executes focused specialist tasks. Only the root can create or stop specialists, preventing recursive child fan-out. Safe/Quick/Standard remain Luna-only.
 
-Engine PRs #6 and #7 are merged. Current engine behavior compacts estimated input at 240,000 tokens toward about 180,000 tokens, bounds direct dedupe input to 200 kB, limits output/agent concurrency, and reserves projected spend before each request. These are code/build guarantees; they do not prove result quality or replace provider-meter reconciliation.
+Engine PRs #6, #7, and #20 are merged. Current engine behavior compacts estimated input at 240,000 tokens toward about 180,000 tokens, bounds direct dedupe input to 200 kB, limits output/agent concurrency, reserves projected spend before each request, and correctly extracts usage tokens from dict or object entries with provider-reported cache-read accounting. These are code/build guarantees; they do not prove result quality or replace provider-meter reconciliation.
 
 For engine work on the host:
 

@@ -91,7 +91,11 @@ export function interpretExitCode(
 const MAX_ENGINE_VULNERABILITIES_BYTES = 10 * 1024 * 1024
 const MAX_ENGINE_RUN_BYTES = 1 * 1024 * 1024
 const SIGKILL_GRACE_MS = 5000
-const ENGINE_HEARTBEAT_MS = 30_000
+// Purely informational "still running" ScanEvent row. Each tick is a Postgres
+// insert competing with finding writes, and the UI polls on its own (slower)
+// cadence, so 30s bought nothing: 2 minutes keeps the feed alive for a long scan
+// at a quarter of the writes.
+const ENGINE_HEARTBEAT_MS = 120_000
 const MAX_ENGINE_ERROR_TAIL_BYTES = 4096
 const MAX_ENGINE_FAILURE_MARKER_WINDOW = 512
 
@@ -173,11 +177,8 @@ export interface EngineProfile {
 
 function assertSupportedRepositoryModel(model: string | undefined): void {
   const normalizedModel = model?.toLowerCase().replaceAll("_", "-")
-  if (
-    normalizedModel &&
-    !/(?:^|[/.-])gpt-5\.6-(?:sol|terra|luna)(?:$|[/.-])/.test(normalizedModel)
-  ) {
-    throw new Error("LyraShield scans require a GPT-5.6 Sol, Terra, or Luna deployment")
+  if (normalizedModel && !/(?:^|[/.-])gpt-5\.6-(?:terra|luna)(?:$|[/.-])/.test(normalizedModel)) {
+    throw new Error("LyraShield scans require a GPT-5.6 Terra or Luna deployment")
   }
 }
 
@@ -228,7 +229,7 @@ export function assertRepositoryScanRuntimeConfigured(
 
 function requireRepositoryModel(model: string | undefined): string {
   if (!model) {
-    throw new Error("A GPT-5.6 Sol, Terra, or Luna deployment must be configured")
+    throw new Error("A GPT-5.6 Terra or Luna deployment must be configured")
   }
   return model
 }
@@ -250,6 +251,8 @@ function buildEngineEnv(profile: EngineProfile): Record<string, string> {
     "LLM_API_BASE",
     "LLM_API_VERSION",
     "LLM_TIMEOUT",
+    "LYRASHIELD_MAX_OUTPUT_TOKENS",
+    "LYRASHIELD_MAX_INPUT_TOKENS",
     "LYRASHIELD_IMAGE",
     "LYRASHIELD_RUNTIME_BACKEND",
     "LYRASHIELD_MAX_LOCAL_COPY_MB",

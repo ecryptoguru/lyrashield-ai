@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -21,7 +21,7 @@ import { formatTime } from "@/lib/date-format"
 import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanReviewProfile } from "@/lib/scan-review-profile"
-import { apiGet, apiGetPaginated } from "@/lib/api-client"
+import { apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import { ScanInProgress } from "./scan-in-progress"
 
 interface ScanEvent {
@@ -208,17 +208,54 @@ export function ScanDetailClient({
   const [currentFindings, setCurrentFindings] = useState<FindingItem[]>(findings)
   const [expandedEvents, setExpandedEvents] = useState(false)
   const [expandedFindings, setExpandedFindings] = useState<Set<string>>(new Set())
+  const [completionNotice, setCompletionNotice] = useState<{
+    status: string
+    message: string
+  } | null>(null)
   const isActive = isActiveScan(scan.status)
   const elapsedTime = useElapsedTime(isActive ? scan.startedAt : null)
   const presentation = getScanPresentation(scan.status)
+  const etagRef = useRef<string | undefined>(undefined)
+  const prevStatusRef = useRef(initialScan.status)
+
+  // Announce the active→terminal transition. Polling swaps the in-progress view
+  // for the stat grid silently otherwise, so users who looked away (or use a
+  // screen reader) never learn the scan finished.
+  useEffect(() => {
+    const prevStatus = prevStatusRef.current
+    prevStatusRef.current = scan.status
+    if (!isActiveScan(prevStatus) || isActiveScan(scan.status)) return
+    setCompletionNotice({
+      status: scan.status,
+      message:
+        scan.status === "COMPLETED"
+          ? // Deliberately no count: the terminal fetch is capped at one page, so
+            // a scan with more findings than that would be announced with the
+            // page size as if it were the total.
+            "Scan completed — findings are ready to review"
+          : getScanPresentation(scan.status).headline,
+    })
+  }, [scan.status])
+
+  // Auto-dismiss the completion banner after 6s; the outcome stays visible in
+  // the status badge and stat grid.
+  useEffect(() => {
+    if (!completionNotice) return
+    const id = window.setTimeout(() => setCompletionNotice(null), 6000)
+    return () => window.clearTimeout(id)
+  }, [completionNotice])
 
   const refresh = useCallback(
     async (signal: AbortSignal) => {
       try {
-        const updated = await apiGet<ScanPollData>(
+        const { data, etag } = await apiGetConditional<ScanPollData>(
           `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}`,
-          { signal }
+          { signal, etag: etagRef.current }
         )
+        etagRef.current = etag
+        if (!data || signal.aborted) return
+
+        const updated = data
         const nextScan: ScanData = {
           id: updated.id,
           workspaceId: updated.workspaceId,
@@ -286,16 +323,43 @@ export function ScanDetailClient({
     if (!isActive) return
     const controller = new AbortController()
     let timeoutId: number | undefined
-    const poll = async () => {
-      await refresh(controller.signal)
-      if (!controller.signal.aborted) timeoutId = window.setTimeout(poll, 5000)
+    let isAborted = false
+
+    const nextInterval = (elapsedMs: number): number => {
+      if (elapsedMs < 60_000) return 5_000
+      if (elapsedMs < 5 * 60_000) return 10_000
+      return 60_000
     }
-    timeoutId = window.setTimeout(poll, 5000)
+
+    const poll = async () => {
+      if (document.hidden) {
+        timeoutId = window.setTimeout(poll, 1000)
+        return
+      }
+      await refresh(controller.signal)
+      if (isAborted) return
+      const startedAtMs = scan.startedAt ? new Date(scan.startedAt).getTime() : Date.now()
+      const elapsed = Date.now() - startedAtMs
+      timeoutId = window.setTimeout(poll, nextInterval(elapsed))
+    }
+
+    timeoutId = window.setTimeout(poll, 5_000)
+
+    const onVisibility = () => {
+      if (!document.hidden && isActive && !isAborted) {
+        window.clearTimeout(timeoutId)
+        timeoutId = window.setTimeout(poll, 0)
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+
     return () => {
+      isAborted = true
       controller.abort()
+      document.removeEventListener("visibilitychange", onVisibility)
       if (timeoutId !== undefined) window.clearTimeout(timeoutId)
     }
-  }, [isActive, refresh])
+  }, [isActive, refresh, scan.startedAt])
 
   const sortedFindings = [...currentFindings].sort(
     (a, b) => (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99)
@@ -346,6 +410,13 @@ export function ScanDetailClient({
 
   return (
     <div>
+      {/* Sole announcer for the scan-completion message. Always mounted, because
+          a live region inserted at the same moment as its content is announced
+          unreliably. The visible banner below is therefore presentational only —
+          giving it live semantics too would double-announce. */}
+      <div aria-live="assertive" aria-atomic="true" className="sr-only">
+        {completionNotice?.message}
+      </div>
       <div className="mb-6">
         <Link
           href="/dashboard/scans"
@@ -397,6 +468,37 @@ export function ScanDetailClient({
       {/* Completed / terminal layout — rendered only once the scan is no longer active */}
       {!isActive && (
         <>
+          {completionNotice && (
+            // Presentational only — the always-mounted sr-only live region above
+            // owns the announcement, so no role="status" here (that would make
+            // screen readers read the completion twice).
+            <div
+              className={`mb-6 flex items-center gap-2 rounded-md border p-3 text-sm ${
+                completionNotice.status === "COMPLETED"
+                  ? "border-primary/30 bg-primary/5"
+                  : ["FAILED", "TIMED_OUT"].includes(completionNotice.status)
+                    ? "border-destructive/50 bg-destructive/10"
+                    : "border-amber-500/50 bg-amber-500/10"
+              }`}
+            >
+              {completionNotice.status === "COMPLETED" ? (
+                <CheckCircle2 className="text-primary h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : ["FAILED", "TIMED_OUT"].includes(completionNotice.status) ? (
+                <XCircle className="text-destructive h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : (
+                <ShieldAlert className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+              )}
+              <span className="min-w-0 flex-1 font-medium">{completionNotice.message}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="shrink-0"
+                onClick={() => setCompletionNotice(null)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          )}
           <div className="bg-border mb-6 grid gap-px border sm:grid-cols-2 lg:grid-cols-5">
             <Card className="border-0 p-4 shadow-none">
               <div className="text-muted-foreground flex items-center gap-2 text-sm">

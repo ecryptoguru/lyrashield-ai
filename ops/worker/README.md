@@ -21,6 +21,8 @@ Copy the three scripts to `/usr/local/libexec/`, the units to `/etc/systemd/syst
 LYRASHIELD_WORKER_IMAGE=lyrashieldprod.azurecr.io/worker@sha256:<approved-worker-digest>
 LYRASHIELD_SANDBOX_IMAGE=ghcr.io/usestrix/strix-sandbox@sha256:<approved-sandbox-digest>
 LYRASHIELD_SANDBOX_NETWORK=lyrashield-sandbox
+# Required when either image is hosted on ghcr.io. GHCR_TOKEN is pulled from Key Vault by refresh-secrets.sh.
+GHCR_USERNAME=<github-username-or-bot>
 ```
 
 `/etc/lyrashield/worker.env` supplies the remaining runtime variables. Defaults in `run-worker.sh` set `NODE_ENV=production`, `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0`, and `LYRASHIELD_WORKER_CONCURRENCY=1`; override these there if the deployment requires email verification or a different concurrency.

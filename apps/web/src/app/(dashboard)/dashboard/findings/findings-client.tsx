@@ -25,6 +25,7 @@ import {
   Spinner,
   LoadMore,
   Textarea,
+  FormField,
   buttonVariants,
   cn,
 } from "@lyrashield/ui"
@@ -147,10 +148,35 @@ export function FindingsClient({
   initialNextCursor: string | null
   initialSelectedFindingId?: string
 }) {
+  const readQueryParams = useCallback(
+    () => new URLSearchParams(typeof window !== "undefined" ? window.location.search : ""),
+    []
+  )
+
+  const updateQueryParams = useCallback(
+    (updates: { filter?: string; sort?: SortMode }) => {
+      const params = readQueryParams()
+      if (updates.filter && updates.filter !== "ALL") params.set("filter", updates.filter)
+      else params.delete("filter")
+      if (updates.sort && updates.sort !== "severity") params.set("sort", updates.sort)
+      else params.delete("sort")
+      const search = params.toString()
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${search ? `?${search}` : ""}`
+      )
+    },
+    [readQueryParams]
+  )
+
   const [findings, setFindings] = useState<FindingListItem[]>(initialData)
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor)
-  const [filter, setFilter] = useState<string>("ALL")
-  const [sortMode, setSortMode] = useState<SortMode>("severity")
+  const [filter, setFilter] = useState<string>(() => readQueryParams().get("filter") ?? "ALL")
+  const [sortMode, setSortMode] = useState<SortMode>(() => {
+    const sort = readQueryParams().get("sort")
+    return sort === "severity" || sort === "newest" ? sort : "severity"
+  })
   const [selectedFinding, setSelectedFinding] = useState<FindingListItem | null>(() =>
     initialSelectedFindingId
       ? (initialData.find((finding) => finding.id === initialSelectedFindingId) ?? null)
@@ -162,6 +188,7 @@ export function FindingsClient({
   const handleFilterChange = useCallback(
     async (newFilter: string) => {
       setFilter(newFilter)
+      updateQueryParams({ filter: newFilter, sort: sortMode })
       if (newFilter === "ALL") {
         setFindings(initialData)
         setNextCursor(initialNextCursor)
@@ -189,7 +216,7 @@ export function FindingsClient({
         setLoading(false)
       }
     },
-    [workspaceId, initialData, initialNextCursor]
+    [workspaceId, initialData, initialNextCursor, sortMode, updateQueryParams]
   )
 
   // Client-side sort — severity high-first or newest first
@@ -262,9 +289,13 @@ export function FindingsClient({
             )}
             <select
               value={sortMode}
-              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              onChange={(e) => {
+                const next = e.target.value as SortMode
+                setSortMode(next)
+                updateQueryParams({ filter, sort: next })
+              }}
               aria-label="Sort findings"
-              className="text-muted-foreground cursor-pointer bg-transparent text-xs font-medium focus:outline-none"
+              className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
             >
               <option value="severity">Severity (high first)</option>
               <option value="newest">Newest</option>
@@ -491,6 +522,7 @@ interface FindingDetail {
   verificationStatus?: string
   verificationMethod?: string | null
   verificationReason?: string | null
+  statusReason?: string | null
   verificationReceipts?: Array<{
     id: string
     status: string
@@ -511,11 +543,8 @@ interface FindingDetail {
 
 /**
  * Inline confirm panel for status-transition actions (accept risk / false positive).
- * The comment field is required client-side for intentionality. NOTE: the current
- * /api/findings/[id] PATCH contract does not persist comments — it accepts only
- * { workspaceId, action }. The comment is collected here for UX clarity but is
- * NOT sent to the server. When the API gains a comment/reason field, wire it into
- * the patch body here.
+ * The comment field is required client-side for intentionality and is persisted
+ * as the finding's statusReason via the /api/findings/[id] PATCH body.
  */
 function StatusActionConfirm({
   label,
@@ -541,17 +570,18 @@ function StatusActionConfirm({
       role="group"
       aria-label={label}
     >
-      <p className="text-sm font-medium">{label}</p>
-      <Textarea
-        rows={2}
-        placeholder="Add a comment explaining your decision (required)…"
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-        aria-required="true"
-        aria-label="Comment"
-        className="w-full"
-        autoFocus
-      />
+      <FormField label={label} htmlFor="status-comment">
+        <Textarea
+          id="status-comment"
+          rows={2}
+          placeholder="Add a comment explaining your decision (required)…"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          aria-required="true"
+          className="w-full"
+          autoFocus
+        />
+      </FormField>
       {error && <p className="text-destructive text-xs">{error}</p>}
       <div className="flex gap-2">
         <Button
@@ -656,16 +686,14 @@ function FindingDetailDrawer({
     }
   }
 
-  async function handleAcceptRisk(_comment: string) {
-    // NOTE: comment is collected client-side for intentionality but the current
-    // PATCH contract ({ workspaceId, action: "accept_risk" }) does not accept a
-    // comment/reason field. Wire _comment into the body once the API supports it.
+  async function handleAcceptRisk(comment: string) {
     setPatchLoading(true)
     setPatchError(null)
     try {
       const result = await apiPatch<{ id: string; status: string }>(`/api/findings/${finding.id}`, {
         workspaceId,
         action: "accept_risk",
+        reason: comment,
       })
       onStatusChange(finding.id, result.status)
       setShowAcceptRisk(false)
@@ -680,14 +708,14 @@ function FindingDetailDrawer({
     }
   }
 
-  async function handleFalsePositive(_comment: string) {
-    // NOTE: see handleAcceptRisk — comment not yet sent to API.
+  async function handleFalsePositive(comment: string) {
     setPatchLoading(true)
     setPatchError(null)
     try {
       const result = await apiPatch<{ id: string; status: string }>(`/api/findings/${finding.id}`, {
         workspaceId,
         action: "false_positive",
+        reason: comment,
       })
       onStatusChange(finding.id, result.status)
       setShowFalsePositive(false)
@@ -720,10 +748,7 @@ function FindingDetailDrawer({
               <li aria-hidden="true">
                 <ChevronRight className="h-3 w-3" />
               </li>
-              <li
-                className="text-foreground max-w-[200px] truncate font-medium"
-                title={finding.title}
-              >
+              <li className="text-foreground max-w-50 truncate font-medium" title={finding.title}>
                 {finding.title}
               </li>
             </ol>
@@ -874,13 +899,16 @@ function FindingDetailDrawer({
                           change your code.
                         </p>
                       </div>
-                      <Textarea
-                        className="w-full"
-                        rows={4}
-                        placeholder="Describe the change you intend to make..."
-                        value={fixSummary}
-                        onChange={(e) => setFixSummary(e.target.value)}
-                      />
+                      <FormField label="Fix summary" htmlFor="fix-summary">
+                        <Textarea
+                          id="fix-summary"
+                          className="w-full"
+                          rows={4}
+                          placeholder="Describe the change you intend to make..."
+                          value={fixSummary}
+                          onChange={(e) => setFixSummary(e.target.value)}
+                        />
+                      </FormField>
                       {fixError && <p className="text-destructive text-xs">{fixError}</p>}
                       <div className="flex gap-2">
                         <Button
@@ -1200,6 +1228,13 @@ function FindingDetailDrawer({
                     <p className="text-muted-foreground mt-1 text-sm">
                       {detail.verificationReason}
                     </p>
+                  </div>
+                )}
+
+                {detail.statusReason && (
+                  <div className="bg-muted/30 rounded-lg border p-3">
+                    <h3 className="text-sm font-medium">Status reason</h3>
+                    <p className="text-muted-foreground mt-1 text-sm">{detail.statusReason}</p>
                   </div>
                 )}
 

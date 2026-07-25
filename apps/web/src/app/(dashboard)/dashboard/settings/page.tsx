@@ -23,7 +23,7 @@ export default async function SettingsPage() {
   if (!workspaceId) {
     return (
       <div>
-        <h1 className="mb-6 text-2xl font-bold tracking-tight">Settings</h1>
+        <h2 className="mb-6 text-2xl font-bold tracking-tight">Settings</h2>
         <EmptyState
           icon={Settings}
           title="No workspace yet"

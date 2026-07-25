@@ -13,9 +13,10 @@ import { logger } from "@lyrashield/logger"
  * and read/write scope enforcement apply uniformly.
  *
  * Mutating tools are refused here (no interactive approval channel over a
- * stateless HTTP request). A trusted automation can opt in per workspace via
- * LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true — off by default. Interactive
- * mutations belong on the local stdio server, which prompts the human.
+ * stateless HTTP request). A trusted automation can opt in process-wide via
+ * LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true — off by default. Each remote
+ * request is still bounded to its own workspace API key and its own write scope.
+ * Interactive mutations belong on the local stdio server, which prompts the human.
  *
  * Rate limiting is applied by the shared /api/* middleware bucket.
  */

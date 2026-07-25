@@ -3,7 +3,6 @@ export const GPT_56_PRICING_SOURCE = "https://openai.com/index/gpt-5-6/"
 export const GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
 
 export const GPT_56_PRICING_USD_PER_MILLION = {
-  "gpt-5.6-sol": { input: 5, cachedInput: 0.5, cacheWriteInput: 6.25, output: 30 },
   "gpt-5.6-terra": { input: 2.5, cachedInput: 0.25, cacheWriteInput: 3.125, output: 15 },
   "gpt-5.6-luna": { input: 1, cachedInput: 0.1, cacheWriteInput: 1.25, output: 6 },
 } as const
@@ -105,9 +104,7 @@ export function calculateGpt56CostUsd(
     !rate ||
     usage.inputTokens === null ||
     usage.outputTokens === null ||
-    usage.cachedInputTokens === null ||
-    usage.cacheWriteInputTokens === null ||
-    usage.cacheWriteInputTokens === undefined
+    usage.cachedInputTokens === null
   ) {
     return null
   }
@@ -117,7 +114,7 @@ export function calculateGpt56CostUsd(
   if (usage.inputTokens > GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS) return null
   const cachedInputTokens = Math.min(usage.cachedInputTokens, usage.inputTokens)
   const cacheWriteInputTokens = Math.min(
-    usage.cacheWriteInputTokens,
+    usage.cacheWriteInputTokens ?? 0,
     usage.inputTokens - cachedInputTokens
   )
   const uncachedInputTokens = usage.inputTokens - cachedInputTokens - cacheWriteInputTokens

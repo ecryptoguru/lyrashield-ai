@@ -1,4 +1,4 @@
-import { prisma } from "@lyrashield/db"
+import { prisma, listScans } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { ScansClient } from "./scans-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
@@ -25,26 +25,16 @@ export default async function ScansPage({
   }
 
   const limit = 50
-  const [targets, initialScans] = await Promise.all([
+  // Scan rows come from listScans so the SSR page and the /api/scans poll share
+  // one query shape and one projection — they previously drifted apart.
+  const [targets, { items, nextCursor }] = await Promise.all([
     prisma.target.findMany({
       where: { workspaceId, deletedAt: null },
       select: { id: true, name: true, type: true, url: true, repoFullName: true },
       orderBy: { name: "asc" },
     }),
-    prisma.scan.findMany({
-      where: { workspaceId, deletedAt: null },
-      include: {
-        target: { select: { id: true, name: true, type: true, url: true, repoFullName: true } },
-        _count: { select: { findings: { where: { deletedAt: null } } } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: limit + 1,
-    }),
+    listScans({ workspaceId, limit }),
   ])
-
-  const hasMore = initialScans.length > limit
-  const items = hasMore ? initialScans.slice(0, limit) : initialScans
-  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
   const initialData = items.map((s) => ({
     id: s.id,
@@ -57,7 +47,7 @@ export default async function ScansPage({
     summary: s.summary,
     errorCategory: s.errorCategory,
     errorMessage: s.errorMessage,
-    findingCount: s._count?.findings ?? 0,
+    findingCount: s.findingCount,
     target: s.target,
     createdAt: s.createdAt.toISOString(),
   }))
