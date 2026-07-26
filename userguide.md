@@ -412,7 +412,7 @@ Use the same supported scan modes as the API: SAFE, QUICK, STANDARD, DEEP, or CU
 
 The public marketing site, Lite Check, browser-local tools, methodology, and content are live. The authenticated dashboard is open for registration; its dedicated BullMQ/engine worker remains a separate controlled full-scan boundary. Ordinary web requests use a restricted `NOBYPASSRLS` database role, and repository scan admission fails closed when the worker heartbeat is absent. A current-tree Safe retest and a successful, reconciled Deep controlled scan are still required before the full-scan release gate passes.
 
-The production application has an authenticated application origin, TLS Redis queue, private evidence storage, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. Broad full-scan availability still requires completed controlled-scan proof, application-level readiness/queue/provider alerts, capacity evidence, and backup/restore. No recovery or RPO/RTO claim is made.
+The production application has an authenticated application origin, TLS Redis queue, private evidence storage, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. Azure Foundry repository scans use direct JSON function tools. The current endpoint rejects programmatic tool calling; this is an optimization gate, not a user-facing scan failure. Broad full-scan availability still requires completed controlled-scan proof, application-level readiness/queue/provider alerts, capacity evidence, and backup/restore. No recovery or RPO/RTO claim is made.
 
 Billing plans, plan quotas, automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
 
@@ -432,7 +432,7 @@ Billing plans, plan quotas, automatic server-generated Fix PRs, intrusive exploi
 - Confirm your role has scan-create permission.
 - Check whether the target already has an active scan.
 - If the message says the scan service is unavailable, no scan was launched. Wait for the operator to restore worker readiness, then retry once.
-- For repository scans, the operator should verify `/api/ready/scans`, Redis queue connectivity, the GPT-5.6 deployment, OpenAI/Azure credentials, sandbox image, and evidence storage.
+- For repository scans, the operator should verify `/api/ready/scans`, Redis queue connectivity, the GPT-5.6 deployment, OpenAI/Azure credentials, sandbox image, and evidence storage. For Azure Foundry, verify that the deployment passes the engine provider-contract baseline; leave programmatic tool calling disabled unless its explicit capability gate passes.
 - Review the returned error and scan events. An enqueue race may create a visible `FAILED` scan with a retained queue event, but it will never remain silently queued or be replayed automatically.
 
 ### A scan has no findings

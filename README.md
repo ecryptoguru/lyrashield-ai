@@ -107,6 +107,12 @@ git diff --check
 
 The full worker requires a BullMQ-compatible Redis URL, private evidence storage, the controlled engine image/runtime, and Azure model configuration. It intentionally refuses scan admission if no live worker is registered.
 
+### Azure AI Foundry runtime configuration
+
+Repository scans accept only GPT-5.6 Terra or Luna deployments. Configure `LYRASHIELD_LUNA_LLM` and `LYRASHIELD_TERRA_LLM` for the normal routes, or set `LYRASHIELD_LLM` as their explicit fallback. Keep `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION` tied to the same Foundry project/resource. Empty routed values are intentionally omitted from the engine process so fallback selection remains deterministic.
+
+The configured Azure Foundry endpoint supports baseline Responses requests and `previous_response_id`, but it rejects the `programmatic_tool_calling` tool type. Production therefore uses direct JSON function tools. Leave `LYRASHIELD_PROGRAMMATIC_TOOL_CALLING` unset unless the engine's bounded `lyrashield provider-contract --require-programmatic-tool-calling` gate succeeds for the exact deployment. `previous_response_id` alone does not enable persistent scan reasoning: the engine currently uses SQLite session persistence, which the Agents SDK does not permit alongside `previous_response_id`.
+
 ## Engine derivative and upstream maintenance
 
 Repository reviews run through [LyraShield Engine](https://github.com/ecryptoguru/lyrashield-engine), the separately versioned sandboxed analysis process used by the worker. It is a controlled derivative of [Strix](https://github.com/usestrix/strix), not a claim that upstream results or benchmarks apply to LyraShield.
