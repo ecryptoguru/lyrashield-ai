@@ -2106,7 +2106,7 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - **API hardening:** `apps/web/src/app/api/scans/[id]/route.ts` returns an ETag based on scan status/events and respects `If-None-Match`. Scorecard create/revoke routes enforce write scope for API keys. `apps/web/src/lib/api-client.ts` adds `apiGetConditional` for ETag-aware conditional GETs with timeouts.
 - **Verification:** the merged `main` passes `pnpm lint`, `pnpm typecheck`, `pnpm test` (1013 core tests in 115 files, 80 marketing tests, 16 motion tests), `pnpm build`, `git diff --check`, and 26 applied Prisma migrations.
 
-## §56 — Azure Foundry capability boundary and worker usage resilience (2026-07-27)
+## §56 — Azure Foundry capability boundary and worker usage resilience
 
 - The configured Azure Foundry GPT-5.6 endpoint accepts baseline Responses requests and `previous_response_id`, but rejects the `programmatic_tool_calling` tool type. Repository scans therefore retain direct JSON function tools. The engine exposes programmatic calling only behind `LYRASHIELD_PROGRAMMATIC_TOOL_CALLING=1`; operators must leave it unset unless `lyrashield provider-contract --require-programmatic-tool-calling` succeeds against the exact deployment.
 - Server-managed continuation is not an engine feature yet. `Runner.run_streamed` rejects `previous_response_id` while its SQLite session is supplied, and SQLite sessions remain required for resume and multi-turn engine state. Replacing that state with a server-managed conversation is a separate design change, not a configuration switch.

@@ -5228,7 +5228,7 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 
 # PART C — Current Implementation and Release Readiness
 
-> **Status date:** 2026-07-27. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
+> **Status date:** 2026-07-26. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
 
 ## C0. Verified repository baseline
 
