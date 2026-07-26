@@ -270,7 +270,7 @@ function buildEngineEnv(profile: EngineProfile): Record<string, string> {
   ])
   const filtered: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined) continue
+    if (value === undefined || value === "") continue
     if (allow.has(key)) {
       filtered[key] = value
     }
