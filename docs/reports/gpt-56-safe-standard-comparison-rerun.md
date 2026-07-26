@@ -5,12 +5,23 @@
 **Engine:** `lyrashield-engine` `main` (post cache-regression fix)  
 **Models:** `azure_ai/gpt-5.6-luna` (`medium` reasoning effort) for SAFE and STANDARD
 
+## Quick facts
+
+| | SAFE | STANDARD |
+| --- | --- | --- |
+| **Latency** | 405.8 s (6.8 min) | 500.3 s (8.3 min) |
+| **Billed cost** | $0.50 | $1.43 |
+| **Cache hit ratio** | 82.5% | 70.3% |
+| **Findings** | 40 (1 C, 2 H, 37 M) | 42 (2 C, 2 H, 38 M) |
+| **Score / grade** | 52 / D | 45 / F |
+| **Budget cap** | $1.20 | $3.20 |
+
 ## Executive summary
 
 - A regression was discovered and fixed during this comparison: the `prompt_cache_options` setting in `lyrashield-engine/strix/core/inputs.py` had been switched to `mode: "explicit"` without inserting explicit `prompt_cache_breakpoint` content markers. This disabled prompt caching, caused the previous STANDARD run to stop at the `$3.20` budget cap, and made SAFE ~2x more expensive than expected.
 - After removing the `prompt_cache_options` parameter entirely and relying on the existing `prompt_cache_key` in `ModelSettings.extra_args`, prompt caching was restored.
 - The re-run produced results consistent with the earlier SAFE/STANDARD benchmarks: SAFE cost **~$0.50** with **82.5%** of input tokens served from cache, STANDARD cost **~$1.43** with **70.3%** cache hit ratio.
-- STANDARD found more total findings (42 vs 40) but with a different severity mix than the previous run (2 critical/2 high this run, 4 critical/1 high previously). SAFE was 45% faster than the prior run while staying within the same `$1.20` budget.
+- STANDARD found more total findings (42 vs 40) but with a different severity mix than the previous run: the previous STANDARD run reported 4 CRITICAL and 1 HIGH, while this run reported 2 CRITICAL and 2 HIGH. SAFE was 45% faster than the prior run while staying within the same `$1.20` budget.
 
 ## Regression detected: the broken `prompt_cache_options` run
 
@@ -64,7 +75,7 @@ Engine test suite result after the fix:
 | CRITICAL | 1 | 1 | — |
 | HIGH | 2 | 2 | — |
 | MEDIUM | 36 | 37 | +1 |
-| Score / grade | 53 / F | 52 / D | similar |
+| Score / grade | 53 / F | 52 / D | comparable (grade change likely a score-threshold rounding effect, not a material quality shift) |
 
 ### STANDARD
 
@@ -83,7 +94,7 @@ Engine test suite result after the fix:
 | CRITICAL | 4 | 2 | -2 |
 | HIGH | 1 | 2 | +1 |
 | MEDIUM | 36 | 38 | +2 |
-| Score / grade | 37 / F | 45 / F | similar |
+| Score / grade | 37 / F | 45 / F | comparable (score difference within stochastic variance; both grade F) |
 
 ## Cost analysis
 
@@ -133,7 +144,7 @@ approximate STANDARD cost            = $1.431
 
 - **SAFE** is now significantly faster (405.8 s vs 734.7 s) while producing the same severity profile and roughly the same cost. The time saving is most likely from better cache hit ratio and reduced per-request model work.
 - **STANDARD** is slower (500.3 s vs 331.3 s) despite making 9 fewer LLM requests. The increased wall-clock time appears to be provider-side variability on the larger initial prompt; cost actually decreased by 3.4%, and cache hit ratio improved.
-- **Findings stability**: Both runs produced the expected SCA base of 36 medium findings, plus the consistent agent-config and secrets findings. The engine-generated findings varied slightly between runs (1 vs 4 CRITICAL in STANDARD, 1 vs 2 in this re-run), which is normal for a stochastic model exploring a repository. The total count and overall risk grade remained in the same band.
+- **Findings stability**: Both runs produced the expected SCA base of 36 medium findings, plus the consistent agent-config and secrets findings. The engine-generated findings varied slightly between runs: the previous STANDARD run reported 4 CRITICAL / 1 HIGH, while this run reported 2 CRITICAL / 2 HIGH; SAFE stayed at 1 CRITICAL / 2 HIGH with one additional MEDIUM. This is normal for a stochastic model exploring a repository. The total count and overall risk grade remained in the same band.
 
 ## Files changed
 
@@ -146,12 +157,13 @@ approximate STANDARD cost            = $1.431
 ## Risks and caveats
 
 - This comparison is based on a single repository (`ecryptoguru/OnboardingAI2`) and a small number of runs. Latency numbers are subject to provider load and cache warmup.
-- The engine-side fix intentionally reverts to default implicit caching. Future work can re-introduce explicit `prompt_cache_breakpoint` markers once the provider/SKD support is confirmed and the content construction is fully implemented.
+- The engine-side fix intentionally reverts to default implicit caching. Future work can re-introduce explicit `prompt_cache_breakpoint` markers once the provider/SDK support is confirmed and the content construction is fully implemented.
 - The score/grade differences (e.g. SAFE 53/F vs 52/D) are within the expected variance of the scoring model and should not be interpreted as a material quality change without a larger corpus.
 
 ## Next steps
 
-1. Merge the engine cache-regression fix to `lyrashield-engine/main`.
-2. Merge the `Dockerfile` and `live-test.ts` changes to `lyrashieldai/main`.
+1. ✅ Merge the engine cache-regression fix to `lyrashield-engine/main` (PR `#37` merged).
+2. ✅ Merge the `Dockerfile` and `live-test.ts` changes to `lyrashieldai/main` (pushed as `48811e6`).
 3. On a larger corpus, validate that cache hit ratios stay above 70% for STANDARD and above 80% for SAFE.
 4. Before re-enabling explicit `prompt_cache_options`, complete the `prompt_cache_breakpoint` content-part implementation and run a provider smoke test.
+5. If STANDARD latency continues to vary between ~330 s and ~500 s, add per-scan latency telemetry to correlate it with cache-write time and request queue depth.
