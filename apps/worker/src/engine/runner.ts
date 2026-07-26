@@ -255,6 +255,7 @@ function buildEngineEnv(profile: EngineProfile): Record<string, string> {
     "LYRASHIELD_MAX_INPUT_TOKENS",
     "LYRASHIELD_IMAGE",
     "LYRASHIELD_RUNTIME_BACKEND",
+    "LYRASHIELD_SERVER_CONVERSATION",
     "LYRASHIELD_MAX_LOCAL_COPY_MB",
     "LYRASHIELD_REASONING_EFFORT",
     "LYRASHIELD_TELEMETRY",
@@ -410,7 +411,10 @@ const ENGINE_RUN_LAYOUTS = ["strix_runs", "lyrashield_runs"] as const
 const ENGINE_OUTPUT_ARTIFACTS = ["run.json", "vulnerabilities.json"] as const
 const MAX_RUN_OUTPUT_ENTRIES = 50_000
 const ENGINE_CHECKOUT_ROOT = resolve(tmpdir(), "strix_repos")
-const ENGINE_WORK_ROOT = resolve(process.cwd(), "lyrashield_runs")
+const ENGINE_WORK_ROOT = resolve(
+  env.LYRASHIELD_ENGINE_WORK_ROOT?.trim() || process.cwd(),
+  "lyrashield_runs"
+)
 
 /**
  * Extract only a repository checkout created by the engine below its dedicated

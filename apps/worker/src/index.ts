@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { hostname } from "node:os"
 import { unlink, writeFile } from "node:fs/promises"
 import { Worker } from "bullmq"
 import { logger } from "@lyrashield/logger"
@@ -19,7 +20,7 @@ let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
 let shuttingDown = false
-const workerId = `${process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
+const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
 async function refreshWorkerReadiness(): Promise<void> {
   await writeFile(readinessPath, new Date().toISOString(), { mode: 0o600 })
