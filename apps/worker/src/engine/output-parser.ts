@@ -403,8 +403,9 @@ function normalizeRequestUsageBuckets(value: unknown): Record<string, unknown> {
     const record = entry as Record<string, unknown>
     const inputTokens = usageInteger(record.input_tokens)
     const outputTokens = usageInteger(record.output_tokens)
-    const cachedInputTokens = detailInteger(record.input_tokens_details, "cached_tokens")
-    const cacheWriteInputTokens = detailInteger(record.input_tokens_details, "cache_write_tokens")
+    const cachedInputTokens = detailInteger(record.input_tokens_details, "cached_tokens") ?? 0
+    const cacheWriteInputTokens =
+      detailInteger(record.input_tokens_details, "cache_write_tokens") ?? 0
     const model = boundedGpt56Model(record.model)?.trim()
     if (!model) everyEntryHasModel = false
     if (

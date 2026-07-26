@@ -387,9 +387,12 @@ describe("output-parser", () => {
 
       expect(result?.llm_usage).toMatchObject({
         cached_input_tokens: 1_792,
+        standard_input_tokens: 4_014,
+        standard_cached_input_tokens: 1_792,
+        standard_cache_write_input_tokens: 0,
+        standard_output_tokens: 63,
       })
       expect(result?.llm_usage).not.toHaveProperty("cache_write_input_tokens")
-      expect(result?.llm_usage).not.toHaveProperty("standard_input_tokens")
     })
 
     it("separates long-context request usage from standard request usage", () => {
