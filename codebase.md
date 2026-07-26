@@ -29,7 +29,7 @@ The canonical engine repo is `ecryptoguru/lyrashield-engine`. It is a controlled
 - **Recorded upstream release/base:** `v1.1.0` / `7d5a67d234bd3faef34d22be8c6f5a9607de41a3`
 - **Adapter version:** `1.1.0.post1`
 - **Compatibility:** maps `LYRASHIELD_*` only when the corresponding `STRIX_*` value is unset; explicit upstream values win; the product entry point forces upstream telemetry to `0`
-- **Model config:** the engine accepts only GPT-5.6 Terra or Luna deployment names. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for the Deep/Custom coordinator, falling back to `LYRASHIELD_LLM`; Deep/Custom child specialists receive Luna/medium through the separate delegate route. Per-request receipts retain their actual model for mixed-model reconciliation. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel is not configured.
+- **Model config:** the engine accepts only GPT-5.6 Terra or Luna deployment names. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for the Deep/Custom coordinator, falling back to `LYRASHIELD_LLM`; Deep/Custom child specialists receive Luna/medium through the separate delegate route. Empty allowlisted environment values are not forwarded to the engine, preventing them from shadowing a valid fallback. Per-request receipts retain their actual model for mixed-model reconciliation. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel is not configured.
 - **Artifacts:** worker accepts `strix_runs` and legacy `lyrashield_runs`, with `run.json` or `vulnerabilities.json`
 - **Sync model:** stable-release tree imports on review branches; human approval and green CI are required, with no force-push or automatic conflict resolution
 - **Verification:** 329 tests, Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox build/smoke, and public worker compatibility
@@ -327,20 +327,20 @@ CI applies migrations to PostgreSQL 16 and runs a Prisma migration-diff gate. Th
 
 The root `.env.example` is the canonical template. `@lyrashield/config` validates the product runtime at import time.
 
-| Area                    | Variables                                                                                                                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Database                | `DATABASE_URL`, optional `DATABASE_DIRECT_URL`                                                                           |
-| Queue                   | `REDIS_URL`                                                                                                              |
-| Distributed API limits  | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`                                                                     |
-| Better Auth             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_COOKIE_DOMAIN`, `ADDITIONAL_TRUSTED_ORIGINS`                       |
-| OAuth                   | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, optional Google and Azure AD values                                          |
-| GitHub App              | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`                                    |
-| Public app              | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MARKETING_URL`, `PORT`                                                               |
-| Engine                  | `LYRASHIELD_LLM` fallback, `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `LLM_API_*`, `LYRASHIELD_IMAGE`, Azure aliases |
-| Evidence storage        | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`                                                |
-| Email/notifications     | `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL`, `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`                     |
-| Billing placeholders    | Polar and Razorpay variables; no billing runtime exists yet                                                              |
-| Monitoring placeholders | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`                                                                                   |
+| Area                    | Variables                                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Database                | `DATABASE_URL`, optional `DATABASE_DIRECT_URL`                                                                                                                                                   |
+| Queue                   | `REDIS_URL`                                                                                                                                                                                      |
+| Distributed API limits  | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`                                                                                                                                             |
+| Better Auth             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_COOKIE_DOMAIN`, `ADDITIONAL_TRUSTED_ORIGINS`                                                                                               |
+| OAuth                   | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, optional Google and Azure AD values                                                                                                                  |
+| GitHub App              | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`                                                                                                            |
+| Public app              | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MARKETING_URL`, `PORT`                                                                                                                                       |
+| Engine                  | `LYRASHIELD_LLM` fallback, `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `LLM_API_*`, `LYRASHIELD_IMAGE`, Azure aliases; programmatic tools only after the engine provider-contract gate passes |
+| Evidence storage        | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`                                                                                                                        |
+| Email/notifications     | `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL`, `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`                                                                                             |
+| Billing placeholders    | Polar and Razorpay variables; no billing runtime exists yet                                                                                                                                      |
+| Monitoring placeholders | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`                                                                                                                                                           |
 
 Required boot values are `DATABASE_URL`, a 32+ character `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `NEXT_PUBLIC_APP_URL`. If the Upstash URL is configured, its token is required. GitHub private keys must be PEM-formatted.
 
@@ -2105,3 +2105,9 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - **Dashboard UX:** the scans list (`apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx`) uses adaptive polling backoff and `visibilitychange` handling. Findings list syncs filter/sort with URL query params. `api-keys.tsx` uses a shared clipboard helper and surfaces copy errors. `inline-confirm.tsx` restores focus after confirm/cancel.
 - **API hardening:** `apps/web/src/app/api/scans/[id]/route.ts` returns an ETag based on scan status/events and respects `If-None-Match`. Scorecard create/revoke routes enforce write scope for API keys. `apps/web/src/lib/api-client.ts` adds `apiGetConditional` for ETag-aware conditional GETs with timeouts.
 - **Verification:** the merged `main` passes `pnpm lint`, `pnpm typecheck`, `pnpm test` (1013 core tests in 115 files, 80 marketing tests, 16 motion tests), `pnpm build`, `git diff --check`, and 26 applied Prisma migrations.
+
+## §56 — Azure Foundry capability boundary and worker usage resilience
+
+- The configured Azure Foundry GPT-5.6 endpoint accepts baseline Responses requests and `previous_response_id`, but rejects the `programmatic_tool_calling` tool type. Repository scans therefore retain direct JSON function tools. The engine exposes programmatic calling only behind `LYRASHIELD_PROGRAMMATIC_TOOL_CALLING=1`; operators must leave it unset unless `lyrashield provider-contract --require-programmatic-tool-calling` succeeds against the exact deployment.
+- Server-managed continuation is not an engine feature yet. `Runner.run_streamed` rejects `previous_response_id` while its SQLite session is supplied, and SQLite sessions remain required for resume and multi-turn engine state. Replacing that state with a server-managed conversation is a separate design change, not a configuration switch.
+- `apps/worker/src/engine/output-parser.ts` now records zero values for optional standard-request cache-read/cache-write buckets when the provider omits them. `apps/worker/src/engine/runner.ts` omits empty allowlisted environment variables. Together these preserve conservative accounting and prevent an empty routed setting from changing provider fallback behavior.
