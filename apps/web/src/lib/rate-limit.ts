@@ -139,11 +139,21 @@ async function checkUpstash(
   const client = await getUpstashClient()
   if (!client) return null
   const rl = client.getOrCreate(lim, window)
-  const result = await rl.limit(identifier)
-  return {
-    limited: !result.success,
-    remaining: result.remaining,
-    retryAfter: Math.ceil((result.reset - Date.now()) / 1000),
+  try {
+    const result = await rl.limit(identifier)
+    return {
+      limited: !result.success,
+      remaining: result.remaining,
+      retryAfter: Math.ceil((result.reset - Date.now()) / 1000),
+    }
+  } catch (error) {
+    // Treat Upstash failures as a transient outage: log once and fall back to
+    // per-instance in-memory limiting rather than failing the request.
+    logger.error("Upstash rate-limit check failed; falling back to in-memory", {
+      identifier,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
   }
 }
 
