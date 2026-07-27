@@ -229,3 +229,14 @@ jobs:
             --output /dev/null --write-out '%{http_code}' | grep --quiet '^404$'
           curl --silent --show-error --head "https://www.lyrashieldai.com/tools?source=ci" \
             | grep --ignore-case --quiet '^location: https://lyrashieldai.com/tools?source=ci'
+
+  deploy-azure:
+    name: Deploy to Azure
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [security, lint-and-typecheck]
+    uses: ./.github/workflows/deploy-azure.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+      id-token: write

@@ -1,0 +1,157 @@
+name: Deploy to Azure
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-azure-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/lyrashield-web
+  WORKER_IMAGE: ghcr.io/${{ github.repository_owner }}/lyrashield-worker
+  MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
+  APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
+  SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
+
+jobs:
+  build:
+    name: Build and push container images
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    outputs:
+      web_image: ${{ steps.meta.outputs.web_image }}
+      worker_image: ${{ steps.meta.outputs.worker_image }}
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The worker image requires the sibling engine source. If the engine repo
+      # is not available this step is skipped and only the web image is built.
+      - name: Checkout engine
+        id: engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        continue-on-error: true
+        with:
+          repository: ${{ github.repository_owner }}/lyrashield-engine
+          path: lyrashield-engine
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.10.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags
+        id: meta
+        run: |
+          echo "web_image=${{ env.WEB_IMAGE }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "worker_image=${{ env.WORKER_IMAGE }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6.15.0
+        with:
+          context: .
+          target: runner
+          push: true
+          tags: ${{ env.WEB_IMAGE }}:${{ github.sha }},${{ env.WEB_IMAGE }}:latest
+          build-args: |
+            BUILD_APP_URL=${{ env.APP_URL }}
+            BUILD_PUBLIC_APP_URL=${{ env.SCANNER_URL }}
+            BUILD_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}
+            BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push worker image
+        if: hashFiles('lyrashield-engine/pyproject.toml') != ''
+        uses: docker/build-push-action@v6.15.0
+        with:
+          context: .
+          target: worker
+          push: true
+          tags: ${{ env.WORKER_IMAGE }}:${{ github.sha }},${{ env.WORKER_IMAGE }}:latest
+          build-contexts: |
+            engine=lyrashield-engine
+          build-args: |
+            BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Worker image digest
+        if: hashFiles('lyrashield-engine/pyproject.toml') != ''
+        run: |
+          echo "Pushed worker image: ${{ env.WORKER_IMAGE }}:${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy Azure Container Apps
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: azure-production
+      url: ${{ env.APP_URL }}
+    if: >
+      (vars.AZURE_RESOURCE_GROUP != '') &&
+      ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
+    steps:
+      - name: Log in to Azure
+        uses: Azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Ensure Container Apps extension
+        run: az extension add --name containerapp --yes --only-show-errors
+
+      - name: Deploy app Container App
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          IMAGE: ${{ needs.build.outputs.web_image }}
+        run: |
+          az containerapp update \
+            --name "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${IMAGE}" \
+            --set-env-vars \
+              "NEXT_PUBLIC_APP_URL=${{ env.APP_URL }}" \
+              "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
+              "BETTER_AUTH_URL=${{ env.APP_URL }}"
+
+      - name: Deploy scanner Container App
+        if: vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        env:
+          IMAGE: ${{ needs.build.outputs.web_image }}
+        run: |
+          az containerapp update \
+            --name "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${IMAGE}" \
+            --set-env-vars \
+              "NEXT_PUBLIC_APP_URL=${{ env.SCANNER_URL }}" \
+              "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
+              "BETTER_AUTH_URL=${{ env.APP_URL }}"
+
+      - name: Smoke app health
+        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        run: |
+          sleep 30
+          curl --fail --silent --show-error --retry 5 --retry-all-errors \
+            "${{ env.APP_URL }}/api/health"
+
+      - name: Smoke scanner health
+        if: vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        run: |
+          sleep 30
+          curl --fail --silent --show-error --retry 5 --retry-all-errors \
+            "${{ env.SCANNER_URL }}/api/health"
