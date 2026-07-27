@@ -18,7 +18,7 @@ The production worker image must run from its own `worker` stage. The container 
 Copy the three scripts to `/usr/local/libexec/`, the units to `/etc/systemd/system/`, and make the scripts root-executable. Create `/etc/lyrashield/worker-runtime.conf` with mode `0600`:
 
 ```sh
-LYRASHIELD_WORKER_IMAGE=lyrashieldprod.azurecr.io/worker@sha256:<approved-worker-digest>
+LYRASHIELD_WORKER_IMAGE=ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:<approved-worker-digest>
 LYRASHIELD_SANDBOX_IMAGE=ghcr.io/usestrix/strix-sandbox@sha256:<approved-sandbox-digest>
 LYRASHIELD_SANDBOX_NETWORK=lyrashield-sandbox
 # Required when either image is hosted on ghcr.io. GHCR_TOKEN is pulled from Key Vault by refresh-secrets.sh.

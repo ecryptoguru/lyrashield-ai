@@ -15,8 +15,8 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/lyrashield-web
-  WORKER_IMAGE: ghcr.io/${{ github.repository_owner }}/lyrashield-worker
+  WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
+  WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
