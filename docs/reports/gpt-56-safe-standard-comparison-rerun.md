@@ -154,16 +154,36 @@ approximate STANDARD cost            = $1.431
 - `lyrashieldai/Dockerfile` — added `git` to the `worker-engine` stage so `uv` can install git dependencies.
 - `lyrashieldai/apps/worker/scripts/live-test.ts` — reads `SCAN_MODE`, `MAX_BUDGET_USD`, `SCAN_GOAL`, and `MAX_DURATION_MINUTES` from environment variables.
 
+## Explicit breakpoint smoke test
+
+I built an opt-in `LYRASHIELD_PROMPT_CACHE_EXPLICIT=1` path in `lyrashield-engine` that:
+
+- emits a `prompt_cache_breakpoint` content part on the stable root-agent prefix in `build_root_initial_input`,
+- sets `ModelSettings.prompt_cache_options = {"mode": "explicit", "ttl": "30m"}` for the coordinator, and
+- is gated off by default so the stable implicit-caching path is unchanged.
+
+A SAFE (`quick`) smoke scan against the same `ecryptoguru/OnboardingAI2` target on `azure_ai/gpt-5.6-luna` immediately failed with:
+
+```text
+agents.exceptions.ModelBehaviorError: Responses stream ended with terminal event `response.incomplete`.
+status=incomplete; incomplete_details=IncompleteDetails(reason='content_filter')
+```
+
+The same configuration without `LYRASHIELD_PROMPT_CACHE_EXPLICIT=1` completed successfully in the earlier comparison runs. This indicates the current Azure AI deployment does not cleanly accept the explicit `prompt_cache_breakpoint` content-part/`prompt_cache_options` combination, or it triggers Azure's content-safety filter. Until a provider/SDK smoke test succeeds, explicit breakpoints should stay off for this deployment.
+
+The experimental implementation lives on the `lyrashield-engine` branch `feat/explicit-prompt-cache-breakpoints` and is *not* merged to `main`.
+
 ## Risks and caveats
 
 - This comparison is based on a single repository (`ecryptoguru/OnboardingAI2`) and a small number of runs. Latency numbers are subject to provider load and cache warmup.
-- The engine-side fix intentionally reverts to default implicit caching. Future work can re-introduce explicit `prompt_cache_breakpoint` markers once the provider/SDK support is confirmed and the content construction is fully implemented.
+- The engine-side fix intentionally reverts to default implicit caching. Explicit `prompt_cache_breakpoint` markers are now gated behind `LYRASHIELD_PROMPT_CACHE_EXPLICIT=1` and have been shown to fail on Azure AI `gpt-5.6-luna` with a `content_filter` incomplete response. They should not be enabled without a passing provider smoke test.
 - The score/grade differences (e.g. SAFE 53/F vs 52/D) are within the expected variance of the scoring model and should not be interpreted as a material quality change without a larger corpus.
 
 ## Next steps
 
 1. ✅ Merge the engine cache-regression fix to `lyrashield-engine/main` (PR `#37` merged).
 2. ✅ Merge the `Dockerfile` and `live-test.ts` changes to `lyrashieldai/main` (pushed as `48811e6`).
-3. On a larger corpus, validate that cache hit ratios stay above 70% for STANDARD and above 80% for SAFE.
-4. Before re-enabling explicit `prompt_cache_options`, complete the `prompt_cache_breakpoint` content-part implementation and run a provider smoke test.
+3. ✅ Test explicit `prompt_cache_breakpoint` markers behind an opt-in gate; result: **not viable on Azure AI `gpt-5.6-luna`** (`response.incomplete` with `content_filter`).
+4. On a larger corpus, validate that cache hit ratios stay above 70% for STANDARD and above 80% for SAFE.
 5. If STANDARD latency continues to vary between ~330 s and ~500 s, add per-scan latency telemetry to correlate it with cache-write time and request queue depth.
+6. Revisit explicit breakpoints only when a provider smoke test proves the deployment accepts them and improves cache hit ratio beyond the current 82.5% (SAFE) / 70.3% (STANDARD).
