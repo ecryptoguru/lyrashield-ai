@@ -155,7 +155,7 @@ async function main(): Promise<void> {
   }, SCAN_WORKER_HEARTBEAT_MS)
 
   scheduleRunner = startScheduleRunner()
-  logger.info("Schedule runner started", { intervalMs: 300_000 })
+  logger.info("Schedule runner started", { intervalMs: 60_000 })
 }
 
 main().catch((error) => {

@@ -214,7 +214,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "require('fs').stat('/tmp/lyrashield-worker-ready',(e,s)=>process.exit(e||Date.now()-s.mtimeMs>30000?1:0))",
+          "require('fs').stat('/tmp/lyrashield-worker-ready',(e,s)=>process.exit(e||Date.now()-s.mtimeMs>120000?1:0))",
         ]
       interval: 15s
       timeout: 5s
