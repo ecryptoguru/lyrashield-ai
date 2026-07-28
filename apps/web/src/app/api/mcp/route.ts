@@ -24,7 +24,7 @@ import { logger } from "@lyrashield/logger"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const ALLOW_REMOTE_MUTATIONS = process.env.LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS === "true"
+const ALLOW_REMOTE_MUTATIONS = env.LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS === "true"
 
 function unauthorized(): Response {
   // WWW-Authenticate advertises Bearer so MCP clients know how to authenticate.

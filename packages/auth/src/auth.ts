@@ -20,6 +20,15 @@ const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_
 const microsoftEnabled = isOAuthProviderConfigured(AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)
 const emailVerificationEnabled = Boolean(env.BREVO_API_KEY)
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 // Origins allowed for auth/CSRF. Always includes BETTER_AUTH_URL; any origin
 // added here may initiate credentialed auth requests. Marketing and Lite Check
 // use separate route-scoped CORS policies and must not be trusted implicitly.
@@ -55,7 +64,7 @@ async function sendVerificationEmail({
         sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
         to: [{ email: user.email, name: user.name }],
         subject: "Verify your email — LyraShield",
-        htmlContent: `<p>Hi ${user.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")},</p><p>Click the link below to verify your email address:</p><p><a href="${url}">Verify Email</a></p><p>If you didn't create an account, you can safely ignore this email.</p>`,
+        htmlContent: `<p>Hi ${escapeHtml(user.name)},</p><p>Click the link below to verify your email address:</p><p><a href="${escapeHtml(url)}">Verify Email</a></p><p>If you didn't create an account, you can safely ignore this email.</p>`,
       }),
     })
       .then((res) => {
@@ -96,7 +105,7 @@ async function sendResetPasswordEmail({
         sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
         to: [{ email: user.email, name: user.name }],
         subject: "Reset your LyraShield password",
-        htmlContent: `<p>Hi ${user.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")},</p><p>Use the link below to reset your password. It expires in one hour.</p><p><a href="${url}">Reset password</a></p><p>If you did not request this, you can safely ignore this email.</p>`,
+        htmlContent: `<p>Hi ${escapeHtml(user.name)},</p><p>Use the link below to reset your password. It expires in one hour.</p><p><a href="${escapeHtml(url)}">Reset password</a></p><p>If you did not request this, you can safely ignore this email.</p>`,
       }),
     })
       .then((res) => {

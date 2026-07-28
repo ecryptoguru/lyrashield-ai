@@ -1,4 +1,5 @@
 import { recordScorecardEvent } from "@lyrashield/db"
+import { isProd } from "@lyrashield/config"
 import { z } from "zod"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { SCORECARD_CHANNELS } from "../../../../lib/scorecard-sharing"
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
     maxAge: 365 * 24 * 60 * 60,
     sameSite: "lax",
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isProd,
     path: "/",
   })
   return response

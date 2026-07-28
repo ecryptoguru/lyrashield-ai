@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { isDev } from "@lyrashield/config"
 import { checkAuthRateLimit, checkApiRateLimit, checkLiteScanRateLimit } from "@/lib/rate-limit"
 
 let warnedUnknownIp = false
@@ -9,7 +10,6 @@ function generateNonce(): string {
 }
 
 function buildCspHeader(nonce: string, upgradeInsecureRequests: boolean): string {
-  const isDev = process.env.NODE_ENV === "development"
   const directives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,

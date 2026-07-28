@@ -60,6 +60,9 @@ const envSchema = z
     // MCP / Agent Action Layer
     LYRASHIELD_API_URL: z.string().url().optional().or(z.literal("")),
     LYRASHIELD_API_KEY: z.string().optional().or(z.literal("")),
+    // Fail-closed opt-outs for the MCP human-approval gate. Only enable in trusted CI contexts.
+    LYRASHIELD_MCP_ALLOW_MUTATIONS: z.enum(["true", "false"]).optional().or(z.literal("")),
+    LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS: z.enum(["true", "false"]).optional().or(z.literal("")),
 
     // App
     NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),

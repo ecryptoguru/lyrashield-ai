@@ -6,7 +6,7 @@ import { parseLiteScorecardToken } from "@/lib/lite-scorecard"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 const appOrigin = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001"
-const marketingOrigin = () => process.env.NEXT_PUBLIC_MARKETING_URL ?? appOrigin()
+const marketingOrigin = () => process.env.NEXT_PUBLIC_MARKETING_URL || appOrigin()
 
 export async function generateMetadata({
   params,

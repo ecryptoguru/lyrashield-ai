@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { hasReferralCode } from "@lyrashield/db"
 import { z } from "zod"
 import { REFERRAL_SOURCES } from "../../../../lib/scorecard-sharing"
+import { isProd } from "@lyrashield/config"
 
 const Source = z.enum(REFERRAL_SOURCES)
 const Body = z
@@ -22,14 +23,14 @@ export async function POST(request: Request) {
     sameSite: "lax",
     httpOnly: true,
     path: "/",
-    secure: process.env.NODE_ENV === "production",
+    secure: isProd,
   })
   response.cookies.set("ls_ref_source", parsed.data.source, {
     maxAge: 30 * 24 * 60 * 60,
     sameSite: "lax",
     httpOnly: true,
     path: "/",
-    secure: process.env.NODE_ENV === "production",
+    secure: isProd,
   })
   return response
 }

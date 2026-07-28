@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import { isProd } from "@lyrashield/config"
 import { z } from "zod"
 
 const ActiveWorkspaceSchema = z.object({ workspaceId: z.string().min(1) })
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
     cookieStore.set("activeWorkspaceId", parsed.data.workspaceId, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: isProd,
       path: "/",
     })
     return apiSuccess({ workspaceId: parsed.data.workspaceId })

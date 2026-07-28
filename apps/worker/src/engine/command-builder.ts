@@ -1,4 +1,5 @@
 import { env } from "@lyrashield/config"
+import { checkInstructionSafety } from "@lyrashield/security"
 
 export type TargetType = "REPO" | "WEB_APP" | "API" | "CLOUD_ACCOUNT" | "CONTAINER" | "IAC"
 
@@ -91,6 +92,15 @@ function resolveExecutable(): string {
   return "lyrashield"
 }
 
+function validateInstruction(instruction: string | undefined): string | undefined {
+  if (!instruction) return undefined
+  const safety = checkInstructionSafety(instruction)
+  if (!safety.safe) {
+    throw new Error(`Engine instruction rejected: ${safety.reason}`)
+  }
+  return instruction
+}
+
 export function buildEngineCommand(config: ScanConfig): EngineCommand {
   const executable = resolveExecutable()
   const targetArg = resolveTargetArg(config.target)
@@ -106,8 +116,9 @@ export function buildEngineCommand(config: ScanConfig): EngineCommand {
     scanMode,
   ]
 
-  if (config.instruction) {
-    args.push("--instruction", config.instruction)
+  const validatedInstruction = validateInstruction(config.instruction)
+  if (validatedInstruction) {
+    args.push("--instruction", validatedInstruction)
   }
 
   if (config.maxBudgetUsd && config.maxBudgetUsd > 0) {

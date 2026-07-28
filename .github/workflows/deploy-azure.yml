@@ -76,7 +76,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push worker image
-        if: hashFiles('lyrashield-engine/pyproject.toml') != ''
+        id: build-worker
+        if: steps.engine.outcome == 'success' && hashFiles('lyrashield-engine/pyproject.toml') != ''
         uses: docker/build-push-action@v6.15.0
         with:
           context: .
@@ -91,7 +92,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Worker image digest
-        if: hashFiles('lyrashield-engine/pyproject.toml') != ''
+        if: steps.build-worker.outcome == 'success'
         run: |
           echo "Pushed worker image: ${{ env.WORKER_IMAGE }}:${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
 
@@ -144,14 +145,32 @@ jobs:
 
       - name: Smoke app health
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        env:
+          SMOKE_URL: "${{ env.APP_URL }}/api/health"
         run: |
-          sleep 30
-          curl --fail --silent --show-error --retry 5 --retry-all-errors \
-            "${{ env.APP_URL }}/api/health"
+          for i in $(seq 1 60); do
+            if curl --fail --silent --show-error --max-time 10 "$SMOKE_URL"; then
+              echo "App health OK"
+              exit 0
+            fi
+            echo "App health not ready (attempt $i), retrying in 10s..."
+            sleep 10
+          done
+          echo "App health smoke failed after 60 attempts"
+          exit 1
 
       - name: Smoke scanner health
         if: vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        env:
+          SMOKE_URL: "${{ env.SCANNER_URL }}/api/health"
         run: |
-          sleep 30
-          curl --fail --silent --show-error --retry 5 --retry-all-errors \
-            "${{ env.SCANNER_URL }}/api/health"
+          for i in $(seq 1 60); do
+            if curl --fail --silent --show-error --max-time 10 "$SMOKE_URL"; then
+              echo "Scanner health OK"
+              exit 0
+            fi
+            echo "Scanner health not ready (attempt $i), retrying in 10s..."
+            sleep 10
+          done
+          echo "Scanner health smoke failed after 60 attempts"
+          exit 1
