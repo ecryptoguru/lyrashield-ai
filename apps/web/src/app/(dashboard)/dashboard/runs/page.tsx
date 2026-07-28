@@ -1,16 +1,71 @@
+import { prisma, listScans } from "@lyrashield/db"
 import { redirect } from "next/navigation"
+import { ScansClient } from "../scans/scans-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 
-export default async function RunsPage() {
+export default async function RunsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>
+}) {
   const session = await getCachedSession()
-  if (!session) {
-    redirect("/sign-in")
-  }
+  if (!session) redirect("/sign-in")
 
   const workspaceId = await getCachedWorkspaceId(session.userId)
+
   if (!workspaceId) {
-    redirect("/onboarding")
+    return (
+      <div className="rounded-lg border border-dashed p-12 text-center">
+        <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
+        <p className="text-muted-foreground text-sm">
+          Create a workspace first to start running reviews.
+        </p>
+      </div>
+    )
   }
 
-  redirect("/dashboard/scans")
+  const limit = 50
+  const [targets, { items, nextCursor }] = await Promise.all([
+    prisma.target.findMany({
+      where: { workspaceId, deletedAt: null },
+      select: { id: true, name: true, type: true, url: true, repoFullName: true },
+      orderBy: { name: "asc" },
+    }),
+    listScans({ workspaceId, limit }),
+  ])
+
+  const initialData = items.map((s) => ({
+    id: s.id,
+    status: s.status,
+    goal: s.goal,
+    mode: s.mode,
+    triggerType: s.triggerType,
+    startedAt: s.startedAt ? s.startedAt.toISOString() : null,
+    endedAt: s.endedAt ? s.endedAt.toISOString() : null,
+    summary: s.summary,
+    errorCategory: s.errorCategory,
+    errorMessage: s.errorMessage,
+    findingCount: s.findingCount,
+    target: s.target,
+    createdAt: s.createdAt.toISOString(),
+  }))
+
+  const params = await searchParams
+  const autoOpen = params.new === "1" || (initialData.length === 0 && targets.length > 0)
+
+  return (
+    <ScansClient
+      workspaceId={workspaceId}
+      targets={targets.map((t) => ({
+        id: t.id,
+        name: t.name,
+        type: t.type,
+        url: t.url,
+        repoFullName: t.repoFullName,
+      }))}
+      initialData={initialData}
+      initialNextCursor={nextCursor}
+      initialShowCreate={autoOpen}
+    />
+  )
 }

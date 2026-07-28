@@ -2,6 +2,7 @@ import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { EmptyState } from "@lyrashield/ui"
 import { Bell } from "lucide-react"
 import { NotificationsClient } from "./notifications-client"
+import { NotificationPreferences } from "@/components/notification-preferences"
 
 export default async function NotificationsPage() {
   const session = await getCachedSession()
@@ -21,5 +22,10 @@ export default async function NotificationsPage() {
     )
   }
 
-  return <NotificationsClient workspaceId={workspaceId} />
+  return (
+    <div className="space-y-8">
+      <NotificationsClient workspaceId={workspaceId} />
+      <NotificationPreferences />
+    </div>
+  )
 }
