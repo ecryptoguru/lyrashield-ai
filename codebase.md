@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current merged baseline — 2026-07-25:** 4 apps, 10 shared packages (including `packages/score`), 25 web page files, 44 API route files, 39 Prisma models, 18 enums, 26 migrations, and 20 directly RLS-protected workspace tables. PR #115 passes lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks (881 core tests in 97 files, 79 marketing tests in 12 files, 16 motion tests, and 2 Playwright Chromium tests). The follow-up merge adds `Finding.statusReason`, engine PR #20 on the sibling repo, dashboard polling/ETag/API hardening, and reaches **1013 core tests in 115 files**. Sections 17–55 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current merged baseline — 2026-07-29:** 4 apps, 10 shared packages (including `packages/score`), 25 web page files, 44 API route files, 39 Prisma models, 18 enums, 26 migrations, and 20 directly RLS-protected workspace tables. PR #115 passes lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks. The follow-up merges add `Finding.statusReason`, engine PR #20 on the sibling repo, dashboard polling/ETag/API hardening, Redis architecture separation, deploy workflow smoke-check retries, and reach **1024 core tests in 115 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Playwright Chromium tests**. Sections 17–55 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -330,8 +330,8 @@ The root `.env.example` is the canonical template. `@lyrashield/config` validate
 | Area                    | Variables                                                                                                                                                                                        |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Database                | `DATABASE_URL`, optional `DATABASE_DIRECT_URL`                                                                                                                                                   |
-| Queue                   | `REDIS_URL`                                                                                                                                                                                      |
-| Distributed API limits  | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`                                                                                                                                             |
+| Queue (BullMQ)          | `REDIS_URL` (redis:// — local Docker Redis in dev, Azure VM-hosted Redis in prod)                                                                                                                |
+| Distributed API limits  | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` (HTTPS REST — separate Upstash instance, never interchangeable with `REDIS_URL`)                                                            |
 | Better Auth             | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_COOKIE_DOMAIN`, `ADDITIONAL_TRUSTED_ORIGINS`                                                                                               |
 | OAuth                   | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, optional Google and Azure AD values                                                                                                                  |
 | GitHub App              | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`                                                                                                            |
@@ -438,7 +438,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **1013 core tests in 115 files**, **80 marketing tests in 12 files**, and **16 motion tests**, pass
+- `pnpm test`: **1024 core tests in 115 files**, **80 marketing tests in 12 files**, and **16 motion tests**, pass
 - `pnpm test:e2e`: **4 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `pnpm format:check`: pass
@@ -449,10 +449,11 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 ### Runtime Truth
 
-- The local Compose architecture includes PostgreSQL, Redis, a migration job, web, and worker.
+- The local Compose architecture includes PostgreSQL, Redis, a migration job, web, and worker. Docker Compose uses the local Redis service for BullMQ (`REDIS_URL`); Upstash env vars are not passed to web/worker containers, so rate limiting falls back to in-memory in dev.
 - The current engine-bearing worker image builds and exposes `lyrashield 1.1.0.post1`.
 - Missing engine model configuration fails before sandbox pull.
 - Historical Docker smoke in §§24–30 proves prior container health, routes, migrations, queue startup, and engine packaging. It does **not** prove a current authorized scan.
+- **First approved production Standard scan (2026-07-29):** a Standard (Code Review) scan against `ecryptoguru/OnboardingAI2` completed on the production Azure Container Apps stack using `azure_ai/gpt-5.6-luna` at medium reasoning. Duration 6m 53s, billed cost $1.78, 40 findings (2 CRITICAL, 2 HIGH, 36 MEDIUM), tamper-evident manifest saved. This is a production Standard/Luna scan, not a Deep/Terra scan or security guarantee. A prior attempt failed because two Prisma migrations had not been applied to the production Supabase database; the Azure deploy workflow does not run Prisma migrations — they must be applied separately.
 - Marketing is deployed and indexable at `https://lyrashieldai.com` with production D1/Rate Limit/KV bindings, all D1 migrations, a Worker-secret IP salt, custom apex/`www` domains, an active canonical 301, sitemap/robots/`llms.txt`, security headers, privacy-bounded PostHog capture, and live waitlist/crawl/Lighthouse/Brave QA. The passive `/scan` route is live and indexable behind the separate scanner origin, Turnstile, rate limit, and monitored abuse route. `/terms` remains individually `noindex`; the authenticated app origin and app-origin unfurl/referral proof remain open gates.
 - PR #52 merged the social distribution loop; PR #53 merged GPT-5.6 routing/caps; PRs #54–#57 merged Deep Review v3; PR #59 preserved deletion/report compatibility; PR #60 added the premium UI; PR #79 merged Deep Review v4 correctness, worker-truth, UX, database, and PostHog remediation. Each merged implementation PR passes the applicable CI migration, lint, format, typecheck, test, build, Chromium E2E, SCA/secret, and security-diff gates. External social-network cache/unfurl behavior remains a real-domain release check.
 
@@ -665,7 +666,7 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 
 - Auth endpoints (`/api/auth/*`): 5 requests/min per IP
 - General API (`/api/*`): 30 requests/min per IP
-- Uses Upstash Redis in production, in-memory Map fallback in dev
+- Uses Upstash Redis REST (HTTPS) in production for distributed rate limiting, in-memory Map fallback in dev. `REDIS_URL` (redis://) is a separate Redis instance for BullMQ and is never used for rate limiting.
 - Auth protection is handled in the `(dashboard)/layout.tsx` server component via `getSession()` + `redirect()`
 - Onboarding redirect: layout checks `OnboardingState` — redirects incomplete/non-skipped users to `/onboarding`
 
@@ -2104,7 +2105,7 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - **Worker hardening:** `apps/worker/src/jobs/run-scan.job.ts` adds a single-model cost fallback for mixed-model usage, post-engine cancellation check, and target field projection before preflight. `apps/worker/src/engine/finding-persister.ts` recovers from unique-constraint races during finding creation by updating the recovered row.
 - **Dashboard UX:** the scans list (`apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx`) uses adaptive polling backoff and `visibilitychange` handling. Findings list syncs filter/sort with URL query params. `api-keys.tsx` uses a shared clipboard helper and surfaces copy errors. `inline-confirm.tsx` restores focus after confirm/cancel.
 - **API hardening:** `apps/web/src/app/api/scans/[id]/route.ts` returns an ETag based on scan status/events and respects `If-None-Match`. Scorecard create/revoke routes enforce write scope for API keys. `apps/web/src/lib/api-client.ts` adds `apiGetConditional` for ETag-aware conditional GETs with timeouts.
-- **Verification:** the merged `main` passes `pnpm lint`, `pnpm typecheck`, `pnpm test` (1013 core tests in 115 files, 80 marketing tests, 16 motion tests), `pnpm build`, `git diff --check`, and 26 applied Prisma migrations.
+- **Verification:** the merged `main` passes `pnpm lint`, `pnpm typecheck`, `pnpm test` (1024 core tests in 115 files, 80 marketing tests, 16 motion tests), `pnpm build`, `git diff --check`, and 26 applied Prisma migrations.
 
 ## §56 — Azure Foundry capability boundary and worker usage resilience
 

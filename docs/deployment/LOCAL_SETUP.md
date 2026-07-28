@@ -26,6 +26,8 @@ pnpm install --frozen-lockfile
 
 Set a real local `BETTER_AUTH_SECRET` in `.env`. When using Compose, set `REDIS_URL` to the password-protected local endpoint shown in `.env.example`.
 
+**Redis architecture:** `REDIS_URL` (redis://) is reserved for the BullMQ job queue. In local development it points to the Docker Compose Redis service. `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (HTTPS REST) are for distributed rate limiting via `@upstash/ratelimit` in production only — leave them blank in dev to use the in-memory limiter. The two are never interchangeable. Docker Compose does not pass Upstash env vars to web/worker services; rate limiting falls back to in-memory in dev.
+
 Optional auth/worker toggles in `.env`:
 
 - `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` — set to `1` to require verified email before sign-in. Requires `BREVO_API_KEY` and `EMAIL_FROM` to send verification and password-reset emails.
@@ -73,7 +75,7 @@ pnpm build
 git diff --check
 ```
 
-Current `main` passes **1013 core tests in 115 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+Current `main` passes **1024 core tests in 115 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Verify scorecards and social sharing
 

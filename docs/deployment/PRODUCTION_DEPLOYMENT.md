@@ -16,7 +16,7 @@
 
 1. Public HTTPS application and marketing origins plus all trusted auth origins are decided. Scorecard canonical/OG/Twitter URLs must resolve to the application origin.
 2. Production Postgres migrations and the CI migration-drift check pass. Before applying `20260714170000_integration_global_external_id_unique`, resolve any duplicate non-null `(type, externalId)` bindings explicitly; the migration intentionally fails rather than silently reassigning an installation.
-3. Redis is private/TLS-protected and reachable by both web and worker.
+3. Redis is private/TLS-protected and reachable by both web and worker. `REDIS_URL` (redis://) is for the BullMQ job queue; `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (HTTPS REST) are for distributed rate limiting only. The two are never interchangeable.
 4. All secrets are supplied through the platform's secret manager, never committed files.
 5. The worker runs as a dedicated non-root user with least-privilege filesystem and Docker access.
 6. The sandbox image is pinned to an inspected digest; mutable tags are not acceptable. The worker and each sandbox share a dedicated internal control-plane network that has no default external route.
@@ -28,7 +28,7 @@
 The live Lite Scanner is a separate passive API and cannot be promoted into the full worker by configuration alone. A controlled repository scan requires all of the following:
 
 - migrated PostgreSQL for application and scan state;
-- a private/TLS `redis://` or `rediss://` service compatible with BullMQ and reachable by both web and worker—Upstash REST URL/token variables are for rate limiting and do not replace `REDIS_URL`;
+- a private/TLS `redis://` or `rediss://` service compatible with BullMQ and reachable by both web and worker—Upstash REST URL/token variables are for distributed rate limiting via `@upstash/ratelimit` and do not replace `REDIS_URL`. In production, `REDIS_URL` points to the Azure VM-hosted Redis instance, while `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` point to a separate Upstash free plan instance;
 - a deployed authenticated Next.js application origin to create targets, authorize users, enqueue scans, and render retained results;
 - dedicated worker compute with Git, the `lyrashield` CLI, the inspected engine source, controlled access to the digest-pinned sandbox runtime, and a dedicated internal network shared only with scan sandboxes;
 - an authorized Luna/Terra/fallback model route and provider credentials;
@@ -44,7 +44,9 @@ Set the production values appropriate to the selected infrastructure:
 ```bash
 DATABASE_URL="postgresql://..."
 DATABASE_DIRECT_URL="postgresql://..." # direct migration connection when using a pooler
-REDIS_URL="rediss://..."
+REDIS_URL="rediss://..."  # BullMQ job queue (Azure VM-hosted Redis in production)
+UPSTASH_REDIS_REST_URL="https://..."  # Distributed rate limiting (separate Upstash instance)
+UPSTASH_REDIS_REST_TOKEN="..."  # Required when UPSTASH_REDIS_REST_URL is set
 BETTER_AUTH_SECRET="..."
 BETTER_AUTH_URL="https://app.example.com"
 NEXT_PUBLIC_APP_URL="https://app.example.com"
