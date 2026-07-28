@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
+import { V2Sidebar } from "@/components/v2-sidebar"
+import { BottomNav } from "@/components/bottom-nav"
+import { MobilePageHeader } from "@/components/mobile-page-header"
 import { FeatureFlagsProvider } from "@/components/feature-flags-provider"
 import { getFlags } from "@/lib/flags"
 import {
@@ -27,30 +30,46 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   const flags = await getFlags(session, activeWorkspaceId ? { id: activeWorkspaceId } : null)
+  const v2Shell = flags.uxV2Shell
 
   return (
-    <div className="bg-background flex min-h-screen">
-      <Sidebar
-        userName={session.userName}
-        userEmail={session.userEmail}
-        workspaces={workspaces}
-        activeWorkspaceId={activeWorkspaceId}
-      />
-      <a
-        href="#main-content"
-        className="bg-primary text-primary-foreground fixed top-2 left-2 z-50 -translate-y-16 px-3 py-2 text-sm font-medium transition-transform focus:translate-y-0"
-      >
-        Skip to content
-      </a>
-      <main
-        id="main-content"
-        className="min-w-0 flex-1 overflow-x-hidden pt-16 md:pt-0"
-        tabIndex={-1}
-      >
-        <div className="mx-auto w-full max-w-[92rem] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <FeatureFlagsProvider flags={flags}>{children}</FeatureFlagsProvider>
-        </div>
-      </main>
-    </div>
+    <FeatureFlagsProvider flags={flags}>
+      <div className="bg-background flex min-h-screen flex-col md:flex-row">
+        {v2Shell ? (
+          <>
+            <V2Sidebar
+              userName={session.userName}
+              userEmail={session.userEmail}
+              workspaces={workspaces}
+              activeWorkspaceId={activeWorkspaceId}
+            />
+            <MobilePageHeader title="LyraShield" />
+          </>
+        ) : (
+          <Sidebar
+            userName={session.userName}
+            userEmail={session.userEmail}
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+          />
+        )}
+        <a
+          href="#main-content"
+          className="bg-primary text-primary-foreground fixed top-2 left-2 z-50 -translate-y-16 px-3 py-2 text-sm font-medium transition-transform focus:translate-y-0"
+        >
+          Skip to content
+        </a>
+        <main
+          id="main-content"
+          className="min-w-0 flex-1 overflow-x-hidden pt-16 md:pt-0"
+          tabIndex={-1}
+        >
+          <div className="mx-auto w-full max-w-[92rem] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            {children}
+          </div>
+        </main>
+        {v2Shell ? <BottomNav /> : null}
+      </div>
+    </FeatureFlagsProvider>
   )
 }
