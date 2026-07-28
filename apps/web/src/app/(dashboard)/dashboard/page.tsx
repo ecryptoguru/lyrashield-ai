@@ -20,6 +20,7 @@ import {
 } from "@/components/security-visuals"
 import { formatDate } from "@/lib/date-format"
 import { getCachedSession, getCachedWorkspaceId, getCachedWorkspaces } from "@/lib/cache"
+import { TrustCommandCenter } from "@/components/trust-command-center"
 import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
 import { getScanPresentation } from "@/lib/scan-presentation"
 
@@ -57,6 +58,7 @@ export default async function DashboardPage() {
     completedScanCount,
     scoreSnapshots,
     recentScans,
+    project,
   ] = await Promise.all([
     prisma.target.count({ where: { workspaceId, deletedAt: null } }),
     prisma.finding.count({
@@ -89,6 +91,11 @@ export default async function DashboardPage() {
         target: { select: { name: true, type: true } },
         _count: { select: { findings: { where: { deletedAt: null } } } },
       },
+    }),
+    prisma.project.findFirst({
+      where: { workspaceId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { name: true, riskScore: true, trustPlan: true },
     }),
   ])
 
@@ -188,6 +195,14 @@ export default async function DashboardPage() {
           Start a scan
         </Link>
       </header>
+
+      <TrustCommandCenter
+        productName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
+        mode="SAFE"
+        assetCount={targetCount}
+        riskScore={latestScore?.score ?? project?.riskScore ?? 100}
+        trustPlanData={project?.trustPlan}
+      />
 
       <section
         className={`border-l-2 p-5 sm:p-6 ${readinessConfig.className}`}

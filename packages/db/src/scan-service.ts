@@ -144,6 +144,11 @@ export async function updateScanStatus(
     }
     if (["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(newStatus)) {
       updateData.endedAt = now
+      const startTime = (updateData.startedAt as Date | undefined) ?? scan.startedAt
+      if (startTime) {
+        const durationMs = now.getTime() - new Date(startTime).getTime()
+        updateData.durationMs = Math.max(0, Math.round(durationMs))
+      }
     }
 
     const result = await tx.scan.updateMany({
@@ -269,6 +274,7 @@ export const SCAN_LIST_SELECT = {
   triggerType: true,
   startedAt: true,
   endedAt: true,
+  durationMs: true,
   summary: true,
   errorCategory: true,
   errorMessage: true,
@@ -285,6 +291,7 @@ export interface ScanListItem {
   triggerType: string
   startedAt: Date | null
   endedAt: Date | null
+  durationMs: number | null
   summary: string | null
   errorCategory: string | null
   errorMessage: string | null
