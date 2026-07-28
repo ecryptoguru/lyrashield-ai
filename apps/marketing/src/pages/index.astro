@@ -1,6 +1,7 @@
 ---
 import Base from "@layouts/Base.astro"
 import PremiumHero from "@components/landing/PremiumHero.astro"
+import V2Launch from "@components/landing/V2Launch.astro"
 import HomeLiteScan from "@components/landing/HomeLiteScan.astro"
 import AssuranceRecord from "@components/landing/AssuranceRecord.astro"
 import EvidenceWorld from "@components/landing/EvidenceWorld.astro"
@@ -125,6 +126,7 @@ const jsonLd = [
   jsonLd={jsonLd}
 >
   <PremiumHero />
+  <V2Launch />
   <HomeLiteScan />
   {/* Anchor for the "How it works" nav link. The Assurance World walkthrough
       below (Target → Scan → Evidence → Fix → Retest → Report) is the how-it-works
