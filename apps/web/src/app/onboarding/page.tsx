@@ -2,9 +2,11 @@ import { redirect } from "next/navigation"
 import { getSession } from "@lyrashield/auth/server"
 import { ShieldCheck } from "lucide-react"
 import { OnboardingWizard } from "./onboarding-wizard"
+import { V2OnboardingWizard } from "./v2-onboarding-wizard"
 import { ReferralClaim } from "./referral-claim"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
+import { getFlags } from "@/lib/flags"
 
 export default async function OnboardingPage() {
   const session = await getSession()
@@ -14,9 +16,19 @@ export default async function OnboardingPage() {
   }
 
   const state = await getOrCreateOnboardingState(session.userId)
+  const flags = await getFlags(session, state?.workspaceId ? { id: state.workspaceId } : null)
 
   if (state?.completed) {
     redirect("/dashboard")
+  }
+
+  const initialState = {
+    currentStep: state.currentStep,
+    completed: state.completed,
+    skipped: state.skipped,
+    workspaceId: state.workspaceId,
+    targetId: state.targetId,
+    selectedGoal: state.selectedGoal,
   }
 
   return (
@@ -34,16 +46,11 @@ export default async function OnboardingPage() {
         </p>
       </div>
 
-      <OnboardingWizard
-        initialState={{
-          currentStep: state.currentStep,
-          completed: state.completed,
-          skipped: state.skipped,
-          workspaceId: state.workspaceId,
-          targetId: state.targetId,
-          selectedGoal: state.selectedGoal,
-        }}
-      />
+      {flags.uxV2Onboarding ? (
+        <V2OnboardingWizard initialState={initialState} />
+      ) : (
+        <OnboardingWizard initialState={initialState} />
+      )}
     </div>
   )
 }
