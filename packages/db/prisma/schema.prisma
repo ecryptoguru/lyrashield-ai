@@ -306,6 +306,7 @@ model Project {
   ownerUserId   String?
   ownerTeam     String?
   riskScore     Int       @default(100)
+  trustPlan     Json?     @db.JsonB
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -423,6 +424,7 @@ model Scan {
   llmCachedInputTokens Int?
   llmOutputTokens      Int?
   determinismMode      String?  @default("default")
+  durationMs           Int?
   sarifUri            String?
   createdById     String
   deletedAt       DateTime?
@@ -1054,4 +1056,21 @@ model OnboardingState {
 
   @@index([userId])
   @@map("onboarding_states")
+}
+
+model NotificationPreference {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  emailDigest         Boolean  @default(true)
+  emailInstant        Boolean  @default(true)
+  inAppInstant        Boolean  @default(true)
+  inAppDigest         Boolean  @default(true)
+  pushEnabled         Boolean  @default(false)
+  quietHoursStart     Int?
+  quietHoursEnd       Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId])
+  @@map("notification_preferences")
 }
