@@ -9,34 +9,24 @@ export default async function ApprovalsPage() {
   if (!session) return null
 
   const workspaceId = await getCachedWorkspaceId(session.userId)
-  if (!workspaceId) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Approval Centre</h1>
-        <EmptyState
-          icon={ClipboardCheck}
-          title="No workspace yet"
-          description="Create a workspace during onboarding to view approvals."
-        />
-      </div>
-    )
-  }
 
-  const proposals = await prisma.fixProposal.findMany({
-    where: {
-      finding: { workspaceId, deletedAt: null },
-      status: { in: ["draft", "pending"] },
-      deletedAt: null,
-    },
-    include: {
-      finding: {
-        select: { id: true, title: true, severity: true, status: true },
-      },
-      pullRequests: { select: { id: true, status: true, provider: true }, where: { deletedAt: null } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  })
+  const proposals = workspaceId
+    ? await prisma.fixProposal.findMany({
+        where: {
+          finding: { workspaceId, deletedAt: null },
+          status: { in: ["draft", "pending"] },
+          deletedAt: null,
+        },
+        include: {
+          finding: {
+            select: { id: true, title: true, severity: true, status: true },
+          },
+          pullRequests: { select: { id: true, status: true, provider: true }, where: { deletedAt: null } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      })
+    : []
 
   return (
     <div className="space-y-4">
@@ -47,7 +37,13 @@ export default async function ApprovalsPage() {
         </p>
       </div>
 
-      {proposals.length === 0 ? (
+      {!workspaceId ? (
+        <EmptyState
+          icon={ClipboardCheck}
+          title="No workspace yet"
+          description="Create a workspace during onboarding to view approvals."
+        />
+      ) : proposals.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
           title="No pending approvals"

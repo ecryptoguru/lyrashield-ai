@@ -1,9 +1,25 @@
 "use client"
 
 import { ShieldCheck, Clock, ListChecks } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from "@lyrashield/ui"
+import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from "@lyrashield/ui"
 import { RUN_SINGULAR } from "@/lib/terminology"
 import { estimateRunMinutes, formatEstimate } from "@/lib/estimator"
+import Link from "next/link"
+
+function trustPlanLabel(data: unknown): string {
+  if (!data || typeof data !== "object") return "Default"
+  const plan = data as Record<string, unknown>
+  const preset =
+    plan.preRelease && Array.isArray(plan.preRelease) && plan.preRelease.length > 0
+      ? String(plan.preRelease[0])
+      : null
+  if (preset) return preset.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+  if (plan.recurring && Array.isArray(plan.recurring) && plan.recurring.length > 0) {
+    const first = plan.recurring[0] as Record<string, unknown>
+    if (typeof first.preset === "string") return String(first.preset).replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+  }
+  return "Configured"
+}
 
 export function TrustCommandCenter({
   productName,
@@ -11,14 +27,29 @@ export function TrustCommandCenter({
   assetCount,
   riskScore,
   trustPlanData,
+  completedScanCount = 0,
+  latestScore = null,
 }: {
   productName: string
   mode: string
   assetCount: number
   riskScore: number
   trustPlanData: unknown
+  completedScanCount?: number
+  latestScore?: { score: number; grade: string } | null
 }) {
   const estimate = estimateRunMinutes(mode, assetCount)
+
+  const hasCompletedReview = completedScanCount > 0 && latestScore !== null
+  const score = latestScore?.score ?? riskScore
+  const verdictVariant =
+    !hasCompletedReview ? "muted" :
+    score >= 80 ? "success" :
+    score >= 50 ? "warning" : "danger"
+  const verdictText =
+    !hasCompletedReview ? "Not evaluated" :
+    score >= 80 ? "Ready to ship within completed scope" :
+    score >= 50 ? "Needs attention" : "Needs action"
 
   return (
     <div className="space-y-4">
@@ -30,13 +61,16 @@ export function TrustCommandCenter({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant={riskScore >= 80 ? "success" : riskScore >= 50 ? "warning" : "danger"}>
-            {riskScore}/100
+          <Badge variant={verdictVariant as "success" | "warning" | "danger" | "muted"}>
+            {score}/100
           </Badge>
-          <Button variant="secondary" size="sm">
-            <ShieldCheck className="size-4" />
+          <Link
+            href="/dashboard/scans?new=1"
+            className={buttonVariants({ variant: "secondary", size: "sm" })}
+          >
+            <ShieldCheck className="size-4" aria-hidden="true" />
             Start {RUN_SINGULAR}
-          </Button>
+          </Link>
         </div>
       </div>
 
@@ -61,7 +95,7 @@ export function TrustCommandCenter({
           <CardContent>
             <div className="flex items-center gap-2">
               <ListChecks className="text-primary size-5" aria-hidden="true" />
-              <span className="text-lg font-semibold">{typeof trustPlanData === "object" && trustPlanData !== null ? "Configured" : "Default"}</span>
+              <span className="text-lg font-semibold">{trustPlanLabel(trustPlanData)}</span>
             </div>
             <p className="text-muted-foreground text-xs">Review and customise controls.</p>
           </CardContent>
@@ -72,8 +106,14 @@ export function TrustCommandCenter({
             <CardTitle className="text-sm font-medium">Latest verdict</CardTitle>
           </CardHeader>
           <CardContent>
-            <Badge variant="muted">No completed review yet</Badge>
-            <p className="text-muted-foreground text-xs">Run your first review to see evidence.</p>
+            <Badge variant={verdictVariant as "success" | "warning" | "danger" | "muted"}>
+              {verdictText}
+            </Badge>
+            <p className="text-muted-foreground text-xs">
+              {hasCompletedReview
+                ? `Based on the latest completed review (${completedScanCount} total).`
+                : "Run your first review to see evidence."}
+            </p>
           </CardContent>
         </Card>
       </div>

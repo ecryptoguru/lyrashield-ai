@@ -9,38 +9,28 @@ export default async function EvidencePage() {
   if (!session) return null
 
   const workspaceId = await getCachedWorkspaceId(session.userId)
-  if (!workspaceId) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Evidence</h1>
-        <EmptyState
-          icon={ShieldCheck}
-          title="No workspace yet"
-          description="Create a workspace during onboarding to view evidence."
-        />
-      </div>
-    )
-  }
 
-  const findings = await prisma.finding.findMany({
-    where: {
-      workspaceId,
-      deletedAt: null,
-      evidence: { some: {} },
-      verified: true,
-    },
-    include: {
-      target: { select: { id: true, name: true, type: true } },
-      evidence: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { type: true, createdAt: true },
-      },
-      _count: { select: { evidence: true } },
-    },
-    orderBy: { lastSeenAt: "desc" },
-    take: 50,
-  })
+  const findings = workspaceId
+    ? await prisma.finding.findMany({
+        where: {
+          workspaceId,
+          deletedAt: null,
+          evidence: { some: {} },
+          verified: true,
+        },
+        include: {
+          target: { select: { id: true, name: true, type: true } },
+          evidence: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { type: true, createdAt: true },
+          },
+          _count: { select: { evidence: true } },
+        },
+        orderBy: { lastSeenAt: "desc" },
+        take: 50,
+      })
+    : []
 
   return (
     <div className="space-y-4">
@@ -51,7 +41,13 @@ export default async function EvidencePage() {
         </p>
       </div>
 
-      {findings.length === 0 ? (
+      {!workspaceId ? (
+        <EmptyState
+          icon={ShieldCheck}
+          title="No workspace yet"
+          description="Create a workspace during onboarding to view evidence."
+        />
+      ) : findings.length === 0 ? (
         <EmptyState
           icon={ShieldAlert}
           title="No verified evidence yet"

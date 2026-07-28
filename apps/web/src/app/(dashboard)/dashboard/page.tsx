@@ -202,6 +202,8 @@ export default async function DashboardPage() {
         assetCount={targetCount}
         riskScore={latestScore?.score ?? project?.riskScore ?? 100}
         trustPlanData={project?.trustPlan}
+        completedScanCount={completedScanCount}
+        latestScore={latestScore ? { score: latestScore.score, grade: latestScore.grade } : null}
       />
 
       <section

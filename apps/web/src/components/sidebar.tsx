@@ -84,7 +84,7 @@ function SidebarPanel({
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="block text-[15px] font-bold tracking-[-0.025em]">LyraShield AI</span>
+            <span className="block text-[15px] font-bold tracking-tight">LyraShield AI</span>
             <span className="border-primary/50 bg-primary/10 text-primary rounded border px-1 py-0.5 text-[9px] font-semibold tracking-[0.12em] uppercase">
               Beta
             </span>
@@ -127,7 +127,7 @@ function SidebarPanel({
               >
                 <item.icon
                   className={cn(
-                    "size-[18px] shrink-0",
+                    "size-4.5 shrink-0",
                     isActive
                       ? "text-primary"
                       : "text-muted-foreground group-hover:text-sidebar-accent-foreground"
