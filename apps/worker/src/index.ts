@@ -108,7 +108,9 @@ async function main(): Promise<void> {
   await worker.waitUntilReady()
   worker.on("completed", (job, result) => {
     logger.info("Job completed", { jobId: job.id, result })
-    void registerScanWorker(workerId).then(refreshWorkerReadiness).catch(() => {})
+    void registerScanWorker(workerId)
+      .then(refreshWorkerReadiness)
+      .catch(() => {})
   })
   worker.on("failed", (job, error) => {
     logger.error("Job failed in queue", { jobId: job?.id, reason: error.message })
