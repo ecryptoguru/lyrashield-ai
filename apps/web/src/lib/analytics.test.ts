@@ -27,7 +27,7 @@ describe("sanitizeProperties", () => {
   it("drops overlong strings", () => {
     const longValue = "a".repeat(1000)
     const result = sanitizeProperties("signup_started", { method: longValue })
-    expect(result).toEqual({})
+    expect(result).toBeNull()
   })
 
   it("returns null when no properties remain", () => {
