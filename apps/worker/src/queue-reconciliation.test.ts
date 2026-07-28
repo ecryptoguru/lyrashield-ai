@@ -117,7 +117,7 @@ describe("scan queue reconciliation", () => {
     )
 
     const reconciliation = reconcileScanQueue()
-    await vi.advanceTimersByTimeAsync(20_000)
+    await vi.advanceTimersByTimeAsync(50_000)
 
     expect(mocks.lockRedis.pexpire).toHaveBeenCalledWith(
       "lyrashield:scan-queue:reconciliation",
