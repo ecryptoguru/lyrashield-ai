@@ -7,7 +7,7 @@ import { getScanQueue } from "./queue"
 
 const RECONCILIATION_LOCK_KEY = "lyrashield:scan-queue:reconciliation"
 const RECONCILIATION_LOCK_MS = 55_000
-const RECONCILIATION_LOCK_RENEW_MS = 20_000
+const RECONCILIATION_LOCK_RENEW_MS = 50_000
 const ORPHAN_GRACE_MS = 5 * 60_000
 const BATCH_SIZE = 500
 const ACTIVE_SCAN_STATUSES = new Set<ScanStatus>(["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"])

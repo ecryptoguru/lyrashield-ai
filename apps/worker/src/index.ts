@@ -106,9 +106,9 @@ async function main(): Promise<void> {
     // in minutes — BullMQ's defaults (5s drain poll, 30s stalled check) spend
     // ~18 commands/minute at idle for latency this queue does not need. Stalled
     // jobs are additionally caught by reconcileScanQueue() on its own interval,
-    // so a slower stalled check costs no safety.
-    drainDelay: 30,
-    stalledInterval: 90_000,
+    // so skipping the stalled check costs no safety.
+    drainDelay: 300,
+    skipStalledCheck: true,
   })
 
   await worker.waitUntilReady()
@@ -159,7 +159,7 @@ async function main(): Promise<void> {
         error: error instanceof Error ? error.message : String(error),
       })
     })
-  }, 300_000)
+  }, 1_800_000)
 
   scheduleRunner = startScheduleRunner()
   logger.info("Schedule runner started", { intervalMs: 60_000 })

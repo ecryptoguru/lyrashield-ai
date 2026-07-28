@@ -4,8 +4,8 @@ import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "@lyrashie
 import { getRedis } from "./redis"
 
 const SCAN_WORKER_REGISTRY_KEY = "lyrashield:scan-workers"
-export const SCAN_WORKER_HEARTBEAT_MS = 90_000
-export const SCAN_WORKER_TTL_MS = 270_000
+export const SCAN_WORKER_HEARTBEAT_MS = 180_000
+export const SCAN_WORKER_TTL_MS = 540_000
 
 export class ScanWorkerUnavailableError extends Error {
   readonly code = "SCAN_SERVICE_UNAVAILABLE"
