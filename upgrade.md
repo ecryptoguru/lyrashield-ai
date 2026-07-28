@@ -8,14 +8,14 @@ Baselines reviewed: web monorepo `ecryptoguru/lyrashield-ai` @ main `33f0c28`; e
 
 ### Founder decisions locked 2026-07-29 (Ankit)
 
-| # | Decision | Consequence |
-|---|---|---|
-| 1 | **Product = existing `Project` record. No new domain tables.** | Product / Asset / Environment become a presentation layer over `Project` / `Target` / `Target.environment`. Zero FK migrations. |
-| 2 | **Adopt softer radii (12/16px) across app AND marketing.** | Phase 1 carries a deliberate visual-identity change applied to both `apps/web` and `apps/marketing`, with before/after screenshots. |
-| 3 | **Engine progress PR approved**, rescoped after verification. | In-run progress ships with no new engine telemetry; the engine PR is hardening only and is non-blocking. See section 16. |
-| 4 | **Release verdict appears on the PUBLIC trust record.** | `buildScorecardPayload` allowlist change, new frozen key set, deliberately-updated regression test. Security-critical. See section 12. |
-| 5 | **Notification setup moves to the active-run screen** (agent judgment, per "do what's best"). | Removed from the onboarding sequence. Activation clock stays clean; opt-in is requested while the user is already waiting. |
-| 6 | **Web push deferred to post-default-rollout** (agent judgment). | Phase 8 ships in-app plus email only. Push becomes a Stage 4 follow-on with its own VAPID/service-worker scope. |
+| #   | Decision                                                                                      | Consequence                                                                                                                            |
+| --- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Product = existing `Project` record. No new domain tables.**                                | Product / Asset / Environment become a presentation layer over `Project` / `Target` / `Target.environment`. Zero FK migrations.        |
+| 2   | **Adopt softer radii (12/16px) across app AND marketing.**                                    | Phase 1 carries a deliberate visual-identity change applied to both `apps/web` and `apps/marketing`, with before/after screenshots.    |
+| 3   | **Engine progress PR approved**, rescoped after verification.                                 | In-run progress ships with no new engine telemetry; the engine PR is hardening only and is non-blocking. See section 16.               |
+| 4   | **Release verdict appears on the PUBLIC trust record.**                                       | `buildScorecardPayload` allowlist change, new frozen key set, deliberately-updated regression test. Security-critical. See section 12. |
+| 5   | **Notification setup moves to the active-run screen** (agent judgment, per "do what's best"). | Removed from the onboarding sequence. Activation clock stays clean; opt-in is requested while the user is already waiting.             |
+| 6   | **Web push deferred to post-default-rollout** (agent judgment).                               | Phase 8 ships in-app plus email only. Push becomes a Stage 4 follow-on with its own VAPID/service-worker scope.                        |
 
 ### New tables permitted in V2 (exhaustive)
 
@@ -35,23 +35,23 @@ Every claim below was read from the repos. Coding agents should trust this secti
 
 ### Already built (do NOT rebuild)
 
-| Capability | Where |
-|---|---|
-| Product grouping | `Project` model, `packages/db/prisma/schema.prisma`; route `/dashboard/projects` |
-| Environments | `Target.environment` enum: LOCAL, PREVIEW, STAGING, PRODUCTION |
-| Release verdict engine | `/dashboard/launch-readiness` + `launch-readiness-client.tsx` + `/api/launch-readiness` |
-| Control coverage counts | `ScanCoverageReceipt` model, enum `ScanCoverageStatus`: COMPLETED, NOT_APPLICABLE, BLOCKED, TIMED_OUT, FAILED |
-| Approval backend | `AgentApproval` model with single-use `inputHash`, enum `ApprovalStatus`: PENDING, APPROVED, EXECUTED, DENIED, EXPIRED; `packages/db/src/agent-approval-service.ts` |
-| Notification records | `Notification` model (channel, type, title, body, status, sentAt); `packages/db/src/notification-service.ts` |
-| Public share system | `ScorecardShare` (slug, frozen `publicPayload`, `revokedAt`, advisory-locked single active share per snapshot), `ScorecardEvent` (dedup on shareId+eventType+channel+visitorHash+dayBucket), `/score/[slug]`, `/score/methodology`, `/api/og`, `/api/badge` |
-| Referrals | `ReferralCode`, `ReferralAttribution`, `apps/web/src/app/onboarding/referral-claim.tsx` |
-| Lite Check | `apps/marketing/src/pages/scan.astro` plus `HomeLiteScan.astro` homepage embed; app route `/lite-check` |
-| Friendly run presets | `apps/web/src/lib/scan-presets.ts` — Release check to LAUNCH_REVIEW/SAFE, Code review to TEST_APP/STANDARD, Deep security review to FULL_PENTEST/DEEP |
-| Adaptive polling | `scans-client.tsx`: 10s for 60s, then 30s to 5min, then 60s; ETag/304; pauses on `document.hidden` |
-| Bottom-sheet primitive | `apps/web/src/components/ui/sheet.tsx` (Radix Dialog, all four sides) |
-| Reduced motion | `apps/web/src/app/globals.css` global animation kill |
-| SSRF guard | `apps/web/src/lib/ssrf.ts` `checkScanUrlSafe` |
-| Audit trail | `AuditLog` with hash chaining, `packages/db/src/audit-hash.ts` |
+| Capability              | Where                                                                                                                                                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product grouping        | `Project` model, `packages/db/prisma/schema.prisma`; route `/dashboard/projects`                                                                                                                                                                            |
+| Environments            | `Target.environment` enum: LOCAL, PREVIEW, STAGING, PRODUCTION                                                                                                                                                                                              |
+| Release verdict engine  | `/dashboard/launch-readiness` + `launch-readiness-client.tsx` + `/api/launch-readiness`                                                                                                                                                                     |
+| Control coverage counts | `ScanCoverageReceipt` model, enum `ScanCoverageStatus`: COMPLETED, NOT_APPLICABLE, BLOCKED, TIMED_OUT, FAILED                                                                                                                                               |
+| Approval backend        | `AgentApproval` model with single-use `inputHash`, enum `ApprovalStatus`: PENDING, APPROVED, EXECUTED, DENIED, EXPIRED; `packages/db/src/agent-approval-service.ts`                                                                                         |
+| Notification records    | `Notification` model (channel, type, title, body, status, sentAt); `packages/db/src/notification-service.ts`                                                                                                                                                |
+| Public share system     | `ScorecardShare` (slug, frozen `publicPayload`, `revokedAt`, advisory-locked single active share per snapshot), `ScorecardEvent` (dedup on shareId+eventType+channel+visitorHash+dayBucket), `/score/[slug]`, `/score/methodology`, `/api/og`, `/api/badge` |
+| Referrals               | `ReferralCode`, `ReferralAttribution`, `apps/web/src/app/onboarding/referral-claim.tsx`                                                                                                                                                                     |
+| Lite Check              | `apps/marketing/src/pages/scan.astro` plus `HomeLiteScan.astro` homepage embed; app route `/lite-check`                                                                                                                                                     |
+| Friendly run presets    | `apps/web/src/lib/scan-presets.ts` — Release check to LAUNCH_REVIEW/SAFE, Code review to TEST_APP/STANDARD, Deep security review to FULL_PENTEST/DEEP                                                                                                       |
+| Adaptive polling        | `scans-client.tsx`: 10s for 60s, then 30s to 5min, then 60s; ETag/304; pauses on `document.hidden`                                                                                                                                                          |
+| Bottom-sheet primitive  | `apps/web/src/components/ui/sheet.tsx` (Radix Dialog, all four sides)                                                                                                                                                                                       |
+| Reduced motion          | `apps/web/src/app/globals.css` global animation kill                                                                                                                                                                                                        |
+| SSRF guard              | `apps/web/src/lib/ssrf.ts` `checkScanUrlSafe`                                                                                                                                                                                                               |
+| Audit trail             | `AuditLog` with hash chaining, `packages/db/src/audit-hash.ts`                                                                                                                                                                                              |
 
 ### Genuine gaps
 
@@ -134,35 +134,35 @@ Create `apps/web/src/lib/terminology.ts` exporting every user-facing noun as nam
 
 Internal identifiers, Prisma models, enum values, API payload keys and integration contracts keep their current names (`Scan`, `Finding`, `Target`, `Project`). The mapping lives only in this module.
 
-| Internal entity | V2 user-facing label |
-|---|---|
-| Scan | Trust Run |
-| Finding | Issue |
-| Project | Product |
-| Target | Asset |
-| `Target.environment` | Environment |
-| FixProposal | Proposed fix (nested inside an Issue) |
-| Report | Evidence record |
-| Schedule | Automation |
+| Internal entity      | V2 user-facing label                  |
+| -------------------- | ------------------------------------- |
+| Scan                 | Trust Run                             |
+| Finding              | Issue                                 |
+| Project              | Product                               |
+| Target               | Asset                                 |
+| `Target.environment` | Environment                           |
+| FixProposal          | Proposed fix (nested inside an Issue) |
+| Report               | Evidence record                       |
+| Schedule             | Automation                            |
 
 ### Route policy — aliases, not renames
 
 Existing URLs appear in already-sent notification emails, generated reports, and bookmarks. Keep them canonical; add aliases where the IA changes.
 
-| Route | Action |
-|---|---|
-| `/dashboard` | Stays. Becomes the Trust Command Center. |
-| `/dashboard/scans`, `/dashboard/scans/[id]` | **Canonical, unchanged.** Add `/dashboard/runs` and `/dashboard/runs/[id]` as `next.config` rewrites to the same segments. |
-| `/dashboard/findings` | **Canonical, unchanged.** Add `/dashboard/issues` alias. |
-| `/dashboard/targets`, `/dashboard/targets/[id]` | **Redirect (308)** to `/dashboard/products` and `/dashboard/products/[id]`. This is the one genuine IA move. |
-| `/dashboard/projects` | Redirect to `/dashboard/products`. |
-| `/dashboard/fixes` | Redirect to `/dashboard/issues`. Fix proposals stop being a top-level destination and appear inside issue detail and the Approval Centre. |
-| `/dashboard/reports` | Redirect to `/dashboard/evidence`. |
-| `/dashboard/launch-readiness` | Keep as a deep link; its content is promoted into `/dashboard` and product detail. |
-| `/dashboard/approvals` | **New.** |
-| `/dashboard/evidence` | **New**, absorbing reports. |
-| `/dashboard/automations` | **New**, alias of `/dashboard/schedules`. |
-| `/dashboard/notifications`, `/integrations`, `/team`, `/settings` | Stay. Promoted into the More menu on mobile. |
+| Route                                                             | Action                                                                                                                                    |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `/dashboard`                                                      | Stays. Becomes the Trust Command Center.                                                                                                  |
+| `/dashboard/scans`, `/dashboard/scans/[id]`                       | **Canonical, unchanged.** Add `/dashboard/runs` and `/dashboard/runs/[id]` as `next.config` rewrites to the same segments.                |
+| `/dashboard/findings`                                             | **Canonical, unchanged.** Add `/dashboard/issues` alias.                                                                                  |
+| `/dashboard/targets`, `/dashboard/targets/[id]`                   | **Redirect (308)** to `/dashboard/products` and `/dashboard/products/[id]`. This is the one genuine IA move.                              |
+| `/dashboard/projects`                                             | Redirect to `/dashboard/products`.                                                                                                        |
+| `/dashboard/fixes`                                                | Redirect to `/dashboard/issues`. Fix proposals stop being a top-level destination and appear inside issue detail and the Approval Centre. |
+| `/dashboard/reports`                                              | Redirect to `/dashboard/evidence`.                                                                                                        |
+| `/dashboard/launch-readiness`                                     | Keep as a deep link; its content is promoted into `/dashboard` and product detail.                                                        |
+| `/dashboard/approvals`                                            | **New.**                                                                                                                                  |
+| `/dashboard/evidence`                                             | **New**, absorbing reports.                                                                                                               |
+| `/dashboard/automations`                                          | **New**, alias of `/dashboard/schedules`.                                                                                                 |
+| `/dashboard/notifications`, `/integrations`, `/team`, `/settings` | Stay. Promoted into the More menu on mobile.                                                                                              |
 
 Implement redirects in `next.config` (there is no `middleware.ts` and one should not be introduced solely for this). Add an e2e assertion that every legacy path resolves 200 or 308 to its replacement.
 
@@ -612,24 +612,24 @@ All events go through the typed `track()` wrapper from Phase 0. Property allowli
 
 ### Activation funnel
 
-| Event | Allowed properties |
-|---|---|
-| `landing_view` | utm_source, utm_medium, utm_campaign, referrer_host |
-| `signup_started` | method |
-| `account_created` | method |
-| `github_connect_started` | — |
-| `github_connected` | repo_count_bucket, account_type |
-| `repos_loaded` | repo_count_bucket, load_ms_bucket |
-| `repos_selected` | selected_count |
-| `product_confirmed` | asset_count, suggested_assets_declined |
-| `trust_plan_accepted` | plan_preset, customised (bool) |
-| `first_run_started` | preset, asset_count, estimate_low_min, estimate_high_min |
-| `first_run_completed` | preset, duration_bucket, verdict, outcome |
-| `first_issue_viewed` | verification_status |
-| `first_remediation_action` | action_type |
-| `first_retest` | outcome |
-| `first_evidence_share` | variant, channel |
-| `paid_conversion` | **deferred — billing not implemented** |
+| Event                      | Allowed properties                                       |
+| -------------------------- | -------------------------------------------------------- |
+| `landing_view`             | utm_source, utm_medium, utm_campaign, referrer_host      |
+| `signup_started`           | method                                                   |
+| `account_created`          | method                                                   |
+| `github_connect_started`   | —                                                        |
+| `github_connected`         | repo_count_bucket, account_type                          |
+| `repos_loaded`             | repo_count_bucket, load_ms_bucket                        |
+| `repos_selected`           | selected_count                                           |
+| `product_confirmed`        | asset_count, suggested_assets_declined                   |
+| `trust_plan_accepted`      | plan_preset, customised (bool)                           |
+| `first_run_started`        | preset, asset_count, estimate_low_min, estimate_high_min |
+| `first_run_completed`      | preset, duration_bucket, verdict, outcome                |
+| `first_issue_viewed`       | verification_status                                      |
+| `first_remediation_action` | action_type                                              |
+| `first_retest`             | outcome                                                  |
+| `first_evidence_share`     | variant, channel                                         |
+| `paid_conversion`          | **deferred — billing not implemented**                   |
 
 ### Engagement
 
@@ -653,13 +653,13 @@ Repository name or full name, owner login, target URL, branch name, file path, f
 
 ### Rollout stages
 
-| Stage | Audience | Flag | Gate to advance |
-|---|---|---|---|
-| 1. Internal preview | Founder plus selected testers | `UX_V2_INTERNAL_USER_IDS` | Navigation, onboarding, grouping, run creation and mobile responsiveness all exercised without a blocker |
-| 2. New-account beta | Newly registered users | `UX_V2_NEW_USERS_FROM` | **Activation funnel instrumented and reporting** — Stage 2 exists to measure, so unmeasured is a hard fail. Plus error rate at or below the legacy baseline |
-| 3. Opt-in migration | Existing users, banner offer | Per-workspace override | Temporary fallback to the legacy interface works from every V2 screen |
-| 4. Default experience | Everyone | Flag default true | Parity check, stable activation, notification delivery reliability, share-privacy review, accessibility review, no critical regression. **Web push may ship here, not before** |
-| 5. Legacy removal | — | Flags deleted | Route compatibility, exported-data compatibility, documentation updated, analytics comparison complete, final regression pass |
+| Stage                 | Audience                      | Flag                      | Gate to advance                                                                                                                                                                |
+| --------------------- | ----------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1. Internal preview   | Founder plus selected testers | `UX_V2_INTERNAL_USER_IDS` | Navigation, onboarding, grouping, run creation and mobile responsiveness all exercised without a blocker                                                                       |
+| 2. New-account beta   | Newly registered users        | `UX_V2_NEW_USERS_FROM`    | **Activation funnel instrumented and reporting** — Stage 2 exists to measure, so unmeasured is a hard fail. Plus error rate at or below the legacy baseline                    |
+| 3. Opt-in migration   | Existing users, banner offer  | Per-workspace override    | Temporary fallback to the legacy interface works from every V2 screen                                                                                                          |
+| 4. Default experience | Everyone                      | Flag default true         | Parity check, stable activation, notification delivery reliability, share-privacy review, accessibility review, no critical regression. **Web push may ship here, not before** |
+| 5. Legacy removal     | —                             | Flags deleted             | Route compatibility, exported-data compatibility, documentation updated, analytics comparison complete, final regression pass                                                  |
 
 ### Non-negotiable acceptance standards (apply at every stage)
 

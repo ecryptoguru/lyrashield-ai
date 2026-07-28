@@ -3,6 +3,7 @@ import { Inter } from "next/font/google"
 import { headers } from "next/headers"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { PostHogProvider } from "@/components/posthog-provider"
 import "./globals.css"
 
 const inter = Inter({
@@ -47,7 +48,9 @@ export default async function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <ThemeProvider>
-          <TooltipProvider>{children}</TooltipProvider>
+          <TooltipProvider>
+            <PostHogProvider>{children}</PostHogProvider>
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>

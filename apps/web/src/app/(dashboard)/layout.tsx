@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
+import { FeatureFlagsProvider } from "@/components/feature-flags-provider"
+import { getFlags } from "@/lib/flags"
 import {
   getCachedSession,
   getCachedWorkspaces,
@@ -24,6 +26,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/onboarding")
   }
 
+  const flags = await getFlags(session, activeWorkspaceId ? { id: activeWorkspaceId } : null)
+
   return (
     <div className="bg-background flex min-h-screen">
       <Sidebar
@@ -44,7 +48,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         tabIndex={-1}
       >
         <div className="mx-auto w-full max-w-[92rem] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          {children}
+          <FeatureFlagsProvider flags={flags}>{children}</FeatureFlagsProvider>
         </div>
       </main>
     </div>
