@@ -110,6 +110,9 @@ export const engineRunRecordSchema = z
     start_time: boundedString,
     end_time: nullableBoundedString,
     status: nonEmptyString,
+    phase: boundedString,
+    seq: z.number().int().min(0).optional(),
+    turn_count: z.number().int().min(0).optional(),
     targets_info: z.array(targetInfoSchema).max(10).optional(),
     llm_usage: z
       .union([z.array(usageEntrySchema).max(1000), z.record(z.string(), z.unknown())])
