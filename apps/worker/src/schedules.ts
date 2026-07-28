@@ -120,7 +120,7 @@ function runSchedulePoll(): void {
   })
 }
 
-export function startScheduleRunner(intervalMs = 60_000): NodeJS.Timeout {
+export function startScheduleRunner(intervalMs = 300_000): NodeJS.Timeout {
   runSchedulePoll()
   return setInterval(runSchedulePoll, intervalMs)
 }

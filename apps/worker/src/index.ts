@@ -18,7 +18,6 @@ import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
-let reconciliationTimer: NodeJS.Timeout | null = null
 let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
@@ -47,10 +46,6 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
       error: error instanceof Error ? error.message : String(error),
     })
   })
-  if (reconciliationTimer) {
-    clearInterval(reconciliationTimer)
-    reconciliationTimer = null
-  }
   await unregisterScanWorker(workerId).catch((error) => {
     logger.warn("Could not unregister scan worker", {
       error: error instanceof Error ? error.message : String(error),
@@ -102,18 +97,18 @@ async function main(): Promise<void> {
     },
     concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
     autorun: false,
-    // Managed Redis bills per command, and scans are long-running jobs measured
-    // in minutes — BullMQ's defaults (5s drain poll, 30s stalled check) spend
-    // ~18 commands/minute at idle for latency this queue does not need. Stalled
-    // jobs are additionally caught by reconcileScanQueue() on its own interval,
-    // so skipping the stalled check costs no safety.
-    drainDelay: 300,
+    // BRPOP blocks for up to 10 min per call — but returns instantly when a
+    // job is pushed to the queue. This gives instant scan pickup with only
+    // ~4.3K re-issue commands/month at idle. Stalled check is skipped because
+    // reconcileScanQueue() runs once on startup and catches orphaned jobs.
+    drainDelay: 600,
     skipStalledCheck: true,
   })
 
   await worker.waitUntilReady()
   worker.on("completed", (job, result) => {
     logger.info("Job completed", { jobId: job.id, result })
+    void registerScanWorker(workerId).then(refreshWorkerReadiness).catch(() => {})
   })
   worker.on("failed", (job, error) => {
     logger.error("Job failed in queue", { jobId: job?.id, reason: error.message })
@@ -124,6 +119,8 @@ async function main(): Promise<void> {
     logger.error("Worker error", { error: error.message, stack: error.stack })
   })
 
+  // One-time sweep on startup — catches orphans from a previous crash.
+  // No background timer: reconciliation runs only when the worker starts.
   await reconcileScanQueue()
   await registerScanWorker(workerId)
   await refreshWorkerReadiness()
@@ -137,6 +134,8 @@ async function main(): Promise<void> {
     queue: SCAN_QUEUE_NAME,
     concurrency: env.LYRASHIELD_WORKER_CONCURRENCY,
   })
+  // Minimal heartbeat: every 30 min, just enough to keep /api/ready/scans
+  // accurate. Registration is also refreshed after each job completes.
   heartbeatTimer = setInterval(() => {
     void registerScanWorker(workerId)
       .then(refreshWorkerReadiness)
@@ -153,16 +152,8 @@ async function main(): Promise<void> {
       })
   }, SCAN_WORKER_HEARTBEAT_MS)
 
-  reconciliationTimer = setInterval(() => {
-    void reconcileScanQueue().catch((error) => {
-      logger.error("Scan queue reconciliation failed", {
-        error: error instanceof Error ? error.message : String(error),
-      })
-    })
-  }, 1_800_000)
-
   scheduleRunner = startScheduleRunner()
-  logger.info("Schedule runner started", { intervalMs: 60_000 })
+  logger.info("Schedule runner started", { intervalMs: 300_000 })
 }
 
 main().catch((error) => {
