@@ -23,7 +23,15 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-function NavLink({ item, pathname, onClick }: { item: NavItem; pathname: string; onClick?: () => void }) {
+function NavLink({
+  item,
+  pathname,
+  onClick,
+}: {
+  item: NavItem
+  pathname: string
+  onClick?: () => void
+}) {
   const active = isActive(pathname, item.href)
   return (
     <Link
@@ -63,20 +71,28 @@ export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: n
               variant="ghost"
               size="icon"
               aria-label="More navigation"
-              className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-none text-[10px] font-medium text-muted-foreground"
+              className="text-muted-foreground flex h-full w-full flex-col items-center justify-center gap-1 rounded-none text-[10px] font-medium"
             >
               <Menu className="size-5" aria-hidden="true" />
               <span>More</span>
             </Button>
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-auto rounded-t-2xl pb-[env(safe-area-inset-bottom)]">
+          <SheetContent
+            side="bottom"
+            className="h-auto rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
+          >
             <SheetHeader className="sr-only">
               <SheetTitle>More</SheetTitle>
               <SheetDescription>Additional navigation and settings.</SheetDescription>
             </SheetHeader>
             <div className="grid grid-cols-3 gap-2 py-4">
               {MORE_NAV_ITEMS.map((item) => (
-                <NavLink key={item.href} item={item} pathname={pathname} onClick={() => setMoreOpen(false)} />
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  pathname={pathname}
+                  onClick={() => setMoreOpen(false)}
+                />
               ))}
             </div>
           </SheetContent>

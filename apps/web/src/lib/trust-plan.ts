@@ -16,10 +16,22 @@ export interface TrustPlan {
   updatedAt: string
 }
 
-export const TRUST_PLAN_PRESETS: { value: TrustPlan["preset"]; label: string; description: string }[] = [
+export const TRUST_PLAN_PRESETS: {
+  value: TrustPlan["preset"]
+  label: string
+  description: string
+}[] = [
   { value: "launch", label: "Launch readiness", description: "Evidence before release." },
-  { value: "continuous", label: "Continuous review", description: "Ongoing checks on every significant change." },
-  { value: "compliance", label: "Compliance baseline", description: "Documented controls and audit trail." },
+  {
+    value: "continuous",
+    label: "Continuous review",
+    description: "Ongoing checks on every significant change.",
+  },
+  {
+    value: "compliance",
+    label: "Compliance baseline",
+    description: "Documented controls and audit trail.",
+  },
   { value: "custom", label: "Custom", description: "Choose your own controls and schedule." },
 ]
 

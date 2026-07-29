@@ -6,16 +6,24 @@ import { Check, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react"
 import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
 import { apiGet, apiPost, apiPatch } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
-import {
-  PRODUCT_SINGULAR,
-  ENVIRONMENT_SINGULAR,
-  RUN_SINGULAR,
-} from "@/lib/terminology"
+import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
 
 const GOALS = [
-  { value: "LAUNCH_REVIEW", label: "Release check", description: "Check what needs attention before release." },
-  { value: "TEST_APP", label: "Code review", description: "Review an app or repository for issues." },
-  { value: "FULL_PENTEST", label: "Deep security review", description: "A thorough security review with evidence." },
+  {
+    value: "LAUNCH_REVIEW",
+    label: "Release check",
+    description: "Check what needs attention before release.",
+  },
+  {
+    value: "TEST_APP",
+    label: "Code review",
+    description: "Review an app or repository for issues.",
+  },
+  {
+    value: "FULL_PENTEST",
+    label: "Deep security review",
+    description: "A thorough security review with evidence.",
+  },
   { value: "WEEKLY_MONITOR", label: "Weekly monitor", description: "Set a recurring review goal." },
 ] as const
 
@@ -107,7 +115,10 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
         `/api/integrations/github/repos?workspaceId=${data.workspaceId}`
       )
       setRepos(res)
-      track("repos_loaded", { repo_count_bucket: bucketCount(res.length), load_ms_bucket: "unknown" })
+      track("repos_loaded", {
+        repo_count_bucket: bucketCount(res.length),
+        load_ms_bucket: "unknown",
+      })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load repositories.")
     } finally {
@@ -160,7 +171,12 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
         mode: "SAFE",
       })
       await persist({ currentStep: 4, completed: true, skipped: false, selectedGoal })
-      track("first_run_started", { preset: selectedGoal, asset_count: 1, estimate_low_min: 1, estimate_high_min: 5 })
+      track("first_run_started", {
+        preset: selectedGoal,
+        asset_count: 1,
+        estimate_low_min: 1,
+        estimate_high_min: 5,
+      })
       router.push(`/dashboard/scans/${scan.id}`)
       router.refresh()
     } catch (cause) {
@@ -206,18 +222,25 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
       </ol>
 
       {error && (
-        <p role="alert" className="border-destructive bg-destructive/10 mb-4 border-l-2 p-3 text-sm">
+        <p
+          role="alert"
+          className="border-destructive bg-destructive/10 mb-4 border-l-2 p-3 text-sm"
+        >
           {error}
         </p>
       )}
 
-      <section className="border rounded-xl p-5 sm:p-7" aria-live="polite">
+      <section className="rounded-xl border p-5 sm:p-7" aria-live="polite">
         {step === 0 && (
           <div className="space-y-5">
             <div>
-              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">Step 1</p>
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                Step 1
+              </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Give your work a home</h2>
-              <p className="text-muted-foreground mt-2 text-sm">A workspace keeps your products and reviews together.</p>
+              <p className="text-muted-foreground mt-2 text-sm">
+                A workspace keeps your products and reviews together.
+              </p>
             </div>
             <FormField label="Workspace name" htmlFor="workspace-name">
               <Input
@@ -240,20 +263,31 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
         {step === 1 && (
           <div className="space-y-5">
             <div>
-              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">Step 2</p>
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                Step 2
+              </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Connect GitHub</h2>
-              <p className="text-muted-foreground mt-2 text-sm">Authorise the LyraShield GitHub App to read your repositories.</p>
+              <p className="text-muted-foreground mt-2 text-sm">
+                Authorise the LyraShield GitHub App to read your repositories.
+              </p>
             </div>
             <div className="bg-muted/50 rounded-lg border p-6 text-center">
               <GithubIcon className="mx-auto mb-3 size-10" aria-hidden="true" />
-              <p className="text-sm">We only read repository metadata and source code you grant access to. We never write code without an approval.</p>
+              <p className="text-sm">
+                We only read repository metadata and source code you grant access to. We never write
+                code without an approval.
+              </p>
             </div>
             <div className="flex justify-between gap-3">
               <Button type="button" variant="ghost" onClick={() => setStep(0)} disabled={loading}>
                 <ChevronLeft className="size-4" /> Back
               </Button>
               <Button type="button" onClick={connectGitHub} disabled={loading}>
-                {loading ? <Spinner className="mr-2" /> : <GithubIcon className="size-4" aria-hidden="true" />}
+                {loading ? (
+                  <Spinner className="mr-2" />
+                ) : (
+                  <GithubIcon className="size-4" aria-hidden="true" />
+                )}
                 Connect GitHub
               </Button>
             </div>
@@ -263,14 +297,21 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
         {step === 2 && (
           <div className="space-y-5">
             <div>
-              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">Step 3</p>
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                Step 3
+              </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Select a repository</h2>
-              <p className="text-muted-foreground mt-2 text-sm">Choose the repository you want to review first.</p>
+              <p className="text-muted-foreground mt-2 text-sm">
+                Choose the repository you want to review first.
+              </p>
             </div>
 
             {repos.length === 0 && (
               <div className="space-y-3">
-                <p className="text-sm">After you finish the GitHub install in the new tab, click below to load repositories.</p>
+                <p className="text-sm">
+                  After you finish the GitHub install in the new tab, click below to load
+                  repositories.
+                </p>
                 <Button type="button" variant="secondary" onClick={loadRepos} disabled={loading}>
                   {loading ? <Spinner /> : <RefreshCwIcon />}
                   Load repositories
@@ -291,7 +332,9 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                   >
                     <span className="truncate font-medium">{repo.fullName}</span>
                     {repo.private && <Badge variant="muted">Private</Badge>}
-                    {selectedRepo?.id === repo.id && <Check className="size-4" aria-hidden="true" />}
+                    {selectedRepo?.id === repo.id && (
+                      <Check className="size-4" aria-hidden="true" />
+                    )}
                   </button>
                 ))}
               </div>
@@ -301,7 +344,11 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
               <Button type="button" variant="ghost" onClick={() => setStep(1)} disabled={loading}>
                 <ChevronLeft className="size-4" /> Back
               </Button>
-              <Button type="button" onClick={confirmRepoAndContinue} disabled={loading || !selectedRepo}>
+              <Button
+                type="button"
+                onClick={confirmRepoAndContinue}
+                disabled={loading || !selectedRepo}
+              >
                 <ChevronRight className="size-4" /> Continue
               </Button>
             </div>
@@ -311,13 +358,22 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
         {step === 3 && (
           <div className="space-y-5">
             <div>
-              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">Step 4</p>
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                Step 4
+              </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">{PRODUCT_SINGULAR} details</h2>
-              <p className="text-muted-foreground mt-2 text-sm">Name your {PRODUCT_SINGULAR.toLowerCase()} and choose the environment to review.</p>
+              <p className="text-muted-foreground mt-2 text-sm">
+                Name your {PRODUCT_SINGULAR.toLowerCase()} and choose the environment to review.
+              </p>
             </div>
 
             <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="product-name">
-              <Input id="product-name" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="My web app" />
+              <Input
+                id="product-name"
+                value={productName}
+                onChange={(e) => setProductName(e.target.value)}
+                placeholder="My web app"
+              />
             </FormField>
 
             <fieldset>
@@ -329,7 +385,9 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                     key={env}
                     onClick={() => setEnvironment(env)}
                     className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                      environment === env ? "border-primary bg-primary/8 text-primary" : "hover:bg-accent"
+                      environment === env
+                        ? "border-primary bg-primary/8 text-primary"
+                        : "hover:bg-accent"
                     }`}
                   >
                     {env.toLowerCase()}
@@ -339,7 +397,9 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
             </fieldset>
 
             <fieldset>
-              <legend className="mb-2 text-sm font-medium">What do you need from this {RUN_SINGULAR.toLowerCase()}?</legend>
+              <legend className="mb-2 text-sm font-medium">
+                What do you need from this {RUN_SINGULAR.toLowerCase()}?
+              </legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 {GOALS.map((goal) => (
                   <button
@@ -347,7 +407,9 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                     key={goal.value}
                     onClick={() => setSelectedGoal(goal.value)}
                     className={`rounded-lg border p-3 text-left text-sm transition-colors ${
-                      selectedGoal === goal.value ? "border-primary bg-primary/8" : "hover:bg-accent"
+                      selectedGoal === goal.value
+                        ? "border-primary bg-primary/8"
+                        : "hover:bg-accent"
                     }`}
                   >
                     <span className="block font-medium">{goal.label}</span>
@@ -358,7 +420,8 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
             </fieldset>
 
             <p className="border-warning bg-warning/10 border-l-2 p-3 text-sm">
-              A {RUN_SINGULAR.toLowerCase()} reports evidence and limitations. A clean result is not a universal security guarantee.
+              A {RUN_SINGULAR.toLowerCase()} reports evidence and limitations. A clean result is not
+              a universal security guarantee.
             </p>
 
             <div className="flex justify-between gap-3">
@@ -367,7 +430,9 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
               </Button>
               <Button type="button" onClick={createProductAndStart} disabled={loading}>
                 <ShieldCheck className="size-4" />
-                {loading ? "Starting…" : `Start ${GOALS.find((g) => g.value === selectedGoal)?.label.toLowerCase() ?? "review"}`}
+                {loading
+                  ? "Starting…"
+                  : `Start ${GOALS.find((g) => g.value === selectedGoal)?.label.toLowerCase() ?? "review"}`}
               </Button>
             </div>
           </div>

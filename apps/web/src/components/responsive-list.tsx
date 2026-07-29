@@ -31,14 +31,7 @@ export function ResponsiveList({
   compact,
 }: ResponsiveListProps) {
   return (
-    <ul
-      className={cn(
-        "grid gap-4",
-        columnClasses[columns],
-        compact && "gap-2",
-        className
-      )}
-    >
+    <ul className={cn("grid gap-4", columnClasses[columns], compact && "gap-2", className)}>
       {children}
     </ul>
   )
@@ -56,17 +49,21 @@ export function ResponsiveListItem({
   return (
     <li
       onClick={onClick}
-      onKeyDown={onClick ? (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onClick()
-        }
-      } : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onClick()
+              }
+            }
+          : undefined
+      }
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
       className={cn(
         "bg-card text-card-foreground rounded-xl border p-4 shadow-xs transition-colors",
-        onClick && "cursor-pointer hover:bg-accent",
+        onClick && "hover:bg-accent cursor-pointer",
         className
       )}
     >

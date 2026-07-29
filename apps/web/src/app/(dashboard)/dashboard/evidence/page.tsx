@@ -59,18 +59,20 @@ export default async function EvidencePage() {
             <Link
               key={f.id}
               href={`/dashboard/findings/${f.id}`}
-              className="group block rounded-xl border bg-card p-4 transition-colors hover:border-primary/50 hover:shadow-card-hover"
+              className="group bg-card hover:border-primary/50 hover:shadow-card-hover block rounded-xl border p-4 transition-colors"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="font-semibold tracking-tight group-hover:text-primary">{f.title}</h3>
+                  <h3 className="group-hover:text-primary font-semibold tracking-tight">
+                    {f.title}
+                  </h3>
                   <p className="text-muted-foreground line-clamp-2 text-sm">{f.summary}</p>
                   {f.target && (
                     <p className="text-muted-foreground mt-1 text-xs">{f.target.name}</p>
                   )}
                 </div>
                 <div className="shrink-0 text-right">
-                  <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                  <span className="bg-primary/10 text-primary inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
                     {f._count.evidence} record{f._count.evidence === 1 ? "" : "s"}
                   </span>
                   <p className="text-muted-foreground mt-1 text-xs">{f.evidence[0]?.type}</p>

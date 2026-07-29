@@ -1,10 +1,6 @@
 "use client"
 
-import {
-  forwardRef,
-  type ReactNode,
-  type ComponentPropsWithoutRef,
-} from "react"
+import { forwardRef, type ReactNode, type ComponentPropsWithoutRef } from "react"
 import { cn } from "@lyrashield/ui"
 import { X } from "lucide-react"
 
@@ -38,7 +34,7 @@ export const BottomSheet = forwardRef<HTMLDivElement, BottomSheetProps>(
             className
           )}
         >
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3">
+          <div className="bg-background sticky top-0 z-10 flex items-center justify-between border-b px-4 py-3">
             <div>
               <h2 className="text-base font-semibold" id="bottom-sheet-title">
                 {title}

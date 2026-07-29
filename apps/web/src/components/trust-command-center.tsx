@@ -13,10 +13,18 @@ function trustPlanLabel(data: unknown): string {
     plan.preRelease && Array.isArray(plan.preRelease) && plan.preRelease.length > 0
       ? String(plan.preRelease[0])
       : null
-  if (preset) return preset.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+  if (preset)
+    return preset
+      .replace(/_/g, " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (c) => c.toUpperCase())
   if (plan.recurring && Array.isArray(plan.recurring) && plan.recurring.length > 0) {
     const first = plan.recurring[0] as Record<string, unknown>
-    if (typeof first.preset === "string") return String(first.preset).replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+    if (typeof first.preset === "string")
+      return String(first.preset)
+        .replace(/_/g, " ")
+        .toLowerCase()
+        .replace(/\b\w/g, (c) => c.toUpperCase())
   }
   return "Configured"
 }
@@ -42,14 +50,20 @@ export function TrustCommandCenter({
 
   const hasCompletedReview = completedScanCount > 0 && latestScore !== null
   const score = latestScore?.score ?? riskScore
-  const verdictVariant =
-    !hasCompletedReview ? "muted" :
-    score >= 80 ? "success" :
-    score >= 50 ? "warning" : "danger"
-  const verdictText =
-    !hasCompletedReview ? "Not evaluated" :
-    score >= 80 ? "Ready to ship within completed scope" :
-    score >= 50 ? "Needs attention" : "Needs action"
+  const verdictVariant = !hasCompletedReview
+    ? "muted"
+    : score >= 80
+      ? "success"
+      : score >= 50
+        ? "warning"
+        : "danger"
+  const verdictText = !hasCompletedReview
+    ? "Not evaluated"
+    : score >= 80
+      ? "Ready to ship within completed scope"
+      : score >= 50
+        ? "Needs attention"
+        : "Needs action"
 
   return (
     <div className="space-y-4">
@@ -84,7 +98,9 @@ export function TrustCommandCenter({
               <Clock className="text-primary size-5" aria-hidden="true" />
               <span className="text-2xl font-bold">{formatEstimate(estimate)}</span>
             </div>
-            <p className="text-muted-foreground text-xs">For {assetCount} asset(s) in {mode.toLowerCase()} mode</p>
+            <p className="text-muted-foreground text-xs">
+              For {assetCount} asset(s) in {mode.toLowerCase()} mode
+            </p>
           </CardContent>
         </Card>
 

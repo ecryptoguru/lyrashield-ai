@@ -13,11 +13,47 @@ interface ShareSheetProps {
   description?: string
 }
 
-const CHANNELS: { id: string; label: string; icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }> | (() => React.ReactElement) }[] = [
+const CHANNELS: {
+  id: string
+  label: string
+  icon:
+    | React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>
+    | (() => React.ReactElement)
+}[] = [
   { id: "copy", label: "Copy link", icon: Link2 },
-  { id: "x", label: "X", icon: function XIcon(props) { return <span {...props} aria-hidden="true">𝕏</span> } },
-  { id: "linkedin", label: "LinkedIn", icon: function LinkedInIcon(props) { return <span {...props} aria-hidden="true">in</span> } },
-  { id: "facebook", label: "Facebook", icon: function FacebookIcon(props) { return <span {...props} aria-hidden="true">f</span> } },
+  {
+    id: "x",
+    label: "X",
+    icon: function XIcon(props) {
+      return (
+        <span {...props} aria-hidden="true">
+          𝕏
+        </span>
+      )
+    },
+  },
+  {
+    id: "linkedin",
+    label: "LinkedIn",
+    icon: function LinkedInIcon(props) {
+      return (
+        <span {...props} aria-hidden="true">
+          in
+        </span>
+      )
+    },
+  },
+  {
+    id: "facebook",
+    label: "Facebook",
+    icon: function FacebookIcon(props) {
+      return (
+        <span {...props} aria-hidden="true">
+          f
+        </span>
+      )
+    },
+  },
   { id: "email", label: "Email", icon: Mail },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { id: "download", label: "Download", icon: Download },
@@ -85,10 +121,10 @@ export function ShareSheet({ open, onClose, title, shareUrl, description }: Shar
             <button
               key={channel.id}
               onClick={() => handleChannel(channel.id)}
-              className="flex flex-col items-center gap-2 rounded-lg p-2 text-center text-xs transition-colors hover:bg-accent"
+              className="hover:bg-accent flex flex-col items-center gap-2 rounded-lg p-2 text-center text-xs transition-colors"
             >
               {channel.id === "copy" && copied ? (
-                <Check className="text-emerald-500 size-6" aria-hidden={true} />
+                <Check className="size-6 text-emerald-500" aria-hidden={true} />
               ) : (
                 <Icon className="size-6" aria-hidden={true} />
               )}
@@ -98,9 +134,9 @@ export function ShareSheet({ open, onClose, title, shareUrl, description }: Shar
         })}
       </div>
       <p className="text-muted-foreground mt-4 text-xs">
-        Shared scorecards use privacy-safe public links. They never expose target, repository, or finding data.
+        Shared scorecards use privacy-safe public links. They never expose target, repository, or
+        finding data.
       </p>
     </BottomSheet>
   )
 }
-

@@ -80,7 +80,10 @@ export async function PATCH(request: Request) {
   } catch (error) {
     logger.error("Failed to update notification preferences", { error: String(error) })
     return NextResponse.json(
-      { success: false, error: { code: "INTERNAL_ERROR", message: "Could not update preferences" } },
+      {
+        success: false,
+        error: { code: "INTERNAL_ERROR", message: "Could not update preferences" },
+      },
       { status: 500 }
     )
   }

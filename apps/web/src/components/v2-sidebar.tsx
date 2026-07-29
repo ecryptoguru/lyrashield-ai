@@ -57,7 +57,14 @@ export function V2Sidebar({
       <div className="bg-sidebar flex h-full min-h-0 flex-col">
         <div className="flex h-16 shrink-0 items-center gap-3 border-b px-5">
           <div className="shadow-primary-glow flex size-9 items-center justify-center rounded-xl border bg-[#07111f] p-1">
-            <Image src="/icon.svg" alt="" width={32} height={32} className="size-6" aria-hidden="true" />
+            <Image
+              src="/icon.svg"
+              alt=""
+              width={32}
+              height={32}
+              className="size-6"
+              aria-hidden="true"
+            />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">

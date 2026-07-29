@@ -35,7 +35,10 @@ export function NotificationPreferences() {
     setPrefs(next)
     setSaving(true)
     try {
-      const saved = await apiPatch<NotificationPreference>("/api/notifications/preferences", updates)
+      const saved = await apiPatch<NotificationPreference>(
+        "/api/notifications/preferences",
+        updates
+      )
       setPrefs(saved)
       track("notification_opened", { event_type: "preferences_updated" })
     } catch {
@@ -74,18 +77,14 @@ export function NotificationPreferences() {
             title="Email notifications"
             description="Daily digest and important instant alerts."
             checked={prefs.emailInstant && prefs.emailDigest}
-            onChange={(checked) =>
-              update({ emailInstant: checked, emailDigest: checked })
-            }
+            onChange={(checked) => update({ emailInstant: checked, emailDigest: checked })}
           />
           <PreferenceRow
             icon={Bell}
             title="In-app notifications"
             description="Instant and digest updates inside the dashboard."
             checked={prefs.inAppInstant && prefs.inAppDigest}
-            onChange={(checked) =>
-              update({ inAppInstant: checked, inAppDigest: checked })
-            }
+            onChange={(checked) => update({ inAppInstant: checked, inAppDigest: checked })}
           />
           <PreferenceRow
             icon={Smartphone}
@@ -98,7 +97,9 @@ export function NotificationPreferences() {
         </div>
 
         <div className="flex items-center justify-between border-t pt-4">
-          <span className="text-sm font-medium">{saving ? "Saving…" : "Changes saved automatically"}</span>
+          <span className="text-sm font-medium">
+            {saving ? "Saving…" : "Changes saved automatically"}
+          </span>
         </div>
       </CardContent>
     </Card>
