@@ -15,12 +15,7 @@ const NEW_ACCOUNT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
 export type ReleaseVerdict = "GO" | "GO_WITH_CONDITIONS" | "NO_GO" | "NOT_EVALUATED"
 
-const RELEASE_VERDICTS: readonly string[] = [
-  "GO",
-  "GO_WITH_CONDITIONS",
-  "NO_GO",
-  "NOT_EVALUATED",
-]
+const RELEASE_VERDICTS: readonly string[] = ["GO", "GO_WITH_CONDITIONS", "NO_GO", "NOT_EVALUATED"]
 
 export interface ScorecardPayload {
   grade: ScoreGrade
@@ -115,7 +110,9 @@ export function normalizeScorecardPayload(raw: unknown): ScorecardPayload | null
     resolvedFindings,
     // Pre-verdict shares carry no verdict. NOT_EVALUATED is the honest reading — it must
     // never be inferred from the grade, because the verdict is a separate judgement.
-    releaseVerdict: isReleaseVerdict(stored.releaseVerdict) ? stored.releaseVerdict : "NOT_EVALUATED",
+    releaseVerdict: isReleaseVerdict(stored.releaseVerdict)
+      ? stored.releaseVerdict
+      : "NOT_EVALUATED",
     verdictVersion:
       typeof stored.verdictVersion === "string" && stored.verdictVersion.length > 0
         ? stored.verdictVersion
