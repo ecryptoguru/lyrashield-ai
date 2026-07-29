@@ -15,8 +15,8 @@
     "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
-    "@prisma/client": "7.9.0",
-    "@prisma/adapter-pg": "7.9.0",
+    "@prisma/client": "7.9.1",
+    "@prisma/adapter-pg": "7.9.1",
     "pg": "^8.13.0",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/config": "workspace:*",
