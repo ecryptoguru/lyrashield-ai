@@ -35,6 +35,47 @@ Accepted risks that are live right now. Each one is a deliberate decision, not a
 
 **Related history.** The flag was declared in the env schema and read by no code until 2026-07-30, so setting it previously had no effect and real behaviour derived from whether `BREVO_API_KEY` happened to be set. It is now authoritative.
 
+### 2. Verify the runtime database role cannot bypass RLS
+
+**Status:** unverified. Needs one query against production before the next traffic increase.
+
+**Why it matters.** All 21 workspace-scoped tables carry fail-closed RLS policies and
+`FORCE ROW LEVEL SECURITY`. `FORCE` subjects the table *owner* to those policies — it does
+**not** affect superusers or any role with `BYPASSRLS`. A superuser connection bypasses
+row-level security unconditionally, so if `DATABASE_URL` connects as one, every policy is
+inert and tenant isolation rests entirely on the application-layer Prisma extension. Managed
+Postgres providers commonly hand out a superuser as the default user, so this is easy to
+inherit by accident.
+
+Verified empirically on 2026-07-30 against a local instance with the production migration
+chain applied: as a superuser, a cross-workspace `SELECT` returned the other tenant's row
+and a cross-workspace `UPDATE` modified it. As a `NOSUPERUSER NOBYPASSRLS` role, both
+returned zero rows.
+
+**How to check.**
+
+```sql
+SELECT current_user, rolsuper, rolbypassrls
+FROM pg_roles WHERE rolname = current_user;
+```
+
+Both booleans must be `false`. If either is `true`, provision a dedicated runtime role and
+point `DATABASE_URL` at it, keeping the privileged role only for migrations
+(`DATABASE_DIRECT_URL`):
+
+```sql
+CREATE ROLE app_runtime LOGIN PASSWORD '...' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+GRANT CONNECT ON DATABASE <db> TO app_runtime;
+GRANT USAGE ON SCHEMA public, app TO app_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime;
+```
+
+**Regression cover.** `packages/db/src/rls-fail-closed.test.ts` asserts the deny-by-default
+behaviour against a real database, and refuses to run — rather than passing vacuously —
+when handed a role that can bypass RLS. CI provisions that restricted role and exports
+`RLS_RUNTIME_DATABASE_URL`.
+
 ## Release prerequisites
 
 1. Public HTTPS application and marketing origins plus all trusted auth origins are decided. Scorecard canonical/OG/Twitter URLs must resolve to the application origin.
