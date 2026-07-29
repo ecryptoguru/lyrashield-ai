@@ -9,7 +9,7 @@ import { LogOut } from "lucide-react"
 import { Button, cn } from "@lyrashield/ui"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 import { ThemeToggle } from "./theme-toggle"
-import { NAV_ITEMS } from "@/lib/nav-items"
+import { PRIMARY_NAV_ITEMS, SECONDARY_NAV_ITEMS, type NavItem } from "@/lib/nav-items"
 import { apiPost } from "@/lib/api-client"
 
 interface Workspace {
@@ -19,6 +19,36 @@ interface Workspace {
   mode: string
   plan: string
   role: string
+}
+
+function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const isActive =
+    item.href === "/dashboard"
+      ? pathname === item.href
+      : pathname === item.href || pathname.startsWith(`${item.href}/`)
+  return (
+    <Link
+      href={item.href}
+      aria-current={isActive ? "page" : undefined}
+      className={cn(
+        "group flex min-h-11 items-center gap-3 border-l-2 px-3 text-sm font-medium transition-[background-color,border-color,color] duration-150",
+        isActive
+          ? "border-primary bg-primary/8 text-primary"
+          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-transparent"
+      )}
+    >
+      <item.icon
+        className={cn(
+          "size-4.5 shrink-0",
+          isActive
+            ? "text-primary"
+            : "text-muted-foreground group-hover:text-sidebar-accent-foreground"
+        )}
+        aria-hidden="true"
+      />
+      {item.label}
+    </Link>
+  )
 }
 
 export function V2Sidebar({
@@ -90,37 +120,23 @@ export function V2Sidebar({
         )}
 
         <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Main navigation">
+          {/* Grouped rather than eleven flat peers. The nav model already encodes the split,
+              so the sidebar reflects it instead of flattening product work and account
+              settings into one undifferentiated list. */}
           <div className="flex flex-col gap-1">
-            {NAV_ITEMS.map((item) => {
-              const isActive =
-                item.href === "/dashboard"
-                  ? pathname === item.href
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={isActive ? "page" : undefined}
-                  className={cn(
-                    "group flex min-h-11 items-center gap-3 border-l-2 px-3 text-sm font-medium transition-[background-color,border-color,color] duration-150",
-                    isActive
-                      ? "border-primary bg-primary/8 text-primary"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-transparent"
-                  )}
-                >
-                  <item.icon
-                    className={cn(
-                      "size-4.5 shrink-0",
-                      isActive
-                        ? "text-primary"
-                        : "text-muted-foreground group-hover:text-sidebar-accent-foreground"
-                    )}
-                    aria-hidden="true"
-                  />
-                  {item.label}
-                </Link>
-              )
-            })}
+            {PRIMARY_NAV_ITEMS.map((item) => (
+              <SidebarLink key={item.href} item={item} pathname={pathname} />
+            ))}
+          </div>
+          <div className="mt-6">
+            <p className="text-muted-foreground px-3 pb-2 text-[10px] font-semibold tracking-[0.14em] uppercase">
+              Workspace
+            </p>
+            <div className="flex flex-col gap-1">
+              {SECONDARY_NAV_ITEMS.map((item) => (
+                <SidebarLink key={item.href} item={item} pathname={pathname} />
+              ))}
+            </div>
           </div>
         </nav>
 

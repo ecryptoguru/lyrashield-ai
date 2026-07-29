@@ -5422,6 +5422,8 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 - Implement provider-backed GitHub installation ownership verification before re-enabling fresh callback binding, and a server-generated immutable patch/evidence pipeline before re-enabling Fix PR creation.
 - Replace the current SSE-S3 key reference with a real KMS/Vault key reference when the production storage provider is selected.
 - Add compliance-lite evidence packs and deeper IaC/container/reachability coverage after the pilot gates, based on customer demand.
+- **Provision `BREVO_API_KEY` and set `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1`** (repository variable read by `deploy-azure.yml`). Open registration currently accepts any address unverified — an accepted, documented blocker as of 2026-07-30, not an oversight. See `docs/deployment/PRODUCTION_DEPLOYMENT.md` "Known production blockers" §1.
+- **Run `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user;` against the production `DATABASE_URL` connection** and confirm both are `false` before the next traffic-growth push. All 21 workspace-scoped tables carry fail-closed RLS policies, but `FORCE ROW LEVEL SECURITY` does not bind superusers or `BYPASSRLS` roles, and managed Postgres commonly hands out a superuser by default. See the same doc, §2.
 
 ## C3. Current sprint status
 

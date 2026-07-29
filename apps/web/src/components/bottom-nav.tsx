@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn, Button } from "@lyrashield/ui"
-import { PRIMARY_NAV_ITEMS, MORE_NAV_ITEMS, type NavItem } from "@/lib/nav-items"
+import { MOBILE_PRIMARY_NAV_ITEMS, MORE_NAV_ITEMS, type NavItem } from "@/lib/nav-items"
 import {
   Sheet,
   SheetContent,
@@ -12,7 +12,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { Menu } from "lucide-react"
+import { ChevronRight, Menu } from "lucide-react"
 import { useState } from "react"
 import { useFeatureFlags } from "./feature-flags-provider"
 
@@ -23,28 +23,60 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-function NavLink({
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const active = isActive(pathname, item.href)
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "relative flex h-full w-full flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-colors duration-150",
+        "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset",
+        "active:scale-[0.97] active:transition-transform active:duration-100",
+        active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {/* Active indicator — status must not be communicated by colour alone. */}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "bg-primary absolute top-0 h-0.5 w-8 rounded-full transition-opacity duration-150",
+          active ? "opacity-100" : "opacity-0"
+        )}
+      />
+      <item.icon className="size-5 shrink-0" aria-hidden="true" />
+      <span className="truncate">{item.shortLabel}</span>
+    </Link>
+  )
+}
+
+function MoreNavRow({
   item,
   pathname,
-  onClick,
+  onNavigate,
 }: {
   item: NavItem
   pathname: string
-  onClick?: () => void
+  onNavigate: () => void
 }) {
   const active = isActive(pathname, item.href)
   return (
     <Link
       href={item.href}
-      onClick={onClick}
+      onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-full w-full flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-colors",
-        active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+        "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150",
+        "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+        active ? "bg-primary/8 text-primary" : "text-foreground hover:bg-muted"
       )}
     >
-      <item.icon className="size-5 shrink-0" aria-hidden="true" />
-      <span className="truncate">{item.shortLabel}</span>
+      <item.icon
+        className={cn("size-4.5 shrink-0", active ? "text-primary" : "text-muted-foreground")}
+        aria-hidden="true"
+      />
+      <span className="flex-1 truncate">{item.label}</span>
+      <ChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
     </Link>
   )
 }
@@ -62,7 +94,7 @@ export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: n
       className="bg-background fixed right-0 bottom-0 left-0 z-40 flex h-[calc(4rem+env(safe-area-inset-bottom))] items-center border-t pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <div className="grid h-16 w-full grid-cols-5 items-center">
-        {PRIMARY_NAV_ITEMS.slice(0, 4).map((item) => (
+        {MOBILE_PRIMARY_NAV_ITEMS.map((item) => (
           <NavLink key={item.href} item={item} pathname={pathname} />
         ))}
         <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
@@ -71,7 +103,7 @@ export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: n
               variant="ghost"
               size="icon"
               aria-label="More navigation"
-              className="text-muted-foreground flex h-full w-full flex-col items-center justify-center gap-1 rounded-none text-[10px] font-medium"
+              className="text-muted-foreground focus-visible:ring-ring flex h-full w-full flex-col items-center justify-center gap-1 rounded-none text-[10px] font-medium focus-visible:ring-2 focus-visible:ring-inset"
             >
               <Menu className="size-5" aria-hidden="true" />
               <span>More</span>
@@ -79,19 +111,24 @@ export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: n
           </SheetTrigger>
           <SheetContent
             side="bottom"
-            className="h-auto rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
+            className="max-h-[80vh] overflow-y-auto rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
           >
-            <SheetHeader className="sr-only">
-              <SheetTitle>More</SheetTitle>
-              <SheetDescription>Additional navigation and settings.</SheetDescription>
+            <SheetHeader className="px-1 text-left">
+              <SheetTitle className="text-base">More</SheetTitle>
+              <SheetDescription className="sr-only">
+                Additional navigation and settings.
+              </SheetDescription>
             </SheetHeader>
-            <div className="grid grid-cols-3 gap-2 py-4">
+            {/* A single-column list rather than a grid: the list is the exact complement of
+                the bottom bar, so it grows as destinations are added and a grid leaves a
+                ragged final row. */}
+            <div className="flex flex-col gap-0.5 py-2">
               {MORE_NAV_ITEMS.map((item) => (
-                <NavLink
+                <MoreNavRow
                   key={item.href}
                   item={item}
                   pathname={pathname}
-                  onClick={() => setMoreOpen(false)}
+                  onNavigate={() => setMoreOpen(false)}
                 />
               ))}
             </div>

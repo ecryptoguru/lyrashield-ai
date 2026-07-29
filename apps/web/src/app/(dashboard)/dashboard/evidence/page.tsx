@@ -1,8 +1,10 @@
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { prisma } from "@lyrashield/db"
-import { EmptyState } from "@lyrashield/ui"
+import { EmptyState, buttonVariants } from "@lyrashield/ui"
 import { ShieldCheck, ShieldAlert } from "lucide-react"
 import Link from "next/link"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { evidenceTypeLabel } from "@/lib/labels"
 
 export default async function EvidencePage() {
   const session = await getCachedSession()
@@ -45,9 +47,8 @@ export default async function EvidencePage() {
       </div>
 
       {!workspaceId ? (
-        <EmptyState
+        <NoWorkspaceState
           icon={ShieldCheck}
-          title="No workspace yet"
           description="Create a workspace during onboarding to view evidence."
         />
       ) : findings.length === 0 ? (
@@ -55,6 +56,11 @@ export default async function EvidencePage() {
           icon={ShieldAlert}
           title="No verified evidence yet"
           description="Run a review and verify findings to collect evidence records."
+          action={
+            <Link href="/dashboard/scans" className={buttonVariants()}>
+              Start a review
+            </Link>
+          }
         />
       ) : (
         <div className="grid gap-3">
@@ -78,7 +84,9 @@ export default async function EvidencePage() {
                   <span className="bg-primary/10 text-primary inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
                     {f._count.evidence} record{f._count.evidence === 1 ? "" : "s"}
                   </span>
-                  <p className="text-muted-foreground mt-1 text-xs">{f.evidence[0]?.type}</p>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {evidenceTypeLabel(f.evidence[0]?.type)}
+                  </p>
                 </div>
               </div>
             </Link>

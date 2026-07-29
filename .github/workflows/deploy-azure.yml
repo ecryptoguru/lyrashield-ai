@@ -115,6 +115,45 @@ jobs:
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
 
+      # Schema first, then code. Migrations previously ran only in CI against a throwaway
+      # database and never against production, so a release needing a schema change served
+      # 500s until someone remembered to run this by hand. Ordering matters: new code must
+      # never meet an old schema, which means migrations must be additive and
+      # backward-compatible with the currently running image.
+      - name: Checkout for migrations
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::DATABASE_DIRECT_URL secret is not set — refusing to deploy code against an unmigrated schema."
+            exit 1
+          fi
+          pnpm install --frozen-lockfile
+          pnpm --filter @lyrashield/db exec prisma migrate deploy
+
+      - name: Verify shared rate-limiting credentials
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: |
+          if [ -z "${UPSTASH_REDIS_REST_URL}" ] || [ -z "${UPSTASH_REDIS_REST_TOKEN}" ]; then
+            echo "::error::UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN are not set. Rate limiting would fall back to per-instance memory, so the effective limit becomes (limit x replica count) and scaling out weakens the control. These are the HTTPS REST credentials and are NOT interchangeable with REDIS_URL."
+            exit 1
+          fi
+          echo "Shared rate-limiting credentials present."
+
       - name: Deploy app Container App
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
@@ -127,7 +166,12 @@ jobs:
             --set-env-vars \
               "NEXT_PUBLIC_APP_URL=${{ env.APP_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
-              "BETTER_AUTH_URL=${{ env.APP_URL }}"
+              "BETTER_AUTH_URL=${{ env.APP_URL }}" \
+              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}" \
+              "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
+              "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
+              "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
+              "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token"
 
       - name: Deploy scanner Container App
         if: vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
@@ -141,12 +185,13 @@ jobs:
             --set-env-vars \
               "NEXT_PUBLIC_APP_URL=${{ env.SCANNER_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
-              "BETTER_AUTH_URL=${{ env.APP_URL }}"
+              "BETTER_AUTH_URL=${{ env.APP_URL }}" \
+              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}"
 
       - name: Smoke app health
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
-          SMOKE_URL: "${{ env.APP_URL }}/api/health"
+          SMOKE_URL: "${{ env.APP_URL }}/api/ready"
         run: |
           for i in $(seq 1 60); do
             if curl --fail --silent --show-error --max-time 10 "$SMOKE_URL"; then
@@ -162,7 +207,7 @@ jobs:
       - name: Smoke scanner health
         if: vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
         env:
-          SMOKE_URL: "${{ env.SCANNER_URL }}/api/health"
+          SMOKE_URL: "${{ env.SCANNER_URL }}/api/ready"
         run: |
           for i in $(seq 1 60); do
             if curl --fail --silent --show-error --max-time 10 "$SMOKE_URL"; then

@@ -125,7 +125,10 @@ const envSchema = z
     LYRASHIELD_LOCAL_EVIDENCE_DIR: z.string().optional().or(z.literal("")),
 
     // Email (Brevo)
-    LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: z.enum(["0", "1"]).optional().default("0"),
+    // Defaults ON. Open registration without verification lets anyone register as any
+    // address, so the insecure state must now be chosen deliberately rather than inherited
+    // from a default. Until 2026-07-30 this flag was declared but never read by any code.
+    LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: z.enum(["0", "1"]).optional().default("1"),
     BREVO_API_KEY: z.string().optional().or(z.literal("")),
     EMAIL_FROM: z.string().optional().or(z.literal("")),
 
@@ -162,6 +165,27 @@ const envSchema = z
     message:
       "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
   })
+  // Claiming to verify email addresses without a way to send the mail is worse than not
+  // claiming it: sign-up would either break or silently fall through unverified.
+  //
+  // Enforced at runtime only. `next build` evaluates this module with NODE_ENV=production,
+  // and compiling an image must not require runtime secrets — otherwise CI and the Docker
+  // build would need a live mail key to produce an artifact. The check still fires when the
+  // server actually boots, which is where it matters.
+  .refine(
+    (val) =>
+      val.NODE_ENV !== "production" ||
+      process.env.NEXT_PHASE === "phase-production-build" ||
+      val.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION !== "1" ||
+      Boolean(val.BREVO_API_KEY),
+    {
+      path: ["BREVO_API_KEY"],
+      message:
+        "BREVO_API_KEY is required in production while LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1. " +
+        "Set the key to enforce verification, or set LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 to " +
+        "accept unverified open registration as a deliberate choice.",
+    }
+  )
 
 export type Env = z.infer<typeof envSchema>
 

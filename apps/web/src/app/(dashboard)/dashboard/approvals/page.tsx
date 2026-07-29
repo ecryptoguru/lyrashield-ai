@@ -1,8 +1,8 @@
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { listApprovals, prisma } from "@lyrashield/db"
-import { EmptyState } from "@lyrashield/ui"
 import { ClipboardCheck } from "lucide-react"
 import { ApprovalsClient } from "./approvals-client"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 export default async function ApprovalsPage() {
   const session = await getCachedSession()
@@ -37,9 +37,8 @@ export default async function ApprovalsPage() {
       </div>
 
       {!workspaceId ? (
-        <EmptyState
+        <NoWorkspaceState
           icon={ClipboardCheck}
-          title="No workspace yet"
           description="Create a workspace during onboarding to view approvals."
         />
       ) : (

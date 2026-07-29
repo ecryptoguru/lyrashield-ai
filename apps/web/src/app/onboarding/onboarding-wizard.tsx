@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ChevronLeft, ChevronRight, Globe, Rocket, SkipForward } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, Globe, Rocket, Clock } from "lucide-react"
 import { Button, FormField, GithubIcon, Input, Spinner } from "@lyrashield/ui"
 import { apiPatch, apiPost } from "@/lib/api-client"
 import { GOAL_OPTIONS } from "@/lib/labels"
@@ -186,7 +186,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
 
       <div className="mb-4 flex justify-end">
         <Button type="button" onClick={finishLater} disabled={loading} variant="ghost" size="sm">
-          <SkipForward className="size-4" aria-hidden="true" />
+          <Clock className="size-4" aria-hidden="true" />
           Finish later
         </Button>
       </div>

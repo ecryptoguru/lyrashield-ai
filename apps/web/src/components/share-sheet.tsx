@@ -2,7 +2,13 @@
 
 import { useState } from "react"
 import { Link2, Check, Mail, MessageCircle, Download } from "lucide-react"
-import { BottomSheet } from "./bottom-sheet"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { track } from "@/lib/analytics"
 
 interface ShareSheetProps {
@@ -113,30 +119,48 @@ export function ShareSheet({ open, onClose, title, shareUrl, description }: Shar
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose} title={`Share ${title}`}>
-      <div className="grid grid-cols-4 gap-2">
-        {CHANNELS.map((channel) => {
-          const Icon = channel.icon
-          return (
-            <button
-              key={channel.id}
-              onClick={() => handleChannel(channel.id)}
-              className="hover:bg-accent flex flex-col items-center gap-2 rounded-lg p-2 text-center text-xs transition-colors"
-            >
-              {channel.id === "copy" && copied ? (
-                <Check className="size-6 text-emerald-500" aria-hidden={true} />
-              ) : (
-                <Icon className="size-6" aria-hidden={true} />
-              )}
-              <span className="text-muted-foreground">{channel.label}</span>
-            </button>
-          )
-        })}
-      </div>
-      <p className="text-muted-foreground mt-4 text-xs">
-        Shared scorecards use privacy-safe public links. They never expose target, repository, or
-        finding data.
-      </p>
-    </BottomSheet>
+    // Radix Sheet rather than a hand-rolled panel: it brings Escape-to-close, a focus trap,
+    // focus restoration and body scroll lock, none of which the custom sheet had.
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose()
+      }}
+    >
+      <SheetContent
+        side="bottom"
+        className="max-h-[80vh] overflow-y-auto rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
+      >
+        <SheetHeader className="px-1 text-left">
+          <SheetTitle className="text-base">{`Share ${title}`}</SheetTitle>
+          <SheetDescription className="sr-only">
+            Choose where to share this scorecard.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="grid grid-cols-4 gap-2">
+          {CHANNELS.map((channel) => {
+            const Icon = channel.icon
+            return (
+              <button
+                key={channel.id}
+                onClick={() => handleChannel(channel.id)}
+                className="hover:bg-accent flex flex-col items-center gap-2 rounded-lg p-2 text-center text-xs transition-colors"
+              >
+                {channel.id === "copy" && copied ? (
+                  <Check className="size-6 text-emerald-500" aria-hidden={true} />
+                ) : (
+                  <Icon className="size-6" aria-hidden={true} />
+                )}
+                <span className="text-muted-foreground">{channel.label}</span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-muted-foreground mt-4 text-xs">
+          Shared scorecards use privacy-safe public links. They never expose target, repository, or
+          finding data.
+        </p>
+      </SheetContent>
+    </Sheet>
   )
 }

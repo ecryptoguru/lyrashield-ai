@@ -12,6 +12,16 @@ const WINDOW_MS = 60_000
 const AUTH_MAX = 5
 const API_MAX = 30
 const LITE_SCAN_MAX = 5
+/**
+ * Scan starts per workspace per minute.
+ *
+ * The general API limit is per-IP and generous (30/min) because most API calls are cheap
+ * reads. Starting a scan is not cheap: each one can consume up to
+ * PLATFORM_MAX_SCAN_BUDGET_USD of model spend, so at the API limit a single caller could
+ * commit four figures a minute before per-scan budgets bite. This bounds the money, and it
+ * is keyed on the workspace rather than the IP so rotating addresses does not lift it.
+ */
+const SCAN_CREATE_MAX = 5
 
 // Bound the in-memory store so a long-running instance (dev / self-hosted
 // without Upstash) can't grow unboundedly with one entry per distinct IP.
@@ -173,4 +183,11 @@ export async function checkLiteScanRateLimit(ipHash: string) {
   const upstash = await checkUpstash(LITE_SCAN_MAX, "60 s", `lite-scan:${ipHash}`)
   if (upstash) return upstash
   return checkInMemory(`lite-scan:${ipHash}`, LITE_SCAN_MAX, WINDOW_MS)
+}
+
+/** Bounds committed model spend per workspace. See SCAN_CREATE_MAX. */
+export async function checkScanCreateRateLimit(workspaceId: string) {
+  const upstash = await checkUpstash(SCAN_CREATE_MAX, "60 s", `scan-create:${workspaceId}`)
+  if (upstash) return upstash
+  return checkInMemory(`scan-create:${workspaceId}`, SCAN_CREATE_MAX, WINDOW_MS)
 }

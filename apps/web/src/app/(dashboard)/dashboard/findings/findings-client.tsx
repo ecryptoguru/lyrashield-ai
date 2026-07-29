@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { severityLabel, humanizeToken } from "@/lib/labels"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -334,6 +335,11 @@ export function FindingsClient({
           icon={Bug}
           title="No findings yet"
           description="Security vulnerabilities detected by scans will appear here. Run a scan to get started."
+          action={
+            <Link href="/dashboard/scans" className={buttonVariants()}>
+              Start a review
+            </Link>
+          }
         />
       ) : (
         <div className={`space-y-3 ${loading ? "pointer-events-none opacity-50" : ""}`}>
@@ -367,7 +373,7 @@ export function FindingsClient({
                           className={cn("mr-1 h-3 w-3", SEVERITY_COLOR[finding.severity])}
                           aria-hidden="true"
                         />
-                        {finding.severity}
+                        {severityLabel(finding.severity)}
                       </Badge>
                       {finding.verified ? (
                         <span className="flex items-center gap-1 text-xs text-emerald-500">
@@ -811,7 +817,7 @@ function FindingDetailDrawer({
                   className={cn("mr-1 h-3 w-3", SEVERITY_COLOR[finding.severity])}
                   aria-hidden="true"
                 />
-                {finding.severity}
+                {severityLabel(finding.severity)}
               </Badge>
               <Badge variant={STATUS_BADGE[finding.status] ?? "muted"}>
                 {finding.status.replace(/_/g, " ")}
@@ -1346,7 +1352,7 @@ function FindingDetailDrawer({
                     <div className="space-y-2">
                       {detail.fixProposals.map((fp) => (
                         <div key={fp.id} className="flex items-center gap-2 text-sm">
-                          <Badge variant="info">{fp.status}</Badge>
+                          <Badge variant="info">{humanizeToken(fp.status)}</Badge>
                           <span className="text-muted-foreground">{fp.summary}</span>
                         </div>
                       ))}

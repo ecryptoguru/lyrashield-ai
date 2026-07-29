@@ -12,6 +12,82 @@
 - Public scorecard pages, social card images, SVG badges, referral capture, and privacy-safe funnel events are served by the Next.js app origin, not the marketing Worker.
 - S3-compatible evidence storage is mandatory for scans that may produce PoC/code-location artifacts. Email, GitHub OAuth/App integration, and monitoring providers use separate credentials.
 
+## Known production blockers
+
+Accepted risks that are live right now. Each one is a deliberate decision, not an oversight, and each has a defined way out. Review this list before any traffic-growth campaign.
+
+### 1. Email verification is disabled — open registration accepts unverified addresses
+
+**Status:** accepted, deferred. `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0` is set explicitly in `.github/workflows/deploy-azure.yml` and `.env.example`.
+
+**Exposure.** Registration is open, so anyone can create an account against an address they do not control and it will reach the dashboard. That permits impersonation of a real person or brand (`ceo@customer.example`), bot and throwaway sign-ups, and inflated activation numbers. Referral attribution is partly protected — rewards only settle after a referred workspace completes a real scan — but sign-up-level abuse is unmitigated.
+
+**Why it is deferred.** No Brevo key is provisioned. The schema default is `"1"`, and production config validation refuses to boot when verification is required but undeliverable, so the flag must be `"0"` until a mail provider exists. That refusal is intentional: the app will not claim to verify addresses it cannot actually mail.
+
+**Way out (small, well-defined).**
+
+1. Provision a Brevo API key and a verified sender address.
+2. Set `BREVO_API_KEY` and `EMAIL_FROM` as production secrets.
+3. Set the `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` repository variable to `1` (the deploy workflow reads it, defaulting to `0`).
+4. Deploy. `packages/auth` enforces verification once the flag and the provider are both present; the boot-time refinement in `packages/config/src/env.ts` guarantees the two can never disagree.
+
+**Do not** re-enable the flag without the key. The deploy will fail fast by design rather than silently accepting unverified sign-ups.
+
+**Related history.** The flag was declared in the env schema and read by no code until 2026-07-30, so setting it previously had no effect and real behaviour derived from whether `BREVO_API_KEY` happened to be set. It is now authoritative.
+
+### 2. Verify the runtime database role cannot bypass RLS
+
+**Status:** unverified. Needs one query against production before the next traffic increase.
+
+**Why it matters.** All 21 workspace-scoped tables carry fail-closed RLS policies and
+`FORCE ROW LEVEL SECURITY`. `FORCE` subjects the table *owner* to those policies — it does
+**not** affect superusers or any role with `BYPASSRLS`. A superuser connection bypasses
+row-level security unconditionally, so if `DATABASE_URL` connects as one, every policy is
+inert and tenant isolation rests entirely on the application-layer Prisma extension. Managed
+Postgres providers commonly hand out a superuser as the default user, so this is easy to
+inherit by accident.
+
+Verified empirically on 2026-07-30 against a local instance with the production migration
+chain applied: as a superuser, a cross-workspace `SELECT` returned the other tenant's row
+and a cross-workspace `UPDATE` modified it. As a `NOSUPERUSER NOBYPASSRLS` role, both
+returned zero rows.
+
+**How to check.**
+
+```sql
+SELECT current_user, rolsuper, rolbypassrls
+FROM pg_roles WHERE rolname = current_user;
+```
+
+Both booleans must be `false`. If either is `true`, provision a dedicated runtime role and
+point `DATABASE_URL` at it, keeping the privileged role only for migrations
+(`DATABASE_DIRECT_URL`):
+
+```sql
+CREATE ROLE app_runtime LOGIN PASSWORD '...' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+GRANT CONNECT ON DATABASE <db> TO app_runtime;
+GRANT USAGE ON SCHEMA public, app TO app_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime;
+```
+
+### 3. Shared rate limiting is enforced at deploy, not at boot
+
+`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are asserted by the deploy workflow
+before the container image is swapped, and passed to both apps as secret references. Without
+them the limiter falls back to a per-instance in-memory store, so the effective limit becomes
+(limit x replica count) and scaling out to absorb load weakens the control.
+
+This is deliberately a deploy gate rather than boot validation. Boot validation fires in
+every production-mode process — including the Playwright E2E server — and would fail a
+running app on restart, trading a rate-limiting weakness for an availability outage. The
+deploy check catches the same misconfiguration at the only moment it can be fixed safely.
+
+**Regression cover.** `packages/db/src/rls-fail-closed.test.ts` asserts the deny-by-default
+behaviour against a real database, and refuses to run — rather than passing vacuously —
+when handed a role that can bypass RLS. CI provisions that restricted role and exports
+`RLS_RUNTIME_DATABASE_URL`.
+
 ## Release prerequisites
 
 1. Public HTTPS application and marketing origins plus all trusted auth origins are decided. Scorecard canonical/OG/Twitter URLs must resolve to the application origin.
@@ -55,7 +131,9 @@ BETTER_AUTH_COOKIE_DOMAIN=".example.com" # only when app and marketing share a p
 ADDITIONAL_TRUSTED_ORIGINS="https://www.example.com"
 TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming copies
 
-# Email (required when LYRASHIELD_REQUIRE_EMAIL_VERIFICATION is set)
+# Email. The schema default is "1" and production refuses to boot when verification
+# is required but no provider is configured. Currently "0" — see
+# "Known production blockers" above before changing it.
 LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"
 BREVO_API_KEY="..."
 EMAIL_FROM="noreply@example.com"

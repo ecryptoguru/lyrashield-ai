@@ -27,6 +27,7 @@ import {
 import { TrustCommandCenter } from "@/components/trust-command-center"
 import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
 import { getScanPresentation } from "@/lib/scan-presentation"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 export default async function DashboardPage() {
   const session = await getCachedSession()
@@ -39,16 +40,9 @@ export default async function DashboardPage() {
 
   if (!workspaceId || workspaces.length === 0) {
     return (
-      <EmptyState
+      <NoWorkspaceState
         icon={ShieldCheck}
-        title="No workspace yet"
         description="Create your first workspace to start scanning your apps."
-        action={
-          <Link href="/onboarding" className={buttonVariants()}>
-            <Play className="size-4" aria-hidden="true" />
-            Create workspace
-          </Link>
-        }
       />
     )
   }
@@ -141,7 +135,8 @@ export default async function DashboardPage() {
   ]
 
   const latestScan = recentScans[0]
-  const commandMode = latestScan?.mode ?? "SAFE"
+  // null when nothing has run yet — the card omits the depth clause rather than claiming one.
+  const commandMode = latestScan?.mode ?? null
 
   return (
     <div className="flex flex-col gap-6 lg:gap-8">

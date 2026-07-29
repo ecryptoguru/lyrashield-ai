@@ -1,19 +1,13 @@
 import Link from "next/link"
 import type { ComponentType, SVGProps } from "react"
 import { Bell, CalendarClock, Plug, Settings, Users } from "lucide-react"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  buttonVariants,
-} from "@lyrashield/ui"
+import { Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@lyrashield/ui"
 import { prisma } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { DeleteAccount } from "./delete-account"
 import { ConnectedAccounts } from "./connected-accounts"
 import { ApiKeysSection } from "./api-keys"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 export default async function SettingsPage() {
   const session = await getCachedSession()
@@ -24,9 +18,8 @@ export default async function SettingsPage() {
     return (
       <div>
         <h2 className="mb-6 text-2xl font-bold tracking-tight">Settings</h2>
-        <EmptyState
+        <NoWorkspaceState
           icon={Settings}
-          title="No workspace yet"
           description="Create a workspace during onboarding to manage settings."
         />
       </div>

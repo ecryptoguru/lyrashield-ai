@@ -25,6 +25,7 @@ import { getScanReviewProfile } from "@/lib/scan-review-profile"
 import { apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import { getScanGoalLabel, getScanModeLabel, getScanTriggerLabel } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
+import { severityLabel } from "@/lib/labels"
 
 interface ScanEvent {
   id: string
@@ -477,6 +478,8 @@ export function ScanDetailClient({
             elapsedTime={elapsedTime}
             events={displayEvents}
             findingsCount={currentFindings.length}
+            onRefresh={() => void handleManualRefresh()}
+            refreshing={refreshing}
           />
         </div>
       )}
@@ -557,7 +560,7 @@ export function ScanDetailClient({
                 Tamper-evident record
               </div>
               <p className="mt-1 text-lg font-semibold">
-                {scan.integrity.manifestChecksum ? "Saved" : "Pending"}
+                {scan.integrity.manifestChecksum ? "Sealed" : isActive ? "Sealing…" : "Not sealed"}
               </p>
             </Card>
           </div>
@@ -907,7 +910,7 @@ export function ScanDetailClient({
                           <div className="min-w-0">
                             <p className="font-medium">{finding.title}</p>
                             <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
-                              <Badge variant="muted">{finding.severity}</Badge>
+                              <Badge variant="muted">{severityLabel(finding.severity)}</Badge>
                               {finding.cwe && <span>CWE: {finding.cwe}</span>}
                               {finding.cvssScore !== null && <span>CVSS: {finding.cvssScore}</span>}
                               {finding.verified && (
@@ -960,6 +963,7 @@ export function ScanDetailClient({
                     ? "No findings were reported within this scan's completed coverage. Review the retained scope before relying on the result."
                     : "No findings were recorded before this scan ended."
               }
+              action={null}
             />
           )}
         </>
@@ -986,6 +990,7 @@ export function ScanDetailClient({
               icon={Clock}
               title="No events"
               description="No scan events have been recorded yet."
+              action={null}
             />
           ) : (
             <Card className="p-4">

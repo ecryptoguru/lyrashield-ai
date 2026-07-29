@@ -15,6 +15,8 @@ const NEW_ACCOUNT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
 export type ReleaseVerdict = "GO" | "GO_WITH_CONDITIONS" | "NO_GO" | "NOT_EVALUATED"
 
+const RELEASE_VERDICTS: readonly string[] = ["GO", "GO_WITH_CONDITIONS", "NO_GO", "NOT_EVALUATED"]
+
 export interface ScorecardPayload {
   grade: ScoreGrade
   scope: string
@@ -36,6 +38,10 @@ function resolveReleaseVerdict(score: number): ReleaseVerdict {
   return "NO_GO"
 }
 
+function isReleaseVerdict(value: unknown): value is ReleaseVerdict {
+  return typeof value === "string" && RELEASE_VERDICTS.includes(value)
+}
+
 /**
  * The ONLY constructor of a public scorecard payload. This is the disclosure allowlist
  * (spec §5): grade, scope, scan date, model version, resolved-findings count, and the
@@ -55,6 +61,62 @@ export function buildScorecardPayload(
     resolvedFindings,
     releaseVerdict: resolveReleaseVerdict(snapshot.score),
     verdictVersion: SCORE_MODEL_VERSION,
+  }
+}
+
+/**
+ * Reads a stored public payload back into its current shape.
+ *
+ * `ScorecardShare.publicPayload` is frozen at share creation, so a share created before
+ * a field existed will not contain it — `releaseVerdict` and `verdictVersion` were added
+ * after the first shares went out. Rendering code that assumes the current shape crashes
+ * on those rows, which took every previously shared public card down with a 500.
+ *
+ * This normalises on read rather than backfilling, because the frozen record is the
+ * disclosure artefact and must not be rewritten. It NEVER widens disclosure: it only
+ * fills fields that are absent, and it is deliberately not the inverse of
+ * buildScorecardPayload — that remains the sole constructor.
+ *
+ * Returns null when a field that has ALWAYS been present is missing or malformed, so a
+ * corrupt row fails closed as a 404 rather than inventing a grade.
+ */
+export function normalizeScorecardPayload(raw: unknown): ScorecardPayload | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
+  const stored = raw as Record<string, unknown>
+
+  // Core fields present in every payload version. Absent means the row is unusable.
+  if (typeof stored.grade !== "string" || stored.grade.length === 0) return null
+  if (typeof stored.scannedAt !== "string" || Number.isNaN(Date.parse(stored.scannedAt))) {
+    return null
+  }
+
+  const modelVersion =
+    typeof stored.modelVersion === "string" && stored.modelVersion.length > 0
+      ? stored.modelVersion
+      : "unversioned"
+
+  const resolvedFindings =
+    typeof stored.resolvedFindings === "number" &&
+    Number.isFinite(stored.resolvedFindings) &&
+    stored.resolvedFindings >= 0
+      ? Math.floor(stored.resolvedFindings)
+      : 0
+
+  return {
+    grade: stored.grade as ScoreGrade,
+    scope: typeof stored.scope === "string" && stored.scope.length > 0 ? stored.scope : SHARE_SCOPE,
+    scannedAt: stored.scannedAt,
+    modelVersion,
+    resolvedFindings,
+    // Pre-verdict shares carry no verdict. NOT_EVALUATED is the honest reading — it must
+    // never be inferred from the grade, because the verdict is a separate judgement.
+    releaseVerdict: isReleaseVerdict(stored.releaseVerdict)
+      ? stored.releaseVerdict
+      : "NOT_EVALUATED",
+    verdictVersion:
+      typeof stored.verdictVersion === "string" && stored.verdictVersion.length > 0
+        ? stored.verdictVersion
+        : modelVersion,
   }
 }
 
@@ -337,6 +399,14 @@ export async function getPublicScorecard(slug: string) {
     },
   })
   if (!share) return null
+  // Frozen payloads predate later fields, so read through the normaliser rather than
+  // casting. A row that cannot be normalised fails closed as "not found" instead of
+  // throwing inside the public page render.
+  const payload = normalizeScorecardPayload(share.publicPayload)
+  if (!payload) {
+    logger.error("Unrenderable public scorecard payload", { shareId: share.id })
+    return null
+  }
   // Supersession notice (founder decision #5): a frozen card must disclose when a newer
   // qualifying scan of the same target exists, so an old flattering snapshot can't be
   // pinned silently. Boolean only — never the newer score itself.
@@ -350,7 +420,7 @@ export async function getPublicScorecard(slug: string) {
     select: { id: true },
   })
   return {
-    payload: share.publicPayload as unknown as ScorecardPayload,
+    payload,
     referralCode: share.referralCode?.code ?? null,
     superseded: Boolean(newer),
   }

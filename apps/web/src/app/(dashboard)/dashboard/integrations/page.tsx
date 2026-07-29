@@ -1,8 +1,8 @@
 import { prisma } from "@lyrashield/db"
 import { Plug } from "lucide-react"
-import { EmptyState } from "@lyrashield/ui"
 import { GithubIntegration } from "./github-integration"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 export default async function IntegrationsPage({
   searchParams,
@@ -22,9 +22,8 @@ export default async function IntegrationsPage({
             Connect external services to your workspace.
           </p>
         </div>
-        <EmptyState
+        <NoWorkspaceState
           icon={Plug}
-          title="No workspace yet"
           description="Create a workspace during onboarding to manage integrations."
         />
       </div>

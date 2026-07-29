@@ -84,6 +84,9 @@ jobs:
       BETTER_AUTH_URL: "http://127.0.0.1:3100"
       NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3100"
       TRUSTED_PROXY_IP_HEADER: "x-forwarded-for"
+      # CI has no mail provider, and the E2E web server runs in production mode where
+      # the schema default of "1" would refuse to boot. Matches the production value.
+      LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
 
     steps:
       - name: Checkout
@@ -167,45 +170,38 @@ jobs:
       name: cloudflare-production
       url: https://lyrashieldai.com
     steps:
+      # This job deliberately has NO path filter.
+      #
+      # It previously skipped unless the single push diff (github.event.before..github.sha)
+      # touched apps/marketing. That stranded builds: when a push containing marketing
+      # changes failed CI, `needs` skipped the deploy, and every later push that fixed CI
+      # without touching apps/marketing then evaluated changed=false and skipped it again.
+      # The marketing fix from 2026-07-29 sat merged-but-undeployed for exactly this reason.
+      #
+      # Deploying unconditionally on main is idempotent and the Astro build is cached, so
+      # the reliability is worth more than the saved minutes. The smoke step below is what
+      # actually proves the deploy landed.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 2
-
-      - name: Detect marketing changes
-        id: changes
-        shell: bash
-        run: |
-          if git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- \
-            apps/marketing package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Setup pnpm
-        if: steps.changes.outputs.changed == 'true'
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
       - name: Setup Node.js
-        if: steps.changes.outputs.changed == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install dependencies
-        if: steps.changes.outputs.changed == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build production marketing Worker
-        if: steps.changes.outputs.changed == 'true'
         env:
           PUBLIC_POSTHOG_KEY: ${{ secrets.PUBLIC_POSTHOG_KEY }}
         run: pnpm --filter @lyrashield/marketing build
 
       - name: Apply D1 migrations and deploy
-        if: steps.changes.outputs.changed == 'true'
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v3.14.1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -217,7 +213,6 @@ jobs:
             deploy --config dist/server/wrangler.json
 
       - name: Smoke production routes
-        if: steps.changes.outputs.changed == 'true'
         shell: bash
         run: |
           for path in / /methodology /tools /robots.txt /sitemap-index.xml /llms.txt; do
@@ -229,6 +224,27 @@ jobs:
             --output /dev/null --write-out '%{http_code}' | grep --quiet '^404$'
           curl --silent --show-error --head "https://www.lyrashieldai.com/tools?source=ci" \
             | grep --ignore-case --quiet '^location: https://lyrashieldai.com/tools?source=ci'
+
+      - name: Assert the live homepage is the build we just shipped
+        shell: bash
+        run: |
+          # A 200 cannot detect a stale deploy — the previous smoke step passed happily for
+          # hours against an old build. These assert markers that only exist in the current
+          # homepage, so a skipped, failed, or cache-pinned deploy fails the run instead.
+          #
+          # If you intentionally change or remove either element, update the marker here in
+          # the same commit. A failure means the live site is not serving this commit.
+          homepage="$(curl --fail --silent --show-error --retry 5 --retry-all-errors \
+            https://lyrashieldai.com/)"
+
+          for marker in \
+            'data-cta-id="premium-hero-lite-check"' \
+            'data-cta-id="v2launch_open_beta"'; do
+            if ! printf '%s' "$homepage" | grep --quiet --fixed-strings "$marker"; then
+              echo "::error::Live homepage is missing '${marker}' — the deploy did not land."
+              exit 1
+            fi
+          done
 
   deploy-azure:
     name: Deploy to Azure

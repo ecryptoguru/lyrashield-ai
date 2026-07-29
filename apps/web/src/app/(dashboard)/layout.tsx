@@ -43,7 +43,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
               workspaces={workspaces}
               activeWorkspaceId={activeWorkspaceId}
             />
-            <MobilePageHeader title="LyraShield" />
+            {/* Title derives from the current route via NAV_ITEMS. On a phone the header
+                is the only place a screen can be named, so it must not spend that slot
+                on the brand. */}
+            <MobilePageHeader />
           </>
         ) : (
           <Sidebar

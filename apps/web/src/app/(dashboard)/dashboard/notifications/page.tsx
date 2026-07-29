@@ -1,8 +1,8 @@
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { EmptyState } from "@lyrashield/ui"
 import { Bell } from "lucide-react"
 import { NotificationsClient } from "./notifications-client"
 import { NotificationPreferences } from "@/components/notification-preferences"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 export default async function NotificationsPage() {
   const session = await getCachedSession()
@@ -13,9 +13,8 @@ export default async function NotificationsPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
-        <EmptyState
+        <NoWorkspaceState
           icon={Bell}
-          title="No workspace yet"
           description="Create a workspace during onboarding to view notifications."
         />
       </div>

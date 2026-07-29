@@ -1,8 +1,16 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { Activity, CheckCircle2, Circle, Clock, Loader2, ShieldAlert } from "lucide-react"
-import { Badge, Card } from "@lyrashield/ui"
+import {
+  Activity,
+  CheckCircle2,
+  Circle,
+  Clock,
+  Loader2,
+  RefreshCw,
+  ShieldAlert,
+} from "lucide-react"
+import { Badge, Button, Card } from "@lyrashield/ui"
 import { formatTime } from "@/lib/date-format"
 
 interface ScanEvent {
@@ -111,6 +119,13 @@ interface ScanInProgressProps {
   elapsedTime: string
   events: ScanEvent[]
   findingsCount: number
+  /**
+   * Lets the user pull an update on demand. Polling backs off to 60s and pauses entirely
+   * while the tab is hidden, so someone watching a long review can otherwise sit in front
+   * of a screen that looks stalled with no way to ask.
+   */
+  onRefresh?: () => void
+  refreshing?: boolean
 }
 
 export function ScanInProgress({
@@ -119,6 +134,8 @@ export function ScanInProgress({
   elapsedTime,
   events,
   findingsCount,
+  onRefresh,
+  refreshing = false,
 }: ScanInProgressProps) {
   const currentStage = deriveCurrentStage(status, events)
   const phases = derivePhases(status, events)
@@ -180,6 +197,22 @@ export function ScanInProgress({
                       Elapsed: <span className="font-medium tabular-nums">{elapsedTime}</span>
                     </span>
                   </span>
+                )}
+                {onRefresh && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={onRefresh}
+                    disabled={refreshing}
+                    className="h-7 px-2 text-xs"
+                  >
+                    <RefreshCw
+                      className={`mr-1.5 h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {refreshing ? "Refreshing" : "Refresh now"}
+                  </Button>
                 )}
                 {findingsCount > 0 && (
                   <span className="flex items-center gap-1.5">

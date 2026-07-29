@@ -2,9 +2,11 @@
 
 import { useState } from "react"
 import { Wrench, GitPullRequest, ShieldCheck, ExternalLink } from "lucide-react"
-import { Badge, Card, EmptyState, LoadMore } from "@lyrashield/ui"
+import Link from "next/link"
+import { Badge, buttonVariants, Card, EmptyState, LoadMore } from "@lyrashield/ui"
 import { apiGetPaginated } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
+import { severityLabel } from "@/lib/labels"
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
 
@@ -81,6 +83,11 @@ export function FixesClient({
           icon={Wrench}
           title="No fix proposals yet"
           description="When scans detect findings, you can generate fix proposals and create pull requests from the findings page."
+          action={
+            <Link href="/dashboard/findings" className={buttonVariants()}>
+              Review issues
+            </Link>
+          }
         />
       ) : (
         <div className="space-y-3">
@@ -95,7 +102,7 @@ export function FixesClient({
                     {proposal.status}
                   </Badge>
                   <Badge variant={SEVERITY_BADGE[proposal.finding.severity] ?? "muted"}>
-                    {proposal.finding.severity}
+                    {severityLabel(proposal.finding.severity)}
                   </Badge>
                   {proposal.safetyScore != null && (
                     <Badge variant={proposal.safetyScore >= 80 ? "success" : "warning"}>

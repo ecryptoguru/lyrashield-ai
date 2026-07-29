@@ -3,7 +3,16 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Radar, Play, X, RefreshCw, ChevronRight, ChevronDown } from "lucide-react"
-import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@lyrashield/ui"
+import {
+  Button,
+  buttonVariants,
+  Card,
+  Badge,
+  FormField,
+  Select,
+  EmptyState,
+  Spinner,
+} from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
@@ -11,6 +20,7 @@ import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanPreset, SCAN_PRESETS, type ScanPresetId } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
+import { getGoalLabel } from "@/lib/labels"
 
 interface ScanItem {
   id: string
@@ -48,15 +58,6 @@ interface ScansClientProps {
   initialData: ScanItem[]
   initialNextCursor: string | null
   initialShowCreate?: boolean
-}
-
-const GOAL_LABELS: Record<string, string> = {
-  CHECK_PR: "Check PR",
-  TEST_APP: "Test App",
-  LAUNCH_REVIEW: "Launch Review",
-  WEEKLY_MONITOR: "Weekly Monitor",
-  FULL_PENTEST: "Deep Security Review",
-  COMPLIANCE_REVIEW: "Compliance Review",
 }
 
 export function ScansClient({
@@ -354,6 +355,18 @@ export function ScansClient({
               ? 'Start your first security scan by clicking "New Scan" above.'
               : "Add a target first (a repo or URL), then you can run scans against it."
           }
+          action={
+            targets.length > 0 ? (
+              <Button onClick={() => setShowCreate(true)}>
+                <Play className="mr-2 h-4 w-4" aria-hidden="true" />
+                New Scan
+              </Button>
+            ) : (
+              <Link href="/dashboard/products" className={buttonVariants()}>
+                Add a product
+              </Link>
+            )
+          }
         />
       ) : (
         <div className="space-y-3">
@@ -365,9 +378,7 @@ export function ScansClient({
                   <div className="min-w-0 flex-1">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <Badge variant={presentation.badgeVariant}>{presentation.label}</Badge>
-                      <span className="text-sm font-medium">
-                        {GOAL_LABELS[scan.goal] ?? scan.goal}
-                      </span>
+                      <span className="text-sm font-medium">{getGoalLabel(scan.goal)}</span>
                     </div>
                     {scan.target && (
                       <p className="mb-1 truncate text-sm">

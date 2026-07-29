@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { defineConfig, envField } from "astro/config"
 import cloudflare from "@astrojs/cloudflare"
 import mdx from "@astrojs/mdx"
@@ -18,6 +18,39 @@ function wranglerVar(name) {
     return undefined
   }
 }
+
+// Real freshness signals only. Every sitemap entry previously carried just <loc>, so with
+// 100+ posts crawlers had nothing to prioritise on. lastmod is emitted only where an actual
+// date exists — stamping build time on every URL would claim the whole site changed on each
+// deploy, which is worse than saying nothing.
+function contentLastmod() {
+  const map = new Map()
+  const dir = new URL("./src/content/blog/", import.meta.url)
+  let files = []
+  try {
+    files = readdirSync(dir)
+  } catch {
+    return map
+  }
+  for (const file of files) {
+    if (!/\.(md|mdx)$/.test(file)) continue
+    let frontmatter = ""
+    try {
+      frontmatter = readFileSync(new URL(file, dir), "utf8").split(/^---\s*$/m)[1] || ""
+    } catch {
+      continue
+    }
+    const pick = (key) => frontmatter.match(new RegExp(`^${key}:\\s*(.+)$`, "m"))?.[1]
+    const raw = (pick("updatedDate") || pick("pubDate") || "").trim().replace(/^["']|["']$/g, "")
+    if (!raw) continue
+    const date = new Date(raw)
+    if (Number.isNaN(date.valueOf())) continue
+    map.set(`/blog/${file.replace(/\.(md|mdx)$/, "")}`, date)
+  }
+  return map
+}
+
+const LASTMOD = contentLastmod()
 
 const configuredSiteUrl = process.env.PUBLIC_SITE_URL || wranglerVar("PUBLIC_SITE_URL")
 const siteUrl = configuredSiteUrl || "http://localhost:4321"
@@ -81,10 +114,12 @@ export default defineConfig({
     sitemap({
       filter: (page) => {
         const pathname = new URL(page).pathname
-        return (
-          pathname !== "/terms" &&
-          (Boolean(configuredScannerUrl) || pathname !== "/scan")
-        )
+        return pathname !== "/terms" && (Boolean(configuredScannerUrl) || pathname !== "/scan")
+      },
+      serialize: (item) => {
+        const pathname = new URL(item.url).pathname.replace(/\/$/, "")
+        const lastmod = LASTMOD.get(pathname)
+        return lastmod ? { ...item, lastmod: lastmod.toISOString() } : item
       },
     }),
   ],

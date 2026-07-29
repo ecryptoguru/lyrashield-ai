@@ -13,6 +13,16 @@ import {
   enqueueScanJob,
   ScanWorkerUnavailableError,
 } from "../../../lib/queue"
+import { checkScanCreateRateLimit } from "../../../lib/rate-limit"
+
+const ACTIVE_SCAN_STATUSES = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"] as const
+
+/**
+ * Concurrent in-flight reviews per workspace. Each running scan holds a worker slot and
+ * commits model spend, so this bounds both blast radius and cost while leaving normal
+ * multi-product use unaffected.
+ */
+const MAX_CONCURRENT_WORKSPACE_SCANS = 3
 
 /**
  * Serialize a scan list row for the client. Dates become ISO strings so the
@@ -83,17 +93,42 @@ export async function POST(request: Request) {
     }
     const policyId = policy?.id
 
-    const activeScans = await prisma.scan.count({
-      where: {
-        workspaceId,
-        targetId: data.targetId,
-        status: { in: ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"] },
-      },
-    })
+    // Spend controls, cheapest check first. The existing per-target guard below stops the
+    // same target running twice; neither of these bounded a workspace fanning out across
+    // many targets, where each scan can commit up to PLATFORM_MAX_SCAN_BUDGET_USD.
+    const scanRate = await checkScanCreateRateLimit(workspaceId)
+    if (scanRate.limited) {
+      return apiError(
+        "SCAN_RATE_LIMITED",
+        "Too many reviews started in the last minute. Please wait a moment and try again.",
+        429,
+        { "Retry-After": String(Math.max(scanRate.retryAfter, 1)) }
+      )
+    }
+
+    const [activeScans, activeWorkspaceScans] = await Promise.all([
+      prisma.scan.count({
+        where: {
+          workspaceId,
+          targetId: data.targetId,
+          status: { in: [...ACTIVE_SCAN_STATUSES] },
+        },
+      }),
+      prisma.scan.count({
+        where: { workspaceId, status: { in: [...ACTIVE_SCAN_STATUSES] } },
+      }),
+    ])
     if (activeScans > 0) {
       return apiError(
         "SCAN_IN_PROGRESS",
         "Target already has an active scan. Cancel it or wait for completion.",
+        409
+      )
+    }
+    if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) {
+      return apiError(
+        "SCAN_CONCURRENCY_LIMIT",
+        `This workspace already has ${activeWorkspaceScans} reviews running. Wait for one to finish before starting another.`,
         409
       )
     }

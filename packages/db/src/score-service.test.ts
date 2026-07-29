@@ -39,6 +39,7 @@ vi.mock("./system-client", async () => {
 import { prisma } from "./client"
 import {
   buildScorecardPayload,
+  normalizeScorecardPayload,
   attributeReferral,
   getPublicScorecard,
   revokeScorecardShare,
@@ -49,6 +50,21 @@ import {
 
 const mockPrisma = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>> & {
   $transaction: ReturnType<typeof vi.fn>
+}
+
+/** A payload frozen before releaseVerdict/verdictVersion existed. */
+const LEGACY_FIVE_KEY_PAYLOAD = {
+  grade: "B",
+  scope: "agentic pentest + SCA + secrets",
+  scannedAt: "2026-07-01T00:00:00.000Z",
+  modelVersion: "lyrashield-score/1.0.0",
+  resolvedFindings: 2,
+}
+
+const CURRENT_PAYLOAD = {
+  ...LEGACY_FIVE_KEY_PAYLOAD,
+  releaseVerdict: "GO_WITH_CONDITIONS",
+  verdictVersion: "lyrashield-score/1.0.0",
 }
 
 describe("score-service", () => {
@@ -107,6 +123,77 @@ describe("score-service", () => {
     })
   })
 
+  describe("normalizeScorecardPayload (frozen-payload compatibility)", () => {
+    it("renders a legacy five-key payload without a verdict as NOT_EVALUATED", () => {
+      const payload = normalizeScorecardPayload(LEGACY_FIVE_KEY_PAYLOAD)
+      expect(payload).not.toBeNull()
+      expect(payload?.releaseVerdict).toBe("NOT_EVALUATED")
+      // Falls back to the payload's own model version rather than inventing one.
+      expect(payload?.verdictVersion).toBe("lyrashield-score/1.0.0")
+      expect(payload?.grade).toBe("B")
+      expect(payload?.resolvedFindings).toBe(2)
+    })
+
+    it("never infers a verdict from the grade", () => {
+      const payload = normalizeScorecardPayload({ ...LEGACY_FIVE_KEY_PAYLOAD, grade: "A_PLUS" })
+      expect(payload?.releaseVerdict).toBe("NOT_EVALUATED")
+    })
+
+    it("returns the seven current keys and no extras for any stored shape", () => {
+      const payload = normalizeScorecardPayload({
+        ...CURRENT_PAYLOAD,
+        // A field that must never survive normalisation into the public shape.
+        targetUrl: "https://private.example.com",
+      })
+      expect(Object.keys(payload ?? {}).sort()).toEqual([
+        "grade",
+        "modelVersion",
+        "releaseVerdict",
+        "resolvedFindings",
+        "scannedAt",
+        "scope",
+        "verdictVersion",
+      ])
+      expect(payload).not.toHaveProperty("targetUrl")
+    })
+
+    it("preserves a verdict that was frozen into the payload", () => {
+      expect(normalizeScorecardPayload(CURRENT_PAYLOAD)?.releaseVerdict).toBe("GO_WITH_CONDITIONS")
+    })
+
+    it("rejects an unrecognised verdict rather than passing it through to the page", () => {
+      const payload = normalizeScorecardPayload({
+        ...CURRENT_PAYLOAD,
+        releaseVerdict: "SHIP_IT",
+      })
+      expect(payload?.releaseVerdict).toBe("NOT_EVALUATED")
+    })
+
+    it("fails closed when a field that has always been present is missing or malformed", () => {
+      expect(normalizeScorecardPayload(null)).toBeNull()
+      expect(normalizeScorecardPayload("nope")).toBeNull()
+      expect(normalizeScorecardPayload([])).toBeNull()
+      expect(normalizeScorecardPayload({ scannedAt: "2026-07-01T00:00:00.000Z" })).toBeNull()
+      expect(normalizeScorecardPayload({ grade: "B" })).toBeNull()
+      expect(normalizeScorecardPayload({ grade: "B", scannedAt: "not-a-date" })).toBeNull()
+    })
+
+    it("coerces a malformed resolved-findings count to zero rather than rendering NaN", () => {
+      expect(
+        normalizeScorecardPayload({ ...LEGACY_FIVE_KEY_PAYLOAD, resolvedFindings: -4 })
+          ?.resolvedFindings
+      ).toBe(0)
+      expect(
+        normalizeScorecardPayload({ ...LEGACY_FIVE_KEY_PAYLOAD, resolvedFindings: "many" })
+          ?.resolvedFindings
+      ).toBe(0)
+      expect(
+        normalizeScorecardPayload({ ...LEGACY_FIVE_KEY_PAYLOAD, resolvedFindings: 2.7 })
+          ?.resolvedFindings
+      ).toBe(2)
+    })
+  })
+
   describe("attributeReferral", () => {
     it("rejects self-referral", () => {
       mockPrisma.referralCode.findUnique.mockResolvedValue({ id: "rc-1", userId: "user-1" })
@@ -149,7 +236,7 @@ describe("score-service", () => {
     it("returns the frozen payload with a supersession flag when a newer snapshot exists", async () => {
       mockPrisma.scorecardShare.findFirst.mockResolvedValue({
         id: "share-1",
-        publicPayload: { grade: "A" },
+        publicPayload: CURRENT_PAYLOAD,
         referralCode: { code: "CODE2345" },
         snapshot: {
           targetId: "target-1",
@@ -160,12 +247,45 @@ describe("score-service", () => {
       mockPrisma.scoreSnapshot.findFirst.mockResolvedValue({ id: "newer" })
       const result = await getPublicScorecard("slug")
       expect(result).toMatchObject({ referralCode: "CODE2345", superseded: true })
+      expect(result?.payload.releaseVerdict).toBe("GO_WITH_CONDITIONS")
       expect(mockPrisma.scoreSnapshot.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ targetId: "target-1", workspaceId: "workspace-1" }),
         })
       )
       expect(mockPrisma.scorecardShare.update).not.toHaveBeenCalled()
+    })
+
+    it("still serves a share created before the release verdict existed", async () => {
+      mockPrisma.scorecardShare.findFirst.mockResolvedValue({
+        id: "share-legacy",
+        publicPayload: LEGACY_FIVE_KEY_PAYLOAD,
+        referralCode: { code: "CODE2345" },
+        snapshot: {
+          targetId: "target-1",
+          workspaceId: "workspace-1",
+          computedAt: new Date("2026-07-01"),
+        },
+      })
+      mockPrisma.scoreSnapshot.findFirst.mockResolvedValue(null)
+      const result = await getPublicScorecard("legacy-slug")
+      expect(result).not.toBeNull()
+      expect(result?.payload.releaseVerdict).toBe("NOT_EVALUATED")
+      expect(result?.superseded).toBe(false)
+    })
+
+    it("fails closed when the stored payload cannot be normalised", async () => {
+      mockPrisma.scorecardShare.findFirst.mockResolvedValue({
+        id: "share-corrupt",
+        publicPayload: { nonsense: true },
+        referralCode: { code: "CODE2345" },
+        snapshot: {
+          targetId: "target-1",
+          workspaceId: "workspace-1",
+          computedAt: new Date("2026-07-01"),
+        },
+      })
+      expect(await getPublicScorecard("corrupt-slug")).toBeNull()
     })
 
     it("returns null for unknown, revoked, or expired shares", async () => {
@@ -178,7 +298,7 @@ describe("score-service", () => {
         .mockResolvedValueOnce({
           id: "share-1",
           snapshot: { workspaceId: "workspace-1" },
-          publicPayload: { grade: "A" },
+          publicPayload: CURRENT_PAYLOAD,
           referralCode: { code: "CODE2345" },
         })
         .mockResolvedValue(null)
