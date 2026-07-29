@@ -153,7 +153,7 @@ jobs:
         run: pnpm build
 
       - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium webkit
 
       - name: Browser E2E
         run: DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" pnpm test:e2e
