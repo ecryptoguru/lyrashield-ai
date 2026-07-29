@@ -96,6 +96,36 @@ jobs:
         run: |
           echo "Pushed worker image: ${{ env.WORKER_IMAGE }}:${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
 
+  # Every merge to main pushes a new SHA-tagged image and re-points :latest, with nothing ever
+  # deleting what it replaced. Multi-arch buildx pushes also leave several untagged manifests
+  # per build (per-platform layers under the tagged manifest list), so versions accumulate
+  # faster than commits. Runs after `deploy` (not `build`) so the freshly deployed image is
+  # never the one being cleaned up.
+  #
+  # Uses dataaxiom/ghcr-cleanup-action rather than a raw "delete this version ID" call: it
+  # resolves multi-arch manifest lists first and will not delete an untagged manifest that a
+  # kept tagged version still references, which a naive per-ID delete could do and break a
+  # pull of an image that still LOOKS tagged and valid.
+  cleanup-old-images:
+    name: Clean up superseded container images
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete untagged and superseded image versions
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          packages: lyrashield-ai/lyrashield-web,lyrashield-ai/lyrashield-worker
+          # Keep the most recent 10 tagged versions of each package (the deployed one plus a
+          # safety margin for rollback) and remove every dangling untagged manifest.
+          keep-n-tagged: 10
+          delete-untagged: true
+          # Dry run until a founder explicitly flips this to false and confirms the first
+          # real pass in the Action summary output. See docs/deployment/PRODUCTION_DEPLOYMENT.md
+          # "Known production blockers" for the sign-off record.
+          dry-run: true
+
   deploy:
     name: Deploy Azure Container Apps
     needs: build
@@ -154,6 +184,29 @@ jobs:
           fi
           echo "Shared rate-limiting credentials present."
 
+      # secretref: below requires the Container App to already define secrets named
+      # upstash-redis-rest-url / upstash-redis-rest-token. Nothing provisioned those, so the
+      # secretref would fail az containerapp update outright on a fresh app. This step
+      # (re)creates them from the same GitHub secrets checked above, on every deploy, so
+      # rotating the GitHub secret also rotates the Container App's copy.
+      - name: Sync Upstash secrets to Container Apps
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: |
+          if [ -n "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" ]; then
+            az containerapp secret set \
+              --name "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --secrets "upstash-redis-rest-url=${UPSTASH_REDIS_REST_URL}" "upstash-redis-rest-token=${UPSTASH_REDIS_REST_TOKEN}"
+          fi
+          if [ -n "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}" ]; then
+            az containerapp secret set \
+              --name "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}" \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --secrets "upstash-redis-rest-url=${UPSTASH_REDIS_REST_URL}" "upstash-redis-rest-token=${UPSTASH_REDIS_REST_TOKEN}"
+          fi
+
       - name: Deploy app Container App
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
@@ -168,8 +221,6 @@ jobs:
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}" \
-              "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
-              "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token"
 
@@ -186,7 +237,9 @@ jobs:
               "NEXT_PUBLIC_APP_URL=${{ env.SCANNER_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
-              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}"
+              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}" \
+              "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
+              "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token"
 
       - name: Smoke app health
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''

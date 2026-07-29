@@ -88,6 +88,29 @@ behaviour against a real database, and refuses to run — rather than passing va
 when handed a role that can bypass RLS. CI provisions that restricted role and exports
 `RLS_RUNTIME_DATABASE_URL`.
 
+### 4. Container registry cleanup runs in dry-run mode — needs a sign-off to go live
+
+**Status:** dry-run only. `cleanup-old-images` in `deploy-azure.yml` runs after every deploy
+and reports what it *would* delete, but `dry-run: true` means nothing is actually removed yet.
+
+**Why this exists.** Every merge to `main` pushes a new SHA-tagged image and re-points
+`:latest`; nothing ever deleted what it replaced. Multi-arch buildx pushes also leave several
+untagged manifests per build. Confirmed 2026-07-30: `lyrashield-web` had 10 versions (6
+untagged) and `lyrashield-worker` had 4 (3 untagged) after only a handful of deploys — this
+grows forever with no cap.
+
+**Why it is not deleting anything yet.** Deleting container images is irreversible, and a
+naive "delete this version ID" approach can remove an untagged manifest that a *kept* tagged
+manifest list still references, silently breaking a future pull of an image that still looks
+valid. `dataaxiom/ghcr-cleanup-action` resolves manifest lists before deleting specifically to
+avoid that, but a first run against months of accumulated history should still be reviewed
+before it is destructive.
+
+**To go live:** review a dry-run's Action summary output (what it proposes to delete for each
+package), confirm nothing currently deployed or needed for rollback is in that list, then flip
+`dry-run: false` in `deploy-azure.yml`. Currently configured to keep the most recent 10 tagged
+versions per package and remove all dangling untagged manifests.
+
 ## Release prerequisites
 
 1. Public HTTPS application and marketing origins plus all trusted auth origins are decided. Scorecard canonical/OG/Twitter URLs must resolve to the application origin.
