@@ -27,7 +27,7 @@ export const UxV2FlagsSchema = z.object({
 
 export type UxV2Flags = z.infer<typeof UxV2FlagsSchema>
 
-const DEFAULT_FLAGS: UxV2Flags = {
+const ALL_TRUE: UxV2Flags = {
   uxV2Shell: true,
   uxV2Onboarding: true,
   uxV2Runs: true,
@@ -36,6 +36,25 @@ const DEFAULT_FLAGS: UxV2Flags = {
   uxV2Notifications: true,
   uxV2Sharing: true,
 }
+
+const ALL_FALSE: UxV2Flags = {
+  uxV2Shell: false,
+  uxV2Onboarding: false,
+  uxV2Runs: false,
+  uxV2Issues: false,
+  uxV2Evidence: false,
+  uxV2Notifications: false,
+  uxV2Sharing: false,
+}
+
+// When no UX V2 allowlist env vars are configured, V2 is the default experience.
+// When allowlists ARE configured (even if empty/future-dated), users who don't
+// match fall back to V1. This lets CI/E2E pin the old wizard by setting
+// UX_V2_NEW_USERS_FROM to a future date without matching any real user.
+const uxV2AllowlistConfigured =
+  Boolean(env.UX_V2_INTERNAL_USER_IDS?.trim()) || Boolean(env.UX_V2_NEW_USERS_FROM?.trim())
+
+const DEFAULT_FLAGS: UxV2Flags = uxV2AllowlistConfigured ? ALL_FALSE : ALL_TRUE
 
 function allEnabled(): UxV2Flags {
   return uxV2FlagNames.reduce((acc, name) => ({ ...acc, [name]: true }), {} as UxV2Flags)
