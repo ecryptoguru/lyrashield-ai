@@ -234,17 +234,41 @@ jobs:
           #
           # If you intentionally change or remove either element, update the marker here in
           # the same commit. A failure means the live site is not serving this commit.
-          homepage="$(curl --fail --silent --show-error --retry 5 --retry-all-errors \
-            https://lyrashieldai.com/)"
+          #
+          # Retried with backoff: a wrangler deploy that itself succeeds can take a short
+          # window to propagate across Cloudflare's edge, and the very first check here once
+          # failed one second after a deploy that had already reported success. A
+          # cache-busting query param avoids being served a stale edge-cached response during
+          # that window.
+          markers=(
+            'data-cta-id="premium-hero-lite-check"'
+            'data-cta-id="v2launch_open_beta"'
+          )
 
-          for marker in \
-            'data-cta-id="premium-hero-lite-check"' \
-            'data-cta-id="v2launch_open_beta"'; do
-            if ! printf '%s' "$homepage" | grep --quiet --fixed-strings "$marker"; then
-              echo "::error::Live homepage is missing '${marker}' — the deploy did not land."
-              exit 1
+          for attempt in $(seq 1 8); do
+            homepage="$(curl --fail --silent --show-error --retry 5 --retry-all-errors \
+              -H 'Cache-Control: no-cache' \
+              "https://lyrashieldai.com/?cachebust=${GITHUB_SHA}-${attempt}")"
+
+            missing=""
+            for marker in "${markers[@]}"; do
+              if ! printf '%s' "$homepage" | grep --quiet --fixed-strings "$marker"; then
+                missing="$marker"
+                break
+              fi
+            done
+
+            if [ -z "$missing" ]; then
+              echo "Live homepage matches this deploy (attempt ${attempt})."
+              exit 0
             fi
+
+            echo "Attempt ${attempt}: homepage missing '${missing}', retrying in 15s..."
+            sleep 15
           done
+
+          echo "::error::Live homepage is missing '${missing}' after 8 attempts — the deploy did not land."
+          exit 1
 
   deploy-azure:
     name: Deploy to Azure
