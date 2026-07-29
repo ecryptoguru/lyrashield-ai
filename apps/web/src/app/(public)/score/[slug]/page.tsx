@@ -16,6 +16,18 @@ const getScorecard = cache(getPublicScorecard)
 const appOrigin = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001"
 const REFERRAL_SOURCE_SET = new Set<string>(REFERRAL_SOURCES)
 
+/**
+ * Verdict presentation. Shares frozen before the verdict existed normalise to
+ * NOT_EVALUATED, so every lookup must tolerate it — indexing this map without a fallback
+ * previously threw during render and took every pre-verdict public card down with a 500.
+ */
+const VERDICT_CONFIG = {
+  GO: { label: "Ready to launch", variant: "success" as const },
+  GO_WITH_CONDITIONS: { label: "Ready with conditions", variant: "warning" as const },
+  NO_GO: { label: "Not ready", variant: "danger" as const },
+  NOT_EVALUATED: { label: "Not evaluated", variant: "muted" as const },
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -81,14 +93,10 @@ export default async function ScorecardPage({
   const grade = payload.grade.replace("_PLUS", "+")
 
   const verdict = payload.releaseVerdict
-  const verdictConfig = {
-    GO: { label: "Ready to launch", variant: "success" as const },
-    GO_WITH_CONDITIONS: { label: "Ready with conditions", variant: "warning" as const },
-    NO_GO: { label: "Not ready", variant: "danger" as const },
-    NOT_EVALUATED: { label: "Not evaluated", variant: "muted" as const },
-  }
-  const { label: verdictLabel, variant: verdictVariant } =
-    verdictConfig[verdict as keyof typeof verdictConfig]
+  const verdictDisplay = VERDICT_CONFIG[verdict] ?? VERDICT_CONFIG.NOT_EVALUATED
+  // A pre-verdict share has nothing truthful to show here, so omit the panel rather than
+  // advertising "Not evaluated" on a card whose scan simply predates the field.
+  const showVerdict = verdict !== "NOT_EVALUATED"
   const activeReferral = ref ?? referralCode
   const referralSource = source && REFERRAL_SOURCE_SET.has(source) ? source : undefined
   const shareUrl = `/score/${slug}${activeReferral ? `?ref=${activeReferral}` : ""}`
@@ -155,18 +163,20 @@ export default async function ScorecardPage({
                   finding{payload.resolvedFindings === 1 ? "" : "s"} fixed and retest-confirmed
                 </p>
               </div>
-              <div className="bg-muted/45 rounded-xl border p-5">
-                <p className="flex items-center gap-2 text-sm font-medium">
-                  <ShieldCheck className="text-primary size-4" aria-hidden="true" />
-                  Release verdict
-                </p>
-                <div className="mt-3">
-                  <Badge variant={verdictVariant}>{verdictLabel}</Badge>
+              {showVerdict && (
+                <div className="bg-muted/45 rounded-xl border p-5">
+                  <p className="flex items-center gap-2 text-sm font-medium">
+                    <ShieldCheck className="text-primary size-4" aria-hidden="true" />
+                    Release verdict
+                  </p>
+                  <div className="mt-3">
+                    <Badge variant={verdictDisplay.variant}>{verdictDisplay.label}</Badge>
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Verdict {payload.verdictVersion}
+                  </p>
                 </div>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Verdict {payload.verdictVersion}
-                </p>
-              </div>
+              )}
             </div>
           </div>
           <div className="relative mt-8 flex flex-wrap items-center gap-3 border-t pt-6">
