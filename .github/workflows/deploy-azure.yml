@@ -143,6 +143,17 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm --filter @lyrashield/db exec prisma migrate deploy
 
+      - name: Verify shared rate-limiting credentials
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: |
+          if [ -z "${UPSTASH_REDIS_REST_URL}" ] || [ -z "${UPSTASH_REDIS_REST_TOKEN}" ]; then
+            echo "::error::UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN are not set. Rate limiting would fall back to per-instance memory, so the effective limit becomes (limit x replica count) and scaling out weakens the control. These are the HTTPS REST credentials and are NOT interchangeable with REDIS_URL."
+            exit 1
+          fi
+          echo "Shared rate-limiting credentials present."
+
       - name: Deploy app Container App
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
@@ -156,7 +167,11 @@ jobs:
               "NEXT_PUBLIC_APP_URL=${{ env.APP_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
-              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}"
+              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}" \
+              "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
+              "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
+              "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
+              "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token"
 
       - name: Deploy scanner Container App
         if: vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''

@@ -71,6 +71,18 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runti
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime;
 ```
 
+### 3. Shared rate limiting is enforced at deploy, not at boot
+
+`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are asserted by the deploy workflow
+before the container image is swapped, and passed to both apps as secret references. Without
+them the limiter falls back to a per-instance in-memory store, so the effective limit becomes
+(limit x replica count) and scaling out to absorb load weakens the control.
+
+This is deliberately a deploy gate rather than boot validation. Boot validation fires in
+every production-mode process — including the Playwright E2E server — and would fail a
+running app on restart, trading a rate-limiting weakness for an availability outage. The
+deploy check catches the same misconfiguration at the only moment it can be fixed safely.
+
 **Regression cover.** `packages/db/src/rls-fail-closed.test.ts` asserts the deny-by-default
 behaviour against a real database, and refuses to run — rather than passing vacuously —
 when handed a role that can bypass RLS. CI provisions that restricted role and exports

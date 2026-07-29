@@ -165,27 +165,6 @@ const envSchema = z
     message:
       "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
   })
-  // Rate limiting must be shared across replicas. Without Upstash it silently degrades to
-  // a per-instance in-memory Map, so the effective limit becomes (limit x replica count)
-  // and scaling out to handle load weakens the control instead of preserving it. A warning
-  // was not enough — the degraded mode is invisible in normal operation.
-  //
-  // Runtime-only, for the same reason as the email check below: building an image must not
-  // require live infrastructure credentials.
-  .refine(
-    (val) =>
-      val.NODE_ENV !== "production" ||
-      process.env.NEXT_PHASE === "phase-production-build" ||
-      Boolean(val.UPSTASH_REDIS_REST_URL && val.UPSTASH_REDIS_REST_TOKEN),
-    {
-      path: ["UPSTASH_REDIS_REST_URL"],
-      message:
-        "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production. " +
-        "Without them rate limiting falls back to per-instance memory, which does not hold " +
-        "across replicas. Note these are the HTTPS REST credentials and are NOT interchangeable " +
-        "with REDIS_URL, which is the BullMQ queue connection.",
-    }
-  )
   // Claiming to verify email addresses without a way to send the mail is worse than not
   // claiming it: sign-up would either break or silently fall through unverified.
   //
