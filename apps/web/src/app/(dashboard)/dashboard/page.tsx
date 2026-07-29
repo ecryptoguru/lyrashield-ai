@@ -135,7 +135,8 @@ export default async function DashboardPage() {
   ]
 
   const latestScan = recentScans[0]
-  const commandMode = latestScan?.mode ?? "SAFE"
+  // null when nothing has run yet — the card omits the depth clause rather than claiming one.
+  const commandMode = latestScan?.mode ?? null
 
   return (
     <div className="flex flex-col gap-6 lg:gap-8">

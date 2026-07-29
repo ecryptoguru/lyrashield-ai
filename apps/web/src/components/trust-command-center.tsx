@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from 
 import { RUN_SINGULAR } from "@/lib/terminology"
 import { estimateRunMinutes, formatEstimate } from "@/lib/estimator"
 import Link from "next/link"
+import { modeLabel } from "@/lib/labels"
 
 function trustPlanLabel(data: unknown): string {
   if (!data || typeof data !== "object") return "Default"
@@ -37,14 +38,17 @@ export function TrustCommandCenter({
   latestScore = null,
 }: {
   productName: string
-  mode: string
+  /** Depth of the most recent review, or null when none has run yet. */
+  mode: string | null
   assetCount: number
   riskScore: number
   trustPlanData: unknown
   completedScanCount?: number
   latestScore?: { score: number; grade: string } | null
 }) {
-  const estimate = estimateRunMinutes(mode, assetCount)
+  // With no history, estimate against the recommended default depth. The copy below still
+  // omits the mode clause rather than claiming a review ran in a mode it never did.
+  const estimate = estimateRunMinutes(mode ?? "SAFE", assetCount)
 
   const hasCompletedReview = completedScanCount > 0 && latestScore !== null
   const score = latestScore?.score ?? riskScore
@@ -97,7 +101,8 @@ export function TrustCommandCenter({
               <span className="text-2xl font-bold">{formatEstimate(estimate)}</span>
             </div>
             <p className="text-muted-foreground text-xs">
-              For {assetCount} asset(s) in {mode.toLowerCase()} mode
+              For {assetCount} asset{assetCount === 1 ? "" : "s"}
+              {mode ? ` in ${modeLabel(mode).toLowerCase()} mode` : ""}
             </p>
           </CardContent>
         </Card>

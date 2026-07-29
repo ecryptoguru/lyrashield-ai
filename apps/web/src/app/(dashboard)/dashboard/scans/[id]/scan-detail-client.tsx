@@ -478,6 +478,8 @@ export function ScanDetailClient({
             elapsedTime={elapsedTime}
             events={displayEvents}
             findingsCount={currentFindings.length}
+            onRefresh={() => void handleManualRefresh()}
+            refreshing={refreshing}
           />
         </div>
       )}
@@ -558,7 +560,7 @@ export function ScanDetailClient({
                 Tamper-evident record
               </div>
               <p className="mt-1 text-lg font-semibold">
-                {scan.integrity.manifestChecksum ? "Saved" : "Pending"}
+                {scan.integrity.manifestChecksum ? "Sealed" : isActive ? "Sealing…" : "Not sealed"}
               </p>
             </Card>
           </div>
