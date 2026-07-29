@@ -1,6 +1,9 @@
 name: Production database backup
 
 on:
+  # Backups must not depend on someone remembering to click a button.
+  schedule:
+    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       restore:
