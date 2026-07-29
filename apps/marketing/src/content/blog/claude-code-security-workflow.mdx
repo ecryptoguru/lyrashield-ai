@@ -1,138 +1,141 @@
 ---
-title: "Secure a Claude Code Project"
-description: "Constrain Claude Code permissions, sandbox access, MCP tools, and release actions while keeping the coding workflow useful."
-pubDate: 2026-07-17
+title: Claude Code security workflow for AI built apps
+description: Secure Claude Code workflows with MCP scope checks, permission hardening, dependency gating and SARIF evidence for trustworthy releases.
+pubDate: 2026-07-30
 updatedDate: 2026-08-07
 author: lyrashield-team
-tags:
-  - vibe-coding-security
-  - agent-security
-  - verification
+tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-05
 faq:
-  - q: "Is Claude Code plan mode a sandbox?"
-    a: "No. Plan mode controls whether Claude edits source, while the Bash sandbox enforces filesystem and network boundaries for shell commands. Use both when the task involves untrusted content or sensitive local resources."
-  - q: "When is bypass permissions mode acceptable?"
-    a: "Only inside a disposable container or virtual machine with no production credentials, narrow mounts, and restricted network access. It should not be the default on a developer workstation."
-  - q: "Does a trusted MCP server still need scoped permissions?"
-    a: "Yes. Trusting the publisher does not make every tool or credential appropriate for every repository. Enable only the tools and resource scope that the current task needs."
+  - q: Where does Claude Code store MCP server config?
+    a: In .mcp.json with local project and user scopes. Project scope lives in your repo for team sharing while user scope stays in home for personal tools. Always use env var references for keys.
+  - q: How should I handle plan mode versus default mode?
+    a: Use plan mode for read only exploration then switch to controlled execution with approval prompts. Require review before edits to auth, payment or infra code.
+  - q: What evidence should I keep for Claude Code releases?
+    a: Keep SARIF from secret and dependency scans plus a log of MCP servers used and the pull request with permission settings. That supports later verification and audit.
 ---
+Claude Code reads your repo, edits many files, runs commands and calls MCP tools in one session, so you need scoped permissions and locked down config. This workflow shows how to harden .mcp.json across local, project and user scopes, limit tool permissions, gate secrets and dependencies and collect SARIF for every pull request. See our [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls before applying Claude Code specific checks.
 
-**Direct answer:** Start Claude Code in plan or default mode, keep the writable project root narrow, enable a fail-closed Bash sandbox, and deny release or credential operations in project policy. Review repository settings and MCP servers before trusting the folder. After changes, inspect the diff and run focused tests. Keep deployment as a separate human decision.
+## Understand Claude Code risk surface
 
-_Product behavior and control names were reviewed against Anthropic documentation on July 17, 2026. Recheck them when upgrading Claude Code._
+Claude Code operates with your shell permissions and broad file access. A single prompt can add packages, change auth middleware and connect a new MCP server. That compression of work is productive but concentrates risk, especially when production credentials are loaded in the same shell.
 
-Claude Code can read a repository, edit files, run commands, and call connected tools. Those capabilities are useful because they remove handoffs. They also mean a broad approval can reach farther than the code change that prompted it.
+Common patterns seen in AI assisted code include leftover debug endpoints that skip auth, hardcoded test secrets that become real credentials and transitive dependencies added without review. Use consistent references when you file tickets so severity is clear to reviewers.
 
-The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. The same distinction applies to the coding agent. A prompt such as "do not deploy" states intent. A permission deny rule, sandbox boundary, or missing production credential enforces it.
+OWASP Top Ten lists injection and misconfiguration as persistent app risks, see [OWASP Top Ten](https://owasp.org/www-project-top-ten/). Credential handling weakness maps to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html) and command injection to [CWE 78 for OS command injection](https://cwe.mitre.org/data/definitions/78.html). MCP server security expectations including auth are defined in [MCP authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). If you also ship with visual builders, our [Replit app security checklist](/blog/replit-app-security-checklist) shows similar permission and evidence ideas in a different runtime, which helps keep a consistent verification story across tools.
 
-## Map the effective capability before starting
+## Configure MCP in .mcp.json with scoped permissions
 
-Claude Code's practical reach comes from several controls used together:
+Claude Code supports three scopes for MCP config. Local scope applies to just this session. Project scope lives in .mcp.json at repo root and is shared with the team via git. User scope lives in personal config like dot Claude dot json or .mcp.json in home and is for personal helpers. Prefer project scope for team servers that every developer needs, and user scope for personal tools that should not be in git.
 
-- The directory where the session starts and any additional directories it can access.
-- The selected permission mode and project permission rules.
-- The Bash sandbox's filesystem and network limits.
-- Environment variables inherited by commands.
-- MCP servers, individual MCP tools, and the credentials behind them.
-- The Git branch and deployment permissions available outside Claude Code.
-
-Anthropic currently documents `default`, `acceptEdits`, `plan`, `auto`, `dontAsk`, and `bypassPermissions` modes. Their behavior is not interchangeable. Plan mode lets Claude investigate without editing source. It does not replace OS-enforced sandboxing. Auto mode uses background checks but remains a research preview. Bypass mode skips the permission layer and belongs only in an isolated container or virtual machine.
-
-## The risky pattern: a trusted folder with broad standing permission
-
-**Vulnerable pattern. This example is intentionally overbroad.**
+Secure example for project .mcp.json:
 
 ```json
 {
-  "permissions": {
-    "defaultMode": "acceptEdits",
-    "allow": ["Bash(*)", "WebFetch(*)"]
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp/work"]
+    }
   }
 }
 ```
 
-Once saved as project configuration, this policy follows the repository. A later session may read an issue, generated fixture, package script, or tool response containing hostile instructions. A broad Bash rule removes a useful pause exactly when the requested command has changed.
-
-The problem is not that Claude Code ignores the prompt. The problem is that natural-language instructions and executable authority solve different problems. Repository instructions can be changed in a pull request. An MCP tool can expose a write action under an innocent-looking server name. A package script can change while the saved approval still matches it.
-
-## Build a narrow project policy
-
-Begin with `plan` or `default`. Add permission rules for repeatable, low-impact operations only after reviewing the exact match. Deny production, credential, and repository-policy changes even if similar development commands are allowed.
+Add servers via CLI instead of manual JSON when possible:
 
 ```json
 {
-  "permissions": {
-    "defaultMode": "default",
-    "deny": [
-      "Read(.env)",
-      "Edit(.github/workflows/**)",
-      "Bash(npm run deploy:*)",
-      "Bash(terraform apply:*)"
-    ]
-  },
-  "sandbox": {
-    "enabled": true,
-    "failIfUnavailable": true,
-    "allowUnsandboxedCommands": false
-  }
+  "note": "Commands to run: claude mcp add lyrashield --scope project -- npx -y @lyrashield/mcp and claude mcp add --transport http --scope user lyrashield-remote https://app.lyrashieldai.com/api/mcp"
 }
 ```
 
-Treat this as an illustrative fragment, then confirm the current matcher syntax in Anthropic's permission documentation. Bash patterns have security limitations, and a slightly different command form may not match the rule you expected. Hard separation is stronger: leave cloud credentials out of the process, remove production network reach, and use an account that cannot deploy.
+Hardening details that matter for review:
 
-Set all three sandbox values when sandboxing is a release requirement. `enabled` turns Bash sandboxing on. `failIfUnavailable` makes an unsupported or incomplete sandbox fail at startup instead of warning and continuing unsandboxed. `allowUnsandboxedCommands: false` disables the `dangerouslyDisableSandbox` escape hatch. Review `excludedCommands` separately because every command listed there still runs outside the sandbox. A visible warning or a permission prompt is useful during exploration. Neither is a fail-closed CI gate.
+* Never store raw keys in .mcp.json. Use env var references and load from a secret manager at runtime. Check CI for literal sk or lsk patterns.
+* For project scope, require pull request review for any MCP addition. Treat new servers like new production dependencies with an owner and review date.
+* Limit filesystem server args to the smallest directory needed for the task. Over broad file access widens exfiltration risk.
+* For remote MCP at https://app.lyrashieldai.com/api/mcp use Bearer lsk key from env and restrict egress if possible. Protocol and transport options are described at [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18).
+* Verify scope behavior with vendor docs at [Claude Code MCP](https://docs.claude.com/en/docs/claude-code/mcp) and overview at [Claude Code overview](https://docs.claude.com/en/docs/claude-code/overview).
 
-## Review repository configuration as executable policy
+Log which servers were active for a feature in the pull request description. That one line helps reproduce permission issues later and keeps audits simple.
 
-Trusting a directory allows project-scoped Claude configuration to take effect. Review `.claude/settings.json`, hooks, skills, plugins, `CLAUDE.md`, and MCP configuration before accepting trust. Include those files in normal code review and branch protection.
+## Harden rules with CLAUDE.md and settings
 
-Check both the addition and the expansion of authority. A harmless-looking rule change can turn a prompt into a persistent allow. A hook can run code before or after a tool call. A plugin can add more than a written instruction. If a repository accepts outside contributions, require a security owner for changes to agent configuration.
+Use CLAUDE.md in repo root to state what the agent may and may not do. Version it in git and require review on changes.
 
-Use a clean worktree for unfamiliar branches. This prevents generated changes from mixing with unrelated local edits and makes `git diff` easier to interpret. It does not prevent shell access outside the worktree unless the sandbox does.
+Recommended policy blocks:
 
-## Scope MCP servers by tool and credential
+* Edit scope: allow src, tests and docs. Protect env, secrets and infra unless security owner approves. Deny direct edits to production workflow files.
+* Command policy: allow read and limited test commands, require confirm for package installs and migrations, deny curl with secrets and git push to main.
+* Network policy: list allowed registries and APIs the agent may call during generation, and forbid arbitrary egress.
 
-Claude Code supports permissions for MCP tools, and Anthropic warns that it does not security-audit or manage every MCP server. Review the server package or endpoint, transport, tool list, data destination, and credential scope.
+Pair that with project owned settings for approval. Prefer asking before execution for auth, payment, file upload and infrastructure code. This slows only the riskiest paths while keeping routine refactors fast.
 
-A GitHub server with read-only issue access is a different capability from one that can merge, change repository settings, or read every private repository available to a personal token. Disable unused tools. Prefer a repository-scoped app credential over a broad personal token. Keep production databases and messaging tools disconnected from ordinary code-editing sessions.
+Add a rule about plan first for broad changes. Ask Claude Code to write a short plan markdown and get approval before editing ten or more files or touching auth. That mirrors plan mode design and reduces blast radius when prompts are ambiguous.
 
-For a deeper capability review, read [least privilege for MCP tools](/blog/least-privilege-mcp-tools). The server must enforce authorization even when the client asks politely and the model appears to understand the boundary.
+If the agent proposes broad regex replacements, split into smaller commits with tests. Broad replacements are where credential patterns or auth bypasses are missed.
 
-## Handle monorepos and generated files deliberately
+## Gate dependencies and secrets before merge
 
-A narrow working directory can be awkward in a monorepo. Tests may need a sibling package, a shared lockfile, or generated types above the app folder. Add those paths one at a time instead of moving the session to the repository root by habit. Keep unrelated customer fixtures, infrastructure state, and local credential folders outside the readable set.
+Agentic edits often add npm or Python packages to solve a task quickly. That is where supply chain risk enters the repo.
 
-Generated output deserves a separate check. A formatter or code generator can touch hundreds of files and hide a small policy change inside mechanical noise. Run generators in their own commit when practical. Compare the generator version and command, then review unexpected files before accepting the bulk output.
+Run dependency scanning on each pull request. OSV provides a broad open vulnerability database at [OSV database](https://osv.dev). For Node run npm audit or pnpm audit, for Python consider pip audit. Block high severity findings outright. Document any exception with owner, risk note and expiry date. Check lockfile diffs for new transitive deps with low download count or recent maintainer change and flag those for manual review.
 
-For CI, use `dontAsk` only with a predeclared tool set and an isolated runner. Anthropic documents that unapproved actions are denied in this mode. Make a denied operation fail the job visibly, and do not fall back to bypass mode just to keep the pipeline moving.
+For secrets, run gitleaks or trufflehog in CI and locally via pre commit. Block new findings. Validate that .mcp.json, CLAUDE.md and local shell history do not contain raw tokens. The GitHub SARIF shape for secret scanning is described at [GitHub SARIF for secret scanning](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning). Keep env examples as placeholders only. Production secrets belong in your secret manager, not in agent context.
 
-## Verify the change without granting release authority
+Require secret management via platform store. Verify that bearer token env var references point to env that is not echoed in logs. Check CI logs for accidental secret echo and redact quickly if found.
 
-Use a non-production repository or disposable branch for the first pass. Ask Claude to explain the intended files and tests in plan mode. Then switch to an editing mode that fits the sensitivity of the task.
+## Capture verified evidence with SARIF and logs
 
-After the edit:
+Collect machine readable evidence for each release so review does not depend on memory.
 
-1. Inspect `git status` and the complete diff, including lockfiles and agent configuration.
-2. Run focused unit, type, lint, and security checks in the sandbox.
-3. Search the diff for secrets, disabled checks, broad CORS, authorization removal, and new network destinations.
-4. Exercise a negative case, such as a second user being denied access to the first user's resource.
-5. Commit to a branch and let CI run with a credential set designed for CI, not a developer's shell.
+Per branch procedure:
 
-The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help track these boundaries. It records what you can show is in place. It does not inspect the Claude Code session, execute tests, or prove that a deployment is secure.
+1. Run lint, type check, secret scan and dependency audit.
+2. Convert each tool output to SARIF where supported.
+3. Upload SARIF via GitHub Action code scanning uploader.
+4. Add docs slash security evidence markdown file with date, commit, active MCP servers, tools run and reviewers.
+5. Store build and SARIF artifacts with release tag.
 
-## What automation cannot settle
+See GitHub guidance at [SARIF upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github) and general code scanning at [GitHub code scanning](https://docs.github.com/en/code-security/code-scanning). Keep artifacts for at least a few releases so you can show trend and exception closure.
 
-A clean diff and passing tests show that the checked behavior matched the test environment. They do not prove that every authorization branch was exercised, an MCP server behaved honestly, or production configuration matches local configuration. An agent's report that a task is complete is a claim to verify, not independent evidence.
+If you use remote MCP, log server version used during generation. Small details like server url and timestamp help when debugging tool permission drift.
 
-Record the permission mode, sandbox state, MCP servers, branch, tests, and known exclusions when the change affects sensitive code. If a scanner reports a candidate issue, keep it in a detected state until a person or independent verifier confirms the behavior. After a fix, run a fresh test rather than treating the edit itself as proof.
+| Control | File or setting | Review signal |
+| --- | --- | --- |
+| MCP scope | .mcp.json local project user scopes | No raw keys, project scope reviewed, least directory access configured |
+| Permission policy | CLAUDE.md plus approval settings | Plan mode for exploration, approval needed for edits outside src and for infra |
+| Secrets gate | CI secret scan with SARIF upload | No tokens in git, env via manager, findings block merge |
+| Dependency gate | OSV plus package audit in CI | High severity blocks, exceptions tracked with owner and expiry date |
+| Evidence | GitHub code scanning plus security evidence file | SARIF on PR and main, MCP list logged per release, release tag linked |
+| Release hygiene | Pull request template plus branch protection | Auth changes flagged, tests required, reviewers assigned and documented |
 
-## Sources
+## Why pair Claude Code with LyraShield
 
-- [Anthropic: Claude Code security](https://code.claude.com/docs/en/security)
-- [Anthropic: Configure permissions](https://code.claude.com/docs/en/permissions)
-- [Anthropic: Permission modes](https://code.claude.com/docs/en/permission-modes)
-- [Anthropic: Sandboxing](https://code.claude.com/docs/en/sandboxing)
-- [OWASP: LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
-- [GitHub: About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
+LyraShield AI is an agent native application security platform for AI built software, see https://lyrashieldai.com. The intended flow is Target to Scan to Verified Finding to Fix PR to Retest to Report, so findings stay tied to code changes and evidence.
+
+MCP integration is designed for Claude Code. Local stdio via npx -y @lyrashield/mcp uses env var keys for project scope, and remote at https://app.lyrashieldai.com/api/mcp is designed to accept Bearer lsk key with user or project scope. GitHub Action is designed to be diff aware and produce SARIF for code scanning so results appear in your pull request.
+
+Build honesty note: Sprints 0 to 2 shipped. Scan engine MVP, automated fix PR creation and billing are on the roadmap and not live today. Current value is the hardened workflow, MCP config pattern and SARIF shape that lets teams prepare for upcoming automated verification. V1 is designed to include agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF.
+
+This pairing keeps Claude Code speed while preserving a consistent verification narrative across editors.
+
+## Closing checks and next steps
+
+Before merge, confirm these controls.
+
+* .mcp.json scopes minimal, no raw secrets, reviewed in PR.
+* CLAUDE.md policy lists protected paths and required approvals.
+* Dependency and secret scans ran and SARIF uploaded to code scanning.
+* Auth and payment changes have tests and assigned reviewer.
+* Release evidence file updated with MCP servers and commit.
+
+Apply the same evidence pattern using our [AI app security checklist tool](/tools/ai-app-security-checklist) and join the waitlist at https://lyrashieldai.com for upcoming scan and automated fix PR milestones. For related multi builder flows see [V0 app security checklist](/blog/v0-app-security-checklist) and [Base44 app security checklist](/blog/base44-app-security-checklist) to keep controls uniform across your fleet.

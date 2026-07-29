@@ -1,129 +1,138 @@
 ---
-title: "Secure a Windsurf Project"
-description: "Control Cascade terminal actions, MCP tools, credentials, shared rules, and branch review as Windsurf moves into Devin Desktop."
-pubDate: 2026-07-17
+title: Windsurf security workflow for AI generated apps
+description: Harden Windsurf MCP config, rules, dependencies and secrets with SARIF evidence for secure AI assisted releases of your app.
+pubDate: 2026-07-30
 updatedDate: 2026-08-07
 author: lyrashield-team
-tags:
-  - vibe-coding-security
-  - agent-security
-  - verification
+tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-01
 faq:
-  - q: "Did Windsurf become Devin Desktop?"
-    a: "Current Cascade and MCP documentation is published under Devin Desktop, while Windsurf plugin documentation still exists. Check the documentation for the surface your team actually runs before applying a setting."
-  - q: "Does an official MCP marketplace badge mean the server passed a security audit?"
-    a: "No. The current documentation says the badge identifies that the parent service company made the server. It does not describe the badge as a complete security audit."
-  - q: "When should terminal auto-execution be disabled?"
-    a: "Disable or tightly constrain it when a repository is unfamiliar, content is untrusted, commands can reach credentials, or the task touches release infrastructure. Review exact controls in the installed client version."
+  - q: Where does Windsurf store MCP config?
+    a: Global in ~/.codeium/windsurf/mcp_config.json and local .codeium/windsurf/mcp_config.json. Use serverUrl for remote servers and env with var references so secrets stay out of git.
+  - q: How do Windsurf rules help security?
+    a: Rules in .codeium/windsurf/memories and muserules.md state auth requirements, forbidden patterns and review needs so Cascade prefers secure defaults for routes and handlers.
+  - q: What SARIF should I keep for Windsurf builds?
+    a: Keep SARIF from secret scanning and dependency scanning at minimum. Upload to GitHub code scanning on pull requests and on main for release evidence and trend tracking.
 ---
+Windsurf with Cascade can edit many files and call external MCP tools quickly, so you must lock down MCP config, tighten project rules, gate dependencies and secrets and keep SARIF for every release. This workflow covers mcp_config.json with serverUrl, Cascade memories hardening and verifiable evidence. Baseline controls are in our [vibe coding security guide](/blog/vibe-coding-security-guide) with Windsurf specific checks below.
 
-**Direct answer:** Review Windsurf and Cascade as a combined terminal, repository, MCP, and credential boundary. Keep command execution interactive for unfamiliar code, allowlist MCP servers and individual tools, interpolate secrets instead of checking them into configuration, work on a branch or worktree, and make CI plus human review the release decision.
+## Understand Windsurf and Cascade risk
 
-_Current naming and MCP controls were reviewed in Devin documentation on July 17, 2026. The Windsurf to Devin Desktop transition is active, so confirm labels in the installed client before publication or rollout._
+Windsurf uses Cascade for agentic edits across files with tool awareness. Cascade can read workspace files, run commands and invoke MCP servers you configured. That speed is valuable but also means one prompt can add packages, expose data in logs or broaden network access without a clear record.
 
-Windsurf guidance now spans two product labels. Current Cascade documentation appears under Devin Desktop, while Windsurf plugin and administrator pages remain available. That documentation move is not itself a security change. It is a reason to stop copying settings from an old screenshot and verify the control on the surface the team runs.
+Typical AI inserted issues include debug endpoints that skip auth, error handlers that log secrets and new dependencies with install scripts. You need consistent weakness language so findings are triaged similarly across builders.
 
-The [vibe coding security guide](/blog/vibe-coding-security-guide) asks where each sensitive action is enforced. For a Cascade session, the answer may sit in terminal behavior, an MCP registry, a tool toggle, `mcp_config.json`, an environment variable, or repository review policy. The editor window alone is not the boundary.
+Map issues to common references. OWASP Top Ten at [OWASP Top Ten](https://owasp.org/www-project-top-ten/) captures injection and misconfiguration seen in AI generated back ends. Hardcoded credential patterns map to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html). MCP transport and auth expectations are defined at [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18) and [MCP authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). If you also ship with visual builders, our [Bolt app security checklist](/blog/bolt-app-security-checklist) shows similar permission ideas adapted to a different stack.
 
-## The risky pattern: one agent session can edit, execute, and publish
+## Lock down MCP in mcp_config.json with serverUrl
 
-**Vulnerable pattern. This configuration exposes more authority than a code-editing task needs.**
+Windsurf loads MCP servers from global ~/.codeium/windsurf/mcp_config.json for personal tools and local .codeium/windsurf/mcp_config.json for team shared servers. Both files use a mcpServers object. Remote servers use serverUrl field for HTTPS endpoints.
+
+Secure example with zero raw secrets committed:
 
 ```json
 {
   "mcpServers": {
-    "operations": {
-      "serverUrl": "https://mcp.example.invalid/mcp",
-      "headers": {
-        "Authorization": "Bearer production-token-here"
+    "lyrashield-local": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
+      }
+    },
+    "lyrashield-remote": {
+      "serverUrl": "https://app.lyrashieldai.com/api/mcp",
+      "env": {
+        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
       }
     }
   }
 }
 ```
 
-The example checks a token into a local configuration file and gives the session every tool the remote server advertises. If terminal commands can also run without a meaningful pause, repository text or tool output can influence both local execution and remote actions.
+Hardening for review checklists:
 
-Generated workflows miss this because each part looks ordinary in isolation. A remote MCP connection is a supported feature. An environment variable is a normal configuration mechanism. A terminal command may be a valid build step. Security depends on their combined reach, not on whether each feature works as documented.
+* Prefer env var interpolation in env and never raw tokens in committed files. Validate in CI that no literal sk or lsk token appears in mcp_config.json.
+* Keep global file for personal helpers and local file for team shared servers. Require explicit review for either file when a new MCP server appears. Treat new servers like new production dependencies with owner and review date.
+* Limit server count per workspace. Each MCP server adds tool surface that Cascade can call, so only keep servers needed for current milestone.
+* For remote MCP, confirm transport is HTTPS and auth uses Bearer from env. Short startup timeouts reduce hang risk and improve CI stability.
+* For protocol reference, see [MCP spec overview](https://modelcontextprotocol.io). Supply chain context on packages loaded by MCP servers is at [OSV database](https://osv.dev). SARIF integration is at [GitHub SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning).
 
-## Inventory the surface you actually use
+Log which MCP servers were active for a feature branch in your pull request description. That single line helps reproduce permission problems and supports audit questions about external tools used during generation.
 
-Record the client, version, team policy, repository root, terminal execution setting, MCP servers, enabled tools, and credentials. Check whether the team uses the full Devin Desktop Cascade surface, a Windsurf plugin, or both. The available controls and labels may differ.
+## Harden rules and workspace memories
 
-Do not assume a renamed document means an old configuration file stopped loading. Current Devin documentation still describes `~/.codeium/windsurf/mcp_config.json`, supports stdio, Streamable HTTP, and SSE transports, and uses a `windsurf://` deep link for MCP registry pages. These compatibility details are exactly why an inventory beats a product-name shortcut.
+Windsurf respects project rules in .codeium/windsurf/memories, optional muserules.md in repo root and global rules. Treat these as lightweight security policy that guides Cascade toward secure defaults.
 
-For unfamiliar repositories, begin with planning and review rather than terminal automation. Treat repository rules, memories, workflows, and agent instructions as policy-bearing code. Require review for changes that expand tool access or relax command prompts.
+Require these policy statements in your repo so generated code meets that bar from first commit:
 
-## Allowlist MCP servers, then trim their tools
+Auth is required on all API routes handling user data, sessions or file access. No public bypass for local debugging remains after merge.
 
-Devin Desktop currently lets users toggle individual tools for each MCP server. Team administrators can replace the default marketplace with custom registries or allowlist server configurations. Once a team allowlists at least one server, the documentation says non-allowlisted servers are blocked.
+Input validation uses explicit libraries like zod or valibot for Node stacks, with tests for failure paths.
 
-An allowlisted server can still expose more tools than a task needs. Disable write, delete, merge, deploy, messaging, and administrative tools unless the workflow explicitly requires them. Use separate server entries or credentials for read-only review and mutation.
+No shell exec with untrusted input. If exec is needed for image processing or similar, list allowed commands and sanitize args with allow list.
 
-The blue check shown for some marketplace entries identifies an MCP made by the parent service company. The documentation does not call it a full security audit. Review the server's package or endpoint, data destination, authentication, update path, and tool schemas. A legitimate publisher can still offer a capability that is too broad for the current repository.
+Package policy states allowed registries, need for lockfile audit before merge and reviewer requirement for new dependencies that introduce network access or native binaries.
 
-For server-side authorization and input handling, use [least privilege for MCP tools](/blog/least-privilege-mcp-tools). Client tool toggles reduce accidental use. The server must still reject unauthorized actions.
+Secret policy states env vars come from secret manager only, no secrets committed, no tokens pasted into Cascade summaries that get copied into tickets.
 
-## Test team allowlists against the real configuration
+Version rules in git and require review on rules changes. When Cascade proposes broad multi file edits, split into smaller commits with tests for auth and upload paths so review stays effective.
 
-The current admin documentation contains details that are easy to miss. Server IDs are case sensitive. Allowlist configuration uses anchored regular expressions for commands and arguments. Argument counts must match. The `env` section is not regex-matched, and disabled tools are handled separately.
+Document the workflow in docs/contributing.md so new contributors know why rules exist and what evidence is expected per release.
 
-That means an allowlist entry can approve the intended executable while still leaving users free to supply a different credential value. It can also block a safe update because one argument changed. Test the exact user configuration on a non-production team before rollout. Review regex metacharacters, server IDs, command paths, arguments, enabled tools, and credential scope as separate fields.
+## Gate supply chain and secrets
 
-Prefer an exact configuration for sensitive servers. A flexible pattern needs a written reason and negative tests for paths or arguments it should reject. Keep the admin policy under review, since a marketplace or client update can change the generated configuration without changing the server's display name.
+Windsurf Cascade solves tasks by adding dependencies, which creates supply chain risk if auto acceptance is allowed.
 
-## Keep credentials out of checked-in configuration
+Run OSV checks at [OSV](https://osv.dev) and npm or pnpm audit in CI on every pull request, and block high severity vulnerabilities outright. Flag new packages with low weekly downloads, recent ownership change or install scripts that touch network or file system for manual review. Keep lockfile diffs readable by grouping dependency only commits separately from feature code.
 
-Current Cascade MCP configuration supports `${env:VAR_NAME}` and `${file:/path/to/file}` interpolation in command, argument, environment, URL, and header fields. Use interpolation rather than a literal token.
+For secrets, run a scanner such as gitleaks that can output SARIF and upload to GitHub code scanning. See [GitHub secret scanning SARIF](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) and upload guidance at [GitHub SARIF artifact](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github). Check env .example and mcp_config.json examples for accidental tokens, and check editor logs and chat exports if pasted into issues, since tokens often leak via pasted logs.
 
-```json
-{
-  "mcpServers": {
-    "issues-readonly": {
-      "serverUrl": "https://mcp.example.invalid/mcp",
-      "headers": {
-        "Authorization": "Bearer ${env:ISSUES_READ_TOKEN}"
-      },
-      "disabledTools": ["create_issue", "delete_issue", "merge_change"]
-    }
-  }
-}
-```
+Enforce both local pre commit hooks and CI scans. Local hooks give early feedback while CI is the gate. Require security owner review for any env file change or new MCP server addition, so token handling always gets a second set of eyes.
 
-This is a safer shape, not a complete policy. Environment interpolation prevents the literal value from entering the JSON file. It does not stop the MCP process or agent from using the credential. Scope the token at the provider, keep it read-only, and restrict it to the intended organization or repository.
+## Build verifiable release evidence with SARIF
 
-Be careful with file interpolation. A readable file can still be copied by a process that has access. Use an operating-system secret store or short-lived credential where the integration supports one. Never paste a real token into a prompt, screenshot, or support request.
+Collect evidence you can point to in release notes without depending on memory or private chat logs.
 
-## Separate terminal work from release work
+Repeatable per release procedure:
 
-Use a branch or worktree for generated edits. A worktree keeps parallel tasks from overwriting each other and gives review a clean base. It does not sandbox terminal commands, network calls, or MCP actions.
+1. Run lint, type check, secret scan and dependency audit locally and in CI.
+2. Convert each tool output to SARIF where the tool supports it.
+3. Upload SARIF to GitHub code scanning so findings surface in pull request checks.
+4. Add docs slash security evidence entry with date, commit hash, active MCP servers, tools run and reviewers.
+5. Store build and SARIF artifacts with release tag for later reference.
 
-Before allowing a command, read the complete command and the script it invokes. Package scripts can change in the same branch. Avoid download-and-execute pipelines. Keep production deployment credentials outside the editor process, and protect the default branch at the repository host.
+See overview at [GitHub code scanning](https://docs.github.com/en/code-security/code-scanning) and hardening ideas for web apps at [Next.js security](https://nextjs.org/docs/app/guides/data-security) and [Cloudflare fundamentals](https://cloudflare.com/learning/). These help frame header and auth review while your app specific verified findings remain in SARIF.
 
-After Cascade edits the project:
+Keep evidence for several releases so you can show trend, exception closure and repeatability of controls. If you use remote MCP, record serverUrl and version used during generation so tool output drift can be reproduced.
 
-1. Inspect all changed and untracked files, including agent rules and MCP configuration.
-2. Review dependency and lockfile changes separately from application code.
-3. Run focused tests plus a negative authorization or invalid-input case.
-4. Search for secrets, disabled checks, wildcard CORS, new network calls, and release-script changes.
-5. Push only to a review branch and let CI use its own scoped identity.
+| Control | Where configured | Verification signal |
+| --- | --- | --- |
+| MCP config | mcp_config.json with serverUrl and env refs | No raw keys in git, least servers enabled, changes reviewed in pull request |
+| Rules | .codeium/windsurf/memories plus muserules | Auth and validation required, destructive commands denied, tests added |
+| Dependencies | OSV plus audit in CI | High severity blocks merge, lockfile diff reviewed, exceptions tracked |
+| Secrets | Secret scan plus SARIF upload | No tokens in repo or logs, env via manager, example files placeholder only |
+| Evidence | GitHub code scanning plus evidence file | SARIF on PR and main, MCP list logged, release tag linked |
 
-The browser-local [AI app security checklist](/tools/ai-app-security-checklist) provides a compact release inventory. It cannot inspect Cascade, validate a registry, or establish that a remote MCP tool enforced its advertised scope.
+## Why pair Windsurf with LyraShield
 
-## What the workflow can and cannot prove
+LyraShield AI at https://lyrashieldai.com is built for AI built software as agent native application security. The intended loop is Target to Scan to Verified Finding to Fix PR to Retest to Report, keeping findings tied to code and to evidence you can show to teammates.
 
-A branch review can show exactly what entered the repository. It cannot show every action a remote MCP server took unless the provider exposes reliable audit evidence. Passing tests show behavior in the test environment, not the installed desktop client's policy or the production deployment.
+MCP integration is designed for Windsurf. Local stdio via npx -y @lyrashield/mcp runs with env var keys, and remote via serverUrl https://app.lyrashieldai.com/api/mcp is designed to accept Bearer lsk key from env. Diff aware GitHub Action and SARIF output are designed to surface verified findings in pull requests so review stays in context.
 
-Record unresolved limits. If the team cannot confirm terminal execution behavior on a plugin version, keep sensitive credentials unavailable and require command review. If a tool's publisher or data handling is unclear, leave it disabled. Those are ordinary engineering decisions, not verdicts about the vendor.
+Build transparency: Sprints 0 to 2 are shipped. Scan engine MVP, automated fix PR and billing are on the roadmap and not live today. Today LyraShield provides hardened workflow and SARIF shape so teams can prepare before automated scans are enabled. V1 is designed to include agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF.
 
-Scan results and agent summaries should remain detected claims until a reviewer confirms the relevant path. A clean retest can support a retest-confirmed outcome for the case it covers. It does not prove that an MCP server, untested branch, or production environment is secure.
+This pairing keeps Windsurf velocity while adding consistent verification across visual builders and IDE tools.
 
-## Sources
+## Release gates and next steps
 
-- [Devin: Cascade Model Context Protocol integration](https://docs.devin.ai/desktop/cascade/mcp)
-- [Devin: Windsurf guide for administrators](https://docs.devin.ai/windsurf/plugins/guide-for-admins)
-- [Model Context Protocol: Security best practices](https://modelcontextprotocol.io/specification/latest/basic/security_best_practices)
-- [OWASP: LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
-- [GitHub: About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
+Before you ship a Windsurf built release, confirm gates.
+
+* mcp_config.json files contain no raw tokens and only needed servers are enabled.
+* Rules require auth and validation and forbid risky exec with untrusted input.
+* Dependency and secret scans passed and SARIF uploaded on pull request and main.
+* Auth, payment or file upload changes include tests and reviewer.
+* Security evidence file updated per release tag with MCP list and date.
+
+Reuse the same evidence loop on every release with our [AI app security checklist tool](/tools/ai-app-security-checklist) and join the waitlist at https://lyrashieldai.com for upcoming scan milestones. For related builder patterns see [V0 app security checklist](/blog/v0-app-security-checklist) and [Replit app security checklist](/blog/replit-app-security-checklist) to keep controls uniform.
