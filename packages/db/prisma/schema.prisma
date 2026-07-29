@@ -1069,7 +1069,7 @@ model NotificationPreference {
   quietHoursStart     Int?
   quietHoursEnd       Int?
   createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  updatedAt           DateTime @default(now()) @updatedAt
 
   @@index([userId])
   @@map("notification_preferences")
