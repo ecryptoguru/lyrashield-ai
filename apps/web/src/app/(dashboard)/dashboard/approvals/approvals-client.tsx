@@ -11,7 +11,8 @@ interface ApprovalItem extends Omit<ApprovalListItem, "input"> {
 }
 
 function asObject(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>
+  if (value && typeof value === "object" && !Array.isArray(value))
+    return value as Record<string, unknown>
   return {}
 }
 
@@ -92,10 +93,7 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
   return (
     <div className="space-y-6">
       {error && (
-        <div
-          className="bg-destructive/5 border-destructive/20 rounded-lg border p-4"
-          role="alert"
-        >
+        <div className="bg-destructive/5 border-destructive/20 rounded-lg border p-4" role="alert">
           <div className="text-destructive flex items-center gap-2 text-sm font-medium">
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             {error}
@@ -113,12 +111,17 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
               <Card key={approval.id}>
                 <CardContent className="flex items-start justify-between gap-4 p-4">
                   <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                       {approval.actionName}
                     </p>
-                    <p className="mt-1 font-medium">{approvalSummary(approval.actionName, approval.input)}</p>
+                    <p className="mt-1 font-medium">
+                      {approvalSummary(approval.actionName, approval.input)}
+                    </p>
                     <p className="text-muted-foreground mt-1 text-xs">
-                      Expires {approval.expiresAt ? new Date(approval.expiresAt).toLocaleDateString() : "Never"}
+                      Expires{" "}
+                      {approval.expiresAt
+                        ? new Date(approval.expiresAt).toLocaleDateString()
+                        : "Never"}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">
@@ -131,7 +134,11 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
                       <X className="size-4" />
                       Deny
                     </Button>
-                    <Button size="sm" onClick={() => handleApprove(approval)} disabled={pending[approval.id]}>
+                    <Button
+                      size="sm"
+                      onClick={() => handleApprove(approval)}
+                      disabled={pending[approval.id]}
+                    >
                       <Check className="size-4" />
                       Approve
                     </Button>

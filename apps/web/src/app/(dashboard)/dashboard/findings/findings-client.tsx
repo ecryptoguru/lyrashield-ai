@@ -784,7 +784,10 @@ function FindingDetailDrawer({
             <Spinner />
           </div>
         ) : drawerError ? (
-          <div className="bg-destructive/5 border-destructive/20 rounded-lg border p-4" role="alert">
+          <div
+            className="bg-destructive/5 border-destructive/20 rounded-lg border p-4"
+            role="alert"
+          >
             <div className="text-destructive flex items-center gap-2 text-sm font-medium">
               <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
               {drawerError}
@@ -1007,7 +1010,9 @@ function FindingDetailDrawer({
                               </span>
                             </TooltipTrigger>
                             <TooltipContent>
-                              A fresh retest needs a linked server scan. Run a scan for this target first, or check that this finding came from a completed scan rather than an imported report.
+                              A fresh retest needs a linked server scan. Run a scan for this target
+                              first, or check that this finding came from a completed scan rather
+                              than an imported report.
                             </TooltipContent>
                           </Tooltip>
                         ) : (

@@ -22,7 +22,10 @@ export const getCachedWorkspaceContext = cache(async (userId: string) => {
     },
     orderBy: { createdAt: "asc" },
   })
-  const workspaceId = selectActiveWorkspaceId(memberships, cookieStore.get("activeWorkspaceId")?.value)
+  const workspaceId = selectActiveWorkspaceId(
+    memberships,
+    cookieStore.get("activeWorkspaceId")?.value
+  )
   const workspaces = memberships.map((m) => ({
     id: m.workspace.id,
     name: m.workspace.name,

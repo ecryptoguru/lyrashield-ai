@@ -1,4 +1,9 @@
-import { ApprovalMutationError, approveApproval, getApproval, verifyInputHash } from "@lyrashield/db"
+import {
+  ApprovalMutationError,
+  approveApproval,
+  getApproval,
+  verifyInputHash,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -33,7 +38,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     if (!verifyInputHash(approval.actionName, input, approval.inputHash)) {
-      return apiError("INPUT_HASH_MISMATCH", "Submitted input does not match the requested action", 422)
+      return apiError(
+        "INPUT_HASH_MISMATCH",
+        "Submitted input does not match the requested action",
+        422
+      )
     }
 
     const updated = await approveApproval(approvalId, workspaceId, session.userId)

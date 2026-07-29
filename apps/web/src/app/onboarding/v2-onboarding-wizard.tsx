@@ -320,7 +320,12 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                     {loading ? <Spinner /> : <RefreshCwIcon />}
                     Load repositories
                   </Button>
-                  <Button type="button" variant="outline" onClick={connectGitHub} disabled={loading}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={connectGitHub}
+                    disabled={loading}
+                  >
                     <GithubIcon className="size-4" aria-hidden="true" />
                     Reconnect GitHub
                   </Button>

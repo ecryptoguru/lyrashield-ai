@@ -437,7 +437,8 @@ export function ScanDetailClient({
               {presentation.headline}
             </h1>
             <p className="text-muted-foreground mt-1 text-sm">
-              {getScanGoalLabel(scan.goal)} · {getScanModeLabel(scan.mode)} · {getScanTriggerLabel(scan.triggerType)}
+              {getScanGoalLabel(scan.goal)} · {getScanModeLabel(scan.mode)} ·{" "}
+              {getScanTriggerLabel(scan.triggerType)}
             </p>
           </div>
           <div className="flex items-center gap-2">

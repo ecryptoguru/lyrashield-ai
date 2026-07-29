@@ -1,6 +1,12 @@
 "use client"
 
-import { forwardRef, useEffect, useState, type ReactNode, type ComponentPropsWithoutRef } from "react"
+import {
+  forwardRef,
+  useEffect,
+  useState,
+  type ReactNode,
+  type ComponentPropsWithoutRef,
+} from "react"
 import { cn } from "@lyrashield/ui"
 import { X } from "lucide-react"
 
@@ -70,7 +76,7 @@ export const BottomSheet = forwardRef<HTMLDivElement, BottomSheetProps>(
             </div>
             <button
               onClick={onClose}
-              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none rounded-md p-2"
+              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded-md p-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               aria-label="Close"
             >
               <X className="size-5" aria-hidden="true" />

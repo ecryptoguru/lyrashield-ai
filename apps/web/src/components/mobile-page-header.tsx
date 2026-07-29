@@ -10,7 +10,7 @@ export function MobilePageHeader({ title, backHref }: { title: string; backHref?
   if (!flags.uxV2Shell) return null
 
   return (
-    <header className="bg-background fixed top-0 z-30 flex h-[calc(4rem+env(safe-area-inset-top))] w-full items-center justify-between border-b pt-[env(safe-area-inset-top)] px-4 md:hidden">
+    <header className="bg-background fixed top-0 z-30 flex h-[calc(4rem+env(safe-area-inset-top))] w-full items-center justify-between border-b px-4 pt-[env(safe-area-inset-top)] md:hidden">
       <div className="flex items-center gap-2">
         {backHref ? (
           <Link

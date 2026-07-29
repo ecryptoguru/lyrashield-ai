@@ -163,7 +163,9 @@ export default async function ScorecardPage({
                 <div className="mt-3">
                   <Badge variant={verdictVariant}>{verdictLabel}</Badge>
                 </div>
-                <p className="text-muted-foreground mt-1 text-sm">Verdict {payload.verdictVersion}</p>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Verdict {payload.verdictVersion}
+                </p>
               </div>
             </div>
           </div>

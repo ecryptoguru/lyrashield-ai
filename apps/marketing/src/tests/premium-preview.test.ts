@@ -65,8 +65,8 @@ describe("premium assurance-world homepage", () => {
 
   it("lazy-loads the evidence-world module as an island", () => {
     expect(world).toContain('import("./evidence-world.ts")')
-    expect(world).toContain('IntersectionObserver')
-    expect(world).toContain('bootstrapEvidenceWorld')
+    expect(world).toContain("IntersectionObserver")
+    expect(world).toContain("bootstrapEvidenceWorld")
   })
 
   it("keeps telemetry privacy-bounded and includes resilient media fallbacks", () => {

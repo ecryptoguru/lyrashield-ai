@@ -113,7 +113,7 @@ export function TrustCommandCenter({
             </div>
             <Link
               href="/dashboard/settings"
-              className="text-muted-foreground text-xs underline decoration-border underline-offset-4 hover:text-foreground"
+              className="text-muted-foreground decoration-border hover:text-foreground text-xs underline underline-offset-4"
             >
               Review and customise controls.
             </Link>

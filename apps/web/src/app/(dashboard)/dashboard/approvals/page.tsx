@@ -11,7 +11,9 @@ export default async function ApprovalsPage() {
   const workspaceId = await getCachedWorkspaceId(session.userId)
 
   const [approvals, hasProposals] = await Promise.all([
-    workspaceId ? listApprovals({ workspaceId, status: "PENDING", limit: 50 }).then((r) => r.items) : [],
+    workspaceId
+      ? listApprovals({ workspaceId, status: "PENDING", limit: 50 }).then((r) => r.items)
+      : [],
     workspaceId
       ? prisma.fixProposal
           .count({
@@ -41,7 +43,11 @@ export default async function ApprovalsPage() {
           description="Create a workspace during onboarding to view approvals."
         />
       ) : (
-        <ApprovalsClient workspaceId={workspaceId} approvals={approvals} hasProposals={hasProposals} />
+        <ApprovalsClient
+          workspaceId={workspaceId}
+          approvals={approvals}
+          hasProposals={hasProposals}
+        />
       )}
     </div>
   )

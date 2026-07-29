@@ -305,9 +305,7 @@ export default async function DashboardPage() {
           <div className="flex items-center justify-between gap-4 border-b px-5 py-4 sm:px-6">
             <div>
               <h2 className="font-semibold">Recent scan activity</h2>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Your most recent reviews.
-              </p>
+              <p className="text-muted-foreground mt-1 text-xs">Your most recent reviews.</p>
             </div>
             <Link
               href="/dashboard/scans"

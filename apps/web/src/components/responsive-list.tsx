@@ -64,7 +64,7 @@ export function ResponsiveListItem({
       className={cn(
         "bg-card text-card-foreground rounded-xl border p-4 shadow-xs transition-colors",
         onClick &&
-          "hover:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none cursor-pointer",
+          "hover:bg-accent focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
         className
       )}
     >

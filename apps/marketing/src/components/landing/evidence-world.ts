@@ -1,9 +1,14 @@
-import type { EvidenceChapterId, MotionMediaManifest, MotionVariant } from "../../lib/motion-manifest"
+import type {
+  EvidenceChapterId,
+  MotionMediaManifest,
+  MotionVariant,
+} from "../../lib/motion-manifest"
 
-type IdleWindow = Window & typeof globalThis & {
-  requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
-  cancelIdleCallback?: (handle: number) => void
-}
+type IdleWindow = Window &
+  typeof globalThis & {
+    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
+    cancelIdleCallback?: (handle: number) => void
+  }
 
 class EvidenceWorldElement extends HTMLElement {
   private manifest!: MotionMediaManifest
@@ -36,7 +41,9 @@ class EvidenceWorldElement extends HTMLElement {
     this.viewportWidth = innerWidth
 
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
-    const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true
+    const saveData =
+      (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData ===
+      true
     this.motionEnabled = !reduced && !saveData
     if (!this.motionEnabled) this.captureView(0, "poster")
     this.updatePosters(0)
@@ -44,7 +51,9 @@ class EvidenceWorldElement extends HTMLElement {
     this.showPoster()
     this.classList.add("is-enhanced")
     this.videos.forEach((video) => video.addEventListener("seeked", this.queueSeek))
-    this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) => image.addEventListener("error", this.handlePosterError))
+    this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) =>
+      image.addEventListener("error", this.handlePosterError)
+    )
 
     if (this.motionEnabled) {
       this.observer = new IntersectionObserver(this.handleIntent, { rootMargin: "50% 0px" })
@@ -65,7 +74,9 @@ class EvidenceWorldElement extends HTMLElement {
     removeEventListener("pointerdown", this.primeIos)
     removeEventListener("touchstart", this.primeIos)
     this.videos.forEach((video) => video.removeEventListener("seeked", this.queueSeek))
-    this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) => image.removeEventListener("error", this.handlePosterError))
+    this.querySelectorAll<HTMLImageElement>("[data-poster-chapter]").forEach((image) =>
+      image.removeEventListener("error", this.handlePosterError)
+    )
     this.objectUrls.forEach((url) => URL.revokeObjectURL(url))
     this.objectUrls.clear()
     this.videos.forEach((video) => {
@@ -80,11 +91,18 @@ class EvidenceWorldElement extends HTMLElement {
     const idleWindow = window as IdleWindow
     const begin = () => this.initializeMotion()
     if (document.readyState === "complete") {
-      this.idleHandle = idleWindow.requestIdleCallback?.(begin, { timeout: 1200 }) ?? window.setTimeout(begin, 250)
+      this.idleHandle =
+        idleWindow.requestIdleCallback?.(begin, { timeout: 1200 }) ?? window.setTimeout(begin, 250)
     } else {
-      addEventListener("load", () => {
-        this.idleHandle = idleWindow.requestIdleCallback?.(begin, { timeout: 1200 }) ?? window.setTimeout(begin, 250)
-      }, { once: true })
+      addEventListener(
+        "load",
+        () => {
+          this.idleHandle =
+            idleWindow.requestIdleCallback?.(begin, { timeout: 1200 }) ??
+            window.setTimeout(begin, 250)
+        },
+        { once: true }
+      )
     }
   }
 
@@ -163,7 +181,8 @@ class EvidenceWorldElement extends HTMLElement {
 
     const label = this.querySelector<HTMLElement>("[data-progress-label]")
     const bar = this.querySelector<HTMLElement>("[data-progress-bar]")
-    if (label) label.textContent = `${String(nextIndex + 1).padStart(2, "0")} / ${String(chapterCount).padStart(2, "0")}`
+    if (label)
+      label.textContent = `${String(nextIndex + 1).padStart(2, "0")} / ${String(chapterCount).padStart(2, "0")}`
     if (bar) bar.style.transform = `scaleX(${Math.max(0.02, progress)})`
   }
 
@@ -181,18 +200,23 @@ class EvidenceWorldElement extends HTMLElement {
     const delta = this.targetTime - video.currentTime
     const epsilon = this.isMobile() ? 2 / 30 : 1 / 30
     if (!Number.isFinite(delta) || Math.abs(delta) <= epsilon) return
-    const eased = Math.abs(delta) < 0.35
-      ? this.targetTime
-      : video.currentTime + delta * (this.isMobile() ? 0.42 : 0.3)
+    const eased =
+      Math.abs(delta) < 0.35
+        ? this.targetTime
+        : video.currentTime + delta * (this.isMobile() ? 0.42 : 0.3)
     video.currentTime = Math.min(Math.max(eased, 0), Math.max(video.duration - 1 / 30, 0))
   }
 
   private updatePosters(index: number) {
-    this.posters.forEach((poster, posterIndex) => poster.classList.toggle("is-active", posterIndex === index))
+    this.posters.forEach((poster, posterIndex) =>
+      poster.classList.toggle("is-active", posterIndex === index)
+    )
   }
 
   private updateChapters(index: number) {
-    this.chapters.forEach((chapter, chapterIndex) => chapter.classList.toggle("is-active", chapterIndex === index))
+    this.chapters.forEach((chapter, chapterIndex) =>
+      chapter.classList.toggle("is-active", chapterIndex === index)
+    )
   }
 
   private showPoster() {
@@ -201,12 +225,18 @@ class EvidenceWorldElement extends HTMLElement {
 
   private showVideo(slot: number) {
     this.frontVideo = slot
-    this.videos.forEach((video, videoIndex) => video.classList.toggle("is-front", videoIndex === slot))
+    this.videos.forEach((video, videoIndex) =>
+      video.classList.toggle("is-front", videoIndex === slot)
+    )
   }
 
   private findReadySlot(index: number) {
     for (const [slot, loadedIndex] of this.videoIndexes) {
-      if (loadedIndex === index && this.videos[slot].readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return slot
+      if (
+        loadedIndex === index &&
+        this.videos[slot].readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+      )
+        return slot
     }
     return undefined
   }
@@ -269,7 +299,11 @@ class EvidenceWorldElement extends HTMLElement {
 
   private async loadVideo(index: number, slot: number, signal: AbortSignal) {
     const video = this.videos[slot]
-    if (this.videoIndexes.get(slot) === index && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return
+    if (
+      this.videoIndexes.get(slot) === index &&
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+    )
+      return
 
     let objectUrl = this.objectUrls.get(index)
     if (!objectUrl) {
@@ -353,7 +387,8 @@ class EvidenceWorldElement extends HTMLElement {
   }
 
   private handlePosterError = (event: Event) => {
-    const chapterId = (event.currentTarget as HTMLImageElement).dataset.posterChapter as EvidenceChapterId | undefined
+    const chapterId = (event.currentTarget as HTMLImageElement).dataset.posterChapter as
+      EvidenceChapterId | undefined
     if (chapterId) this.captureError(chapterId, "poster")
   }
 
@@ -369,8 +404,12 @@ class EvidenceWorldElement extends HTMLElement {
     const key = `${chapterId}:${assetType}`
     if (this.mediaErrors.has(key)) return
     this.mediaErrors.add(key)
-    window.posthog?.capture("cinematic_media_error", { chapter_id: chapterId, asset_type: assetType })
+    window.posthog?.capture("cinematic_media_error", {
+      chapter_id: chapterId,
+      asset_type: assetType,
+    })
   }
 }
 
-if (!customElements.get("evidence-world")) customElements.define("evidence-world", EvidenceWorldElement)
+if (!customElements.get("evidence-world"))
+  customElements.define("evidence-world", EvidenceWorldElement)
