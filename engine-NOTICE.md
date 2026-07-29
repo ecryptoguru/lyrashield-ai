@@ -54,7 +54,7 @@ This product includes software developed by the following projects:
 - `pyproject.toml` and `uv.lock`
 - Existing tests under `tests/`
 
-The current derivative also carries GPT-5.6-only validation, context/output/agent/spend limits, non-interactive lifecycle hardening, deterministic report identity, structured evidence/control metadata, and worker compatibility. The file list above is representative rather than exhaustive; `git diff $(cat .lyrashield-upstream-base)..HEAD -- strix` is authoritative. These changes do not grant a right to use upstream trademarks.
+The current derivative also carries GPT-5.6-only validation, context/output/agent/spend limits, non-interactive lifecycle hardening, deterministic report identity, structured evidence/control metadata, and worker compatibility. The file list above is representative rather than exhaustive; `git diff $(cat .lyrashield-upstream-base)..HEAD -- strix` is authoritative. The current delta spans 57 modified `strix/` source files plus adapter and test additions. These changes do not grant a right to use upstream trademarks.
 
 ### Added fork files
 

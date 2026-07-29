@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current merged baseline — 2026-07-29:** 4 apps, 10 shared packages (including `packages/score`), 25 web page files, 44 API route files, 39 Prisma models, 18 enums, 26 migrations, and 20 directly RLS-protected workspace tables. PR #115 passes lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks. The follow-up merges add `Finding.statusReason`, engine PR #20 on the sibling repo, dashboard polling/ETag/API hardening, Redis architecture separation, deploy workflow smoke-check retries, and reach **1024 core tests in 115 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Playwright Chromium tests**. Sections 17–55 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current merged baseline — 2026-07-29:** 4 apps, 10 shared packages (including `packages/score`), 31 web page files, 50 API route files, 40 Prisma models, 18 enums, 28 migrations, and 20 directly RLS-protected workspace tables. PR #115 plus UX V2 Phases 0–10 and follow-up merges pass lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks. The follow-up merges add `Finding.statusReason`, engine PRs #20–#40 on the sibling repo, dashboard polling/ETag/API hardening, Redis architecture separation, deploy workflow smoke-check retries, UX V2 (mobile shell, terminology mapping, feature flags, notification preferences, V2 route aliases, Trust Command Center), and reach **1030 core tests in 116 files**, **80 marketing tests in 12 files**, **16 motion tests**, and **4 Playwright Chromium tests**. Sections 17–56 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -32,7 +32,7 @@ The canonical engine repo is `ecryptoguru/lyrashield-engine`. It is a controlled
 - **Model config:** the engine accepts only GPT-5.6 Terra or Luna deployment names. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for the Deep/Custom coordinator, falling back to `LYRASHIELD_LLM`; Deep/Custom child specialists receive Luna/medium through the separate delegate route. Empty allowlisted environment values are not forwarded to the engine, preventing them from shadowing a valid fallback. Per-request receipts retain their actual model for mixed-model reconciliation. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel is not configured.
 - **Artifacts:** worker accepts `strix_runs` and legacy `lyrashield_runs`, with `run.json` or `vulnerabilities.json`
 - **Sync model:** stable-release tree imports on review branches; human approval and green CI are required, with no force-push or automatic conflict resolution
-- **Verification:** 329 tests, Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox build/smoke, and public worker compatibility
+- **Verification:** 597 tests (1 skipped), Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox build/smoke, and public worker compatibility
 
 ### Engine Boundary
 
@@ -105,7 +105,7 @@ lyrashield/
 │   │       │   │   ├── reports/ notifications/ schedules/
 │   │       │   │   ├── launch-readiness/ integrations/ team/ settings/
 │   │       │   │   └── page.tsx
-│   │       │   ├── api/       # 39 protected/public-data route files; see §9
+│   │       │   ├── api/       # 50 protected/public-data route files; see §9
 │   │       │   ├── (public)/  # Scorecard pages plus OG image and SVG badge routes
 │   │       │   ├── onboarding/
 │   │       │   ├── reports/shared/[id]/
@@ -144,8 +144,8 @@ lyrashield/
 │   ├── config/                # Zod environment contract
 │   ├── db/
 │   │   ├── prisma/
-│   │   │   ├── schema.prisma # 35 models, 14 enums
-│   │   │   └── migrations/   # 12 committed PostgreSQL migrations
+│   │   │   ├── schema.prisma # 40 models, 18 enums
+│   │   │   └── migrations/   # 28 committed PostgreSQL migrations
 │   │   └── src/              # Prisma client (with audit-hash extension), RLS/scoping, domain services
 │   ├── integrations/          # GitHub, notification delivery, Redis, and shared queue helpers
 │   ├── logger/                # Structured redacting logger
@@ -276,7 +276,7 @@ The worker uses `safeFetch` to re-resolve and validate every redirect hop before
 
 ## 5. Database and Persistence
 
-The Prisma schema is `packages/db/prisma/schema.prisma` (35 models, 14 enums). Prisma 7 reads connection configuration from `packages/db/prisma.config.ts`; generated client output lives under `packages/db/src/generated/prisma` and is gitignored.
+The Prisma schema is `packages/db/prisma/schema.prisma` (40 models, 18 enums). Prisma 7 reads connection configuration from `packages/db/prisma.config.ts`; generated client output lives under `packages/db/src/generated/prisma` and is gitignored.
 
 ### Model Groups
 
@@ -438,14 +438,14 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **1024 core tests in 115 files**, **80 marketing tests in 12 files**, and **16 motion tests**, pass
+- `pnpm test`: **1030 core tests in 116 files**, **80 marketing tests in 12 files**, and **16 motion tests**, pass
 - `pnpm test:e2e`: **4 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `pnpm format:check`: pass
 - `pnpm audit --prod --audit-level high`: pass, no known production vulnerabilities
-- Prisma validation, drift, deployment, and status: pass; the repository contains all 26 committed migrations
+- Prisma validation, drift, deployment, and status: pass; the repository contains all 28 committed migrations
 - `git diff --check`: pass
-- Engine gate: 329 tests + Ruff + formatting + headless mypy + Bandit + package/native-binary checks + sandbox smoke + public worker compatibility
+- Engine gate: 597 tests (1 skipped) + Ruff + formatting + headless mypy + Bandit + package/native-binary checks + sandbox smoke + public worker compatibility
 
 ### Runtime Truth
 
@@ -2077,7 +2077,7 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - Engine report deduplication uses deterministic dependency and dynamic identities rather than a second model call. Reporting carries validated Vibe Security control IDs, structured dependency data, evidence, assumptions, fix effort, and CVSS breakdown without allowing model confidence to become verification proof.
 - The worker persists usage immediately after engine execution, before downstream scanners can fail or cancel. It retains separate engine-reported and rate-card reconciliation, rejects incomplete cache-write pricing, does not persist raw stdout/stderr, bounds progress heartbeats, and deletes only validated worker/engine-owned paths.
 - Finding fingerprints preserve distinct package/CVE and code-location claims while correlating exact duplicates across detectors. Candidate hashes bind the bounded claim context; every corroborating detector receives its own detection/verification receipt; explicit control IDs own engine coverage; and unmatched model-only controls remain blocked/inconclusive rather than clean.
-- Docker verification caught and removed stale deleted-tool bytecode from the engine build context. The merged application gate passes 869 core tests, 79 marketing tests, 16 motion tests, and two Chromium E2E tests. The merged engine gate passes 329 tests, Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox build/smoke, worker compatibility, and a rebuilt worker-image smoke for GPT-5.6 policy and Perplexity absence. No paid model scan was used for this verification.
+- Docker verification caught and removed stale deleted-tool bytecode from the engine build context. The merged application gate passes 869 core tests, 79 marketing tests, 16 motion tests, and two Chromium E2E tests. The merged engine gate passes 597 tests (1 skipped), Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox build/smoke, worker compatibility, and a rebuilt worker-image smoke for GPT-5.6 policy and Perplexity absence. No paid model scan was used for this verification.
 
 ## §53 — Fail-closed scan admission and queue recovery (2026-07-18, PR #115)
 
@@ -2091,7 +2091,7 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 
 ## §54 — Engine ownership and compatibility boundary (2026-07-18)
 
-- The engine repository is a controlled derivative, not a thin wrapper: the current production-relevant delta spans 47 files (1,072 additions and 649 deletions), including 38 modified `strix/` source files. The adapter remains the public entry point, but significant LyraShield behavior is intentionally carried inside the derivative.
+- The engine repository is a controlled derivative, not a thin wrapper: the current production-relevant delta spans 57 modified `strix/` source files plus adapter and test additions. The adapter remains the public entry point, but significant LyraShield behavior is intentionally carried inside the derivative.
 - LyraShield owns GPT-5.6 acceptance, mode/reasoning policy, context compaction, output/agent/pre-request spend limits, non-interactive lifecycle, deterministic finding identity, structured control/evidence metadata, telemetry defaults, and the versioned worker-facing artifact contract.
 - The pinned Strix v1.1.0 tree remains the substrate for sandbox/session mechanics, generic tools, agent-SDK plumbing, and the vulnerability skill library. Current upstream `main` has no commits after the recorded base, so there is no compatibility regression motivating an independent rewrite.
 - The target architecture is evolutionary: move LyraShield-owned policy behind explicit engine modules and a versioned JSON protocol when touching those paths, while preserving child-process isolation. Do not create a second runtime or speculative abstraction solely to make the repository look independent.
@@ -2100,15 +2100,27 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 
 ## §55 — Engine PR #20 and finding statusReason (2026-07-25)
 
-- **Engine PR #20 merged:** the controlled derivative now carries the `reduce-root-context` work on `main` along with GPT-5.6 rate fixes. `strix/core/hooks.py` returns a 2-tuple from `_model_rates`, handles provider-reported cache-read tokens, and extracts `input_tokens`/`output_tokens` from either dict or object usage entries. `strix/interface/main.py` passes explicit telemetry keyword arguments to `posthog.start` and `scarf.start`. `tests/conftest.py` clears LLM-related environment variables before each test to avoid leaked Azure endpoints. The `Makefile` type-check and security targets now match `scripts/verify-thin-fork.sh` (mypy excludes `strix/interface/tui`, bandit covers `strix` and `lyrashield_adapter`). Engine CI passes 329 tests plus ruff, mypy, bandit, native-binary, sandbox, and worker-compatibility checks.
+- **Engine PR #20 merged:** the controlled derivative now carries the `reduce-root-context` work on `main` along with GPT-5.6 rate fixes. `strix/core/hooks.py` returns a 2-tuple from `_model_rates`, handles provider-reported cache-read tokens, and extracts `input_tokens`/`output_tokens` from either dict or object usage entries. `strix/interface/main.py` passes explicit telemetry keyword arguments to `posthog.start` and `scarf.start`. `tests/conftest.py` clears LLM-related environment variables before each test to avoid leaked Azure endpoints. The `Makefile` type-check and security targets now match `scripts/verify-thin-fork.sh` (mypy excludes `strix/interface/tui`, bandit covers `strix` and `lyrashield_adapter`). Engine CI passes 597 tests (1 skipped) plus ruff, mypy, bandit, native-binary, sandbox, and worker-compatibility checks.
 - **Finding statusReason:** `Finding` gained an optional `statusReason` column (migration `20260725132208_add_finding_status_reason`). `packages/db/src/finding-service.ts` accepts an optional `reason` on `updateFindingStatus`, `acceptRisk`, and `markFalsePositive`. `apps/web/src/app/api/findings/[id]/route.ts` validates an optional `reason` field in the PATCH schema and passes it to the DB. The findings client (`apps/web/src/app/(dashboard)/dashboard/findings/findings-client.tsx`) sends the collected comment and renders `statusReason` in the detail drawer. Unit tests in `packages/db/src/finding-service.test.ts` cover the reason persistence path.
 - **Worker hardening:** `apps/worker/src/jobs/run-scan.job.ts` adds a single-model cost fallback for mixed-model usage, post-engine cancellation check, and target field projection before preflight. `apps/worker/src/engine/finding-persister.ts` recovers from unique-constraint races during finding creation by updating the recovered row.
 - **Dashboard UX:** the scans list (`apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx`) uses adaptive polling backoff and `visibilitychange` handling. Findings list syncs filter/sort with URL query params. `api-keys.tsx` uses a shared clipboard helper and surfaces copy errors. `inline-confirm.tsx` restores focus after confirm/cancel.
 - **API hardening:** `apps/web/src/app/api/scans/[id]/route.ts` returns an ETag based on scan status/events and respects `If-None-Match`. Scorecard create/revoke routes enforce write scope for API keys. `apps/web/src/lib/api-client.ts` adds `apiGetConditional` for ETag-aware conditional GETs with timeouts.
-- **Verification:** the merged `main` passes `pnpm lint`, `pnpm typecheck`, `pnpm test` (1024 core tests in 115 files, 80 marketing tests, 16 motion tests), `pnpm build`, `git diff --check`, and 26 applied Prisma migrations.
+- **Verification:** the merged `main` passes `pnpm lint`, `pnpm typecheck`, `pnpm test` (1030 core tests in 116 files, 80 marketing tests, 16 motion tests), `pnpm build`, `git diff --check`, and 28 applied Prisma migrations.
 
 ## §56 — Azure Foundry capability boundary and worker usage resilience
 
 - The configured Azure Foundry GPT-5.6 endpoint accepts baseline Responses requests and `previous_response_id`, but rejects the `programmatic_tool_calling` tool type. Repository scans therefore retain direct JSON function tools. The engine exposes programmatic calling only behind `LYRASHIELD_PROGRAMMATIC_TOOL_CALLING=1`; operators must leave it unset unless `lyrashield provider-contract --require-programmatic-tool-calling` succeeds against the exact deployment.
 - Server-managed continuation is not an engine feature yet. `Runner.run_streamed` rejects `previous_response_id` while its SQLite session is supplied, and SQLite sessions remain required for resume and multi-turn engine state. Replacing that state with a server-managed conversation is a separate design change, not a configuration switch.
 - `apps/worker/src/engine/output-parser.ts` now records zero values for optional standard-request cache-read/cache-write buckets when the provider omits them. `apps/worker/src/engine/runner.ts` omits empty allowlisted environment variables. Together these preserve conservative accounting and prevent an empty routed setting from changing provider fallback behavior.
+
+## §57 — UX V2 Phases 0–10 (2026-07-29)
+
+- UX V2 Phases 0–10 are merged on `main`. The dashboard now has a mobile-first shell (`V2Sidebar`, `BottomNav`, `MobilePageHeader`), a feature-flags system with env and per-workspace cookie override, a PostHog product analytics wrapper with privacy-safe allowlist, and a terminology mapping module (`apps/web/src/lib/terminology.ts`) that maps internal identifiers to user-facing labels (Scan→Trust Run, Finding→Issue, Project→Product, Target→Asset).
+- New schema additions via migration `20260803000000_uxv2_schema`: `Project.trustPlan`, `NotificationPreference`, `Scan.durationMs`. The `NotificationPreference.updatedAt` field is aligned with its migration via `@default(now())`.
+- New V2 route aliases (not renames): `/dashboard/products` (targets), `/dashboard/runs` (scans), `/dashboard/issues` (findings), `/dashboard/approvals`, `/dashboard/evidence` (reports), `/dashboard/automations` (schedules). Legacy URLs remain canonical with `next.config` rewrites or 308 redirects.
+- The dashboard home renders a `TrustCommandCenter` using workspace project trust-plan data, completed scan count, and latest score. Evidence and Approvals pages are functional. Notification preferences UI is live. A share sheet with privacy-safe channels is implemented.
+- The worker schema accepts engine `run.json` progress fields (`phase`, `seq`, `turn_count`) via `engineRunRecordSchema`.
+- Onboarding state creation is race-free via raw `INSERT ... ON CONFLICT DO NOTHING` in `apps/web/src/lib/onboarding-state.ts`, replacing the Prisma `upsert` that could surface P2002/23505 under concurrent server-component and API calls.
+- Playwright visual baseline snapshots exist for dashboard, products, runs, issues, and onboarding at desktop, iPad, and iPhone viewports. Visual E2E tests are skipped in CI (`--grep-invert '@visual'`) until Linux baselines are generated; the 4 Chromium E2E critical-flow tests remain in CI.
+- The marketing homepage includes a V2 launch highlight section.
+- The merged `main` passes 1030 core tests in 116 files, 80 marketing tests in 12 files, 16 motion tests, 4 Chromium E2E tests, lint, typecheck, production build, formatting, 28 applied Prisma migrations, SCA/secret scanning, and `git diff --check`.

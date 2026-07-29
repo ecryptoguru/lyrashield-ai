@@ -85,7 +85,7 @@ TargetType:  REPO, WEB_APP, API, CLOUD_ACCOUNT, CONTAINER, IAC
 
 ### Stack
 
-Next 16.2.11, React 19.2.8, Tailwind 4.3.3 (no `tailwind.config.ts` — theme lives in `@theme` inside `globals.css`), TypeScript 6, shadcn/ui new-york on Radix, lucide-react 1.26. Shared primitives in `packages/ui/src` (button, card, badge, form-field, empty-state, spinner, load-more). 27 migrations, latest `20260725160000_scan_workspace_status_index`.
+Next 16.2.11, React 19.2.8, Tailwind 4.3.3 (no `tailwind.config.ts` — theme lives in `@theme` inside `globals.css`), TypeScript 6, shadcn/ui new-york on Radix, lucide-react 1.26. Shared primitives in `packages/ui/src` (button, card, badge, form-field, empty-state, spinner, load-more). 28 migrations, latest `20260803000000_uxv2_schema`.
 
 ## 3. Non-Negotiable Rules for Coding Agents
 
