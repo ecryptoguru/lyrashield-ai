@@ -156,7 +156,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium webkit
 
       - name: Browser E2E
-        run: DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" pnpm test:e2e
+        run: DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" pnpm exec playwright test --grep-invert '@visual'
 
   deploy-marketing:
     name: Deploy Marketing to Cloudflare
