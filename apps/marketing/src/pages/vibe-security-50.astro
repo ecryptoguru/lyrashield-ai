@@ -4,10 +4,17 @@ import {
   VIBE_SECURITY_CONTROLS,
   VIBE_SECURITY_COVERAGE_VERSION,
   type VibeCoverageStrategy,
-} from "@lyrashield/security/src/vibe-security-controls"
+} from "../../../../packages/security/src/vibe-security-controls"
 
-// Deep import on purpose: the package index re-exports the SSRF and fetch helpers, which
-// pull in undici and would break the Cloudflare worker bundle. Only the registry is needed.
+// Relative filesystem import on purpose, not "@lyrashield/security":
+// 1. The package index re-exports the SSRF and fetch helpers, which pull in undici and
+//    would break the Cloudflare Worker bundle. Only the registry file is needed.
+// 2. A pnpm "workspace:*" dependency in apps/marketing/package.json broke the production
+//    marketing deploy: wrangler-action's own `npm i wrangler@<pinned>` step runs inside
+//    apps/marketing with plain npm, which does not understand the "workspace:" protocol
+//    and fails with EUNSUPPORTEDPROTOCOL the moment any dependency in that package.json
+//    uses it. apps/marketing must stay free of pnpm-workspace-protocol dependencies.
+//    A relative import reads the file directly and needs no package.json entry.
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/vibe-security-50", origin).toString()
