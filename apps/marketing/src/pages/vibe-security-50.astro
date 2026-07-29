@@ -1,0 +1,263 @@
+---
+import Base from "@layouts/Base.astro"
+import {
+  VIBE_SECURITY_CONTROLS,
+  VIBE_SECURITY_COVERAGE_VERSION,
+  type VibeCoverageStrategy,
+} from "@lyrashield/security/src/vibe-security-controls"
+
+// Deep import on purpose: the package index re-exports the SSRF and fetch helpers, which
+// pull in undici and would break the Cloudflare worker bundle. Only the registry is needed.
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/vibe-security-50", origin).toString()
+
+// Every number on this page is derived from the same registry the scanner executes, so the
+// published list and the counts cited in llms.txt and on the homepage cannot drift apart.
+const controls = [...VIBE_SECURITY_CONTROLS].sort((a, b) => a.rank - b.rank)
+const evidenceControls = controls.filter((control) => control.strategy === "evidence")
+const machineControls = controls.filter((control) => control.strategy !== "evidence")
+const totalControls = controls.length
+
+// Cheap insurance: if the registry changes shape, fail the build rather than publish a
+// page that contradicts the counts quoted elsewhere on the site.
+if (totalControls !== 50 || machineControls.length !== 43 || evidenceControls.length !== 7) {
+  throw new Error(
+    `Vibe Security 50 registry drifted: ${totalControls} controls, ` +
+      `${machineControls.length} machine-testable, ${evidenceControls.length} evidence-required. ` +
+      `Update this page and the counts in llms.txt together.`
+  )
+}
+
+const STRATEGY_LABEL: Record<VibeCoverageStrategy, string> = {
+  deterministic: "Automated check",
+  hybrid: "Automated signal, reviewed for exploitability",
+  engine: "Agentic review",
+  evidence: "Needs evidence you provide",
+}
+
+const STRATEGY_BLURB: Record<VibeCoverageStrategy, string> = {
+  deterministic:
+    "A bounded, repeatable check over your repository or public surface. Same input, same answer.",
+  hybrid:
+    "An automated signal finds the pattern; establishing whether it is actually exploitable in your app needs review.",
+  engine:
+    "Requires authentication, data-flow reasoning, live interaction, or business context, so an agent works through it.",
+  evidence:
+    "Cannot be established safely from a repository or URL scan. You supply the proof and it is retained alongside the scan.",
+}
+
+const STRATEGY_ORDER: VibeCoverageStrategy[] = ["deterministic", "hybrid", "engine", "evidence"]
+const groups = STRATEGY_ORDER.map((strategy) => ({
+  strategy,
+  label: STRATEGY_LABEL[strategy],
+  blurb: STRATEGY_BLURB[strategy],
+  items: controls.filter((control) => control.strategy === strategy),
+}))
+
+const title = `The Vibe Security 50 — the controls LyraShield reviews | LyraShield AI`
+const description = `The full ${totalControls}-control checklist LyraShield AI reviews on AI-built apps: ${machineControls.length} machine-testable controls and ${evidenceControls.length} that need retained human evidence.`
+
+const faq = [
+  {
+    q: "What is the Vibe Security 50?",
+    a: `It is a fixed list of ${totalControls} security controls that LyraShield AI reviews on AI-built applications. ${machineControls.length} are machine-testable and ${evidenceControls.length} require evidence a scan cannot establish on its own, such as restore proof or accountable human review. The list is versioned as ${VIBE_SECURITY_COVERAGE_VERSION}.`,
+  },
+  {
+    q: "Does a clean result mean my app is secure?",
+    a: "No. When a check completes without returning a finding, that is recorded as no finding returned — not as passed. It means the assigned check ran and reported nothing within its scope, which is narrower than a statement about your whole application.",
+  },
+  {
+    q: "Why can't all 50 controls be automated?",
+    a: `Seven of them describe operational practice rather than code: audit coverage, monitoring, restore proof, deployment egress, test independence, multi-agent trust, and accountable review. A repository or URL scan cannot observe those safely, so LyraShield asks you for the evidence and retains it with the scan instead of guessing.`,
+  },
+  {
+    q: "Does every scan check all 50 controls?",
+    a: "No, and the record says which. Applicability depends on the target: a URL or API scan cannot exercise repository or operational controls, and each control gets a receipt recording whether it completed, was limited, did not apply, or still needs evidence.",
+  },
+]
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "The Vibe Security 50",
+    description,
+    url: canonical,
+    isPartOf: { "@id": `${origin}/#website` },
+    publisher: { "@id": `${origin}/#organization` },
+    about: [
+      "application security controls",
+      "AI-generated code security",
+      "security review checklist",
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: `Vibe Security 50 (${VIBE_SECURITY_COVERAGE_VERSION})`,
+    description,
+    numberOfItems: totalControls,
+    itemListOrder: "https://schema.org/ItemListOrderAscending",
+    itemListElement: controls.map((control) => ({
+      "@type": "ListItem",
+      position: control.rank,
+      name: control.title,
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((entry) => ({
+      "@type": "Question",
+      name: entry.q,
+      acceptedAnswer: { "@type": "Answer", text: entry.a },
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Vibe Security 50", item: canonical },
+    ],
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:py-24">
+    <header class="max-w-3xl" data-reveal-group>
+      <p
+        class="font-mono text-xs font-semibold tracking-wider text-accent uppercase"
+        data-reveal="fade"
+      >
+        Coverage contract · {VIBE_SECURITY_COVERAGE_VERSION}
+      </p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>
+        The Vibe Security 50
+      </h1>
+      <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
+        A fixed list of {totalControls} security controls LyraShield AI reviews on AI-built
+        applications. {machineControls.length} are machine-testable. The remaining {
+          evidenceControls.length
+        } describe operational practice that a repository or URL scan cannot establish safely, so
+        they ask you for evidence instead of guessing.
+      </p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
+        This page is generated from the same registry the scanner executes, so the list below and
+        the counts quoted elsewhere on this site cannot drift apart.
+      </p>
+    </header>
+
+    <section aria-labelledby="language-heading" class="mt-16 border-y border-border py-12">
+      <h2 id="language-heading" class="text-2xl font-semibold text-text" data-reveal>
+        What a result does and does not say
+      </h2>
+      <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Detected</dt>
+          <dd class="mt-2 leading-7 text-text-muted">
+            Evidence was returned for the control.
+          </dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">No finding returned</dt>
+          <dd class="mt-2 leading-7 text-text-muted">
+            The assigned check completed without reporting anything in scope. This is not
+            independent verification, and it is never shown as passed.
+          </dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Inconclusive</dt>
+          <dd class="mt-2 leading-7 text-text-muted">
+            The control applied, but the available scan could not establish an outcome.
+          </dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Not applicable</dt>
+          <dd class="mt-2 leading-7 text-text-muted">
+            The control does not apply to the scanned target type or available subject.
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    {
+      groups.map((group) => (
+        <section aria-labelledby={`group-${group.strategy}`} class="py-14">
+          <div class="max-w-3xl" data-reveal-group>
+            <h2
+              id={`group-${group.strategy}`}
+              class="text-2xl font-semibold text-text"
+              data-reveal
+            >
+              {group.label}
+              <span class="ml-3 font-mono text-sm font-normal text-text-muted">
+                {group.items.length} of {totalControls}
+              </span>
+            </h2>
+            <p class="mt-3 leading-7 text-text-muted" data-reveal>{group.blurb}</p>
+          </div>
+          <ol class="mt-8 divide-y divide-border border-y border-border" data-reveal-group>
+            {group.items.map((control) => (
+              <li class="grid gap-2 py-5 sm:grid-cols-[4rem_1fr] sm:gap-6" data-reveal>
+                <span class="font-mono text-xs text-text-muted" aria-hidden="true">
+                  {String(control.rank).padStart(2, "0")}
+                </span>
+                <h3 class="font-medium text-text">{control.title}</h3>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))
+    }
+
+    <section aria-labelledby="faq-heading" class="border-t border-border py-14">
+      <h2 id="faq-heading" class="text-2xl font-semibold text-text" data-reveal>
+        Common questions
+      </h2>
+      <div class="mt-8 divide-y divide-border border-y border-border" data-reveal-group>
+        {
+          faq.map((entry) => (
+            <details class="group py-5" data-question-id={entry.q}>
+              <summary
+                class="flex cursor-pointer items-center justify-between gap-4 font-medium text-text marker:hidden"
+              >
+                {entry.q}
+                <span class="text-text-muted transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+              </summary>
+              <p class="mt-3 leading-7 text-text-muted">{entry.a}</p>
+            </details>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="border-t border-border pt-12" data-reveal-group>
+      <h2 class="text-2xl font-semibold text-text" data-reveal>See it against your own app</h2>
+      <p class="mt-3 max-w-2xl leading-7 text-text-muted" data-reveal>
+        The free Lite Check runs the passive public-surface subset with no account. A full review
+        covers the machine-testable controls and records a receipt for every one of the {
+          totalControls
+        }.
+      </p>
+      <div class="mt-8 flex flex-wrap gap-4" data-reveal>
+        <a
+          href="/scan"
+          class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          data-cta-id="vibe50_lite_check"
+        >
+          Run a free Lite Check
+        </a>
+        <a
+          href="/methodology"
+          class="inline-flex min-h-12 items-center justify-center rounded-lg border border-border px-5 text-sm font-semibold text-text transition-colors hover:border-accent/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          data-cta-id="vibe50_methodology"
+        >
+          Read the methodology
+        </a>
+      </div>
+    </section>
+  </section>
+</Base>
