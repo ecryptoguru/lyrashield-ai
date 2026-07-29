@@ -12,6 +12,29 @@
 - Public scorecard pages, social card images, SVG badges, referral capture, and privacy-safe funnel events are served by the Next.js app origin, not the marketing Worker.
 - S3-compatible evidence storage is mandatory for scans that may produce PoC/code-location artifacts. Email, GitHub OAuth/App integration, and monitoring providers use separate credentials.
 
+## Known production blockers
+
+Accepted risks that are live right now. Each one is a deliberate decision, not an oversight, and each has a defined way out. Review this list before any traffic-growth campaign.
+
+### 1. Email verification is disabled — open registration accepts unverified addresses
+
+**Status:** accepted, deferred. `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0` is set explicitly in `.github/workflows/deploy-azure.yml` and `.env.example`.
+
+**Exposure.** Registration is open, so anyone can create an account against an address they do not control and it will reach the dashboard. That permits impersonation of a real person or brand (`ceo@customer.example`), bot and throwaway sign-ups, and inflated activation numbers. Referral attribution is partly protected — rewards only settle after a referred workspace completes a real scan — but sign-up-level abuse is unmitigated.
+
+**Why it is deferred.** No Brevo key is provisioned. The schema default is `"1"`, and production config validation refuses to boot when verification is required but undeliverable, so the flag must be `"0"` until a mail provider exists. That refusal is intentional: the app will not claim to verify addresses it cannot actually mail.
+
+**Way out (small, well-defined).**
+
+1. Provision a Brevo API key and a verified sender address.
+2. Set `BREVO_API_KEY` and `EMAIL_FROM` as production secrets.
+3. Set the `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` repository variable to `1` (the deploy workflow reads it, defaulting to `0`).
+4. Deploy. `packages/auth` enforces verification once the flag and the provider are both present; the boot-time refinement in `packages/config/src/env.ts` guarantees the two can never disagree.
+
+**Do not** re-enable the flag without the key. The deploy will fail fast by design rather than silently accepting unverified sign-ups.
+
+**Related history.** The flag was declared in the env schema and read by no code until 2026-07-30, so setting it previously had no effect and real behaviour derived from whether `BREVO_API_KEY` happened to be set. It is now authoritative.
+
 ## Release prerequisites
 
 1. Public HTTPS application and marketing origins plus all trusted auth origins are decided. Scorecard canonical/OG/Twitter URLs must resolve to the application origin.
@@ -55,7 +78,9 @@ BETTER_AUTH_COOKIE_DOMAIN=".example.com" # only when app and marketing share a p
 ADDITIONAL_TRUSTED_ORIGINS="https://www.example.com"
 TRUSTED_PROXY_IP_HEADER="x-forwarded-for" # only after ingress strips incoming copies
 
-# Email (required when LYRASHIELD_REQUIRE_EMAIL_VERIFICATION is set)
+# Email. The schema default is "1" and production refuses to boot when verification
+# is required but no provider is configured. Currently "0" — see
+# "Known production blockers" above before changing it.
 LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"
 BREVO_API_KEY="..."
 EMAIL_FROM="noreply@example.com"

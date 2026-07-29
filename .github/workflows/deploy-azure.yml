@@ -155,7 +155,8 @@ jobs:
             --set-env-vars \
               "NEXT_PUBLIC_APP_URL=${{ env.APP_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
-              "BETTER_AUTH_URL=${{ env.APP_URL }}"
+              "BETTER_AUTH_URL=${{ env.APP_URL }}" \
+              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}"
 
       - name: Deploy scanner Container App
         if: vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
@@ -169,7 +170,8 @@ jobs:
             --set-env-vars \
               "NEXT_PUBLIC_APP_URL=${{ env.SCANNER_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
-              "BETTER_AUTH_URL=${{ env.APP_URL }}"
+              "BETTER_AUTH_URL=${{ env.APP_URL }}" \
+              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}"
 
       - name: Smoke app health
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
