@@ -25,6 +25,7 @@ import { getScanReviewProfile } from "@/lib/scan-review-profile"
 import { apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import { getScanGoalLabel, getScanModeLabel, getScanTriggerLabel } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
+import { severityLabel } from "@/lib/labels"
 
 interface ScanEvent {
   id: string
@@ -907,7 +908,7 @@ export function ScanDetailClient({
                           <div className="min-w-0">
                             <p className="font-medium">{finding.title}</p>
                             <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
-                              <Badge variant="muted">{finding.severity}</Badge>
+                              <Badge variant="muted">{severityLabel(finding.severity)}</Badge>
                               {finding.cwe && <span>CWE: {finding.cwe}</span>}
                               {finding.cvssScore !== null && <span>CVSS: {finding.cvssScore}</span>}
                               {finding.verified && (

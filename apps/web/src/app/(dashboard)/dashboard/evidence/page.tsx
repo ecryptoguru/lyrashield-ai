@@ -4,6 +4,7 @@ import { EmptyState, buttonVariants } from "@lyrashield/ui"
 import { ShieldCheck, ShieldAlert } from "lucide-react"
 import Link from "next/link"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { evidenceTypeLabel } from "@/lib/labels"
 
 export default async function EvidencePage() {
   const session = await getCachedSession()
@@ -83,7 +84,9 @@ export default async function EvidencePage() {
                   <span className="bg-primary/10 text-primary inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
                     {f._count.evidence} record{f._count.evidence === 1 ? "" : "s"}
                   </span>
-                  <p className="text-muted-foreground mt-1 text-xs">{f.evidence[0]?.type}</p>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {evidenceTypeLabel(f.evidence[0]?.type)}
+                  </p>
                 </div>
               </div>
             </Link>

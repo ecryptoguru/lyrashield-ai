@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Badge, buttonVariants, Card, EmptyState, LoadMore } from "@lyrashield/ui"
 import { apiGetPaginated } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
+import { severityLabel } from "@/lib/labels"
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
 
@@ -101,7 +102,7 @@ export function FixesClient({
                     {proposal.status}
                   </Badge>
                   <Badge variant={SEVERITY_BADGE[proposal.finding.severity] ?? "muted"}>
-                    {proposal.finding.severity}
+                    {severityLabel(proposal.finding.severity)}
                   </Badge>
                   {proposal.safetyScore != null && (
                     <Badge variant={proposal.safetyScore >= 80 ? "success" : "warning"}>

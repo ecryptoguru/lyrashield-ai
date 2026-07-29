@@ -6,6 +6,7 @@ import { ArrowLeft, GitBranch, Globe, Bug, Crosshair } from "lucide-react"
 import { Card, Badge } from "@lyrashield/ui"
 import { ScorecardControls } from "./scorecard-controls"
 import { formatDate, formatDateTime } from "@/lib/date-format"
+import { modeLabel } from "@/lib/labels"
 
 export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -243,7 +244,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
               {target.scans.map((scan) => (
                 <tr key={scan.id} className="border-b last:border-0">
                   <td className="px-4 py-3 font-medium">{scan.goal}</td>
-                  <td className="px-4 py-3">{scan.mode}</td>
+                  <td className="px-4 py-3">{modeLabel(scan.mode)}</td>
                   <td className="px-4 py-3">
                     <Badge
                       variant={
