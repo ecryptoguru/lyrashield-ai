@@ -1,31 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Check, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react"
 import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
 import { apiGet, apiPost, apiPatch } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
-
-const GOALS = [
-  {
-    value: "LAUNCH_REVIEW",
-    label: "Release check",
-    description: "Check what needs attention before release.",
-  },
-  {
-    value: "TEST_APP",
-    label: "Code review",
-    description: "Review an app or repository for issues.",
-  },
-  {
-    value: "FULL_PENTEST",
-    label: "Deep security review",
-    description: "A thorough security review with evidence.",
-  },
-  { value: "WEEKLY_MONITOR", label: "Weekly monitor", description: "Set a recurring review goal." },
-] as const
+import { GOAL_OPTIONS } from "@/lib/labels"
 
 interface V2OnboardingData {
   currentStep: number
@@ -59,6 +41,54 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
   const [productName, setProductName] = useState("")
   const [environment, setEnvironment] = useState("STAGING")
   const [selectedGoal, setSelectedGoal] = useState<string>("LAUNCH_REVIEW")
+  const autoFetchAttempted = useRef(false)
+
+  function bucketCount(n: number): string {
+    if (n <= 0) return "0"
+    if (n <= 3) return "1-3"
+    if (n <= 10) return "4-10"
+    if (n <= 50) return "11-50"
+    return "50+"
+  }
+
+  const fetchRepos = useCallback(() => {
+    if (!data.workspaceId) return Promise.resolve<Repo[]>([])
+    return apiGet<Repo[]>(`/api/integrations/github/repos?workspaceId=${data.workspaceId}`)
+  }, [data.workspaceId])
+
+  const loadRepos = useCallback(async () => {
+    if (!data.workspaceId) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetchRepos()
+      setRepos(res)
+      track("repos_loaded", {
+        repo_count_bucket: bucketCount(res.length),
+        load_ms_bucket: "unknown",
+      })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load repositories.")
+    } finally {
+      setLoading(false)
+    }
+  }, [data.workspaceId, fetchRepos])
+
+  useEffect(() => {
+    if (step !== 2 || autoFetchAttempted.current || !data.workspaceId) return
+    autoFetchAttempted.current = true
+    fetchRepos()
+      .then((res) => {
+        setRepos(res)
+        track("repos_loaded", {
+          repo_count_bucket: bucketCount(res.length),
+          load_ms_bucket: "unknown",
+        })
+      })
+      .catch((cause) => {
+        setError(cause instanceof Error ? cause.message : "Could not load repositories.")
+      })
+  }, [step, data.workspaceId, fetchRepos])
 
   async function persist(updates: Partial<V2OnboardingData>) {
     const next = await apiPatch<V2OnboardingData>("/api/onboarding", updates)
@@ -101,26 +131,6 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
       setStep(2)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not start GitHub connect.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function loadRepos() {
-    if (!data.workspaceId) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await apiGet<Repo[]>(
-        `/api/integrations/github/repos?workspaceId=${data.workspaceId}`
-      )
-      setRepos(res)
-      track("repos_loaded", {
-        repo_count_bucket: bucketCount(res.length),
-        load_ms_bucket: "unknown",
-      })
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load repositories.")
     } finally {
       setLoading(false)
     }
@@ -184,14 +194,6 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
     } finally {
       setLoading(false)
     }
-  }
-
-  function bucketCount(n: number): string {
-    if (n <= 0) return "0"
-    if (n <= 3) return "1-3"
-    if (n <= 10) return "4-10"
-    if (n <= 50) return "11-50"
-    return "50+"
   }
 
   const steps = ["Workspace", "Connect GitHub", "Select repository", `${PRODUCT_SINGULAR} details`]
@@ -309,13 +311,20 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
             {repos.length === 0 && (
               <div className="space-y-3">
                 <p className="text-sm">
-                  After you finish the GitHub install in the new tab, click below to load
-                  repositories.
+                  {error
+                    ? "We couldn't load repositories. You may need to reconnect GitHub or check the installation."
+                    : "After you finish the GitHub install in the new tab, click below to load repositories."}
                 </p>
-                <Button type="button" variant="secondary" onClick={loadRepos} disabled={loading}>
-                  {loading ? <Spinner /> : <RefreshCwIcon />}
-                  Load repositories
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" onClick={loadRepos} disabled={loading}>
+                    {loading ? <Spinner /> : <RefreshCwIcon />}
+                    Load repositories
+                  </Button>
+                  <Button type="button" variant="outline" onClick={connectGitHub} disabled={loading}>
+                    <GithubIcon className="size-4" aria-hidden="true" />
+                    Reconnect GitHub
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -401,7 +410,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                 What do you need from this {RUN_SINGULAR.toLowerCase()}?
               </legend>
               <div className="grid gap-2 sm:grid-cols-2">
-                {GOALS.map((goal) => (
+                {GOAL_OPTIONS.map((goal) => (
                   <button
                     type="button"
                     key={goal.value}
@@ -432,7 +441,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                 <ShieldCheck className="size-4" />
                 {loading
                   ? "Starting…"
-                  : `Start ${GOALS.find((g) => g.value === selectedGoal)?.label.toLowerCase() ?? "review"}`}
+                  : `Start ${GOAL_OPTIONS.find((g) => g.value === selectedGoal)?.label.toLowerCase() ?? "review"}`}
               </Button>
             </div>
           </div>

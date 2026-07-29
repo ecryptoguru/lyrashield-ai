@@ -3,6 +3,7 @@ import { prisma } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateRepoTargetSchema, CreateUrlTargetSchema } from "@lyrashield/types"
+import { revalidateDashboardAggregates } from "../../../lib/cache"
 import { logger } from "@lyrashield/logger"
 import { checkScanUrlSafe } from "../../../lib/ssrf"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -108,7 +109,21 @@ export async function POST(request: Request) {
       },
     })
 
+    if (data.type !== "REPO" && data.ownershipAttested) {
+      await prisma.auditLog.create({
+        data: {
+          workspaceId,
+          actorUserId: session.userId,
+          action: "target.ownership_attested",
+          resourceType: "target",
+          resourceId: target.id,
+        },
+      })
+    }
+
     logger.info("Target created", { targetId: target.id, workspaceId, type: target.type })
+
+    revalidateDashboardAggregates()
 
     return NextResponse.json({
       success: true,

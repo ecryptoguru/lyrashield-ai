@@ -62,7 +62,6 @@ describe("public marketing claims", () => {
       "../pages/methodology.astro",
       "../pages/llms.txt.ts",
       "../components/landing/Hero.astro",
-      "../components/landing/Loop.astro",
       "../components/landing/Faq.astro",
       "../components/landing/TwoDepths.astro",
     ]

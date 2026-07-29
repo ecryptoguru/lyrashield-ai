@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+  unstable_cache: vi.fn((cb) => cb),
+  updateTag: vi.fn(),
+  refresh: vi.fn(),
+  cacheTag: vi.fn(),
+}))
+
 vi.mock("@lyrashield/db", () => ({
   prisma: {
     target: { findFirst: vi.fn() },

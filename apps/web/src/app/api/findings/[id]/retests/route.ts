@@ -11,6 +11,7 @@ import {
   ScanWorkerUnavailableError,
 } from "../../../../../lib/queue"
 import { resolveRetestProfile } from "../../../../../lib/retest-profile"
+import { revalidateDashboardAggregates } from "../../../../../lib/cache"
 
 const CreateRetestSchema = z.object({
   workspaceId: z.string().min(1),
@@ -149,6 +150,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         scanId: scan.id,
         error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
       })
+      revalidateDashboardAggregates()
       return apiError(
         "SCAN_SERVICE_UNAVAILABLE",
         "Retesting became unavailable while starting. Please try again shortly.",
@@ -166,6 +168,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     })
 
+    revalidateDashboardAggregates()
     return apiSuccess({ retest, scan: { id: scan.id, status: scan.status } }, 201)
   } catch (error) {
     const authErr = authErrorResponse(error)

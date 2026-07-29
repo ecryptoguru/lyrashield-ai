@@ -78,6 +78,7 @@ export function TargetsClient({
     name: "",
     url: "",
     urlType: "WEB_APP" as "WEB_APP" | "API",
+    ownershipAttested: false,
   })
 
   const [githubRepos, setGithubRepos] = useState<GithubRepo[]>([])
@@ -190,9 +191,10 @@ export function TargetsClient({
         type: urlForm.urlType,
         name: urlForm.name,
         url: urlForm.url,
+        ownershipAttested: urlForm.ownershipAttested,
       })
       setShowForm(false)
-      setUrlForm({ name: "", url: "", urlType: "WEB_APP" })
+      setUrlForm({ name: "", url: "", urlType: "WEB_APP", ownershipAttested: false })
       await fetchTargets()
       router.refresh()
     } catch (e) {
@@ -456,8 +458,20 @@ export function TargetsClient({
                   }
                 />
               </FormField>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={urlForm.ownershipAttested}
+                  onChange={(e) => setUrlForm({ ...urlForm, ownershipAttested: e.target.checked })}
+                  className="mt-0.5"
+                  required
+                />
+                <span className="text-muted-foreground">
+                  I own or am authorized to scan this target.
+                </span>
+              </label>
               <div className="flex gap-2">
-                <Button type="submit" disabled={creating}>
+                <Button type="submit" disabled={creating || !urlForm.ownershipAttested}>
                   {creating ? "Creating..." : "Create Target"}
                 </Button>
                 <Button

@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Bell } from "lucide-react"
-import { Button } from "@lyrashield/ui"
+import { Bell, ChevronLeft } from "lucide-react"
+import { Button, buttonVariants } from "@lyrashield/ui"
 import { useFeatureFlags } from "./feature-flags-provider"
 
 export function MobilePageHeader({ title, backHref }: { title: string; backHref?: string }) {
@@ -10,12 +10,15 @@ export function MobilePageHeader({ title, backHref }: { title: string; backHref?
   if (!flags.uxV2Shell) return null
 
   return (
-    <header className="bg-background fixed top-0 z-30 flex h-16 w-full items-center justify-between border-b px-4 md:hidden">
+    <header className="bg-background fixed top-0 z-30 flex h-[calc(4rem+env(safe-area-inset-top))] w-full items-center justify-between border-b pt-[env(safe-area-inset-top)] px-4 md:hidden">
       <div className="flex items-center gap-2">
         {backHref ? (
-          <Link href={backHref} className="text-muted-foreground hover:text-foreground">
-            <span aria-hidden="true">←</span>
-            <span className="sr-only">Back</span>
+          <Link
+            href={backHref}
+            className={`${buttonVariants({ variant: "ghost", size: "icon" })} text-muted-foreground hover:text-foreground`}
+            aria-label="Back"
+          >
+            <ChevronLeft className="size-5" aria-hidden="true" />
           </Link>
         ) : null}
         <h1 className="text-lg font-semibold">{title}</h1>

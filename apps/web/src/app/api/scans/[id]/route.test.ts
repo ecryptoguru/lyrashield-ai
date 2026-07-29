@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+  unstable_cache: vi.fn((cb) => cb),
+  updateTag: vi.fn(),
+  refresh: vi.fn(),
+  cacheTag: vi.fn(),
+}))
+
 vi.mock("@lyrashield/db", () => ({
   getScanWithEvents: vi.fn(),
   cancelScan: vi.fn(),

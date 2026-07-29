@@ -7,6 +7,7 @@ import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { explainFinding } from "@/lib/plain-language"
 import { z } from "zod"
+import { revalidateDashboardAggregates } from "../../../../lib/cache"
 
 const VALID_STATUSES = [
   "OPEN",
@@ -106,6 +107,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             resourceId: id,
           },
         })
+        revalidateDashboardAggregates()
         return apiSuccess({ id: updated.id, status: updated.status })
       }
       case "accept_risk": {
@@ -119,6 +121,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             resourceId: id,
           },
         })
+        revalidateDashboardAggregates()
         return apiSuccess({ id: updated.id, status: updated.status })
       }
       case "update_status": {
@@ -136,6 +139,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             resourceId: id,
           },
         })
+        revalidateDashboardAggregates()
         return apiSuccess({ id: updated.id, status: updated.status })
       }
     }

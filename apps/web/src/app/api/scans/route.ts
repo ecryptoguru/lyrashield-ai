@@ -5,6 +5,7 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateScanSchema, ScanStatusSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
+import { revalidateDashboardAggregates } from "../../../lib/cache"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
 import {
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
         errorCategory: "QUEUE",
         errorMessage: "Scan worker became unavailable while queueing the scan",
       })
+      revalidateDashboardAggregates()
       return apiError(
         "SCAN_SERVICE_UNAVAILABLE",
         "Scanning became unavailable while starting this scan. Please try again shortly.",
@@ -159,6 +161,8 @@ export async function POST(request: Request) {
       workspaceId,
       targetId: data.targetId,
     })
+
+    revalidateDashboardAggregates()
 
     return apiSuccess(
       {

@@ -28,13 +28,13 @@ export const UxV2FlagsSchema = z.object({
 export type UxV2Flags = z.infer<typeof UxV2FlagsSchema>
 
 const DEFAULT_FLAGS: UxV2Flags = {
-  uxV2Shell: false,
-  uxV2Onboarding: false,
-  uxV2Runs: false,
-  uxV2Issues: false,
-  uxV2Evidence: false,
-  uxV2Notifications: false,
-  uxV2Sharing: false,
+  uxV2Shell: true,
+  uxV2Onboarding: true,
+  uxV2Runs: true,
+  uxV2Issues: true,
+  uxV2Evidence: true,
+  uxV2Notifications: true,
+  uxV2Sharing: true,
 }
 
 function allEnabled(): UxV2Flags {

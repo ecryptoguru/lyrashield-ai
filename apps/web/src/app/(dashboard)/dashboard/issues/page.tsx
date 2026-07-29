@@ -27,10 +27,10 @@ export default async function IssuesPage({
   }
 
   const { finding: requestedFindingId } = await searchParams
-  const { items: findings, nextCursor } = await getCachedFindings(workspaceId)
-  const requestedFinding =
-    requestedFindingId && !findings.some((finding) => finding.id === requestedFindingId)
-      ? await prisma.finding.findFirst({
+  const [{ items: findings, nextCursor }, requestedFinding] = await Promise.all([
+    getCachedFindings(workspaceId),
+    requestedFindingId
+      ? prisma.finding.findFirst({
           where: { id: requestedFindingId, workspaceId, deletedAt: null },
           include: {
             target: { select: { id: true, name: true, type: true } },
@@ -42,8 +42,12 @@ export default async function IssuesPage({
             },
           },
         })
-      : null
-  const visibleFindings = requestedFinding ? [requestedFinding, ...findings] : findings
+      : Promise.resolve(null),
+  ])
+  const visibleFindings =
+    requestedFinding && !findings.some((finding) => finding.id === requestedFindingId)
+      ? [requestedFinding, ...findings]
+      : findings
 
   const initialData: FindingListItem[] = visibleFindings.map((f) => ({
     id: f.id,

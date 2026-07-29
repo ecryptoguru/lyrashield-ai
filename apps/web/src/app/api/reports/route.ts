@@ -10,6 +10,7 @@ import {
   parsePaginationParams,
 } from "../../../lib/api-response"
 import { z } from "zod"
+import { revalidateDashboardAggregates } from "../../../lib/cache"
 
 const CreateReportSchema = z.object({
   workspaceId: z.string().min(1),
@@ -71,6 +72,8 @@ export async function POST(request: Request) {
       title,
       createdById: session.userId,
     })
+
+    revalidateDashboardAggregates()
 
     return apiSuccess({ id: report.id, title: report.title, status: report.status }, 201)
   } catch (error) {

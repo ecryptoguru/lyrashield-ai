@@ -41,6 +41,7 @@ import {
   buildScorecardPayload,
   attributeReferral,
   getPublicScorecard,
+  revokeScorecardShare,
   completeScanWithScore,
   recordScorecardEvent,
   createScorecardShare,
@@ -56,10 +57,11 @@ describe("score-service", () => {
   })
 
   describe("buildScorecardPayload (disclosure allowlist)", () => {
-    it("emits EXACTLY the five allowlisted fields — nothing else may ever be added silently", () => {
+    it("emits EXACTLY the seven allowlisted fields — nothing else may ever be added silently", () => {
       const payload = buildScorecardPayload(
         {
           grade: "A",
+          score: 96,
           computedAt: new Date("2026-07-12T00:00:00Z"),
           modelVersion: "lyrashield-score/1.0.0",
         },
@@ -71,12 +73,37 @@ describe("score-service", () => {
       expect(Object.keys(payload).sort()).toEqual([
         "grade",
         "modelVersion",
+        "releaseVerdict",
         "resolvedFindings",
         "scannedAt",
         "scope",
+        "verdictVersion",
       ])
       expect(payload).not.toHaveProperty("targetUrl")
       expect(payload).not.toHaveProperty("breakdown")
+      expect(payload).not.toHaveProperty("unresolvedFindings")
+      expect(payload).not.toHaveProperty("scanId")
+    })
+
+    it("maps score to a release verdict", () => {
+      expect(
+        buildScorecardPayload(
+          { grade: "A", score: 96, computedAt: new Date(), modelVersion: "v1" },
+          0
+        ).releaseVerdict
+      ).toBe("GO")
+      expect(
+        buildScorecardPayload(
+          { grade: "C", score: 60, computedAt: new Date(), modelVersion: "v1" },
+          0
+        ).releaseVerdict
+      ).toBe("GO_WITH_CONDITIONS")
+      expect(
+        buildScorecardPayload(
+          { grade: "F", score: 20, computedAt: new Date(), modelVersion: "v1" },
+          0
+        ).releaseVerdict
+      ).toBe("NO_GO")
     })
   })
 
@@ -144,6 +171,30 @@ describe("score-service", () => {
     it("returns null for unknown, revoked, or expired shares", async () => {
       mockPrisma.scorecardShare.findFirst.mockResolvedValue(null)
       expect(await getPublicScorecard("nope")).toBeNull()
+    })
+
+    it("is not available immediately after revocation", async () => {
+      mockPrisma.scorecardShare.findFirst
+        .mockResolvedValueOnce({
+          id: "share-1",
+          snapshot: { workspaceId: "workspace-1" },
+          publicPayload: { grade: "A" },
+          referralCode: { code: "CODE2345" },
+        })
+        .mockResolvedValue(null)
+      mockPrisma.scorecardShare.update.mockResolvedValue({
+        id: "share-1",
+        revokedAt: new Date(),
+      })
+
+      await revokeScorecardShare("share-1", "workspace-1", "user-1")
+      const afterRevoke = await getPublicScorecard("share-1")
+
+      expect(afterRevoke).toBeNull()
+      expect(mockPrisma.scorecardShare.update).toHaveBeenCalledWith({
+        where: { id: "share-1" },
+        data: { revokedAt: expect.any(Date) },
+      })
     })
   })
 

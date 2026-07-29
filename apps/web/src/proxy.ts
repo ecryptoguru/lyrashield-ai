@@ -69,6 +69,12 @@ export async function proxy(request: NextRequest) {
       request: { headers: requestHeaders },
     })
     response.headers.set("Content-Security-Policy", csp)
+    if (!isLocalPreview) {
+      response.headers.set(
+        "Strict-Transport-Security",
+        "max-age=63072000; includeSubDomains; preload"
+      )
+    }
     if (
       pathname.startsWith("/score/") ||
       pathname.startsWith("/lite-check/") ||

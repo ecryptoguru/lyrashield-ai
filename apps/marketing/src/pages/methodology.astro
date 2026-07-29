@@ -31,7 +31,7 @@ const jsonLd = [
     name: "LyraShield AI security evidence methodology",
     description,
     url: canonical,
-    dateModified: "2026-07-17",
+    dateModified: "2026-07-29",
     reviewedBy: { "@id": `${origin}/#organization` },
     isPartOf: { "@id": `${origin}/#website` },
     about: [
@@ -68,7 +68,7 @@ const jsonLd = [
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
         LyraShield AI preserves scope, coverage, evidence provenance, and retest state as separate facts. It does not turn scanner confidence or missing evidence into a universal security verdict.
       </p>
-      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-07-17">July 17, 2026</time> · Maintained by LyraShield Security + Engineering</p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-07-29">July 29, 2026</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
     <section aria-labelledby="record-heading" class="mt-16 border-y border-border py-12">
@@ -92,6 +92,31 @@ const jsonLd = [
           </article>
         ))}
       </div>
+    </section>
+
+    <section aria-labelledby="verdict-heading" class="py-16" data-reveal-group>
+      <h2 id="verdict-heading" class="text-2xl font-semibold text-text" data-reveal>Release verdict</h2>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>
+        A public scorecard may include a release verdict. The verdict is derived from the frozen LyraShield Score using the same versioned model that produced the grade. It is an interpretation aid, not an override of the underlying evidence.
+      </p>
+      <dl class="mt-8 grid gap-6 sm:grid-cols-2" data-reveal-group>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Go</dt>
+          <dd class="mt-2 leading-7 text-text-muted">Score 80 or above. The evidence suggests the target is ready to release, with the retained limitations visible on the scorecard.</dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Go with conditions</dt>
+          <dd class="mt-2 leading-7 text-text-muted">Score 40–79. The result is releasable only if the conditions recorded in the scorecard—open findings, coverage limits, and retest state—are accepted.</dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">No go</dt>
+          <dd class="mt-2 leading-7 text-text-muted">Score below 40. The evidence does not currently support release.</dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Not evaluated</dt>
+          <dd class="mt-2 leading-7 text-text-muted">No score snapshot was available for the shared record.</dd>
+        </div>
+      </dl>
     </section>
 
     <section aria-labelledby="limits-heading" class="rounded-2xl border border-border bg-bg-raised p-7 sm:p-9" data-reveal="scale">

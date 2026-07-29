@@ -8,7 +8,7 @@ export default function Loading() {
       </div>
       <div className="space-y-3">
         {[0, 1, 2, 3, 4].map((item) => (
-          <div key={item} className="bg-card border-border h-24 animate-pulse border p-4">
+          <div key={item} className="bg-card border-border h-24 animate-pulse rounded-lg border p-4">
             <div className="bg-muted h-5 w-72 max-w-full" />
             {/* Badge row — reserved so cards don't grow when real content lands */}
             <div className="mt-3 flex gap-2">

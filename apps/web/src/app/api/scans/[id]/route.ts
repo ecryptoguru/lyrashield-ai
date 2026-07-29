@@ -7,6 +7,7 @@ import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { revalidateDashboardAggregates } from "../../../../lib/cache"
 
 function scanEtag(scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>>>): string {
   const events = scan.events ?? []
@@ -81,6 +82,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const cancelled = await cancelScan(id, workspaceId)
+    revalidateDashboardAggregates()
     return apiSuccess({
       id: cancelled.id,
       status: cancelled.status,

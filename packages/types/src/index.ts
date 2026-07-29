@@ -154,6 +154,7 @@ export const CreateUrlTargetSchema = z.object({
     .refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
   url: z.url(),
   environment: TargetEnvironmentSchema.default("STAGING"),
+  ownershipAttested: z.boolean().refine((v) => v === true, "You must attest that you own or are authorized to scan this target"),
 })
 
 export const CreateScanSchema = z.object({

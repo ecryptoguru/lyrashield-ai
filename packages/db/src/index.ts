@@ -174,6 +174,7 @@ export {
   ApprovalMutationError,
   type CreateApprovalParams,
   type ListApprovalsParams,
+  type ApprovalListItem,
 } from "./agent-approval-service"
 export {
   createApiKey,

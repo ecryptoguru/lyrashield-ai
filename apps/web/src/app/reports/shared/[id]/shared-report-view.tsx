@@ -68,7 +68,7 @@ export function SharedReportView({ report }: { report: ShareableReport }) {
         </header>
 
         <Card className="security-grid relative overflow-hidden p-5 sm:p-8 lg:p-10">
-          <div className="from-card via-card/95 to-primary/5 absolute inset-0 bg-gradient-to-br" />
+          <div className="from-card via-card/95 to-primary/5 absolute inset-0 bg-linear-to-br" />
           <div className="relative grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
             <div>
               <div className="mb-5 flex flex-wrap items-center gap-2">

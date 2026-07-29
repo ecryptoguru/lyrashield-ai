@@ -40,10 +40,14 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const fetchNotifications = useCallback(async () => {
+    return apiGetPaginated<NotificationItem>(`/api/notifications`, { workspaceId })
+  }, [workspaceId])
+
   const loadNotifications = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await apiGetPaginated<NotificationItem>(`/api/notifications`, { workspaceId })
+      const res = await fetchNotifications()
       setNotifications(res.items)
       setNextCursor(res.nextCursor)
       setError(null)
@@ -53,11 +57,11 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
     } finally {
       setLoading(false)
     }
-  }, [workspaceId])
+  }, [fetchNotifications])
 
   useEffect(() => {
     let cancelled = false
-    apiGetPaginated<NotificationItem>(`/api/notifications`, { workspaceId })
+    fetchNotifications()
       .then((res) => {
         if (cancelled) return
         setNotifications(res.items)
@@ -75,7 +79,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
     return () => {
       cancelled = true
     }
-  }, [workspaceId])
+  }, [fetchNotifications])
 
   const handleMarkRead = async (notificationId: string) => {
     try {

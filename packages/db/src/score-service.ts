@@ -13,12 +13,16 @@ const REFERRAL_BONUS_MINUTES = 30
 /** Attribution applies to newly created accounts only — never retroactively (spec §4). */
 const NEW_ACCOUNT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
+export type ReleaseVerdict = "GO" | "GO_WITH_CONDITIONS" | "NO_GO" | "NOT_EVALUATED"
+
 export interface ScorecardPayload {
   grade: ScoreGrade
   scope: string
   scannedAt: string
   modelVersion: string
   resolvedFindings: number
+  releaseVerdict: ReleaseVerdict
+  verdictVersion: string
 }
 
 function randomBase32(length: number): string {
@@ -26,14 +30,21 @@ function randomBase32(length: number): string {
   return Array.from(bytes, (byte) => BASE32[byte % BASE32.length]).join("")
 }
 
+function resolveReleaseVerdict(score: number): ReleaseVerdict {
+  if (score >= 80) return "GO"
+  if (score >= 40) return "GO_WITH_CONDITIONS"
+  return "NO_GO"
+}
+
 /**
  * The ONLY constructor of a public scorecard payload. This is the disclosure allowlist
- * (spec §5): grade, scope, scan date, model version, resolved-findings count — nothing else.
+ * (spec §5): grade, scope, scan date, model version, resolved-findings count, and the
+ * release verdict with its version — nothing else.
  * Adding a field here MUST be a deliberate, reviewed decision; the allowlist regression
  * test asserts the exact key set.
  */
 export function buildScorecardPayload(
-  snapshot: { grade: ScoreGrade; computedAt: Date; modelVersion: string },
+  snapshot: { grade: ScoreGrade; score: number; computedAt: Date; modelVersion: string },
   resolvedFindings: number
 ): ScorecardPayload {
   return {
@@ -42,6 +53,8 @@ export function buildScorecardPayload(
     scannedAt: snapshot.computedAt.toISOString(),
     modelVersion: snapshot.modelVersion,
     resolvedFindings,
+    releaseVerdict: resolveReleaseVerdict(snapshot.score),
+    verdictVersion: SCORE_MODEL_VERSION,
   }
 }
 

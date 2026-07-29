@@ -1,6 +1,6 @@
 "use client"
 
-import { forwardRef, type ReactNode, type ComponentPropsWithoutRef } from "react"
+import { forwardRef, useEffect, useState, type ReactNode, type ComponentPropsWithoutRef } from "react"
 import { cn } from "@lyrashield/ui"
 import { X } from "lucide-react"
 
@@ -14,7 +14,22 @@ export interface BottomSheetProps extends ComponentPropsWithoutRef<"div"> {
 
 export const BottomSheet = forwardRef<HTMLDivElement, BottomSheetProps>(
   ({ open, onClose, title, description, children, className, ...props }, ref) => {
-    if (!open) return null
+    const [isOpen, setIsOpen] = useState(open)
+    const [mounted, setMounted] = useState(open)
+
+    useEffect(() => {
+      if (open) {
+        setMounted(true)
+        const raf = requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)))
+        return () => cancelAnimationFrame(raf)
+      } else {
+        setIsOpen(false)
+        const timer = setTimeout(() => setMounted(false), 240)
+        return () => clearTimeout(timer)
+      }
+    }, [open])
+
+    if (!mounted) return null
 
     return (
       <div
@@ -25,12 +40,20 @@ export const BottomSheet = forwardRef<HTMLDivElement, BottomSheetProps>(
         role="dialog"
         {...props}
       >
-        <div className="absolute inset-0 bg-black/40" aria-hidden="true" />
+        <div
+          className={cn(
+            "absolute inset-0 bg-black/40 transition-opacity duration-320 ease-out",
+            isOpen ? "opacity-100" : "opacity-0"
+          )}
+          aria-hidden="true"
+        />
         <div
           onClick={(e) => e.stopPropagation()}
           className={cn(
             "bg-background fixed right-0 bottom-0 left-0 max-h-[80vh] overflow-y-auto rounded-t-2xl border-t shadow-lg",
             "pb-[env(safe-area-inset-bottom)]",
+            "transition-transform duration-320 ease-out",
+            isOpen ? "translate-y-0" : "translate-y-full",
             className
           )}
         >
@@ -47,7 +70,7 @@ export const BottomSheet = forwardRef<HTMLDivElement, BottomSheetProps>(
             </div>
             <button
               onClick={onClose}
-              className="text-muted-foreground hover:text-foreground rounded-md p-2"
+              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none rounded-md p-2"
               aria-label="Close"
             >
               <X className="size-5" aria-hidden="true" />

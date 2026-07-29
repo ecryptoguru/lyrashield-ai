@@ -11,7 +11,7 @@ export default function Loading() {
       </div>
       <div className="space-y-3">
         {[0, 1, 2].map((item) => (
-          <div key={item} className="bg-card border-border h-28 animate-pulse border" />
+          <div key={item} className="bg-card border-border h-28 animate-pulse rounded-lg border" />
         ))}
       </div>
     </div>

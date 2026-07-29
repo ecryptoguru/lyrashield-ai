@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import Link from "next/link"
 import {
   Bug,
@@ -618,6 +619,7 @@ function FindingDetailDrawer({
 }) {
   const [detail, setDetail] = useState<FindingDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [drawerError, setDrawerError] = useState<string | null>(null)
   const [showFixForm, setShowFixForm] = useState(false)
   const [fixSummary, setFixSummary] = useState("")
   const [creatingFix, setCreatingFix] = useState(false)
@@ -638,16 +640,22 @@ function FindingDetailDrawer({
   const knownExploited = detail?.technicalDetail?.includes("CISA KEV:") ?? false
   const epssSummary = extractEpssPercentage(detail?.technicalDetail)
 
+  const fetchDetail = useCallback(
+    () => apiGet<FindingDetail>(`/api/findings/${finding.id}?workspaceId=${workspaceId}`),
+    [finding.id, workspaceId]
+  )
+
   useEffect(() => {
     let cancelled = false
-    apiGet<FindingDetail>(`/api/findings/${finding.id}?workspaceId=${workspaceId}`)
+    fetchDetail()
       .then((res) => {
         if (cancelled) return
         setDetail(res ?? null)
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return
         setDetail(null)
+        setDrawerError(err instanceof Error ? err.message : "Failed to load finding details.")
       })
       .finally(() => {
         if (cancelled) return
@@ -656,7 +664,19 @@ function FindingDetailDrawer({
     return () => {
       cancelled = true
     }
-  }, [finding.id, workspaceId])
+  }, [fetchDetail])
+
+  const handleRetry = useCallback(() => {
+    setLoading(true)
+    setDrawerError(null)
+    fetchDetail()
+      .then((res) => setDetail(res ?? null))
+      .catch((err) => {
+        setDetail(null)
+        setDrawerError(err instanceof Error ? err.message : "Failed to load finding details.")
+      })
+      .finally(() => setLoading(false))
+  }, [fetchDetail])
 
   const latestRetest = detail?.retests?.[0] ?? null
   const hasFixProposal = (detail?.fixProposals?.length ?? 0) > 0
@@ -762,6 +782,21 @@ function FindingDetailDrawer({
         {loading ? (
           <div className="flex justify-center py-8">
             <Spinner />
+          </div>
+        ) : drawerError ? (
+          <div className="bg-destructive/5 border-destructive/20 rounded-lg border p-4" role="alert">
+            <div className="text-destructive flex items-center gap-2 text-sm font-medium">
+              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {drawerError}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button type="button" size="sm" onClick={() => void handleRetry()}>
+                Retry
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={onClose}>
+                Close
+              </Button>
+            </div>
           </div>
         ) : detail ? (
           <div className="space-y-4">
@@ -962,24 +997,34 @@ function FindingDetailDrawer({
                         the retest only after you apply the fix.
                       </p>
                       <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={creatingRetest || !detail.scanId}
-                          onClick={() => void queueRetest()}
-                        >
-                          {creatingRetest ? (
-                            <span className="flex items-center gap-2">
-                              <Spinner /> Queuing retest...
-                            </span>
-                          ) : (
-                            "Queue fresh retest"
-                          )}
-                        </Button>
-                        {!detail.scanId && (
-                          <span className="text-muted-foreground text-xs">
-                            No scan is linked to this finding
-                          </span>
+                        {!detail.scanId ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-block">
+                                <Button type="button" size="sm" disabled>
+                                  Queue fresh retest
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              A fresh retest needs a linked server scan. Run a scan for this target first, or check that this finding came from a completed scan rather than an imported report.
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={creatingRetest}
+                            onClick={() => void queueRetest()}
+                          >
+                            {creatingRetest ? (
+                              <span className="flex items-center gap-2">
+                                <Spinner /> Queuing retest...
+                              </span>
+                            ) : (
+                              "Queue fresh retest"
+                            )}
+                          </Button>
                         )}
                       </div>
                       {retestError && (

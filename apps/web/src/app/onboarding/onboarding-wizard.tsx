@@ -5,21 +5,7 @@ import { useRouter } from "next/navigation"
 import { Check, ChevronLeft, ChevronRight, Globe, Rocket, SkipForward } from "lucide-react"
 import { Button, FormField, GithubIcon, Input, Spinner } from "@lyrashield/ui"
 import { apiPatch, apiPost } from "@/lib/api-client"
-
-const GOALS = [
-  { value: "CHECK_PR", label: "Check a PR", description: "Review a pull request before merging." },
-  {
-    value: "TEST_APP",
-    label: "Test my app",
-    description: "Review an app or repository for issues.",
-  },
-  {
-    value: "LAUNCH_REVIEW",
-    label: "Launch review",
-    description: "Check what needs attention before release.",
-  },
-  { value: "WEEKLY_MONITOR", label: "Monitor weekly", description: "Set a recurring review goal." },
-] as const
+import { GOAL_OPTIONS } from "@/lib/labels"
 
 interface OnboardingData {
   currentStep: number
@@ -368,7 +354,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
             <fieldset>
               <legend className="mb-2 text-sm font-medium">What do you need from the scan?</legend>
               <div className="grid gap-px border sm:grid-cols-2">
-                {GOALS.map((goal) => (
+                {GOAL_OPTIONS.map((goal) => (
                   <button
                     key={goal.value}
                     type="button"
@@ -428,7 +414,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               <div className="flex justify-between gap-4 p-4">
                 <dt className="text-muted-foreground">Goal</dt>
                 <dd className="font-medium">
-                  {GOALS.find((goal) => goal.value === selectedGoal)?.label ?? "Selected"}
+                  {GOAL_OPTIONS.find((goal) => goal.value === selectedGoal)?.label ?? "Selected"}
                 </dd>
               </div>
               <div className="flex justify-between gap-4 p-4">

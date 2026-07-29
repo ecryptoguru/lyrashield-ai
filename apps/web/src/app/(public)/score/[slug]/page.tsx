@@ -3,14 +3,14 @@ import Link from "next/link"
 import { cache } from "react"
 import { notFound } from "next/navigation"
 import { getPublicScorecard } from "@lyrashield/db"
-import { buttonVariants } from "@lyrashield/ui"
+import { Badge, buttonVariants } from "@lyrashield/ui"
 import { CheckCircle2, ShieldCheck } from "lucide-react"
 import { ScorecardShareComposer } from "../../../../components/scorecard-share-composer"
 import { ReferralCapture } from "./referral-capture"
 import { REFERRAL_SOURCES } from "../../../../lib/scorecard-sharing"
 import { ThemeToggle } from "@/components/theme-toggle"
 
-export const revalidate = 60
+export const dynamic = "force-dynamic"
 
 const getScorecard = cache(getPublicScorecard)
 const appOrigin = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001"
@@ -79,6 +79,16 @@ export default async function ScorecardPage({
 
   const { payload, referralCode, superseded } = scorecard
   const grade = payload.grade.replace("_PLUS", "+")
+
+  const verdict = payload.releaseVerdict
+  const verdictConfig = {
+    GO: { label: "Ready to launch", variant: "success" as const },
+    GO_WITH_CONDITIONS: { label: "Ready with conditions", variant: "warning" as const },
+    NO_GO: { label: "Not ready", variant: "danger" as const },
+    NOT_EVALUATED: { label: "Not evaluated", variant: "muted" as const },
+  }
+  const { label: verdictLabel, variant: verdictVariant } =
+    verdictConfig[verdict as keyof typeof verdictConfig]
   const activeReferral = ref ?? referralCode
   const referralSource = source && REFERRAL_SOURCE_SET.has(source) ? source : undefined
   const shareUrl = `/score/${slug}${activeReferral ? `?ref=${activeReferral}` : ""}`
@@ -134,15 +144,27 @@ export default async function ScorecardPage({
                 .
               </p>
             </div>
-            <div className="bg-muted/45 min-w-64 rounded-xl border p-5">
-              <p className="flex items-center gap-2 text-sm font-medium">
-                <CheckCircle2 className="text-success size-4" aria-hidden="true" />
-                Retest-confirmed progress
-              </p>
-              <p className="mt-3 text-4xl font-semibold">{payload.resolvedFindings}</p>
-              <p className="text-muted-foreground mt-1 text-sm">
-                finding{payload.resolvedFindings === 1 ? "" : "s"} fixed and retest-confirmed
-              </p>
+            <div className="min-w-64 space-y-4">
+              <div className="bg-muted/45 rounded-xl border p-5">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <CheckCircle2 className="text-success size-4" aria-hidden="true" />
+                  Retest-confirmed progress
+                </p>
+                <p className="mt-3 text-4xl font-semibold">{payload.resolvedFindings}</p>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  finding{payload.resolvedFindings === 1 ? "" : "s"} fixed and retest-confirmed
+                </p>
+              </div>
+              <div className="bg-muted/45 rounded-xl border p-5">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <ShieldCheck className="text-primary size-4" aria-hidden="true" />
+                  Release verdict
+                </p>
+                <div className="mt-3">
+                  <Badge variant={verdictVariant}>{verdictLabel}</Badge>
+                </div>
+                <p className="text-muted-foreground mt-1 text-sm">Verdict {payload.verdictVersion}</p>
+              </div>
             </div>
           </div>
           <div className="relative mt-8 flex flex-wrap items-center gap-3 border-t pt-6">

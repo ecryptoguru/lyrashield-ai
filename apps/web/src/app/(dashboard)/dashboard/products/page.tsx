@@ -1,6 +1,9 @@
+import Link from "next/link"
+import { Play, ShieldCheck } from "lucide-react"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { TargetsClient } from "../targets/targets-client"
+import { EmptyState, buttonVariants } from "@lyrashield/ui"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 
 export default async function ProductsPage({
@@ -16,37 +19,44 @@ export default async function ProductsPage({
 
   if (!workspaceId) {
     return (
-      <div className="rounded-lg border border-dashed p-12 text-center">
-        <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
-        <p className="text-muted-foreground text-sm">
-          Create a workspace first to start managing products.
-        </p>
-      </div>
+      <EmptyState
+        icon={ShieldCheck}
+        title="No workspace yet"
+        description="Create a workspace first to start managing products."
+        action={
+          <Link href="/onboarding" className={buttonVariants()}>
+            <Play className="size-4" aria-hidden="true" />
+            Create workspace
+          </Link>
+        }
+      />
     )
   }
 
   const limit = 50
-  const initialTargets = await prisma.target.findMany({
-    where: {
-      workspaceId,
-      deletedAt: null,
-      ...(params.projectId ? { projectId: params.projectId } : {}),
-    },
-    include: {
-      project: { select: { id: true, name: true } },
-      _count: { select: { scans: true, findings: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: limit + 1,
-  })
+  const [initialTargets, githubIntegration] = await Promise.all([
+    prisma.target.findMany({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        ...(params.projectId ? { projectId: params.projectId } : {}),
+      },
+      include: {
+        project: { select: { id: true, name: true } },
+        _count: { select: { scans: true, findings: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit + 1,
+    }),
+    prisma.integration.findFirst({
+      where: { workspaceId, type: "GITHUB", status: "active", deletedAt: null },
+    }),
+  ])
 
   const hasMore = initialTargets.length > limit
   const items = hasMore ? initialTargets.slice(0, limit) : initialTargets
   const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
-  const githubIntegration = await prisma.integration.findFirst({
-    where: { workspaceId, type: "GITHUB", status: "active", deletedAt: null },
-  })
   const githubConnected = !!githubIntegration
   const githubAccountLogin =
     (githubIntegration?.metadata as { accountLogin?: string } | null)?.accountLogin ?? null

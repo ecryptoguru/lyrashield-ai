@@ -32,6 +32,7 @@ export default async function ScansPage({
       where: { workspaceId, deletedAt: null },
       select: { id: true, name: true, type: true, url: true, repoFullName: true },
       orderBy: { name: "asc" },
+      take: 200,
     }),
     listScans({ workspaceId, limit }),
   ])

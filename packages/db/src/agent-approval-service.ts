@@ -61,8 +61,10 @@ export async function getApproval(
   })
 }
 
+export type ApprovalListItem = Omit<AgentApproval, "result">
+
 export async function listApprovals(params: ListApprovalsParams): Promise<{
-  items: AgentApproval[]
+  items: ApprovalListItem[]
   nextCursor: string | null
 }> {
   const limit = Math.min(Math.max(params.limit ?? 50, 1), 100)
@@ -76,6 +78,22 @@ export async function listApprovals(params: ListApprovalsParams): Promise<{
     orderBy: { createdAt: "desc" },
     take: limit + 1,
     ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+    select: {
+      id: true,
+      workspaceId: true,
+      actionName: true,
+      inputHash: true,
+      status: true,
+      input: true,
+      requestedById: true,
+      approvedById: true,
+      approvedAt: true,
+      deniedAt: true,
+      executedAt: true,
+      expiresAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   })
 
   const hasMore = approvals.length > limit

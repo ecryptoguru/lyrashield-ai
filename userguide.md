@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last verified against the application code and open-registration deployment: 2026-07-22
+Last verified against the application code and open-registration deployment: 2026-07-29
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
@@ -159,7 +159,8 @@ Select **URL**, then configure:
 - type: Web App or API;
 - public HTTP(S) URL;
 - optional project;
-- environment: Local, Preview, Staging, or Production.
+- environment: Local, Preview, Staging, or Production;
+- **ownership attestation** — you must check the box confirming you own or are authorized to scan this target before the form can be submitted.
 
 URL and API targets use the pinned deterministic URL scanner. The external AI engine is not invoked for these targets. Review depth still describes the requested workflow, but it does not turn a passive URL scan into a repository or intrusive assessment.
 

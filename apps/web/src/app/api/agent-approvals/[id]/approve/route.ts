@@ -1,4 +1,4 @@
-import { ApprovalMutationError, approveApproval } from "@lyrashield/db"
+import { ApprovalMutationError, approveApproval, getApproval, verifyInputHash } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -14,15 +14,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return apiError("INVALID_JSON", "Request body must be valid JSON", 400)
   }
 
-  const workspaceId = (body as { workspaceId?: string })?.workspaceId
+  const typedBody = body as { workspaceId?: string; input?: Record<string, unknown> }
+  const workspaceId = typedBody?.workspaceId
+  const input = typedBody?.input
   if (!workspaceId) {
     return apiError("VALIDATION_ERROR", "workspaceId is required", 400)
+  }
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return apiError("VALIDATION_ERROR", "input is required and must be an object", 400)
   }
 
   try {
     const { session } = await requirePermission(workspaceId, PERMISSIONS.agent.approve)
-    const approval = await approveApproval(approvalId, workspaceId, session.userId)
-    return apiSuccess(approval)
+
+    const approval = await getApproval(approvalId, workspaceId)
+    if (!approval) {
+      return apiError("NOT_FOUND", "Approval not found", 404)
+    }
+
+    if (!verifyInputHash(approval.actionName, input, approval.inputHash)) {
+      return apiError("INPUT_HASH_MISMATCH", "Submitted input does not match the requested action", 422)
+    }
+
+    const updated = await approveApproval(approvalId, workspaceId, session.userId)
+    return apiSuccess(updated)
   } catch (err) {
     if (err instanceof ApprovalMutationError && err.code === "NOT_FOUND") {
       return apiError("NOT_FOUND", err.message, 404)

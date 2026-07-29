@@ -10,7 +10,6 @@ import {
   Wrench,
 } from "lucide-react"
 import { Badge, Card, EmptyState, buttonVariants } from "@lyrashield/ui"
-import { prisma } from "@lyrashield/db"
 import {
   MetricCard,
   RemediationBars,
@@ -19,7 +18,12 @@ import {
   SeverityDonut,
 } from "@/components/security-visuals"
 import { formatDate } from "@/lib/date-format"
-import { getCachedSession, getCachedWorkspaceId, getCachedWorkspaces } from "@/lib/cache"
+import {
+  getCachedSession,
+  getCachedWorkspaceId,
+  getCachedWorkspaces,
+  getCachedDashboardAggregates,
+} from "@/lib/cache"
 import { TrustCommandCenter } from "@/components/trust-command-center"
 import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
 import { getScanPresentation } from "@/lib/scan-presentation"
@@ -50,7 +54,8 @@ export default async function DashboardPage() {
   }
 
   const activeWorkspace = workspaces.find((workspace) => workspace.id === workspaceId)
-  const [
+
+  const {
     targetCount,
     openFindingCount,
     reportCount,
@@ -59,45 +64,7 @@ export default async function DashboardPage() {
     scoreSnapshots,
     recentScans,
     project,
-  ] = await Promise.all([
-    prisma.target.count({ where: { workspaceId, deletedAt: null } }),
-    prisma.finding.count({
-      where: {
-        workspaceId,
-        deletedAt: null,
-        status: { notIn: ["FIXED", "FALSE_POSITIVE", "DUPLICATE"] },
-      },
-    }),
-    prisma.report.count({ where: { workspaceId, deletedAt: null } }),
-    prisma.finding.groupBy({
-      by: ["severity", "status", "verified"],
-      where: { workspaceId, deletedAt: null },
-      _count: { _all: true },
-    }),
-    prisma.scan.count({
-      where: { workspaceId, deletedAt: null, status: "COMPLETED" },
-    }),
-    prisma.scoreSnapshot.findMany({
-      where: { workspaceId },
-      orderBy: { computedAt: "desc" },
-      take: 10,
-      select: { score: true, grade: true, computedAt: true },
-    }),
-    prisma.scan.findMany({
-      where: { workspaceId, deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-      include: {
-        target: { select: { name: true, type: true } },
-        _count: { select: { findings: { where: { deletedAt: null } } } },
-      },
-    }),
-    prisma.project.findFirst({
-      where: { workspaceId, deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      select: { name: true, riskScore: true, trustPlan: true },
-    }),
-  ])
+  } = await getCachedDashboardAggregates(workspaceId)
 
   const severity = Object.fromEntries(
     Object.entries(
@@ -173,6 +140,9 @@ export default async function DashboardPage() {
     { label: "Assurance shared", complete: reportCount > 0, href: "/dashboard/reports" },
   ]
 
+  const latestScan = recentScans[0]
+  const commandMode = latestScan?.mode ?? "SAFE"
+
   return (
     <div className="flex flex-col gap-6 lg:gap-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -198,7 +168,7 @@ export default async function DashboardPage() {
 
       <TrustCommandCenter
         productName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
-        mode="SAFE"
+        mode={commandMode}
         assetCount={targetCount}
         riskScore={latestScore?.score ?? project?.riskScore ?? 100}
         trustPlanData={project?.trustPlan}
@@ -336,7 +306,7 @@ export default async function DashboardPage() {
             <div>
               <h2 className="font-semibold">Recent scan activity</h2>
               <p className="text-muted-foreground mt-1 text-xs">
-                The latest worker lifecycle outcomes.
+                Your most recent reviews.
               </p>
             </div>
             <Link

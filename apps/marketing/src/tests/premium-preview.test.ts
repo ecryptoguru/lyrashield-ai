@@ -15,6 +15,11 @@ const world = readFileSync(
   "utf8"
 )
 // eslint-disable-next-line security/detect-non-literal-fs-filename
+const worldModule = readFileSync(
+  new URL("../components/landing/evidence-world.ts", import.meta.url),
+  "utf8"
+)
+// eslint-disable-next-line security/detect-non-literal-fs-filename
 const astroConfig = readFileSync(new URL("../../astro.config.mjs", import.meta.url), "utf8")
 
 describe("premium assurance-world homepage", () => {
@@ -58,25 +63,31 @@ describe("premium assurance-world homepage", () => {
     }
   })
 
+  it("lazy-loads the evidence-world module as an island", () => {
+    expect(world).toContain('import("./evidence-world.ts")')
+    expect(world).toContain('IntersectionObserver')
+    expect(world).toContain('bootstrapEvidenceWorld')
+  })
+
   it("keeps telemetry privacy-bounded and includes resilient media fallbacks", () => {
-    expect(world).toContain('"cinematic_chapter_view"')
-    expect(world).toContain("{ chapter_id: chapterId, mode }")
-    expect(world).toContain('"cinematic_media_error"')
-    expect(world).toContain("{ chapter_id: chapterId, asset_type: assetType }")
-    expect(world).not.toContain("exception")
-    expect(world).not.toContain("userAgent")
-    expect(world).toContain('matchMedia("(prefers-reduced-motion: reduce)")')
-    expect(world).toContain("connection?.saveData")
-    expect(world).toContain('rootMargin: "50% 0px"')
-    expect(world).toContain("URL.revokeObjectURL")
+    expect(worldModule).toContain('"cinematic_chapter_view"')
+    expect(worldModule).toContain("{ chapter_id: chapterId, mode }")
+    expect(worldModule).toContain('"cinematic_media_error"')
+    expect(worldModule).toContain("{ chapter_id: chapterId, asset_type: assetType }")
+    expect(worldModule).not.toContain("exception")
+    expect(worldModule).not.toContain("userAgent")
+    expect(worldModule).toContain('matchMedia("(prefers-reduced-motion: reduce)")')
+    expect(worldModule).toContain("connection?.saveData")
+    expect(worldModule).toContain('rootMargin: "50% 0px"')
+    expect(worldModule).toContain("URL.revokeObjectURL")
   })
 
   it("coalesces scroll seeks and keeps exactly one decoded video layer in front", () => {
-    expect(world).toContain("if (video.seeking) return")
-    expect(world).toContain('video.addEventListener("seeked", this.queueSeek)')
-    expect(world).toContain("HTMLMediaElement.HAVE_CURRENT_DATA")
-    expect(world).toContain('video.classList.toggle("is-front", videoIndex === slot)')
-    expect(world).toContain("if (innerWidth === this.viewportWidth)")
-    expect(world).toContain('chapter.classList.toggle("is-active", chapterIndex === index)')
+    expect(worldModule).toContain("if (video.seeking) return")
+    expect(worldModule).toContain('video.addEventListener("seeked", this.queueSeek)')
+    expect(worldModule).toContain("HTMLMediaElement.HAVE_CURRENT_DATA")
+    expect(worldModule).toContain('video.classList.toggle("is-front", videoIndex === slot)')
+    expect(worldModule).toContain("if (innerWidth === this.viewportWidth)")
+    expect(worldModule).toContain('chapter.classList.toggle("is-active", chapterIndex === index)')
   })
 })

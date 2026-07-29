@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import { headers } from "next/headers"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -22,6 +22,12 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "LyraShield AI",
   },
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 }
 
 export default async function RootLayout({

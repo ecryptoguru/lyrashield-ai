@@ -63,7 +63,8 @@ export function ResponsiveListItem({
       tabIndex={onClick ? 0 : undefined}
       className={cn(
         "bg-card text-card-foreground rounded-xl border p-4 shadow-xs transition-colors",
-        onClick && "hover:bg-accent cursor-pointer",
+        onClick &&
+          "hover:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none cursor-pointer",
         className
       )}
     >

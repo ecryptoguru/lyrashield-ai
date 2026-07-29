@@ -2,6 +2,7 @@
 @plugin "@tailwindcss/typography";
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/bricolage-grotesque";
 
 @theme {
   --color-bg: var(--bg);
@@ -215,4 +216,13 @@ textarea {
 /* Animated count-up numbers use this to avoid layout shift while ticking. */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* Suppress the default details marker so custom chevrons render alone. */
+summary {
+  list-style: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
 }

@@ -46,7 +46,7 @@ describe("marketing SEO metadata", () => {
     expect(home).toContain('"@id": `${pageUrl}#application`')
     expect(home).toContain('"@id": `${pageUrl}#faq`')
     expect(home).toContain('inLanguage: "en-US"')
-    expect(methodology).toContain('dateModified: "2026-07-17"')
+    expect(methodology).toContain('dateModified: "2026-07-29"')
     expect(llms).toContain("43 controls are machine-testable and 7 require retained human evidence")
     expect(llms).toContain("`${origin}/scan`")
   })

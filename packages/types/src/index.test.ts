@@ -382,6 +382,7 @@ describe("CreateUrlTargetSchema", () => {
         type: "WEB_APP",
         name: "My App",
         url: "https://example.com",
+        ownershipAttested: true,
       }).success
     ).toBe(true)
   })
@@ -393,6 +394,7 @@ describe("CreateUrlTargetSchema", () => {
         type: "API",
         name: "My API",
         url: "https://api.example.com",
+        ownershipAttested: true,
       }).success
     ).toBe(true)
   })
@@ -404,6 +406,7 @@ describe("CreateUrlTargetSchema", () => {
         type: "WEB_APP",
         name: "My App",
         url: "not-a-url",
+        ownershipAttested: true,
       }).success
     ).toBe(false)
   })
@@ -415,6 +418,30 @@ describe("CreateUrlTargetSchema", () => {
         type: "WEB_APP",
         name: "test\u007F",
         url: "https://example.com",
+        ownershipAttested: true,
+      }).success
+    ).toBe(false)
+  })
+
+  it("rejects without ownershipAttested", () => {
+    expect(
+      CreateUrlTargetSchema.safeParse({
+        workspaceId: "ws-1",
+        type: "WEB_APP",
+        name: "My App",
+        url: "https://example.com",
+      }).success
+    ).toBe(false)
+  })
+
+  it("rejects ownershipAttested false", () => {
+    expect(
+      CreateUrlTargetSchema.safeParse({
+        workspaceId: "ws-1",
+        type: "WEB_APP",
+        name: "My App",
+        url: "https://example.com",
+        ownershipAttested: false,
       }).success
     ).toBe(false)
   })

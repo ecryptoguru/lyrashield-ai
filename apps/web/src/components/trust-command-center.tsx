@@ -1,5 +1,3 @@
-"use client"
-
 import { ShieldCheck, Clock, ListChecks } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from "@lyrashield/ui"
 import { RUN_SINGULAR } from "@/lib/terminology"
@@ -113,7 +111,12 @@ export function TrustCommandCenter({
               <ListChecks className="text-primary size-5" aria-hidden="true" />
               <span className="text-lg font-semibold">{trustPlanLabel(trustPlanData)}</span>
             </div>
-            <p className="text-muted-foreground text-xs">Review and customise controls.</p>
+            <Link
+              href="/dashboard/settings"
+              className="text-muted-foreground text-xs underline decoration-border underline-offset-4 hover:text-foreground"
+            >
+              Review and customise controls.
+            </Link>
           </CardContent>
         </Card>
 

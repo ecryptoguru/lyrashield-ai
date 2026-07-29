@@ -18,7 +18,10 @@ export default async function EvidencePage() {
           evidence: { some: {} },
           verified: true,
         },
-        include: {
+        select: {
+          id: true,
+          title: true,
+          summary: true,
           target: { select: { id: true, name: true, type: true } },
           evidence: {
             orderBy: { createdAt: "desc" },

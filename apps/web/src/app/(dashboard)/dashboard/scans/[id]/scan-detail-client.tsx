@@ -15,6 +15,7 @@ import {
   XCircle,
   ChevronDown,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react"
 import { Card, Badge, Button, EmptyState, buttonVariants } from "@lyrashield/ui"
 import { formatTime } from "@/lib/date-format"
@@ -22,6 +23,7 @@ import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanReviewProfile } from "@/lib/scan-review-profile"
 import { apiGetConditional, apiGetPaginated } from "@/lib/api-client"
+import { getScanGoalLabel, getScanModeLabel, getScanTriggerLabel } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
 
 interface ScanEvent {
@@ -139,15 +141,6 @@ const SEVERITY_COLOR: Record<string, string> = {
   INFO: "text-muted-foreground",
 }
 
-const GOAL_LABELS: Record<string, string> = {
-  CHECK_PR: "Check PR",
-  TEST_APP: "Test App",
-  LAUNCH_REVIEW: "Launch Review",
-  WEEKLY_MONITOR: "Weekly Monitor",
-  FULL_PENTEST: "Deep Security Review",
-  COMPLIANCE_REVIEW: "Compliance Review",
-}
-
 const EVENT_LEVEL_COLOR: Record<string, string> = {
   info: "text-muted-foreground",
   warn: "text-amber-600 dark:text-amber-400",
@@ -212,6 +205,7 @@ export function ScanDetailClient({
     status: string
     message: string
   } | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const isActive = isActiveScan(scan.status)
   const elapsedTime = useElapsedTime(isActive ? scan.startedAt : null)
   const presentation = getScanPresentation(scan.status)
@@ -361,6 +355,17 @@ export function ScanDetailClient({
     }
   }, [isActive, refresh, scan.startedAt])
 
+  async function handleManualRefresh() {
+    setRefreshing(true)
+    etagRef.current = undefined
+    const controller = new AbortController()
+    try {
+      await refresh(controller.signal)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   const sortedFindings = [...currentFindings].sort(
     (a, b) => (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99)
   )
@@ -432,10 +437,20 @@ export function ScanDetailClient({
               {presentation.headline}
             </h1>
             <p className="text-muted-foreground mt-1 text-sm">
-              {GOAL_LABELS[scan.goal] ?? scan.goal} · {scan.mode} · {scan.triggerType}
+              {getScanGoalLabel(scan.goal)} · {getScanModeLabel(scan.mode)} · {getScanTriggerLabel(scan.triggerType)}
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleManualRefresh()}
+              disabled={refreshing}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
             {isActive && (
               <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
                 <span className="relative flex h-2 w-2">
