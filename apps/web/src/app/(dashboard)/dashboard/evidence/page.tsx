@@ -1,8 +1,9 @@
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { prisma } from "@lyrashield/db"
-import { EmptyState } from "@lyrashield/ui"
+import { EmptyState, buttonVariants } from "@lyrashield/ui"
 import { ShieldCheck, ShieldAlert } from "lucide-react"
 import Link from "next/link"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 export default async function EvidencePage() {
   const session = await getCachedSession()
@@ -45,9 +46,8 @@ export default async function EvidencePage() {
       </div>
 
       {!workspaceId ? (
-        <EmptyState
+        <NoWorkspaceState
           icon={ShieldCheck}
-          title="No workspace yet"
           description="Create a workspace during onboarding to view evidence."
         />
       ) : findings.length === 0 ? (
@@ -55,6 +55,11 @@ export default async function EvidencePage() {
           icon={ShieldAlert}
           title="No verified evidence yet"
           description="Run a review and verify findings to collect evidence records."
+          action={
+            <Link href="/dashboard/scans" className={buttonVariants()}>
+              Start a review
+            </Link>
+          }
         />
       ) : (
         <div className="grid gap-3">

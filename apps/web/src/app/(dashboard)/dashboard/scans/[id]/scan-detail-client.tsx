@@ -960,6 +960,7 @@ export function ScanDetailClient({
                     ? "No findings were reported within this scan's completed coverage. Review the retained scope before relying on the result."
                     : "No findings were recorded before this scan ended."
               }
+              action={null}
             />
           )}
         </>
@@ -986,6 +987,7 @@ export function ScanDetailClient({
               icon={Clock}
               title="No events"
               description="No scan events have been recorded yet."
+              action={null}
             />
           ) : (
             <Card className="p-4">

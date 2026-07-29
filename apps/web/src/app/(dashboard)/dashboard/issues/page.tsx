@@ -1,8 +1,8 @@
 import { getCachedSession, getCachedWorkspaceId, getCachedFindings } from "@/lib/cache"
 import { prisma } from "@lyrashield/db"
-import { EmptyState } from "@lyrashield/ui"
 import { ShieldAlert } from "lucide-react"
 import { FindingsClient, type FindingListItem } from "../findings/findings-client"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 export default async function IssuesPage({
   searchParams,
@@ -17,9 +17,8 @@ export default async function IssuesPage({
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold tracking-tight">Issues</h1>
-        <EmptyState
+        <NoWorkspaceState
           icon={ShieldAlert}
-          title="No workspace yet"
           description="Create a workspace during onboarding to view issues."
         />
       </div>

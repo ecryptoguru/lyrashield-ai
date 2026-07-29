@@ -326,6 +326,12 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
           icon={Calendar}
           title="No scheduled scans"
           description="Set up recurring scans to monitor your targets on a schedule."
+          action={
+            <Button onClick={() => setShowCreateForm(true)}>
+              <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
+              New Schedule
+            </Button>
+          }
         />
       ) : (
         <div className="space-y-3">

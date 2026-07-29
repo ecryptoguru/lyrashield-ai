@@ -153,6 +153,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
           icon={Bell}
           title="No notifications"
           description="You'll see scan alerts, critical finding warnings, and fix PR updates here."
+          action={null}
         />
       ) : (
         <div className="space-y-3">

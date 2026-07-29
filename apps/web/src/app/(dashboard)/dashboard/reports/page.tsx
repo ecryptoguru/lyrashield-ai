@@ -1,7 +1,7 @@
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { EmptyState } from "@lyrashield/ui"
 import { FileText } from "lucide-react"
 import { ReportsClient } from "./reports-client"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 export default async function ReportsPage({
   searchParams,
@@ -16,9 +16,8 @@ export default async function ReportsPage({
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
-        <EmptyState
+        <NoWorkspaceState
           icon={FileText}
-          title="No workspace yet"
           description="Create a workspace during onboarding to manage reports."
         />
       </div>

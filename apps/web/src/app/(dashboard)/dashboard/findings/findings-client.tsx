@@ -334,6 +334,11 @@ export function FindingsClient({
           icon={Bug}
           title="No findings yet"
           description="Security vulnerabilities detected by scans will appear here. Run a scan to get started."
+          action={
+            <Link href="/dashboard/scans" className={buttonVariants()}>
+              Start a review
+            </Link>
+          }
         />
       ) : (
         <div className={`space-y-3 ${loading ? "pointer-events-none opacity-50" : ""}`}>

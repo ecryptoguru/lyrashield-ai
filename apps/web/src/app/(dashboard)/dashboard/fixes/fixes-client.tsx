@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { Wrench, GitPullRequest, ShieldCheck, ExternalLink } from "lucide-react"
-import { Badge, Card, EmptyState, LoadMore } from "@lyrashield/ui"
+import Link from "next/link"
+import { Badge, buttonVariants, Card, EmptyState, LoadMore } from "@lyrashield/ui"
 import { apiGetPaginated } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
 
@@ -81,6 +82,11 @@ export function FixesClient({
           icon={Wrench}
           title="No fix proposals yet"
           description="When scans detect findings, you can generate fix proposals and create pull requests from the findings page."
+          action={
+            <Link href="/dashboard/findings" className={buttonVariants()}>
+              Review issues
+            </Link>
+          }
         />
       ) : (
         <div className="space-y-3">

@@ -3,7 +3,16 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Radar, Play, X, RefreshCw, ChevronRight, ChevronDown } from "lucide-react"
-import { Button, Card, Badge, FormField, Select, EmptyState, Spinner } from "@lyrashield/ui"
+import {
+  Button,
+  buttonVariants,
+  Card,
+  Badge,
+  FormField,
+  Select,
+  EmptyState,
+  Spinner,
+} from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
@@ -353,6 +362,18 @@ export function ScansClient({
             targets.length > 0
               ? 'Start your first security scan by clicking "New Scan" above.'
               : "Add a target first (a repo or URL), then you can run scans against it."
+          }
+          action={
+            targets.length > 0 ? (
+              <Button onClick={() => setShowCreate(true)}>
+                <Play className="mr-2 h-4 w-4" aria-hidden="true" />
+                New Scan
+              </Button>
+            ) : (
+              <Link href="/dashboard/products" className={buttonVariants()}>
+                Add a product
+              </Link>
+            )
           }
         />
       ) : (

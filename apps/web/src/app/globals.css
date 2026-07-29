@@ -54,6 +54,22 @@
   --safe-area-inset-left: env(safe-area-inset-left);
   --safe-area-inset-right: env(safe-area-inset-right);
 
+  /*
+   * Motion scale. Durations were previously ad hoc per component (150 here, 320 there),
+   * which is consistent only by luck. Enter with --ease-out, leave with --ease-in, and
+   * always leave faster than you enter — that asymmetry is what makes the UI feel
+   * responsive rather than sluggish. Animate transform/opacity/colour only.
+   */
+  --duration-instant: 100ms;
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+  --duration-sheet: 320ms;
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+
   /* Premium shadows */
   --shadow-xs: 0 1px 2px 0 oklch(0.18 0.02 270 / 0.04);
   --shadow-sm:
@@ -87,6 +103,19 @@
   select,
   textarea {
     -webkit-tap-highlight-color: transparent;
+  }
+  /*
+   * Headings balance across lines instead of leaving a single orphaned word, and body
+   * copy avoids one-word last lines. Cheap globally, and it fixes the ragged multi-line
+   * headline that was visible at every breakpoint.
+   */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
   }
 }
 

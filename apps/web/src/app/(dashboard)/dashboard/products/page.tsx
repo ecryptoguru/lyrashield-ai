@@ -1,10 +1,9 @@
-import Link from "next/link"
-import { Play, ShieldCheck } from "lucide-react"
+import { ShieldCheck } from "lucide-react"
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { TargetsClient } from "../targets/targets-client"
-import { EmptyState, buttonVariants } from "@lyrashield/ui"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 export default async function ProductsPage({
   searchParams,
@@ -19,16 +18,9 @@ export default async function ProductsPage({
 
   if (!workspaceId) {
     return (
-      <EmptyState
+      <NoWorkspaceState
         icon={ShieldCheck}
-        title="No workspace yet"
         description="Create a workspace first to start managing products."
-        action={
-          <Link href="/onboarding" className={buttonVariants()}>
-            <Play className="size-4" aria-hidden="true" />
-            Create workspace
-          </Link>
-        }
       />
     )
   }

@@ -11,9 +11,11 @@ import {
   Download,
   Plus,
 } from "lucide-react"
+import Link from "next/link"
 import {
   Button,
   Badge,
+  buttonVariants,
   Card,
   EmptyState,
   Spinner,
@@ -387,6 +389,11 @@ export function ReportsClient({
           icon={FileText}
           title="No reports yet"
           description="Generate a security report from a completed scan to share with stakeholders."
+          action={
+            <Link href="/dashboard/scans" className={buttonVariants()}>
+              Start a review
+            </Link>
+          }
         />
       ) : (
         <div className="space-y-3">
