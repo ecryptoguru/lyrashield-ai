@@ -18,7 +18,25 @@ const secureCookies = new URL(env.BETTER_AUTH_URL).protocol === "https:"
 const githubEnabled = isOAuthProviderConfigured(GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET)
 const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
 const microsoftEnabled = isOAuthProviderConfigured(AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)
-const emailVerificationEnabled = Boolean(env.BREVO_API_KEY)
+/**
+ * Verification is enforced when it is both asked for and actually deliverable.
+ *
+ * Previously this derived from BREVO_API_KEY alone, which made the operator's intent
+ * unexpressible: LYRASHIELD_REQUIRE_EMAIL_VERIFICATION was declared but read nowhere, so
+ * setting it had no effect and the absence of a mail key silently downgraded an openly
+ * registerable app to unverified sign-up. The flag is now authoritative, defaults on, and
+ * production config validation rejects "required but undeliverable".
+ */
+const emailVerificationRequested = env.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION === "1"
+const emailProviderConfigured = Boolean(env.BREVO_API_KEY)
+const emailVerificationEnabled = emailVerificationRequested && emailProviderConfigured
+
+if (emailVerificationRequested && !emailProviderConfigured) {
+  logger.warn(
+    "Email verification is requested but no mail provider is configured — sign-up will not be verified. " +
+      "Set BREVO_API_KEY, or set LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0 to make this explicit."
+  )
+}
 
 function escapeHtml(text: string): string {
   return text
