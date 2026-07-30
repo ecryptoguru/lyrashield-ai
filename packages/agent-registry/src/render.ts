@@ -34,7 +34,7 @@ function resolveSecret(
       return agent.credential.syntax
     }
     // Fallback for agents that do not support interpolation.
-    return opts.apiKey ?? "<LYRASHIELD_API_KEY>"
+    return "<LYRASHIELD_API_KEY>"
   }
 
   if (opts.secretMode === "header") {

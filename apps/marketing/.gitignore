@@ -12,6 +12,9 @@
 .env.*.local
 .dev.vars
 
+# Generated OpenAPI spec for docs
+public/openapi.json
+
 # Re-include source pages that happen to live in a directory named "docs"
 # (the monorepo root .gitignore has a broad `docs/` rule)
 !src/pages/docs/

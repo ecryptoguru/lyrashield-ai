@@ -15,8 +15,12 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@iarna/toml": "^2.2.5",
+    "@types/iarna__toml": "^2.0.5",
     "@types/node": "^22.20.1",
+    "jsonc-parser": "^3.3.1",
     "typescript": "^6.0.0",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "yaml": "^2.7.1"
   }
 }

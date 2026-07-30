@@ -17,26 +17,32 @@ export interface SecretModeOptions {
   apiUrl: string
   inlineSecret?: boolean
   dryRun?: boolean
+  cwd?: string
 }
 
-async function isFileGitTracked(filePath: string): Promise<boolean> {
+async function isFileGitTracked(filePath: string, cwd?: string): Promise<boolean> {
   return new Promise((resolve) => {
-    execFile("git", ["ls-files", "--error-unmatch", filePath], { cwd: process.cwd() }, (err) => {
-      resolve(!err)
-    })
+    execFile(
+      "git",
+      ["ls-files", "--error-unmatch", filePath],
+      { cwd: cwd ?? process.cwd() },
+      (err) => {
+        resolve(!err)
+      }
+    )
   })
 }
 
-async function isFileGitIgnored(filePath: string): Promise<boolean> {
+async function isFileGitIgnored(filePath: string, cwd?: string): Promise<boolean> {
   return new Promise((resolve) => {
-    execFile("git", ["check-ignore", filePath], { cwd: process.cwd() }, (err) => {
+    execFile("git", ["check-ignore", filePath], { cwd: cwd ?? process.cwd() }, (err) => {
       resolve(!err)
     })
   })
 }
 
 export async function resolveSecretMode(opts: SecretModeOptions): Promise<ResolvedSecretMode> {
-  const { agent, location, inlineSecret } = opts
+  const { agent, location, inlineSecret, cwd } = opts
 
   const envVar = "LYRASHIELD_API_KEY"
 
@@ -58,8 +64,8 @@ export async function resolveSecretMode(opts: SecretModeOptions): Promise<Resolv
 
   if (location.sharedByConvention) {
     if (inlineSecret) {
-      const tracked = await isFileGitTracked(location.path)
-      const ignored = await isFileGitIgnored(location.path)
+      const tracked = await isFileGitTracked(location.path, cwd)
+      const ignored = await isFileGitIgnored(location.path, cwd)
       if (tracked && !ignored) {
         return {
           mode: "manual",

@@ -24,6 +24,7 @@ export interface InstallAgentOptions {
   dryRun?: boolean
   inlineSecret?: boolean
   yes?: boolean
+  cwd?: string
 }
 
 export interface InstallAgentResult {
@@ -55,7 +56,7 @@ async function tryMergeLocation(
   loc: ConfigLocation,
   opts: InstallAgentOptions
 ): Promise<InstallAgentResult | undefined> {
-  const resolved = resolveLocation(loc, { scope: opts.scope, cwd: process.cwd() })
+  const resolved = resolveLocation(loc, { scope: opts.scope, cwd: opts.cwd ?? process.cwd() })
   const secret = await resolveSecretMode({
     agent,
     location: loc,
@@ -64,6 +65,7 @@ async function tryMergeLocation(
     apiUrl: opts.apiUrl,
     inlineSecret: opts.inlineSecret,
     dryRun: opts.dryRun,
+    cwd: opts.cwd ?? process.cwd(),
   })
 
   if (secret.mode === "manual") {
@@ -160,7 +162,7 @@ async function runVendorCli(
 }
 
 export async function installAgent(opts: InstallAgentOptions): Promise<InstallAgentResult> {
-  const { agent, all } = opts
+  const { agent, all, cwd } = opts
 
   if (agent.installStrategy === "guided-manual") {
     return {
@@ -175,14 +177,16 @@ export async function installAgent(opts: InstallAgentOptions): Promise<InstallAg
     return runVendorCli(agent, opts)
   }
 
-  const detected = await detectAgent(agent, { scope: opts.scope, cwd: process.cwd() })
+  const baseDir = cwd ?? process.cwd()
+
+  const detected = await detectAgent(agent, { scope: opts.scope, cwd: baseDir })
   if (!detected && !all) {
     return { agent: agent.id, displayName: agent.displayName, outcome: "NOT_DETECTED" }
   }
 
   const locationStates = await findDetectedLocations(agent, {
     scope: opts.scope,
-    cwd: process.cwd(),
+    cwd: baseDir,
   })
   for (const state of locationStates) {
     if (opts.scope && state.location.scope !== opts.scope) continue
@@ -211,7 +215,7 @@ export async function installAgent(opts: InstallAgentOptions): Promise<InstallAg
 
 export async function uninstallAgent(
   agent: AgentEntry,
-  opts: { scope?: "project" | "global"; serverName?: string }
+  opts: { scope?: "project" | "global"; serverName?: string; cwd?: string }
 ): Promise<InstallAgentResult> {
   const serverName = opts.serverName ?? "lyrashield"
   const { removeFile } = await import("./merge.js")
@@ -227,7 +231,7 @@ export async function uninstallAgent(
 
   for (const loc of agent.locations) {
     if (opts.scope && loc.scope !== opts.scope) continue
-    const resolved = resolveLocation(loc, { scope: opts.scope, cwd: process.cwd() })
+    const resolved = resolveLocation(loc, { scope: opts.scope, cwd: opts.cwd ?? process.cwd() })
     const removed = await removeFile({
       filePath: resolved,
       format: agent.format,
