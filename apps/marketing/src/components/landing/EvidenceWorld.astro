@@ -181,9 +181,9 @@ const { manifest } = Astro.props
 
   .evidence-world__chapter {
     display: grid;
-    min-height: 115svh;
+    min-height: 82svh;
     align-items: center;
-    padding: 6rem max(1rem, calc((100% - 1280px) / 2));
+    padding: 3.25rem max(1rem, calc((100% - 1280px) / 2));
   }
 
   .evidence-world__chapter:nth-child(even) .evidence-world__copy {
@@ -334,9 +334,9 @@ const { manifest } = Astro.props
 
   @media (max-width: 767px) {
     .evidence-world__chapter {
-      min-height: 118svh;
+      min-height: 84svh;
       align-items: center;
-      padding: 5rem 1rem;
+      padding: 2.75rem 1rem;
     }
 
     .evidence-world__chapter .evidence-world__copy,
@@ -397,12 +397,82 @@ const { manifest } = Astro.props
     }
   }
 
+  /* No-JS and reduced-motion fallback: content must be visible without JS.
+     Without is-enhanced (no-JS), stack chapters normally and avoid the -100svh trick.
+     With reduced motion, show all copies and un-stick the stage. */
+  evidence-world:not(.is-enhanced) .evidence-world__stage {
+    position: relative;
+    height: auto;
+    min-height: 420px;
+  }
+
+  evidence-world:not(.is-enhanced) .evidence-world__chapters {
+    margin-top: 0;
+  }
+
+  evidence-world:not(.is-enhanced) .evidence-world__chapter {
+    min-height: auto;
+    padding-block: 1.75rem;
+  }
+
+  evidence-world:not(.is-enhanced) .evidence-world__media {
+    position: relative;
+    height: 420px;
+  }
+
+  evidence-world:not(.is-enhanced) .evidence-world__poster {
+    opacity: 1;
+  }
+
+  evidence-world:not(.is-enhanced) .evidence-world__poster:not(.is-active) {
+    display: none;
+  }
+
+  evidence-world:not(.is-enhanced) .evidence-world__video {
+    display: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .evidence-world__poster,
     .evidence-world__video,
     evidence-world.is-enhanced .evidence-world__copy,
     evidence-world.is-enhanced .evidence-world__chapter.is-active .evidence-world__copy {
       transition: none;
+    }
+
+    evidence-world.is-enhanced .evidence-world__stage {
+      position: relative;
+      height: auto;
+      min-height: 380px;
+    }
+
+    evidence-world.is-enhanced .evidence-world__media {
+      position: relative;
+      height: 380px;
+    }
+
+    evidence-world.is-enhanced .evidence-world__chapters {
+      margin-top: 0;
+    }
+
+    evidence-world.is-enhanced .evidence-world__chapter {
+      min-height: auto;
+      padding-block: 1.5rem;
+    }
+
+    evidence-world.is-enhanced .evidence-world__copy,
+    evidence-world.is-enhanced .evidence-world__chapter .evidence-world__copy,
+    evidence-world.is-enhanced .evidence-world__chapter:nth-child(even) .evidence-world__copy {
+      visibility: visible;
+      opacity: 1;
+      pointer-events: auto;
+      position: relative;
+      top: auto;
+      right: auto;
+      left: auto;
+      transform: none;
+      width: min(46rem, 100%);
+      margin: 0;
     }
   }
 </style>
