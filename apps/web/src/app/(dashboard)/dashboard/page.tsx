@@ -25,6 +25,7 @@ import {
   getCachedDashboardAggregates,
 } from "@/lib/cache"
 import { TrustCommandCenter } from "@/components/trust-command-center"
+import { GetStartedChecklist } from "@/components/get-started-checklist"
 import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
 import { getScanPresentation } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -160,6 +161,13 @@ export default async function DashboardPage() {
           Start a scan
         </Link>
       </header>
+
+      {/* First-run guide for brand-new workspaces (zero completed scans). The
+          full metric grid below is the returning-user view; this is what makes
+          the first five minutes simple and engaging. Dismissible per workspace. */}
+      {completedScanCount === 0 && (
+        <GetStartedChecklist workspaceId={workspaceId} steps={assuranceSteps} />
+      )}
 
       <TrustCommandCenter
         productName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
