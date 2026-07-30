@@ -71,9 +71,9 @@ export function FixesClient({
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Fix proposals</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Proposed fixes</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Review fix proposals and track pull requests for your findings.
+            Review proposed fixes and track pull requests for your issues.
           </p>
         </div>
       </div>
@@ -81,8 +81,8 @@ export function FixesClient({
       {proposals.length === 0 && !nextCursor ? (
         <EmptyState
           icon={Wrench}
-          title="No fix proposals yet"
-          description="When scans detect findings, you can generate fix proposals and create pull requests from the findings page."
+          title="No proposed fixes yet"
+          description="When trust runs surface issues, you can generate proposed fixes and create pull requests from the issues page."
           action={
             <Link href="/dashboard/findings" className={buttonVariants()}>
               Review issues
@@ -94,7 +94,7 @@ export function FixesClient({
           {proposals.map((proposal) => (
             <Card
               key={proposal.id}
-              className="group p-5 transition-all duration-200 hover:shadow-md"
+              className="group p-5 transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out)] hover:shadow-md"
             >
               <div>
                 <div className="mb-2 flex items-center gap-2">

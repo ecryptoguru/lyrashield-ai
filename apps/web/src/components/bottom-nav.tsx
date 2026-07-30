@@ -30,9 +30,9 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "relative flex h-full w-full flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-colors duration-150",
+        "relative flex h-full w-full flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset",
-        "active:scale-[0.97] active:transition-transform active:duration-100",
+        "active:scale-[0.97] active:transition-transform active:duration-[var(--duration-instant)]",
         active ? "text-primary" : "text-muted-foreground hover:text-foreground"
       )}
     >
@@ -40,7 +40,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       <span
         aria-hidden="true"
         className={cn(
-          "bg-primary absolute top-0 h-0.5 w-8 rounded-full transition-opacity duration-150",
+          "bg-primary absolute top-0 h-0.5 w-8 rounded-full transition-opacity duration-[var(--duration-fast)] ease-[var(--ease-out)]",
           active ? "opacity-100" : "opacity-0"
         )}
       />
@@ -66,7 +66,7 @@ function MoreNavRow({
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150",
+        "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
         active ? "bg-primary/8 text-primary" : "text-foreground hover:bg-muted"
       )}

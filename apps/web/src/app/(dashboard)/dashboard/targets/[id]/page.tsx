@@ -111,21 +111,21 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="group p-5 transition-all duration-200 hover:shadow-md">
+        <Card className="group p-5 transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out)] hover:shadow-md">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Crosshair className="text-primary h-4 w-4" aria-hidden="true" />
-            Total Scans
+            Total Trust Runs
           </div>
           <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.scans}</p>
         </Card>
-        <Card className="group p-5 transition-all duration-200 hover:shadow-md">
+        <Card className="group p-5 transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out)] hover:shadow-md">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Bug className="text-primary h-4 w-4" aria-hidden="true" />
-            Total Findings
+            Total Issues
           </div>
           <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.findings}</p>
         </Card>
-        <Card className="group p-5 transition-all duration-200 hover:shadow-md">
+        <Card className="group p-5 transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out)] hover:shadow-md">
           <div className="text-muted-foreground text-sm">Last Scan</div>
           <p className="mt-2 text-2xl font-bold tracking-tight">
             {target.lastScanAt ? formatDate(target.lastScanAt) : "Never"}
@@ -221,11 +221,11 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
 
       <div className="overflow-x-auto rounded-xl border shadow-sm">
         <div className="border-b p-4">
-          <h2 className="text-lg font-semibold">Recent Scans</h2>
+          <h2 className="text-lg font-semibold">Recent Trust Runs</h2>
         </div>
         {target.scans.length === 0 ? (
           <div className="text-muted-foreground p-8 text-center text-sm">
-            No scans yet for this target.
+            No trust runs yet for this product.
           </div>
         ) : (
           <table className="w-full text-sm">

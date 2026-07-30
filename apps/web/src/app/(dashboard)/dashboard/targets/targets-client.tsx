@@ -509,8 +509,8 @@ export function TargetsClient({
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Name</th>
                 <th className="px-4 py-3 text-left font-semibold">Type</th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Scans</th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Findings</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Trust Runs</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Issues</th>
                 <th className="px-4 py-3 text-left font-semibold">Status</th>
                 <th className="px-4 py-3 text-left font-semibold">
                   <span className="sr-only">View</span>
