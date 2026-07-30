@@ -28,6 +28,8 @@ import { handleReadiness } from "./commands/readiness.js"
 import { handleTargets } from "./commands/targets.js"
 import { handleRules } from "./commands/rules.js"
 import { handleHook } from "./commands/hook.js"
+import { handleApprovals } from "./commands/approvals.js"
+import { handleMcp } from "./commands/mcp.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -65,6 +67,8 @@ const COMMANDS: Record<string, (args: string[], output: Output) => Promise<numbe
   targets: handleTargets,
   rules: handleRules,
   hook: handleHook,
+  approvals: handleApprovals,
+  mcp: handleMcp,
 }
 
 function usage(): string {
@@ -94,6 +98,8 @@ Commands:
   rules remove <agent> Remove an agent rules file
   rules check          Validate agent rule checksums
   hook install         Install a pre-commit hook
+  approvals            List, create, approve, or deny agent approvals
+  mcp call <tool>      Call a remote MCP tool
 
 Global flags:
   --json               Machine-readable output

@@ -564,6 +564,98 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           },
         },
       },
+      "/agent-approvals": {
+        get: {
+          summary: "List agent approvals",
+          parameters: [
+            workspaceIdParam,
+            {
+              name: "status",
+              in: "query",
+              required: false,
+              schema: { type: "string", enum: ["PENDING", "APPROVED", "DENIED", "EXPIRED"] },
+            },
+            { name: "cursor", in: "query", required: false, schema: { type: "string" } },
+            { name: "limit", in: "query", required: false, schema: { type: "string" } },
+          ],
+          responses: {
+            200: paginatedResponse(genericItem, "List of agent approvals"),
+            ...commonErrors,
+          },
+        },
+        post: {
+          summary: "Create an agent approval",
+          parameters: [workspaceIdParam],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    workspaceId: { type: "string" },
+                    actionName: { type: "string" },
+                    input: { type: "object" },
+                    expiresAt: { type: "string", format: "date-time" },
+                  },
+                  required: ["workspaceId", "actionName", "input"],
+                },
+              },
+            },
+          },
+          responses: {
+            201: successResponse(genericItem, "Agent approval created"),
+            ...commonErrors,
+          },
+        },
+      },
+      "/agent-approvals/{id}/approve": {
+        post: {
+          summary: "Approve an agent action",
+          parameters: [idPathParam, workspaceIdParam],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    workspaceId: { type: "string" },
+                    input: { type: "object" },
+                  },
+                  required: ["workspaceId", "input"],
+                },
+              },
+            },
+          },
+          responses: {
+            200: successResponse(genericItem, "Agent approval approved"),
+            ...commonErrors,
+          },
+        },
+      },
+      "/agent-approvals/{id}/deny": {
+        post: {
+          summary: "Deny an agent action",
+          parameters: [idPathParam, workspaceIdParam],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { workspaceId: { type: "string" } },
+                  required: ["workspaceId"],
+                },
+              },
+            },
+          },
+          responses: {
+            200: successResponse(genericItem, "Agent approval denied"),
+            ...commonErrors,
+          },
+        },
+      },
     },
     components: {
       securitySchemes,

@@ -12,6 +12,7 @@ const WINDOW_MS = 60_000
 const AUTH_MAX = 5
 const API_MAX = 30
 const LITE_SCAN_MAX = 5
+const APPROVAL_CREATE_MAX = 10
 /**
  * Scan starts per workspace per minute.
  *
@@ -190,4 +191,11 @@ export async function checkScanCreateRateLimit(workspaceId: string) {
   const upstash = await checkUpstash(SCAN_CREATE_MAX, "60 s", `scan-create:${workspaceId}`)
   if (upstash) return upstash
   return checkInMemory(`scan-create:${workspaceId}`, SCAN_CREATE_MAX, WINDOW_MS)
+}
+
+/** Bounds remote MCP approval creation per workspace. */
+export async function checkApprovalCreateRateLimit(workspaceId: string) {
+  const upstash = await checkUpstash(APPROVAL_CREATE_MAX, "60 s", `approval-create:${workspaceId}`)
+  if (upstash) return upstash
+  return checkInMemory(`approval-create:${workspaceId}`, APPROVAL_CREATE_MAX, WINDOW_MS)
 }

@@ -3,11 +3,23 @@ import { createInterface as createPrompt } from "node:readline/promises"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
 import { McpServer } from "./server"
-import type { ApprovalGate, McpServerOptions } from "./server"
+import type { ApprovalDecision, ApprovalGate, McpServerOptions } from "./server"
 import { logger } from "@lyrashield/logger"
 
 export const SERVER_NAME = "lyrashield-mcp"
 export const SERVER_VERSION = "0.2.0"
+
+export interface RemoteApprovalContext {
+  workspaceId: string
+  scopes: string[]
+  apiKeyInfo: { keyId: string; createdById: string }
+}
+
+export type RemoteApprovalGate = (
+  toolName: string,
+  args: Record<string, unknown>,
+  ctx: RemoteApprovalContext
+) => Promise<ApprovalDecision> | ApprovalDecision
 
 export interface CreateServerOptions {
   /** When true, mutating tools skip the approval gate (trusted CI). */
@@ -21,8 +33,14 @@ export interface CreateServerOptions {
    * - "deny": no approval channel exists (e.g. the stateless remote HTTP
    *   endpoint, where server→client elicitation can't round-trip). Mutating
    *   tools are refused with a clear reason unless allowMutations is set.
+   * - "remote-oob": create an AgentApproval row and return a structured PENDING
+   *   result; a later call with `approvalId` resumes after human approval.
    */
-  approvalMode?: "interactive" | "deny"
+  approvalMode?: "interactive" | "deny" | "remote-oob"
+  /** Gate callback for "remote-oob" mode. Receives the authenticated workspace context. */
+  remoteApprovalGate?: RemoteApprovalGate
+  /** Authenticated context for the remote approval gate. */
+  remoteApprovalContext?: RemoteApprovalContext
 }
 
 /**
@@ -110,7 +128,22 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
     return ttyApproval(toolName)
   }
 
-  const approvalGate = options.approvalMode === "deny" ? denyGate : interactiveGate
+  let approvalGate: ApprovalGate | undefined
+  if (options.allowMutations) {
+    approvalGate = undefined
+  } else if (options.approvalMode === "deny") {
+    approvalGate = denyGate
+  } else if (
+    options.approvalMode === "remote-oob" &&
+    options.remoteApprovalGate &&
+    options.remoteApprovalContext
+  ) {
+    const remote = options.remoteApprovalGate
+    const ctx = options.remoteApprovalContext
+    approvalGate = (toolName, args) => remote(toolName, args, ctx)
+  } else {
+    approvalGate = interactiveGate
+  }
 
   const engine = new McpServer({
     ...(options.allowMutations ? { allowMutations: true } : { approvalGate }),

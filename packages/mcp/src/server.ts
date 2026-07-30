@@ -11,10 +11,21 @@ import { PromptInjectionGuard } from "./prompt-injection-guard"
  * Wire this to the product's Agent Action Layer / a human confirmation prompt.
  * If omitted, the server is fail-closed: mutating tools are blocked.
  */
+export interface ApprovalDecision {
+  approved: boolean
+  /** When true, the call is held for out-of-band human approval rather than denied. */
+  pending?: boolean
+  approvalId?: string
+  approvalUrl?: string
+  reason?: string
+  /** Pre-computed tool result; if set and approved is true, the handler is skipped. */
+  result?: McpToolResult
+}
+
 export type ApprovalGate = (
   toolName: string,
   args: Record<string, unknown>
-) => Promise<{ approved: boolean; reason?: string }> | { approved: boolean; reason?: string }
+) => Promise<ApprovalDecision> | ApprovalDecision
 
 export interface McpServerOptions {
   serverName?: string
@@ -116,6 +127,27 @@ export class McpServer {
             reason: "No approval gate configured; mutating tools are blocked by default.",
           }
       if (!decision.approved) {
+        if (decision.pending) {
+          logger.info("MCP mutating tool pending human approval", {
+            tool: name,
+            approvalId: decision.approvalId,
+          })
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  status: "PENDING",
+                  approvalId: decision.approvalId,
+                  approvalUrl: decision.approvalUrl,
+                  message:
+                    decision.reason ??
+                    "This action requires human approval. Poll with the same arguments and approvalId once approved.",
+                }),
+              },
+            ],
+          }
+        }
         logger.warn("MCP mutating tool blocked — not approved", {
           tool: name,
           reason: decision.reason,
@@ -133,6 +165,10 @@ export class McpServer {
           ],
           isError: true,
         }
+      }
+      if (decision.result) {
+        logger.info("MCP mutating tool returned pre-computed approved result", { tool: name })
+        return decision.result
       }
       logger.info("MCP mutating tool approved", { tool: name })
     }

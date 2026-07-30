@@ -19,11 +19,18 @@ export {
   type ToolHandlerContext,
 } from "./tools"
 export { PromptInjectionGuard, type GuardResult } from "./prompt-injection-guard"
-export { McpServer, type McpServerOptions, type ApprovalGate } from "./server"
+export {
+  McpServer,
+  type McpServerOptions,
+  type ApprovalGate,
+  type ApprovalDecision,
+} from "./server"
 export {
   createLyraShieldServer,
   SERVER_NAME,
   SERVER_VERSION,
   type CreateServerOptions,
+  type RemoteApprovalGate,
+  type RemoteApprovalContext,
 } from "./create-server"
 export { handleRemoteMcpRequest, type RemoteMcpOptions } from "./http-transport"

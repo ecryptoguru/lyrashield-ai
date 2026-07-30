@@ -11,11 +11,15 @@ const updatedDate = "2026-07-24"
 const faqItems = [
   {
     q: "Can cloud editors run mutating LyraShield tools?",
-    a: "Remote mutating tools (scan triggers, finding submissions) are refused by default for safety. They require an explicit trusted-automation opt-in. Read-only inspection and reporting tools work everywhere via the remote endpoint.",
+    a: "Remote mutating tools (scan triggers, finding submissions, report creation) require a human out-of-band approval. When a cloud agent calls one, the server returns a PENDING result with an approvalId and a URL. After a human approves it in the LyraShield dashboard, the agent can re-call the same tool with the approvalId to execute it once. Read-only inspection and reporting tools work everywhere without approval. A `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true` opt-out still exists for genuinely trusted CI, but the approval flow is the recommended path.",
   },
   {
     q: "What is the difference between remote MCP and the GitHub Action?",
     a: "Remote MCP connects your cloud editor's AI assistant to LyraShield tools for interactive use. The GitHub Action runs automated checks in CI on every pull request without any AI editor involved. For cloud-hosted workflows, using both together is recommended.",
+  },
+  {
+    q: "How long does an approval stay pending?",
+    a: "Approvals expire after 15 minutes. An expired approval must be re-requested.",
   },
 ]
 
@@ -73,9 +77,11 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Read-only by default:</strong> Remote mutating tools (scan triggers, finding
-    submissions) are refused unless a trusted automation explicitly opts in. Read-only inspection
-    and reporting tools work everywhere.
+    <strong>Human approval required:</strong> Remote mutating tools (scan triggers, finding
+    submissions, report creation) return a PENDING result and an approval URL. They run only after a
+    human approves the action in the LyraShield dashboard. Read-only inspection and reporting tools
+    work everywhere. A <code>LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true</code> opt-out still works for
+    genuinely trusted CI, but the approval flow is the recommended path.
   </div>
 
   <h2>Endpoint details</h2>
@@ -103,6 +109,29 @@ const jsonLd: unknown[] = [
       </tr>
     </tbody>
   </table>
+
+  <h2>Mutating-tool approval flow</h2>
+  <p>
+    When a cloud editor calls a mutating tool over remote MCP, LyraShield does <strong>not</strong>
+    execute it immediately. Instead it creates a PENDING agent approval and returns a structured
+    result the agent can understand:
+  </p>
+  <pre><code>{`{
+  "status": "PENDING",
+  "approvalId": "cm...",
+  "approvalUrl": "https://app.lyrashieldai.com/agent-approvals/cm...",
+  "message": "This action requires human approval. Poll with the same arguments and approvalId once approved."
+}`}</code></pre>
+  <ol>
+    <li>A human opens the approval URL and reviews the exact action and inputs.</li>
+    <li>After approving, the agent re-calls the same tool with the same arguments plus <code>approvalId</code>.</li>
+    <li>LyraShield verifies the input hash, executes the tool exactly once, and returns the result.</li>
+    <li>Replays with the same approvalId return the stored result without re-executing.</li>
+  </ol>
+  <p>
+    Approvals expire after 15 minutes. An expired approval must be re-requested. Write scope is
+    required; read-only keys are refused even for approved actions.
+  </p>
 
   <h2>Lovable</h2>
   <p>

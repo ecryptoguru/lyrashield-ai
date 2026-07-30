@@ -1,0 +1,89 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/approvals", origin).toString()
+const title = "Agent Approvals"
+const description =
+  "Human out-of-band approval for mutating agent actions in LyraShield. PENDING approvals expire after 15 minutes."
+const updatedDate = "2026-07-31"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Docs", item: `${origin}/docs` },
+      { "@type": "ListItem", position: 3, name: "Approvals", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/approvals"
+>
+  <h1>Agent approvals</h1>
+  <p>
+    Mutating actions requested by a remote agent (scan, report, fix proposal, retest) are held in a
+    <strong>PENDING</strong> state until a human explicitly approves or denies them.
+  </p>
+
+  <h2>Lifecycle</h2>
+  <ol>
+    <li>The agent calls a mutating tool with its normal arguments.</li>
+    <li>
+      LyraShield returns a PENDING result with an <code>approvalId</code> and a URL such as{" "}
+      <code>https://app.lyrashieldai.com/agent-approvals/&lt;approvalId&gt;</code>.
+    </li>
+    <li>A human reviews the exact action and inputs, then approves or denies.</li>
+    <li>
+      The agent re-calls the same tool with the same arguments plus <code>approvalId</code>. The
+      server verifies the input hash, executes the tool once, and stores the result.
+    </li>
+    <li>
+      Replays with the same <code>approvalId</code> return the stored result without re-executing.
+    </li>
+  </ol>
+
+  <h2>Expiry</h2>
+  <p>
+    PENDING approvals expire after 15 minutes. An expired approval must be re-requested; the
+    human-readable URL will show the expired state.
+  </p>
+
+  <h2>API</h2>
+  <ul>
+    <li><code>GET /api/v1/agent-approvals?workspaceId=&lt;id&gt;</code> — list approvals</li>
+    <li><code>POST /api/v1/agent-approvals</code> — create an approval</li>
+    <li>
+      <code>POST /api/v1/agent-approvals/&lt;id&gt;/approve</code> — approve an action (requires{" "}
+      <code>input</code> for hash verification)
+    </li>
+    <li><code>POST /api/v1/agent-approvals/&lt;id&gt;/deny</code> — deny an action</li>
+  </ul>
+
+  <h2>Trusted CI opt-out</h2>
+  <p>
+    The environment variable <code>LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true</code> still bypasses
+    the approval gate for genuinely trusted automation. This is a blunt instrument; the approval
+    flow is the recommended default.
+  </p>
+</DocsLayout>

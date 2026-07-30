@@ -1,7 +1,8 @@
-import { verifyApiKey } from "@lyrashield/db"
+import { verifyApiKey, type VerifiedApiKey } from "@lyrashield/db"
 import { handleRemoteMcpRequest } from "@lyrashield/mcp"
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
+import { makeRemoteApprovalGate } from "./remote-approval-gate"
 
 /**
  * Remote LyraShield MCP endpoint (Streamable HTTP) at /api/mcp.
@@ -44,26 +45,32 @@ function unauthorized(): Response {
   )
 }
 
-async function authenticate(request: Request): Promise<string | null> {
+async function authenticate(request: Request): Promise<VerifiedApiKey | null> {
   const header = request.headers.get("authorization")
   if (!header?.startsWith("Bearer ")) return null
   const rawKey = header.slice("Bearer ".length).trim()
-  const verified = await verifyApiKey(rawKey)
-  if (!verified) return null
-  return rawKey
+  return verifyApiKey(rawKey)
 }
 
 async function handle(request: Request): Promise<Response> {
-  const rawKey = await authenticate(request)
-  if (!rawKey) return unauthorized()
+  const apiKeyInfo = await authenticate(request)
+  if (!apiKeyInfo) return unauthorized()
 
   try {
+    const toolContext = {
+      apiBaseUrl: env.NEXT_PUBLIC_APP_URL,
+      apiKey: request.headers.get("authorization")!.slice("Bearer ".length).trim(),
+    }
+
     return await handleRemoteMcpRequest(request, {
-      toolContext: {
-        apiBaseUrl: env.NEXT_PUBLIC_APP_URL,
-        apiKey: rawKey,
-      },
+      toolContext,
       allowMutations: ALLOW_REMOTE_MUTATIONS,
+      remoteApprovalContext: {
+        workspaceId: apiKeyInfo.workspaceId,
+        scopes: apiKeyInfo.scopes,
+        apiKeyInfo: { keyId: apiKeyInfo.keyId, createdById: apiKeyInfo.createdById },
+      },
+      remoteApprovalGate: makeRemoteApprovalGate({ apiKeyInfo, toolContext }),
     })
   } catch (err) {
     logger.error("Remote MCP request failed", {
