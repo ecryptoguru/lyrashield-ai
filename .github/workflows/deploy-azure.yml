@@ -122,10 +122,13 @@ jobs:
           # safety margin for rollback) and remove every dangling untagged manifest.
           keep-n-tagged: 10
           delete-untagged: true
-          # Dry run until a founder explicitly flips this to false and confirms the first
-          # real pass in the Action summary output. See docs/deployment/PRODUCTION_DEPLOYMENT.md
-          # "Known production blockers" for the sign-off record.
-          dry-run: true
+          # Live as of 2026-07-30. Founder-approved after reviewing a real dry-run pass
+          # (run 30496418272): it reported "no tagged images found to delete" and "no
+          # untagged images found" for both packages — with only ~10 accumulated versions
+          # against keep-n-tagged: 10, nothing had aged out yet, so the first live run is a
+          # verified no-op, not a leap of faith. See docs/deployment/PRODUCTION_DEPLOYMENT.md
+          # "Known production blockers" #4 for the full sign-off record.
+          dry-run: false
 
   deploy:
     name: Deploy Azure Container Apps

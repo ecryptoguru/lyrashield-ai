@@ -88,28 +88,49 @@ behaviour against a real database, and refuses to run — rather than passing va
 when handed a role that can bypass RLS. CI provisions that restricted role and exports
 `RLS_RUNTIME_DATABASE_URL`.
 
-### 4. Container registry cleanup runs in dry-run mode — needs a sign-off to go live
+### 4. Container registry cleanup — RESOLVED 2026-07-30, now live
 
-**Status:** dry-run only. `cleanup-old-images` in `deploy-azure.yml` runs after every deploy
-and reports what it *would* delete, but `dry-run: true` means nothing is actually removed yet.
+**Status:** live. `cleanup-old-images` in `deploy-azure.yml` runs after every successful
+deploy with `dry-run: false`, keeping the most recent 10 tagged versions per package and
+removing dangling untagged manifests.
 
-**Why this exists.** Every merge to `main` pushes a new SHA-tagged image and re-points
+**Why this existed.** Every merge to `main` pushes a new SHA-tagged image and re-points
 `:latest`; nothing ever deleted what it replaced. Multi-arch buildx pushes also leave several
 untagged manifests per build. Confirmed 2026-07-30: `lyrashield-web` had 10 versions (6
-untagged) and `lyrashield-worker` had 4 (3 untagged) after only a handful of deploys — this
-grows forever with no cap.
+untagged) and `lyrashield-worker` had 4 (3 untagged) after only a handful of deploys.
 
-**Why it is not deleting anything yet.** Deleting container images is irreversible, and a
-naive "delete this version ID" approach can remove an untagged manifest that a *kept* tagged
+**Why it shipped in dry-run first.** Deleting container images is irreversible, and a naive
+"delete this version ID" approach can remove an untagged manifest that a *kept* tagged
 manifest list still references, silently breaking a future pull of an image that still looks
 valid. `dataaxiom/ghcr-cleanup-action` resolves manifest lists before deleting specifically to
-avoid that, but a first run against months of accumulated history should still be reviewed
-before it is destructive.
+avoid that, but a first run against accumulated history was reviewed before going live rather
+than trusted blind.
 
-**To go live:** review a dry-run's Action summary output (what it proposes to delete for each
-package), confirm nothing currently deployed or needed for rollback is in that list, then flip
-`dry-run: false` in `deploy-azure.yml`. Currently configured to keep the most recent 10 tagged
-versions per package and remove all dangling untagged manifests.
+**What the review found.** Run `30496418272`'s dry-run pass reported "no tagged images found
+to delete" and "no untagged images found" for both packages — with `keep-n-tagged: 10` and
+only ~10 total accumulated versions, nothing had aged out yet. The first live run is a
+verified no-op, not a leap of faith; it starts actually pruning once deploy counts exceed the
+keep threshold.
+
+### 5. Nightly backups have a schedule but no credentials — they are not actually running
+
+**Status:** broken. Do not treat "the backup workflow is on a cron schedule" as "backups are
+happening." As of 2026-07-30 every scheduled run fails immediately with `AWS_ACCESS_KEY_ID is
+required`.
+
+**What happened.** `production-backup.yml` was `workflow_dispatch`-only until 2026-07-30, when
+a `schedule: cron("0 2 * * *")` trigger was added so nightly backups would not depend on
+someone remembering to click a button. The first automatic run then failed at its very first
+step. This is not a regression the schedule caused — the underlying credential gap already
+existed and dispatch-only runs were apparently never exercised (or never checked) — but adding
+the schedule is what surfaced it.
+
+**Way out.** Provision S3-compatible storage credentials (`AWS_ACCESS_KEY_ID` and whatever
+else the backup job's next failing step turns out to need — only the first missing variable
+is visible until this one is fixed) as repository secrets. Confirm whether this should be the
+same bucket/credentials as evidence storage (`S3_*` in the application config) or a dedicated
+backup destination, then re-run `production-backup.yml` via `workflow_dispatch` to confirm a
+real backup completes before trusting the nightly schedule.
 
 ## Release prerequisites
 
