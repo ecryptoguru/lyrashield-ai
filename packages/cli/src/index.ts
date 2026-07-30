@@ -91,6 +91,8 @@ Commands:
   readiness            Launch readiness
   targets              List or create targets
   rules add <agent>    Write an agent rules file
+  rules remove <agent> Remove an agent rules file
+  rules check          Validate agent rule checksums
   hook install         Install a pre-commit hook
 
 Global flags:
