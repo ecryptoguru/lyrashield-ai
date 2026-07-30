@@ -28,7 +28,7 @@ export default function NotFound() {
               404 · Not in evidence
             </p>
             <h1 className="mt-3 text-2xl font-bold tracking-tight text-balance">
-              This page isn&apos;t in evidence
+              404 — This page isn&apos;t in evidence
             </h1>
             <p className="text-muted-foreground mt-3 max-w-[32ch] text-sm text-pretty">
               The path doesn&apos;t exist or isn&apos;t available in this workspace. Check the URL
