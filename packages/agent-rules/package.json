@@ -1,0 +1,37 @@
+{
+  "name": "@lyrashield/agent-rules",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LyraShield AI per-agent rule and skill file renderers with managed-block discipline.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "lint": "eslint src --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "build": "tsup",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lyrashield/agent-registry": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsup": "^8.5.1",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

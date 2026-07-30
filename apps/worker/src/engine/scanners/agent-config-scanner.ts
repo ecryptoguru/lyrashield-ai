@@ -1,5 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { lstat, readFile, readdir } from "fs/promises"
+import { createHash } from "node:crypto"
 import { join } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
@@ -15,8 +16,26 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new Error("Agent configuration scan cancelled")
 }
 
-const INSTRUCTION_FILE_NAMES = new Set(["AGENTS.md", "CLAUDE.md", ".cursorrules", ".windsurfrules"])
-const COPILOT_INSTRUCTIONS = ".github/copilot-instructions.md"
+const INSTRUCTION_FILE_NAMES = new Set([
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".cursorrules",
+  ".windsurfrules",
+  ".clinerules",
+  "skill.md",
+])
+const INSTRUCTION_FILE_PATHS = new Set([
+  ".github/copilot-instructions.md",
+  ".cursor/rules/lyrashield.mdc",
+  ".windsurf/rules/lyrashield.md",
+])
+
+function isInstructionFile(relativePath: string): boolean {
+  const name = relativePath.split("/").pop() ?? ""
+  if (INSTRUCTION_FILE_NAMES.has(name)) return true
+  if (INSTRUCTION_FILE_PATHS.has(relativePath)) return true
+  return false
+}
 const MAX_FILE_BYTES = 512 * 1024
 const MAX_WORKFLOWS = 100
 const MAX_INSTRUCTION_WALK_ENTRIES = 20_000
@@ -43,6 +62,44 @@ const PROTECTIVE_INSTRUCTION_PATTERNS = [
   /^(?:do not|never|must not)\s+(?:disable|skip|bypass).{0,40}(?:security|tests?|review|approval)\s*[.!]?$/i,
   /^(?:do not|never|must not)\s+(?:upload|send|exfiltrate).{0,50}(?:\.env|secrets?|credentials?|tokens?)\s*[.!]?$/i,
 ]
+
+// Security-critical: only a checksum-valid LyraShield managed block is treated as
+// protective. We key on the full marker including the declared SHA-256 truncated to
+// 12 hex characters, not a bare string, so an attacker cannot bypass scanning by
+// naming an unrelated malicious block "lyrashield".
+const MANAGED_BLOCK_PATTERN =
+  /<!--\s*lyrashield:begin\s+v=([\w.]+)\s+sha=([0-9a-f]{12})\s*-->([\s\S]*?)<!--\s*lyrashield:end\s*-->/gi
+
+function hashManagedBody(body: string): string {
+  return createHash("sha256").update(body).digest("hex").slice(0, 12)
+}
+
+function stripManagedBlocks(content: string): string {
+  const matches: Array<{ start: number; end: number }> = []
+  MANAGED_BLOCK_PATTERN.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = MANAGED_BLOCK_PATTERN.exec(content)) !== null) {
+    const declaredSha = match[2] ?? ""
+    const body = match[3] ?? ""
+    if (hashManagedBody(body) === declaredSha) {
+      matches.push({ start: match.index, end: match.index + match[0].length })
+    }
+  }
+
+  if (matches.length === 0) return content
+
+  let cleaned = ""
+  let last = 0
+  for (const { start, end } of matches) {
+    cleaned += content.slice(last, start)
+    // Preserve line count so line numbers remain stable for the rest of the file.
+    const lineCount = content.slice(start, end).split("\n").length - 1
+    cleaned += "\n".repeat(lineCount)
+    last = end
+  }
+  cleaned += content.slice(last)
+  return cleaned
+}
 
 function finding(
   id: string,
@@ -124,10 +181,7 @@ async function findInstructionFiles(
         if (!IGNORED_DIRECTORIES.has(entry.name)) {
           await visit(join(directory, entry.name), relativePath, depth + 1)
         }
-      } else if (
-        entry.isFile() &&
-        (INSTRUCTION_FILE_NAMES.has(entry.name) || relativePath === COPILOT_INSTRUCTIONS)
-      ) {
+      } else if (entry.isFile() && isInstructionFile(relativePath)) {
         found.push(relativePath)
       }
     }
@@ -152,8 +206,11 @@ async function scanInstructionFiles(
   const findings: EngineVulnerability[] = []
   for (const file of await findInstructionFiles(repoPath, coverageIssues, signal)) {
     throwIfAborted(signal)
-    const content = await readBoundedFile(repoPath, file, coverageIssues)
-    if (!content) continue
+    const rawContent = await readBoundedFile(repoPath, file, coverageIssues)
+    if (!rawContent) continue
+    // Strip checksum-valid LyraShield managed blocks before scanning. An invalid or
+    // missing checksum is not considered protective and is scanned like any other text.
+    const content = stripManagedBlocks(rawContent)
     let inCodeFence = false
     for (const [index, line] of content.split("\n").entries()) {
       throwIfAborted(signal)
