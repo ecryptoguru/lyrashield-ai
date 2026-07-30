@@ -30,7 +30,8 @@ function pendingDecision(approvalId: string): {
     pending: true,
     approvalId,
     approvalUrl: approvalUrl(approvalId),
-    reason: "This action requires human approval. Poll with the same arguments and approvalId once approved.",
+    reason:
+      "This action requires human approval. Poll with the same arguments and approvalId once approved.",
   }
 }
 

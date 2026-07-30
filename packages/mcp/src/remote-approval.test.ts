@@ -91,13 +91,15 @@ function makeFakeGate(): { gate: RemoteApprovalGate; approvals: Map<string, Fake
         pending: true,
         approvalId: id,
         approvalUrl: `https://app.example.com/agent-approvals/${id}`,
-        reason: "This action requires human approval. Poll with the same arguments and approvalId once approved.",
+        reason:
+          "This action requires human approval. Poll with the same arguments and approvalId once approved.",
       }
     }
 
     const approval = approvals.get(approvalId)
     if (!approval) return { approved: false, reason: "Approval not found" }
-    if (!verifyInput(approval, toolName, toolArgs)) return { approved: false, reason: "Input hash mismatch" }
+    if (!verifyInput(approval, toolName, toolArgs))
+      return { approved: false, reason: "Input hash mismatch" }
     if (approval.status === "EXECUTED") {
       return { approved: true, result: resultFrom(approval.result) }
     }
@@ -123,7 +125,11 @@ function makeFakeGate(): { gate: RemoteApprovalGate; approvals: Map<string, Fake
   return { gate, approvals }
 }
 
-function verifyInput(approval: FakeApproval, toolName: string, input: Record<string, unknown>): boolean {
+function verifyInput(
+  approval: FakeApproval,
+  toolName: string,
+  input: Record<string, unknown>
+): boolean {
   return toolName === approval.actionName && hashInput(toolName, input) === approval.inputHash
 }
 
@@ -135,7 +141,10 @@ function resultFrom(data: Record<string, unknown> | undefined): {
   }
 }
 
-function callWithApprovalId(base: Record<string, unknown>, approvalId: string): Record<string, unknown> {
+function callWithApprovalId(
+  base: Record<string, unknown>,
+  approvalId: string
+): Record<string, unknown> {
   return { ...base, approvalId }
 }
 
@@ -159,7 +168,10 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
         jsonrpc: "2.0",
         id: 2,
         method: "tools/call",
-        params: { name: "lyrashield_run_pr_scan", arguments: { workspaceId: "ws-1", targetId: "t-1" } },
+        params: {
+          name: "lyrashield_run_pr_scan",
+          arguments: { workspaceId: "ws-1", targetId: "t-1" },
+        },
       }),
       {
         toolContext: ctx(fetchFn),
@@ -190,7 +202,10 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
         jsonrpc: "2.0",
         id: 2,
         method: "tools/call",
-        params: { name: "lyrashield_run_pr_scan", arguments: { workspaceId: "ws-1", targetId: "t-1" } },
+        params: {
+          name: "lyrashield_run_pr_scan",
+          arguments: { workspaceId: "ws-1", targetId: "t-1" },
+        },
       }),
       {
         toolContext: ctx(fetchFn),
@@ -204,7 +219,7 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
     )
     const firstBody = await readJson(first)
     const firstResult = JSON.parse(
-      ((firstBody.result as { content?: Array<{ text: string }> })?.content?.[0]?.text) ?? "{}"
+      (firstBody.result as { content?: Array<{ text: string }> })?.content?.[0]?.text ?? "{}"
     ) as Record<string, unknown>
     const approvalId = firstResult.approvalId as string
 
@@ -247,7 +262,10 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
         jsonrpc: "2.0",
         id: 2,
         method: "tools/call",
-        params: { name: "lyrashield_run_pr_scan", arguments: { workspaceId: "ws-1", targetId: "t-1" } },
+        params: {
+          name: "lyrashield_run_pr_scan",
+          arguments: { workspaceId: "ws-1", targetId: "t-1" },
+        },
       }),
       {
         toolContext: ctx(fetchFn),
@@ -261,7 +279,7 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
     )
     const firstBody = await readJson(first)
     const firstResult = JSON.parse(
-      ((firstBody.result as { content?: Array<{ text: string }> })?.content?.[0]?.text) ?? "{}"
+      (firstBody.result as { content?: Array<{ text: string }> })?.content?.[0]?.text ?? "{}"
     ) as Record<string, unknown>
     const approvalId = firstResult.approvalId as string
 
@@ -321,7 +339,10 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
     const thirdBody = await readJson(third)
     const thirdResult = thirdBody.result as { isError?: boolean; content?: Array<{ text: string }> }
     expect(thirdResult?.isError).toBeFalsy()
-    const thirdPayload = JSON.parse(thirdResult?.content?.[0]?.text ?? "{}") as Record<string, unknown>
+    const thirdPayload = JSON.parse(thirdResult?.content?.[0]?.text ?? "{}") as Record<
+      string,
+      unknown
+    >
     expect(thirdPayload.id).toBe("scan-1")
     expect(fetchFn).not.toHaveBeenCalled()
   })
@@ -333,7 +354,10 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
         jsonrpc: "2.0",
         id: 2,
         method: "tools/call",
-        params: { name: "lyrashield_run_pr_scan", arguments: { workspaceId: "ws-1", targetId: "t-1" } },
+        params: {
+          name: "lyrashield_run_pr_scan",
+          arguments: { workspaceId: "ws-1", targetId: "t-1" },
+        },
       }),
       { toolContext: ctx(fetchFn), allowMutations: true }
     )
@@ -349,14 +373,23 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
       if (!ctx.scopes.includes("write")) {
         return { approved: false, reason: "API key does not have write scope" }
       }
-      return { approved: false, pending: true, approvalId: "x", approvalUrl: "y", reason: "pending" }
+      return {
+        approved: false,
+        pending: true,
+        approvalId: "x",
+        approvalUrl: "y",
+        reason: "pending",
+      }
     }
     const res = await handleRemoteMcpRequest(
       mcpRequest({
         jsonrpc: "2.0",
         id: 2,
         method: "tools/call",
-        params: { name: "lyrashield_run_pr_scan", arguments: { workspaceId: "ws-1", targetId: "t-1" } },
+        params: {
+          name: "lyrashield_run_pr_scan",
+          arguments: { workspaceId: "ws-1", targetId: "t-1" },
+        },
       }),
       {
         toolContext: ctx(fetchFn),

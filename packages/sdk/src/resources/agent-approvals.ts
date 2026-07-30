@@ -74,14 +74,16 @@ export function approveAgentApproval(
     ...input,
     workspaceId: input.workspaceId ?? client.workspaceId,
   }
-  return client.request<AgentApproval>("POST", `/agent-approvals/${encodeURIComponent(id)}/approve`, { body })
+  return client.request<AgentApproval>(
+    "POST",
+    `/agent-approvals/${encodeURIComponent(id)}/approve`,
+    { body }
+  )
 }
 
-export function denyAgentApproval(
-  client: LyraShieldClient,
-  id: string,
-  workspaceId?: string
-) {
+export function denyAgentApproval(client: LyraShieldClient, id: string, workspaceId?: string) {
   const body = { workspaceId: workspaceId ?? client.workspaceId }
-  return client.request<AgentApproval>("POST", `/agent-approvals/${encodeURIComponent(id)}/deny`, { body })
+  return client.request<AgentApproval>("POST", `/agent-approvals/${encodeURIComponent(id)}/deny`, {
+    body,
+  })
 }

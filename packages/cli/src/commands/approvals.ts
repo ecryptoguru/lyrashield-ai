@@ -29,7 +29,10 @@ export async function handleApprovals(args: string[], output: Output): Promise<n
   switch (subcommand) {
     case "list": {
       const status = (parsed.status as string | undefined) ?? undefined
-      const res = await listAgentApprovals(client, { workspaceId, ...(status ? { status: status as never } : {}) })
+      const res = await listAgentApprovals(client, {
+        workspaceId,
+        ...(status ? { status: status as never } : {}),
+      })
       output.result(res)
       return 0
     }
@@ -39,7 +42,9 @@ export async function handleApprovals(args: string[], output: Output): Promise<n
         output.error("Usage: lyrashield approvals create <actionName> --input '{...}'")
         return 2
       }
-      const input = parsed.input ? (JSON.parse(parsed.input as string) as Record<string, unknown>) : {}
+      const input = parsed.input
+        ? (JSON.parse(parsed.input as string) as Record<string, unknown>)
+        : {}
       const res = await createAgentApproval(client, { workspaceId, actionName: action, input })
       output.result(res)
       return 0
@@ -49,7 +54,9 @@ export async function handleApprovals(args: string[], output: Output): Promise<n
         output.error("Usage: lyrashield approvals approve <approvalId> --input '{...}'")
         return 2
       }
-      const input = parsed.input ? (JSON.parse(parsed.input as string) as Record<string, unknown>) : {}
+      const input = parsed.input
+        ? (JSON.parse(parsed.input as string) as Record<string, unknown>)
+        : {}
       const res = await approveAgentApproval(client, id, { workspaceId, input })
       output.result(res)
       return 0

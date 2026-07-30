@@ -42,7 +42,11 @@ vi.mock("@lyrashield/sdk", async (importOriginal) => {
   return {
     ...mod,
     listAgentApprovals: vi.fn(async () => mockApprovals),
-    createAgentApproval: vi.fn(async () => ({ id: "apv-3", actionName: "lyrashield_scan_target", status: "PENDING" })),
+    createAgentApproval: vi.fn(async () => ({
+      id: "apv-3",
+      actionName: "lyrashield_scan_target",
+      status: "PENDING",
+    })),
     approveAgentApproval: vi.fn(async () => ({ id: "apv-1", status: "APPROVED" })),
     denyAgentApproval: vi.fn(async () => ({ id: "apv-1", status: "DENIED" })),
   }
@@ -68,7 +72,10 @@ describe("lyrashield approvals command conformance", () => {
 
   it("creates an approval", async () => {
     const output = makeOutput()
-    const code = await handleApprovals(["create", "lyrashield_scan_target", "--input", '{"targetId":"t-1"}'], output)
+    const code = await handleApprovals(
+      ["create", "lyrashield_scan_target", "--input", '{"targetId":"t-1"}'],
+      output
+    )
     expect(code).toBe(0)
     expect((output.lines[0] as { result: unknown }).result).toEqual({
       id: "apv-3",
@@ -79,16 +86,25 @@ describe("lyrashield approvals command conformance", () => {
 
   it("approves an approval", async () => {
     const output = makeOutput()
-    const code = await handleApprovals(["approve", "apv-1", "--input", '{"targetId":"t-1"}'], output)
+    const code = await handleApprovals(
+      ["approve", "apv-1", "--input", '{"targetId":"t-1"}'],
+      output
+    )
     expect(code).toBe(0)
-    expect((output.lines[0] as { result: unknown }).result).toEqual({ id: "apv-1", status: "APPROVED" })
+    expect((output.lines[0] as { result: unknown }).result).toEqual({
+      id: "apv-1",
+      status: "APPROVED",
+    })
   })
 
   it("denies an approval", async () => {
     const output = makeOutput()
     const code = await handleApprovals(["deny", "apv-1"], output)
     expect(code).toBe(0)
-    expect((output.lines[0] as { result: unknown }).result).toEqual({ id: "apv-1", status: "DENIED" })
+    expect((output.lines[0] as { result: unknown }).result).toEqual({
+      id: "apv-1",
+      status: "DENIED",
+    })
   })
 
   it("shows usage when called without subcommand", async () => {

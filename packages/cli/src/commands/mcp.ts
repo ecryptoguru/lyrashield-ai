@@ -6,7 +6,11 @@ const MCP_ENDPOINT = "/api/mcp"
 const PROTOCOL_VERSION = "2025-06-18"
 
 export async function handleMcp(args: string[], output: Output): Promise<number> {
-  const parsed = minimist(args, { boolean: ["help"], alias: { h: "help" }, default: { help: false } })
+  const parsed = minimist(args, {
+    boolean: ["help"],
+    alias: { h: "help" },
+    default: { help: false },
+  })
 
   if (parsed.help || parsed._.length < 2) {
     output.notice(usage())
@@ -37,7 +41,11 @@ export async function handleMcp(args: string[], output: Output): Promise<number>
     jsonrpc: "2.0",
     id: 1,
     method: "initialize",
-    params: { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "lyrashield-cli", version: "0.1.0" } },
+    params: {
+      protocolVersion: PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: { name: "lyrashield-cli", version: "0.1.0" },
+    },
   }
 
   const callReq = {
@@ -54,20 +62,29 @@ export async function handleMcp(args: string[], output: Output): Promise<number>
   }
 
   // Initialize first (stateless transport still requires protocol negotiation).
-  const initRes = await fetch(`${baseUrl}${MCP_ENDPOINT}`, { method: "POST", headers, body: JSON.stringify(initReq) })
+  const initRes = await fetch(`${baseUrl}${MCP_ENDPOINT}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(initReq),
+  })
   if (!initRes.ok) {
     output.error(`MCP initialization failed: ${initRes.status} ${initRes.statusText}`)
     return 1
   }
 
-  const callRes = await fetch(`${baseUrl}${MCP_ENDPOINT}`, { method: "POST", headers, body: JSON.stringify(callReq) })
+  const callRes = await fetch(`${baseUrl}${MCP_ENDPOINT}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(callReq),
+  })
   if (!callRes.ok) {
     output.error(`MCP call failed: ${callRes.status} ${callRes.statusText}`)
     return 1
   }
 
   const text = await callRes.text()
-  const json = parseSseJson(text, callRes.headers.get("content-type")) as Record<string, unknown> | undefined
+  const json = parseSseJson(text, callRes.headers.get("content-type")) as
+    Record<string, unknown> | undefined
   const result = (json?.result ?? json) as Record<string, unknown> | undefined
 
   if (result && typeof result === "object") {
