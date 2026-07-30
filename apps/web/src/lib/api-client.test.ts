@@ -230,5 +230,21 @@ describe("api-client", () => {
         apiGetConditional("/api/test", { signal: controller.signal })
       ).rejects.toMatchObject({ code: "ABORTED" })
     })
+
+    it("reports a malformed successful response as a parse error", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => {
+          throw new Error("Invalid JSON")
+        },
+      })
+
+      await expect(apiGetConditional("/api/test")).rejects.toMatchObject({
+        code: "PARSE_ERROR",
+        status: 200,
+      })
+    })
   })
 })

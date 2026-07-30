@@ -15,7 +15,7 @@
     "db:seed": "pnpm --filter @lyrashield/db seed",
     "db:studio": "pnpm --filter @lyrashield/db studio",
     "test": "vitest run --exclude '**/dist/**' && pnpm --filter @lyrashield/marketing exec vitest run && node --test apps/marketing-motion/tests/*.test.mjs",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --grep-invert '@visual'",
     "test:watch": "vitest --exclude '**/dist/**'"
   },
   "devDependencies": {

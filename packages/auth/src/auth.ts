@@ -151,12 +151,6 @@ export const auth = betterAuth({
     requireEmailVerification: emailVerificationEnabled,
     sendResetPassword: sendResetPasswordEmail,
   },
-  emailVerification: {
-    sendVerificationEmail,
-    sendOnSignUp: true,
-    sendOnSignIn: true,
-    autoSignInAfterVerification: true,
-  },
   ...(emailVerificationEnabled && !isDev
     ? {
         emailVerification: {

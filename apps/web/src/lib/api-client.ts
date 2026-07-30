@@ -129,7 +129,16 @@ export async function apiGetConditional<T>(
       throw new ApiError("HTTP_ERROR", `Request failed with status ${res.status}`, res.status)
     }
 
-    const json = (await res.json()) as ApiResponse<T>
+    let json: ApiResponse<T>
+    try {
+      json = (await res.json()) as ApiResponse<T>
+    } catch {
+      throw new ApiError(
+        "PARSE_ERROR",
+        `Failed to parse response (status ${res.status})`,
+        res.status
+      )
+    }
     if (!json.success) {
       throw new ApiError(
         json.error?.code ?? "UNKNOWN_ERROR",
