@@ -61,7 +61,7 @@ export function AuthSplitLayout({
             ))}
           </ul>
         </div>
-        <div className="relative flex items-center gap-4 p-10 text-xs text-muted-foreground lg:p-14">
+        <div className="text-muted-foreground relative flex items-center gap-4 p-10 text-xs lg:p-14">
           <Link href="https://lyrashieldai.com" className="hover:text-foreground transition-colors">
             lyrashieldai.com
           </Link>
@@ -84,7 +84,10 @@ export function AuthSplitLayout({
 
       {/* Form side */}
       <div className="relative flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
-        <div className="gradient-hero pointer-events-none absolute inset-0 md:hidden" aria-hidden="true" />
+        <div
+          className="gradient-hero pointer-events-none absolute inset-0 md:hidden"
+          aria-hidden="true"
+        />
         <div className="relative w-full max-w-md">
           {/* Mobile-only compact brand mark (panel covers it at md+) */}
           <div className="mb-8 flex flex-col items-center md:hidden">
