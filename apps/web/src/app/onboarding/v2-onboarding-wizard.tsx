@@ -2,12 +2,18 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-react"
 import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
 import { apiGet, apiPost, apiPatch } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
 import { GOAL_OPTIONS } from "@/lib/labels"
+import {
+  buildUrlTargetPayload,
+  pathLabel,
+  pathNeedsRepo,
+  type OnboardingPath,
+} from "./onboarding-flow.utils"
 
 interface V2OnboardingData {
   currentStep: number
@@ -41,6 +47,10 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
   const [productName, setProductName] = useState("")
   const [environment, setEnvironment] = useState("STAGING")
   const [selectedGoal, setSelectedGoal] = useState<string>("LAUNCH_REVIEW")
+  // Four-way step 2: which way the user chose to add their first target.
+  const [path, setPath] = useState<OnboardingPath>(null)
+  const [githubUnavailable, setGithubUnavailable] = useState(false)
+  const [urlForm, setUrlForm] = useState({ name: "", url: "", ownershipAttested: false })
   const autoFetchAttempted = useRef(false)
 
   function bucketCount(n: number): string {
@@ -128,9 +138,80 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
       })
       track("github_connect_started")
       window.open(res.installUrl, "_blank", "noopener,noreferrer")
+      setPath("github")
       setStep(2)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not start GitHub connect.")
+      // The GitHub App is not configured (or the endpoint otherwise failed). Do
+      // not strand the user: mark the path unavailable and keep them on the
+      // four-way choice with the other three ways forward intact.
+      setGithubUnavailable(true)
+      setPath(null)
+      setError(
+        cause instanceof Error && cause.message
+          ? `GitHub connect is unavailable right now (${cause.message}). You can add an app URL or API instead, or skip for now.`
+          : "GitHub connect is unavailable right now. You can add an app URL or API instead, or skip for now."
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function choosePath(next: Exclude<OnboardingPath, null>) {
+    setError(null)
+    if (next === "skip") {
+      void skipOnboarding()
+      return
+    }
+    if (next === "github") {
+      void connectGitHub()
+      return
+    }
+    // URL / API: prefill a sensible product name, then collect the URL.
+    setPath(next)
+    if (!productName) {
+      setProductName(next === "api" ? "Production API" : "Staging Site")
+    }
+  }
+
+  async function skipOnboarding() {
+    setLoading(true)
+    setError(null)
+    try {
+      await persist({ skipped: true, currentStep: 0 })
+      router.push("/dashboard")
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not skip setup.")
+      setLoading(false)
+    }
+  }
+
+  async function continueWithUrlTarget() {
+    const payload = buildUrlTargetPayload({
+      workspaceId: data.workspaceId,
+      path,
+      name: urlForm.name,
+      url: urlForm.url,
+      environment,
+      ownershipAttested: urlForm.ownershipAttested,
+    })
+    if (!payload) {
+      setError(
+        urlForm.ownershipAttested
+          ? "Enter a name and a valid URL to continue."
+          : "Confirm you own or are authorized to scan this target."
+      )
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const target = await apiPost<{ id: string; name: string }>("/api/targets", payload)
+      setProductName(target.name)
+      await persist({ targetId: target.id, currentStep: 3, skipped: false })
+      setStep(3)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not add that target.")
     } finally {
       setLoading(false)
     }
@@ -147,8 +228,19 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
   }
 
   async function createProductAndStart() {
-    if (!data.workspaceId || !selectedRepo) {
+    if (!data.workspaceId) {
+      setError("Workspace is required.")
+      return
+    }
+    // GitHub path creates a REPO target here; URL/API already created theirs in
+    // the previous step (data.targetId), so they only need to start the scan.
+    const needsRepo = pathNeedsRepo(path)
+    if (needsRepo && !selectedRepo) {
       setError("Workspace and repository are required.")
+      return
+    }
+    if (!needsRepo && !data.targetId) {
+      setError("Add a target to continue.")
       return
     }
     if (!productName.trim()) {
@@ -163,20 +255,24 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
     setLoading(true)
     setError(null)
     try {
-      const target = await apiPost<{ id: string }>("/api/targets", {
-        workspaceId: data.workspaceId,
-        name: productName.trim(),
-        type: "REPO",
-        repoProvider: "github",
-        repoOwner: selectedRepo.owner,
-        repoName: selectedRepo.name,
-        branch: selectedRepo.defaultBranch,
-        environment,
-      })
-      await persist({ targetId: target.id, selectedGoal, currentStep: 3, skipped: false })
+      let targetId = data.targetId
+      if (needsRepo && selectedRepo) {
+        const target = await apiPost<{ id: string }>("/api/targets", {
+          workspaceId: data.workspaceId,
+          name: productName.trim(),
+          type: "REPO",
+          repoProvider: "github",
+          repoOwner: selectedRepo.owner,
+          repoName: selectedRepo.name,
+          branch: selectedRepo.defaultBranch,
+          environment,
+        })
+        targetId = target.id
+        await persist({ targetId: target.id, selectedGoal, currentStep: 3, skipped: false })
+      }
       const scan = await apiPost<{ id: string }>("/api/scans", {
         workspaceId: data.workspaceId,
-        targetId: target.id,
+        targetId,
         goal: selectedGoal,
         mode: "SAFE",
       })
@@ -196,11 +292,11 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
     }
   }
 
-  const steps = ["Workspace", "Connect GitHub", "Select repository", `${PRODUCT_SINGULAR} details`]
+  const steps = ["Workspace", "Add target", "Select repository", `${PRODUCT_SINGULAR} details`]
 
   return (
     <div className="w-full max-w-2xl">
-      <ol className="mb-6 grid grid-cols-4 border-y" aria-label="Getting started progress">
+      <ol className="mb-2 grid grid-cols-4 border-y" aria-label="Getting started progress">
         {steps.map((label, index) => {
           const current = index === step
           const done = index < step
@@ -217,11 +313,17 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
               <span className="mb-1 flex size-5 items-center justify-center border text-[10px]">
                 {done ? <Check className="size-3" aria-hidden="true" /> : index + 1}
               </span>
-              <span className="hidden sm:inline">{label}</span>
+              {/* Always name the current step on every breakpoint; the rest stay
+                  desktop-only to avoid crowding phones. A bare "1-2-3-4" gave
+                  mobile users no idea where they were. */}
+              <span className={current ? "inline" : "hidden sm:inline"}>{label}</span>
             </li>
           )
         })}
       </ol>
+      <p className="text-muted-foreground mb-4 text-xs sm:hidden" aria-live="polite">
+        Step {step + 1} of {steps.length}
+      </p>
 
       {error && (
         <p
@@ -262,35 +364,156 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
           </div>
         )}
 
-        {step === 1 && (
+        {step === 1 && path !== "url" && path !== "api" && (
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
                 Step 2
               </p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight">Connect GitHub</h2>
+              <h2 className="mt-1 text-2xl font-bold tracking-tight">Add your first target</h2>
               <p className="text-muted-foreground mt-2 text-sm">
-                Authorise the LyraShield GitHub App to read your repositories.
+                Choose what LyraShield reviews first. You can connect GitHub, point at a live app
+                or API, or set this up later.
               </p>
             </div>
-            <div className="bg-muted/50 rounded-lg border p-6 text-center">
-              <GithubIcon className="mx-auto mb-3 size-10" aria-hidden="true" />
-              <p className="text-sm">
-                We only read repository metadata and source code you grant access to. We never write
-                code without an approval.
-              </p>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => choosePath("github")}
+                disabled={loading || githubUnavailable}
+                className="rounded-lg border p-4 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <GithubIcon className="mb-2 size-6" aria-hidden="true" />
+                <span className="block text-sm font-medium">Connect GitHub</span>
+                <span className="text-muted-foreground mt-1 block text-xs">
+                  {githubUnavailable
+                    ? "Unavailable right now — pick another option."
+                    : "Review a repository. Read-only; we never write code without an approval."}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => choosePath("url")}
+                disabled={loading}
+                className="rounded-lg border p-4 text-left transition-colors hover:bg-accent disabled:opacity-60"
+              >
+                <Globe className="text-primary mb-2 size-6" aria-hidden="true" />
+                <span className="block text-sm font-medium">Add an app URL</span>
+                <span className="text-muted-foreground mt-1 block text-xs">
+                  Scan a live web app over HTTP — no repo access needed.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => choosePath("api")}
+                disabled={loading}
+                className="rounded-lg border p-4 text-left transition-colors hover:bg-accent disabled:opacity-60"
+              >
+                <Globe className="text-primary mb-2 size-6" aria-hidden="true" />
+                <span className="block text-sm font-medium">Add an API</span>
+                <span className="text-muted-foreground mt-1 block text-xs">
+                  Scan an API&apos;s public surface — no repo access needed.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => choosePath("skip")}
+                disabled={loading}
+                className="rounded-lg border border-dashed p-4 text-left transition-colors hover:bg-accent disabled:opacity-60"
+              >
+                <ChevronRight className="text-muted-foreground mb-2 size-6" aria-hidden="true" />
+                <span className="block text-sm font-medium">Skip for now</span>
+                <span className="text-muted-foreground mt-1 block text-xs">
+                  Go to your dashboard. You can add a target anytime.
+                </span>
+              </button>
             </div>
-            <div className="flex justify-between gap-3">
+
+            <div className="flex justify-start">
               <Button type="button" variant="ghost" onClick={() => setStep(0)} disabled={loading}>
                 <ChevronLeft className="size-4" /> Back
               </Button>
-              <Button type="button" onClick={connectGitHub} disabled={loading}>
+            </div>
+          </div>
+        )}
+
+        {step === 1 && (path === "url" || path === "api") && (
+          <div className="space-y-5">
+            <div>
+              <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
+                Step 2
+              </p>
+              <h2 className="mt-1 text-2xl font-bold tracking-tight">
+                {path === "api" ? "Add your API" : "Add your app URL"}
+              </h2>
+              <p className="text-muted-foreground mt-2 text-sm">
+                {path === "api"
+                  ? "Point LyraShield at the API's base URL. Scans run over HTTP against the public surface."
+                  : "Point LyraShield at the app's URL. Scans run over HTTP against the public surface."}{" "}
+                You can connect GitHub later from Integrations.
+              </p>
+            </div>
+
+            <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="url-name">
+              <Input
+                id="url-name"
+                type="text"
+                value={urlForm.name}
+                onChange={(e) => setUrlForm({ ...urlForm, name: e.target.value })}
+                maxLength={100}
+                autoFocus
+                placeholder={path === "api" ? "Production API" : "Staging Site"}
+              />
+            </FormField>
+
+            <FormField label="URL" htmlFor="url-input">
+              <Input
+                id="url-input"
+                type="url"
+                value={urlForm.url}
+                onChange={(e) => setUrlForm({ ...urlForm, url: e.target.value })}
+                placeholder={
+                  path === "api" ? "https://api.example.com" : "https://staging.example.com"
+                }
+              />
+            </FormField>
+
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={urlForm.ownershipAttested}
+                onChange={(e) => setUrlForm({ ...urlForm, ownershipAttested: e.target.checked })}
+                className="mt-0.5"
+              />
+              <span className="text-muted-foreground">
+                I own or am authorized to scan this target.
+              </span>
+            </label>
+
+            <div className="flex justify-between gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setPath(null)}
+                disabled={loading}
+              >
+                <ChevronLeft className="size-4" /> Back
+              </Button>
+              <Button
+                type="button"
+                onClick={continueWithUrlTarget}
+                disabled={loading || !urlForm.ownershipAttested}
+              >
                 {loading ? (
                   <Spinner className="mr-2" />
                 ) : (
-                  <GithubIcon className="size-4" aria-hidden="true" />
+                  <ChevronRight className="size-4" aria-hidden="true" />
                 )}
-                Connect GitHub
+                Continue
               </Button>
             </div>
           </div>
@@ -377,7 +600,9 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">{PRODUCT_SINGULAR} details</h2>
               <p className="text-muted-foreground mt-2 text-sm">
-                Name your {PRODUCT_SINGULAR.toLowerCase()} and choose the environment to review.
+                {pathNeedsRepo(path)
+                  ? `Name your ${PRODUCT_SINGULAR.toLowerCase()} and choose the environment to review.`
+                  : `Reviewing your ${pathLabel(path)}. Name it and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
               </p>
             </div>
 
@@ -439,7 +664,14 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
             </p>
 
             <div className="flex justify-between gap-3">
-              <Button type="button" variant="ghost" onClick={() => setStep(2)} disabled={loading}>
+              {/* GitHub path backs into repo-select (step 2); URL/API back into
+                  the URL form (step 1, path kept). */}
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setStep(pathNeedsRepo(path) ? 2 : 1)}
+                disabled={loading}
+              >
                 <ChevronLeft className="size-4" /> Back
               </Button>
               <Button type="button" onClick={createProductAndStart} disabled={loading}>
