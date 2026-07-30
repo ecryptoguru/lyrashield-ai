@@ -17,7 +17,13 @@ const themes: Array<{ value: ThemePreference; label: string; icon: typeof Monito
   { value: "dark", label: "Dark theme", icon: Moon },
 ]
 
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({
+  className,
+  tooltipSide = "right",
+}: {
+  className?: string
+  tooltipSide?: "top" | "right" | "bottom" | "left"
+}) {
   const preference = useSyncExternalStore(
     (onChange) => {
       window.addEventListener(THEME_EVENT, onChange)
@@ -54,7 +60,7 @@ export function ThemeToggle({ className }: { className?: string }) {
           <Icon aria-hidden="true" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="right">{current.label}</TooltipContent>
+      <TooltipContent side={tooltipSide}>{current.label}</TooltipContent>
     </Tooltip>
   )
 }

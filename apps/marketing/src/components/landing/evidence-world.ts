@@ -15,6 +15,8 @@ class EvidenceWorldElement extends HTMLElement {
   private posters: HTMLElement[] = []
   private chapters: HTMLElement[] = []
   private videos: HTMLVideoElement[] = []
+  private progressLabel?: HTMLElement
+  private progressBar?: HTMLElement
   private activeIndex = 0
   private frontVideo = 0
   private frame = 0
@@ -24,6 +26,7 @@ class EvidenceWorldElement extends HTMLElement {
   private motionEnabled = true
   private viewportWidth = 0
   private targetTime = 0
+  private targetProgress = 0
   private observer?: IntersectionObserver
   private fetchController?: AbortController
   private objectUrls = new Map<number, string>()
@@ -38,6 +41,8 @@ class EvidenceWorldElement extends HTMLElement {
     this.posters = Array.from(this.querySelectorAll<HTMLElement>("[data-poster-index]"))
     this.chapters = Array.from(this.querySelectorAll<HTMLElement>("[data-chapter-index]"))
     this.videos = Array.from(this.querySelectorAll<HTMLVideoElement>("video"))
+    this.progressLabel = this.querySelector<HTMLElement>("[data-progress-label]") ?? undefined
+    this.progressBar = this.querySelector<HTMLElement>("[data-progress-bar]") ?? undefined
     this.viewportWidth = innerWidth
 
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -158,6 +163,7 @@ class EvidenceWorldElement extends HTMLElement {
     const scaled = Math.min(chapterCount - 0.000001, progress * chapterCount)
     const nextIndex = progress === 1 ? chapterCount - 1 : Math.floor(scaled)
     const chapterProgress = progress === 1 ? 1 : Math.min(1, Math.max(0, scaled - nextIndex))
+    this.targetProgress = chapterProgress
 
     if (nextIndex !== this.activeIndex) {
       const previousFront = this.frontVideo
@@ -165,8 +171,15 @@ class EvidenceWorldElement extends HTMLElement {
       this.updatePosters(nextIndex)
       this.updateChapters(nextIndex)
       const readySlot = this.findReadySlot(nextIndex)
-      if (readySlot === undefined) this.showPoster()
-      else this.showVideo(readySlot)
+      if (!this.motionEnabled || readySlot === undefined) {
+        this.showPoster()
+      } else {
+        const video = this.videos[readySlot]
+        this.targetTime = chapterProgress * Math.max(video.duration - 1 / 30, 0)
+        if (Math.abs(this.targetTime - video.currentTime) <= this.seekEpsilon())
+          this.showVideo(readySlot)
+        else this.showPoster()
+      }
       if (this.motionEnabled) void this.loadPair(nextIndex, previousFront)
       if (!this.motionEnabled) this.captureView(nextIndex, "poster")
     }
@@ -179,11 +192,9 @@ class EvidenceWorldElement extends HTMLElement {
       this.queueSeek()
     }
 
-    const label = this.querySelector<HTMLElement>("[data-progress-label]")
-    const bar = this.querySelector<HTMLElement>("[data-progress-bar]")
-    if (label)
-      label.textContent = `${String(nextIndex + 1).padStart(2, "0")} / ${String(chapterCount).padStart(2, "0")}`
-    if (bar) bar.style.transform = `scaleX(${Math.max(0.02, progress)})`
+    if (this.progressLabel)
+      this.progressLabel.textContent = `${String(nextIndex + 1).padStart(2, "0")} / ${String(chapterCount).padStart(2, "0")}`
+    if (this.progressBar) this.progressBar.style.transform = `scaleX(${Math.max(0.02, progress)})`
   }
 
   private queueSeek = () => {
@@ -193,18 +204,18 @@ class EvidenceWorldElement extends HTMLElement {
 
   private performSeek = () => {
     this.seekFrame = 0
+    if (!this.motionEnabled) return
     const slot = this.findReadySlot(this.activeIndex)
     if (slot === undefined) return
     const video = this.videos[slot]
     if (video.seeking) return
     const delta = this.targetTime - video.currentTime
-    const epsilon = this.isMobile() ? 2 / 30 : 1 / 30
-    if (!Number.isFinite(delta) || Math.abs(delta) <= epsilon) return
-    const eased =
-      Math.abs(delta) < 0.35
-        ? this.targetTime
-        : video.currentTime + delta * (this.isMobile() ? 0.42 : 0.3)
-    video.currentTime = Math.min(Math.max(eased, 0), Math.max(video.duration - 1 / 30, 0))
+    if (!Number.isFinite(delta)) return
+    if (Math.abs(delta) <= this.seekEpsilon()) {
+      this.showVideo(slot)
+      return
+    }
+    video.currentTime = Math.min(Math.max(this.targetTime, 0), Math.max(video.duration - 1 / 30, 0))
   }
 
   private updatePosters(index: number) {
@@ -245,6 +256,10 @@ class EvidenceWorldElement extends HTMLElement {
     return matchMedia("(max-width: 767px)").matches
   }
 
+  private seekEpsilon() {
+    return this.isMobile() ? 2 / 30 : 1 / 30
+  }
+
   private getVariant(index: number): MotionVariant {
     const chapter = this.manifest.chapters[index]
     return this.isMobile() ? chapter.portrait : chapter.desktop
@@ -262,7 +277,6 @@ class EvidenceWorldElement extends HTMLElement {
       await this.loadVideo(index, currentSlot, controller.signal)
       if (controller.signal.aborted) return
       if (index === this.activeIndex) {
-        this.showVideo(currentSlot)
         this.updateFromScroll()
       }
 
@@ -321,7 +335,12 @@ class EvidenceWorldElement extends HTMLElement {
     await this.waitForLoadedData(video, signal)
     if (signal.aborted) throw new DOMException("Aborted", "AbortError")
     this.videoIndexes.set(slot, index)
-    if (index === this.activeIndex) this.captureView(index, "motion")
+    if (index === this.activeIndex) {
+      const duration = Math.max(video.duration - 1 / 30, 0)
+      this.targetTime = this.targetProgress * duration
+      this.queueSeek()
+      this.captureView(index, "motion")
+    }
   }
 
   private async fetchVideo(variant: MotionVariant, signal: AbortSignal) {

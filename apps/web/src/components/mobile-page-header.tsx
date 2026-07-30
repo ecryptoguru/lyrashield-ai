@@ -7,6 +7,7 @@ import { Bell, ChevronLeft } from "lucide-react"
 import { buttonVariants } from "@lyrashield/ui"
 import { NAV_ITEMS } from "@/lib/nav-items"
 import { useFeatureFlags } from "./feature-flags-provider"
+import { ThemeToggle } from "./theme-toggle"
 
 /**
  * Resolves the current destination's label from the shared nav definition, preferring the
@@ -28,7 +29,7 @@ export function MobilePageHeader({ title, backHref }: { title?: string; backHref
 
   return (
     <header className="bg-background fixed top-0 z-30 flex h-[calc(4rem+env(safe-area-inset-top))] w-full items-center justify-between border-b px-4 pt-[env(safe-area-inset-top)] md:hidden">
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         {backHref ? (
           <Link
             href={backHref}
@@ -51,15 +52,21 @@ export function MobilePageHeader({ title, backHref }: { title?: string; backHref
             />
           </span>
         )}
-        <h1 className="truncate text-lg font-semibold">{pageTitle}</h1>
+        <h1 className="min-w-0 truncate text-lg font-semibold">{pageTitle}</h1>
       </div>
-      <Link
-        href="/dashboard/notifications"
-        aria-label="Notifications"
-        className={`${buttonVariants({ variant: "ghost", size: "icon" })} text-muted-foreground hover:text-foreground relative shrink-0`}
-      >
-        <Bell className="size-5" aria-hidden="true" />
-      </Link>
+      <div className="flex shrink-0 items-center gap-1">
+        <ThemeToggle
+          tooltipSide="bottom"
+          className="text-muted-foreground hover:text-foreground shrink-0"
+        />
+        <Link
+          href="/dashboard/notifications"
+          aria-label="Notifications"
+          className={`${buttonVariants({ variant: "ghost", size: "icon" })} text-muted-foreground hover:text-foreground relative shrink-0`}
+        >
+          <Bell className="size-5" aria-hidden="true" />
+        </Link>
+      </div>
     </header>
   )
 }
