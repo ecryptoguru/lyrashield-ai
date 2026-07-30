@@ -3,13 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "predev": "wrangler types",
+    "predev": "wrangler types && pnpm exec tsx scripts/generate-openapi.ts",
     "dev": "astro dev",
-    "prebuild": "wrangler types",
+    "prebuild": "wrangler types && pnpm exec tsx scripts/generate-openapi.ts",
     "build": "astro build",
-    "prepreview": "wrangler types",
+    "prepreview": "wrangler types && pnpm exec tsx scripts/generate-openapi.ts",
     "preview": "astro build && CI=1 wrangler d1 migrations apply lyrashield-marketing-waitlist --local --config dist/server/wrangler.json && wrangler dev --local --config dist/server/wrangler.json",
-    "pretypecheck": "wrangler types",
+    "pretypecheck": "wrangler types && pnpm exec tsx scripts/generate-openapi.ts",
     "typecheck": "astro check",
     "lint": "eslint src --max-warnings 0",
     "deploy": "astro build && wrangler deploy --config dist/server/wrangler.json",
@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.1.4",
+    "@lyrashield/agent-registry": "workspace:*",
     "@astrojs/markdown-satteri": "^0.3.4",
     "@astrojs/mdx": "^7.0.3",
     "@astrojs/rss": "^4.0.19",
@@ -40,6 +41,7 @@
     "@types/node": "^22.20.1",
     "lighthouse": "^13.4.1",
     "puppeteer": "^25.3.0",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.0",
     "wrangler": "^4.114.0"
   },

@@ -13,7 +13,7 @@ function makeApiResponse(data: unknown, success = true) {
   return {
     ok: true,
     status: 200,
-    headers: { forEach: () => {} },
+    headers: new Headers(),
     json: async () => ({ success, data }),
   }
 }
@@ -22,7 +22,7 @@ function makeErrorResponse(message: string) {
   return {
     ok: true,
     status: 400,
-    headers: { forEach: () => {} },
+    headers: new Headers(),
     json: async () => ({ success: false, error: { code: "TEST_ERROR", message } }),
   }
 }
@@ -47,7 +47,7 @@ describe("createScanTargetTool", () => {
     expect(data.action).toBe("scan_triggered")
     expect(data.scan.id).toBe("scan-1")
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://localhost:3000/api/scans",
+      "http://localhost:3000/api/v1/scans",
       expect.objectContaining({ method: "POST" })
     )
     const request = mockFetch.mock.calls[0]![1] as RequestInit
@@ -114,7 +114,7 @@ describe("apiCall error handling", () => {
       ok: false,
       status: 500,
       statusText: "Internal Server Error",
-      headers: { forEach: () => {} },
+      headers: new Headers(),
       json: async () => {
         throw new Error("not JSON")
       },
@@ -131,7 +131,7 @@ describe("apiCall error handling", () => {
       ok: false,
       status: 403,
       statusText: "Forbidden",
-      headers: { forEach: () => {} },
+      headers: new Headers(),
       json: async () => ({ error: { message: "Permission denied" } }),
     })
     const tool = createScanTargetTool(context)

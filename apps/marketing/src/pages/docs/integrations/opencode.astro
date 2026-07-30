@@ -1,4 +1,5 @@
 ---
+import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -59,19 +60,7 @@ const jsonLd: unknown[] = [
   </div>
 
   <h2>Local stdio setup</h2>
-  <pre><code>{`{
-  "mcp": {
-    "lyrashield": {
-      "type": "local",
-      "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": {
-        "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}",
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
-    }
-  }
-}`}</code></pre>
+  <AgentSnippet agentId="opencode" transport="stdio" />
 
   <p>
     Export <code>LYRASHIELD_API_KEY</code> in your shell or add it to a <code>.env</code> file that
@@ -79,17 +68,7 @@ const jsonLd: unknown[] = [
   </p>
 
   <h2>Remote endpoint</h2>
-  <pre><code>{`{
-  "mcp": {
-    "lyrashield": {
-      "type": "remote",
-      "url": "https://app.lyrashieldai.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer {env:LYRASHIELD_API_KEY}"
-      }
-    }
-  }
-}`}</code></pre>
+  <AgentSnippet agentId="opencode" transport="remote-http" />
 
   <h2>Verify the connection</h2>
   <p>

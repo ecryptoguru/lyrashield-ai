@@ -1,0 +1,257 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderConfig snapshot — every agent × every transport > amp × stdio 1`] = `[Error: Agent "amp" uses installStrategy "vendor-cli"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > claude-code × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_test_lyrashield_api_key"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > claude-code × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > cline × remote-http 1`] = `[Error: Agent "cline" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > cline × stdio 1`] = `[Error: Agent "cline" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > cursor × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_test_lyrashield_api_key"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > cursor × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > gemini-cli × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > hermes × stdio 1`] = `[Error: Agent "hermes" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > jetbrains × stdio 1`] = `[Error: Agent "jetbrains" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > kilo-code × remote-http 1`] = `
+"{
+  "mcp": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:LYRASHIELD_API_KEY}"
+      },
+      "type": "remote"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > kilo-code × stdio 1`] = `
+"{
+  "mcp": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
+      },
+      "type": "local"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > openai-codex × stdio 1`] = `
+"[mcp_servers.lyrashield]
+command = "npx"
+args = ["-y", "@lyrashield/mcp"]
+
+[mcp_servers.lyrashield.env_vars]
+LYRASHIELD_API_URL = "https://app.lyrashieldai.com/api/mcp"
+LYRASHIELD_API_KEY = "lsk_test_lyrashield_api_key""
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > openclaw × stdio 1`] = `[Error: Agent "openclaw" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > opencode × remote-http 1`] = `
+"{
+  "mcp": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:LYRASHIELD_API_KEY}"
+      },
+      "type": "remote"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > opencode × stdio 1`] = `
+"{
+  "mcp": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
+      },
+      "type": "local"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > picode × stdio 1`] = `[Error: Agent "picode" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > vscode × remote-http 1`] = `
+"{
+  "servers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_test_lyrashield_api_key"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > vscode × stdio 1`] = `
+"{
+  "servers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
+      },
+      "type": "stdio"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > windsurf × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "serverUrl": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_test_lyrashield_api_key"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > windsurf × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > zed × stdio 1`] = `
+"{
+  "context_servers": {
+    "lyrashield": {
+      "command": {
+        "path": "npx",
+        "args": [
+          "-y",
+          "@lyrashield/mcp"
+        ],
+        "env": {
+          "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+          "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
+        }
+      }
+    }
+  }
+}"
+`;

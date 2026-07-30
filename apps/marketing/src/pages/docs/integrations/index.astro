@@ -1,5 +1,7 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
+import { listAgents } from "@lyrashield/agent-registry"
+import type { AgentEntry } from "@lyrashield/agent-registry"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations", origin).toString()
@@ -8,6 +10,21 @@ const description =
   "Connect LyraShield AI to Claude Code, Cursor, Windsurf, VS Code, GitHub Actions, and more. Step-by-step MCP server setup, REST API keys, and agent rules for every AI coding environment."
 
 const updatedDate = "2026-07-24"
+
+const agents = listAgents()
+
+function agentSubtitle(agent: AgentEntry): string {
+  if (agent.installStrategy === "config-file") {
+    const loc =
+      agent.locations.find((location) => location.sharedByConvention) ??
+      agent.locations[0]
+    return loc?.path ?? "Config file"
+  }
+  if (agent.installStrategy === "vendor-cli") {
+    return `${agent.vendorCli?.command} ${agent.vendorCli?.args?.join(" ")}`.trim()
+  }
+  return "Manual setup"
+}
 
 const faqItems = [
   {
@@ -93,74 +110,25 @@ const jsonLd: unknown[] = [
     assistant.
   </p>
   <div class="nav-cards">
-    <a href="/docs/integrations/claude-code" class="nav-card">
-      <span class="nav-card__label">Claude Code</span>
-      <span class="nav-card__sub">.mcp.json or claude mcp add</span>
-    </a>
-    <a href="/docs/integrations/cursor" class="nav-card">
-      <span class="nav-card__label">Cursor</span>
-      <span class="nav-card__sub">.cursor/mcp.json</span>
-    </a>
-    <a href="/docs/integrations/windsurf" class="nav-card">
-      <span class="nav-card__label">Windsurf</span>
-      <span class="nav-card__sub">mcp_config.json</span>
-    </a>
-    <a href="/docs/integrations/vscode" class="nav-card">
-      <span class="nav-card__label">VS Code</span>
-      <span class="nav-card__sub">.vscode/mcp.json — key: servers</span>
-    </a>
-    <a href="/docs/integrations/openai-codex" class="nav-card">
-      <span class="nav-card__label">OpenAI Codex</span>
-      <span class="nav-card__sub">~/.codex/config.toml</span>
-    </a>
-    <a href="/docs/integrations/cline" class="nav-card">
-      <span class="nav-card__label">Cline</span>
-      <span class="nav-card__sub">cline_mcp_settings.json</span>
-    </a>
-    <a href="/docs/integrations/opencode" class="nav-card">
-      <span class="nav-card__label">OpenCode</span>
-      <span class="nav-card__sub">opencode.json, key: mcp</span>
-    </a>
-    <a href="/docs/integrations/kilo-code" class="nav-card">
-      <span class="nav-card__label">Kilo Code</span>
-      <span class="nav-card__sub">kilo.jsonc, key: mcp</span>
-    </a>
-    <a href="/docs/integrations/zed" class="nav-card">
-      <span class="nav-card__label">Zed</span>
-      <span class="nav-card__sub">settings.json — key: context_servers</span>
-    </a>
-    <a href="/docs/integrations/gemini-cli" class="nav-card">
-      <span class="nav-card__label">Gemini CLI</span>
-      <span class="nav-card__sub">~/.gemini/settings.json</span>
-    </a>
-    <a href="/docs/integrations/jetbrains" class="nav-card">
-      <span class="nav-card__label">JetBrains AI</span>
-      <span class="nav-card__sub">Settings → AI Assistant → MCP</span>
-    </a>
-    <a href="/docs/integrations/amp" class="nav-card">
-      <span class="nav-card__label">Amp</span>
-      <span class="nav-card__sub">amp mcp add CLI</span>
-    </a>
-    <a href="/docs/integrations/picode" class="nav-card">
-      <span class="nav-card__label">PiCode</span>
-      <span class="nav-card__sub">mcpServers config</span>
-    </a>
-    <a href="/docs/integrations/openclaw" class="nav-card">
-      <span class="nav-card__label">OpenClaw</span>
-      <span class="nav-card__sub">MCPorter YAML</span>
-    </a>
-    <a href="/docs/integrations/hermes" class="nav-card">
-      <span class="nav-card__label">Hermes</span>
-      <span class="nav-card__sub">Profile YAML</span>
-    </a>
+    {
+      agents
+        .filter((agent) => agent.transports.includes("stdio"))
+        .map((agent) => (
+          <a href={`/docs/integrations/${agent.docsSlug}`} class="nav-card">
+            <span class="nav-card__label">{agent.displayName}</span>
+            <span class="nav-card__sub">{agentSubtitle(agent)}</span>
+          </a>
+        ))
+    }
   </div>
 
   <h2>Remote MCP endpoint</h2>
   <p>
     Cloud editors that cannot run local processes connect to the remote Streamable-HTTP endpoint at
     <code>https://app.lyrashieldai.com/api/mcp</code> with a Bearer API key. The
-    <a href="/docs/integrations/github-action">GitHub Action</a> is the recommended complement for
-    automated PR checks.
+    <a href="/docs/integrations/remote-mcp">Remote MCP</a> guide covers Lovable, Bolt.new, Replit,
+    and v0. The <a href="/docs/integrations/github-action">GitHub Action</a> is the recommended
+    complement for automated PR checks.
   </p>
   <div class="nav-cards">
     <a href="/docs/integrations/remote-mcp" class="nav-card">
@@ -178,6 +146,10 @@ const jsonLd: unknown[] = [
     <a href="/docs/integrations/rest-api" class="nav-card">
       <span class="nav-card__label">REST API & API Keys</span>
       <span class="nav-card__sub">Workspace keys, scopes, lsk_ prefix</span>
+    </a>
+    <a href="/docs/api" class="nav-card">
+      <span class="nav-card__label">API v1</span>
+      <span class="nav-card__sub">OpenAPI docs and endpoints</span>
     </a>
     <a href="/docs/integrations/agent-rules" class="nav-card">
       <span class="nav-card__label">Agent Rules Snippets</span>

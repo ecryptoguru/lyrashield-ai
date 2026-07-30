@@ -13,6 +13,7 @@ function fetchStub(data: unknown = { ok: true }) {
     ok: true,
     status: 200,
     statusText: "OK",
+    headers: new Headers(),
     json: async () => ({ success: true, data }),
   })) as unknown as typeof fetch
 }

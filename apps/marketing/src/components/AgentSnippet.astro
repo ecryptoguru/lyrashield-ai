@@ -1,0 +1,147 @@
+---
+import { getAgent, renderConfig } from "@lyrashield/agent-registry"
+import type { AgentEntry, InstallOptions, Transport } from "@lyrashield/agent-registry"
+
+interface Props {
+  agentId: string
+  transport?: Transport
+  secretMode?: InstallOptions["secretMode"]
+  apiKey?: string
+}
+
+const API_URL = "https://app.lyrashieldai.com/api/v1"
+const SERVER_NAME = "lyrashield"
+const DEFAULT_API_KEY = "<LYRASHIELD_API_KEY>"
+
+const { agentId, transport, secretMode, apiKey = DEFAULT_API_KEY } = Astro.props
+const agent = getAgent(agentId)
+if (!agent) {
+  throw new Error(`Unknown agent: ${agentId}`)
+}
+
+const showInstallCommand = import.meta.env.SHOW_INSTALL_COMMAND === "true"
+
+const effectiveTransport: Transport =
+  transport && agent.transports.includes(transport) ? transport : (agent.transports[0] ?? "stdio")
+
+const defaultSecretMode: InstallOptions["secretMode"] =
+  agent.id === "gemini-cli" ? "inline" : "interpolated"
+
+const effectiveSecretMode: InstallOptions["secretMode"] = secretMode ?? defaultSecretMode
+
+function buildKeyNote(snippet: string): string {
+  if (snippet.includes("<LYRASHIELD_API_KEY>")) {
+    return "Replace &lt;LYRASHIELD_API_KEY&gt; with your workspace API key."
+  }
+  if (snippet.includes("{env:LYRASHIELD_API_KEY}")) {
+    return "Make sure LYRASHIELD_API_KEY is exported in your shell or .env file."
+  }
+  return "Add your workspace API key where required."
+}
+
+function buildManualCommand(): string {
+  return `LYRASHIELD_API_KEY=${apiKey} LYRASHIELD_API_URL=${API_URL} npx -y @lyrashield/mcp stdio`
+}
+
+function buildRemoteManualCommand(agent: AgentEntry): string {
+  const remoteFields = agent.transportFields?.["remote-http"]
+  if (!remoteFields) {
+    return buildManualCommand()
+  }
+
+  const entry: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(remoteFields)) {
+    entry[key] = value === "<apiUrl>" ? API_URL : value
+  }
+  entry.headers = {
+    Authorization: `Bearer ${apiKey}`,
+  }
+
+  return JSON.stringify({ mcpServers: { [SERVER_NAME]: entry } }, null, 2)
+}
+
+function buildVendorCommand(agent: AgentEntry): string {
+  const command = [agent.vendorCli?.command, ...(agent.vendorCli?.args ?? [])]
+    .filter(Boolean)
+    .join(" ")
+  return `LYRASHIELD_API_KEY=${apiKey} LYRASHIELD_API_URL=${API_URL} ${command}`
+}
+
+const strategyNotes: Record<string, string> = {
+  jetbrains:
+    "JetBrains AI & Junie: UI-only. Open Settings → Tools → AI Assistant → MCP Servers and add a new server using the values below.",
+  amp: "Amp (Sourcegraph): shell-env CLI-only. Export the variables in the shell where Amp runs, then run the command.",
+  cline: "Cline: manual. Edit cline_mcp_settings.json or use the Cline MCP settings panel.",
+  picode:
+    "PiCode: manual. The exact config file path is not documented; use the command below as a reference and verify with PiCode's docs.",
+  openclaw:
+    "OpenClaw: manual. The profile YAML path is not verified; use the command below as a reference.",
+  hermes:
+    "Hermes: manual. The profile YAML path is not documented; use the command below as a reference.",
+}
+
+let snippet = ""
+let note = ""
+let strategyNote = ""
+
+if (agent.installStrategy === "config-file") {
+  const { content } = renderConfig(agent, {
+    transport: effectiveTransport,
+    apiUrl: API_URL,
+    serverName: SERVER_NAME,
+    secretMode: effectiveSecretMode,
+    apiKey,
+  })
+  snippet = content
+
+  const primaryLocation =
+    agent.locations.find((loc) => loc.sharedByConvention) ?? agent.locations[0]
+  const path = primaryLocation?.path ?? "your agent's config file"
+  note = `Add the following to <code>${path}</code>. ${buildKeyNote(snippet)}`
+} else if (agent.installStrategy === "vendor-cli") {
+  snippet = buildVendorCommand(agent)
+  note = buildKeyNote(snippet)
+  strategyNote =
+    strategyNotes[agent.id] ??
+    `${agent.displayName}: configured through its vendor CLI.`
+} else {
+  // guided-manual
+  if (effectiveTransport === "remote-http" && agent.transportFields?.["remote-http"]) {
+    snippet = buildRemoteManualCommand(agent)
+    note = `Remote Streamable-HTTP setup. ${buildKeyNote(snippet)}`
+  } else {
+    snippet = buildManualCommand()
+    note = `Use this command in a terminal, or enter the same values in the agent's MCP settings UI. ${buildKeyNote(snippet)}`
+  }
+  strategyNote =
+    strategyNotes[agent.id] ?? `${agent.displayName}: requires manual configuration.`
+}
+---
+
+{strategyNote && (
+  <div class="callout callout--warn">
+    <strong>Install type:</strong> {strategyNote}
+  </div>
+)}
+
+{note && <p class="callout" set:html={note} />}
+
+<pre><code>{snippet}</code></pre>
+
+{showInstallCommand && (
+  <div class="callout callout--warn">
+    <strong>One-line install</strong> (available after npm publish):
+    <pre><code>npx lyrashield install {agentId}</code></pre>
+  </div>
+)}
+
+{agent.installStrategy !== "config-file" && agent.gotchas.length > 0 && (
+  <>
+    <h3>Important gotchas</h3>
+    <ul>
+      {agent.gotchas.map((g) => (
+        <li>{g}</li>
+      ))}
+    </ul>
+  </>
+)}

@@ -35,12 +35,14 @@
     "node": ">=20"
   },
   "scripts": {
+    "lint": "eslint src --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "build": "tsup",
     "prepublishOnly": "tsup",
     "test": "vitest run"
   },
   "dependencies": {
+    "@lyrashield/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.76"
   },

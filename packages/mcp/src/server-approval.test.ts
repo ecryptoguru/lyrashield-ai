@@ -9,6 +9,7 @@ function makeCtx(): { context: ToolHandlerContext; fetchSpy: ReturnType<typeof v
     ok: true,
     status: 200,
     statusText: "OK",
+    headers: new Headers(),
     json: async () => ({ success: true, data: { id: "scan_1" } }),
   })) as unknown as ReturnType<typeof vi.fn>
   const context: ToolHandlerContext = {

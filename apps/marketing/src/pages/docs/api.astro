@@ -1,0 +1,60 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+import spec from "../../data/openapi.json" with { type: "json" }
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/api", origin).toString()
+const title = "LyraShield API v1 Reference"
+const description = "OpenAPI 3.1 reference for the LyraShield /api/v1 endpoints."
+const updatedDate = "2026-07-31"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Docs", item: `${origin}/docs` },
+      { "@type": "ListItem", position: 3, name: "API v1", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/api"
+>
+  <h1>API v1 Reference</h1>
+  <p>
+    The <code>/api/v1</code> surface is a curated, additive re-export of the existing API. Breaking
+    changes will be introduced under a new major version.
+  </p>
+
+  <div class="callout">
+    <strong>Base URL:</strong> <code>https://app.lyrashieldai.com/api/v1</code>. Authenticate with a
+    workspace API key in the <code>Authorization: Bearer &lt;key&gt;</code> header.
+  </div>
+
+  <p>
+    Download the OpenAPI 3.1 spec as JSON: <a href="/openapi.json" download>openapi.json</a>
+  </p>
+
+  <h2>OpenAPI 3.1 Specification</h2>
+  <pre><code>{JSON.stringify(spec, null, 2)}</code></pre>
+</DocsLayout>

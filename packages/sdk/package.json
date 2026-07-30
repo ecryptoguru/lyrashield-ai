@@ -1,0 +1,39 @@
+{
+  "name": "@lyrashield/sdk",
+  "version": "0.1.0",
+  "description": "Shared LyraShield HTTP client for the CLI and MCP server.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "eslint src --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "build": "tsup",
+    "test": "vitest run"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsup": "^8.5.1",
+    "typescript": "6.0.3",
+    "vitest": "^3.2.7"
+  }
+}
