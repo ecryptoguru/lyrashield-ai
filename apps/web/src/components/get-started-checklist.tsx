@@ -67,10 +67,7 @@ export function GetStartedChecklist({
   }
 
   return (
-    <section
-      className="rounded-xl border p-5 sm:p-6"
-      aria-labelledby="get-started-heading"
-    >
+    <section className="rounded-xl border p-5 sm:p-6" aria-labelledby="get-started-heading">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
