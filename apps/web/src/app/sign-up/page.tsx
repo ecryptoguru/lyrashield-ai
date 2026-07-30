@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
-import { ShieldCheck } from "lucide-react"
 import {
   Button,
   Input,
@@ -15,6 +14,7 @@ import {
   FormField,
 } from "@lyrashield/ui"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AuthSplitLayout } from "@/components/auth-split-layout"
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -239,20 +239,20 @@ export default function SignUpPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center px-4">
+    <>
       <ThemeToggle className="fixed top-4 right-4 z-10" />
-      <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
-      <div className="relative w-full max-w-md">
-        <div className="mb-8 flex flex-col items-center">
-          <div className="gradient-primary shadow-primary-glow mb-3 flex h-12 w-12 items-center justify-center rounded-xl">
-            <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">Create your account</h1>
-          <p className="text-muted-foreground text-sm">
-            Start your evidence-backed release workflow.
+      <AuthSplitLayout
+        heading="Create your account"
+        subheading="Start your evidence-backed release workflow."
+        footer={
+          <p className="text-muted-foreground mt-6 text-center text-sm md:text-left">
+            Already have an account?{" "}
+            <Link href="/sign-in" className="text-primary font-medium hover:underline">
+              Sign in
+            </Link>
           </p>
-        </div>
-
+        }
+      >
         <div className="bg-card rounded-xl border p-6 shadow-lg sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             <FormField label="Name" htmlFor="name">
@@ -287,7 +287,12 @@ export default function SignUpPage() {
                 minLength={8}
                 autoComplete="new-password"
                 placeholder="At least 8 characters"
+                aria-describedby="password-hint"
               />
+              <p id="password-hint" className="text-muted-foreground mt-1.5 text-xs">
+                At least 8 characters. Use a mix of letters, numbers, and symbols for a stronger
+                password.
+              </p>
             </FormField>
 
             {error && (
@@ -300,6 +305,14 @@ export default function SignUpPage() {
               {loading && <Spinner className="mr-2" />}
               Create account
             </Button>
+
+            <p className="text-muted-foreground text-center text-xs leading-relaxed">
+              By creating an account you agree to the{" "}
+              <Link href="https://lyrashieldai.com/terms" className="text-primary hover:underline">
+                Terms
+              </Link>{" "}
+              and acknowledge our privacy practices.
+            </p>
           </form>
 
           {providers.socialSignUp &&
@@ -352,14 +365,7 @@ export default function SignUpPage() {
               </>
             )}
         </div>
-
-        <p className="text-muted-foreground mt-6 text-center text-sm">
-          Already have an account?{" "}
-          <Link href="/sign-in" className="text-primary font-medium hover:underline">
-            Sign in
-          </Link>
-        </p>
-      </div>
-    </main>
+      </AuthSplitLayout>
+    </>
   )
 }
