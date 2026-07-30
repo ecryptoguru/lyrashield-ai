@@ -4,6 +4,7 @@ export const EVENT_ALLOWLIST = {
   account_created: ["method"],
   github_connect_started: [],
   github_connected: ["repo_count_bucket", "account_type"],
+  onboarding_path_chosen: ["path"],
   repos_loaded: ["repo_count_bucket", "load_ms_bucket"],
   repos_selected: ["selected_count"],
   product_confirmed: ["asset_count", "suggested_assets_declined"],

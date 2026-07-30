@@ -52,9 +52,7 @@ describe("buildUrlTargetPayload", () => {
   })
 
   it("builds an API payload for the api path", () => {
-    expect(
-      buildUrlTargetPayload({ ...base, path: "api", name: "Production API" })
-    ).toEqual({
+    expect(buildUrlTargetPayload({ ...base, path: "api", name: "Production API" })).toEqual({
       workspaceId: "ws-1",
       type: "API",
       name: "Production API",
@@ -76,9 +74,7 @@ describe("buildUrlTargetPayload", () => {
   })
 
   it("refuses to build when ownership is not attested (the API rejects it too)", () => {
-    expect(
-      buildUrlTargetPayload({ ...base, path: "url", ownershipAttested: false })
-    ).toBeNull()
+    expect(buildUrlTargetPayload({ ...base, path: "url", ownershipAttested: false })).toBeNull()
   })
 
   it("refuses when name or url is blank", () => {

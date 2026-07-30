@@ -10,6 +10,7 @@ import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/term
 import { GOAL_OPTIONS } from "@/lib/labels"
 import {
   buildUrlTargetPayload,
+  nextStepForPath,
   pathLabel,
   pathNeedsRepo,
   type OnboardingPath,
@@ -139,17 +140,19 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
       track("github_connect_started")
       window.open(res.installUrl, "_blank", "noopener,noreferrer")
       setPath("github")
-      setStep(2)
-    } catch (cause) {
+      const next = nextStepForPath("github")
+      if (next !== null) setStep(next)
+    } catch {
       // The GitHub App is not configured (or the endpoint otherwise failed). Do
       // not strand the user: mark the path unavailable and keep them on the
-      // four-way choice with the other three ways forward intact.
+      // four-way choice with the other three ways forward intact. Only reset the
+      // path when the user is still on the chooser — a failed *reconnect* from
+      // the repo-select step should not yank them back. Do not interpolate the
+      // raw server error into the UI.
       setGithubUnavailable(true)
-      setPath(null)
+      if (step === 1) setPath(null)
       setError(
-        cause instanceof Error && cause.message
-          ? `GitHub connect is unavailable right now (${cause.message}). You can add an app URL or API instead, or skip for now.`
-          : "GitHub connect is unavailable right now. You can add an app URL or API instead, or skip for now."
+        "GitHub connect is unavailable right now. You can add an app URL or API instead, or skip for now."
       )
     } finally {
       setLoading(false)
@@ -158,6 +161,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
 
   function choosePath(next: Exclude<OnboardingPath, null>) {
     setError(null)
+    track("onboarding_path_chosen", { path: next })
     if (next === "skip") {
       void skipOnboarding()
       return
@@ -166,7 +170,9 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
       void connectGitHub()
       return
     }
-    // URL / API: prefill a sensible product name, then collect the URL.
+    // URL / API: prefill a sensible product name, then collect the URL. The
+    // onward step comes from the shared helper so the wizard and the flow logic
+    // cannot diverge.
     setPath(next)
     if (!productName) {
       setProductName(next === "api" ? "Production API" : "Staging Site")
@@ -186,7 +192,12 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
     }
   }
 
-  async function continueWithUrlTarget() {
+  // Validate the URL/API inputs and advance to product details. The target is
+  // NOT created here — creation is deferred to createProductAndStart (the same
+  // step the GitHub path uses) so the name/environment the user confirms on the
+  // final step are what actually get saved, and so going Back -> Continue never
+  // orphans a duplicate target.
+  function continueWithUrlTarget() {
     const payload = buildUrlTargetPayload({
       workspaceId: data.workspaceId,
       path,
@@ -203,18 +214,10 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
       )
       return
     }
-    setLoading(true)
     setError(null)
-    try {
-      const target = await apiPost<{ id: string; name: string }>("/api/targets", payload)
-      setProductName(target.name)
-      await persist({ targetId: target.id, currentStep: 3, skipped: false })
-      setStep(3)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not add that target.")
-    } finally {
-      setLoading(false)
-    }
+    if (!productName) setProductName(payload.name)
+    const next = nextStepForPath(payload.type === "API" ? "api" : "url")
+    if (next !== null) setStep(next)
   }
 
   async function confirmRepoAndContinue() {
@@ -232,15 +235,27 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
       setError("Workspace is required.")
       return
     }
-    // GitHub path creates a REPO target here; URL/API already created theirs in
-    // the previous step (data.targetId), so they only need to start the scan.
+    // Every non-skip path creates its target here, at the final step, so the
+    // name/environment the user just confirmed are what get saved — and so Back
+    // -> Continue never orphans a duplicate. GitHub creates a REPO target;
+    // URL/API create a WEB_APP/API target (ownership was attested in step 2).
     const needsRepo = pathNeedsRepo(path)
     if (needsRepo && !selectedRepo) {
       setError("Workspace and repository are required.")
       return
     }
-    if (!needsRepo && !data.targetId) {
-      setError("Add a target to continue.")
+    if (
+      !needsRepo &&
+      !buildUrlTargetPayload({
+        workspaceId: data.workspaceId,
+        path,
+        name: productName,
+        url: urlForm.url,
+        environment,
+        ownershipAttested: urlForm.ownershipAttested,
+      })
+    ) {
+      setError("Add a valid target and confirm ownership to continue.")
       return
     }
     if (!productName.trim()) {
@@ -268,8 +283,21 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
           environment,
         })
         targetId = target.id
-        await persist({ targetId: target.id, selectedGoal, currentStep: 3, skipped: false })
+      } else if (!needsRepo) {
+        const payload = buildUrlTargetPayload({
+          workspaceId: data.workspaceId,
+          path,
+          name: productName,
+          url: urlForm.url,
+          environment,
+          ownershipAttested: urlForm.ownershipAttested,
+        })
+        if (payload) {
+          const target = await apiPost<{ id: string }>("/api/targets", payload)
+          targetId = target.id
+        }
       }
+      await persist({ targetId, selectedGoal, currentStep: 3, skipped: false })
       const scan = await apiPost<{ id: string }>("/api/scans", {
         workspaceId: data.workspaceId,
         targetId,
@@ -372,8 +400,8 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Add your first target</h2>
               <p className="text-muted-foreground mt-2 text-sm">
-                Choose what LyraShield reviews first. You can connect GitHub, point at a live app
-                or API, or set this up later.
+                Choose what LyraShield reviews first. You can connect GitHub, point at a live app or
+                API, or set this up later.
               </p>
             </div>
 
@@ -382,7 +410,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                 type="button"
                 onClick={() => choosePath("github")}
                 disabled={loading || githubUnavailable}
-                className="rounded-lg border p-4 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                className="hover:bg-accent rounded-lg border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <GithubIcon className="mb-2 size-6" aria-hidden="true" />
                 <span className="block text-sm font-medium">Connect GitHub</span>
@@ -397,7 +425,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                 type="button"
                 onClick={() => choosePath("url")}
                 disabled={loading}
-                className="rounded-lg border p-4 text-left transition-colors hover:bg-accent disabled:opacity-60"
+                className="hover:bg-accent rounded-lg border p-4 text-left transition-colors disabled:opacity-60"
               >
                 <Globe className="text-primary mb-2 size-6" aria-hidden="true" />
                 <span className="block text-sm font-medium">Add an app URL</span>
@@ -410,7 +438,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                 type="button"
                 onClick={() => choosePath("api")}
                 disabled={loading}
-                className="rounded-lg border p-4 text-left transition-colors hover:bg-accent disabled:opacity-60"
+                className="hover:bg-accent rounded-lg border p-4 text-left transition-colors disabled:opacity-60"
               >
                 <Globe className="text-primary mb-2 size-6" aria-hidden="true" />
                 <span className="block text-sm font-medium">Add an API</span>
@@ -423,7 +451,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                 type="button"
                 onClick={() => choosePath("skip")}
                 disabled={loading}
-                className="rounded-lg border border-dashed p-4 text-left transition-colors hover:bg-accent disabled:opacity-60"
+                className="hover:bg-accent rounded-lg border border-dashed p-4 text-left transition-colors disabled:opacity-60"
               >
                 <ChevronRight className="text-muted-foreground mb-2 size-6" aria-hidden="true" />
                 <span className="block text-sm font-medium">Skip for now</span>
