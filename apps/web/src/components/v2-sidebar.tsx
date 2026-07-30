@@ -31,7 +31,7 @@ function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
       href={item.href}
       aria-current={isActive ? "page" : undefined}
       className={cn(
-        "group flex min-h-11 items-center gap-3 border-l-2 px-3 text-sm font-medium transition-[background-color,border-color,color] duration-150",
+        "group flex min-h-11 items-center gap-3 border-l-2 px-3 text-sm font-medium transition-[background-color,border-color,color] duration-[var(--duration-fast)] ease-[var(--ease-out)]",
         isActive
           ? "border-primary bg-primary/8 text-primary"
           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-transparent"

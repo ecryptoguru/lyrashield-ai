@@ -223,9 +223,9 @@ export function ScansClient({
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Scans</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Trust Runs</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Run and monitor security scans against your targets
+            Run and monitor trust runs against your products
           </p>
         </div>
         <div className="flex gap-2">
@@ -257,7 +257,7 @@ export function ScansClient({
       {showCreate && (
         <Card className="mb-6 p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Start a scan</h2>
+            <h2 className="text-lg font-semibold">Start a trust run</h2>
             <Button
               variant="ghost"
               size="sm"
@@ -290,7 +290,7 @@ export function ScansClient({
               className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium"
             >
               <ChevronDown
-                className={`size-4 transition-transform duration-150 ${showAdvanced ? "rotate-180" : ""}`}
+                className={`size-4 transition-transform duration-[var(--duration-fast)] ease-[var(--ease-out)] ${showAdvanced ? "rotate-180" : ""}`}
                 aria-hidden="true"
               />
               Advanced
@@ -329,7 +329,7 @@ export function ScansClient({
               ) : (
                 <>
                   <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Start Scan
+                  Start Trust Run
                 </>
               )}
             </Button>
@@ -341,7 +341,7 @@ export function ScansClient({
       )}
 
       {refreshing && scans.length === 0 ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading scans">
+        <div className="space-y-3" aria-busy="true" aria-label="Loading trust runs">
           {[0, 1, 2].map((item) => (
             <Skeleton key={item} className="h-32 w-full" />
           ))}
@@ -349,17 +349,17 @@ export function ScansClient({
       ) : scans.length === 0 ? (
         <EmptyState
           icon={Radar}
-          title="No scans yet"
+          title="No trust runs yet"
           description={
             targets.length > 0
-              ? 'Start your first security scan by clicking "New Scan" above.'
-              : "Add a target first (a repo or URL), then you can run scans against it."
+              ? 'Start your first trust run by clicking "New Trust Run" above.'
+              : "Add a product first, then you can run trust reviews against it."
           }
           action={
             targets.length > 0 ? (
               <Button onClick={() => setShowCreate(true)}>
                 <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-                New Scan
+                New Trust Run
               </Button>
             ) : (
               <Link href="/dashboard/products" className={buttonVariants()}>

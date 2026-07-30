@@ -178,7 +178,7 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
     })
     await expect(skipOtherOnboarding).toBeOK()
     await otherPage.goto(`/dashboard/targets/${targetId}`)
-    await expect(otherPage.getByRole("heading", { name: "404" })).toBeVisible()
+    await expect(otherPage.getByRole("heading", { name: /404|Not in evidence/i })).toBeVisible()
     await otherPage.goto(`/dashboard/scans/${scan.id}`)
     await expect(otherPage.getByRole("heading", { name: "No workspace yet" })).toBeVisible()
   } finally {

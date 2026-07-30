@@ -229,7 +229,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                 className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium"
               >
                 <ChevronDown
-                  className={`size-4 transition-transform duration-150 ${showAdvanced ? "rotate-180" : ""}`}
+                  className={`size-4 transition-transform duration-[var(--duration-fast)] ease-[var(--ease-out)] ${showAdvanced ? "rotate-180" : ""}`}
                   aria-hidden="true"
                 />
                 Advanced
@@ -338,7 +338,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
           {schedules.map((schedule) => (
             <Card
               key={schedule.id}
-              className="hover:shadow-card-hover p-4 transition-shadow duration-200"
+              className="hover:shadow-card-hover p-4 transition-shadow duration-[var(--duration-base)] ease-[var(--ease-out)]"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">

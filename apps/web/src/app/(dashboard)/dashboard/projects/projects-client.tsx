@@ -208,7 +208,7 @@ export function ProjectsClient({
             <Link
               key={project.id}
               href={`/dashboard/targets?projectId=${project.id}`}
-              className="group bg-card block rounded-xl border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              className="group bg-card block rounded-xl border p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-[var(--duration-base)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-md"
             >
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="font-semibold">{project.name}</h3>

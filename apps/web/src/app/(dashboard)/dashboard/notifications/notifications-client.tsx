@@ -163,7 +163,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
             return (
               <Card
                 key={notification.id}
-                className="hover:shadow-card-hover p-4 transition-shadow duration-200"
+                className="hover:shadow-card-hover p-4 transition-shadow duration-[var(--duration-base)] ease-[var(--ease-out)]"
               >
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 shrink-0">

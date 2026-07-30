@@ -400,7 +400,7 @@ export function ReportsClient({
           {reports.map((report) => (
             <Card
               key={report.id}
-              className="hover:shadow-card-hover p-4 transition-shadow duration-200"
+              className="hover:shadow-card-hover p-4 transition-shadow duration-[var(--duration-base)] ease-[var(--ease-out)]"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
