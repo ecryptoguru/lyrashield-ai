@@ -1,0 +1,53 @@
+{
+  "name": "@lyrashield/cli",
+  "version": "0.1.0",
+  "description": "LyraShield AI CLI — install, scan, and gate your AI coding agents.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "lyrashield": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "security",
+    "appsec",
+    "ai-coding",
+    "mcp",
+    "lyrashield",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsup",
+    "prepublishOnly": "tsup",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "@lyrashield/agent-registry": "workspace:*",
+    "@lyrashield/sdk": "workspace:*",
+    "jsonc-parser": "^3.3.1",
+    "minimist": "^1.2.8",
+    "yaml": "^2.7.1"
+  },
+  "devDependencies": {
+    "@types/iarna__toml": "^2.0.5",
+    "@types/minimist": "^1.2.5",
+    "@types/node": "^22.20.1",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

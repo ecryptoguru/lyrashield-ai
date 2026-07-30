@@ -1,3 +1,5 @@
+import { LyraShieldClient } from "@lyrashield/sdk"
+
 export type McpToolResult = {
   content: Array<{ type: "text"; text: string }>
   isError?: boolean
@@ -26,56 +28,23 @@ export interface ToolHandlerContext {
   fetchFn?: typeof fetch
 }
 
+function getClient(context: ToolHandlerContext): LyraShieldClient {
+  return new LyraShieldClient({
+    apiKey: context.apiKey ?? "",
+    apiUrl: context.apiBaseUrl,
+    fetchFn: context.fetchFn,
+  })
+}
+
 async function apiCall(
   context: ToolHandlerContext,
   method: string,
   path: string,
   body?: Record<string, unknown>
 ): Promise<unknown> {
-  const fetchImpl = context.fetchFn ?? globalThis.fetch
-  const url = `${context.apiBaseUrl}${path}`
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  }
-  if (context.apiKey) {
-    headers["Authorization"] = `Bearer ${context.apiKey}`
-  }
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 30000)
-  try {
-    const res = await fetchImpl(url, {
-      method,
-      headers,
-      signal: controller.signal,
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    })
-    clearTimeout(timeout)
-
-    if (!res.ok) {
-      let errorMsg = `API returned ${res.status} ${res.statusText}`
-      try {
-        const errorJson = (await res.json()) as { error?: { message?: string } }
-        if (errorJson.error?.message) errorMsg = errorJson.error.message
-      } catch {
-        // Response body is not JSON — use status text
-      }
-      throw new Error(errorMsg)
-    }
-
-    const json = (await res.json()) as {
-      success: boolean
-      data?: unknown
-      error?: { message?: string }
-    }
-    if (!json.success) {
-      throw new Error(json.error?.message ?? "API call failed")
-    }
-    return json.data
-  } catch (err) {
-    clearTimeout(timeout)
-    throw err
-  }
+  const client = getClient(context)
+  const sdkPath = path.startsWith("/api/") ? path.slice(4) : path
+  return client.request(method, sdkPath, body ? { body } : undefined)
 }
 
 function makeToolResult(data: unknown): McpToolResult {

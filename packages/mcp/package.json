@@ -41,6 +41,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@lyrashield/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.76"
   },

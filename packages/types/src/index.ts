@@ -403,3 +403,105 @@ export const ApproveDenyInputSchema = z.object({
   workspaceId: z.string().min(1),
   approvalId: z.string().min(1),
 })
+
+// ── v1 API input schemas (source of truth for OpenAPI generation) ─────
+
+export const ReportTypeSchema = z.enum(["developer", "executive", "compliance"])
+
+export const CreateReportSchema = z.object({
+  workspaceId: z.string().min(1),
+  scanId: z.string().optional(),
+  type: ReportTypeSchema.optional(),
+  title: z.string().min(1).max(200),
+})
+
+export type CreateReportInput = z.infer<typeof CreateReportSchema>
+
+export const ReportActionSchema = z.object({
+  workspaceId: z.string().min(1),
+  action: z.enum(["share", "revoke"]),
+})
+
+export type ReportActionInput = z.infer<typeof ReportActionSchema>
+
+export const CreateFixProposalSchema = z.object({
+  workspaceId: z.string().min(1),
+  summary: z.string().min(10, "Summary must be at least 10 characters"),
+  diffRef: z.string().optional(),
+  generatedByModel: z.string().optional(),
+  safetyScore: z.number().int().min(0).max(100).optional(),
+})
+
+export type CreateFixProposalInput = z.infer<typeof CreateFixProposalSchema>
+
+export const CreateRetestSchema = z.object({
+  workspaceId: z.string().min(1),
+  scanId: z.string().optional(),
+})
+
+export type CreateRetestInput = z.infer<typeof CreateRetestSchema>
+
+export const PatchFindingSchema = z.object({
+  workspaceId: z.string().min(1),
+  action: z.enum(["false_positive", "accept_risk", "update_status"]),
+  status: FindingStatusSchema.optional(),
+  reason: z.string().max(1000).optional(),
+})
+
+export type PatchFindingInput = z.infer<typeof PatchFindingSchema>
+
+function isFiveFieldCron(cron: string) {
+  const parts = cron.trim().split(/\s+/)
+  return parts.length === 5
+}
+
+export const CreateScheduleSchema = z.object({
+  workspaceId: z.string().min(1),
+  targetId: z.string().min(1),
+  cron: z
+    .string()
+    .min(1, "cron expression is required")
+    .refine(
+      (c) => isFiveFieldCron(c),
+      "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'"
+    ),
+  goal: ScanGoalSchema,
+  mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).default("SAFE"),
+})
+
+export type CreateScheduleInput = z.infer<typeof CreateScheduleSchema>
+
+export const PatchScheduleSchema = z.object({
+  workspaceId: z.string().min(1),
+  cron: z
+    .string()
+    .min(1)
+    .refine((c) => isFiveFieldCron(c), "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'")
+    .optional(),
+  goal: ScanGoalSchema.optional(),
+  mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).optional(),
+  enabled: z.boolean().optional(),
+})
+
+export type PatchScheduleInput = z.infer<typeof PatchScheduleSchema>
+
+export const CreatePRSchema = z.object({
+  workspaceId: z.string().min(1),
+})
+
+export type CreatePRInput = z.infer<typeof CreatePRSchema>
+
+export const FindingQuerySchema = z.object({
+  workspaceId: z.string().min(1),
+  targetId: z.string().optional(),
+  scanId: z.string().optional(),
+  severity: FindingSeveritySchema.optional(),
+  status: FindingStatusSchema.optional(),
+  verified: z.enum(["true", "false"]).optional(),
+  category: z.string().optional(),
+  stats: z.enum(["true"]).optional(),
+  cursor: z.string().optional(),
+  limit: z.string().optional(),
+})
+
+export type FindingQueryInput = z.infer<typeof FindingQuerySchema>
