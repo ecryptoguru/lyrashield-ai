@@ -998,5 +998,115 @@
     "targetWords": 1350,
     "batch": "batch-6",
     "cta": "Pillar + Secret Scanner"
+  },
+  {
+    "index": 101,
+    "title": "VS Code AI app security checklist for MCP hardened builds",
+    "slug": "vscode-ai-app-security-checklist",
+    "query": "vscode app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 102,
+    "title": "JetBrains AI App Security Checklist for Vibe Coding",
+    "slug": "jetbrains-ai-app-security-checklist",
+    "query": "jetbrains ai app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 103,
+    "title": "Zed AI App Security Checklist for Vibe Teams",
+    "slug": "zed-ai-app-security-checklist",
+    "query": "zed app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 104,
+    "title": "OpenCode App Security Checklist for AI Built Apps",
+    "slug": "opencode-app-security-checklist",
+    "query": "opencode app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 105,
+    "title": "Gemini CLI App Security Checklist for Vibe Coding",
+    "slug": "gemini-cli-app-security-checklist",
+    "query": "gemini cli app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 106,
+    "title": "Cline App Security Checklist for AI Built Software",
+    "slug": "cline-app-security-checklist",
+    "query": "cline app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 107,
+    "title": "Kilo Code App Security Checklist - LyraShield AI",
+    "slug": "kilo-code-app-security-checklist",
+    "query": "kilo code app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 108,
+    "title": "Amp App Security Checklist - LyraShield AI",
+    "slug": "amp-app-security-checklist",
+    "query": "amp app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 109,
+    "title": "Hermes Agent App Security Checklist - LyraShield AI",
+    "slug": "hermes-app-security-checklist",
+    "query": "hermes app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 110,
+    "title": "Pi Coding Agent App Security Checklist - LyraShield",
+    "slug": "pi-coding-agent-app-security-checklist",
+    "query": "pi coding agent app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 111,
+    "title": "OpenClaw App Security Checklist - LyraShield AI",
+    "slug": "openclaw-app-security-checklist",
+    "query": "openclaw app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-7",
+    "cta": "Pillar + Launch Checklist"
   }
 ]

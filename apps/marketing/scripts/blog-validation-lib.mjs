@@ -18,7 +18,17 @@ export const PROGRAM_RELEASES = Object.freeze([
   "batch-4",
   "batch-5",
   "batch-6",
+  "batch-7",
 ])
+
+// Declarative corpus size. Bump these together with a release: drift in either
+// direction still fails, but the expected shape is stated once instead of being
+// spread across hardcoded literals in the distribution assertions below.
+export const PROGRAM_ARTICLE_COUNT = 111
+
+export const IMAGE_CORPUS = Object.freeze({ authority: 1, shared: 46 })
+
+export const MAX_SHARED_IMAGE_USAGE = 3
 
 const ALL_FREE_TOOL_ROUTES = Object.freeze([
   "/tools/ai-app-security-checklist",
@@ -591,14 +601,13 @@ export function validateArticle(article, programEntry, context = {}) {
 
 export function validateUsageCounts(counts, finalDistribution = false) {
   const errors = []
-  if (counts.some((count) => count > 3)) errors.push("shared image usage must not exceed 3")
+  if (counts.some((count) => count > MAX_SHARED_IMAGE_USAGE))
+    errors.push(`shared image usage must not exceed ${MAX_SHARED_IMAGE_USAGE}`)
   if (counts.some((count) => count < 1)) errors.push("shared image usage must be at least 1")
-  if (finalDistribution) {
-    const twos = counts.filter((count) => count === 2).length
-    const threes = counts.filter((count) => count === 3).length
-    if (counts.length !== 35 || threes !== 29 || twos !== 6) {
-      errors.push("shared image distribution must be 29x3 and 6x2")
-    }
+  if (finalDistribution && counts.length !== IMAGE_CORPUS.shared) {
+    errors.push(
+      `shared image distribution must contain exactly ${IMAGE_CORPUS.shared} images; found ${counts.length}`
+    )
   }
   return errors
 }
@@ -768,27 +777,29 @@ export function validateImageLibrary(catalog, manifests, root, options = {}) {
     .map(([, count]) => count)
   if (options.finalDistribution === true) {
     const assignmentCount = [...usage.values()].reduce((total, count) => total + count, 0)
-    if (authorityIds.size !== 1) {
+    if (authorityIds.size !== IMAGE_CORPUS.authority) {
       errors.push(
-        `final image distribution must contain exactly 1 authority image; found ${authorityIds.size}`
+        `final image distribution must contain exactly ${IMAGE_CORPUS.authority} authority image; found ${authorityIds.size}`
       )
     }
-    if (sharedCounts.length !== 35) {
+    if (sharedCounts.length !== IMAGE_CORPUS.shared) {
       errors.push(
-        `final image distribution must contain exactly 35 shared images; found ${sharedCounts.length}`
+        `final image distribution must contain exactly ${IMAGE_CORPUS.shared} shared images; found ${sharedCounts.length}`
       )
     }
-    if (usage.size !== 36) {
-      errors.push(`final image distribution must contain exactly 36 images; found ${usage.size}`)
-    }
-    if (Object.keys(catalog).length !== 36) {
+    if (usage.size !== IMAGE_CORPUS.authority + IMAGE_CORPUS.shared) {
       errors.push(
-        `final image catalog must contain exactly 36 images; found ${Object.keys(catalog).length}`
+        `final image distribution must contain exactly ${IMAGE_CORPUS.authority + IMAGE_CORPUS.shared} images; found ${usage.size}`
       )
     }
-    if (assignmentCount !== 100) {
+    if (Object.keys(catalog).length !== IMAGE_CORPUS.authority + IMAGE_CORPUS.shared) {
       errors.push(
-        `final image distribution must contain exactly 100 assignments; found ${assignmentCount}`
+        `final image catalog must contain exactly ${IMAGE_CORPUS.authority + IMAGE_CORPUS.shared} images; found ${Object.keys(catalog).length}`
+      )
+    }
+    if (assignmentCount !== PROGRAM_ARTICLE_COUNT) {
+      errors.push(
+        `final image distribution must contain exactly ${PROGRAM_ARTICLE_COUNT} assignments; found ${assignmentCount}`
       )
     }
   }

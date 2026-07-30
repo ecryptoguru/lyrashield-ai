@@ -394,5 +394,126 @@
     "alt": "Data signals entering a constrained execution funnel while other paths are blocked",
     "width": 1600,
     "height": 900
+  },
+  "agent-security-10": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-10/hero.avif",
+    "webp": "/images/blog/library/agent-security-10/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-10/hero.jpg",
+    "og": "/images/blog/library/agent-security-10/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-10/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with VS Code",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-11": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-11/hero.avif",
+    "webp": "/images/blog/library/agent-security-11/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-11/hero.jpg",
+    "og": "/images/blog/library/agent-security-11/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-11/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with JetBrains",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-12": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-12/hero.avif",
+    "webp": "/images/blog/library/agent-security-12/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-12/hero.jpg",
+    "og": "/images/blog/library/agent-security-12/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-12/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Zed",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-14": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-14/hero.avif",
+    "webp": "/images/blog/library/agent-security-14/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-14/hero.jpg",
+    "og": "/images/blog/library/agent-security-14/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-14/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with OpenCode",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-15": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-15/hero.avif",
+    "webp": "/images/blog/library/agent-security-15/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-15/hero.jpg",
+    "og": "/images/blog/library/agent-security-15/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-15/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Gemini CLI",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-16": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-16/hero.avif",
+    "webp": "/images/blog/library/agent-security-16/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-16/hero.jpg",
+    "og": "/images/blog/library/agent-security-16/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-16/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Cline",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-17": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-17/hero.avif",
+    "webp": "/images/blog/library/agent-security-17/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-17/hero.jpg",
+    "og": "/images/blog/library/agent-security-17/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-17/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Kilo Code",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-18": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-18/hero.avif",
+    "webp": "/images/blog/library/agent-security-18/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-18/hero.jpg",
+    "og": "/images/blog/library/agent-security-18/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-18/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Amp",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-19": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-19/hero.avif",
+    "webp": "/images/blog/library/agent-security-19/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-19/hero.jpg",
+    "og": "/images/blog/library/agent-security-19/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-19/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Hermes",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-20": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-20/hero.avif",
+    "webp": "/images/blog/library/agent-security-20/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-20/hero.jpg",
+    "og": "/images/blog/library/agent-security-20/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-20/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Pi",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-21": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-21/hero.avif",
+    "webp": "/images/blog/library/agent-security-21/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-21/hero.jpg",
+    "og": "/images/blog/library/agent-security-21/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-21/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with OpenClaw",
+    "width": 1600,
+    "height": 900
   }
 }

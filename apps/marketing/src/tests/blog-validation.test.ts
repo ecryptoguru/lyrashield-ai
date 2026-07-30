@@ -8,6 +8,23 @@ import { describe, expect, it, vi } from "vitest"
 import program from "../content/blog-program.json"
 
 import {
+import { IMAGE_CORPUS, PROGRAM_ARTICLE_COUNT } from "../../scripts/blog-validation-lib.mjs"
+
+// Builds a shared-usage distribution of exactly IMAGE_CORPUS.shared images whose
+// assignments sum to the non-authority half of PROGRAM_ARTICLE_COUNT, with every
+// image inside the 1..MAX_SHARED_IMAGE_USAGE band.
+function sharedUsageDistribution() {
+  const target = PROGRAM_ARTICLE_COUNT - IMAGE_CORPUS.authority
+  const counts = Array(IMAGE_CORPUS.shared).fill(1)
+  let remaining = target - IMAGE_CORPUS.shared
+  for (let pass = 0; pass < 2 && remaining > 0; pass += 1) {
+    for (let index = 0; index < counts.length && remaining > 0; index += 1) {
+      counts[index] += 1
+      remaining -= 1
+    }
+  }
+  return counts
+}
   checkExternalLinks,
   classifySource,
   parseArticle,
@@ -152,9 +169,11 @@ describe("blog validator", () => {
   })
 
   it("enforces the final shared-image distribution", () => {
-    expect(validateUsageCounts([...Array(29).fill(3), ...Array(6).fill(2)], true)).toEqual([])
-    expect(validateUsageCounts([...Array(35).fill(3)], true)).toContain(
-      "shared image distribution must be 29x3 and 6x2"
+    expect(validateUsageCounts(sharedUsageDistribution(), true)).toEqual([])
+    expect(validateUsageCounts([...Array(IMAGE_CORPUS.shared - 1).fill(3)], true)).toContain(
+      `shared image distribution must contain exactly ${IMAGE_CORPUS.shared} images; found ${
+        IMAGE_CORPUS.shared - 1
+      }`
     )
     expect(validateUsageCounts([4], false)).toContain("shared image usage must not exceed 3")
   })
@@ -588,25 +607,23 @@ ${filler}
     }
   })
 
-  it("accepts the complete authority plus 29x3 and 6x2 image library", () => {
+  it("accepts the complete declared authority plus shared image corpus", () => {
     const root = mkdtempSync(join(tmpdir(), "blog-validation-final-"))
     const catalog: Record<string, ReturnType<typeof catalogEntry>> = {}
     const authorityId = "authority-guide-01"
     catalog[authorityId] = catalogEntry(authorityId, "authority")
     writeImageSet(root, authorityId)
 
-    const sharedIds = [...Array(35)].map((_, index) => `verification-${index + 1}`)
-    const tripleIds = new Set(sharedIds.slice(0, 29))
+    const distribution = sharedUsageDistribution()
+    const sharedIds = distribution.map((_, index) => `verification-${index + 1}`)
     for (const imageId of sharedIds) {
       catalog[imageId] = catalogEntry(imageId)
       writeImageSet(root, imageId)
     }
-    const assignments = [
-      ...sharedIds,
-      ...sharedIds,
-      ...sharedIds.filter((imageId) => tripleIds.has(imageId)),
-    ]
-    const counts = new Map(sharedIds.map((imageId) => [imageId, tripleIds.has(imageId) ? 3 : 2]))
+    const counts = new Map(sharedIds.map((imageId, index) => [imageId, distribution[index]]))
+    const assignments = sharedIds.flatMap((imageId) =>
+      Array(counts.get(imageId)!).fill(imageId)
+    )
     const manifests = [
       {
         release: "authority",
@@ -623,7 +640,7 @@ ${filler}
     expect(validateImageLibrary(catalog, manifests, root, { finalDistribution: true })).toEqual([])
   })
 
-  it("requires exactly one authority image and 36 images across 100 final assignments", () => {
+  it("requires exactly one authority image and the declared corpus across final assignments", () => {
     const root = mkdtempSync(join(tmpdir(), "blog-validation-cardinality-"))
     const catalog: Record<string, ReturnType<typeof catalogEntry>> = {}
     const authorityIds = ["authority-guide-01", "authority-guide-02"]
@@ -661,11 +678,15 @@ ${filler}
 
     const errors = validateImageLibrary(catalog, manifests, root, { finalDistribution: true })
     expect(errors).toContain(
-      "final image distribution must contain exactly 1 authority image; found 2"
+      `final image distribution must contain exactly ${IMAGE_CORPUS.authority} authority image; found 2`
     )
-    expect(errors).toContain("final image distribution must contain exactly 36 images; found 37")
     expect(errors).toContain(
-      "final image distribution must contain exactly 100 assignments; found 101"
+      `final image distribution must contain exactly ${
+        IMAGE_CORPUS.authority + IMAGE_CORPUS.shared
+      } images; found 37`
+    )
+    expect(errors).toContain(
+      `final image distribution must contain exactly ${PROGRAM_ARTICLE_COUNT} assignments; found 101`
     )
   })
 

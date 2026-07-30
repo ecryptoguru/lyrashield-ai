@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest"
 import program from "../content/blog-program.json"
 import images from "../content/blog-images/images.json"
 import authors from "../content/authors/authors.json"
+import {
+  IMAGE_CORPUS,
+  PROGRAM_ARTICLE_COUNT,
+} from "../../scripts/blog-validation-lib.mjs"
 
 type BlogProgramEntry = {
   index: number
@@ -15,7 +19,7 @@ type BlogProgramEntry = {
   cta: string
 }
 
-const BLOG_MAP_HEADING = "## 5. The 100-blog map"
+const BLOG_MAP_HEADING = "## 5. The published blog map"
 const TOOLS_HEADING = "## 6. `/tools` product-led SEO surface"
 
 function batchFor(index: number) {
@@ -25,7 +29,8 @@ function batchFor(index: number) {
   if (index <= 52) return "batch-3"
   if (index <= 68) return "batch-4"
   if (index <= 84) return "batch-5"
-  return "batch-6"
+  if (index <= 100) return "batch-6"
+  return "batch-7"
 }
 
 function readApprovedBlogProgram(): BlogProgramEntry[] {
@@ -41,7 +46,7 @@ function readApprovedBlogProgram(): BlogProgramEntry[] {
   const sectionEnd = plan.indexOf(TOOLS_HEADING, sectionStart)
 
   if (sectionStart === -1 || sectionEnd === -1) {
-    throw new Error("Could not find the authoritative 100-blog map in the editorial plan")
+    throw new Error("Could not find the authoritative blog map in the editorial plan")
   }
 
   return plan
@@ -83,7 +88,7 @@ describe("blog program contracts", () => {
   it("contains the exact ordered 100-topic program", () => {
     const approvedProgram = readApprovedBlogProgram()
 
-    expect(approvedProgram).toHaveLength(100)
+    expect(approvedProgram).toHaveLength(PROGRAM_ARTICLE_COUNT)
     expect(program).toHaveLength(approvedProgram.length)
     approvedProgram.forEach((approvedEntry, position) => {
       expect(
@@ -91,13 +96,13 @@ describe("blog program contracts", () => {
         `Manifest position ${position + 1} must exactly match approved topic ${approvedEntry.index} (${approvedEntry.slug})`
       ).toEqual(approvedEntry)
     })
-    expect(new Set(program.map((entry) => entry.slug)).size).toBe(100)
+    expect(new Set(program.map((entry) => entry.slug)).size).toBe(PROGRAM_ARTICLE_COUNT)
   })
 
   it("contains the reviewed 36-image catalog with every production rendition", () => {
     const entries = Object.entries(images)
 
-    expect(entries).toHaveLength(36)
+    expect(entries).toHaveLength(IMAGE_CORPUS.authority + IMAGE_CORPUS.shared)
     expect(new Set(entries.map(([, image]) => image.cluster))).toEqual(
       new Set([
         "authority",
