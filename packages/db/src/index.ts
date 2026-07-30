@@ -163,11 +163,13 @@ export {
 export {
   createApproval,
   getApproval,
+  findPendingApprovalByHash,
   listApprovals,
   approveApproval,
   denyApproval,
   consumeApproval,
   saveApprovalResult,
+  executeApproval,
   expireStaleApprovals,
   hashInput,
   verifyInputHash,

@@ -121,4 +121,23 @@ describe("/api/v1 parity", () => {
     expect(v1.GET).toBe(twin.GET)
     expect(v1.POST).toBe(twin.POST)
   })
+
+  it("agent-approvals (GET, POST)", async () => {
+    const v1 = await import("../app/api/v1/agent-approvals/route")
+    const twin = await import("../app/api/agent-approvals/route")
+    expect(v1.GET).toBe(twin.GET)
+    expect(v1.POST).toBe(twin.POST)
+  })
+
+  it("agent-approvals/[id]/approve (POST)", async () => {
+    const v1 = await import("../app/api/v1/agent-approvals/[id]/approve/route")
+    const twin = await import("../app/api/agent-approvals/[id]/approve/route")
+    expect(v1.POST).toBe(twin.POST)
+  })
+
+  it("agent-approvals/[id]/deny (POST)", async () => {
+    const v1 = await import("../app/api/v1/agent-approvals/[id]/deny/route")
+    const twin = await import("../app/api/agent-approvals/[id]/deny/route")
+    expect(v1.POST).toBe(twin.POST)
+  })
 })

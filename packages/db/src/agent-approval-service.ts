@@ -61,6 +61,29 @@ export async function getApproval(
   })
 }
 
+export async function findPendingApprovalByHash(
+  workspaceId: string,
+  actionName: string,
+  inputHash: string
+): Promise<AgentApproval | null> {
+  return prisma.agentApproval.findFirst({
+    where: { workspaceId, actionName, inputHash, status: "PENDING" },
+  })
+}
+
+/** Atomically mark an APPROVED approval as EXECUTED and persist its result. */
+export async function executeApproval(
+  approvalId: string,
+  workspaceId: string,
+  result: Record<string, unknown>
+): Promise<boolean> {
+  const update = await prisma.agentApproval.updateMany({
+    where: { id: approvalId, workspaceId, status: "APPROVED" },
+    data: { status: "EXECUTED", executedAt: new Date(), result },
+  })
+  return update.count === 1
+}
+
 export type ApprovalListItem = Omit<AgentApproval, "result">
 
 export async function listApprovals(params: ListApprovalsParams): Promise<{

@@ -1,5 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import { createLyraShieldServer } from "./create-server"
+import type { RemoteApprovalContext, RemoteApprovalGate } from "./create-server"
 import type { ToolHandlerContext } from "./tools"
 
 /**
@@ -17,23 +18,35 @@ import type { ToolHandlerContext } from "./tools"
  *
  * Approval posture: a stateless HTTP request has no channel for server→client
  * elicitation, so mutating tools are refused (approvalMode "deny") unless the
- * caller passes `allowMutations` for a trusted, pre-authorized automation.
+ * caller passes a `remoteApprovalGate` (remote out-of-band approval) or
+ * `allowMutations` for a trusted, pre-authorized automation.
  */
 export interface RemoteMcpOptions {
   /** Authenticated tool context (API base URL + the caller's workspace key). */
   toolContext: ToolHandlerContext
   /** Allow mutating tools without an interactive gate (trusted automation only). */
   allowMutations?: boolean
+  /** Workspace context for the remote out-of-band approval gate. */
+  remoteApprovalContext?: RemoteApprovalContext
+  /** Remote out-of-band approval gate callback. */
+  remoteApprovalGate?: RemoteApprovalGate
 }
 
 export async function handleRemoteMcpRequest(
   request: Request,
   options: RemoteMcpOptions
 ): Promise<Response> {
+  const approvalMode = options.remoteApprovalGate ? "remote-oob" : "deny"
   const { server } = createLyraShieldServer({
     toolContext: options.toolContext,
-    approvalMode: "deny",
+    approvalMode,
     ...(options.allowMutations ? { allowMutations: true } : {}),
+    ...(options.remoteApprovalContext && options.remoteApprovalGate
+      ? {
+          remoteApprovalContext: options.remoteApprovalContext,
+          remoteApprovalGate: options.remoteApprovalGate,
+        }
+      : {}),
   })
 
   // Stateless: no sessionIdGenerator. Each request is fully self-contained.
