@@ -15,6 +15,7 @@ import {
   FormField,
 } from "@lyrashield/ui"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AuthSplitLayout } from "@/components/auth-split-layout"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -213,18 +214,20 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center px-4">
+    <>
       <ThemeToggle className="fixed top-4 right-4 z-10" />
-      <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
-      <div className="relative w-full max-w-md">
-        <div className="mb-8 flex flex-col items-center">
-          <div className="gradient-primary shadow-primary-glow mb-3 flex h-12 w-12 items-center justify-center rounded-xl">
-            <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
-          <p className="text-muted-foreground text-sm">Sign in to your LyraShield account</p>
-        </div>
-
+      <AuthSplitLayout
+        heading="Welcome back"
+        subheading="Sign in to your LyraShield account"
+        footer={
+          <p className="text-muted-foreground mt-6 text-center text-sm md:text-left">
+            Don&apos;t have an account?{" "}
+            <Link href="/sign-up" className="text-primary font-medium hover:underline">
+              Sign up
+            </Link>
+          </p>
+        }
+      >
         <div className="bg-card rounded-xl border p-6 shadow-lg sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             <FormField label="Email" htmlFor="email">
@@ -321,14 +324,7 @@ export default function SignInPage() {
             </>
           )}
         </div>
-
-        <p className="text-muted-foreground mt-6 text-center text-sm">
-          Don&apos;t have an account?{" "}
-          <Link href="/sign-up" className="text-primary font-medium hover:underline">
-            Sign up
-          </Link>
-        </p>
-      </div>
-    </main>
+      </AuthSplitLayout>
+    </>
   )
 }
