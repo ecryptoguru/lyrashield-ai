@@ -20,6 +20,7 @@ env:
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
+  REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}
 
 jobs:
   build:
@@ -220,7 +221,7 @@ jobs:
               "NEXT_PUBLIC_APP_URL=${{ env.APP_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
-              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}" \
+              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token"
 
@@ -237,7 +238,7 @@ jobs:
               "NEXT_PUBLIC_APP_URL=${{ env.SCANNER_URL }}" \
               "NEXT_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}" \
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
-              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '0' }}" \
+              "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
               "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token"
 
