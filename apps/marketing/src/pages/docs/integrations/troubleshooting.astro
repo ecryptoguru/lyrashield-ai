@@ -1,5 +1,6 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
+import { listAgents } from "@lyrashield/agent-registry"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/troubleshooting", origin).toString()
@@ -7,6 +8,8 @@ const title = "LyraShield MCP Troubleshooting & Gotchas"
 const description =
   "Fix common LyraShield MCP integration problems: VS Code uses 'servers' not 'mcpServers', Gemini CLI strips KEY/TOKEN/SECRET env vars, Zed uses context_servers, OpenCode uses {env:VAR} interpolation."
 const updatedDate = "2026-07-24"
+
+const agents = listAgents()
 
 const faqItems = [
   {
@@ -91,61 +94,31 @@ const jsonLd: unknown[] = [
     Here is a quick reference for each known gotcha, followed by detailed answers.
   </p>
 
-  <h2>Quick reference — per-editor gotchas</h2>
+  <h2>Quick reference — per-agent gotchas</h2>
   <table>
     <thead>
       <tr>
-        <th>Editor</th>
-        <th>Gotcha</th>
+        <th>Agent</th>
+        <th>Gotchas</th>
       </tr>
     </thead>
     <tbody>
-      <tr>
-        <td>VS Code</td>
-        <td>
-          Root key is <code>servers</code>, not <code>mcpServers</code>. Every entry needs{" "}
-          <code>"type": "stdio"</code>.
-        </td>
-      </tr>
-      <tr>
-        <td>Gemini CLI</td>
-        <td>
-          Strips env vars with <code>KEY</code>/<code>TOKEN</code>/<code>SECRET</code> in the name.
-          Declare explicitly in the <code>env</code> block. No underscores in server name.
-        </td>
-      </tr>
-      <tr>
-        <td>Zed</td>
-        <td>
-          Root key is <code>context_servers</code>, not <code>mcpServers</code>.
-        </td>
-      </tr>
-      <tr>
-        <td>OpenCode</td>
-        <td>
-          Root key is <code>mcp</code>. Env interpolation is <code>{"{env:VAR}"}</code>, not{" "}
-          <code>{"${VAR}"}</code>.
-        </td>
-      </tr>
-      <tr>
-        <td>Kilo Code</td>
-        <td>
-          Same as OpenCode: <code>mcp</code> key, <code>{"{env:VAR}"}</code> interpolation.
-        </td>
-      </tr>
-      <tr>
-        <td>OpenAI Codex</td>
-        <td>
-          TOML format. Env key is <code>env_vars</code>, not <code>env</code>.
-        </td>
-      </tr>
-      <tr>
-        <td>Cline (remote)</td>
-        <td>
-          Must set <code>"type": "streamableHttp"</code> explicitly. Omitting defaults to legacy
-          SSE.
-        </td>
-      </tr>
+      {
+        agents.map((agent) => (
+          <tr>
+            <td>
+              <a href={`/docs/integrations/${agent.docsSlug}`}>{agent.displayName}</a>
+            </td>
+            <td>
+              <ul>
+                {agent.gotchas.map((gotcha) => (
+                  <li>{gotcha}</li>
+                ))}
+              </ul>
+            </td>
+          </tr>
+        ))
+      }
     </tbody>
   </table>
 
@@ -227,5 +200,11 @@ const jsonLd: unknown[] = [
   .faq-item__a {
     padding-bottom: 1rem;
     font-size: 0.9rem;
+  }
+
+  .faq-item:focus-within .faq-item__q {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 0.2rem;
   }
 </style>

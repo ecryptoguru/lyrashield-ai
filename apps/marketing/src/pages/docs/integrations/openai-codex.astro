@@ -1,4 +1,5 @@
 ---
+import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -83,13 +84,7 @@ const jsonLd: unknown[] = [
     variables in Codex TOML config.
   </p>
 
-  <pre><code>{`[mcp_servers.lyrashield]
-command = "npx"
-args = ["-y", "@lyrashield/mcp"]
-
-[mcp_servers.lyrashield.env_vars]
-LYRASHIELD_API_KEY = "lsk_your_key_here"
-LYRASHIELD_API_URL = "https://app.lyrashieldai.com"`}</code></pre>
+  <AgentSnippet agentId="openai-codex" transport="stdio" />
 
   <div class="callout">
     <strong>env_vars vs. env:</strong> OpenAI Codex uses <code>env_vars</code> in its TOML config,

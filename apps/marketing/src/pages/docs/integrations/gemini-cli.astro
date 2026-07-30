@@ -1,4 +1,5 @@
 ---
+import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -75,18 +76,7 @@ const jsonLd: unknown[] = [
     the environment.
   </p>
 
-  <pre><code>{`{
-  "mcpServers": {
-    "lyrashield": {
-      "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": {
-        "LYRASHIELD_API_KEY": "lsk_your_key_here",
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
-    }
-  }
-}`}</code></pre>
+  <AgentSnippet agentId="gemini-cli" transport="stdio" />
 
   <h2>Verify the connection</h2>
   <p>

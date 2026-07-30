@@ -1,15 +1,12 @@
 ---
 import DocsLayout from "@layouts/DocsLayout.astro"
-import { readFileSync } from "node:fs"
+import spec from "../../data/openapi.json" with { type: "json" }
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/api", origin).toString()
 const title = "LyraShield API v1 Reference"
 const description = "OpenAPI 3.1 reference for the LyraShield /api/v1 endpoints."
 const updatedDate = "2026-07-31"
-
-const specPath = new URL("../../../public/openapi.json", import.meta.url)
-const spec = JSON.parse(readFileSync(specPath, "utf-8"))
 
 const jsonLd: unknown[] = [
   {

@@ -16,7 +16,10 @@ function parseContent(format: ConfigFormat, content: string): Record<string, unk
   return YAML.parse(content) as Record<string, unknown>
 }
 
-function renderOpts(transport: Transport, secretMode: InstallOptions["secretMode"]): InstallOptions {
+function renderOpts(
+  transport: Transport,
+  secretMode: InstallOptions["secretMode"]
+): InstallOptions {
   return {
     transport,
     apiUrl: API_URL,

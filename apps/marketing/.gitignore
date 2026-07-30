@@ -14,6 +14,7 @@
 
 # Generated OpenAPI spec for docs
 public/openapi.json
+src/data/openapi.json
 
 # Re-include source pages that happen to live in a directory named "docs"
 # (the monorepo root .gitignore has a broad `docs/` rule)

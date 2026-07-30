@@ -1,4 +1,5 @@
 ---
+import AgentSnippet from "@components/AgentSnippet.astro"
 import DocsLayout from "@layouts/DocsLayout.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
@@ -78,36 +79,7 @@ const jsonLd: unknown[] = [
   </p>
 
   <h2>Adding the MCP server</h2>
-  <ol>
-    <li>
-      Open <strong>Settings</strong> (<code>Ctrl/Cmd + ,</code>) → <strong>Tools</strong> →{" "}
-      <strong>AI Assistant</strong> → <strong>MCP Servers</strong>.
-    </li>
-    <li>Click <strong>+</strong> to add a new server.</li>
-    <li>
-      Set the following values:
-      <ul>
-        <li>
-          <strong>Command:</strong> <code>npx</code>
-        </li>
-        <li>
-          <strong>Arguments:</strong> <code>-y @lyrashield/mcp</code>
-        </li>
-      </ul>
-    </li>
-    <li>
-      In the <strong>Environment variables</strong> section, add:
-      <ul>
-        <li>
-          <code>LYRASHIELD_API_KEY</code> = <code>lsk_your_key_here</code>
-        </li>
-        <li>
-          <code>LYRASHIELD_API_URL</code> = <code>https://app.lyrashieldai.com</code>
-        </li>
-      </ul>
-    </li>
-    <li>Click <strong>OK</strong> and apply settings.</li>
-  </ol>
+  <AgentSnippet agentId="jetbrains" />
 
   <div class="callout">
     <strong>Config file location:</strong> JetBrains stores the MCP config in the IDE's settings
