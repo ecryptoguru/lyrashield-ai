@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline"
 import { Writable } from "node:stream"
 import minimist from "minimist"
-import { saveCredentials, loadCredentials, getEnvApiKey, getEnvApiUrl } from "../credentials.js"
+import { saveCredentials, loadCredentials, getEnvApiUrl } from "../credentials.js"
 import { redactKey } from "../output.js"
 import type { Output } from "../output.js"
 import process from "node:process"

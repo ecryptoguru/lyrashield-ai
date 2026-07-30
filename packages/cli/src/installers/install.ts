@@ -160,7 +160,7 @@ async function runVendorCli(
 }
 
 export async function installAgent(opts: InstallAgentOptions): Promise<InstallAgentResult> {
-  const { agent, dryRun, all } = opts
+  const { agent, all } = opts
 
   if (agent.installStrategy === "guided-manual") {
     return {

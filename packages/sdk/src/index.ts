@@ -1,4 +1,9 @@
-export { LyraShieldClient, type LyraShieldClientOptions, type RequestOptions, VERSION } from "./client"
+export {
+  LyraShieldClient,
+  type LyraShieldClientOptions,
+  type RequestOptions,
+  VERSION,
+} from "./client"
 export { LyraShieldError, NotModified, isNotModified, type LyraShieldErrorOptions } from "./errors"
 export { paginate, listAll, type Paginated, type PaginationParams } from "./pagination"
 

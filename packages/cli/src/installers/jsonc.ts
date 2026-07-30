@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename */
 import { access, readFile, writeFile, rename } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
@@ -29,11 +30,9 @@ export interface JsoncMergeResult {
 export async function mergeJsonc(opts: JsoncMergeOptions): Promise<JsoncMergeResult> {
   const { filePath, rootKey, serverName, value, dryRun } = opts
   let original = "{}"
-  let exists = false
   try {
     await access(filePath)
     original = await readFile(filePath, "utf-8")
-    exists = true
   } catch {
     // new file
   }

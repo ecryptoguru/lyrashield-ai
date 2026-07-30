@@ -4,7 +4,6 @@ import type {
   InstallOptions,
   RenderedConfig,
   RenderedEntry,
-  Transport,
 } from "./types.js"
 
 export const API_URL_PLACEHOLDER = "<apiUrl>"
@@ -18,9 +17,7 @@ function assertConfigFileAgent(
     )
   }
   if (!agent.format || !agent.rootKey) {
-    throw new Error(
-      `Agent "${agent.id}" is missing format or rootKey and cannot be rendered.`
-    )
+    throw new Error(`Agent "${agent.id}" is missing format or rootKey and cannot be rendered.`)
   }
 }
 
@@ -49,10 +46,7 @@ function resolveSecret(
   return opts.apiKey ?? "<LYRASHIELD_API_KEY>"
 }
 
-function buildEnvBlock(
-  agent: AgentEntry,
-  opts: InstallOptions
-): Record<string, string> {
+function buildEnvBlock(agent: AgentEntry, opts: InstallOptions): Record<string, string> {
   const env: Record<string, string> = {
     LYRASHIELD_API_URL: opts.apiUrl,
   }
@@ -65,10 +59,7 @@ function buildEnvBlock(
   return env
 }
 
-function buildStdioEntry(
-  agent: AgentEntry,
-  opts: InstallOptions
-): Record<string, unknown> {
+function buildStdioEntry(agent: AgentEntry, opts: InstallOptions): Record<string, unknown> {
   const env = buildEnvBlock(agent, opts)
 
   let entry: Record<string, unknown>
@@ -104,10 +95,7 @@ function buildStdioEntry(
   return entry
 }
 
-function buildRemoteEntry(
-  agent: AgentEntry,
-  opts: InstallOptions
-): Record<string, unknown> {
+function buildRemoteEntry(agent: AgentEntry, opts: InstallOptions): Record<string, unknown> {
   const secret = resolveSecret(agent, opts, true)
   const headers: Record<string, string> = {}
   if (secret !== undefined) {
@@ -137,10 +125,7 @@ function buildRemoteEntry(
   return entry
 }
 
-function buildServerEntry(
-  agent: AgentEntry,
-  opts: InstallOptions
-): Record<string, unknown> {
+function buildServerEntry(agent: AgentEntry, opts: InstallOptions): Record<string, unknown> {
   if (opts.transport === "stdio") {
     return buildStdioEntry(agent, opts)
   }
@@ -160,22 +145,14 @@ function tomlValue(value: unknown): string {
   return ""
 }
 
-function serializeToml(
-  rootKey: string,
-  entryKey: string,
-  entry: Record<string, unknown>
-): string {
+function serializeToml(rootKey: string, entryKey: string, entry: Record<string, unknown>): string {
   const lines: string[] = []
   lines.push(`[${rootKey}.${entryKey}]`)
 
   const nested: Array<[string, Record<string, unknown>]> = []
 
   for (const [key, value] of Object.entries(entry)) {
-    if (
-      value !== null &&
-      typeof value === "object" &&
-      !Array.isArray(value)
-    ) {
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       nested.push([key, value as Record<string, unknown>])
     } else {
       lines.push(`${key} = ${tomlValue(value)}`)
@@ -227,11 +204,7 @@ function yamlValue(value: unknown, indent: number): string {
   return ""
 }
 
-function serializeYaml(
-  rootKey: string,
-  entryKey: string,
-  entry: Record<string, unknown>
-): string {
+function serializeYaml(rootKey: string, entryKey: string, entry: Record<string, unknown>): string {
   const root: Record<string, unknown> = {
     [rootKey]: {
       [entryKey]: entry,
@@ -257,30 +230,19 @@ function serializeContent(
   return serializeYaml(rootKey, entryKey, entry)
 }
 
-export function renderConfig(
-  agent: AgentEntry,
-  opts: InstallOptions
-): RenderedConfig {
+export function renderConfig(agent: AgentEntry, opts: InstallOptions): RenderedConfig {
   assertConfigFileAgent(agent)
 
   const serverName = opts.serverName ?? "lyrashield"
   const entry = buildServerEntry(agent, opts)
 
   return {
-    content: serializeContent(
-      agent.format,
-      agent.rootKey,
-      serverName,
-      entry
-    ),
+    content: serializeContent(agent.format, agent.rootKey, serverName, entry),
     format: agent.format,
   }
 }
 
-export function renderEntry(
-  agent: AgentEntry,
-  opts: InstallOptions
-): RenderedEntry {
+export function renderEntry(agent: AgentEntry, opts: InstallOptions): RenderedEntry {
   assertConfigFileAgent(agent)
 
   const serverName = opts.serverName ?? "lyrashield"

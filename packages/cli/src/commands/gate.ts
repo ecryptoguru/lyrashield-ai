@@ -1,7 +1,7 @@
 import minimist from "minimist"
 import { writeFile } from "node:fs/promises"
 import { createClient } from "../client.js"
-import { getEffectiveCredentials, requireApiKey, requireWorkspace } from "../credentials.js"
+import { getEffectiveCredentials, requireWorkspace } from "../credentials.js"
 import { resolveDiffRange, runRiskyPatternChecks, buildSarif, rankSeverity } from "../diff-core.js"
 import type { Output } from "../output.js"
 
@@ -86,6 +86,7 @@ export async function handleGate(args: string[], output: Output): Promise<number
           : undefined,
       }))
     )
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await writeFile(parsed.sarif as string, JSON.stringify(sarif, null, 2), "utf-8")
   }
 

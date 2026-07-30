@@ -14,8 +14,6 @@ export function listAgents(): readonly AgentEntry[] {
   return AGENTS
 }
 
-export function agentsByStrategy(
-  strategy: InstallStrategy
-): readonly AgentEntry[] {
+export function agentsByStrategy(strategy: InstallStrategy): readonly AgentEntry[] {
   return AGENTS.filter((a) => a.installStrategy === strategy)
 }

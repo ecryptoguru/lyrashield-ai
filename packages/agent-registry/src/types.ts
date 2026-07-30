@@ -57,9 +57,4 @@ export interface RenderedEntry {
 }
 
 export type InstallOutcome =
-  | "CONFIGURED"
-  | "ALREADY_CONFIGURED"
-  | "DELEGATED"
-  | "MANUAL_REQUIRED"
-  | "NOT_DETECTED"
-  | "FAILED"
+  "CONFIGURED" | "ALREADY_CONFIGURED" | "DELEGATED" | "MANUAL_REQUIRED" | "NOT_DETECTED" | "FAILED"

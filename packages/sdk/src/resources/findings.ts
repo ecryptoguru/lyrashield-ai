@@ -36,6 +36,8 @@ export function getFinding(client: LyraShieldClient, id: string, query: GetFindi
   const workspaceId = query.workspaceId ?? client.workspaceId
   if (workspaceId) params.set("workspaceId", workspaceId)
   const qs = params.toString()
-  const path = qs ? `/findings/${encodeURIComponent(id)}?${qs}` : `/findings/${encodeURIComponent(id)}`
+  const path = qs
+    ? `/findings/${encodeURIComponent(id)}?${qs}`
+    : `/findings/${encodeURIComponent(id)}`
   return client.request("GET", path)
 }

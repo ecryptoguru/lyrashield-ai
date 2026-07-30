@@ -49,7 +49,9 @@ const conflict = { description: "Conflict", content: jsonErrors }
 const unprocessable = { description: "Validation failed", content: jsonErrors }
 const tooManyRequests = {
   description: "Rate limited",
-  headers: { "Retry-After": { schema: { type: "string" }, description: "Seconds to wait before retrying" } },
+  headers: {
+    "Retry-After": { schema: { type: "string" }, description: "Seconds to wait before retrying" },
+  },
   content: jsonErrors,
 }
 const serverError = { description: "Internal server error", content: jsonErrors }
@@ -73,7 +75,10 @@ function successResponse(dataSchema: unknown, description = "Success"): Record<s
     content: {
       "application/json": {
         schema: {
-          allOf: [successEnvelope, { type: "object", properties: { data: dataSchema }, required: ["data"] }],
+          allOf: [
+            successEnvelope,
+            { type: "object", properties: { data: dataSchema }, required: ["data"] },
+          ],
         },
       },
     },
@@ -85,7 +90,11 @@ function paginatedResponse(itemSchema: unknown, description = "Success"): Record
     {
       allOf: [
         paginatedEnvelope,
-        { type: "object", properties: { items: { type: "array", items: itemSchema } }, required: ["items"] },
+        {
+          type: "object",
+          properties: { items: { type: "array", items: itemSchema } },
+          required: ["items"],
+        },
       ],
     },
     description
@@ -94,10 +103,15 @@ function paginatedResponse(itemSchema: unknown, description = "Success"): Record
 
 function queryParamsFromSchema(
   schema: Record<string, unknown>,
-  { include = "all", exclude = ["workspaceId"] }: { include?: string[] | "all"; exclude?: string[] } = {}
+  {
+    include = "all",
+    exclude = ["workspaceId"],
+  }: { include?: string[] | "all"; exclude?: string[] } = {}
 ): unknown[] {
   const properties = (schema.properties ?? {}) as Record<string, unknown>
-  const required = new Set<string>(Array.isArray(schema.required) ? (schema.required as string[]) : [])
+  const required = new Set<string>(
+    Array.isArray(schema.required) ? (schema.required as string[]) : []
+  )
   const keys = include === "all" ? Object.keys(properties) : include
   return keys
     .filter((key) => !exclude.includes(key))
@@ -137,7 +151,11 @@ export function buildOpenApiSpec(): Record<string, unknown> {
 
   const findingQueryJson = schemas.FindingQuery as Record<string, unknown>
 
-  const genericItem = { type: "object", additionalProperties: true, description: "See response examples" }
+  const genericItem = {
+    type: "object",
+    additionalProperties: true,
+    description: "See response examples",
+  }
 
   return {
     openapi: "3.1.0",
@@ -188,7 +206,11 @@ export function buildOpenApiSpec(): Record<string, unknown> {
       "/scans/{id}": {
         get: {
           summary: "Get a scan",
-          parameters: [idPathParam, workspaceIdParam, { name: "If-None-Match", in: "header", required: false, schema: { type: "string" } }],
+          parameters: [
+            idPathParam,
+            workspaceIdParam,
+            { name: "If-None-Match", in: "header", required: false, schema: { type: "string" } },
+          ],
           responses: {
             200: successResponse(genericItem, "Scan details"),
             304: { description: "Not Modified", headers: { ETag: { schema: { type: "string" } } } },
@@ -200,7 +222,15 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           parameters: [idPathParam, workspaceIdParam],
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { type: "object", properties: { workspaceId: { type: "string" } }, required: ["workspaceId"] } } },
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { workspaceId: { type: "string" } },
+                  required: ["workspaceId"],
+                },
+              },
+            },
           },
           responses: {
             200: successResponse(genericItem, "Scan cancelled"),
@@ -326,7 +356,8 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           responses: {
             ...commonErrors,
             409: {
-              description: "Pull request creation is blocked pending server-generated patch evidence",
+              description:
+                "Pull request creation is blocked pending server-generated patch evidence",
               content: { "application/json": { schema: errorEnvelope } },
             },
           },
@@ -401,7 +432,10 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           summary: "Download a report",
           parameters: [idPathParam, workspaceIdParam],
           responses: {
-            200: { description: "Report HTML", content: { "text/html": { schema: { type: "string" } } } },
+            200: {
+              description: "Report HTML",
+              content: { "text/html": { schema: { type: "string" } } },
+            },
             ...commonErrors,
           },
         },
@@ -447,7 +481,12 @@ export function buildOpenApiSpec(): Record<string, unknown> {
           parameters: [
             workspaceIdParam,
             { name: "targetId", in: "query", required: false, schema: { type: "string" } },
-            { name: "enabled", in: "query", required: false, schema: { type: "string", enum: ["true", "false"] } },
+            {
+              name: "enabled",
+              in: "query",
+              required: false,
+              schema: { type: "string", enum: ["true", "false"] },
+            },
             { name: "cursor", in: "query", required: false, schema: { type: "string" } },
             { name: "limit", in: "query", required: false, schema: { type: "string" } },
           ],

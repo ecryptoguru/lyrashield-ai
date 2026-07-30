@@ -41,5 +41,8 @@ export class NotModified {
 }
 
 export function isNotModified(value: unknown): value is NotModified {
-  return value instanceof NotModified || (value as { notModified?: boolean } | null)?.notModified === true
+  return (
+    value instanceof NotModified ||
+    (value as { notModified?: boolean } | null)?.notModified === true
+  )
 }

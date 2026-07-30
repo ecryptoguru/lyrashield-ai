@@ -2,7 +2,7 @@ import type { Output } from "../output.js"
 
 export async function handleRules(args: string[], output: Output): Promise<number> {
   if (args[0] === "add") {
-    const [_, agentId] = args
+    const [, agentId] = args
     if (!agentId) {
       output.error("usage: lyrashield rules add <agent>")
       return 2

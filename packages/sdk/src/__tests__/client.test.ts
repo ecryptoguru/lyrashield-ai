@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { LyraShieldClient } from "../client"
 import { LyraShieldError, NotModified } from "../errors"
-import { paginate } from "../pagination"
+import { paginate, type Paginated } from "../pagination"
 
 function makeFetch(mock: ReturnType<typeof vi.fn>): typeof fetch {
   return mock as unknown as typeof fetch
@@ -43,9 +43,7 @@ describe("LyraShieldClient", () => {
   })
 
   it("sends apiKey as Authorization Bearer header", async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ body: { success: true, data: { ok: true } } })
-    )
+    mockFetch.mockResolvedValueOnce(mockResponse({ body: { success: true, data: { ok: true } } }))
     await client.request("GET", "/workspaces")
     const init = mockFetch.mock.calls[0]![1] as RequestInit
     const headers = init.headers as Record<string, string>
@@ -53,9 +51,7 @@ describe("LyraShieldClient", () => {
   })
 
   it("sends User-Agent lyra-shield-sdk/version", async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ body: { success: true, data: { ok: true } } })
-    )
+    mockFetch.mockResolvedValueOnce(mockResponse({ body: { success: true, data: { ok: true } } }))
     await client.request("GET", "/workspaces")
     const init = mockFetch.mock.calls[0]![1] as RequestInit
     const headers = init.headers as Record<string, string>
@@ -63,16 +59,16 @@ describe("LyraShieldClient", () => {
   })
 
   it("parses the envelope and returns data", async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ body: { success: true, data: { id: "ws-1" } } })
-    )
+    mockFetch.mockResolvedValueOnce(mockResponse({ body: { success: true, data: { id: "ws-1" } } }))
     const data = (await client.request("GET", "/workspaces")) as { id: string }
     expect(data.id).toBe("ws-1")
   })
 
   it("throws LyraShieldError when success is false on HTTP 200", async () => {
     mockFetch.mockResolvedValue(
-      mockResponse({ body: { success: false, error: { code: "TEST_ERROR", message: "Bad request" } } })
+      mockResponse({
+        body: { success: false, error: { code: "TEST_ERROR", message: "Bad request" } },
+      })
     )
     await expect(client.request("GET", "/workspaces")).rejects.toBeInstanceOf(LyraShieldError)
     try {
@@ -86,7 +82,9 @@ describe("LyraShieldClient", () => {
 
   it("extracts known API error codes", async () => {
     mockFetch.mockResolvedValueOnce(
-      mockResponse({ body: { success: false, error: { code: "SCAN_RATE_LIMITED", message: "rate limited" } } })
+      mockResponse({
+        body: { success: false, error: { code: "SCAN_RATE_LIMITED", message: "rate limited" } },
+      })
     )
     try {
       await client.request("GET", "/scans")
@@ -109,9 +107,7 @@ describe("LyraShieldClient", () => {
           body: {},
         })
       )
-      .mockResolvedValueOnce(
-        mockResponse({ body: { success: true, data: { id: "scan-1" } } })
-      )
+      .mockResolvedValueOnce(mockResponse({ body: { success: true, data: { id: "scan-1" } } }))
 
     const data = await client.request("GET", "/scans")
     expect(mockFetch).toHaveBeenCalledTimes(2)
@@ -129,7 +125,9 @@ describe("LyraShieldClient", () => {
         body: {},
       })
     )
-    await expect(client.request("POST", "/scans", { body: {} })).rejects.toBeInstanceOf(LyraShieldError)
+    await expect(client.request("POST", "/scans", { body: {} })).rejects.toBeInstanceOf(
+      LyraShieldError
+    )
     expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 
@@ -208,7 +206,7 @@ describe("paginate", () => {
       .mockResolvedValueOnce({ items: [{ id: "1" }], nextCursor: "c2", total: 3 })
       .mockResolvedValueOnce({ items: [{ id: "2" }], nextCursor: null, total: 3 })
 
-    const pages: { items: unknown[]; nextCursor: string | null }[] = []
+    const pages: Paginated<{ id: string }>[] = []
     for await (const page of paginate<{ id: string }>(client, "GET", "/findings", { limit: 1 })) {
       pages.push(page)
     }

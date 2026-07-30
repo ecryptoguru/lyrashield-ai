@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename */
 import { chmod } from "node:fs/promises"
 import { mergeJson, removeJson } from "./json.js"
 import { mergeJsonc, removeJsonc } from "./jsonc.js"

@@ -16,9 +16,7 @@ const credentialStyleSchema = z.union([
 const configLocationSchema = z.object({
   scope: z.enum(["project", "global"]),
   path: z.string().min(1),
-  platform: z
-    .partialRecord(z.enum(["darwin", "linux", "win32"]), z.string().min(1))
-    .optional(),
+  platform: z.partialRecord(z.enum(["darwin", "linux", "win32"]), z.string().min(1)).optional(),
   sharedByConvention: z.boolean(),
 })
 
@@ -34,9 +32,7 @@ export const agentEntrySchema = z
     transports: z.array(transportSchema).min(1),
     credential: credentialStyleSchema,
     requiredEntryFields: z.record(z.string(), z.string()).optional(),
-    transportFields: z
-      .partialRecord(transportSchema, z.record(z.string(), z.string()))
-      .optional(),
+    transportFields: z.partialRecord(transportSchema, z.record(z.string(), z.string())).optional(),
     commandWrapperKey: z.string().nullable().optional(),
     vendorCli: z
       .object({

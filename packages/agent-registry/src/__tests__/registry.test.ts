@@ -170,9 +170,7 @@ describe("gotchas from §3.4 are represented", () => {
 
   for (const marker of gotchaMarkers) {
     it(`gotcha: ${marker}`, () => {
-      const found = AGENTS.some((agent) =>
-        agent.gotchas.some((g) => g.includes(marker))
-      )
+      const found = AGENTS.some((agent) => agent.gotchas.some((g) => g.includes(marker)))
       expect(found).toBe(true)
     })
   }
@@ -204,14 +202,8 @@ describe("registry helpers", () => {
     expect(vendorCli.length).toBe(1)
     expect(guided.length).toBeGreaterThan(0)
 
-    expect(configFile.every((a) => a.installStrategy === "config-file")).toBe(
-      true
-    )
-    expect(vendorCli.every((a) => a.installStrategy === "vendor-cli")).toBe(
-      true
-    )
-    expect(guided.every((a) => a.installStrategy === "guided-manual")).toBe(
-      true
-    )
+    expect(configFile.every((a) => a.installStrategy === "config-file")).toBe(true)
+    expect(vendorCli.every((a) => a.installStrategy === "vendor-cli")).toBe(true)
+    expect(guided.every((a) => a.installStrategy === "guided-manual")).toBe(true)
   })
 })

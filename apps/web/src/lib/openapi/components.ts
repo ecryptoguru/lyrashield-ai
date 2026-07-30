@@ -37,7 +37,7 @@ export const idPathParam = {
 export const successEnvelope = {
   type: "object" as const,
   properties: {
-    success: { type: "boolean" as const, "const": true as const, description: "Request succeeded" },
+    success: { type: "boolean" as const, const: true as const, description: "Request succeeded" },
     data: { description: "Response payload" },
   },
   required: ["success", "data"],
@@ -46,7 +46,7 @@ export const successEnvelope = {
 export const errorEnvelope = {
   type: "object" as const,
   properties: {
-    success: { type: "boolean" as const, "const": false as const, description: "Request failed" },
+    success: { type: "boolean" as const, const: false as const, description: "Request failed" },
     error: {
       type: "object" as const,
       properties: {

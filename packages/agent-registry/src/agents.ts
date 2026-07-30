@@ -79,9 +79,7 @@ const windsurf: AgentEntry = {
     "remote-http": { serverUrl: API_URL_PLACEHOLDER },
   },
   rulesFiles: [".windsurf/rules/lyrashield.md"],
-  gotchas: [
-    "Windsurf's remote form uses `serverUrl`, not `url`.",
-  ],
+  gotchas: ["Windsurf's remote form uses `serverUrl`, not `url`."],
 }
 
 const vscode: AgentEntry = {
@@ -112,7 +110,7 @@ const vscode: AgentEntry = {
   rulesFiles: [".github/copilot-instructions.md"],
   gotchas: [
     "VS Code uses `servers`, not `mcpServers`; using `mcpServers` silently fails.",
-    "VS Code stdio entries require `type: \"stdio\"`; remote entries use `type: \"http\"`.",
+    'VS Code stdio entries require `type: "stdio"`; remote entries use `type: "http"`.',
   ],
 }
 
@@ -154,7 +152,7 @@ const cline: AgentEntry = {
   rulesFiles: [".clinerules"],
   gotchas: [
     "The `cline_mcp_settings.json` path is not verified; Cline is documented as managed via the panel.",
-    "Cline defaults to legacy SSE when `type` is omitted; the remote endpoint needs `type: \"streamableHttp\"` explicitly.",
+    'Cline defaults to legacy SSE when `type` is omitted; the remote endpoint needs `type: "streamableHttp"` explicitly.',
   ],
 }
 
@@ -184,7 +182,7 @@ const opencode: AgentEntry = {
   rulesFiles: ["AGENTS.md"],
   gotchas: [
     "OpenCode uses single-brace `{env:VAR}` syntax, not `${VAR}`; wrong syntax passes the literal string through.",
-    "OpenCode entries need `type: \"local\"` for stdio and `type: \"remote\"` for remote.",
+    'OpenCode entries need `type: "local"` for stdio and `type: "remote"` for remote.',
   ],
 }
 
@@ -215,7 +213,7 @@ const kiloCode: AgentEntry = {
   gotchas: [
     "Kilo Code uses single-brace `{env:VAR}` syntax, not `${VAR}`; wrong syntax passes the literal string through.",
     "Kilo Code's file is JSONC; a JSON.parse/stringify round-trip destroys the user's comments.",
-    "Kilo Code entries need `type: \"local\"` for stdio and `type: \"remote\"` for remote.",
+    'Kilo Code entries need `type: "local"` for stdio and `type: "remote"` for remote.',
   ],
 }
 

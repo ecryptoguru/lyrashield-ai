@@ -15,9 +15,7 @@ export function createFixProposal(
     ...input,
     workspaceId: input.workspaceId ?? client.workspaceId,
   }
-  return client.request(
-    "POST",
-    `/findings/${encodeURIComponent(findingId)}/fix-proposals`,
-    { body }
-  )
+  return client.request("POST", `/findings/${encodeURIComponent(findingId)}/fix-proposals`, {
+    body,
+  })
 }

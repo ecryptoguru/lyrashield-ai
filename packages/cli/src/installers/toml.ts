@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename */
 import { access, readFile, writeFile, rename } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"

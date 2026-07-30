@@ -1,5 +1,6 @@
+/* eslint-disable security/detect-non-literal-fs-filename */
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { redactKey, createOutput, isTTY } from "../output.js"
+import { redactKey } from "../output.js"
 import { resolveSecretMode } from "../installers/secret-mode.js"
 import { mergeJson } from "../installers/json.js"
 import { mergeFile, removeFile } from "../installers/merge.js"

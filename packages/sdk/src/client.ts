@@ -37,7 +37,11 @@ export class LyraShieldClient {
     this.userAgent = options.userAgent ?? `lyrashield-sdk/${VERSION}`
   }
 
-  request<T = unknown>(method: string, path: string, options?: RequestOptions): Promise<T | NotModified>
+  request<T = unknown>(
+    method: string,
+    path: string,
+    options?: RequestOptions
+  ): Promise<T | NotModified>
   async request<T = unknown>(
     method: string,
     path: string,
@@ -74,10 +78,16 @@ export class LyraShieldClient {
           return new NotModified(etag)
         }
 
-        if ((res.status === 429 || res.status === 503) && isIdempotent && attempt < MAX_RETRIES - 1) {
+        if (
+          (res.status === 429 || res.status === 503) &&
+          isIdempotent &&
+          attempt < MAX_RETRIES - 1
+        ) {
           const retryAfterHeader = this.getHeader(res, "retry-after")
           const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN
-          const baseDelay = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : 2 ** attempt * 500
+          const baseDelay = Number.isFinite(retryAfterSeconds)
+            ? retryAfterSeconds * 1000
+            : 2 ** attempt * 500
           const jitter = Math.random() * 500
           const delay = Math.min(baseDelay + jitter, 30000)
           await new Promise((resolve) => setTimeout(resolve, delay))
@@ -118,13 +128,21 @@ export class LyraShieldClient {
         clearTimeout(timeout)
         if (err instanceof LyraShieldError) throw err
         if (err instanceof Error && err.name === "AbortError") {
-          throw new LyraShieldError({ status: 0, code: "REQUEST_TIMEOUT", message: "Request timed out" })
+          throw new LyraShieldError({
+            status: 0,
+            code: "REQUEST_TIMEOUT",
+            message: "Request timed out",
+          })
         }
         throw err
       }
     }
 
-    throw new LyraShieldError({ status: 0, code: "MAX_RETRIES_EXCEEDED", message: "Max retries exceeded" })
+    throw new LyraShieldError({
+      status: 0,
+      code: "MAX_RETRIES_EXCEEDED",
+      message: "Max retries exceeded",
+    })
   }
 
   private buildUrl(path: string): string {
@@ -134,10 +152,7 @@ export class LyraShieldClient {
 
   private getHeader(res: Response, name: string): string | null {
     const headers = res.headers as unknown as
-      | Headers
-      | { get?: (name: string) => string | null }
-      | Record<string, string>
-      | undefined
+      Headers | { get?: (name: string) => string | null } | Record<string, string> | undefined
     if (!headers) return null
     if (headers instanceof Headers) return headers.get(name)
     if ("get" in headers && typeof (headers as { get?: unknown }).get === "function") {

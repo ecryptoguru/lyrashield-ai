@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename */
 import { randomUUID } from "node:crypto"
 import { mkdir, readFile, writeFile, unlink, chmod, access, rename } from "node:fs/promises"
 import { homedir } from "node:os"

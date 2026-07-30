@@ -36,7 +36,7 @@ async function isFileGitIgnored(filePath: string): Promise<boolean> {
 }
 
 export async function resolveSecretMode(opts: SecretModeOptions): Promise<ResolvedSecretMode> {
-  const { agent, location, apiKey, apiUrl, inlineSecret } = opts
+  const { agent, location, inlineSecret } = opts
 
   const envVar = "LYRASHIELD_API_KEY"
 
