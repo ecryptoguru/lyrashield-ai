@@ -132,6 +132,78 @@ same bucket/credentials as evidence storage (`S3_*` in the application config) o
 backup destination, then re-run `production-backup.yml` via `workflow_dispatch` to confirm a
 real backup completes before trusting the nightly schedule.
 
+### 6. GitHub App connect path requires app creation + 4 secrets — currently unprovisioned (blocks new signups)
+
+**Status:** intentionally degraded, but unblocked by F1's four-way onboarding. As of 2026-07-30,
+`GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, and `GITHUB_WEBHOOK_SECRET` are
+not set as repo secrets and not present in the Container Apps.
+
+**Exposure.** `POST /api/integrations/github/install` calls `getInstallAppUrl()`, which throws
+`GITHUB_APP_SLUG not configured` when `GITHUB_APP_SLUG` is empty. The route catches it and
+returns 500 `{ code: "CONFIG_ERROR", message: "GitHub App is not configured" }`. Previously
+(days 1-3 of the beta, pre-F1) onboarding was REPO-only: step 2 was "Connect GitHub" as the only
+way forward, and `(dashboard)/layout.tsx` redirects any user whose onboarding is neither
+`completed` nor `skipped` back to `/onboarding`. A 500 on that one path = every new signup bricked.
+That exact scenario was verified live in a browser on 2026-07-30.
+
+**F1's fix (merged 2026-07-30):** step 2 is now a four-way choice: Connect GitHub / Add app URL
+/`Add API / Skip`. The non-GitHub paths never call the install endpoint, and `connectGitHub()`
+now explicitly degrades — it marks the GitHub option unavailable, keeps the three other paths,
+and shows a stable `GitHub connect is unavailable right now…` message (never the raw server error).
+A brand-new signup therefore survives without GitHub (URL/API scan or skip → dashboard) even while
+the GitHub path 500s. The P0 is closed.
+
+**Why the GitHub path still matters.** Without the GitHub App, private-repository scanning and any
+flow that needs the App's `Contents: Read` / `Metadata: Read` / webhook delivery remain disabled.
+For a beta that may grow from URL scans to repo scans, that is a real conversion drop-off. The App
+path's own code is intentionally **failing closed**: the install callback (`GET
+/api/integrations/github/install`) requires an existing workspace `Integration` binding for the
+`installation_id` (IDOR / enumeration defense) and the deploy pipeline never creates a secret
+from a callback-supplied parameter. Those gates are load-bearing, not placeholders — see
+`PRODUCTION_DEPLOYMENT.md` prerequisites and `AGENTS.md`'s "GitHub installations and Fix PRs"
+rule.
+
+**Way out — one-time GitHub App creation + 4 repo secrets + deploy plumbing (already shipped).**
+
+1. **Create the GitHub App** (owner: `ecryptoguru`, same account that owns `lyrashield-ai`):
+   - `https://github.com/settings/apps/new`
+   - **General**: name `LyraShield AI (app.lyrashieldai.com)`, description `Release assurance for AI-built apps — authorized repository scanning.`, homepage `https://lyrashieldai.com`.
+   - **Webhook**: active; URL `https://app.lyrashieldai.com/api/webhooks/github`; generate a webhook secret now and save its value (it becomes `GITHUB_WEBHOOK_SECRET`). Subscribe to `Installation` (deleted signal) and `Pull request` (if Fix PR automation is on) delivery — unsubscribe from everything else.
+   - **Repository permissions — start minimal** (expand only when the first flow that needs more lands; every permission addition requires re-authorizing installs):
+     - `Contents: Read` — scan authorized code.
+     - `Metadata: Read` — list repos for the `POST /api/integrations/github/repos` call.
+     - `Pull requests: Read and write` — **only** when server-generated, approval-bound Fix PRs are implemented; until then `Read` is enough.
+   - **Account permissions**: none required for today's beta (the install-URL uses the slug; listing installs needs the App JWT only).
+   - **Privacy**: public App, but installable on specific `ecryptoguru` repos (or "all repos on the account" if the boundary is governed by the per-workspace allowed-repo list instead). Never enable "any account" until the multi-tenant billing / allowlist is gated.
+
+2. **Note the four values the deploy pipeline needs:**
+   - `GITHUB_APP_ID` — numeric app id from the App settings page (e.g. `1234567`).
+   - `GITHUB_APP_SLUG` — the slug from the URL `https://github.com/apps/<slug>` (e.g. `lyrashield-ai`).
+   - `GITHUB_APP_PRIVATE_KEY` — PEM private key: scroll to the bottom of the App settings page, `Generate a private key`, download the `.pem`, paste the full contents including `-----BEGIN RSA PRIVATE KEY-----`/`-----END RSA PRIVATE KEY-----`. GitHub rotates this immediately when a new one is generated — the old one stops working the instant the new one exists.
+   - `GITHUB_WEBHOOK_SECRET` — the webhook secret you generated in step 1.
+
+3. **Add them as repository secrets** in `ecryptoguru/lyrashield-ai` (Settings → Secrets and variables → Actions → Repository secrets):
+   - `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`.
+
+4. **Deploy wiring — already shipped in `.github/workflows/deploy-azure.yml` (PR #180+):**
+   - `Verify GitHub App credentials` — warns (not errors) if any of the 4 secrets are missing, so existing deploys keep working; onboarding's three non-GitHub paths cover signups in the meantime.
+   - `Sync GitHub App secrets to Container Apps` — when all 4 secrets are set, on every deploy it runs `az containerapp secret set` on both the app and scanner Container Apps with 4 secret names (`github-app-id`, `github-app-slug`, `github-app-private-key`, `github-webhook-secret`). Rotating a GitHub secret therefore also rotates the Container App's copy. When any one secret is missing the entire sync step is skipped (avoids half-configured deploys that would 500 on a different path).
+   - `Deploy app Container App` / `Deploy scanner Container App` — `--set-env-vars` now includes `GITHUB_APP_ID=secretref:github-app-id` etc. `secretref:` requires the Container App to already define a secret with that name — provisioned by the sync step just above on every deploy, so rotation is automatic and a fresh Container App gets its secrets for the first time.
+
+5. **Verify after the deploy:**
+   - `curl https://app.lyrashieldai.com/api/ready` should still be `{"status":"ready",...}`.
+   - As a brand-new signup, step 2 should show all 4 options and "Connect GitHub" should be enabled (not "GitHub connect is unavailable right now…").
+   - Clicking "Connect GitHub" should open `https://github.com/apps/<slug>/installations/new?state=...` in a new tab (the `state` param is workspace-bound and signed — S2 defense), not 500.
+   - `POST /api/webhooks/github` deliveries (GitHub App settings → Advanced → Recent Deliveries → Redeliver) should 200 and write `webhookEvent` rows (`@@unique([provider, externalId])` idempotency).
+
+**Do not:**
+- Hard-code PEM keys or webhook secrets in GitHub workflow files, Terraform, or `*.md` examples.
+- Set any `GITHUB_APP_*` env var from workflow `vars` (non-secret) — they must come through `secrets` + `secretref:`.
+- Add broader GitHub App permissions (e.g. `Administration`, `Organization`, `Checks: Write`) until the first flow that requires them lands and the extra permission is reviewed as part of that PR's threat model.
+
+**Cleanup (auditor).** The two audit accounts created during the live repro:
+`devagent-uxaudit2+20260730@fusionwaveai.com` and `devagent-uxaudit3+20260730@fusionwaveai.com` are now bricked in onboarding (workspace created, GitHub step unreachable at the time). Purge them after F1 lands (same as the earlier test waitlist row cleanup).
+
 ## Release prerequisites
 
 1. Public HTTPS application and marketing origins plus all trusted auth origins are decided. Scorecard canonical/OG/Twitter URLs must resolve to the application origin.
