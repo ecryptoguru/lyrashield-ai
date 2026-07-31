@@ -6,7 +6,6 @@
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "bin": {
     "lyrashield": "./dist/index.js"
   },
@@ -37,9 +36,6 @@
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
-    "@lyrashield/agent-registry": "workspace:*",
-    "@lyrashield/agent-rules": "workspace:*",
-    "@lyrashield/sdk": "workspace:*",
     "jsonc-parser": "^3.3.1",
     "minimist": "^1.2.8",
     "yaml": "^2.7.1"
@@ -48,6 +44,9 @@
     "@types/iarna__toml": "^2.0.5",
     "@types/minimist": "^1.2.5",
     "@types/node": "^22.20.1",
+    "@lyrashield/agent-registry": "workspace:*",
+    "@lyrashield/agent-rules": "workspace:*",
+    "@lyrashield/sdk": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "6.0.3",
     "vitest": "^4.1.9"

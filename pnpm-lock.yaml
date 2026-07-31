@@ -435,15 +435,6 @@ importers:
       '@iarna/toml':
         specifier: ^2.2.5
         version: 2.2.5
-      '@lyrashield/agent-registry':
-        specifier: workspace:*
-        version: link:../agent-registry
-      '@lyrashield/agent-rules':
-        specifier: workspace:*
-        version: link:../agent-rules
-      '@lyrashield/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       jsonc-parser:
         specifier: ^3.3.1
         version: 3.3.1
@@ -454,6 +445,15 @@ importers:
         specifier: ^2.7.1
         version: 2.9.0
     devDependencies:
+      '@lyrashield/agent-registry':
+        specifier: workspace:*
+        version: link:../agent-registry
+      '@lyrashield/agent-rules':
+        specifier: workspace:*
+        version: link:../agent-rules
+      '@lyrashield/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@types/iarna__toml':
         specifier: ^2.0.5
         version: 2.0.5
