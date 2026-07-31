@@ -33,16 +33,16 @@ This file is the source of truth for the legacy-to-new route map and the rollout
 
 ## Terminology map
 
-| Internal | V2 user-facing label |
-|---|---|
-| Scan | Trust Run |
-| Finding | Issue |
-| Project | Product |
-| Target | Asset |
-| Target.environment | Environment |
-| FixProposal | Proposed fix |
-| Report | Evidence record |
-| Schedule | Automation |
+| Internal           | V2 user-facing label |
+| ------------------ | -------------------- |
+| Scan               | Trust Run            |
+| Finding            | Issue                |
+| Project            | Product              |
+| Target             | Asset                |
+| Target.environment | Environment          |
+| FixProposal        | Proposed fix         |
+| Report             | Evidence record      |
+| Schedule           | Automation           |
 
 ## Rollout checklist
 

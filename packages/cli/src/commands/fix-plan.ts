@@ -28,7 +28,9 @@ export async function handleFixPlan(args: string[], output: Output): Promise<num
 
   const [findingId] = args
   if (!findingId) {
-    output.error("usage: lyrashield fix-plan <findingId> | lyrashield fix-plan create <findingId> --summary <summary>")
+    output.error(
+      "usage: lyrashield fix-plan <findingId> | lyrashield fix-plan create <findingId> --summary <summary>"
+    )
     return 2
   }
   const res = (await client.request(

@@ -8,15 +8,15 @@
 
 **Evidence rule:** every narration claim appears on screen at the moment it is spoken.
 
-| Time        | Source                                        | Treatment                        | Required visible proof                                                                |
-| ----------- | --------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
-| 00:00–00:13 | Live production landing page                  | Clean capture, no browser chrome | Product purpose and the “what was tested” hook                                        |
-| 00:13–00:55 | Live Lite Check and compressed wait           | Restrained slow push             | Passive scope, actual result, and visible limitation                                   |
-| 00:55–01:26 | Methodology and sanitized sample report       | Slow scroll                      | Evidence states, `Sanitized mock`, and explicit non-claim                             |
-| 01:26–01:52 | Authenticated workspace and scan setup        | Clean still sequence             | Configured target, `Needs evidence`, named review modes; no scan initiated             |
-| 01:52–02:12 | Repository-backed architecture and source     | Restrained slow push             | Deterministic public check versus Luna/Terra controlled review                         |
-| 02:12–02:36 | Current-revision Build Week verification card | Restrained slow push             | Codex/GPT-5.6 contribution and exact passing test counts                               |
-| 02:36–02:47 | LyraShield AI end card                        | Gentle close                     | Evidence-led positioning and canonical domain                                         |
+| Time        | Source                                        | Treatment                        | Required visible proof                                                     |
+| ----------- | --------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
+| 00:00–00:13 | Live production landing page                  | Clean capture, no browser chrome | Product purpose and the “what was tested” hook                             |
+| 00:13–00:55 | Live Lite Check and compressed wait           | Restrained slow push             | Passive scope, actual result, and visible limitation                       |
+| 00:55–01:26 | Methodology and sanitized sample report       | Slow scroll                      | Evidence states, `Sanitized mock`, and explicit non-claim                  |
+| 01:26–01:52 | Authenticated workspace and scan setup        | Clean still sequence             | Configured target, `Needs evidence`, named review modes; no scan initiated |
+| 01:52–02:12 | Repository-backed architecture and source     | Restrained slow push             | Deterministic public check versus Luna/Terra controlled review             |
+| 02:12–02:36 | Current-revision Build Week verification card | Restrained slow push             | Codex/GPT-5.6 contribution and exact passing test counts                   |
+| 02:36–02:47 | LyraShield AI end card                        | Gentle close                     | Evidence-led positioning and canonical domain                              |
 
 ## Capture gates
 

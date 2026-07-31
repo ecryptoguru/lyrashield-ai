@@ -19,10 +19,7 @@ export async function handleStatus(args: string[], output: Output): Promise<numb
     return 0
   }
 
-  const res = await client.request(
-    "GET",
-    `/scans?workspaceId=${encodeURIComponent(workspaceId)}`
-  )
+  const res = await client.request("GET", `/scans?workspaceId=${encodeURIComponent(workspaceId)}`)
   output.result(res)
   if (parsed.watch) output.warn("--watch not yet implemented")
   return 0

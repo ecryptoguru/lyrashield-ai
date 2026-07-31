@@ -6,7 +6,7 @@ This report compares the two successful local scans of `ecryptoguru/OnboardingAI
 
 - Both scans completed and stayed well inside the $3.20 mode cap.
 - **Prompt caching is already working**: ~78% (SAFE) and ~68% (STANDARD) of input tokens were served from cache, saving roughly **$1.05** and **$2.19** respectively versus an uncached run.
-- **STANDARD is faster and finds more critical issues**: 5.5 min vs 12.2 min, 4 critical findings vs 1, at ~3x the cost (~$1.48 vs ~$0.50).
+- **STANDARD is faster and finds more critical issues**: 5.5 min vs 12.2 min, 4 critical findings vs 1, at ~~3x the cost (~~$1.48 vs ~$0.50).
 - **Cost accounting is fixed in `output-parser.ts`**: `actualCostCents`, `providerCostUsd`, and `billedCostUsd` were `null` because the worker discarded per-request usage buckets when any entry omitted `cache_write_tokens`. Missing cache counters now default to `0` so cost reconciliation succeeds.
 - **Four optimisation levers** are available, in rough priority order:
   1. Fix per-request usage-bucket parsing so cost is reconciled and stored.
@@ -16,22 +16,22 @@ This report compares the two successful local scans of `ecryptoguru/OnboardingAI
 
 ## 2. Scan results side by side
 
-| Metric | SAFE (`cms12f4mp...`) | STANDARD (`cms1p41q9...`) | Notes |
-| --- | --- | --- | --- |
-| Status | COMPLETED | COMPLETED | |
-| Total latency | 734.7 s (12.2 min) | 331.3 s (5.5 min) | STANDARD is 2.2x faster |
-| Engine latency | 734.6 s | 331.2 s | |
-| LLM requests | 39 | 83 | STANDARD makes 2.1x more calls |
-| Input tokens | 1,490,772 | 3,561,150 | |
-| Cached input tokens | 1,167,360 | 2,437,120 | |
-| Cache hit ratio | **78.3%** | **68.4%** | SAFE caches better per request |
-| Output tokens | 9,864 | 18,995 | Output is tiny vs input |
-| Risk score / grade | 53 / F | 37 / F | Score formula weights multiple factors |
-| Findings | 39 | 41 | |
-| CRITICAL | 1 | 4 | |
-| HIGH | 2 | 1 | |
-| MEDIUM | 36 | 36 | |
-| `actualCostCents` in DB | `null` | `null` | Reconciliation failure |
+| Metric                  | SAFE (`cms12f4mp...`) | STANDARD (`cms1p41q9...`) | Notes                                  |
+| ----------------------- | --------------------- | ------------------------- | -------------------------------------- |
+| Status                  | COMPLETED             | COMPLETED                 |                                        |
+| Total latency           | 734.7 s (12.2 min)    | 331.3 s (5.5 min)         | STANDARD is 2.2x faster                |
+| Engine latency          | 734.6 s               | 331.2 s                   |                                        |
+| LLM requests            | 39                    | 83                        | STANDARD makes 2.1x more calls         |
+| Input tokens            | 1,490,772             | 3,561,150                 |                                        |
+| Cached input tokens     | 1,167,360             | 2,437,120                 |                                        |
+| Cache hit ratio         | **78.3%**             | **68.4%**                 | SAFE caches better per request         |
+| Output tokens           | 9,864                 | 18,995                    | Output is tiny vs input                |
+| Risk score / grade      | 53 / F                | 37 / F                    | Score formula weights multiple factors |
+| Findings                | 39                    | 41                        |                                        |
+| CRITICAL                | 1                     | 4                         |                                        |
+| HIGH                    | 2                     | 1                         |                                        |
+| MEDIUM                  | 36                    | 36                        |                                        |
+| `actualCostCents` in DB | `null`                | `null`                    | Reconciliation failure                 |
 
 ## 3. Cost analysis
 
@@ -39,10 +39,10 @@ This report compares the two successful local scans of `ecryptoguru/OnboardingAI
 
 Source: `apps/worker/src/engine/gpt56-pricing.ts`
 
-| Model | Input | Cached input | Cache-write input | Output |
-| --- | --- | --- | --- | --- |
-| `gpt-5.6-luna` | $1.00 / M | $0.10 / M | $1.25 / M | $6.00 / M |
-| `gpt-5.6-terra` | $2.50 / M | $0.25 / M | $3.125 / M | $15.00 / M |
+| Model           | Input     | Cached input | Cache-write input | Output     |
+| --------------- | --------- | ------------ | ----------------- | ---------- |
+| `gpt-5.6-luna`  | $1.00 / M | $0.10 / M    | $1.25 / M         | $6.00 / M  |
+| `gpt-5.6-terra` | $2.50 / M | $0.25 / M    | $3.125 / M        | $15.00 / M |
 
 Long-context input (> 272k tokens in a single request) is billed at **2x**.
 
@@ -80,11 +80,11 @@ approximate STANDARD cost           = $1.482 (~$1.48)
 
 ### 3.3 Value of cache
 
-| Scenario | SAFE cost | STANDARD cost |
-| --- | --- | --- |
-| With caching (observed) | $0.50 | $1.48 |
-| Without caching (all input at $1/M) | $1.55 | $3.68 |
-| **Cache savings** | **~$1.05 (68%)** | **~$2.19 (60%)** |
+| Scenario                            | SAFE cost        | STANDARD cost    |
+| ----------------------------------- | ---------------- | ---------------- |
+| With caching (observed)             | $0.50            | $1.48            |
+| Without caching (all input at $1/M) | $1.55            | $3.68            |
+| **Cache savings**                   | **~$1.05 (68%)** | **~$2.19 (60%)** |
 
 Output tokens are such a small fraction of spend that optimising output tokens (e.g., lowering `max_output_tokens`) would save only cents, not dollars. The big levers are **input size** and **cache hit ratio**.
 
@@ -202,14 +202,14 @@ The transcript reports 24% token savings from programmatic tool calling and bett
 
 ## 6. What to implement where
 
-| Optimisation | Repo | Files |
-| --- | --- | --- |
-| Cost reconciliation fix | `lyrashieldai` | `apps/worker/src/engine/output-parser.ts` |
-| Env var plumbing for max tokens | `lyrashieldai` | `.env`, `.env.example`, `apps/worker/src/engine/runner.ts`, `packages/config/src/env.ts` |
-| Prompt-cache breakpoints | `lyrashield-engine` | `strix/core/inputs.py`, `strix/core/runner.py` |
-| Compaction threshold tuning | `lyrashield-engine` | `strix/core/hooks.py` |
-| Programmatic tool calling | `lyrashield-engine` | `strix/core/inputs.py`, agent tooling |
-| Persistent reasoning | `lyrashield-engine` | `strix/core/runner.py` |
+| Optimisation                    | Repo                | Files                                                                                    |
+| ------------------------------- | ------------------- | ---------------------------------------------------------------------------------------- |
+| Cost reconciliation fix         | `lyrashieldai`      | `apps/worker/src/engine/output-parser.ts`                                                |
+| Env var plumbing for max tokens | `lyrashieldai`      | `.env`, `.env.example`, `apps/worker/src/engine/runner.ts`, `packages/config/src/env.ts` |
+| Prompt-cache breakpoints        | `lyrashield-engine` | `strix/core/inputs.py`, `strix/core/runner.py`                                           |
+| Compaction threshold tuning     | `lyrashield-engine` | `strix/core/hooks.py`                                                                    |
+| Programmatic tool calling       | `lyrashield-engine` | `strix/core/inputs.py`, agent tooling                                                    |
+| Persistent reasoning            | `lyrashield-engine` | `strix/core/runner.py`                                                                   |
 
 Engine-side recommendations are detailed in `lyrashield-engine/docs/cost-cache-engine-plan.md`.
 

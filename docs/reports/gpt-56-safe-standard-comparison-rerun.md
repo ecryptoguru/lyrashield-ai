@@ -7,14 +7,14 @@
 
 ## Quick facts
 
-| | SAFE | STANDARD |
-| --- | --- | --- |
-| **Latency** | 405.8 s (6.8 min) | 500.3 s (8.3 min) |
-| **Billed cost** | $0.50 | $1.43 |
-| **Cache hit ratio** | 82.5% | 70.3% |
-| **Findings** | 40 (1 C, 2 H, 37 M) | 42 (2 C, 2 H, 38 M) |
-| **Score / grade** | 52 / D | 45 / F |
-| **Budget cap** | $1.20 | $3.20 |
+|                     | SAFE                | STANDARD            |
+| ------------------- | ------------------- | ------------------- |
+| **Latency**         | 405.8 s (6.8 min)   | 500.3 s (8.3 min)   |
+| **Billed cost**     | $0.50               | $1.43               |
+| **Cache hit ratio** | 82.5%               | 70.3%               |
+| **Findings**        | 40 (1 C, 2 H, 37 M) | 42 (2 C, 2 H, 38 M) |
+| **Score / grade**   | 52 / D              | 45 / F              |
+| **Budget cap**      | $1.20               | $3.20               |
 
 ## Executive summary
 
@@ -27,18 +27,18 @@
 
 Two initial scans were executed using the then-current `main` engine code, which set `ModelSettings.prompt_cache_options = {"mode": "explicit", "ttl": "30m"}` in `strix/core/inputs.py` but did not insert explicit cache breakpoints in the request content. OpenAI/Azure therefore applied no cache, leading to much higher per-request costs.
 
-| Metric | SAFE (broken explicit) | STANDARD (broken explicit) |
-| --- | --- | --- |
-| Status | COMPLETED | **STOPPED_BUDGET** |
-| Total latency | 331.1 s | 223.6 s |
-| `billedCost` | $1.05 | $3.11 |
-| `actualCostCents` | 105 | 311 |
-| LLM requests | 42 | 70 |
-| Input tokens | 1,665,385 | 3,380,676 |
-| Cached input tokens | 770,048 (46.2%) | 413,184 (12.2%) |
-| Output tokens | 12,544 | 16,136 |
-| Findings | 42 | 39 |
-| Score / grade | 47 / F | n/a (budget stop) |
+| Metric              | SAFE (broken explicit) | STANDARD (broken explicit) |
+| ------------------- | ---------------------- | -------------------------- |
+| Status              | COMPLETED              | **STOPPED_BUDGET**         |
+| Total latency       | 331.1 s                | 223.6 s                    |
+| `billedCost`        | $1.05                  | $3.11                      |
+| `actualCostCents`   | 105                    | 311                        |
+| LLM requests        | 42                     | 70                         |
+| Input tokens        | 1,665,385              | 3,380,676                  |
+| Cached input tokens | 770,048 (46.2%)        | 413,184 (12.2%)            |
+| Output tokens       | 12,544                 | 16,136                     |
+| Findings            | 42                     | 39                         |
+| Score / grade       | 47 / F                 | n/a (budget stop)          |
 
 Key take-aways from the broken run:
 
@@ -60,49 +60,49 @@ Engine test suite result after the fix:
 
 ### SAFE
 
-| Metric | Previous benchmark (`gpt-56-cost-cache-analysis.md`) | This re-run (fixed cache) | Change |
-| --- | --- | --- | --- |
-| Status | COMPLETED | COMPLETED | — |
-| Total latency | 734.7 s (12.2 min) | 405.8 s (6.8 min) | **-44.8%** |
-| Engine latency | 734.6 s | 405.7 s | **-44.8%** |
-| LLM requests | 39 | 38 | -1 |
-| Input tokens | 1,490,772 | 1,700,050 | +14.0% |
-| Cached input tokens | 1,167,360 (78.3%) | 1,402,880 (82.5%) | **+4.2 pp** |
-| Output tokens | 9,864 | 10,646 | +7.9% |
-| `billedCost` | ~$0.50 (exact $0.501334) | $0.501334 | ~flat |
-| `actualCostCents` | `null` (reconciliation bug) | 50 | fixed |
-| Findings | 39 | 40 | +1 |
-| CRITICAL | 1 | 1 | — |
-| HIGH | 2 | 2 | — |
-| MEDIUM | 36 | 37 | +1 |
-| Score / grade | 53 / F | 52 / D | comparable (grade change likely a score-threshold rounding effect, not a material quality shift) |
+| Metric              | Previous benchmark (`gpt-56-cost-cache-analysis.md`) | This re-run (fixed cache) | Change                                                                                           |
+| ------------------- | ---------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------ |
+| Status              | COMPLETED                                            | COMPLETED                 | —                                                                                                |
+| Total latency       | 734.7 s (12.2 min)                                   | 405.8 s (6.8 min)         | **-44.8%**                                                                                       |
+| Engine latency      | 734.6 s                                              | 405.7 s                   | **-44.8%**                                                                                       |
+| LLM requests        | 39                                                   | 38                        | -1                                                                                               |
+| Input tokens        | 1,490,772                                            | 1,700,050                 | +14.0%                                                                                           |
+| Cached input tokens | 1,167,360 (78.3%)                                    | 1,402,880 (82.5%)         | **+4.2 pp**                                                                                      |
+| Output tokens       | 9,864                                                | 10,646                    | +7.9%                                                                                            |
+| `billedCost`        | ~$0.50 (exact $0.501334)                             | $0.501334                 | ~flat                                                                                            |
+| `actualCostCents`   | `null` (reconciliation bug)                          | 50                        | fixed                                                                                            |
+| Findings            | 39                                                   | 40                        | +1                                                                                               |
+| CRITICAL            | 1                                                    | 1                         | —                                                                                                |
+| HIGH                | 2                                                    | 2                         | —                                                                                                |
+| MEDIUM              | 36                                                   | 37                        | +1                                                                                               |
+| Score / grade       | 53 / F                                               | 52 / D                    | comparable (grade change likely a score-threshold rounding effect, not a material quality shift) |
 
 ### STANDARD
 
-| Metric | Previous benchmark | This re-run (fixed cache) | Change |
-| --- | --- | --- | --- |
-| Status | COMPLETED | COMPLETED | — |
-| Total latency | 331.3 s (5.5 min) | 500.3 s (8.3 min) | **+51.0%** |
-| Engine latency | 331.2 s | 500.2 s | **+51.0%** |
-| LLM requests | 83 | 74 | -10.8% |
-| Input tokens | 3,561,150 | 3,556,418 | -0.1% |
-| Cached input tokens | 2,437,120 (68.4%) | 2,501,120 (70.3%) | **+1.9 pp** |
-| Output tokens | 18,995 | 20,995 | +10.5% |
-| `billedCost` | ~$1.48 (exact $1.482) | $1.43138 | **-3.4%** |
-| `actualCostCents` | `null` (reconciliation bug) | 143 | fixed |
-| Findings | 41 | 42 | +1 |
-| CRITICAL | 4 | 2 | -2 |
-| HIGH | 1 | 2 | +1 |
-| MEDIUM | 36 | 38 | +2 |
-| Score / grade | 37 / F | 45 / F | comparable (score difference within stochastic variance; both grade F) |
+| Metric              | Previous benchmark          | This re-run (fixed cache) | Change                                                                 |
+| ------------------- | --------------------------- | ------------------------- | ---------------------------------------------------------------------- |
+| Status              | COMPLETED                   | COMPLETED                 | —                                                                      |
+| Total latency       | 331.3 s (5.5 min)           | 500.3 s (8.3 min)         | **+51.0%**                                                             |
+| Engine latency      | 331.2 s                     | 500.2 s                   | **+51.0%**                                                             |
+| LLM requests        | 83                          | 74                        | -10.8%                                                                 |
+| Input tokens        | 3,561,150                   | 3,556,418                 | -0.1%                                                                  |
+| Cached input tokens | 2,437,120 (68.4%)           | 2,501,120 (70.3%)         | **+1.9 pp**                                                            |
+| Output tokens       | 18,995                      | 20,995                    | +10.5%                                                                 |
+| `billedCost`        | ~$1.48 (exact $1.482)       | $1.43138                  | **-3.4%**                                                              |
+| `actualCostCents`   | `null` (reconciliation bug) | 143                       | fixed                                                                  |
+| Findings            | 41                          | 42                        | +1                                                                     |
+| CRITICAL            | 4                           | 2                         | -2                                                                     |
+| HIGH                | 1                           | 2                         | +1                                                                     |
+| MEDIUM              | 36                          | 38                        | +2                                                                     |
+| Score / grade       | 37 / F                      | 45 / F                    | comparable (score difference within stochastic variance; both grade F) |
 
 ## Cost analysis
 
 Using the official GPT-5.6 Luna rate card (`apps/worker/src/engine/gpt56-pricing.ts`):
 
-| Model | Input | Cached input | Cache-write input | Output |
-| --- | --- | --- | --- | --- |
-| `gpt-5.6-luna` | $1.00 / M | $0.10 / M | $1.25 / M | $6.00 / M |
+| Model          | Input     | Cached input | Cache-write input | Output    |
+| -------------- | --------- | ------------ | ----------------- | --------- |
+| `gpt-5.6-luna` | $1.00 / M | $0.10 / M    | $1.25 / M         | $6.00 / M |
 
 ### SAFE re-run
 
@@ -134,11 +134,11 @@ approximate STANDARD cost            = $1.431
 
 ### Value of prompt caching
 
-| Scenario | SAFE cost | STANDARD cost |
-| --- | --- | --- |
-| With caching (observed) | $0.50 | $1.43 |
-| Without caching (all input at $1/M + output) | $1.76 | $3.69 |
-| **Cache savings** | **~$1.26 (72%)** | **~$2.26 (61%)** |
+| Scenario                                     | SAFE cost        | STANDARD cost    |
+| -------------------------------------------- | ---------------- | ---------------- |
+| With caching (observed)                      | $0.50            | $1.43            |
+| Without caching (all input at $1/M + output) | $1.76            | $3.69            |
+| **Cache savings**                            | **~$1.26 (72%)** | **~$2.26 (61%)** |
 
 ## Latency and quality observations
 

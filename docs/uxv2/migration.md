@@ -6,15 +6,15 @@ This document records the rollout stages, flag names, fallback criteria, and the
 
 All flags are evaluated in `apps/web/src/lib/flags.ts` and consumed via `useFeatureFlags()`.
 
-| Flag | Phase introduced | Default | Controls |
-|---|---|---|---|
-| `uxV2Shell` | 0 | false | Mobile shell, bottom navigation, radius tokens |
-| `uxV2Onboarding` | 2 | false | Autonomous GitHub onboarding |
-| `uxV2Runs` | 5 | false | Trust Runs screens and live progress |
-| `uxV2Issues` | 6 | false | Issues and Approval Centre screens |
-| `uxV2Evidence` | 7 | false | Evidence home and public verdict |
-| `uxV2Notifications` | 8 | false | Notification centre and preferences |
-| `uxV2Sharing` | 9 | false | New share composer and card variants |
+| Flag                | Phase introduced | Default | Controls                                       |
+| ------------------- | ---------------- | ------- | ---------------------------------------------- |
+| `uxV2Shell`         | 0                | false   | Mobile shell, bottom navigation, radius tokens |
+| `uxV2Onboarding`    | 2                | false   | Autonomous GitHub onboarding                   |
+| `uxV2Runs`          | 5                | false   | Trust Runs screens and live progress           |
+| `uxV2Issues`        | 6                | false   | Issues and Approval Centre screens             |
+| `uxV2Evidence`      | 7                | false   | Evidence home and public verdict               |
+| `uxV2Notifications` | 8                | false   | Notification centre and preferences            |
+| `uxV2Sharing`       | 9                | false   | New share composer and card variants           |
 
 ## Rollout stages
 

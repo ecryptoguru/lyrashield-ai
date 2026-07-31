@@ -40,7 +40,7 @@ Accepted risks that are live right now. Each one is a deliberate decision, not a
 **Status:** unverified. Needs one query against production before the next traffic increase.
 
 **Why it matters.** All 21 workspace-scoped tables carry fail-closed RLS policies and
-`FORCE ROW LEVEL SECURITY`. `FORCE` subjects the table *owner* to those policies — it does
+`FORCE ROW LEVEL SECURITY`. `FORCE` subjects the table _owner_ to those policies — it does
 **not** affect superusers or any role with `BYPASSRLS`. A superuser connection bypasses
 row-level security unconditionally, so if `DATABASE_URL` connects as one, every policy is
 inert and tenant isolation rests entirely on the application-layer Prisma extension. Managed
@@ -100,7 +100,7 @@ untagged manifests per build. Confirmed 2026-07-30: `lyrashield-web` had 10 vers
 untagged) and `lyrashield-worker` had 4 (3 untagged) after only a handful of deploys.
 
 **Why it shipped in dry-run first.** Deleting container images is irreversible, and a naive
-"delete this version ID" approach can remove an untagged manifest that a *kept* tagged
+"delete this version ID" approach can remove an untagged manifest that a _kept_ tagged
 manifest list still references, silently breaking a future pull of an image that still looks
 valid. `dataaxiom/ghcr-cleanup-action` resolves manifest lists before deleting specifically to
 avoid that, but a first run against accumulated history was reviewed before going live rather
