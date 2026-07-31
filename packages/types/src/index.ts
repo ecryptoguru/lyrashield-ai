@@ -141,11 +141,7 @@ export const CreateRepoTargetSchema = z.object({
   // GitHub App installation ids are numeric. Constrain the shape here so an
   // arbitrary string can never reach Target.installationId; the route
   // additionally verifies the id belongs to this workspace.
-  installationId: z
-    .string()
-    .regex(/^\d+$/, "Invalid installation id")
-    .max(20)
-    .optional(),
+  installationId: z.string().regex(/^\d+$/, "Invalid installation id").max(20).optional(),
   branch: z.string().max(255).optional(),
   environment: TargetEnvironmentSchema.default("STAGING"),
 })
