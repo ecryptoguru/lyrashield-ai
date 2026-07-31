@@ -125,7 +125,7 @@ Full detail in `codebase.md` §59. Fixed three live P0s (mobile nav orphaning Ap
 
 ### CLI, agent registry, and docs hardening (2026-07-31)
 
-Closed the remaining `review.md` P0/P1/P2 findings for the agent installer and MCP: bare-path CLI calls through `@lyrashield/sdk`, fail-fast `INVALID_PATH` guard in `buildUrl()`, data-driven `forceInlineEnv` and `serverNamePattern` in `packages/agent-registry`, removal of the dead `serverNameConstraint` field, JSONC-safe `renderConfig()` and `renderEntry()` paths, TOML/YAML merge-safety tests, and the `source { checkedOn, url }` field on every agent entry. The manual-install verification gate was run against real Windsurf, VS Code, and OpenAI Codex config files and the actual `@lyrashield/mcp` stdio binary. Docs package READMEs, `upgrade2.md`, `codebase.md §60`, and this file were updated to reflect the current shape.
+Closed the remaining `docs/audits/2026-07-31-agent-integration-deep-review-v10.md` P0/P1/P2 findings for the agent installer and MCP: bare-path CLI calls through `@lyrashield/sdk`, fail-fast `INVALID_PATH` guard in `buildUrl()`, data-driven `forceInlineEnv` and `serverNamePattern` in `packages/agent-registry`, removal of the dead `serverNameConstraint` field, JSONC-safe `renderConfig()` and `renderEntry()` paths, TOML/YAML merge-safety tests, and the `source { checkedOn, url }` field on every agent entry. The manual-install verification gate was run against real Windsurf, VS Code, and OpenAI Codex config files and the actual `@lyrashield/mcp` stdio binary. Docs package READMEs, `docs/audits/2026-07-31-agent-integration-coding-agent-handoff.md`, `codebase.md §60`, and this file were updated to reflect the current shape.
 
 ### Technical-debt cleanup and GitHub webhook precision (2026-07-31)
 
@@ -134,6 +134,16 @@ Removed launch-debt items from `apps/marketing`, `apps/web`, and `packages/*`: r
 Added `Target.installationId` to the Prisma schema with a supporting migration, regenerated the Prisma client, and updated `CreateRepoTargetSchema` to accept an optional `installationId`. `POST /api/targets` now stores the GitHub App installation ID on every repo target (from the request, or by resolving the workspace's active GitHub integration) and `POST /api/webhooks/github` deletes targets by exact `installationId` on `installation.deleted`, replacing the previous `repoFullName` `startsWith(owner/)` heuristic that could over-match. The repo-picker API and all three target-creation call sites (targets page, GitHub integration card, onboarding wizard) now thread `installationId` from the integration through to the target.
 
 Verified: `git diff --check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (132/132), and `python3 .devin/scripts/checklist.py .` (6/6) all pass. The local Postgres database has been migrated to the 29th migration (`20260731104104_add_target_installation_id`).
+
+### Installation-id authorisation and CLI/web UX hardening (PR #185, merged `9d0aa8a`, 2026-07-31)
+
+An independent review of the installation-id work above (`docs/audits/2026-07-31-agent-integration-deep-review-v10.md`) found two real gaps and fixed both. `POST /api/targets` had accepted a client-supplied `installationId` verbatim (schema was a bare `z.string().optional()`); a caller could tag a target with a foreign or invented installation id, which then permanently escaped the App-uninstall cleanup above. The route now verifies the id belongs to an active GitHub integration in the same workspace (400 `INSTALLATION_NOT_FOUND` otherwise), and `CreateRepoTargetSchema.installationId` is constrained to a numeric string, max 20. Separately, the `installation.deleted` webhook's exact-match predicate could never match the `NULL` `installationId` on targets created before that column existed, so those legacy targets survived an App uninstall and stayed scannable after the customer revoked access; the cleanup now also covers that cohort via an exact `repoOwner` match (not the `startsWith` prefix bug the exact match originally replaced).
+
+CLI: `scan --watch`/`status --watch` previously warned "not yet implemented" and exited `0`, so a CI script waiting on a scan believed it had completed; both now exit `2` before doing any work, and `scan` refuses before submitting so a retry cannot double-spend the workspace scan budget. `doctor` gives concrete remediation (checks to run, `lyrashield login`, available workspaces by id and name) instead of printing a raw connection error, and stops printing gotchas for agents that are not installed. `init` prints human-readable outcomes ("needs manual setup") instead of the raw `MANUAL_REQUIRED`-style enum; `--json` output keeps the machine codes.
+
+Web/marketing: the reports client no longer discards the server's error message in bare `catch {}` blocks; `share-sheet.tsx`'s copy-feedback timer is cleared on unmount; the onboarding workspace-name step submits on Enter; the marketing lite scanner's fetch now has a 30s `AbortController` (previously could hang indefinitely on an unreachable target) and the Turnstile boot loop is bounded (previously polled every 100ms forever if a script was blocked); every docs code block got a copy button.
+
+Verified: `pnpm lint` clean (marketing/web/cli), `astro check` clean for changed files, full suite passed with no regressions against the pre-change baseline. CI green on the merge commit. Process note: the first push to this PR failed CI on `format:check` (prettier) because the local verification pass had run lint and tests but skipped it — a reminder to run the full documented gate, not a subset.
 
 ## Current execution queue
 
@@ -190,6 +200,7 @@ Owner: founder + marketing + engineering.
 - Pricing, plan boundaries, usage metric, and billing provider
 - Public-launch timing
 - Authorized model/provider and first controlled-scan target
+- **`eval-exec` gate severity (self-flagged 2026-07-31, never confirmed):** `packages/cli/src/diff-core.ts` classifies `eval`/`exec` usage in a diff as `MEDIUM` (was `HIGH`); `action.yml`'s equivalent risky-pattern check was already `MEDIUM`. Both `lyrashield gate` and the GitHub Action default to `--fail-on HIGH`, so as of this change **an `eval()`/`exec()` addition in a diff will not fail either gate by default.** `codebase.md`'s working notes on this change say "a security review should confirm this is the intended product behavior before merge" — it already merged (main, `packages/cli/src/diff-core.ts:38-40`) without that confirmation. Needs an explicit founder call: keep both at `MEDIUM` (current state, internally consistent but permissive), or raise both to `HIGH` (stricter default, matches how a security product's own reviewer would likely want to be treated).
 
 ## Non-negotiable implementation rules
 
