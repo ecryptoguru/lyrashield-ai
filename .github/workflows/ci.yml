@@ -207,7 +207,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/marketing
-          wranglerVersion: "4.110.0"
+          wranglerVersion: "4"
           command: |
             d1 migrations apply lyrashield-marketing-waitlist --remote --config dist/server/wrangler.json
             deploy --config dist/server/wrangler.json
