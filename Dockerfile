@@ -8,7 +8,12 @@ WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/web/package.json ./apps/web/
 COPY apps/marketing/package.json ./apps/marketing/
+COPY apps/marketing-motion/package.json ./apps/marketing-motion/
+COPY packages/agent-registry/package.json ./packages/agent-registry/
+COPY packages/agent-rules/package.json ./packages/agent-rules/
 COPY packages/auth/package.json ./packages/auth/
+COPY packages/cli/package.json ./packages/cli/
+COPY packages/cli-alias/package.json ./packages/cli-alias/
 COPY packages/config/package.json ./packages/config/
 COPY packages/db/package.json ./packages/db/
 COPY packages/integrations/package.json ./packages/integrations/
@@ -16,6 +21,7 @@ COPY packages/logger/package.json ./packages/logger/
 COPY packages/types/package.json ./packages/types/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/score/package.json ./packages/score/
+COPY packages/sdk/package.json ./packages/sdk/
 COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/security/package.json ./packages/security/
 COPY apps/worker/package.json ./apps/worker/
@@ -57,7 +63,7 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     BETTER_AUTH_URL="$BUILD_APP_URL" \
     NEXT_PUBLIC_APP_URL="$BUILD_PUBLIC_APP_URL" \
     TRUSTED_PROXY_IP_HEADER="$BUILD_TRUSTED_PROXY_IP_HEADER" \
-    pnpm --filter @lyrashield/web build
+    pnpm exec turbo run build --filter=@lyrashield/web
 
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
