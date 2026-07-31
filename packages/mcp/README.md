@@ -75,11 +75,16 @@ Claude Code one-liner: `claude mcp add lyrashield -e LYRASHIELD_API_KEY=lsk_… 
 
 ### Codex (`~/.codex/config.toml`)
 
+OpenAI Codex keeps MCP servers under the `[mcp_servers.<name>]` table, and the API key/url must live in a dedicated `[mcp_servers.<name>.env_vars]` sub-table — a plain `env` key is silently ignored.
+
 ```toml
 [mcp_servers.lyrashield]
 command = "npx"
 args = ["-y", "@lyrashield/mcp"]
-env_vars = ["LYRASHIELD_API_KEY", "LYRASHIELD_API_URL"]
+
+[mcp_servers.lyrashield.env_vars]
+LYRASHIELD_API_KEY = "lsk_your_key"
+LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
 ```
 
 Per-client config for OpenCode, Kilo Code, Cline, Zed, and the cloud platforms lives in the LyraShield docs.

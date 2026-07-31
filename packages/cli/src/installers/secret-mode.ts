@@ -47,7 +47,7 @@ export async function resolveSecretMode(opts: SecretModeOptions): Promise<Resolv
   const envVar = "LYRASHIELD_API_KEY"
 
   let mode: ResolvedSecretMode["mode"]
-  if (agent.id === "gemini-cli") {
+  if (agent.forceInlineEnv) {
     mode = "inline"
   } else if (agent.credential.kind === "interpolated-env") {
     mode = "interpolated"

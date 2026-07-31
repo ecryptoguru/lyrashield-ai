@@ -1,13 +1,17 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 import { access, readFile, writeFile, rename } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import * as TOML from "@iarna/toml"
 import { backupFile } from "./backup.js"
 
-function atomicWrite(filePath: string, content: string): Promise<void> {
+async function atomicWrite(filePath: string, content: string): Promise<void> {
   const tmp = `${filePath}.lyrashield-tmp`
-  return writeFile(tmp, content, "utf-8").then(() => rename(tmp, filePath))
+  // tmp is a sibling file generated from the same resolved target path.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(tmp, content, "utf-8")
+  // filePath is the resolved installer target path selected for this workspace.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await rename(tmp, filePath)
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -100,6 +104,8 @@ export async function mergeToml(opts: TomlMergeOptions): Promise<TomlMergeResult
   let exists = false
   try {
     await access(filePath)
+    // filePath is the resolved installer target path for this workspace.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     original = await readFile(filePath, "utf-8")
     exists = true
   } catch {
@@ -128,9 +134,13 @@ export async function mergeToml(opts: TomlMergeOptions): Promise<TomlMergeResult
   }
 
   const backupPath = await backupFile(filePath)
+  // parent is the directory of the resolved installer target path.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
   await atomicWrite(filePath, newContent)
 
+  // filePath is the resolved installer target path for this workspace.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const reread = TOML.parse(await readFile(filePath, "utf-8")) as Record<string, unknown>
   const inserted = (reread[rootKey] as Record<string, unknown> | undefined)?.[serverName]
   if (!equals(inserted, value)) {
@@ -155,6 +165,8 @@ export async function removeToml(opts: TomlRemoveOptions): Promise<boolean> {
   } catch {
     return false
   }
+  // filePath is the resolved installer target path for this workspace.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const original = await readFile(filePath, "utf-8")
   const range = findSectionRange(original, rootKey, serverName)
   if (!range) return false

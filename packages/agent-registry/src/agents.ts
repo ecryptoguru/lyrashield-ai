@@ -1,6 +1,8 @@
 import type { AgentEntry } from "./types.js"
 import { API_URL_PLACEHOLDER } from "./render.js"
 
+const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-07-31"
+
 const claudeCode: AgentEntry = {
   id: "claude-code",
   displayName: "Claude Code",
@@ -22,6 +24,10 @@ const claudeCode: AgentEntry = {
   },
   vendorCli: { command: "claude", args: ["mcp", "add"] },
   rulesFiles: ["CLAUDE.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://code.claude.com/docs/en/mcp",
+  },
   gotchas: [
     "The project `.mcp.json` is shared by convention with the team; never inline a literal API key into it.",
     "`claude mcp add` flag syntax is ambiguous between docs and upstream README; verify the current form before shelling out.",
@@ -54,6 +60,10 @@ const cursor: AgentEntry = {
     "remote-http": { type: "http", url: API_URL_PLACEHOLDER },
   },
   rulesFiles: [".cursor/rules/lyrashield.mdc", ".cursorrules"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://cursor.com/docs/mcp",
+  },
   gotchas: [
     "The project `.cursor/mcp.json` is shared by convention; never inline a literal API key into it.",
   ],
@@ -79,6 +89,10 @@ const windsurf: AgentEntry = {
     "remote-http": { serverUrl: API_URL_PLACEHOLDER },
   },
   rulesFiles: [".windsurf/rules/lyrashield.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://docs.windsurf.com/plugins/cascade/mcp",
+  },
   gotchas: ["Windsurf's remote form uses `serverUrl`, not `url`."],
 }
 
@@ -113,6 +127,10 @@ const vscode: AgentEntry = {
     "remote-http": { type: "http", url: API_URL_PLACEHOLDER },
   },
   rulesFiles: [".github/copilot-instructions.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://code.visualstudio.com/docs/agent-customization/mcp-servers",
+  },
   gotchas: [
     "VS Code uses `servers`, not `mcpServers`; using `mcpServers` silently fails.",
     'VS Code stdio entries require `type: "stdio"`; remote entries use `type: "http"`.',
@@ -137,6 +155,10 @@ const openaiCodex: AgentEntry = {
   transports: ["stdio"],
   credential: { kind: "env-names", field: "env_vars" },
   rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://developers.openai.com/codex/mcp",
+  },
   gotchas: [
     "OpenAI Codex uses `env_vars`, not `env` — a separate TOML sub-table `[mcp_servers.lyrashield.env_vars]`. Using `env` is silently ignored.",
   ],
@@ -156,6 +178,10 @@ const cline: AgentEntry = {
     "remote-http": { type: "streamableHttp", url: API_URL_PLACEHOLDER },
   },
   rulesFiles: [".clinerules"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://docs.cline.bot/mcp/mcp-marketplace",
+  },
   gotchas: [
     "The `cline_mcp_settings.json` path is not verified; Cline is documented as managed via the panel.",
     'Cline defaults to legacy SSE when `type` is omitted; the remote endpoint needs `type: "streamableHttp"` explicitly.',
@@ -186,6 +212,10 @@ const opencode: AgentEntry = {
     "remote-http": { type: "remote", url: API_URL_PLACEHOLDER },
   },
   rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://dev.opencode.ai/docs/mcp-servers/",
+  },
   gotchas: [
     "OpenCode uses single-brace `{env:VAR}` syntax, not `${VAR}`; wrong syntax passes the literal string through.",
     'OpenCode entries need `type: "local"` for stdio and `type: "remote"` for remote.',
@@ -216,6 +246,10 @@ const kiloCode: AgentEntry = {
     "remote-http": { type: "remote", url: API_URL_PLACEHOLDER },
   },
   rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://kilo.ai/docs/automate/mcp/using-in-kilo-code",
+  },
   gotchas: [
     "Kilo Code uses single-brace `{env:VAR}` syntax, not `${VAR}`; wrong syntax passes the literal string through.",
     "Kilo Code's file is JSONC; a JSON.parse/stringify round-trip destroys the user's comments.",
@@ -241,6 +275,10 @@ const zed: AgentEntry = {
   credential: { kind: "inline-env" },
   commandWrapperKey: "command",
   rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://zed.dev/docs/ai/mcp",
+  },
   gotchas: [
     "Zed uses `context_servers`, and nests args/env inside a `command` object whose executable field is `path`, not `command`.",
     "Zed's global settings path is `~/.config/zed/settings.json`; verify it for your platform.",
@@ -263,8 +301,13 @@ const geminiCli: AgentEntry = {
   ],
   transports: ["stdio"],
   credential: { kind: "inline-env" },
-  serverNameConstraint: "Use 'lyrashield' only — no underscores.",
+  forceInlineEnv: true,
+  serverNamePattern: "^lyrashield$",
   rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://github.com/google-gemini/gemini-cli/blob/HEAD/docs/tools/mcp-server.md",
+  },
   gotchas: [
     "Gemini CLI strips env vars whose names contain KEY, TOKEN or SECRET from subprocess environments; LYRASHIELD_API_KEY must be declared inline in the entry's env block.",
     "Server name must not contain underscores; use `lyrashield`, never `lyra_shield`.",
@@ -282,6 +325,10 @@ const jetbrains: AgentEntry = {
   transports: ["stdio"],
   credential: { kind: "ui-fields" },
   rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://www.jetbrains.com/help/ai-assistant/mcp.html",
+  },
   gotchas: [
     "JetBrains has no file we can write; the MCP server must be configured through the Settings UI.",
   ],
@@ -299,6 +346,10 @@ const amp: AgentEntry = {
   credential: { kind: "shell-env" },
   vendorCli: { command: "amp", args: ["mcp", "add"] },
   rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://ampcode.com/manual/mcp.md",
+  },
   gotchas: [
     "Amp takes no --env flags; the key must be exported in the user's shell profile and inherited by the Amp CLI.",
     "Amp config is global and CLI-managed; there is no per-project file.",
@@ -316,6 +367,10 @@ const picode: AgentEntry = {
   transports: ["stdio"],
   credential: { kind: "inline-env" },
   rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: null,
+  },
   gotchas: [
     "PiCode's config file path is not documented in our docs; the `mcpServers` shape is known but the path is not.",
   ],
@@ -332,6 +387,10 @@ const openclaw: AgentEntry = {
   transports: ["stdio"],
   credential: { kind: "inline-env" },
   rulesFiles: ["OpenClaw skill.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://docs.openclaw.ai/gateway/configuration-reference",
+  },
   gotchas: [
     "OpenClaw's `mcporter.yaml` resolution order and profile YAML path are not verified.",
     "If promoted to config-file, OpenClaw uses YAML with `mcp_servers` root, stdio transport, and must declare `transport: stdio` explicitly.",
@@ -349,6 +408,10 @@ const hermes: AgentEntry = {
   transports: ["stdio"],
   credential: { kind: "inline-env" },
   rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference",
+  },
   gotchas: [
     "Hermes' profile YAML path is not documented.",
     "If promoted to config-file, Hermes uses YAML with `mcp_servers` root, stdio transport, and must declare `transport: stdio` explicitly.",

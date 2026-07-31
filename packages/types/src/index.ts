@@ -138,6 +138,7 @@ export const CreateRepoTargetSchema = z.object({
     .min(1)
     .max(100)
     .regex(/^[A-Za-z0-9_.-]+$/, "Invalid repo name"),
+  installationId: z.string().optional(),
   branch: z.string().max(255).optional(),
   environment: TargetEnvironmentSchema.default("STAGING"),
 })

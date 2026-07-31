@@ -28,12 +28,14 @@ export interface AgentEntry {
   transports: Transport[]
   credential: CredentialStyle
   requiredEntryFields?: Record<string, string>
-  /** Per-transport fields. Use "<apiUrl>" as a value to substitute opts.apiUrl dynamically. */
+  /** Per-transport fields. Use "<apiUrl>" as a placeholder; stdio env blocks receive the base apiUrl, remote HTTP entries receive the MCP endpoint. */
   transportFields?: Partial<Record<Transport, Record<string, string>>>
   commandWrapperKey?: string | null
   vendorCli?: { command: string; args: string[] }
   rulesFiles: string[]
-  serverNameConstraint?: string
+  forceInlineEnv?: boolean
+  serverNamePattern?: string
+  source?: { url?: string | null; checkedOn?: string }
   gotchas: string[]
 }
 

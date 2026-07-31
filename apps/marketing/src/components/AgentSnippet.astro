@@ -1,5 +1,5 @@
 ---
-import { getAgent, renderConfig } from "@lyrashield/agent-registry"
+import { getAgent, renderConfig, renderEntry } from "@lyrashield/agent-registry"
 import type { AgentEntry, InstallOptions, Transport } from "@lyrashield/agent-registry"
 
 interface Props {
@@ -9,7 +9,8 @@ interface Props {
   apiKey?: string
 }
 
-const API_URL = "https://app.lyrashieldai.com/api/v1"
+const API_URL = "https://app.lyrashieldai.com"
+const MCP_REMOTE_URL = "https://app.lyrashieldai.com/api/mcp"
 const SERVER_NAME = "lyrashield"
 const DEFAULT_API_KEY = "<LYRASHIELD_API_KEY>"
 
@@ -21,11 +22,13 @@ if (!agent) {
 
 const showInstallCommand = import.meta.env.SHOW_INSTALL_COMMAND === "true"
 
+const safeAgent = agent as AgentEntry
+
 const effectiveTransport: Transport =
-  transport && agent.transports.includes(transport) ? transport : (agent.transports[0] ?? "stdio")
+  transport && safeAgent.transports.includes(transport) ? transport : (safeAgent.transports[0] ?? "stdio")
 
 const defaultSecretMode: InstallOptions["secretMode"] =
-  agent.id === "gemini-cli" ? "inline" : "interpolated"
+  safeAgent.forceInlineEnv ? "inline" : "interpolated"
 
 const effectiveSecretMode: InstallOptions["secretMode"] = secretMode ?? defaultSecretMode
 
@@ -51,7 +54,7 @@ function buildRemoteManualCommand(agent: AgentEntry): string {
 
   const entry: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(remoteFields)) {
-    entry[key] = value === "<apiUrl>" ? API_URL : value
+    entry[key] = value === "<apiUrl>" ? MCP_REMOTE_URL : value
   }
   entry.headers = {
     Authorization: `Bearer ${apiKey}`,
@@ -84,37 +87,51 @@ let snippet = ""
 let note = ""
 let strategyNote = ""
 
-if (agent.installStrategy === "config-file") {
-  const { content } = renderConfig(agent, {
+if (safeAgent.installStrategy === "config-file") {
+  const { rootKey, entryKey, value } = renderEntry(safeAgent, {
     transport: effectiveTransport,
     apiUrl: API_URL,
     serverName: SERVER_NAME,
     secretMode: effectiveSecretMode,
     apiKey,
   })
-  snippet = content
+
+  if (safeAgent.format === "jsonc") {
+    // The CLI uses jsonc-parser to preserve comments when merging into an existing file.
+    // For copy-paste we render a plain JSON snippet that is also valid JSONC.
+    snippet = JSON.stringify({ [rootKey]: { [entryKey]: value } }, null, 2)
+  } else {
+    const { content } = renderConfig(safeAgent, {
+      transport: effectiveTransport,
+      apiUrl: API_URL,
+      serverName: SERVER_NAME,
+      secretMode: effectiveSecretMode,
+      apiKey,
+    })
+    snippet = content
+  }
 
   const primaryLocation =
-    agent.locations.find((loc) => loc.sharedByConvention) ?? agent.locations[0]
+    safeAgent.locations.find((loc) => loc.sharedByConvention) ?? safeAgent.locations[0]
   const path = primaryLocation?.path ?? "your agent's config file"
   note = `Add the following to <code>${path}</code>. ${buildKeyNote(snippet)}`
-} else if (agent.installStrategy === "vendor-cli") {
-  snippet = buildVendorCommand(agent)
+} else if (safeAgent.installStrategy === "vendor-cli") {
+  snippet = buildVendorCommand(safeAgent)
   note = buildKeyNote(snippet)
   strategyNote =
-    strategyNotes[agent.id] ??
-    `${agent.displayName}: configured through its vendor CLI.`
+    strategyNotes[safeAgent.id] ??
+    `${safeAgent.displayName}: configured through its vendor CLI.`
 } else {
   // guided-manual
-  if (effectiveTransport === "remote-http" && agent.transportFields?.["remote-http"]) {
-    snippet = buildRemoteManualCommand(agent)
+  if (effectiveTransport === "remote-http" && safeAgent.transportFields?.["remote-http"]) {
+    snippet = buildRemoteManualCommand(safeAgent)
     note = `Remote Streamable-HTTP setup. ${buildKeyNote(snippet)}`
   } else {
     snippet = buildManualCommand()
     note = `Use this command in a terminal, or enter the same values in the agent's MCP settings UI. ${buildKeyNote(snippet)}`
   }
   strategyNote =
-    strategyNotes[agent.id] ?? `${agent.displayName}: requires manual configuration.`
+    strategyNotes[safeAgent.id] ?? `${safeAgent.displayName}: requires manual configuration.`
 }
 ---
 
@@ -135,11 +152,11 @@ if (agent.installStrategy === "config-file") {
   </div>
 )}
 
-{agent.installStrategy !== "config-file" && agent.gotchas.length > 0 && (
+{safeAgent.installStrategy !== "config-file" && safeAgent.gotchas.length > 0 && (
   <>
     <h3>Important gotchas</h3>
     <ul>
-      {agent.gotchas.map((g) => (
+      {safeAgent.gotchas.map((g) => (
         <li>{g}</li>
       ))}
     </ul>

@@ -55,6 +55,7 @@ export async function GET(request: Request) {
         defaultBranch: r.default_branch,
         private: r.private,
         htmlUrl: r.html_url,
+        installationId: String(installationId),
       })),
     })
   } catch (error) {

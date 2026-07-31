@@ -311,6 +311,11 @@ const DIFF_ADVISORY_PATTERNS: Array<{ id: string; label: string; re: RegExp }> =
   { id: "child-process", label: "Shell/child_process execution", re: /child_process|exec\s*\(/ },
 ]
 
+/**
+ * Creates the offline `lyrashield_check_diff` tool. The `context` parameter is
+ * unused (no API call, no state change) but is kept for consistency with the
+ * other tool factory functions.
+ */
 export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_check_diff",
@@ -327,8 +332,6 @@ export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
       },
       required: ["diff"],
     },
-    // Intentionally local/offline: no API call, no state change. The context is
-    // unused here but kept in the signature for consistency.
     handler: async (args) => {
       void context
       const diff = typeof args.diff === "string" ? args.diff : ""

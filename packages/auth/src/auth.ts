@@ -68,35 +68,37 @@ async function sendVerificationEmail({
   token: string
 }) {
   if (isProd && env.BREVO_API_KEY) {
+    const apiKey = env.BREVO_API_KEY as string
     // Do not await the provider call — awaiting can leak timing information
     // about whether an email exists during sign-up/sign-in. The response is
     // processed in a detached promise and errors are logged asynchronously.
-    void fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      signal: AbortSignal.timeout(10_000),
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": env.BREVO_API_KEY,
-      },
-      body: JSON.stringify({
-        sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
-        to: [{ email: user.email, name: user.name }],
-        subject: "Verify your email — LyraShield",
-        htmlContent: `<p>Hi ${escapeHtml(user.name)},</p><p>Click the link below to verify your email address:</p><p><a href="${escapeHtml(url)}">Verify Email</a></p><p>If you didn't create an account, you can safely ignore this email.</p>`,
-      }),
-    })
-      .then((res) => {
+    void (async () => {
+      try {
+        const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          signal: AbortSignal.timeout(10_000),
+          headers: {
+            "Content-Type": "application/json",
+            "api-key": apiKey,
+          },
+          body: JSON.stringify({
+            sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
+            to: [{ email: user.email, name: user.name }],
+            subject: "Verify your email — LyraShield",
+            htmlContent: `<p>Hi ${escapeHtml(user.name)},</p><p>Click the link below to verify your email address:</p><p><a href="${escapeHtml(url)}">Verify Email</a></p><p>If you didn't create an account, you can safely ignore this email.</p>`,
+          }),
+        })
         if (!res.ok) {
           logger.error("Failed to send verification email via Brevo", {
             status: res.status,
           })
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         logger.error("Exception while sending verification email", {
           error: err instanceof Error ? err.message : String(err),
         })
-      })
+      }
+    })()
   } else if (isProd && !env.BREVO_API_KEY) {
     logger.error("BREVO_API_KEY is required to send verification emails in production")
   } else {
@@ -112,26 +114,30 @@ async function sendResetPasswordEmail({
   url: string
 }) {
   if (isProd && env.BREVO_API_KEY) {
-    void fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      signal: AbortSignal.timeout(10_000),
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": env.BREVO_API_KEY,
-      },
-      body: JSON.stringify({
-        sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
-        to: [{ email: user.email, name: user.name }],
-        subject: "Reset your LyraShield password",
-        htmlContent: `<p>Hi ${escapeHtml(user.name)},</p><p>Use the link below to reset your password. It expires in one hour.</p><p><a href="${escapeHtml(url)}">Reset password</a></p><p>If you did not request this, you can safely ignore this email.</p>`,
-      }),
-    })
-      .then((res) => {
-        if (!res.ok) logger.error("Failed to send reset email via Brevo", { status: res.status })
-      })
-      .catch((error) =>
+    const apiKey = env.BREVO_API_KEY as string
+    void (async () => {
+      try {
+        const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          signal: AbortSignal.timeout(10_000),
+          headers: {
+            "Content-Type": "application/json",
+            "api-key": apiKey,
+          },
+          body: JSON.stringify({
+            sender: { email: env.EMAIL_FROM || "noreply@lyrashieldai.com" },
+            to: [{ email: user.email, name: user.name }],
+            subject: "Reset your LyraShield password",
+            htmlContent: `<p>Hi ${escapeHtml(user.name)},</p><p>Use the link below to reset your password. It expires in one hour.</p><p><a href="${escapeHtml(url)}">Reset password</a></p><p>If you did not request this, you can safely ignore this email.</p>`,
+          }),
+        })
+        if (!res.ok) {
+          logger.error("Failed to send reset email via Brevo", { status: res.status })
+        }
+      } catch (error) {
         logger.error("Exception while sending reset email", { error: String(error) })
-      )
+      }
+    })()
   } else if (isProd) {
     logger.error("BREVO_API_KEY is required to send password reset emails")
   } else {

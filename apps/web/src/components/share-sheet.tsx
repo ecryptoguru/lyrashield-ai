@@ -65,6 +65,8 @@ const CHANNELS: {
   { id: "download", label: "Download", icon: Download },
 ]
 
+const COPY_FEEDBACK_RESET_MS = 2_000
+
 export function ShareSheet({ open, onClose, title, shareUrl, description }: ShareSheetProps) {
   const [copied, setCopied] = useState(false)
 
@@ -76,7 +78,7 @@ export function ShareSheet({ open, onClose, title, shareUrl, description }: Shar
       case "copy":
         await navigator.clipboard.writeText(shareUrl)
         setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        setTimeout(() => setCopied(false), COPY_FEEDBACK_RESET_MS)
         break
       case "x":
         window.open(

@@ -1,13 +1,17 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 import { access, readFile, writeFile, rename } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { modify, applyEdits, parse as parseJsonc } from "jsonc-parser"
 import { backupFile } from "./backup.js"
 
-function atomicWrite(filePath: string, content: string): Promise<void> {
+async function atomicWrite(filePath: string, content: string): Promise<void> {
   const tmp = `${filePath}.lyrashield-tmp`
-  return writeFile(tmp, content, "utf-8").then(() => rename(tmp, filePath))
+  // tmp is a sibling file generated from the same resolved target path.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(tmp, content, "utf-8")
+  // filePath is the resolved installer target path selected for this workspace.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await rename(tmp, filePath)
 }
 
 function equals(a: unknown, b: unknown): boolean {
@@ -32,6 +36,8 @@ export async function mergeJsonc(opts: JsoncMergeOptions): Promise<JsoncMergeRes
   let original = "{}"
   try {
     await access(filePath)
+    // filePath is the resolved installer target path for this workspace.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     original = await readFile(filePath, "utf-8")
   } catch {
     // new file
@@ -70,9 +76,13 @@ export async function mergeJsonc(opts: JsoncMergeOptions): Promise<JsoncMergeRes
   }
 
   const backupPath = await backupFile(filePath)
+  // parent is the directory of the resolved installer target path.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
   await atomicWrite(filePath, newContent)
 
+  // filePath is the resolved installer target path for this workspace.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const reread = (parseJsonc(await readFile(filePath, "utf-8")) ?? {}) as Record<string, unknown>
   const root = reread[rootKey] as Record<string, unknown> | undefined
   if (!equals(root?.[serverName], value)) {
@@ -97,6 +107,8 @@ export async function removeJsonc(opts: JsoncRemoveOptions): Promise<boolean> {
   } catch {
     return false
   }
+  // filePath is the resolved installer target path for this workspace.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const original = await readFile(filePath, "utf-8")
   const before = (parseJsonc(original) ?? {}) as Record<string, unknown>
   const root = before[rootKey] as Record<string, unknown> | undefined

@@ -95,6 +95,14 @@ function buildStdioEntry(agent: AgentEntry, opts: InstallOptions): Record<string
   return entry
 }
 
+function deriveMcpUrl(apiUrl: string): string {
+  const base = apiUrl.replace(/\/$/, "")
+  if (base.endsWith("/api/mcp")) return base
+  if (base.endsWith("/api/v1")) return base.replace(/\/api\/v1$/, "") + "/api/mcp"
+  if (base.endsWith("/api")) return base.replace(/\/api$/, "") + "/api/mcp"
+  return base + "/api/mcp"
+}
+
 function buildRemoteEntry(agent: AgentEntry, opts: InstallOptions): Record<string, unknown> {
   const secret = resolveSecret(agent, opts, true)
   const headers: Record<string, string> = {}
@@ -102,17 +110,18 @@ function buildRemoteEntry(agent: AgentEntry, opts: InstallOptions): Record<strin
     headers.Authorization = `Bearer ${secret}`
   }
 
+  const mcpUrl = deriveMcpUrl(opts.apiUrl)
   const remoteFields = { ...agent.transportFields?.["remote-http"] }
   let urlKey = "url"
   for (const [key, value] of Object.entries(remoteFields)) {
     if (value === API_URL_PLACEHOLDER) {
       urlKey = key
-      remoteFields[key] = opts.apiUrl
+      remoteFields[key] = mcpUrl
     }
   }
 
   const entry: Record<string, unknown> = {
-    [urlKey]: opts.apiUrl,
+    [urlKey]: mcpUrl,
     headers,
   }
 
@@ -213,13 +222,29 @@ function serializeYaml(rootKey: string, entryKey: string, entry: Record<string, 
   return yamlValue(root, 0)
 }
 
+function assertServerName(agent: AgentEntry, serverName: string): void {
+  if (!agent.serverNamePattern) return
+  // eslint-disable-next-line security/detect-non-literal-regexp
+  if (!new RegExp(agent.serverNamePattern).test(serverName)) {
+    throw new Error(
+      `Agent "${agent.id}" requires serverName to match /${agent.serverNamePattern}/; got "${serverName}".`
+    )
+  }
+}
+
 function serializeContent(
   format: ConfigFormat,
   rootKey: string,
   entryKey: string,
   entry: Record<string, unknown>
 ): string {
-  if (format === "json" || format === "jsonc") {
+  if (format === "jsonc") {
+    throw new Error(
+      "renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead."
+    )
+  }
+
+  if (format === "json") {
     return JSON.stringify({ [rootKey]: { [entryKey]: entry } }, null, 2)
   }
 
@@ -234,6 +259,7 @@ export function renderConfig(agent: AgentEntry, opts: InstallOptions): RenderedC
   assertConfigFileAgent(agent)
 
   const serverName = opts.serverName ?? "lyrashield"
+  assertServerName(agent, serverName)
   const entry = buildServerEntry(agent, opts)
 
   return {
@@ -246,6 +272,7 @@ export function renderEntry(agent: AgentEntry, opts: InstallOptions): RenderedEn
   assertConfigFileAgent(agent)
 
   const serverName = opts.serverName ?? "lyrashield"
+  assertServerName(agent, serverName)
   const value = buildServerEntry(agent, opts)
 
   return {

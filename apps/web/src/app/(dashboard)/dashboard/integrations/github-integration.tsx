@@ -14,6 +14,7 @@ interface Repo {
   defaultBranch: string
   private: boolean
   htmlUrl: string
+  installationId: string
 }
 
 export function GithubIntegration({
@@ -72,6 +73,7 @@ export function GithubIntegration({
         repoProvider: "github",
         repoOwner: selectedRepo.owner,
         repoName: selectedRepo.name,
+        installationId: selectedRepo.installationId,
         branch: selectedRepo.defaultBranch,
         environment: "STAGING",
       })

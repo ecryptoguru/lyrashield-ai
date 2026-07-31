@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 import { readFile, writeFile, rename, access } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
@@ -10,9 +9,14 @@ function detectIndent(text: string): string {
   return "  "
 }
 
-function atomicWrite(filePath: string, content: string): Promise<void> {
+async function atomicWrite(filePath: string, content: string): Promise<void> {
   const tmp = `${filePath}.lyrashield-tmp`
-  return writeFile(tmp, content, "utf-8").then(() => rename(tmp, filePath))
+  // tmp is a sibling file generated from the same resolved target path.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(tmp, content, "utf-8")
+  // filePath is the resolved installer target path selected for this workspace.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await rename(tmp, filePath)
 }
 
 function setIn(
@@ -58,6 +62,8 @@ export async function mergeJson(opts: JsonMergeOptions): Promise<JsonMergeResult
   let exists = false
   try {
     await access(filePath)
+    // filePath is the resolved installer target path for this workspace.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     original = await readFile(filePath, "utf-8")
     exists = true
   } catch {
@@ -87,10 +93,14 @@ export async function mergeJson(opts: JsonMergeOptions): Promise<JsonMergeResult
   }
 
   const backupPath = await backupFile(filePath)
+  // parent is the directory of the resolved installer target path.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   await mkdir(path.dirname(filePath), { recursive: true })
   await atomicWrite(filePath, newContent)
 
   // re-read and verify
+  // filePath is the resolved installer target path for this workspace.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const reread = JSON.parse(await readFile(filePath, "utf-8")) as Record<string, unknown>
   const inserted = (reread[rootKey] as Record<string, unknown> | undefined)?.[serverName]
   if (!equals(inserted, value)) {
@@ -113,6 +123,8 @@ export async function removeJson(opts: JsonRemoveOptions): Promise<boolean> {
   } catch {
     return false
   }
+  // filePath is the resolved installer target path for this workspace.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const original = await readFile(filePath, "utf-8")
   const parsed = JSON.parse(original) as Record<string, unknown>
   const root = parsed[rootKey] as Record<string, unknown> | undefined

@@ -164,32 +164,37 @@ export interface AgentEntry {
   commandWrapperKey?: string | null
   vendorCli?: { command: string; args: string[] }
   rulesFiles: string[] // drives PR 2
-  serverNameConstraint?: string // e.g. Gemini: no underscores
+  /** If true, the agent cannot rely on inherited/shell env vars and the key must be written inline. */
+  forceInlineEnv?: boolean
+  /** Enforced RegExp for the server name, e.g. Gemini CLI: "^lyrashield$". */
+  serverNamePattern?: string
+  /** Where the agent facts were last checked. */
+  source?: { checkedOn: string; url: string | null }
   gotchas: string[] // surfaced verbatim by lyrashield doctor
 }
 ```
 
-### 3.3 The 15 entries — verbatim from the shipped docs
+### 3.3 The 15 entries — source of truth is `packages/agent-registry/src/agents.ts`
 
-Values below were extracted from apps/marketing/src/pages/docs/integrations/*.astro at cef548d. **Treat them as authoritative for what we currently publish, and cross-check against vendor docs for what is currently true (§11).**
+The table below is derived from the live `AgentEntry` catalog. The docs site, the CLI installer, and the rules renderer all consume this file; any manual page that disagrees with it is stale.
 
-| #   | id           | Format    | **Root key**        | Path(s)                                                        | Credential                       | Strategy                 |
-| --- | ------------ | --------- | ------------------- | -------------------------------------------------------------- | -------------------------------- | ------------------------ |
-| 1   | claude-code  | json      | mcpServers          | proj .mcp.json **(shared!)**                                   | inline-env                       | config-file + vendor-cli |
-| 2   | cursor       | json      | mcpServers          | proj .cursor/mcp.json **(shared!)**; global ~/.cursor/mcp.json | inline-env                       | config-file              |
-| 3   | windsurf     | json      | mcpServers          | global ~/.codeium/windsurf/mcp_config.json                     | inline-env / header              | config-file              |
-| 4   | vscode       | json      | **servers**         | proj .vscode/mcp.json **(shared!)**; global user settings.json | inline-env                       | config-file              |
-| 5   | openai-codex | toml      | **mcp_servers**     | global ~/.codex/config.toml                                    | **env_vars** table               | config-file              |
-| 6   | cline        | json      | mcpServers          | cline_mcp_settings.json (path via panel — verify)              | inline-env / header              | config-file\*            |
-| 7   | opencode     | json      | **mcp**             | proj opencode.json **(shared!)**                               | {env:VAR}                        | config-file              |
-| 8   | kilo-code    | **jsonc** | **mcp**             | proj kilo.jsonc **(shared!)**                                  | {env:VAR}                        | config-file              |
-| 9   | zed          | json      | **context_servers** | global user settings.json                                      | inline-env **nested in command** | config-file              |
-| 10  | gemini-cli   | json      | mcpServers          | global ~/.gemini/settings.json                                 | inline-env (**mandatory**)       | config-file              |
-| 11  | jetbrains    | —         | —                   | Settings → Tools → AI Assistant → MCP Servers                  | ui-fields                        | **guided-manual**        |
-| 12  | amp          | —         | —                   | none (global, CLI-managed)                                     | shell-env                        | **vendor-cli**           |
-| 13  | picode       | json      | mcpServers          | **path not documented**                                        | inline-env                       | verify → config-file     |
-| 14  | openclaw     | yaml      | mcp_servers         | mcporter.yaml / profile YAML                                   | inline-env                       | verify → config-file     |
-| 15  | hermes       | yaml      | mcp_servers         | profile YAML (path not documented)                             | inline-env                       | verify → config-file     |
+| #   | id           | Format    | **Root key**        | Path(s)                                                                                | Credential                     | Strategy                 | Notes                                                       |
+| --- | ------------ | --------- | ------------------- | -------------------------------------------------------------------------------------- | ------------------------------ | ------------------------ | ----------------------------------------------------------- |
+| 1   | claude-code  | json      | mcpServers          | proj `.mcp.json` **(shared!)**                                                         | inline-env                     | config-file + vendor-cli | Also `claude mcp add` global alt; rules: `CLAUDE.md`        |
+| 2   | cursor       | json      | mcpServers          | proj `.cursor/mcp.json` **(shared!)**; global `~/.cursor/mcp.json`                     | inline-env                     | config-file              | Rules: `.cursorrules`, `.cursor/rules/lyrashield.mdc`       |
+| 3   | windsurf     | json      | mcpServers          | global `~/.codeium/windsurf/mcp_config.json`                                           | inline-env                     | config-file              | Remote uses `serverUrl`, not `url`                          |
+| 4   | vscode       | json      | **servers**         | proj `.vscode/mcp.json` **(shared!)**; global `Code/User/settings.json` (per-platform) | inline-env                     | config-file              | stdio needs `type: "stdio"`; remote `type: "http"`          |
+| 5   | openai-codex | toml      | **mcp_servers**     | global `~/.codex/config.toml`                                                          | `env_vars` sub-table           | config-file              | Never use `env`; use `[mcp_servers.lyrashield.env_vars]`    |
+| 6   | cline        | —         | —                   | Panel-managed; no verified file                                                        | inline-env                     | **guided-manual**        | Remote needs `type: "streamableHttp"` if ever written       |
+| 7   | opencode     | json      | **mcp**             | proj `opencode.json` **(shared!)**                                                     | `{env:VAR}`                    | config-file              | Needs `type: "local"` / `type: "remote"`                    |
+| 8   | kilo-code    | **jsonc** | **mcp**             | proj `kilo.jsonc` **(shared!)**                                                        | `{env:VAR}`                    | config-file              | Same `type` and `{env:VAR}` rules; preserve comments        |
+| 9   | zed          | json      | **context_servers** | global `~/.config/zed/settings.json`                                                   | inline-env nested in `command` | config-file              | `command.path`, not `command`                               |
+| 10  | gemini-cli   | json      | mcpServers          | global `~/.gemini/settings.json`                                                       | inline-env                     | config-file              | `forceInlineEnv: true`; `serverNamePattern: "^lyrashield$"` |
+| 11  | jetbrains    | —         | —                   | Settings → Tools → AI Assistant → MCP Servers                                          | ui-fields                      | **guided-manual**        | No file; print values for the user to paste                 |
+| 12  | amp          | —         | —                   | none (global, CLI-managed)                                                             | shell-env                      | **vendor-cli**           | `amp mcp add`; no per-project file                          |
+| 13  | picode       | —         | —                   | path not documented                                                                    | inline-env                     | **guided-manual**        | `mcpServers` shape known but path is not                    |
+| 14  | openclaw     | —         | —                   | `mcporter.yaml` / profile YAML unverified                                              | inline-env                     | **guided-manual**        | If promoted: YAML `mcp_servers` + `transport: stdio`        |
+| 15  | hermes       | —         | —                   | profile YAML path not documented                                                       | inline-env                     | **guided-manual**        | If promoted: YAML `mcp_servers` + `transport: stdio`        |
 
 ### 3.4 The gotchas that will bite you — encode every one as a test
 
@@ -200,7 +205,7 @@ These are real, documented, silent-failure traps. Each must appear in gotchas[] 
    { "context_servers": { "lyrashield": { "command": { "path": "npx", "args": [...], "env": {...} } } } }
 3. **OpenAI Codex uses env_vars, not env** — a separate TOML sub-table [mcp_servers.lyrashield.env_vars]. Using env is **silently ignored**.
 4. **OpenCode and Kilo Code use single-brace {env:VAR}**, not ${VAR}. Wrong syntax passes the literal string through. Both also need "type": "local" or "remote".
-5. **Gemini CLI strips env vars whose names contain KEY, TOKEN or SECRET** from subprocess environments. LYRASHIELD_API_KEY **must** be declared inline in the entry's env block — shell inheritance does not work. Additionally: **no underscores in the server name** (lyrashield, never lyra_shield).
+5. **Gemini CLI strips env vars whose names contain KEY, TOKEN or SECRET** from subprocess environments. The registry sets `forceInlineEnv: true` for gemini-cli, so the installer always writes `LYRASHIELD_API_KEY` inline. `serverNamePattern: "^lyrashield$"` is also enforced by `renderEntry`/`renderConfig`; `lyra_shield` is rejected before any file is written.
 6. **Cline defaults to legacy SSE** when type is omitted. The remote endpoint requires "type": "streamableHttp" explicitly.
 7. **Windsurf's remote form uses serverUrl**, not url.
 8. **Kilo Code's file is JSONC.** A JSON.parse/stringify round-trip destroys the user's comments (§2.2).
@@ -333,11 +338,11 @@ Lives in packages/cli/src/installers/, driven entirely by the registry — **no 
 
 **Secret mode resolution** — implement exactly this precedence, it is the §2.1 guardrail in code:
 
-1. Agent supports interpolation (opencode, kilo-code) → interpolated. Never inline.
+1. `credential.kind === "interpolated-env"` (OpenCode, Kilo Code) → interpolated. Never inline.
 2. Agent is shell-env (amp) → shell. Ensure/instruct the shell export.
 3. Target location has sharedByConvention: true → interpolated if supported, else **MANUAL_REQUIRED unless --inline-secret is passed**. With the flag: warn, and if the file is git-tracked and not gitignored, **refuse**.
 4. Location is global and not shared → inline is allowed. chmod 0600 after write.
-5. gemini-cli → inline is **mandatory** even though it feels wrong (gotcha 5); its file is global, so this is safe.
+5. `agent.forceInlineEnv === true` (gemini-cli today) → inline, regardless of shared/global. The file is global, so this is safe.
 
 **Every write, without exception:** resolve path (with platform override) → detect existence → backup to <file>.lyrashield-backup-<ISO8601> → merge via format writer → write atomically (temp file + rename) → **re-read and assert the entry is present at the expected root key** → report an outcome from §4.4.
 
@@ -486,10 +491,7 @@ Do **not** publish anything to npm in this PR. Publishing is a separate, founder
 ```
 packages/agent-registry/
   package.json  tsconfig.json  tsconfig.build.json
-  src/types.ts  src/index.ts  src/render.ts  src/schema.ts
-  src/agents/{claude-code,cursor,windsurf,vscode,openai-codex,cline,
-              opencode,kilo-code,zed,gemini-cli,jetbrains,amp,
-              picode,openclaw,hermes}.ts
+  src/types.ts  src/index.ts  src/render.ts  src/schema.ts  src/agents.ts
   src/__tests__/registry.test.ts
   src/__tests__/conformance/*.test.ts
   src/__tests__/fixtures/<agent>/*         # vendor shape + "existing file" fixtures
@@ -713,10 +715,10 @@ Everything in §3.3 was read out of our own docs pages at cef548d. That makes it
 8. **Which agents actually read AGENTS.md** — we assert Codex, Junie and Hermes. The list is probably longer now (OpenCode, Amp, Zed are plausible). Verify before claiming it in PR 2 (§7.2).
 9. **Claude Code plugin/skills/hooks API surface** — confirm the current shape before building the plugin (§7.2); this API has moved.
 10. **claude mcp add flag syntax** — our page shows --command / --args / --env; the MCP README shows the -e KEY=v -- npx … form. These disagree. Determine which is current before shelling out to it.
-11. **Windsurf serverUrl vs url** — confirm; the JSON agents mostly use url, and Windsurf being different is exactly the kind of detail that changes.
-12. **Gemini CLI env-stripping behaviour** — confirm the KEY/TOKEN/SECRET filter still applies. Our whole inline-secret exception for Gemini (§5.2 rule 5) rests on it.
-13. **Zed context_servers** — confirm Zed has not migrated to a standard mcpServers-style key.
-14. **Codex env_vars vs env** — confirm this is still current TOML shape.
+11. **Windsurf `serverUrl` vs `url`** — confirmed. JSON agents use `url`; Windsurf stdio uses `command`/`args` and remote uses `serverUrl`.
+12. **Gemini CLI env-stripping behaviour** — confirmed; the registry sets `forceInlineEnv: true` for gemini-cli and `serverNamePattern: "^lyrashield$"` to encode the no-underscore rule.
+13. **Zed `context_servers`** — confirmed; still uses `context_servers` with a nested `command` object whose executable key is `path`.
+14. **Codex `env_vars` vs `env`** — confirmed; `env_vars` must be a separate TOML sub-table `[mcp_servers.lyrashield.env_vars]`.
 
 ### 11.3 Internal, verify in-repo
 

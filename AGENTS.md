@@ -10,7 +10,7 @@ LyraShield AI is the evidence-backed release-assurance layer for AI-built softwa
 - `apps/worker` — BullMQ scan worker
 - `apps/agent` — approval-gated agent actions
 - `apps/marketing` — Astro 7 / Cloudflare Workers marketing site
-- `packages/*` — auth, config, db, integrations, logger, MCP, score, security, types, UI
+- `packages/*` — auth, config, db, integrations, logger, MCP, score, security, types, UI, plus the CLI/agent-install stack (`packages/cli`, `packages/agent-registry`, `packages/sdk`)
 
 Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables without founder approval. Public copy uses **LyraShield AI**; the canonical marketing domain is **`lyrashieldai.com`**. Trademark clearance remains a founder/legal decision.
 
@@ -53,6 +53,7 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 - **Rate-limit and approval controls:** `apps/web/src/lib/rate-limit.ts` added `checkApprovalCreateRateLimit` (10 approvals per workspace per minute). `apps/web/src/app/api/agent-approvals/route.ts` calls it after `requirePermission()`. A new untracked `apps/web/src/middleware.ts` applies the global `checkApiRateLimit` (30/min per IP) to all `/api/:path*`.
 - **Approval default expiry:** `packages/db/src/agent-approval-service.ts` default `expiresAt` tightened from 24 hours to 15 minutes, matching the route default.
 - **MCP path normalization:** `packages/mcp/src/tools.ts` `apiCall()` now strips `/api/v1` and `/api` prefixes before passing paths to the SDK client, fixing double-prefixing when tools call `/api/v1/...`.
+- **Remote-HTTP vs stdio URL contract:** `packages/agent-registry/src/render.ts` `deriveMcpUrl()` resolves the remote-HTTP `url`/`serverUrl` to `<apiUrl>/api/mcp` while the stdio `LYRASHIELD_API_URL` env block uses the base `apiUrl`. `apps/marketing/src/components/AgentSnippet.astro` now uses the base URL for manual/vendor commands and `/api/mcp` for remote-HTTP snippets.
 - **Turbo task graph:** `turbo.json` adds a `test` task with `dependsOn: ["^build", "generate"]` and `cache: false`, and adds `generate` to the `typecheck` task dependencies so Prisma client generation runs before test/typecheck.
 
 ### UX V2 merge (Phases 0–10, merged on `main`)
@@ -121,6 +122,18 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 ### UX V2 audit remediation, spend controls, and RLS proof (2026-07-30)
 
 Full detail in `codebase.md` §59. Fixed three live P0s (mobile nav orphaning Approvals/Evidence/Automations; every pre-verdict public scorecard 500ing; the marketing deploy stranded by a path filter), closed 17 of 25 empty-state dead ends by making `EmptyState.action` a required `ReactNode | null`, stopped six screens from rendering raw database enums, deleted the hand-rolled `bottom-sheet.tsx` in favor of the Radix `Sheet` already used elsewhere, added a manual-refresh affordance to the in-progress scan view, grouped the desktop sidebar, added a per-workspace scan-creation rate limit (5/min) and a 3-concurrent-scan cap to bound spend, made the RLS fail-closed test actually run against a real `NOBYPASSRLS` role instead of a superuser that made it pass vacuously, made `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` load-bearing (it was previously read by no code), fixed the deploy workflow to actually run migrations and probe `/api/ready`, scheduled nightly backups, published `/vibe-security-50` generated from the live control registry, and closed several SEO/AEO gaps. Verified end-to-end against a real cloned repo with a local Postgres running the full 28-migration chain: 118 test files, 1055 tests, 0 failures, 0 skips; `pnpm build` 6/6; lint and typecheck exit 0 across all packages; format clean. Merged via PR #174 on branch `fix/uxv2-sweep-p0`.
+
+### CLI, agent registry, and docs hardening (2026-07-31)
+
+Closed the remaining `review.md` P0/P1/P2 findings for the agent installer and MCP: bare-path CLI calls through `@lyrashield/sdk`, fail-fast `INVALID_PATH` guard in `buildUrl()`, data-driven `forceInlineEnv` and `serverNamePattern` in `packages/agent-registry`, removal of the dead `serverNameConstraint` field, JSONC-safe `renderConfig()` and `renderEntry()` paths, TOML/YAML merge-safety tests, and the `source { checkedOn, url }` field on every agent entry. The manual-install verification gate was run against real Windsurf, VS Code, and OpenAI Codex config files and the actual `@lyrashield/mcp` stdio binary. Docs package READMEs, `upgrade2.md`, `codebase.md §60`, and this file were updated to reflect the current shape.
+
+### Technical-debt cleanup and GitHub webhook precision (2026-07-31)
+
+Removed launch-debt items from `apps/marketing`, `apps/web`, and `packages/*`: refactored the inline Lite Check JavaScript in `apps/marketing/src/pages/scan.astro` into named functions, extracted hardcoded polling/timeouts into named constants in `apps/web`, removed dead commented server-only exports from `packages/auth/src/index.ts`, wrapped Brevo `fetch` calls in `packages/auth/src/auth.ts` with `try/catch`, centralized SDK timeout/retry and agent-registry `checkedOn` constants, and added justification comments for security-related `eslint-disable` directives in `packages/security`, `packages/mcp`, `apps/worker`, and `packages/cli`.
+
+Added `Target.installationId` to the Prisma schema with a supporting migration, regenerated the Prisma client, and updated `CreateRepoTargetSchema` to accept an optional `installationId`. `POST /api/targets` now stores the GitHub App installation ID on every repo target (from the request, or by resolving the workspace's active GitHub integration) and `POST /api/webhooks/github` deletes targets by exact `installationId` on `installation.deleted`, replacing the previous `repoFullName` `startsWith(owner/)` heuristic that could over-match. The repo-picker API and all three target-creation call sites (targets page, GitHub integration card, onboarding wizard) now thread `installationId` from the integration through to the target.
+
+Verified: `git diff --check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (132/132), and `python3 .devin/scripts/checklist.py .` (6/6) all pass. The local Postgres database has been migrated to the 29th migration (`20260731104104_add_target_installation_id`).
 
 ## Current execution queue
 

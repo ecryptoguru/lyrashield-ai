@@ -5,9 +5,12 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { getAgent } from "@lyrashield/agent-registry"
 import { installAgent, uninstallAgent } from "../../installers/install.js"
+import { mergeFile } from "../../installers/merge.js"
 import { parse as parseJsonc } from "jsonc-parser"
+import * as TOML from "@iarna/toml"
+import YAML from "yaml"
 
-const API_URL = "https://app.lyrashieldai.com/api/v1"
+const API_URL = "https://app.lyrashieldai.com"
 const API_KEY = "lsk_testkey123"
 
 async function tempDir(): Promise<string> {
@@ -220,5 +223,89 @@ describe("conformance: install/uninstall round-trips", () => {
 
     const content = await readFile(path.join(cwd, ".mcp.json"), "utf-8")
     expect(content).toContain(API_KEY)
+  })
+
+  it("toml merge-safety keeps foreign servers and unrelated keys", async () => {
+    const fixture = `unrelated = true
+
+[mcp_servers.acme]
+command = "npx"
+args = ["acme-mcp"]`
+    const filePath = path.join(cwd, "config.toml")
+    await writeFile(filePath, fixture, "utf-8")
+
+    const result = await mergeFile({
+      filePath,
+      format: "toml",
+      rootKey: "mcp_servers",
+      serverName: "lyrashield",
+      value: {
+        command: "npx",
+        args: ["-y", "@lyrashield/mcp"],
+        env: {
+          LYRASHIELD_API_KEY: API_KEY,
+          LYRASHIELD_API_URL: API_URL,
+        },
+      },
+    })
+
+    expect(result.changed).toBe(true)
+
+    const content = await readFile(filePath, "utf-8")
+    const parsed = TOML.parse(content) as Record<string, unknown>
+    expect(parsed).toHaveProperty("unrelated", true)
+    expect(parsed).toHaveProperty("mcp_servers")
+    const servers = parsed["mcp_servers"] as Record<string, unknown>
+    expect(servers).toHaveProperty("acme")
+    expect(servers).toHaveProperty("lyrashield")
+    const acme = servers["acme"] as Record<string, unknown>
+    expect(acme).toHaveProperty("command", "npx")
+    expect(acme).toHaveProperty("args", ["acme-mcp"])
+    const lyra = servers["lyrashield"] as Record<string, unknown>
+    expect(lyra).toHaveProperty("command", "npx")
+    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp"])
+    expect(lyra).toHaveProperty("env")
+    const env = lyra["env"] as Record<string, unknown>
+    expect(env).toEqual({
+      LYRASHIELD_API_KEY: API_KEY,
+      LYRASHIELD_API_URL: API_URL,
+    })
+  })
+
+  it("yaml merge-safety keeps foreign servers and unrelated keys", async () => {
+    const fixture = `unrelated: true
+mcp_servers:
+  acme:
+    command: npx
+    args: [acme-mcp]`
+    const filePath = path.join(cwd, "config.yaml")
+    await writeFile(filePath, fixture, "utf-8")
+
+    const result = await mergeFile({
+      filePath,
+      format: "yaml",
+      rootKey: "mcp_servers",
+      serverName: "lyrashield",
+      value: {
+        command: "npx",
+        args: ["-y", "@lyrashield/mcp"],
+      },
+    })
+
+    expect(result.changed).toBe(true)
+
+    const content = await readFile(filePath, "utf-8")
+    const parsed = YAML.parse(content) as Record<string, unknown>
+    expect(parsed).toHaveProperty("unrelated", true)
+    expect(parsed).toHaveProperty("mcp_servers")
+    const servers = parsed["mcp_servers"] as Record<string, unknown>
+    expect(servers).toHaveProperty("acme")
+    expect(servers).toHaveProperty("lyrashield")
+    const acme = servers["acme"] as Record<string, unknown>
+    expect(acme).toHaveProperty("command", "npx")
+    expect(acme).toHaveProperty("args", ["acme-mcp"])
+    const lyra = servers["lyrashield"] as Record<string, unknown>
+    expect(lyra).toHaveProperty("command", "npx")
+    expect(lyra).toHaveProperty("args", ["-y", "@lyrashield/mcp"])
   })
 })

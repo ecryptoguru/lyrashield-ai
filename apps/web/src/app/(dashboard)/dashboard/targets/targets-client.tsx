@@ -40,6 +40,7 @@ interface GithubRepo {
   defaultBranch: string
   private: boolean
   htmlUrl: string
+  installationId: string
 }
 
 export function TargetsClient({
@@ -73,6 +74,7 @@ export function TargetsClient({
     repoOwner: "",
     repoName: "",
     branch: "",
+    installationId: "",
   })
   const [urlForm, setUrlForm] = useState({
     name: "",
@@ -126,6 +128,7 @@ export function TargetsClient({
         repoOwner: repo.owner,
         repoName: repo.name,
         branch: repo.defaultBranch,
+        installationId: repo.installationId,
       })
     }
   }
@@ -163,6 +166,7 @@ export function TargetsClient({
         name: repoForm.name,
         repoOwner: repoForm.repoOwner,
         repoName: repoForm.repoName,
+        ...(repoForm.installationId ? { installationId: repoForm.installationId } : {}),
         ...(repoForm.branch ? { branch: repoForm.branch } : {}),
       })
       setShowForm(false)
@@ -171,6 +175,7 @@ export function TargetsClient({
         repoOwner: "",
         repoName: "",
         branch: "",
+        installationId: "",
       })
       await fetchTargets()
       router.refresh()

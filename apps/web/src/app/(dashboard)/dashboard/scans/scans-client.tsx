@@ -169,15 +169,24 @@ export function ScansClient({
     let pollEtag: string | undefined
     const pollStartedAt = Date.now()
 
+    const HIDDEN_POLL_INTERVAL_MS = 1_000
+    const INITIAL_POLL_DELAY_MS = 10_000
+    const VISIBILITY_POLL_DELAY_MS = 0
+    const POLL_FAST_INTERVAL_MS = 10_000
+    const POLL_MEDIUM_INTERVAL_MS = 30_000
+    const POLL_SLOW_INTERVAL_MS = 60_000
+    const POLL_MEDIUM_THRESHOLD_MS = 5 * 60_000
+    const POLL_SLOW_THRESHOLD_MS = 60_000
+
     const nextInterval = (elapsedMs: number): number => {
-      if (elapsedMs < 60_000) return 10_000
-      if (elapsedMs < 5 * 60_000) return 30_000
-      return 60_000
+      if (elapsedMs < POLL_SLOW_THRESHOLD_MS) return POLL_FAST_INTERVAL_MS
+      if (elapsedMs < POLL_MEDIUM_THRESHOLD_MS) return POLL_MEDIUM_INTERVAL_MS
+      return POLL_SLOW_INTERVAL_MS
     }
 
     const poll = async () => {
       if (document.hidden) {
-        timeoutId = window.setTimeout(poll, 1000)
+        timeoutId = window.setTimeout(poll, HIDDEN_POLL_INTERVAL_MS)
         return
       }
       try {
@@ -198,15 +207,16 @@ export function ScansClient({
       }
       if (isAborted) return
       const elapsed = Date.now() - pollStartedAt
-      timeoutId = window.setTimeout(poll, nextInterval(elapsed))
+      const nextPollDelay = nextInterval(elapsed)
+      timeoutId = window.setTimeout(poll, nextPollDelay)
     }
 
-    timeoutId = window.setTimeout(poll, 10_000)
+    timeoutId = window.setTimeout(poll, INITIAL_POLL_DELAY_MS)
 
     const onVisibility = () => {
       if (!document.hidden && hasActiveScans && !isAborted) {
         window.clearTimeout(timeoutId)
-        timeoutId = window.setTimeout(poll, 0)
+        timeoutId = window.setTimeout(poll, VISIBILITY_POLL_DELAY_MS)
       }
     }
     document.addEventListener("visibilitychange", onVisibility)
@@ -290,7 +300,7 @@ export function ScansClient({
               className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium"
             >
               <ChevronDown
-                className={`size-4 transition-transform duration-[var(--duration-fast)] ease-[var(--ease-out)] ${showAdvanced ? "rotate-180" : ""}`}
+                className={`size-4 transition-transform duration-(--duration-fast) ease-out ${showAdvanced ? "rotate-180" : ""}`}
                 aria-hidden="true"
               />
               Advanced

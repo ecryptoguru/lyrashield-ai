@@ -463,49 +463,49 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 Most routes live under `apps/web/src/app/api`; public scorecard OG and badge routes live under `apps/web/src/app/(public)/api`. Protected routes use Better Auth plus workspace permission checks. Inputs are Zod-validated at trust boundaries. List endpoints use cursor pagination where applicable.
 
-| Methods            | Path                                | Purpose                                             |
-| ------------------ | ----------------------------------- | --------------------------------------------------- |
-| GET                | `/api/health`                       | Process liveness                                    |
-| GET                | `/api/ready`                        | PostgreSQL and Redis readiness                      |
-| DELETE             | `/api/account`                      | Confirmed account deletion and anonymization        |
-| GET, POST          | `/api/auth/[...all]`                | Better Auth handler                                 |
-| GET, POST          | `/api/workspaces`                   | List memberships / create workspace                 |
-| POST               | `/api/workspaces/active`            | Persist active workspace in HttpOnly cookie         |
-| GET, PATCH         | `/api/onboarding`                   | Read/update per-user onboarding state               |
-| GET, POST          | `/api/projects`                     | Paginated project list / create                     |
-| GET, POST          | `/api/targets`                      | Paginated target list / create with SSRF validation |
-| POST               | `/api/targets/[id]/scorecard`       | Publish the current eligible score snapshot         |
-| GET, POST          | `/api/team`                         | Paginated team list / invite member                 |
-| GET, POST          | `/api/integrations/github/install`  | Installation callback / signed install URL          |
-| GET                | `/api/integrations/github/repos`    | List installation repositories                      |
-| POST               | `/api/webhooks/github`              | Verify and process GitHub deliveries                |
-| GET, POST          | `/api/scans`                        | Paginated scan list / create and enqueue            |
-| GET, POST          | `/api/scans/[id]`                   | Scan with events / cancel scan                      |
-| GET                | `/api/findings`                     | Paginated finding list                              |
-| GET, PATCH         | `/api/findings/[id]`                | Finding detail / update status (`reason` optional)  |
-| POST               | `/api/findings/[id]/fix-proposals`  | Create fix proposal                                 |
-| POST               | `/api/findings/[id]/retests`        | Queue retest                                        |
-| GET                | `/api/fix-proposals`                | List proposals                                      |
-| POST               | `/api/fix-proposals/[id]/create-pr` | Approval-aware GitHub PR creation                   |
-| GET                | `/api/retests`                      | List retests                                        |
-| GET                | `/api/launch-readiness`             | Compute launch-readiness verdict                    |
-| GET, POST          | `/api/reports`                      | List / generate report                              |
-| GET, POST          | `/api/reports/[id]`                 | Read report / share or revoke token                 |
-| GET                | `/api/reports/[id]/download`        | Download rendered HTML report                       |
-| GET                | `/api/reports/shared/[id]`          | Token-gated public report data                      |
-| DELETE             | `/api/scorecards/[id]`              | Revoke a scorecard share                            |
-| POST               | `/api/scorecards/events`            | Record allowlisted deduplicated view/share events   |
-| POST               | `/api/referrals/capture`            | Validate referral/source and set HttpOnly cookies   |
-| POST               | `/api/referrals/claim`              | Claim a new-account referral during onboarding      |
-| GET                | `/api/og/score/[slug]`              | Render grade/fixes PNG in wide/square/portrait      |
-| GET                | `/api/badge/score/[slug]`           | Render a script-free revocable SVG badge            |
-| GET, POST          | `/api/notifications`                | Paginated list / create notification                |
-| PATCH              | `/api/notifications/[id]`           | Update notification read state                      |
-| GET, POST          | `/api/schedules`                    | Paginated list / create schedule                    |
-| GET, PATCH, DELETE | `/api/schedules/[id]`               | Read/update/delete schedule                         |
-| GET                | `/api/agent-approvals`              | List approvals                                      |
-| POST               | `/api/agent-approvals/[id]/approve` | Approve exact action input                          |
-| POST               | `/api/agent-approvals/[id]/deny`    | Deny pending approval                               |
+| Methods            | Path                                | Purpose                                                                                          |
+| ------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| GET                | `/api/health`                       | Process liveness                                                                                 |
+| GET                | `/api/ready`                        | PostgreSQL and Redis readiness                                                                   |
+| DELETE             | `/api/account`                      | Confirmed account deletion and anonymization                                                     |
+| GET, POST          | `/api/auth/[...all]`                | Better Auth handler                                                                              |
+| GET, POST          | `/api/workspaces`                   | List memberships / create workspace                                                              |
+| POST               | `/api/workspaces/active`            | Persist active workspace in HttpOnly cookie                                                      |
+| GET, PATCH         | `/api/onboarding`                   | Read/update per-user onboarding state                                                            |
+| GET, POST          | `/api/projects`                     | Paginated project list / create                                                                  |
+| GET, POST          | `/api/targets`                      | Paginated target list / create with SSRF validation                                              |
+| POST               | `/api/targets/[id]/scorecard`       | Publish the current eligible score snapshot                                                      |
+| GET, POST          | `/api/team`                         | Paginated team list / invite member                                                              |
+| GET, POST          | `/api/integrations/github/install`  | Installation callback / signed install URL                                                       |
+| GET                | `/api/integrations/github/repos`    | List installation repositories with `installationId`                                             |
+| POST               | `/api/webhooks/github`              | Verify and process GitHub deliveries; `installation.deleted` deletes targets by `installationId` |
+| GET, POST          | `/api/scans`                        | Paginated scan list / create and enqueue                                                         |
+| GET, POST          | `/api/scans/[id]`                   | Scan with events / cancel scan                                                                   |
+| GET                | `/api/findings`                     | Paginated finding list                                                                           |
+| GET, PATCH         | `/api/findings/[id]`                | Finding detail / update status (`reason` optional)                                               |
+| POST               | `/api/findings/[id]/fix-proposals`  | Create fix proposal                                                                              |
+| POST               | `/api/findings/[id]/retests`        | Queue retest                                                                                     |
+| GET                | `/api/fix-proposals`                | List proposals                                                                                   |
+| POST               | `/api/fix-proposals/[id]/create-pr` | Approval-aware GitHub PR creation                                                                |
+| GET                | `/api/retests`                      | List retests                                                                                     |
+| GET                | `/api/launch-readiness`             | Compute launch-readiness verdict                                                                 |
+| GET, POST          | `/api/reports`                      | List / generate report                                                                           |
+| GET, POST          | `/api/reports/[id]`                 | Read report / share or revoke token                                                              |
+| GET                | `/api/reports/[id]/download`        | Download rendered HTML report                                                                    |
+| GET                | `/api/reports/shared/[id]`          | Token-gated public report data                                                                   |
+| DELETE             | `/api/scorecards/[id]`              | Revoke a scorecard share                                                                         |
+| POST               | `/api/scorecards/events`            | Record allowlisted deduplicated view/share events                                                |
+| POST               | `/api/referrals/capture`            | Validate referral/source and set HttpOnly cookies                                                |
+| POST               | `/api/referrals/claim`              | Claim a new-account referral during onboarding                                                   |
+| GET                | `/api/og/score/[slug]`              | Render grade/fixes PNG in wide/square/portrait                                                   |
+| GET                | `/api/badge/score/[slug]`           | Render a script-free revocable SVG badge                                                         |
+| GET, POST          | `/api/notifications`                | Paginated list / create notification                                                             |
+| PATCH              | `/api/notifications/[id]`           | Update notification read state                                                                   |
+| GET, POST          | `/api/schedules`                    | Paginated list / create schedule                                                                 |
+| GET, PATCH, DELETE | `/api/schedules/[id]`               | Read/update/delete schedule                                                                      |
+| GET                | `/api/agent-approvals`              | List approvals                                                                                   |
+| POST               | `/api/agent-approvals/[id]/approve` | Approve exact action input                                                                       |
+| POST               | `/api/agent-approvals/[id]/deny`    | Deny pending approval                                                                            |
 
 ### Response and Client Contracts
 
@@ -585,8 +585,8 @@ All components use `forwardRef` and `cn()` (clsx + tailwind-merge) for class mer
 ### GitHub Integration (`apps/web/src/app/(dashboard)/dashboard/integrations/github-integration.tsx`)
 
 - Connect button: calls `POST /api/integrations/github/install` → redirects to GitHub App install page
-- Repo picker: calls `GET /api/integrations/github/repos` → displays selectable list with private badges, `rounded-lg` buttons
-- Target creation: calls `POST /api/targets` with selected repo data (type: REPO, provider: github)
+- Repo picker: calls `GET /api/integrations/github/repos` → returns repos with `installationId` for the selected GitHub App installation
+- Target creation: calls `POST /api/targets` with selected repo data (type: REPO, provider: github, `installationId`) so the target is bound to the installation
 - Connected state: shows account login badge with checkmark
 - Error handling: inline error banners for all operations
 - Uses `Spinner` from `@lyrashield/ui` for loading states
@@ -621,7 +621,7 @@ All Zod schemas and TypeScript types are defined here:
 
 - `CreateWorkspaceSchema` — name (1-100), mode (default VIBE)
 - `CreateProjectSchema` — workspaceId, name (1-100), description (optional, max 500)
-- `CreateRepoTargetSchema` — workspaceId, projectId (optional), type: REPO, name, repoProvider (default github), repoOwner, repoName, branch (optional), environment (default STAGING)
+- `CreateRepoTargetSchema` — workspaceId, projectId (optional), type: REPO, name, repoProvider (default github), repoOwner, repoName, installationId (optional, stringified GitHub App installation id), branch (optional), environment (default STAGING)
 - `CreateUrlTargetSchema` — workspaceId, projectId (optional), type: WEB_APP|API, name, url (z.url()), environment (default STAGING)
 - `CreateScanSchema` — workspaceId, targetId, goal, mode (default SAFE), policyId (optional)
 - `OnboardingStepSchema` — enum: WORKSPACE, TARGET, GOAL, PREFLIGHT, SCAN, RESULTS, FIX
@@ -788,7 +788,7 @@ A code-grounded deep audit produced these fixes, all now merged to `main`. Where
 
 - **Tenant isolation (`packages/db`)** — the workspace-scoping context was rewritten from an unsafe module-level global to **AsyncLocalStorage** in the new `packages/db/src/scoping.ts`; `extension.ts` is now a thin wrapper. **Both model sets were corrected to match real schema columns:** soft-delete = the **19** models that actually have `deletedAt` (removed `WorkspaceMember`, `CredentialSet`, `AuditLog`, `Retest`); workspace-scoped = the **17** auto-scopable models with `workspaceId` (removed `ScanEvent`, `Evidence`, `FixProposal`, `PullRequest`, `Ticket`; excluded cross-workspace `WorkspaceMember` and per-user `OnboardingState`). Auto-activation is wired into `requireWorkspaceAccess` (`packages/auth/src/session.ts`) via `setWorkspaceContext`. **Postgres RLS is a deliberate follow-up** (needs DB-validated per-request GUC). Regression + concurrency tests in `extension.test.ts` (now imports the real policy from `scoping.ts`).
 - **Rate limiting (`apps/web/src/lib/rate-limit.ts`)** — now uses `UPSTASH_REDIS_REST_URL`/`_TOKEN` (the previous code passed an empty token + the `redis://` URL, silently degrading prod to per-instance in-memory). Fail-loud on init error; in-memory map is bounded by an expiry sweep.
-- **GitHub webhook (`api/webhooks/github`)** — idempotent on `X-GitHub-Delivery` (pre-check + P2002 race guard); `installation.deleted` now matches targets by `startsWith("{owner}/")` instead of `contains`.
+- **GitHub webhook (`api/webhooks/github`)** — idempotent on `X-GitHub-Delivery` (pre-check + P2002 race guard); `installation.deleted` now deletes targets by exact `installationId` stored on `Target`. `Target.installationId` is populated when a repo target is created (from the repo picker's `installationId` or the workspace's active GitHub integration) so uninstallation no longer relies on the coarse `startsWith("{owner}/")` prefix match.
 - **Onboarding (`api/onboarding`)** — PATCH verifies workspace membership + target ownership before persisting (IDOR fix).
 - **GitHub install URL (`packages/integrations/src/github.ts`)** — built from `GITHUB_APP_SLUG` (was the numeric app id, which 404s).
 - **CI (`.github/workflows/ci.yml`)** — adds a `pnpm test` step, reads pnpm from `packageManager`, adds `NEXT_PUBLIC_APP_URL` (landed via Codex, PR #14).
@@ -2215,6 +2215,13 @@ A focused multi-package patch tightens the CLI contract, removes a scanner bypas
 - Zed's global path is now `~/.config/zed/settings.json` instead of `user settings.json`.
 - `packages/cli/src/installers/detect.ts` `resolveLocation()` already respects `ConfigLocation.platform`, so detection and install now resolve to the correct per-platform file.
 
+### Agent registry schema additions
+
+- `AgentEntry` gained `forceInlineEnv?: boolean`, `serverNamePattern?: string`, and `source?: { checkedOn: string; url: string | null }` in `packages/agent-registry/src/types.ts` and `src/schema.ts`.
+- `forceInlineEnv: true` on `gemini-cli` replaces the previous hardcoded `agent.id === "gemini-cli"` branch in `packages/cli/src/installers/secret-mode.ts`.
+- `serverNamePattern: "^lyrashield$"` on `gemini-cli` is enforced by `packages/agent-registry/src/render.ts`; `renderConfig()` and `renderEntry()` throw a clear error if the requested `serverName` does not match.
+- Every agent now carries a `source` object so the registry records when and where each integration fact was last verified.
+
 ### Secret-mode installer refactor
 
 - `packages/cli/src/installers/secret-mode.ts` was simplified. It no longer returns early for each credential kind; instead it derives a single `mode` (`inline`, `interpolated`, `shell`, `header`, or `manual`) and then checks whether that mode writes a raw secret (`inline` or `header`).
@@ -2231,8 +2238,15 @@ A focused multi-package patch tightens the CLI contract, removes a scanner bypas
 
 ### MCP and SDK path normalization
 
-- `packages/sdk/src/client.ts` `buildUrl()` always prepends `/api/v1` to the supplied path, so both `packages/cli` and `packages/mcp` call it with bare paths.
+- `packages/sdk/src/client.ts` `buildUrl()` always prepends `/api/v1` to the supplied bare path, so both `packages/cli` and `packages/mcp` call it with bare paths. As a fail-fast guard, any path that already starts with `/api/` (e.g. `/api/v1/findings` or `/api/findings`) now throws `LyraShieldError { code: "INVALID_PATH" }` before the network request is made, converting a silent doubled-prefix 404 into a loud error.
 - `packages/mcp/src/tools.ts` `apiCall()` now normalizes paths with `path.replace(/^\/api\/v1/, "").replace(/^\/api/, "") || "/"`, fixing the previous `path.slice(4)` bug that turned `/api/v1/findings` into `/v1/findings` and produced `/api/v1/v1/findings`.
+- `packages/agent-registry/src/render.ts` now derives the remote-HTTP MCP endpoint with `deriveMcpUrl()`. The stdio `LYRASHIELD_API_URL` env block uses the base `apiUrl` directly; the remote-HTTP `url`/`serverUrl` resolves to `<base>/api/mcp`, and any stale `/api/v1` suffix is stripped first. `apps/marketing/src/components/AgentSnippet.astro` and the CLI installer both pass the base API URL, so manual copy-paste and programmatic installs now agree with `packages/mcp/README.md`.
+
+### Manual install verification
+
+- The §12.3 pre-publish gate was run against real config files for three representative agents: Windsurf (JSON, global), VS Code project (exotic `servers` root), and OpenAI Codex (TOML, non-JSON).
+- In each case the CLI wrote a valid LyraShield entry, the file was parsed by the agent's expected parser, and the entry was removed cleanly without altering unrelated content.
+- The actual installed command (`npx -y @lyrashield/mcp stdio`) was started and sent an `initialize` request; the server reported all 14 LyraShield tools, confirming the config files would load in the agents.
 
 ### Turbo task graph
 

@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/troubleshooting", origin).toString
 const title = "LyraShield MCP Troubleshooting & Gotchas"
 const description =
   "Fix common LyraShield MCP integration problems: VS Code uses 'servers' not 'mcpServers', Gemini CLI strips KEY/TOKEN/SECRET env vars, Zed uses context_servers, OpenCode uses {env:VAR} interpolation."
-const updatedDate = "2026-07-24"
+const updatedDate = "2026-07-31"
 
 const agents = listAgents()
 
@@ -31,6 +31,10 @@ const faqItems = [
   {
     q: "Zed does not recognize my MCP server config",
     a: 'Zed uses the root key "context_servers" — not "mcpServers". Place this key at the top level of your settings.json. The structure also differs from other editors — check the Zed setup page for the exact schema.',
+  },
+  {
+    q: "OpenAI Codex ignores my API key",
+    a: 'OpenAI Codex TOML config uses a separate sub-table for environment variables: `[mcp_servers.lyrashield.env_vars]`. A top-level `env` key in the table is silently ignored.',
   },
   {
     q: "Cline connects but uses the wrong transport type",

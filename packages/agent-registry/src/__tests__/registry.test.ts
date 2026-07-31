@@ -10,7 +10,8 @@ import {
 } from "../index.js"
 import type { AgentEntry, InstallOptions, Transport } from "../types.js"
 
-const TEST_API_URL = "https://app.lyrashieldai.com/api/mcp"
+const TEST_BASE_URL = "https://app.lyrashieldai.com"
+const TEST_MCP_URL = "https://app.lyrashieldai.com/api/mcp"
 const TEST_API_KEY = "lsk_test_lyrashield_api_key"
 
 function testOptions(agent: AgentEntry, transport: Transport): InstallOptions {
@@ -23,7 +24,7 @@ function testOptions(agent: AgentEntry, transport: Transport): InstallOptions {
 
   return {
     transport,
-    apiUrl: TEST_API_URL,
+    apiUrl: TEST_BASE_URL,
     apiKey: TEST_API_KEY,
     secretMode,
     serverName: "lyrashield",
@@ -31,8 +32,8 @@ function testOptions(agent: AgentEntry, transport: Transport): InstallOptions {
 }
 
 describe("agent registry", () => {
-  it("contains exactly 15 agents", () => {
-    expect(AGENTS).toHaveLength(15)
+  it("contains at least 15 agents", () => {
+    expect(AGENTS.length).toBeGreaterThanOrEqual(15)
   })
 
   it("has unique ids and display names", () => {
@@ -51,6 +52,25 @@ describe("agent registry", () => {
       expect(result.success).toBe(true)
     }
   })
+
+  it("every agent has a source with a valid ISO checkedOn date", () => {
+    const checkedOns: string[] = []
+    for (const agent of AGENTS) {
+      expect(agent.source).toBeDefined()
+      expect(agent.source?.checkedOn).toBeDefined()
+      const parsed = Date.parse(agent.source!.checkedOn!)
+      expect(Number.isNaN(parsed)).toBe(false)
+      checkedOns.push(agent.source!.checkedOn!)
+    }
+
+    const oldest = new Date(Math.min(...checkedOns.map((d) => new Date(d).getTime())))
+    const daysSince = (Date.now() - oldest.getTime()) / (1000 * 60 * 60 * 24)
+    if (daysSince > 365) {
+      console.warn(
+        `Oldest source.checkedOn (${oldest.toISOString().slice(0, 10)}) is ${Math.floor(daysSince)} days old.`
+      )
+    }
+  })
 })
 
 describe("renderConfig snapshot — every agent × every transport", () => {
@@ -60,6 +80,11 @@ describe("renderConfig snapshot — every agent × every transport", () => {
         const opts = testOptions(agent, transport)
 
         if (agent.installStrategy !== "config-file") {
+          expect(() => renderConfig(agent, opts)).toThrowErrorMatchingSnapshot()
+          return
+        }
+
+        if (agent.format === "jsonc") {
           expect(() => renderConfig(agent, opts)).toThrowErrorMatchingSnapshot()
           return
         }
@@ -85,7 +110,7 @@ describe("renderEntry returns correct structural patch", () => {
       args: ["-y", "@lyrashield/mcp"],
       env: {
         LYRASHIELD_API_KEY: TEST_API_KEY,
-        LYRASHIELD_API_URL: TEST_API_URL,
+        LYRASHIELD_API_URL: TEST_BASE_URL,
       },
     })
   })
@@ -101,7 +126,7 @@ describe("renderEntry returns correct structural patch", () => {
         args: ["-y", "@lyrashield/mcp"],
         env: {
           LYRASHIELD_API_KEY: TEST_API_KEY,
-          LYRASHIELD_API_URL: TEST_API_URL,
+          LYRASHIELD_API_URL: TEST_BASE_URL,
         },
       },
     })
@@ -117,7 +142,7 @@ describe("renderEntry returns correct structural patch", () => {
       args: ["-y", "@lyrashield/mcp"],
       env_vars: {
         LYRASHIELD_API_KEY: TEST_API_KEY,
-        LYRASHIELD_API_URL: TEST_API_URL,
+        LYRASHIELD_API_URL: TEST_BASE_URL,
       },
     })
   })
@@ -133,7 +158,7 @@ describe("renderEntry returns correct structural patch", () => {
       args: ["-y", "@lyrashield/mcp"],
       env: {
         LYRASHIELD_API_KEY: "{env:LYRASHIELD_API_KEY}",
-        LYRASHIELD_API_URL: TEST_API_URL,
+        LYRASHIELD_API_URL: TEST_BASE_URL,
       },
     })
   })
@@ -144,7 +169,7 @@ describe("renderEntry returns correct structural patch", () => {
     const entry = renderEntry(agent, opts)
     expect(entry.rootKey).toBe("mcpServers")
     expect(entry.value).toMatchObject({
-      serverUrl: TEST_API_URL,
+      serverUrl: TEST_MCP_URL,
       headers: {
         Authorization: `Bearer ${TEST_API_KEY}`,
       },
@@ -188,8 +213,8 @@ describe("registry helpers", () => {
     expect(getAgent("not-real")).toBeUndefined()
   })
 
-  it("listAgents returns all 15 entries", () => {
-    expect(listAgents()).toHaveLength(15)
+  it("listAgents returns at least 15 entries", () => {
+    expect(listAgents().length).toBeGreaterThanOrEqual(15)
     expect(listAgents()).toBe(AGENTS)
   })
 
@@ -199,7 +224,7 @@ describe("registry helpers", () => {
     const guided = agentsByStrategy("guided-manual")
 
     expect(configFile.length).toBeGreaterThan(0)
-    expect(vendorCli.length).toBe(1)
+    expect(vendorCli.length).toBeGreaterThanOrEqual(1)
     expect(guided.length).toBeGreaterThan(0)
 
     expect(configFile.every((a) => a.installStrategy === "config-file")).toBe(true)

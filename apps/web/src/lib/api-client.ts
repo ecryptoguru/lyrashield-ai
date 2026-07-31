@@ -25,10 +25,11 @@ async function request<T>(url: string, options: FetchOptions = {}): Promise<T> {
 
   const controller = new AbortController()
   let timedOut = false
+  const requestTimeoutMs = timeout
   const timeoutId = setTimeout(() => {
     timedOut = true
     controller.abort()
-  }, timeout)
+  }, requestTimeoutMs)
 
   const onParentAbort = () => controller.abort()
   if (init.signal) {
@@ -42,7 +43,7 @@ async function request<T>(url: string, options: FetchOptions = {}): Promise<T> {
   } catch (err) {
     if (typeof err === "object" && err !== null && "name" in err && err.name === "AbortError") {
       if (!timedOut) throw new ApiError("ABORTED", "Request was cancelled", 0)
-      throw new ApiError("TIMEOUT", `Request timed out after ${timeout}ms`, 0)
+      throw new ApiError("TIMEOUT", `Request timed out after ${requestTimeoutMs}ms`, 0)
     }
     throw new ApiError("NETWORK_ERROR", "Network request failed", 0)
   } finally {
@@ -91,10 +92,11 @@ export async function apiGetConditional<T>(
 ): Promise<ConditionalResponse<T>> {
   const controller = new AbortController()
   let timedOut = false
+  const conditionalTimeoutMs = options.timeout ?? DEFAULT_TIMEOUT_MS
   const timeoutId = setTimeout(() => {
     timedOut = true
     controller.abort()
-  }, options.timeout ?? DEFAULT_TIMEOUT_MS)
+  }, conditionalTimeoutMs)
 
   // This function owns `signal` (it needs its own for the timeout), so the
   // caller's signal must be forwarded explicitly — otherwise it is silently
@@ -151,11 +153,7 @@ export async function apiGetConditional<T>(
   } catch (err) {
     if (typeof err === "object" && err !== null && "name" in err && err.name === "AbortError") {
       if (!timedOut) throw new ApiError("ABORTED", "Request was cancelled", 0)
-      throw new ApiError(
-        "TIMEOUT",
-        `Request timed out after ${options.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
-        0
-      )
+      throw new ApiError("TIMEOUT", `Request timed out after ${conditionalTimeoutMs}ms`, 0)
     }
     if (err instanceof ApiError) throw err
     throw new ApiError("NETWORK_ERROR", "Network request failed", 0)

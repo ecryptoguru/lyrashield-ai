@@ -56,6 +56,7 @@ async function pathExists(p: string): Promise<boolean> {
 
 async function isDirectory(p: string): Promise<boolean> {
   try {
+    // p is a resolved location checked only by the installer, not used as a destination.
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     return (await stat(p)).isDirectory()
   } catch {

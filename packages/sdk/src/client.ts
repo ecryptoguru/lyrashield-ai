@@ -5,6 +5,8 @@ export const VERSION = "0.1.0"
 const DEFAULT_API_URL = "https://app.lyrashieldai.com"
 const REQUEST_TIMEOUT_MS = 30000
 const MAX_RETRIES = 3
+const RETRY_BASE_DELAY_MS = 500
+const MAX_RETRY_DELAY_MS = 30000
 
 export interface LyraShieldClientOptions {
   apiKey: string
@@ -87,9 +89,9 @@ export class LyraShieldClient {
           const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN
           const baseDelay = Number.isFinite(retryAfterSeconds)
             ? retryAfterSeconds * 1000
-            : 2 ** attempt * 500
-          const jitter = Math.random() * 500
-          const delay = Math.min(baseDelay + jitter, 30000)
+            : 2 ** attempt * RETRY_BASE_DELAY_MS
+          const jitter = Math.random() * RETRY_BASE_DELAY_MS
+          const delay = Math.min(baseDelay + jitter, MAX_RETRY_DELAY_MS)
           await new Promise((resolve) => setTimeout(resolve, delay))
           continue
         }
@@ -147,6 +149,13 @@ export class LyraShieldClient {
 
   private buildUrl(path: string): string {
     const normalized = path.startsWith("/") ? path : `/${path}`
+    if (normalized.startsWith("/api/")) {
+      throw new LyraShieldError({
+        status: 0,
+        code: "INVALID_PATH",
+        message: `SDK paths must be bare (e.g. "/scans"), not prefixed (got "${normalized}").`,
+      })
+    }
     return `${this.apiUrl}/api/v1${normalized}`
   }
 

@@ -74,6 +74,23 @@ export async function POST(request: Request) {
       }
     }
 
+    const repoInstallationId =
+      data.type === "REPO"
+        ? (data.installationId ??
+          (
+            await prisma.integration.findFirst({
+              where: {
+                workspaceId,
+                type: "GITHUB",
+                status: "active",
+                deletedAt: null,
+              },
+              select: { externalId: true },
+              orderBy: { createdAt: "desc" },
+            })
+          )?.externalId)
+        : undefined
+
     const targetData =
       data.type === "REPO"
         ? {
@@ -85,6 +102,7 @@ export async function POST(request: Request) {
             repoOwner: data.repoOwner,
             repoName: data.repoName,
             repoFullName: `${data.repoOwner}/${data.repoName}`,
+            installationId: repoInstallationId ?? null,
             branch: data.branch ?? "main",
             environment: data.environment,
           }

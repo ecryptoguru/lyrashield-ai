@@ -26,7 +26,7 @@ exports[`renderConfig snapshot — every agent × every transport > claude-code 
         "@lyrashield/mcp"
       ],
       "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
         "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
       }
     }
@@ -62,7 +62,7 @@ exports[`renderConfig snapshot — every agent × every transport > cursor × st
         "@lyrashield/mcp"
       ],
       "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
         "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
       }
     }
@@ -80,7 +80,7 @@ exports[`renderConfig snapshot — every agent × every transport > gemini-cli �
         "@lyrashield/mcp"
       ],
       "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
         "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
       }
     }
@@ -92,38 +92,9 @@ exports[`renderConfig snapshot — every agent × every transport > hermes × st
 
 exports[`renderConfig snapshot — every agent × every transport > jetbrains × stdio 1`] = `[Error: Agent "jetbrains" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
-exports[`renderConfig snapshot — every agent × every transport > kilo-code × remote-http 1`] = `
-"{
-  "mcp": {
-    "lyrashield": {
-      "url": "https://app.lyrashieldai.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer {env:LYRASHIELD_API_KEY}"
-      },
-      "type": "remote"
-    }
-  }
-}"
-`;
+exports[`renderConfig snapshot — every agent × every transport > kilo-code × remote-http 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
-exports[`renderConfig snapshot — every agent × every transport > kilo-code × stdio 1`] = `
-"{
-  "mcp": {
-    "lyrashield": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@lyrashield/mcp"
-      ],
-      "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
-        "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
-      },
-      "type": "local"
-    }
-  }
-}"
-`;
+exports[`renderConfig snapshot — every agent × every transport > kilo-code × stdio 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > openai-codex × stdio 1`] = `
 "[mcp_servers.lyrashield]
@@ -131,7 +102,7 @@ command = "npx"
 args = ["-y", "@lyrashield/mcp"]
 
 [mcp_servers.lyrashield.env_vars]
-LYRASHIELD_API_URL = "https://app.lyrashieldai.com/api/mcp"
+LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
 LYRASHIELD_API_KEY = "lsk_test_lyrashield_api_key""
 `;
 
@@ -161,7 +132,7 @@ exports[`renderConfig snapshot — every agent × every transport > opencode × 
         "@lyrashield/mcp"
       ],
       "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
         "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
       },
       "type": "local"
@@ -196,7 +167,7 @@ exports[`renderConfig snapshot — every agent × every transport > vscode × st
         "@lyrashield/mcp"
       ],
       "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
         "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
       },
       "type": "stdio"
@@ -228,7 +199,7 @@ exports[`renderConfig snapshot — every agent × every transport > windsurf × 
         "@lyrashield/mcp"
       ],
       "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
         "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
       }
     }
@@ -247,7 +218,7 @@ exports[`renderConfig snapshot — every agent × every transport > zed × stdio
           "@lyrashield/mcp"
         ],
         "env": {
-          "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp",
+          "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
           "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
         }
       }

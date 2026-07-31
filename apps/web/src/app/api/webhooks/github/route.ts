@@ -127,16 +127,15 @@ export async function POST(request: NextRequest) {
                 data: { status: "disconnected", deletedAt: new Date() },
               })
 
-              // Match repos owned by this account exactly, by "owner/" prefix.
-              // A `contains` substring match previously disabled unrelated targets
-              // (login "acme" also matched "not-acme/repo" or "acme-corp/other").
-              // NOTE follow-up: once Target stores the numeric installationId, match
-              // on that instead of the login prefix for full precision.
+              // Match targets that were imported from the same GitHub App
+              // installation. This is precise and avoids the previous
+              // `startsWith` owner-prefix bug (e.g. "acme" matching
+              // "acme-corp/other" or "not-acme/repo").
               await tx.target.updateMany({
                 where: {
                   workspaceId: integration.workspaceId,
                   repoProvider: "github",
-                  repoFullName: { startsWith: `${installation.account.login}/` },
+                  installationId: String(installation.id),
                 },
                 data: { deletedAt: new Date() },
               })

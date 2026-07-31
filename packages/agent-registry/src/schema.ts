@@ -41,7 +41,14 @@ export const agentEntrySchema = z
       })
       .optional(),
     rulesFiles: z.array(z.string().min(1)),
-    serverNameConstraint: z.string().optional(),
+    forceInlineEnv: z.boolean().optional(),
+    serverNamePattern: z.string().optional(),
+    source: z
+      .object({
+        url: z.string().nullable().optional(),
+        checkedOn: z.string().optional(),
+      })
+      .optional(),
     gotchas: z.array(z.string().min(1)),
   })
   .superRefine((entry, ctx) => {

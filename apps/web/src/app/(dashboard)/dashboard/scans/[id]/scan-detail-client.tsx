@@ -157,6 +157,9 @@ const SCANNER_LABELS: Record<string, string> = {
   url: "URL scan",
 }
 
+const ELAPSED_TIME_INTERVAL_MS = 1_000
+const COMPLETION_NOTICE_DISMISS_MS = 6_000
+
 /** Ticking elapsed time from a start timestamp, returning a formatted string. */
 function useElapsedTime(startedAt: string | null): string {
   const [elapsed, setElapsed] = useState(() => formatDuration(startedAt, null))
@@ -164,7 +167,7 @@ function useElapsedTime(startedAt: string | null): string {
     if (!startedAt) return
     const tick = () => setElapsed(formatDuration(startedAt, null))
     tick()
-    const id = window.setInterval(tick, 1000)
+    const id = window.setInterval(tick, ELAPSED_TIME_INTERVAL_MS)
     return () => window.clearInterval(id)
   }, [startedAt])
   return elapsed
@@ -236,7 +239,7 @@ export function ScanDetailClient({
   // the status badge and stat grid.
   useEffect(() => {
     if (!completionNotice) return
-    const id = window.setTimeout(() => setCompletionNotice(null), 6000)
+    const id = window.setTimeout(() => setCompletionNotice(null), COMPLETION_NOTICE_DISMISS_MS)
     return () => window.clearTimeout(id)
   }, [completionNotice])
 

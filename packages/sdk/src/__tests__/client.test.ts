@@ -58,6 +58,14 @@ describe("LyraShieldClient", () => {
     expect(headers["User-Agent"]).toMatch(/^lyrashield-sdk\//)
   })
 
+  it("throws before fetch when path is already prefixed with /api/", async () => {
+    await expect(client.request("GET", "/api/v1/workspaces")).rejects.toMatchObject({
+      code: "INVALID_PATH",
+      message: expect.stringContaining("SDK paths must be bare"),
+    })
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
   it("parses the envelope and returns data", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ body: { success: true, data: { id: "ws-1" } } }))
     const data = (await client.request("GET", "/workspaces")) as { id: string }

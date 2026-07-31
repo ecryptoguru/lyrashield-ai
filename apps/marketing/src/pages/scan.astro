@@ -352,9 +352,15 @@ const jsonLd = [
       const heading = document.querySelector<HTMLElement>("#result-heading")!
       heading.textContent = summary.findingCount === 0 ? "No surface issues found" : `${summary.findingCount} thing${summary.findingCount === 1 ? "" : "s"} worth a look`
       document.querySelector<HTMLElement>("#result-target")!.textContent = `${result.target} · ${new Date(result.scannedAt).toLocaleString()}`
-      const counts = document.querySelector<HTMLElement>("#result-counts")!; counts.replaceChildren(chip("needs attention", summary.needsAttention, severityTone.needs_attention), chip("worth reviewing", summary.worthReviewing, severityTone.worth_reviewing), chip("look OK", summary.looksOk, severityTone.ok))
+      const counts = document.querySelector<HTMLElement>("#result-counts")!
+      counts.replaceChildren(
+        chip("needs attention", summary.needsAttention, severityTone.needs_attention),
+        chip("worth reviewing", summary.worthReviewing, severityTone.worth_reviewing),
+        chip("look OK", summary.looksOk, severityTone.ok)
+      )
       document.querySelector<HTMLElement>("#clean-result")!.classList.toggle("hidden", summary.findingCount !== 0)
-      const findings = document.querySelector<HTMLElement>("#findings")!; findings.replaceChildren()
+      const findings = document.querySelector<HTMLElement>("#findings")!
+      findings.replaceChildren()
       result.checks.forEach((check) => {
         const details = document.createElement("details")
         details.className = "group rounded-2xl border border-border bg-bg-raised p-5 sm:p-6"
@@ -398,9 +404,74 @@ const jsonLd = [
       results?.classList.remove("hidden"); results?.focus(); capture("scan_completed", { duration_ms: durationMs, finding_count: summary.findingCount, categories_flagged: [...new Set(result.checks.filter((check) => check.severity !== "ok").map((check) => check.category))], had_findings: summary.findingCount > 0 }); capture("upsell_viewed")
     }
 
-    scanForm?.addEventListener("submit", async (event) => {
-      event.preventDefault(); errorBox?.classList.add("hidden")
+    async function hashDomainOrReportError(url: string): Promise<string | null> {
+      try {
+        return await hashDomain(url)
+      } catch {
+        if (errorBox) {
+          errorBox.textContent = "Enter a valid public URL."
+          errorBox.classList.remove("hidden")
+        }
+        return null
+      }
+    }
+
+    function captureScanStarted(domainHash: string) {
+      const device = matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop"
+      capture("scan_started", { target_domain_hash: domainHash, device, ...attribution })
+    }
+
+    function showScanningUi() {
+      scanButton!.disabled = true
+      scanButton!.textContent = "Scanning…"
+      results?.classList.add("hidden")
+      scanning?.classList.remove("hidden")
+      scanning?.setAttribute("aria-busy", "true")
+      const motion = matchMedia("(prefers-reduced-motion: reduce)").matches
+      scanning?.scrollIntoView({ behavior: motion ? "auto" : "smooth", block: "start" })
+      return animateSteps()
+    }
+
+    function hideScanningUi(progress: ReturnType<typeof animateSteps>) {
+      progress.stop()
+      scanning?.classList.add("hidden")
+      scanning?.removeAttribute("aria-busy")
+      scanButton!.disabled = false
+      scanButton!.textContent = "Scan my app"
+    }
+
+    async function runLiteScan(url: string, token: string): Promise<{ result: LiteResult; durationMs: number }> {
+      const response = await fetch(`${appOrigin}/api/lite-scan`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url, authorized: true, ...(token ? { turnstileToken: token } : {}) }),
+      })
+      const body = await response.json() as { result?: LiteResult; durationMs?: number; error?: string; message?: string }
+      if (!response.ok || !body.result) {
+        throw Object.assign(new Error(body.message || "The passive check could not finish."), {
+          reason: body.error || "scan_error",
+        })
+      }
+      return { result: body.result, durationMs: body.durationMs ?? 0 }
+    }
+
+    function handleScanError(error: Error & { reason?: string }, domainHash: string) {
+      if (errorBox) {
+        errorBox.textContent = error.message
+        errorBox.classList.remove("hidden")
+      }
+      capture(error.reason === "ssrf_blocked" ? "scan_blocked" : "scan_error", {
+        reason: error.reason || "unreachable",
+        target_domain_hash: domainHash,
+      })
+      ;(window as TurnstileWindow).turnstile?.reset(turnstileWidget)
+    }
+
+    async function handleScanFormSubmit(event: Event) {
+      event.preventDefault()
+      errorBox?.classList.add("hidden")
       if (!appOrigin) return
+
       const input = document.querySelector<HTMLInputElement>("#scan-url")!
       let url = ""
       try {
@@ -414,19 +485,135 @@ const jsonLd = [
         input.focus()
         return
       }
-      let domainHash = ""; try { domainHash = await hashDomain(url) } catch { if (errorBox) { errorBox.textContent = "Enter a valid public URL."; errorBox.classList.remove("hidden") }; return }
-      capture("scan_started", { target_domain_hash: domainHash, device: matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop", ...attribution })
-      scanButton!.disabled = true; scanButton!.textContent = "Scanning…"; results?.classList.add("hidden"); scanning?.classList.remove("hidden"); scanning?.setAttribute("aria-busy", "true"); scanning?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); const progress = animateSteps()
-      try { const response = await fetch(`${appOrigin}/api/lite-scan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, authorized: true, ...(turnstileToken ? { turnstileToken } : {}) }) }); const body = await response.json() as { result?: LiteResult; durationMs?: number; error?: string; message?: string }; if (!response.ok || !body.result) throw Object.assign(new Error(body.message || "The passive check could not finish."), { reason: body.error || "scan_error" }); await progress.finished; renderResult(body.result, body.durationMs ?? 0) } catch (cause) { const error = cause as Error & { reason?: string }; if (errorBox) { errorBox.textContent = error.message; errorBox.classList.remove("hidden") }; capture(error.reason === "ssrf_blocked" ? "scan_blocked" : "scan_error", { reason: error.reason || "unreachable", target_domain_hash: domainHash }); (window as TurnstileWindow).turnstile?.reset(turnstileWidget) } finally { progress.stop(); scanning?.classList.add("hidden"); scanning?.removeAttribute("aria-busy"); scanButton!.disabled = false; scanButton!.textContent = "Scan my app" }
-    })
 
-    document.querySelectorAll<HTMLButtonElement>("[data-capture-action]").forEach((button) => button.addEventListener("click", () => { lastAction = button.dataset.captureAction || "waitlist"; capture("upsell_clicked", { cta: lastAction }) }))
-    document.querySelector("[data-upsell='sample_report']")?.addEventListener("click", () => capture("upsell_clicked", { cta: "sample_report" }))
-    document.querySelector<HTMLFormElement>("#capture-form")?.addEventListener("submit", async (event) => { event.preventDefault(); if (!currentResult) return; const email = document.querySelector<HTMLInputElement>("#result-email")!.value; const status = document.querySelector<HTMLElement>("#capture-status")!; status.textContent = "Saving…"; try { const waitlist = await fetch("/api/waitlist", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, source: "lite_scanner", referralCode, utmSource: attribution.utm_source, utmMedium: attribution.utm_medium, utmCampaign: attribution.utm_campaign, referrer: attribution.referrer }) }); const waitlistBody = await waitlist.json() as { referralCode?: string; message?: string }; if (!waitlist.ok) throw new Error(waitlistBody.message || "Could not save your email."); capture("waitlist_joined", { source: "lite_scanner" }); if (referralCode) capture("referral_signup", { source: "lite_scanner" }); status.textContent = "You're subscribed. We'll email product updates and new feature announcements."; if (lastAction === "scorecard") { const s = currentResult.liteResultSummary; const card = await fetch(`${appOrigin}/api/lite-scorecards`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ needsAttention: s.needsAttention, worthReviewing: s.worthReviewing, looksOk: s.looksOk, referralCode: waitlistBody.referralCode }) }); const cardBody = await card.json() as { url?: string }; if (!card.ok || !cardBody.url) throw new Error("Could not create the scorecard."); const absolute = new URL(cardBody.url, appOrigin).toString(); const link = document.querySelector<HTMLAnchorElement>("#scorecard-link")!; link.href = absolute; document.querySelector<HTMLElement>("#scorecard-actions")!.classList.remove("hidden"); document.querySelector<HTMLElement>("#scorecard-actions")!.classList.add("flex"); status.textContent = "Your shareable scorecard is ready."; capture("scorecard_generated", { referral_code: waitlistBody.referralCode ? "present" : "absent" }) } } catch (cause) { status.textContent = cause instanceof Error ? cause.message : "Could not save this result." } })
-    document.querySelector<HTMLButtonElement>("#share-scorecard")?.addEventListener("click", async () => { const url = document.querySelector<HTMLAnchorElement>("#scorecard-link")!.href; const usedNativeShare = typeof navigator.share === "function"; if (usedNativeShare) await navigator.share({ title: "My LyraShield AI Lite Check", url }); else await navigator.clipboard.writeText(url); capture("scorecard_shared", { channel: usedNativeShare ? "native" : "copy" }) })
+      const domainHash = await hashDomainOrReportError(url)
+      if (!domainHash) return
+
+      captureScanStarted(domainHash)
+      const progress = showScanningUi()
+      try {
+        const { result, durationMs } = await runLiteScan(url, turnstileToken)
+        await progress.finished
+        renderResult(result, durationMs)
+      } catch (cause) {
+        handleScanError(cause as Error & { reason?: string }, domainHash)
+      } finally {
+        hideScanningUi(progress)
+      }
+    }
+
+    function trackUpsellClicks() {
+      document.querySelectorAll<HTMLButtonElement>("[data-capture-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+          lastAction = button.dataset.captureAction || "waitlist"
+          capture("upsell_clicked", { cta: lastAction })
+        })
+      })
+      document.querySelector("[data-upsell='sample_report']")?.addEventListener("click", () => {
+        capture("upsell_clicked", { cta: "sample_report" })
+      })
+    }
+
+    async function handleCaptureFormSubmit(event: Event) {
+      event.preventDefault()
+      if (!currentResult) return
+      const email = document.querySelector<HTMLInputElement>("#result-email")!.value
+      const status = document.querySelector<HTMLElement>("#capture-status")!
+      status.textContent = "Saving…"
+      try {
+        const waitlist = await fetch("/api/waitlist", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email,
+            source: "lite_scanner",
+            referralCode,
+            utmSource: attribution.utm_source,
+            utmMedium: attribution.utm_medium,
+            utmCampaign: attribution.utm_campaign,
+            referrer: attribution.referrer,
+          }),
+        })
+        const waitlistBody = await waitlist.json() as { referralCode?: string; message?: string }
+        if (!waitlist.ok) throw new Error(waitlistBody.message || "Could not save your email.")
+        capture("waitlist_joined", { source: "lite_scanner" })
+        if (referralCode) capture("referral_signup", { source: "lite_scanner" })
+        status.textContent = "You're subscribed. We'll email product updates and new feature announcements."
+        if (lastAction === "scorecard") {
+          const s = currentResult.liteResultSummary
+          const card = await fetch(`${appOrigin}/api/lite-scorecards`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              needsAttention: s.needsAttention,
+              worthReviewing: s.worthReviewing,
+              looksOk: s.looksOk,
+              referralCode: waitlistBody.referralCode,
+            }),
+          })
+          const cardBody = await card.json() as { url?: string }
+          if (!card.ok || !cardBody.url) throw new Error("Could not create the scorecard.")
+          const absolute = new URL(cardBody.url, appOrigin).toString()
+          const link = document.querySelector<HTMLAnchorElement>("#scorecard-link")!
+          link.href = absolute
+          document.querySelector<HTMLElement>("#scorecard-actions")!.classList.remove("hidden")
+          document.querySelector<HTMLElement>("#scorecard-actions")!.classList.add("flex")
+          status.textContent = "Your shareable scorecard is ready."
+          capture("scorecard_generated", { referral_code: waitlistBody.referralCode ? "present" : "absent" })
+        }
+      } catch (cause) {
+        status.textContent = cause instanceof Error ? cause.message : "Could not save this result."
+      }
+    }
+
+    async function handleShareScorecard() {
+      const url = document.querySelector<HTMLAnchorElement>("#scorecard-link")!.href
+      const usedNativeShare = typeof navigator.share === "function"
+      if (usedNativeShare) {
+        await navigator.share({ title: "My LyraShield AI Lite Check", url })
+      } else {
+        await navigator.clipboard.writeText(url)
+      }
+      capture("scorecard_shared", { channel: usedNativeShare ? "native" : "copy" })
+    }
+
+    function startHomepageScan() {
+      if (pendingHomepageScan) {
+        pendingHomepageScan = false
+        scanForm?.requestSubmit()
+      }
+    }
+
+    function bootTurnstile() {
+      const turnstile = (window as TurnstileWindow).turnstile
+      if (!turnstile) {
+        window.setTimeout(bootTurnstile, 100)
+        return
+      }
+      turnstileWidget = turnstile.render("#turnstile-container", {
+        sitekey: turnstileSiteKey,
+        size: "flexible",
+        appearance: "interaction-only",
+        callback: (token: string) => {
+          turnstileToken = token
+          startHomepageScan()
+        },
+        "expired-callback": () => {
+          turnstileToken = ""
+        },
+      })
+    }
+
+    scanForm?.addEventListener("submit", handleScanFormSubmit)
+    trackUpsellClicks()
+    document.querySelector<HTMLFormElement>("#capture-form")?.addEventListener("submit", handleCaptureFormSubmit)
+    document.querySelector<HTMLButtonElement>("#share-scorecard")?.addEventListener("click", handleShareScorecard)
 
     if (referralCode) capture("referral_visit", { source: "lite_scanner" })
-    const startHomepageScan = () => { if (pendingHomepageScan) { pendingHomepageScan = false; scanForm?.requestSubmit() } }
-    if (turnstileSiteKey) { const boot = () => { const turnstile = (window as TurnstileWindow).turnstile; if (!turnstile) return window.setTimeout(boot, 100); turnstileWidget = turnstile.render("#turnstile-container", { sitekey: turnstileSiteKey, size: "flexible", appearance: "interaction-only", callback: (token: string) => { turnstileToken = token; startHomepageScan() }, "expired-callback": () => { turnstileToken = "" } }) }; boot() } else { startHomepageScan() }
+    if (turnstileSiteKey) {
+      bootTurnstile()
+    } else {
+      startHomepageScan()
+    }
   </script>
 </Base>

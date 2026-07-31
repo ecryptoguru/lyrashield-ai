@@ -6,31 +6,6 @@ import minimist from "minimist"
 import { createOutput } from "./output.js"
 import type { Output } from "./output.js"
 
-// Command handlers
-import { handleLogin } from "./commands/login.js"
-import { handleLogout } from "./commands/logout.js"
-import { handleUse } from "./commands/use.js"
-import { handleAgents } from "./commands/agents.js"
-import { handleDoctor } from "./commands/doctor.js"
-import { handleInit } from "./commands/init.js"
-import { handleInstall } from "./commands/install.js"
-import { handleUninstall } from "./commands/uninstall.js"
-import { handleScan } from "./commands/scan.js"
-import { handleStatus } from "./commands/status.js"
-import { handleFindings } from "./commands/findings.js"
-import { handleExplain } from "./commands/explain.js"
-import { handleFixPlan } from "./commands/fix-plan.js"
-import { handleVerify } from "./commands/verify.js"
-import { handleCheckDiff } from "./commands/check-diff.js"
-import { handleGate } from "./commands/gate.js"
-import { handleReport } from "./commands/report.js"
-import { handleReadiness } from "./commands/readiness.js"
-import { handleTargets } from "./commands/targets.js"
-import { handleRules } from "./commands/rules.js"
-import { handleHook } from "./commands/hook.js"
-import { handleApprovals } from "./commands/approvals.js"
-import { handleMcp } from "./commands/mcp.js"
-
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -45,30 +20,33 @@ async function getVersion(): Promise<string> {
   }
 }
 
-const COMMANDS: Record<string, (args: string[], output: Output) => Promise<number>> = {
-  login: handleLogin,
-  logout: handleLogout,
-  use: handleUse,
-  agents: handleAgents,
-  doctor: handleDoctor,
-  init: handleInit,
-  install: handleInstall,
-  uninstall: handleUninstall,
-  scan: handleScan,
-  status: handleStatus,
-  findings: handleFindings,
-  explain: handleExplain,
-  "fix-plan": handleFixPlan,
-  verify: handleVerify,
-  "check-diff": handleCheckDiff,
-  gate: handleGate,
-  report: handleReport,
-  readiness: handleReadiness,
-  targets: handleTargets,
-  rules: handleRules,
-  hook: handleHook,
-  approvals: handleApprovals,
-  mcp: handleMcp,
+type CommandHandler = (args: string[], output: Output) => Promise<number>
+type CommandThunk = () => Promise<CommandHandler>
+
+const COMMANDS: Record<string, CommandThunk> = {
+  login: () => import("./commands/login.js").then((m) => m.handleLogin),
+  logout: () => import("./commands/logout.js").then((m) => m.handleLogout),
+  use: () => import("./commands/use.js").then((m) => m.handleUse),
+  agents: () => import("./commands/agents.js").then((m) => m.handleAgents),
+  doctor: () => import("./commands/doctor.js").then((m) => m.handleDoctor),
+  init: () => import("./commands/init.js").then((m) => m.handleInit),
+  install: () => import("./commands/install.js").then((m) => m.handleInstall),
+  uninstall: () => import("./commands/uninstall.js").then((m) => m.handleUninstall),
+  scan: () => import("./commands/scan.js").then((m) => m.handleScan),
+  status: () => import("./commands/status.js").then((m) => m.handleStatus),
+  findings: () => import("./commands/findings.js").then((m) => m.handleFindings),
+  explain: () => import("./commands/explain.js").then((m) => m.handleExplain),
+  "fix-plan": () => import("./commands/fix-plan.js").then((m) => m.handleFixPlan),
+  verify: () => import("./commands/verify.js").then((m) => m.handleVerify),
+  "check-diff": () => import("./commands/check-diff.js").then((m) => m.handleCheckDiff),
+  gate: () => import("./commands/gate.js").then((m) => m.handleGate),
+  report: () => import("./commands/report.js").then((m) => m.handleReport),
+  readiness: () => import("./commands/readiness.js").then((m) => m.handleReadiness),
+  targets: () => import("./commands/targets.js").then((m) => m.handleTargets),
+  rules: () => import("./commands/rules.js").then((m) => m.handleRules),
+  hook: () => import("./commands/hook.js").then((m) => m.handleHook),
+  approvals: () => import("./commands/approvals.js").then((m) => m.handleApprovals),
+  mcp: () => import("./commands/mcp.js").then((m) => m.handleMcp),
 }
 
 function usage(): string {
@@ -145,7 +123,7 @@ async function main(argv: string[]): Promise<number> {
     return 2
   }
 
-  return handler(rest, output)
+  return (await handler())(rest, output)
 }
 
 main(process.argv.slice(2)).then(

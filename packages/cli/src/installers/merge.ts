@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
 import { chmod } from "node:fs/promises"
 import { mergeJson, removeJson } from "./json.js"
 import { mergeJsonc, removeJsonc } from "./jsonc.js"
@@ -33,6 +32,8 @@ export async function mergeFile(opts: MergeFileOptions): Promise<MergeFileResult
 
   if (result.changed && opts.chmod0600 && !opts.dryRun) {
     try {
+      // filePath is the resolved config target path chosen by the installer.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       await chmod(opts.filePath, 0o600)
     } catch {
       // ignore

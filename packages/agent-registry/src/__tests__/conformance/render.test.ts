@@ -5,7 +5,7 @@ import YAML from "yaml"
 import { AGENTS, renderConfig } from "../../index.js"
 import type { ConfigFormat, InstallOptions, Transport } from "../../types.js"
 
-const API_URL = "https://app.lyrashieldai.com/api/v1"
+const API_URL = "https://app.lyrashieldai.com"
 const API_KEY = "lsk_testkey123"
 const SERVER_NAME = "lyrashield"
 
@@ -37,6 +37,13 @@ describe("conformance: renderConfig round-trips through the format parser", () =
       const caseName = `${agent.id} × ${transport}`
 
       it(`${caseName} — interpolated secret is safe`, () => {
+        if (agent.format === "jsonc") {
+          expect(() =>
+            renderConfig(agent, renderOpts(transport, "interpolated"))
+          ).toThrowErrorMatchingSnapshot(`${caseName} — interpolated`)
+          return
+        }
+
         const { content, format } = renderConfig(agent, renderOpts(transport, "interpolated"))
 
         // The raw content must contain the API URL but never the literal test key.
@@ -73,38 +80,30 @@ describe("conformance: renderConfig round-trips through the format parser", () =
           expect(entry).toHaveProperty("headers")
         }
 
-        // Vendor-specific structural gotchas.
-        if (agent.id === "vscode") {
-          expect(agent.rootKey).toBe("servers")
+        // Data-driven structural checks.
+        const transportType = agent.transportFields?.[transport]?.type
+        if (transportType) {
           expect(entry).toHaveProperty("type")
+          expect(entry.type).toBe(transportType)
         }
 
-        if (agent.id === "openai-codex") {
-          expect(agent.rootKey).toBe("mcp_servers")
-          expect(entry).toHaveProperty("env_vars")
+        if (agent.credential.kind === "env-names") {
           expect(entry).not.toHaveProperty("env")
         }
 
-        if (agent.id === "opencode" || agent.id === "kilo-code") {
-          expect(agent.rootKey).toBe("mcp")
-          expect(entry).toHaveProperty("type")
-          if (transport === "stdio") {
-            expect(entry.type).toBe("local")
-          } else {
-            expect(entry.type).toBe("remote")
-          }
-          // Single-brace {env:VAR} syntax for the API key.
-          expect(content).toContain("{env:LYRASHIELD_API_KEY}")
+        if (agent.credential.kind === "interpolated-env") {
+          expect(content).toContain(agent.credential.syntax)
         }
 
-        if (agent.id === "windsurf" && transport === "remote-http") {
+        if (transport === "remote-http" && agent.transportFields?.["remote-http"]?.serverUrl) {
           expect(entry).toHaveProperty("serverUrl")
           expect(entry).not.toHaveProperty("url")
-          expect(entry.serverUrl).toBe(API_URL)
+          expect(entry.serverUrl).toBe(API_URL + "/api/mcp")
         }
 
-        if (agent.id === "gemini-cli") {
-          expect(SERVER_NAME).not.toContain("_")
+        if (agent.serverNamePattern) {
+          // eslint-disable-next-line security/detect-non-literal-regexp
+          expect(new RegExp(agent.serverNamePattern).test(SERVER_NAME)).toBe(true)
         }
 
         // Anything rendered must parse back to the expected root key.
@@ -113,10 +112,49 @@ describe("conformance: renderConfig round-trips through the format parser", () =
       })
 
       it(`${caseName} — inline secret may contain the literal key`, () => {
+        if (agent.format === "jsonc") {
+          expect(() =>
+            renderConfig(agent, renderOpts(transport, "inline"))
+          ).toThrowErrorMatchingSnapshot(`${caseName} — inline`)
+          return
+        }
+
         const { content } = renderConfig(agent, renderOpts(transport, "inline"))
         expect(content).toContain(API_KEY)
         expect(content).toMatchSnapshot(`${caseName} — inline`)
       })
     }
   }
+
+  describe("deriveMcpUrl URL normalization", () => {
+    it("strips a stale /api suffix from the remote HTTP endpoint", () => {
+      const windsurf = AGENTS.find((a) => a.id === "windsurf")!
+      const { content } = renderConfig(windsurf, {
+        transport: "remote-http",
+        apiUrl: "https://app.lyrashieldai.com/api",
+        secretMode: "interpolated",
+        apiKey: API_KEY,
+        serverName: SERVER_NAME,
+      })
+      const parsed = parseContent("json", content)
+      const root = parsed[windsurf.rootKey!] as Record<string, unknown>
+      const entry = root[SERVER_NAME] as Record<string, unknown>
+      expect(entry.serverUrl).toBe("https://app.lyrashieldai.com/api/mcp")
+    })
+
+    it("strips a stale /api/v1 suffix from the remote HTTP endpoint", () => {
+      const windsurf = AGENTS.find((a) => a.id === "windsurf")!
+      const { content } = renderConfig(windsurf, {
+        transport: "remote-http",
+        apiUrl: "https://app.lyrashieldai.com/api/v1",
+        secretMode: "interpolated",
+        apiKey: API_KEY,
+        serverName: SERVER_NAME,
+      })
+      const parsed = parseContent("json", content)
+      const root = parsed[windsurf.rootKey!] as Record<string, unknown>
+      const entry = root[SERVER_NAME] as Record<string, unknown>
+      expect(entry.serverUrl).toBe("https://app.lyrashieldai.com/api/mcp")
+    })
+  })
 })

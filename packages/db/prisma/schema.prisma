@@ -330,6 +330,7 @@ model Target {
   repoOwner       String?
   repoName        String?
   repoFullName    String?
+  installationId  String?
   branch          String?
   environment     TargetEnvironment @default(STAGING)
   status          String            @default("active")
@@ -351,6 +352,8 @@ model Target {
   @@unique([workspaceId, url])
   @@index([workspaceId])
   @@index([projectId])
+  @@index([installationId])
+  @@index([workspaceId, repoProvider, installationId])
 }
 
 model CredentialSet {

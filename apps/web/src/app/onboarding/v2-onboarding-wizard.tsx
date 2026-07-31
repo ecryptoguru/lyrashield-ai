@@ -33,6 +33,7 @@ interface Repo {
   defaultBranch: string
   private: boolean
   htmlUrl: string
+  installationId: string
 }
 
 export function V2OnboardingWizard({ initialState }: { initialState: V2OnboardingData }) {
@@ -279,6 +280,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
           repoProvider: "github",
           repoOwner: selectedRepo.owner,
           repoName: selectedRepo.name,
+          installationId: selectedRepo.installationId,
           branch: selectedRepo.defaultBranch,
           environment,
         })

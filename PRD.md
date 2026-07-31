@@ -1,6 +1,6 @@
 <!-- markdownlint-disable MD041 -->
 
-> **CURRENT SOURCE OF TRUTH — 2026-07-25:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
+> **CURRENT SOURCE OF TRUTH — 2026-07-31:** This document combines the product specification with historical audit records. **Part C is the authoritative implementation and release-readiness snapshot.** Running code and schema override older prose. Historical counts and superseded findings in Part B are retained as an audit trail, not as current status.
 >
 > The canonical repositories are `github.com/ecryptoguru/lyrashield-ai` and `github.com/ecryptoguru/lyrashield-engine`. Internal `@lyrashield/*` package scopes and `LYRASHIELD_*` environment variables remain intentionally unchanged pending founder-approved naming decisions. The current local application gate passes lint, typecheck, build, the Vitest suite, and the Playwright suite (current counts: see C0). Core auth (with email verification), tenancy, targets, scanning, findings, fix proposals, retests, reports, notifications, schedules, launch readiness, agent actions, approvals, MCP, privacy deletion, the GitHub diff gate, and the LyraShield Score / public scorecard / referral / social-distribution layer are implemented. Fresh GitHub installation claims and Fix PR execution remain fail-closed until their provider-ownership and server-generated-patch security proofs exist. Phase 1 is **not launch-complete**: see Part C for the controlled-scan, billing, production deployment/egress, real-domain sharing validation, and marketing gates.
 
@@ -579,6 +579,20 @@ packages/security
 packages/mcp
   MCP tools and stdio transport
   approval-aware API calls
+
+packages/sdk
+  authenticated HTTP client for the LyraShield API
+  shared by CLI, MCP server, and internal services
+
+packages/agent-registry
+  single source of truth for coding-agent integrations
+  renders per-agent JSON/JSONC/TOML/YAML config entries
+
+packages/cli
+  `lyrashield` CLI: login, install/uninit/doctor, scan/finding/report commands
+
+packages/agent-rules
+  render, add, remove, and validate per-agent rules and skill files
 
 packages/logger
   structured logging
@@ -1246,6 +1260,7 @@ model Target {
   repoOwner       String?
   repoName        String?
   repoFullName    String?  // Denormalized: derived from repoOwner/repoName for convenience
+  installationId  String?  // Stringified GitHub App installation id; used for precise uninstall cleanup
   branch          String?
   environment     TargetEnvironment @default(STAGING)
   status          String            @default("active")
@@ -1262,6 +1277,8 @@ model Target {
 
   @@index([workspaceId])
   @@index([projectId])
+  @@index([installationId])
+  @@index([workspaceId, repoProvider, installationId])
 }
 
 model CredentialSet {
@@ -1948,6 +1965,7 @@ Request for repo:
   "repoProvider": "github",
   "repoOwner": "lyrafin",
   "repoName": "web",
+  "installationId": "12345678",
   "branch": "main",
   "environment": "STAGING"
 }
@@ -1974,6 +1992,8 @@ URL must be normalized.
 URL must pass SSRF blocklist validation.
 Production targets require explicit ownership confirmation.
 Repo targets require valid GitHub App installation.
+Repo targets store `installationId` (from request or the workspace's active GitHub integration).
+`installation.deleted` webhook deletes matching repo targets by `installationId`.
 Audit log is written.
 ```
 
@@ -3988,7 +4008,7 @@ Create visual security plan and recap skills for LyraShield. /security-plan gene
 
 ## Sprint 9.5: MCP Server for Coding Agents
 
-Status: **Core server complete; broader tool catalog and client setup documentation remain**
+Status: **Complete** — stdio package published as `@lyrashield/mcp`, remote Streamable HTTP endpoint live at `/api/mcp`, setup docs cover 15 agents, and the `lyrashield install/init/doctor` CLI commands automate config writing.
 
 Duration: 1-2 weeks
 
@@ -4001,9 +4021,9 @@ Let external coding agents call LyraShield via MCP.
 Tasks:
 
 ```txt
-Expose selected actions over MCP at /_agent-native/mcp.
+Expose selected actions over MCP at /api/mcp (remote) and via @lyrashield/mcp stdio.
 Add MCP auth token.
-Add MCP setup docs for Cursor, Codex, Claude Code, Windsurf, OpenCode.
+Add MCP setup docs for Cursor, Codex, Claude Code, Windsurf, OpenCode, Zed, Gemini CLI, Kilo Code, Cline, and others.
 Add tools:
   check-diff
   run-pr-scan
@@ -4011,23 +4031,33 @@ Add tools:
   generate-fix-plan
   verify-fix
   create-pr-security-recap
+  list_workspaces
+  list_targets
+  get_scan_status
+  get_findings
+  get_launch_readiness
+  create_report
+  scan_target
+  record_fix_proposal
 Add safe default permissions (read-only by default).
+Add a CLI installer that detects agents and writes/merges config without leaking secrets into shared-by-convention files.
 ```
 
 Acceptance criteria:
 
 ```txt
-Cursor/Codex can call LyraShield MCP.
+Cursor/Codex/Claude Code/Windsurf/Zed/Gemini CLI/OpenCode/Kilo Code can call LyraShield MCP.
 Agent can scan a PR.
 Agent can explain findings.
 Agent cannot create PR without user approval.
-MCP setup docs exist for at least 3 coding agents.
+MCP setup docs exist for all supported coding agents.
+`lyrashield install <agent>` writes valid config for JSON, JSONC, TOML, and YAML agents.
 ```
 
 Codex/Hermes prompt:
 
 ```txt
-Expose LyraShield Agent-Native actions as MCP tools. Set up the MCP server at /_agent-native/mcp with auth tokens. Add tools: check-diff, run-pr-scan, explain-finding, generate-fix-plan, verify-fix, create-pr-security-recap. Default to read-only permissions. Write setup docs for Cursor, Codex, Claude Code, Windsurf, and OpenCode.
+Expose LyraShield Agent-Native actions as MCP tools. Set up the MCP server at /api/mcp and the @lyrashield/mcp stdio package. Add tools: check-diff, run-pr-scan, explain-finding, generate-fix-plan, verify-fix, create-pr-security-recap, plus workspace/target/scan/finding/readiness helpers. Default to read-only permissions. Write setup docs and a `lyrashield install` CLI for Cursor, Codex, Claude Code, Windsurf, OpenCode, Zed, Gemini CLI, and Kilo Code.
 ```
 
 ---

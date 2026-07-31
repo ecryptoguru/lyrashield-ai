@@ -7,6 +7,8 @@ export interface GuardResult {
   detectedPatterns: string[]
 }
 
+// Patterns are static keyword/phrase alternations with non-nested optional quantifiers.
+// Input is normalized and length-capped, so no catastrophic backtracking (ReDoS).
 /* eslint-disable security/detect-unsafe-regex */
 const INJECTION_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
   {
