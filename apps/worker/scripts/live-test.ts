@@ -7,7 +7,13 @@ const REPO_OWNER = "ecryptoguru"
 const REPO_NAME = "OnboardingAI2"
 const REPO_BRANCH = "main"
 type ScanMode = "SAFE" | "STANDARD" | "DEEP" | "CUSTOM" | "QUICK"
-type ScanGoal = "LAUNCH_REVIEW" | "CHECK_PR" | "TEST_APP" | "WEEKLY_MONITOR" | "FULL_PENTEST" | "COMPLIANCE_REVIEW"
+type ScanGoal =
+  | "LAUNCH_REVIEW"
+  | "CHECK_PR"
+  | "TEST_APP"
+  | "WEEKLY_MONITOR"
+  | "FULL_PENTEST"
+  | "COMPLIANCE_REVIEW"
 const SCAN_MODE = (process.env.SCAN_MODE || "STANDARD").toUpperCase() as ScanMode
 const SCAN_GOAL = (process.env.SCAN_GOAL || "LAUNCH_REVIEW") as ScanGoal
 const DEFAULT_BUDGET: Record<string, number> = {
@@ -16,7 +22,8 @@ const DEFAULT_BUDGET: Record<string, number> = {
   DEEP: 15,
   CUSTOM: 15,
 }
-const MAX_BUDGET_USD = parseFloat(process.env.MAX_BUDGET_USD || "0") || DEFAULT_BUDGET[SCAN_MODE] || 3.2
+const MAX_BUDGET_USD =
+  parseFloat(process.env.MAX_BUDGET_USD || "0") || DEFAULT_BUDGET[SCAN_MODE] || 3.2
 const MAX_DURATION_MINUTES = parseInt(process.env.MAX_DURATION_MINUTES || "30", 10)
 
 async function sleep(ms: number) {
@@ -96,7 +103,9 @@ async function main() {
   )
 
   console.log(`[setup] policy=${policy.id} target=${target.id} scan=${scan.id}`)
-  console.log(`[setup] cost cap $${MAX_BUDGET_USD} duration ${MAX_DURATION_MINUTES}min mode=${SCAN_MODE}`)
+  console.log(
+    `[setup] cost cap $${MAX_BUDGET_USD} duration ${MAX_DURATION_MINUTES}min mode=${SCAN_MODE}`
+  )
 
   const startTime = new Date()
   const startIso = startTime.toISOString()
@@ -155,9 +164,10 @@ async function main() {
       const endTime = current.endedAt ? new Date(current.endedAt) : new Date()
       const latencyMs = endTime.getTime() - startTime.getTime()
       const startedAt = current.startedAt ? new Date(current.startedAt) : null
-      const engineLatencyMs = startedAt && current.endedAt
-        ? new Date(current.endedAt).getTime() - startedAt.getTime()
-        : null
+      const engineLatencyMs =
+        startedAt && current.endedAt
+          ? new Date(current.endedAt).getTime() - startedAt.getTime()
+          : null
 
       console.log("\n=== LIVE TEST RESULT ===\n")
       console.log(`scanId:        ${scan.id}`)
@@ -167,7 +177,9 @@ async function main() {
       console.log(`mode:          ${SCAN_MODE}`)
       console.log(`status:        ${current.status}`)
       console.log(`total latency: ${(latencyMs / 1000).toFixed(1)}s`)
-      console.log(`engine latency:${engineLatencyMs ? (engineLatencyMs / 1000).toFixed(1) : "n/a"}s`)
+      console.log(
+        `engine latency:${engineLatencyMs ? (engineLatencyMs / 1000).toFixed(1) : "n/a"}s`
+      )
       console.log(`providerCost:  ${current.providerCostUsd ?? "n/a"}`)
       console.log(`billedCost:    ${current.billedCostUsd ?? "n/a"}`)
       console.log(`actualCostCents:${current.actualCostCents ?? "n/a"}`)
@@ -192,7 +204,9 @@ async function main() {
         const lines = logs.split("\n")
         console.log(lines.slice(-80).join("\n"))
       } catch (logErr) {
-        console.log(`[logs] failed to collect logs: ${logErr instanceof Error ? logErr.message : String(logErr)}`)
+        console.log(
+          `[logs] failed to collect logs: ${logErr instanceof Error ? logErr.message : String(logErr)}`
+        )
       }
     }
   }
