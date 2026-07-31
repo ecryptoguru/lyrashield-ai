@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Link2, Check, Mail, MessageCircle, Download } from "lucide-react"
 import {
   Sheet,
@@ -69,6 +69,15 @@ const COPY_FEEDBACK_RESET_MS = 2_000
 
 export function ShareSheet({ open, onClose, title, shareUrl, description }: ShareSheetProps) {
   const [copied, setCopied] = useState(false)
+  // Without this, closing the sheet within the feedback window fires setState
+  // on an unmounted component.
+  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimer.current) clearTimeout(copyResetTimer.current)
+    }
+  }, [])
 
   async function handleChannel(channel: string) {
     const text = description ? `${title} — ${description}` : title
@@ -78,7 +87,8 @@ export function ShareSheet({ open, onClose, title, shareUrl, description }: Shar
       case "copy":
         await navigator.clipboard.writeText(shareUrl)
         setCopied(true)
-        setTimeout(() => setCopied(false), COPY_FEEDBACK_RESET_MS)
+        if (copyResetTimer.current) clearTimeout(copyResetTimer.current)
+        copyResetTimer.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_RESET_MS)
         break
       case "x":
         window.open(

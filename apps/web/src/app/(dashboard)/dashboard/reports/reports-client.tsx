@@ -151,8 +151,8 @@ export function ReportsClient({
       setSelectedScanId("")
       setReportType("executive")
       await loadReports()
-    } catch {
-      setError("Failed to create report.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create report.")
     } finally {
       setCreatingReport(false)
     }
@@ -181,8 +181,8 @@ export function ReportsClient({
             : r
         )
       )
-    } catch {
-      setError("Failed to generate share link.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate share link.")
     }
   }
 
@@ -200,8 +200,8 @@ export function ReportsClient({
         setSharedReportId(null)
         setCopied(null)
       }
-    } catch {
-      setError("Failed to revoke share link.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to revoke share link.")
     }
   }
 

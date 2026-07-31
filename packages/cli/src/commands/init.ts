@@ -5,6 +5,21 @@ import { installAgent } from "../installers/install.js"
 import type { InstallAgentResult } from "../installers/install.js"
 import type { Output } from "../output.js"
 
+// Internal outcome codes are precise but SHOUTY_SNAKE_CASE is not a user
+// interface. The JSON output keeps the raw codes for machines; humans get these.
+const OUTCOME_LABELS: Record<string, string> = {
+  CONFIGURED: "configured",
+  ALREADY_CONFIGURED: "already set up",
+  DELEGATED: "handed to vendor CLI",
+  MANUAL_REQUIRED: "needs manual setup",
+  NOT_DETECTED: "not installed",
+  FAILED: "failed",
+}
+
+function outcomeLabel(outcome: string): string {
+  return OUTCOME_LABELS[outcome] ?? outcome.toLowerCase().replace(/_/g, " ")
+}
+
 export async function handleInit(args: string[], output: Output): Promise<number> {
   const parsed = minimist(args, {
     boolean: ["dry-run", "all", "global", "project", "inline-secret", "yes"],
@@ -67,7 +82,7 @@ export async function handleInit(args: string[], output: Output): Promise<number
     })
     results.push(result)
     if (!output.json) {
-      const status = result.outcome.padEnd(18)
+      const status = outcomeLabel(result.outcome).padEnd(20)
       output.log(`${status} ${agent.displayName}` + (result.path ? `  (${result.path})` : ""))
       if (result.message && (result.outcome === "MANUAL_REQUIRED" || result.outcome === "FAILED")) {
         output.notice(result.message)
@@ -81,7 +96,7 @@ export async function handleInit(args: string[], output: Output): Promise<number
     const byOutcome = new Map<string, number>()
     for (const r of results) byOutcome.set(r.outcome, (byOutcome.get(r.outcome) ?? 0) + 1)
     output.log("\nSummary:")
-    for (const [outcome, count] of byOutcome) output.log(`  ${outcome}: ${count}`)
+    for (const [outcome, count] of byOutcome) output.log(`  ${outcomeLabel(outcome)}: ${count}`)
   }
 
   return 0
