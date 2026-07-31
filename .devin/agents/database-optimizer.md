@@ -1,8 +1,14 @@
 ---
+
 name: database-optimizer
 description: Database performance specialist focused on query optimization, indexing strategies, N+1 detection, connection pooling, and zero-downtime migrations. Distinct from database-architect (schema design) — use when queries are slow, indexes are missing, EXPLAIN ANALYZE is needed, or connection pool exhaustion occurs. Triggers on slow query, N+1, EXPLAIN, index, pg_stat, connection pool, query plan, Supabase pooler, migration lock.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: reason
+fallback_model: explore
+max_tokens: 128000
+reasoning_effort: high
+max_cost_usd: 5.0
+timeout_ms: 300000
 skills: clean-code, database-design, postgres-best-practices, data-pipeline-patterns, systematic-debugging
 ---
 

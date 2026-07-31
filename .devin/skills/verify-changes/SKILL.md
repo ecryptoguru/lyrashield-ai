@@ -1,9 +1,12 @@
 ---
+
 name: verify-changes
 description: Prove code works by running it, not just checking it exists. Verification through execution rather than inspection. Use after writing or modifying code to ensure it actually functions correctly.
 when_to_use: "After writing code, completing a feature, or fixing a bug. When the user says 'does this work?', 'test this', 'verify', or when /verify workflow is invoked. NOT for writing new code — for proving existing code works."
 allowed-tools: Read, Bash, Grep, Glob
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # Verify Changes — Prove Code Works

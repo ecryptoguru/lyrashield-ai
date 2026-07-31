@@ -1,9 +1,12 @@
 ---
+
 name: next-upgrade
 description: Upgrade Next.js to the latest version following official migration guides and codemods. Use when migrating between Next.js major versions, running codemods, or updating peer dependencies after a framework bump.
 when_to_use: "When upgrading a Next.js project to a newer major version, running codemods, or resolving breaking changes after a version bump. NOT for day-to-day development."
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # Next.js Upgrade Skill

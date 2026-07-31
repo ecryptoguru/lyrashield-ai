@@ -1,9 +1,12 @@
 ---
+
 name: documentation-templates
 description: Documentation templates and structure guidelines. README, API docs, code comments, and AI-friendly documentation.
 when_to_use: "When writing README files, API documentation, code comments, or generating AI-friendly documentation."
 allowed-tools: Read, Glob, Grep
 effort: high
+token_budget: 12000
+summary_mode: false
 ---
 
 # Documentation Templates

@@ -1,8 +1,14 @@
 ---
+
 name: product-manager
 description: Expert in product requirements, user stories, acceptance criteria, and backlog prioritization. Use for defining features, clarifying ambiguity, prioritizing work, MVP scoping, and roadmap planning. Triggers on requirements, user story, acceptance criteria, product specs, backlog, MVP, PRD, stakeholder.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: explore
+fallback_model: tool
+max_tokens: 128000
+reasoning_effort: medium
+max_cost_usd: 2.0
+timeout_ms: 120000
 skills: plan-writing, brainstorming, clean-code
 ---
 

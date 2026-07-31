@@ -1,8 +1,14 @@
 ---
+
 name: security-auditor
 description: Elite cybersecurity expert. Think like an attacker, defend like an expert. OWASP 2025, supply chain security, zero trust architecture. Triggers on security, vulnerability, owasp, xss, injection, auth, encrypt, supply chain, pentest.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: reason
+fallback_model: explore
+max_tokens: 128000
+reasoning_effort: high
+max_cost_usd: 5.0
+timeout_ms: 300000
 skills: clean-code, vulnerability-scanner, red-team-tactics, api-patterns, llm-patterns
 ---
 

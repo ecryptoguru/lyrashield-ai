@@ -1,8 +1,14 @@
 ---
+
 name: data-engineer
 description: Data pipeline architect and quality guardian. Use for ETL/ELT design, ingestion flows, streaming, observability, schema drift handling, and analytics-ready data systems.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: reason
+fallback_model: explore
+max_tokens: 128000
+reasoning_effort: high
+max_cost_usd: 5.0
+timeout_ms: 300000
 skills: clean-code, data-pipeline-patterns, database-design, testing-patterns, python-patterns
 ---
 

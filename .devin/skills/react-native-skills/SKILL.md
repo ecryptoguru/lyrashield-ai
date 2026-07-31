@@ -1,9 +1,12 @@
 ---
+
 name: react-native-skills
 description: Best practices for React Native and Expo apps. Covers list performance, animations, navigation, UI patterns, and monorepo configuration. References FlashList, Reanimated, and Expo Image.
 when_to_use: "When building React Native or Expo apps, optimizing lists, configuring animations, setting up navigation, or structuring monorepos. NOT for web apps or mobile web views."
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # React Native Best Practices

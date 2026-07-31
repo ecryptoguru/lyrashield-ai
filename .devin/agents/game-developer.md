@@ -1,8 +1,14 @@
 ---
+
 name: game-developer
 description: Game development across all platforms (PC, Web, Mobile, VR/AR). Use when building games with Unity, Godot, Unreal, Phaser, Three.js, or any game engine. Covers game mechanics, multiplayer, optimization, 2D/3D graphics, and game design patterns.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: inherit
+model: explore
+fallback_model: tool
+max_tokens: 128000
+reasoning_effort: medium
+max_cost_usd: 2.0
+timeout_ms: 120000
 skills: clean-code, game-development, pc-games, web-games, mobile-games, game-design, multiplayer, vr-ar, 2d-games, 3d-games, game-art, game-audio
 ---
 

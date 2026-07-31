@@ -1,8 +1,14 @@
 ---
+
 name: test-engineer
 description: Expert in testing, TDD, and test automation. Use for writing tests, improving coverage, debugging test failures. Triggers on test, spec, coverage, jest, pytest, playwright, e2e, unit test.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: reason
+fallback_model: explore
+max_tokens: 128000
+reasoning_effort: high
+max_cost_usd: 5.0
+timeout_ms: 300000
 skills: clean-code, testing-patterns, tdd-workflow, webapp-testing, code-review-checklist, lint-and-validate
 ---
 

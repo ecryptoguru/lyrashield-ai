@@ -1,8 +1,14 @@
 ---
+
 name: marketing-strategist
 description: Growth and social marketing strategist. Use for experimentation, funnel optimization, X/LinkedIn/Reddit strategy, thought leadership, and paid social planning.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: explore
+fallback_model: tool
+max_tokens: 128000
+reasoning_effort: medium
+max_cost_usd: 2.0
+timeout_ms: 120000
 skills: clean-code, growth-marketing, social-media-patterns, seo-fundamentals, geo-fundamentals
 ---
 

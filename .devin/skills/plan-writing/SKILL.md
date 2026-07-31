@@ -1,9 +1,12 @@
 ---
+
 name: plan-writing
 description: Structured task planning with clear breakdowns, dependencies, and verification criteria. Use when implementing features, refactoring, or any multi-step work.
 when_to_use: "When creating structured task plans, breaking down features into tasks, or defining verification criteria. Use with /plan workflow."
 allowed-tools: Read, Glob, Grep
 effort: high
+token_budget: 12000
+summary_mode: false
 ---
 
 # Plan Writing

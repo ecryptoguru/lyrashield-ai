@@ -1,9 +1,12 @@
 ---
+
 name: python-patterns
 description: Python development principles and decision-making. Framework selection, async patterns, type hints, project structure. Teaches thinking, not copying.
 when_to_use: "When writing Python code, selecting Python frameworks, implementing type hints, or structuring Python projects."
 allowed-tools: Read, Write, Edit, Glob, Grep
 effort: high
+token_budget: 12000
+summary_mode: false
 ---
 
 # Python Patterns

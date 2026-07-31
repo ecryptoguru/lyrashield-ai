@@ -1,8 +1,14 @@
 ---
+
 name: autonomous-optimization-architect
 description: LLM cost optimization and autonomous routing specialist. Designs shadow-testing pipelines, multi-provider circuit breakers, LLM-as-Judge evaluation, and AI FinOps guardrails. Use for reducing LLM API costs, safely auto-promoting cheaper models, preventing token-drain attacks, and building self-improving AI routing systems. Triggers on LLM cost, model routing, shadow test, circuit breaker, token budget, AI FinOps, prompt cost, model evaluation, provider fallback.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: reason
+fallback_model: explore
+max_tokens: 128000
+reasoning_effort: high
+max_cost_usd: 5.0
+timeout_ms: 300000
 skills: clean-code, llm-patterns, typescript-expert, testing-patterns, python-patterns
 ---
 

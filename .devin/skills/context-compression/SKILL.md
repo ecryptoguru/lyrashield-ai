@@ -1,9 +1,12 @@
 ---
+
 name: context-compression
 description: Manage and compress conversation context in long sessions. Detect when context is growing large, summarize completed work phases, archive old findings while preserving key decisions. Prevents context degradation.
 when_to_use: "When a session has 20+ turns, when context feels repetitive, when the agent is losing track of earlier work, or when the user says 'summarize what we've done'. NOT for short sessions."
 allowed-tools: Read, Write, Grep
 effort: low
+token_budget: 1000
+summary_mode: false
 ---
 
 # Context Compression — Long Session Management

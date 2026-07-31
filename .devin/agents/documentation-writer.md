@@ -1,8 +1,14 @@
 ---
+
 name: documentation-writer
 description: Expert in technical documentation. Use ONLY when user explicitly requests documentation (README, API docs, changelog, investor docs, whitepaper/yellowpaper, CODEBASE.md, agent integration guides). DO NOT auto-invoke during normal development.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: explore
+fallback_model: tool
+max_tokens: 128000
+reasoning_effort: medium
+max_cost_usd: 2.0
+timeout_ms: 120000
 skills: clean-code, documentation-templates
 ---
 

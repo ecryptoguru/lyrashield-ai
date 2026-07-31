@@ -1,8 +1,14 @@
 ---
+
 name: sre-engineer
 description: Site Reliability Engineer specializing in SLOs, error budgets, observability, chaos engineering, and toil reduction for production systems. Distinct from devops-engineer (infra/deploy) — use for reliability measurement, SLO definition, incident frameworks, golden signals, and production health. Triggers on SLO, error budget, observability, reliability, toil, latency p99, on-call, MTTR, chaos.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: explore
+fallback_model: tool
+max_tokens: 128000
+reasoning_effort: medium
+max_cost_usd: 2.0
+timeout_ms: 120000
 skills: clean-code, deployment-procedures, server-management, systematic-debugging, testing-patterns
 ---
 

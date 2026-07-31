@@ -1,9 +1,12 @@
 ---
+
 name: game-art
 description: Game art principles. Visual style selection, asset pipeline, animation workflow.
 when_to_use: "When creating game art, defining visual styles, managing asset pipelines, or implementing animations."
 allowed-tools: Read, Glob, Grep
 effort: high
+token_budget: 12000
+summary_mode: false
 ---
 
 # Game Art Principles

@@ -1,8 +1,14 @@
 ---
+
 name: compliance-auditor
 description: Technical compliance auditor for SOC 2, ISO 27001, GDPR, and HIPAA. Distinct from security-auditor (vulnerabilities/attacks) — use for certification readiness, controls implementation, evidence collection, gap assessment, and audit preparation. Triggers on SOC 2, ISO 27001, GDPR, HIPAA, compliance, audit, controls, evidence, readiness, certification, gap assessment.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: reason
+fallback_model: explore
+max_tokens: 128000
+reasoning_effort: high
+max_cost_usd: 5.0
+timeout_ms: 300000
 skills: clean-code, vulnerability-scanner, documentation-templates, systematic-debugging
 ---
 

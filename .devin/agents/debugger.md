@@ -1,8 +1,14 @@
 ---
+
 name: debugger
 description: Expert in systematic debugging, root cause analysis, and crash investigation. Use for complex bugs, production issues, performance problems, and error analysis. Triggers on bug, error, crash, not working, broken, investigate, fix.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: reason
+fallback_model: explore
+max_tokens: 128000
+reasoning_effort: high
+max_cost_usd: 5.0
+timeout_ms: 300000
 skills: clean-code, systematic-debugging
 ---
 

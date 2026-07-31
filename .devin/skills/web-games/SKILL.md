@@ -1,9 +1,12 @@
 ---
+
 name: web-games
 description: Web browser game development principles. Framework selection, WebGPU, optimization, PWA.
 when_to_use: "When building browser-based games, selecting web game frameworks, or optimizing for WebGL/WebGPU."
 allowed-tools: Read, Write, Edit, Glob, Grep
 effort: high
+token_budget: 12000
+summary_mode: false
 ---
 
 # Web Browser Game Development

@@ -1,9 +1,12 @@
 ---
+
 name: vr-ar
 description: VR/AR development principles. Comfort, interaction, performance requirements.
 when_to_use: "When building VR or AR experiences, designing for comfort and immersion, or optimizing for headset performance."
 allowed-tools: Read, Write, Edit, Glob, Grep
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # VR/AR Development

@@ -1,9 +1,12 @@
 ---
+
 name: powershell-windows
 description: PowerShell Windows patterns. Critical pitfalls, operator syntax, error handling.
 when_to_use: "When working on Windows systems, writing PowerShell scripts, or using Windows-specific commands. NOT for macOS/Linux."
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 effort: high
+token_budget: 12000
+summary_mode: false
 ---
 
 # PowerShell Windows Patterns

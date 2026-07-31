@@ -1,9 +1,12 @@
 ---
+
 name: deployment-procedures
 description: Production deployment principles and decision-making. Safe deployment workflows, rollback strategies, and verification. Teaches thinking, not scripts.
 when_to_use: "When deploying to production, planning rollback strategies, or setting up CI/CD pipelines. Use with /deploy workflow."
 allowed-tools: Read, Glob, Grep, Bash
 effort: high
+token_budget: 12000
+summary_mode: false
 ---
 
 # Deployment Procedures

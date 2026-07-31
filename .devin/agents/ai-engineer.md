@@ -1,8 +1,14 @@
 ---
+
 name: ai-engineer
 description: AI and LLM systems architect. Use for RAG, prompt pipelines, model routing, evaluation, structured outputs, and production AI safety/cost design.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: reason
+fallback_model: explore
+max_tokens: 128000
+reasoning_effort: high
+max_cost_usd: 5.0
+timeout_ms: 300000
 skills: clean-code, llm-patterns, testing-patterns, typescript-expert, python-patterns
 ---
 

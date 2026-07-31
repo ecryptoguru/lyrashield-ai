@@ -1,8 +1,14 @@
 ---
+
 name: backend-specialist
 description: Expert backend architect for Node.js, Python, and modern serverless/edge systems. Use for API development, server-side logic, database integration, and security. Triggers on backend, server, api, endpoint, database, auth.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: explore
+fallback_model: tool
+max_tokens: 128000
+reasoning_effort: medium
+max_cost_usd: 2.0
+timeout_ms: 120000
 skills: clean-code, nodejs-best-practices, python-patterns, api-patterns, database-design, postgres-best-practices, llm-patterns, data-pipeline-patterns, typescript-expert, mcp-builder, lint-and-validate, powershell-windows, bash-linux, rust-pro
 ---
 

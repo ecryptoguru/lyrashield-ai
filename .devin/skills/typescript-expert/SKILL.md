@@ -1,9 +1,12 @@
 ---
+
 name: typescript-expert
 description: Advanced TypeScript principles. Type modeling, generics, discriminated unions, runtime validation boundaries, and maintainable type-safe API design.
 when_to_use: "When solving complex TypeScript typing problems, optimizing type performance, or designing type-safe APIs and architectures."
 allowed-tools: Read, Write, Edit, Glob, Grep
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # TypeScript Expert

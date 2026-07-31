@@ -1,8 +1,14 @@
 ---
+
 name: explorer-agent
 description: Advanced codebase discovery, deep architectural analysis, and proactive research agent. The eyes and ears of the framework. Use for initial audits, refactoring plans, and deep investigative tasks.
 tools: Read, Grep, Glob, Bash, ViewCodeItem, FindByName
-model: inherit
+model: explore
+fallback_model: tool
+max_tokens: 128000
+reasoning_effort: medium
+max_cost_usd: 2.0
+timeout_ms: 120000
 skills: clean-code, architecture, plan-writing, brainstorming, systematic-debugging
 ---
 

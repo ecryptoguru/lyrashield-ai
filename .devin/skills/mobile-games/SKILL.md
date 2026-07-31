@@ -1,9 +1,12 @@
 ---
+
 name: mobile-games
 description: Mobile game development principles. Touch input, battery, performance, app stores.
 when_to_use: "When building mobile games for iOS or Android, optimizing for touch input, battery life, or app store submission."
 allowed-tools: Read, Write, Edit, Glob, Grep
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # Mobile Game Development

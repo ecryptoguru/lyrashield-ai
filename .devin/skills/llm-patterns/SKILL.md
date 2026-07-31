@@ -1,9 +1,12 @@
 ---
+
 name: llm-patterns
 description: LLM systems and AI integration principles. RAG architecture, prompt design, evaluation, model routing, and cost-safe production patterns.
 when_to_use: "When designing LLM systems, prompt pipelines, RAG architectures, model routing, evaluation frameworks, or structured output flows."
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # LLM Patterns

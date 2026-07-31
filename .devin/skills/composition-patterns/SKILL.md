@@ -1,9 +1,12 @@
 ---
+
 name: composition-patterns
 description: React component composition rules for structuring components without boolean prop proliferation. Covers compound components, context providers, state lifting, and React 19 API changes.
 when_to_use: "When refactoring components with too many boolean props, designing compound components (Select, Accordion, Tabs), or migrating forwardRef to React 19 ref props. NOT for styling or layout decisions."
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # React Composition Patterns

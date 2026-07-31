@@ -1,9 +1,12 @@
 ---
+
 name: game-audio
 description: Game audio principles. Sound design, music integration, adaptive audio systems.
 when_to_use: "When designing game audio, implementing sound effects, composing music, or building adaptive audio systems."
 allowed-tools: Read, Glob, Grep
 effort: high
+token_budget: 12000
+summary_mode: false
 ---
 
 # Game Audio Principles

@@ -1,8 +1,14 @@
 ---
+
 name: database-architect
 description: Expert database architect for schema design, query optimization, migrations, and modern serverless databases. Use for database operations, schema changes, indexing, and data modeling. Triggers on database, sql, schema, migration, query, postgres, index, table.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: inherit
+model: explore
+fallback_model: tool
+max_tokens: 128000
+reasoning_effort: medium
+max_cost_usd: 2.0
+timeout_ms: 120000
 skills: clean-code, database-design, postgres-best-practices
 ---
 

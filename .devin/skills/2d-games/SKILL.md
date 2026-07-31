@@ -1,9 +1,12 @@
 ---
+
 name: 2d-games
 description: 2D game development principles. Sprites, tilemaps, physics, camera.
 when_to_use: "When building 2D games with sprites, tilemaps, physics, or camera systems."
 allowed-tools: Read, Write, Edit, Glob, Grep
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # 2D Game Development

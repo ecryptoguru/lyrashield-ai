@@ -47,7 +47,7 @@ packages/db/src/generated/
 
 # Docker
 docker-data/
-.lyrashield/
+.devin/
 
 # Secrets / keys (deploy doc has you download GitHub App .pem)
 *.pem

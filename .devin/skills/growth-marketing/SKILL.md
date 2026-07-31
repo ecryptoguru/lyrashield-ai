@@ -1,9 +1,12 @@
 ---
+
 name: growth-marketing
 description: Growth marketing principles. Experiment design, funnel optimization, activation, retention, CAC/LTV thinking, and North Star metric alignment.
 when_to_use: "When designing growth experiments, optimizing funnels, prioritizing campaigns, or working on activation and retention strategies."
 allowed-tools: Read, Write, Edit, Glob, Grep
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # Growth Marketing

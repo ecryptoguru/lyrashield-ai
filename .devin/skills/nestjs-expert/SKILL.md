@@ -1,9 +1,12 @@
 ---
+
 name: nestjs-expert
 description: NestJS expert covering modules, dependency injection, decorators, interceptors, guards, and enterprise patterns. Use when building or refactoring NestJS applications.
 when_to_use: "When building NestJS backends, designing modules, implementing DI, writing decorators, or applying enterprise patterns in Node.js."
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # NestJS Expert

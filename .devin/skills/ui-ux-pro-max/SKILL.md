@@ -1,9 +1,12 @@
 ---
+
 name: ui-ux-pro-max
 description: AI-powered design intelligence with 50+ styles, 95+ color palettes, and automated design system generation. Use for comprehensive UI/UX design decisions and design system creation.
 when_to_use: "When planning or implementing UI/UX, selecting color palettes, choosing fonts, designing components, or building design systems."
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # UI/UX Pro Max

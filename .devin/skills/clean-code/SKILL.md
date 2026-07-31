@@ -1,4 +1,5 @@
 ---
+
 name: clean-code
 description: Pragmatic coding standards - concise, direct, no over-engineering, no unnecessary comments
 when_to_use: "Always active for ALL code writing. Enforces concise, direct coding standards, testing pyramid, and performance best practices."
@@ -6,6 +7,8 @@ allowed-tools: Read, Write, Edit
 version: 2.0
 priority: CRITICAL
 effort: high
+token_budget: 12000
+summary_mode: false
 ---
 
 # Clean Code - Pragmatic AI Coding Standards

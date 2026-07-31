@@ -1,9 +1,12 @@
 ---
+
 name: 3d-games
 description: 3D game development principles. Rendering, shaders, physics, cameras.
 when_to_use: "When building 3D games with meshes, shaders, rendering pipelines, or camera systems."
 allowed-tools: Read, Write, Edit, Glob, Grep
 effort: medium
+token_budget: 4000
+summary_mode: false
 ---
 
 # 3D Game Development
