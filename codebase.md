@@ -2182,3 +2182,66 @@ A three-round post-ship audit (mobile nav, live production, and a full local bui
 **SEO/AEO hygiene (`apps/marketing`):** the sitemap (`astro.config.mjs`) now emits `<lastmod>` from each blog post's `updatedDate ?? pubDate`, but only where a real date exists (100 of 149 URLs) — static pages deliberately carry no `lastmod` rather than a build-time stamp that would claim the whole site changed on every deploy. `robots.txt.ts` names `GPTBot`, `ClaudeBot`, `PerplexityBot`, `CCBot`, and `Google-Extended` explicitly rather than relying on the permissive wildcard alone. `SeoHead.astro` gained `twitter:site`. `Header.astro` gained a "Get started" primary CTA (linking to `/sign-up`) alongside the existing "Sign in" link, in both the desktop nav and the mobile menu, both carrying `data-cta-id`. Two findings from the same audit pass did **not** hold up on inspection and were left alone: `/scan` and `/sample-report` were already in the sitemap, and the blog `#collection` JSON-LD node (`isPartOf` in `BlogPost.astro` and `editorial-policy.astro`) already resolves against the id declared on the blog index — both verified by parsing the actual built HTML output, not by reading the source.
 
 **Verification method for this entire batch:** a full local clone with dependencies installed, embedded Postgres with all 28 migrations applied, and the exact CI-shaped `NOBYPASSRLS` restricted role. Every commit in the batch was gated on: `pnpm lint` / `pnpm typecheck` (turbo, all packages) exit 0, `pnpm exec vitest run` against the real database (118 files / 1055 tests / 0 failures / 0 skips), `pnpm build` 6/6, `pnpm format:check` clean, and — for the workflow changes — YAML parse validation plus tracing the actual CI job logs after a real failure to find the root cause rather than guessing.
+
+## §60 — CLI hardening, agent-config scanner bypass removal, and rate-limit expansion (2026-07-31, working changes)
+
+A focused multi-package patch tightens the CLI contract, removes a scanner bypass, hardens secret installation, and adds per-workspace approval rate limits before a broader UX V2 follow-up. Code and tests are the source of truth; this section is the implementation map.
+
+### CLI path and exit-code contract
+
+- `packages/cli/src/client.ts` builds a `LyraShieldClient` from `@lyrashield/sdk` with `apiKey`, `apiUrl`, and a `lyrashield-cli/0.1.0` user agent. The SDK's `buildUrl()` prepends `/api/v1` automatically, so all CLI command handlers were moved to bare paths (`/findings`, `/scans`, etc.). This removes the earlier double-prefix bug and unifies how CLI and MCP call the API.
+- `packages/cli/src/index.ts` now catches unhandled errors and maps `LyraShieldError.status` to exit codes: `3` for 401/403, `4` for other API/network failures, and `5` for 429. `packages/cli/src/output.ts` was refactored: `error(message, exitCode?)` exits with the supplied code in `--json` mode (default `2` in plain mode), and `fail(error, exitCode?)` is used for top-level exceptions.
+- `packages/cli/README.md` now documents the full command catalog, environment variables, exit-code contract, and the `fix-plan` split.
+
+### `fix-plan` CLI split
+
+- `packages/cli/src/commands/fix-plan.ts` now does one of two things:
+  - `lyrashield fix-plan <findingId>` is **read-only**: it `GET /findings/<id>` and returns `recommendedFix` and `plainLanguage`.
+  - `lyrashield fix-plan create <findingId> --summary <summary>` is the **write** path: it `POST /findings/<id>/fix-proposals` with `workspaceId` and `summary`. The CLI validates `summary.trim().length >= 10`, matching the server-side Zod schema.
+- This is a breaking change from the previous `fix-plan <findingId>` that always created a proposal; the CLI and docs were updated together to make the new shape discoverable.
+
+### Agent-config scanner hardening
+
+- `apps/worker/src/engine/scanners/agent-config-scanner.ts` removed the `lyrashield:begin/end` managed-block parser (`MANAGED_BLOCK_PATTERN`, `hashManagedBody()`, `stripManagedBlocks()`) and the `node:crypto` import it required. The rationale is fail-closed: a checksum-valid block was previously stripped before pattern matching, which would have allowed an attacker to hide malicious instructions inside a correctly-computed `<!-- lyrashield:begin ... -->...<!-- lyrashield:end -->` wrapper.
+- All instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `.clinerules`, `skill.md`, `.github/copilot-instructions.md`, `.cursor/rules/lyrashield.mdc`, `.windsurf/rules/lyrashield.md`) are now scanned as plain text. The existing line/coverage bounds, code-fence skipping, and dangerous/protective pattern checks remain unchanged.
+- `packages/agent-rules/src/__tests__/scan.test.ts` now contains two managed-block cases:
+  - "does not treat a managed block with a wrong checksum as protective" (pre-existing), and
+  - "still flags a managed block even when the checksum is correctly computed" (new).
+    Both expect an `agent-instruction-poisoning` finding, confirming the bypass no longer exists.
+
+### Agent registry path corrections
+
+- `packages/agent-registry/src/agents.ts` fixes the global VS Code settings path from a vague `user settings.json` to `~/.config/Code/User/settings.json` with platform overrides for `darwin` (`~/Library/Application Support/Code/User/settings.json`), `linux` (`~/.config/Code/User/settings.json`), and `win32` (`~/AppData/Roaming/Code/User/settings.json`).
+- Zed's global path is now `~/.config/zed/settings.json` instead of `user settings.json`.
+- `packages/cli/src/installers/detect.ts` `resolveLocation()` already respects `ConfigLocation.platform`, so detection and install now resolve to the correct per-platform file.
+
+### Secret-mode installer refactor
+
+- `packages/cli/src/installers/secret-mode.ts` was simplified. It no longer returns early for each credential kind; instead it derives a single `mode` (`inline`, `interpolated`, `shell`, `header`, or `manual`) and then checks whether that mode writes a raw secret (`inline` or `header`).
+- If the target location is `sharedByConvention` and the mode writes a raw secret, the installer requires `--inline-secret` and confirms the file is either gitignored or not tracked. This prevents committing an `Authorization: Bearer <key>` header or an inline API key into a shared project config by mistake.
+- `secretValue()` was removed; no other file referenced it. `packages/cli/src/installers/install.ts` passes the resolved `secret.mode` through to `renderEntry()`, which resolves the secret value in `packages/agent-registry/src/render.ts`.
+- The refactor introduces two `as` casts for credential kind fields; a follow-up should replace them with a discriminated type guard.
+
+### Rate limiting and approval controls
+
+- `apps/web/src/lib/rate-limit.ts` adds `APPROVAL_CREATE_MAX = 10` and `checkApprovalCreateRateLimit(workspaceId)`, keyed on workspace so rotating IPs cannot bypass it. In production with `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`, it uses Upstash; otherwise it falls back to per-instance in-memory limiting.
+- `apps/web/src/app/api/agent-approvals/route.ts` calls `checkApprovalCreateRateLimit()` after `requirePermission()` on the `POST` handler, returning 429 with `Retry-After` when the limit is exceeded.
+- A new untracked `apps/web/src/middleware.ts` applies `checkApiRateLimit()` (30 requests per IP per minute) to all `/api/:path*`. It reads `x-forwarded-for` or `x-real-ip` and sets `X-RateLimit-Remaining`. This is a global backstop; it should be reviewed behind a trusted proxy before production hardening is complete.
+- `packages/db/src/agent-approval-service.ts` default `expiresAt` was tightened from 24 hours to 15 minutes, matching the route default and the intended short-lived approval window.
+
+### MCP and SDK path normalization
+
+- `packages/sdk/src/client.ts` `buildUrl()` always prepends `/api/v1` to the supplied path, so both `packages/cli` and `packages/mcp` call it with bare paths.
+- `packages/mcp/src/tools.ts` `apiCall()` now normalizes paths with `path.replace(/^\/api\/v1/, "").replace(/^\/api/, "") || "/"`, fixing the previous `path.slice(4)` bug that turned `/api/v1/findings` into `/v1/findings` and produced `/api/v1/v1/findings`.
+
+### Turbo task graph
+
+- `turbo.json` adds a top-level `test` task with `dependsOn: ["^build", "generate"]` and `cache: false`. It also adds `"generate"` to `typecheck.dependsOn`. This ensures Prisma client generation runs before tests and typecheck, preventing stale generated types in CI.
+
+### Local diff pattern severity
+
+- `packages/cli/src/diff-core.ts` lowered the `eval-exec` local pattern from `HIGH` to `MEDIUM`. This is a deliberate advisory change: the `gate` default remains `--fail-on HIGH`, so `eval()` / `exec()` additions in a diff will not fail the gate unless the threshold is lowered. A security review should confirm this is the intended product behavior before merge.
+
+### Verification and follow-up
+
+- The patch should be verified with `pnpm lint`, `pnpm typecheck`, `pnpm --filter @lyrashield/cli test`, `pnpm --filter @lyrashield/agent-rules test`, `pnpm --filter @lyrashield/web typecheck`, `pnpm --filter @lyrashield/mcp typecheck`, and `git diff --check`. The new `middleware.ts` and the `eval-exec` severity change in particular need a security/operations review.

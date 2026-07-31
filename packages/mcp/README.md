@@ -107,7 +107,10 @@ The remote endpoint runs the same guard and tools as stdio. Because a stateless 
 - **In an editor that supports elicitation** (Cursor, VS Code, Claude Code, …): you get an in-editor approve/deny prompt before any mutating tool runs.
 - **In a bare terminal with a TTY**: you're prompted on the controlling terminal.
 - **No approval channel available** (e.g. a headless process): mutating tools fail closed.
-- **Trusted, pre-reviewed CI**: set `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true` to skip the remote gate; the local stdio server still prompts interactively.
+
+### Trusted CI opt-out
+
+Set `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true` in the environment to skip the human-approval gate for remote mutating tools. This is a process-wide, fail-open opt-out and is intended only for genuinely trusted, pre-reviewed automation or CI. The local stdio server still prompts interactively even when this flag is set.
 
 Read-only tools never prompt. A read-only key is additionally rejected server-side for any write action.
 

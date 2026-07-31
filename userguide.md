@@ -398,14 +398,29 @@ To delete your account, enter the exact confirmation text `DELETE`. Deletion is 
 
 ## 22. MCP and agent workflows
 
-LyraShield exposes four MCP tools:
+LyraShield exposes an MCP server for local editors and a hosted remote endpoint. The full tool catalog lives in `packages/mcp/README.md`; the current set is:
+
+### Read tools
+
+- `lyrashield_list_workspaces` — list workspaces the API key can access;
+- `lyrashield_list_targets` — list targets in a workspace;
+- `lyrashield_get_scan_status` — status and events for a scan;
+- `lyrashield_get_findings` — list findings with optional target or severity filters;
+- `lyrashield_explain_finding` — full detail and plain-language explanation of a finding;
+- `lyrashield_generate_fix_plan` — assemble a remediation plan from a finding;
+- `lyrashield_get_launch_readiness` — retrieve the current scoped launch verdict;
+- `lyrashield_create_pr_security_recap` — generate a markdown security recap for a PR comment;
+- `lyrashield_check_diff` — fast **advisory** heuristic pre-filter on a diff (not a verified scan).
+
+### Write tools
 
 - `lyrashield_scan_target` — start a scan on a registered target;
-- `lyrashield_get_findings` — list findings with optional target or severity filters;
-- `lyrashield_get_launch_readiness` — retrieve the current scoped verdict;
+- `lyrashield_run_pr_scan` — start a PR-focused (CHECK_PR) scan;
+- `lyrashield_record_fix_proposal` — record a fix proposal on a finding;
+- `lyrashield_verify_fix` — queue a retest to verify a fix;
 - `lyrashield_create_report` — create an executive, developer, or compliance report.
 
-Read actions follow API-key scope and workspace permissions. Mutating MCP actions require interactive approval on the controlling terminal and fail closed when no approval terminal is available. Model-facing inputs pass through the prompt-injection guard.
+Read actions follow API-key scope and workspace permissions. Mutating MCP actions require interactive approval on the controlling terminal and fail closed when no approval terminal is available; over a remote-HTTP transport, mutating tools are refused by default unless the operator explicitly allows them. Model-facing inputs pass through the prompt-injection guard.
 
 Use the same supported scan modes as the API: SAFE, QUICK, STANDARD, DEEP, or CUSTOM. Dashboard users should normally prefer the named presets rather than raw modes.
 

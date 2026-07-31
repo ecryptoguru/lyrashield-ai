@@ -70,8 +70,8 @@ git diff --stat 72ba1e2a54fdedf81989325031c781f41d14dec6..HEAD
 - `apps/web` — Next.js workspace for targets, scans, evidence, reports, scorecards, and approval-gated actions.
 - `apps/worker` — BullMQ scan worker with queue admission, reconciliation, evidence receipts, and controlled engine execution.
 - `apps/agent` — approval-gated agent actions.
-- `apps/marketing` — Astro/Cloudflare marketing site and browser-local free tools.
-- `packages/*` — auth, configuration, database, integrations, MCP, score, security, shared UI, and logging.
+- `apps/marketing` — Astro 7 / Cloudflare Workers marketing site.
+- `packages/*` — auth, cli, cli-alias, configuration, database, integrations, logger, MCP, SDK, score, security, types, UI, agent-registry, and agent-rules
 
 The authenticated workflow currently supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution remains deliberately fail-closed until a server-generated patch pipeline is bound to an approval.
 

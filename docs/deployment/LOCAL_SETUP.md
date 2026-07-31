@@ -77,6 +77,27 @@ git diff --check
 
 Current `main` passes **1034 core tests in 116 files**, **81 marketing tests in 12 files**, **16 motion tests**, and **4 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
+### Use the CLI
+
+The CLI package (`packages/cli`) builds from the same monorepo. With the local web app running, you can use it against `http://localhost:3001`:
+
+```bash
+cp .env apps/web/.env
+pnpm --filter @lyrashield/cli build
+npx @lyrashield/cli login        # uses LYRASHIELD_API_KEY from the environment
+npx @lyrashield/cli use <workspace>
+```
+
+Or run it from the workspace root:
+
+```bash
+npx lyrashield --help
+npx lyrashield doctor
+npx lyrashield scan --target <targetId> --goal TEST_APP
+```
+
+For the full command catalog, exit codes, and environment variables, see `packages/cli/README.md`.
+
 ### Verify scorecards and social sharing
 
 Apply all PostgreSQL migrations first; `20260713170000_scorecard_events` is required for view/share recording. `20260714170000_integration_global_external_id_unique` intentionally rejects duplicate non-null provider installation IDs, so resolve disposable local duplicates before applying it rather than editing the migration. In the dashboard, complete or use an eligible Standard/Deep scan, publish its scorecard from the target page, and copy the generated slug.
