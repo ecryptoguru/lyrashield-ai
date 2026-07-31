@@ -18,21 +18,38 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
   if (creds.apiKey) {
     try {
       const client = await createClient()
-      const workspaces = (await client.request("GET", "/workspaces")) as unknown[]
+      const workspaces = (await client.request("GET", "/workspaces")) as {
+        id: string
+        name?: string
+      }[]
       report.workspacesAvailable = workspaces.length
       apiReachable = true
-      if (
-        creds.workspaceId &&
-        !workspaces.some((w) => (w as { id: string }).id === creds.workspaceId)
-      ) {
+      if (creds.workspaceId && !workspaces.some((w) => w.id === creds.workspaceId)) {
+        // Naming the alternatives is the difference between a dead end and a
+        // fix: the id alone is an opaque cuid the user cannot act on.
         report.workspaceWarning = `Workspace ${creds.workspaceId} was not found in the available workspaces.`
+        report.availableWorkspaces = workspaces.map((w) => ({ id: w.id, name: w.name }))
+        report.workspaceRemedy = workspaces.length
+          ? `Switch with: lyrashield use <workspaceId> — available: ${workspaces
+              .map((w) => (w.name ? `${w.id} (${w.name})` : w.id))
+              .join(", ")}`
+          : "This API key can't see any workspaces. Check that the key belongs to the right workspace."
       }
     } catch (err) {
       report.apiError = err instanceof Error ? err.message : String(err)
+      report.apiRemedy = [
+        `Check LYRASHIELD_API_URL — currently ${creds.apiUrl}`,
+        "Re-authenticate if the key is expired or revoked: lyrashield login",
+        "Confirm outbound HTTPS to the API host is not blocked by a proxy or firewall",
+      ]
       apiReachable = false
     }
   } else {
     report.apiError = "No API key set."
+    report.apiRemedy = [
+      "Set one with: lyrashield login",
+      "Or export LYRASHIELD_API_KEY=lsk_… for CI",
+    ]
   }
 
   const registry = await import("@lyrashield/agent-registry").catch(
@@ -79,7 +96,16 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
     output.log(`API URL:    ${creds.apiUrl}`)
     output.log(`Workspace:  ${creds.workspaceId ?? "not set"}`)
     output.log(`API status: ${apiReachable ? "reachable" : "unreachable"}`)
-    if (report.apiError) output.error(report.apiError as string)
+    if (report.apiError) {
+      output.error(report.apiError as string)
+      for (const step of (report.apiRemedy as string[] | undefined) ?? []) {
+        output.log(`  → ${step}`)
+      }
+    }
+    if (report.workspaceWarning) {
+      output.warn(report.workspaceWarning as string)
+      if (report.workspaceRemedy) output.log(`  → ${report.workspaceRemedy as string}`)
+    }
     for (const check of agentChecks as {
       id: string
       displayName: string
@@ -90,8 +116,12 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
       output.log(`\n[${check.id}] ${check.displayName}`)
       output.log(`  detected:   ${check.detected ? "yes" : "no"}`)
       output.log(`  configured: ${check.configured.length ? check.configured.join(", ") : "no"}`)
-      for (const gotcha of check.gotchas) {
-        output.log(`  ! ${gotcha}`)
+      // Gotchas for an agent the user doesn't have are pure noise; only surface
+      // them once the agent is actually present or configured.
+      if (check.detected || check.configured.length > 0) {
+        for (const gotcha of check.gotchas) {
+          output.log(`  ! ${gotcha}`)
+        }
       }
     }
   }

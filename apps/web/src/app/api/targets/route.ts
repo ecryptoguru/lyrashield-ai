@@ -74,6 +74,36 @@ export async function POST(request: Request) {
       }
     }
 
+    // A caller-supplied installationId must belong to an active GitHub
+    // integration in THIS workspace. Without this check a client could tag a
+    // target with a foreign or invented installation id, which would then never
+    // match on App-uninstall cleanup and would leave the target active forever.
+    if (data.type === "REPO" && data.installationId) {
+      const ownedInstallation = await prisma.integration.findFirst({
+        where: {
+          workspaceId,
+          type: "GITHUB",
+          externalId: data.installationId,
+          status: "active",
+          deletedAt: null,
+        },
+        select: { id: true },
+      })
+      if (!ownedInstallation) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "INSTALLATION_NOT_FOUND",
+              message:
+                "The provided installationId does not match an active GitHub integration for this workspace",
+            },
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     const repoInstallationId =
       data.type === "REPO"
         ? (data.installationId ??

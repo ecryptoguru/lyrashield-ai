@@ -39,6 +39,16 @@ export async function handleScan(args: string[], output: Output): Promise<number
     return 2
   }
 
+  // Fail before submitting. Warning after a successful POST and still exiting 0
+  // would tell a CI script the scan was followed to completion when it was not,
+  // and re-running would submit a second scan against the workspace budget.
+  if (parsed.watch) {
+    output.error(
+      "--watch is not implemented yet. Submit the scan without --watch, then poll it with: lyrashield status <scanId>"
+    )
+    return 2
+  }
+
   const client = await createClient()
   const workspaceId = requireWorkspace(await getEffectiveCredentials())
 
@@ -47,11 +57,6 @@ export async function handleScan(args: string[], output: Output): Promise<number
   })) as { id: string }
 
   output.result(res)
-
-  if (parsed.watch) {
-    // placeholder: the SDK resource would poll with ETag
-    output.warn("--watch not yet implemented")
-  }
 
   return 0
 }

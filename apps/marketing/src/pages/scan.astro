@@ -271,8 +271,14 @@ const jsonLd = [
     const scanButton = document.querySelector<HTMLButtonElement>("#scan-button")
     const appOrigin = scanForm?.dataset.apiOrigin || ""
     const turnstileSiteKey = scanForm?.dataset.turnstileSiteKey || ""
+    const LITE_SCAN_TIMEOUT_MS = 30_000
+    // Turnstile is loaded from a third party; ad blockers and network failures
+    // are common. Bound the wait instead of polling forever in silence.
+    const TURNSTILE_POLL_INTERVAL_MS = 100
+    const TURNSTILE_MAX_ATTEMPTS = 100 // ~10s
     let turnstileToken = ""
     let turnstileWidget = ""
+    let turnstileAttempts = 0
     let currentResult: LiteResult | null = null
     let lastAction = "waitlist"
 
@@ -441,11 +447,32 @@ const jsonLd = [
     }
 
     async function runLiteScan(url: string, token: string): Promise<{ result: LiteResult; durationMs: number }> {
-      const response = await fetch(`${appOrigin}/api/lite-scan`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url, authorized: true, ...(token ? { turnstileToken: token } : {}) }),
-      })
+      // Without a deadline an unreachable target leaves the visitor watching the
+      // running animation forever, with no result and no way to recover.
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), LITE_SCAN_TIMEOUT_MS)
+      let response: Response
+      try {
+        response = await fetch(`${appOrigin}/api/lite-scan`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url, authorized: true, ...(token ? { turnstileToken: token } : {}) }),
+          signal: controller.signal,
+        })
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          throw Object.assign(
+            new Error("The check timed out. The site may be slow or unreachable — please try again."),
+            { reason: "timeout" }
+          )
+        }
+        throw Object.assign(
+          new Error("Could not reach the checker. Check your connection and try again."),
+          { reason: "network_error" }
+        )
+      } finally {
+        window.clearTimeout(timeoutId)
+      }
       const body = await response.json() as { result?: LiteResult; durationMs?: number; error?: string; message?: string }
       if (!response.ok || !body.result) {
         throw Object.assign(new Error(body.message || "The passive check could not finish."), {
@@ -587,7 +614,19 @@ const jsonLd = [
     function bootTurnstile() {
       const turnstile = (window as TurnstileWindow).turnstile
       if (!turnstile) {
-        window.setTimeout(bootTurnstile, 100)
+        turnstileAttempts += 1
+        if (turnstileAttempts > TURNSTILE_MAX_ATTEMPTS) {
+          if (errorBox) {
+            errorBox.textContent =
+              "Could not load the verification challenge. Disable your ad blocker for this page or reload to try again."
+            errorBox.classList.remove("hidden")
+          }
+          // No scan is in flight at boot, so there is no progress animation to
+          // stop — just make sure the form is not left in a disabled state.
+          if (scanButton) scanButton.disabled = false
+          return
+        }
+        window.setTimeout(bootTurnstile, TURNSTILE_POLL_INTERVAL_MS)
         return
       }
       turnstileWidget = turnstile.render("#turnstile-container", {

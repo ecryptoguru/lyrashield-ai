@@ -131,11 +131,20 @@ export async function POST(request: NextRequest) {
               // installation. This is precise and avoids the previous
               // `startsWith` owner-prefix bug (e.g. "acme" matching
               // "acme-corp/other" or "not-acme/repo").
+              //
+              // Targets created before Target.installationId existed have a
+              // NULL value and would never match the precise predicate, so they
+              // would survive an App uninstall and stay scannable after the
+              // customer revoked access. Cover that legacy cohort by falling
+              // back to an exact owner match (not `startsWith`) for NULL rows.
               await tx.target.updateMany({
                 where: {
                   workspaceId: integration.workspaceId,
                   repoProvider: "github",
-                  installationId: String(installation.id),
+                  OR: [
+                    { installationId: String(installation.id) },
+                    { installationId: null, repoOwner: installation.account.login },
+                  ],
                 },
                 data: { deletedAt: new Date() },
               })

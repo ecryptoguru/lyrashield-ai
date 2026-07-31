@@ -95,6 +95,49 @@ const resolvedPath = currentPath || Astro.url.pathname
   </div>
 </Base>
 
+<script>
+  // Add a copy control to every docs code block. Purely progressive: if this
+  // never runs, the snippets are still selectable exactly as before.
+  const COPIED_FEEDBACK_MS = 1600
+
+  function addCopyButtons() {
+    const blocks = document.querySelectorAll<HTMLPreElement>(".docs-main pre")
+    blocks.forEach((pre) => {
+      if (pre.querySelector(".code-copy")) return
+      const code = pre.querySelector("code")
+      if (!code) return
+
+      const button = document.createElement("button")
+      button.type = "button"
+      button.className = "code-copy"
+      button.textContent = "Copy"
+      button.setAttribute("aria-label", "Copy code to clipboard")
+
+      let resetTimer: number | undefined
+      button.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(code.innerText)
+          button.textContent = "Copied"
+          button.dataset.copied = "true"
+        } catch {
+          // Clipboard can be blocked by permissions or an insecure origin.
+          button.textContent = "Press Ctrl+C"
+        }
+        window.clearTimeout(resetTimer)
+        resetTimer = window.setTimeout(() => {
+          button.textContent = "Copy"
+          delete button.dataset.copied
+        }, COPIED_FEEDBACK_MS)
+      })
+
+      pre.appendChild(button)
+    })
+  }
+
+  addCopyButtons()
+  document.addEventListener("astro:after-swap", addCopyButtons)
+</script>
+
 <style>
   .docs-shell {
     width: min(100% - 2rem, 80rem);
@@ -222,6 +265,7 @@ const resolvedPath = currentPath || Astro.url.pathname
   }
 
   .docs-main :global(pre) {
+    position: relative;
     margin: 1.25rem 0 0;
     overflow-x: auto;
     border: 1px solid var(--color-border);
@@ -230,6 +274,59 @@ const resolvedPath = currentPath || Astro.url.pathname
     padding: 1.25rem 1.5rem;
     font-size: 0.83rem;
     line-height: 1.6;
+  }
+
+  /* Copy button injected by the script below. Every docs snippet exists to be
+     pasted into a config file, so selecting multi-line JSON by hand — which is
+     near-impossible on mobile — should never be the only option. */
+  .docs-main :global(.code-copy) {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    z-index: 1;
+    border: 1px solid var(--color-border);
+    border-radius: 0.4rem;
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    padding: 0.25rem 0.55rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    opacity: 0;
+    transition:
+      opacity 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .docs-main :global(pre:hover .code-copy),
+  .docs-main :global(.code-copy:focus-visible) {
+    opacity: 1;
+  }
+
+  .docs-main :global(.code-copy:hover) {
+    color: var(--color-text);
+    border-color: var(--color-accent);
+  }
+
+  .docs-main :global(.code-copy[data-copied="true"]) {
+    opacity: 1;
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+
+  /* Touch devices have no hover, so keep the control permanently visible. */
+  @media (hover: none) {
+    .docs-main :global(.code-copy) {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .docs-main :global(.code-copy) {
+      transition: none;
+    }
   }
 
   .docs-main :global(code) {

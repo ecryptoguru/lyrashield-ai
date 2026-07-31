@@ -381,6 +381,13 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                 id="workspace-name"
                 value={workspaceName}
                 onChange={(e) => setWorkspaceName(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter is how people expect to advance a single-field step.
+                  if (e.key === "Enter" && !loading) {
+                    e.preventDefault()
+                    void createWorkspace()
+                  }
+                }}
                 placeholder="My app security"
                 autoComplete="organization"
               />
