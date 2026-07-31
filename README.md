@@ -1,6 +1,6 @@
 # LyraShield AI
 
-Evidence-backed release assurance for AI-built software.
+Evidence-backed release assurance for AI-built software — for humans and for the coding agents building it.
 
 LyraShield AI turns a target into a release-assurance loop:
 
@@ -13,57 +13,49 @@ It keeps detected findings, independently verified evidence, retest-confirmed re
 - Marketing and methodology: [lyrashieldai.com](https://lyrashieldai.com)
 - Public passive Lite Check: [lyrashieldai.com/scan](https://lyrashieldai.com/scan)
 - Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com) (open registration)
+- User guide: [userguide.md](userguide.md)
 
-The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. The workspace supports password and configured OAuth registration. Production web requests are intended to use a restricted `NOBYPASSRLS` database role — unverified against the live connection as of 2026-07-30, see `docs/deployment/PRODUCTION_DEPLOYMENT.md` "Known production blockers" §2 for the one-query check — and repository scans are admitted only while the dedicated production worker holds a live lease. The current release gate still requires a current-tree Safe retest and a successful, reconciled Deep run.
+The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. Repository scans are admitted only while the dedicated production worker holds a live lease, and the current release gate requires a current-tree Safe retest plus a successful, reconciled Deep run.
 
-## Judge and project links
+## Use it from your coding agent
 
-- [Public product site](https://lyrashieldai.com) · [public Lite Check](https://lyrashieldai.com/scan) · [workspace registration](https://app.lyrashieldai.com)
-- [Methodology](https://lyrashieldai.com/methodology) · [synthetic sample report](https://lyrashieldai.com/sample-report) · [Vibe Security 50](docs/vibe-security-50.md)
-- [Application source](https://github.com/ecryptoguru/lyrashield-ai) · [engine source](https://github.com/ecryptoguru/lyrashield-engine) · [engine ownership boundary](https://github.com/ecryptoguru/lyrashield-engine#ownership-boundary) · [engine upgrade ledger](https://github.com/ecryptoguru/lyrashield-engine/blob/main/UPGRADES.md)
-- [Submitted 2:46 demo video](https://youtu.be/Wd7v5uOrhWI) · [Build Week judge path](#openai-build-week-judge-path) · [user guide](userguide.md)
-- [Engine derivative and upstream maintenance](#engine-derivative-and-upstream-maintenance) · [production-beta readiness plan](docs/plans/2026-07-20-production-beta-readiness.md)
+LyraShield ships three ways to run checks without leaving your editor or CI pipeline:
 
-## OpenAI Build Week judge path
-
-LyraShield AI is entered in the **Developer Tools** track. Judges can exercise the submitted public path without an account, rebuilding the repository, or using paid services:
-
-1. Open [the public Lite Check](https://lyrashieldai.com/scan).
-2. Enter `lyrashieldai.com`, confirm authorization and the Terms, and run the check.
-3. Inspect the result and its stated limitations; the interface does not convert an unavailable or inconclusive check into a pass.
-4. Compare the states with [the public methodology](https://lyrashieldai.com/methodology) and [synthetic sample report](https://lyrashieldai.com/sample-report).
-
-The public demo supports current desktop and mobile browsers and is automatically tested in Chromium. Local development and Docker validation target macOS and Linux with Node.js 24+, pnpm, and Docker. Windows/WSL2 is not a release-tested target.
-
-### Judge testing and local setup
-
-No installation, account, credential, or paid service is required to test the submitted public path. Use `lyrashieldai.com` as the authorized sample target; the public result and sample report make the review scope and limitations visible. The workspace is separately available through open registration at `app.lyrashieldai.com` for authorized targets.
-
-To run the repository locally, use Node.js 24+, pnpm, Docker, and an environment file based on `.env.example`; the commands in [Local setup](#local-setup) start the stack and the listed checks validate it. The full worker additionally requires private evidence storage, a BullMQ-compatible Redis connection, the controlled engine runtime, and authorized Azure model configuration. It fails closed rather than starting a scan when those dependencies are unavailable.
-
-### What changed during Build Week
-
-LyraShield AI existed before the submission period. The official start was **July 13, 2026, 9:00 AM PT (16:00 UTC)**. The pre-period baseline is commit [`72ba1e2`](https://github.com/ecryptoguru/lyrashield-ai/commit/72ba1e2a54fdedf81989325031c781f41d14dec6), authored at 15:48:53 UTC—before that start—and is not claimed as Build Week work.
-
-| Period                    | What to evaluate                                                                                                                                                                                                                                                                      |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Before July 13, 16:00 UTC | The repository state reachable at [`72ba1e2`](https://github.com/ecryptoguru/lyrashield-ai/tree/72ba1e2a54fdedf81989325031c781f41d14dec6). It is the disclosed starting point, including pre-existing product and engine infrastructure.                                              |
-| During Build Week         | The reviewed delta from [`72ba1e2..HEAD`](https://github.com/ecryptoguru/lyrashield-ai/compare/72ba1e2a54fdedf81989325031c781f41d14dec6...main), beginning with [`1f54eb0`](https://github.com/ecryptoguru/lyrashield-ai/commit/1f54eb0). The additions below are the submitted work. |
-
-Judges should evaluate the meaningful post-baseline extensions:
-
-- **Evidence integrity:** immutable result manifests, coverage receipts, finding candidates, independent verification receipts, and server-owned retests distinguish detected, independently verified, retest-confirmed, and inconclusive results ([PR #67](https://github.com/ecryptoguru/lyrashield-ai/pull/67), [PR #68](https://github.com/ecryptoguru/lyrashield-ai/pull/68)).
-- **Working public product:** the passive Lite Scanner, direct-domain flow, truthful one-pass progress, privacy-bounded scorecards, and production deployment created the no-login judge path ([PR #71](https://github.com/ecryptoguru/lyrashield-ai/pull/71), [PR #76](https://github.com/ecryptoguru/lyrashield-ai/pull/76), [PR #84](https://github.com/ecryptoguru/lyrashield-ai/pull/84), [PR #86](https://github.com/ecryptoguru/lyrashield-ai/pull/86)).
-- **Complete product experience:** the premium dashboard, responsive navigation, evidence console, assurance reports, and guided review loop replaced proof-of-concept surfaces with an accessible end-to-end experience ([PR #60](https://github.com/ecryptoguru/lyrashield-ai/pull/60), [PR #99](https://github.com/ecryptoguru/lyrashield-ai/pull/99), [PR #107](https://github.com/ecryptoguru/lyrashield-ai/pull/107)).
-- **GPT-5.6 execution contract:** protected model routing, per-request accounting, bounded context/output/agents/spend, deterministic finding identity, explicit coverage controls, and fail-closed provider handling hardened the controlled full-scan path ([PR #109](https://github.com/ecryptoguru/lyrashield-ai/pull/109), [PR #113](https://github.com/ecryptoguru/lyrashield-ai/pull/113), [PR #119](https://github.com/ecryptoguru/lyrashield-ai/pull/119)).
-- **Operational reliability:** worker heartbeats, fail-closed scan admission, orphan reconciliation, queue cleanup, production readiness, and open-registration authentication made failure behavior explicit ([PR #115](https://github.com/ecryptoguru/lyrashield-ai/pull/115), [PR #120](https://github.com/ecryptoguru/lyrashield-ai/pull/120), [PR #123](https://github.com/ecryptoguru/lyrashield-ai/pull/123)).
-
-The dated Git history and linked pull requests are the audit trail. To inspect the same boundary locally:
+**CLI** — install and configure any supported agent in one command:
 
 ```bash
-git log --since='2026-07-13T16:00:00Z' --date=iso-strict --oneline
-git diff --stat 72ba1e2a54fdedf81989325031c781f41d14dec6..HEAD
+npx lyrashield login              # paste a workspace API key when prompted
+npx lyrashield init                # detect installed agents and configure them
+npx lyrashield gate                # CI-friendly diff-aware security gate
 ```
+
+`lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`). It writes agent configs directly — merging, not overwriting, and never inlining a raw API key into a file your team commits — for 9 agents, shells out to the vendor's own CLI for Amp, and prints exact copy-paste values for the 5 agents whose tooling has no config file to write (JetBrains, Cline, PiCode, OpenClaw, Hermes). Run `npx lyrashield doctor` any time to check what's configured and what's missing.
+
+**MCP server** — for editors that speak Model Context Protocol directly:
+
+```json
+{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": { "LYRASHIELD_API_KEY": "lsk_your_key" }
+    }
+  }
+}
+```
+
+`@lyrashield/mcp` is published on npm with 14 tools (read-only inspection plus scan/fix/retest actions gated behind human approval) and both stdio and remote Streamable-HTTP transports. Full per-agent setup for Claude Code, Cursor, Windsurf, VS Code, Zed, and 10 others is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations).
+
+**GitHub Action** — a diff-aware CI gate that needs no LyraShield account, using `action.yml` at the repository root:
+
+```yaml
+- uses: ecryptoguru/lyrashield-ai@v1
+  with:
+    fail_on_severity: HIGH
+```
+
+It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF for GitHub Code Scanning, and every third-party action it uses is SHA-pinned.
 
 ## What is here
 
@@ -71,9 +63,14 @@ git diff --stat 72ba1e2a54fdedf81989325031c781f41d14dec6..HEAD
 - `apps/worker` — BullMQ scan worker with queue admission, reconciliation, evidence receipts, and controlled engine execution.
 - `apps/agent` — approval-gated agent actions.
 - `apps/marketing` — Astro 7 / Cloudflare Workers marketing site.
-- `packages/*` — auth, cli, cli-alias, configuration, database, integrations, logger, MCP, SDK, score, security, types, UI, agent-registry, and agent-rules
+- `packages/cli` / `packages/cli-alias` — the published `lyrashield` / `@lyrashield/cli` command-line tool.
+- `packages/agent-registry` — the single source of truth for all 15 supported coding agents (config paths, formats, install strategy); the CLI installers and the docs site are both generated against it.
+- `packages/agent-rules` — renders LyraShield's security policy into each agent's native rules/instructions format (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others).
+- `packages/mcp` — the published `@lyrashield/mcp` server.
+- `packages/sdk` — the typed REST client shared by the CLI and the MCP server, so their behavior can't drift apart.
+- `packages/*` (remaining) — auth, configuration, database, integrations, logger, score, security, types, UI.
 
-The authenticated workflow currently supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution remains deliberately fail-closed until a server-generated patch pipeline is bound to an approval.
+The authenticated workflow supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution remains deliberately fail-closed until a server-generated patch pipeline is bound to an approval.
 
 ## Evidence states
 
@@ -86,7 +83,7 @@ The authenticated workflow currently supports project targets, findings, determi
 
 ## Local setup
 
-Prerequisites: Node.js 24+, pnpm, Docker, and an environment file based on `.env.example`.
+Prerequisites: Node.js 20+ (this monorepo and CI are validated on Node 24), pnpm, Docker, and an environment file based on `.env.example`.
 
 ```bash
 pnpm install
@@ -121,14 +118,6 @@ LyraShield owns the product-critical execution contract: GPT-5.6 model policy, b
 
 Upgrades are deliberately review-gated: the engine records its incorporated Strix base, compares stable releases, prepares a review PR, and requires human approval plus its read-only CI gate. It never auto-resolves conflicts, force-pushes history, or deploys from the sync workflow. The [engine verification and upgrade guidance](https://github.com/ecryptoguru/lyrashield-engine#verification) describes the checks; they prove implementation compatibility, not scan accuracy or universal coverage.
 
-Quick links: [judge path](#openai-build-week-judge-path) · [Codex and GPT-5.6 use](#built-with-codex-and-gpt-56) · [security and release boundaries](#security-and-release-boundaries).
-
-## Built with Codex and GPT-5.6
-
-Codex was the engineering collaborator throughout the Build Week extensions: it traced cross-package data flows, implemented focused changes, added regression tests, reviewed rendered UX, diagnosed CI and deployment failures, and reconciled documentation with live behavior. The founder retained the key product decisions: evidence state rather than an AI confidence claim; passive public scanning separated from the authenticated engine; independent proof required for verification; and risky scan or Fix PR paths failing closed.
-
-GPT-5.6 contributed in two ways. GPT-5.6-powered Codex sessions performed the Build Week implementation and review work. GPT-5.6 is also part of the controlled full-scan runtime contract: Luna handles Safe/Quick/Standard work at medium reasoning; Terra coordinates Deep/Custom work with Luna specialists. The execution boundary enforces bounded context, agent, output, concurrency, and spend controls before model requests. The public Lite Check is deterministic and does not call that full-scan runtime.
-
 ## Security and release boundaries
 
 - Workspace data is tenant-scoped and sensitive operations are audit-logged.
@@ -136,9 +125,17 @@ GPT-5.6 contributed in two ways. GPT-5.6-powered Codex sessions performed the Bu
 - URL targets use pinned deterministic URL scanners rather than the repository engine.
 - Queue admission fails closed without a healthy worker heartbeat.
 - Public scorecard payloads are allowlisted and sharing is revocable.
+- The MCP server's mutating tools (start a scan, record a fix, queue a retest) require human approval before executing, both locally and over the remote endpoint.
 - The public marketing surface and the authenticated workspace have separate deployment boundaries.
 
-See [the production beta readiness plan](docs/plans/2026-07-20-production-beta-readiness.md) for the exact deployment and verification gates. Do not treat this repository, the Lite Check, or a local run as proof of an authenticated provider-backed production scan.
+See [the production beta readiness plan](docs/plans/2026-07-20-production-beta-readiness.md) for the exact deployment and verification gates. Do not treat this repository, the Lite Check, the CLI, or a local run as proof of an authenticated provider-backed production scan.
+
+## Further reading
+
+- [AGENTS.md](AGENTS.md) — current implementation state, execution queue, and non-negotiable rules for anyone (human or AI) working in this codebase.
+- [codebase.md](codebase.md) — the architecture and implementation map.
+- [PRD.md](PRD.md) — product strategy and the release-readiness backlog.
+- [product.md](product.md) — current positioning and founder decisions.
 
 ## License
 

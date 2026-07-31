@@ -3,10 +3,10 @@ import DocsLayout from "@layouts/DocsLayout.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/github-action", origin).toString()
-const title = "LyraShield GitHub Action — CI Security Checks"
+const title = "LyraShield GitHub Action — Diff-Aware CI Security Gate"
 const description =
-  "Run LyraShield security checks on every pull request with the GitHub Action. Store your lsk_ API key as a GitHub secret and add the workflow step to your CI pipeline."
-const updatedDate = "2026-07-24"
+  "Add the LyraShield GitHub Action to your workflow for a one-step, diff-aware security gate: secret detection, risky-pattern checks, and SARIF output. Runs entirely in your own runner — no LyraShield account or API key required."
+const updatedDate = "2026-07-31"
 
 const jsonLd: unknown[] = [
   {
@@ -23,25 +23,25 @@ const jsonLd: unknown[] = [
   {
     "@context": "https://schema.org",
     "@type": "HowTo",
-    name: "Set up LyraShield GitHub Action",
+    name: "Set up the LyraShield GitHub Action",
     step: [
       {
         "@type": "HowToStep",
         position: 1,
-        name: "Add the API key as a GitHub secret",
-        text: "Go to your repository Settings → Secrets and variables → Actions. Add a secret named LYRASHIELD_API_KEY with your lsk_ workspace key.",
+        name: "Create the workflow file",
+        text: "Create .github/workflows/lyrashield.yml in your repository referencing ecryptoguru/lyrashield-ai@v1. No secrets or account setup are required for the diff gate itself.",
       },
       {
         "@type": "HowToStep",
         position: 2,
-        name: "Create the workflow file",
-        text: "Create .github/workflows/lyrashield.yml in your repository and add the LyraShield action step.",
+        name: "Set the severity threshold",
+        text: "Configure fail_on_severity (default HIGH) to control which finding severities block the pull request.",
       },
       {
         "@type": "HowToStep",
         position: 3,
-        name: "Configure check targets",
-        text: "Set the targets input to the URL or scope you want to check. Configure the fail-on-findings option to control whether the check blocks the PR.",
+        name: "Review results",
+        text: "Findings are emitted as SARIF and, if the workflow grants security-events: write, uploaded to GitHub Code Scanning. The gate itself does not require that permission to function.",
       },
     ],
   },
@@ -72,96 +72,117 @@ const jsonLd: unknown[] = [
 >
   <h1>GitHub Action</h1>
   <p>
-    The LyraShield GitHub Action runs security checks in your CI pipeline on every pull request. It
-    is the recommended integration for teams using cloud editors and for any workflow that needs
-    automated, auditable security checks without an AI editor present.
+    The LyraShield GitHub Action is a lightweight, diff-scoped security gate that runs entirely in
+    your own runner with your own <code>GITHUB_TOKEN</code>. It does not call the hosted LyraShield
+    engine, does not require a LyraShield account or API key, and requests no elevated permissions
+    of its own — the calling workflow controls the token scope.
   </p>
-
-  <h2>Step 1 — Add your API key as a secret</h2>
-  <p>
-    Go to your GitHub repository <strong>Settings → Secrets and variables → Actions</strong> and
-    add a repository secret:
-  </p>
-  <ul>
-    <li>
-      <strong>Name:</strong> <code>LYRASHIELD_API_KEY</code>
-    </li>
-    <li>
-      <strong>Value:</strong> your <code>lsk_</code>-prefixed workspace key
-    </li>
-  </ul>
 
   <div class="callout">
-    <strong>Key scope:</strong> The GitHub Action requires a read-and-write key if you want it to
-    submit findings to your LyraShield workspace. A read-only key is sufficient for reporting-only
-    runs.
+    <strong>What it checks:</strong> secret detection via <a
+      href="https://github.com/gitleaks/gitleaks"
+      target="_blank"
+      rel="noopener noreferrer">gitleaks</a
+    >, plus a set of high-signal risky-pattern checks on the lines added in the diff — hardcoded
+    secrets, SQL-injection-shaped string concatenation, security controls disabled in code (CORS,
+    CSRF, XSS protections), and <code>eval</code>/<code>exec</code> usage. This is a fast,
+    zero-setup pre-merge gate, not the full agentic scan. For the exploit-validated, verified-finding
+    workflow, connect the target in the LyraShield app, or use the <a
+      href="/docs/integrations/remote-mcp">MCP server</a
+    > or <a href="/docs/integrations/rest-api">REST API</a>.
   </div>
 
-  <h2>Step 2 — Create the workflow file</h2>
+  <h2>Add the workflow</h2>
   <p>
-    Create <code>.github/workflows/lyrashield.yml</code> in your repository with the following
-    content. Adjust the <code>on:</code> triggers and inputs to match your project.
+    Create <code>.github/workflows/lyrashield.yml</code> in your repository. This is the whole setup
+    — no secrets to configure:
   </p>
 
   <pre><code>{`name: LyraShield security checks
 
 on:
   pull_request:
-    branches: [main, master]
-  push:
-    branches: [main, master]
+    branches: [main]
 
 jobs:
   lyrashield:
     name: Run security checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # optional: only needed to publish SARIF to Code Scanning
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: LyraShield check
-        uses: lyrashield/action@v1
+        uses: ecryptoguru/lyrashield-ai@v1
         with:
-          api-key: \${{ secrets.LYRASHIELD_API_KEY }}
-          # Optional: target URL or workspace scope
-          # target: "https://your-staging-url.example.com"
-          # Optional: fail the workflow if findings are detected
-          # fail-on-findings: "true"`}</code></pre>
+          fail_on_severity: HIGH`}</code></pre>
 
-  <h2>Workflow inputs reference</h2>
+  <p>
+    That single step checks out your repository itself (with the depth the diff calculation needs),
+    so you don't need a separate <code>actions/checkout</code> step before it.
+  </p>
+
+  <h2>Inputs</h2>
   <table>
     <thead>
       <tr>
         <th>Input</th>
-        <th>Required</th>
+        <th>Default</th>
         <th>Description</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td><code>api-key</code></td>
-        <td>Yes</td>
-        <td>Your <code>lsk_</code> workspace API key</td>
-      </tr>
-      <tr>
-        <td><code>target</code></td>
-        <td>No</td>
-        <td>URL or workspace scope to check</td>
-      </tr>
-      <tr>
-        <td><code>fail-on-findings</code></td>
-        <td>No</td>
+        <td><code>scan_mode</code></td>
+        <td><code>SAFE</code></td>
         <td>
-          Set to <code>true</code> to block the PR on findings (default: <code>false</code>)
+          <code>SAFE</code> or <code>AGGRESSIVE</code> (also scans config/doc file types).
+          <code>DEEP</code> is reserved and currently runs <code>SAFE</code>-equivalent coverage.
         </td>
+      </tr>
+      <tr>
+        <td><code>fail_on_severity</code></td>
+        <td><code>HIGH</code></td>
+        <td>
+          Fail the check when a finding at or above this severity is present:
+          <code>CRITICAL</code>, <code>HIGH</code>, <code>MEDIUM</code>, <code>LOW</code>, or
+          <code>INFO</code>.
+        </td>
+      </tr>
+      <tr>
+        <td><code>target_ref</code></td>
+        <td><em>(empty)</em></td>
+        <td>Git ref/SHA to scan as HEAD. Defaults to the PR head, then the checked-out HEAD.</td>
+      </tr>
+      <tr>
+        <td><code>fetch_depth</code></td>
+        <td><code>0</code></td>
+        <td>Checkout depth. <code>0</code> (full history) is required for accurate diff derivation.</td>
       </tr>
     </tbody>
   </table>
+
+  <h2>Results</h2>
+  <p>
+    Findings are written to a SARIF file and archived as a workflow artifact on every run. If the job
+    grants <code>security-events: write</code>, they're also uploaded to GitHub Code Scanning under
+    the <code>lyrashield-diff-scan</code> category — that upload is optional and best-effort; the
+    pass/fail gate itself does not depend on it. All third-party actions this workflow uses internally
+    are SHA-pinned.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Requirements:</strong> a GitHub Actions runner with network access to fetch the pinned
+    third-party actions (gitleaks, upload-artifact, codeql-action). No Node.js installation, LyraShield
+    account, or API key is required for this workflow.
+  </div>
 
   <h2>Cloud editor complement</h2>
   <p>
     For teams using cloud editors like Lovable, Bolt.new, Replit, or v0, the GitHub Action provides
     automated CI checks on the synced repository. The action runs independently of the editor's MCP
-    connection and works even if the editor does not support custom remote MCP.
+    connection and works even if the editor does not support custom remote MCP — see the <a
+      href="/docs/integrations/remote-mcp">remote MCP page</a
+    > for the complementary in-editor path.
   </p>
 </DocsLayout>

@@ -1,12 +1,12 @@
 # LyraShield AI User Guide
 
-Last verified against the application code and open-registration deployment: 2026-07-29
+Last verified against the application code and open-registration deployment: 2026-07-31
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
 ## Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report
 
-This guide covers the public Lite Check, authenticated dashboard, scan choices, findings, fixes, reports, scorecards, teams, integrations, schedules, notifications, MCP tools, and current limitations.
+This guide covers the public Lite Check, authenticated dashboard, scan choices, findings, fixes, reports, scorecards, teams, integrations, schedules, notifications, the CLI, MCP tools, and current limitations.
 
 ## 1. Important product boundaries
 
@@ -396,11 +396,30 @@ The current settings surface reports retention and telemetry configuration but d
 
 To delete your account, enter the exact confirmation text `DELETE`. Deletion is blocked when you are the sole owner of a workspace because removing the account would orphan it. Transfer or add ownership first. Deletion anonymizes retained attribution where required and preserves audit-chain integrity.
 
-## 22. MCP and agent workflows
+## 22. CLI, MCP, and agent workflows
+
+LyraShield ships three ways to run checks from a coding agent, an editor, or a terminal, sharing one underlying API client so their behavior cannot drift apart.
+
+### CLI
+
+The `lyrashield` command-line tool (published on npm; also available as the scoped alias `@lyrashield/cli`) installs, configures, and drives scans without hand-editing any config file:
+
+```
+npx lyrashield login              # store a workspace API key
+npx lyrashield init                # detect installed coding agents and configure them
+npx lyrashield doctor              # check what's configured and what's missing
+npx lyrashield gate                # CI-friendly diff-aware security gate
+```
+
+`init`/`install <agent>` support 9 agents with a real config file the CLI can write directly (merging into any existing file, never overwriting it, and never inlining a raw API key into a file conventionally shared with a team unless you explicitly opt in and the file is gitignored). For Amp, the CLI shells out to Amp's own `amp mcp add` command. For the 5 agents whose current tooling has no config file to safely write — JetBrains AI & Junie, Cline, PiCode, OpenClaw, and Hermes — `install` prints the exact command, arguments, and environment values to paste in, generated from the same source of truth the writable installers use, rather than leaving you to copy them from a documentation page that can drift out of sync.
+
+Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `findings`, `explain <findingId>`, `fix-plan <findingId>`, `verify <findingId>`, `report`, `readiness`, `targets`, and `rules add/remove/check <agent>` (writes or removes LyraShield's security policy in that agent's native rules format — `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others — inside a checksummed block so re-running never clobbers your own edits to the surrounding file). `check-diff` is the same fast, local, **advisory** heuristic as the MCP tool of the same purpose — not a verified scan. Every command supports `--json` for scripting, and `gate` exits non-zero when a finding at or above the configured severity is present, matching the GitHub Action's own gate semantics.
+
+### MCP
 
 LyraShield exposes an MCP server for local editors and a hosted remote endpoint. The full tool catalog lives in `packages/mcp/README.md`; the current set is:
 
-### Read tools
+**Read tools**
 
 - `lyrashield_list_workspaces` — list workspaces the API key can access;
 - `lyrashield_list_targets` — list targets in a workspace;
@@ -412,7 +431,7 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 - `lyrashield_create_pr_security_recap` — generate a markdown security recap for a PR comment;
 - `lyrashield_check_diff` — fast **advisory** heuristic pre-filter on a diff (not a verified scan).
 
-### Write tools
+**Write tools**
 
 - `lyrashield_scan_target` — start a scan on a registered target;
 - `lyrashield_run_pr_scan` — start a PR-focused (CHECK_PR) scan;
@@ -420,9 +439,13 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 - `lyrashield_verify_fix` — queue a retest to verify a fix;
 - `lyrashield_create_report` — create an executive, developer, or compliance report.
 
-Read actions follow API-key scope and workspace permissions. Mutating MCP actions require interactive approval on the controlling terminal and fail closed when no approval terminal is available; over a remote-HTTP transport, mutating tools are refused by default unless the operator explicitly allows them. Model-facing inputs pass through the prompt-injection guard.
+Read actions follow API-key scope and workspace permissions. Locally, mutating MCP actions require interactive approval on the controlling terminal (or your editor's own approval prompt, where the editor supports MCP elicitation) and fail closed when no approval channel is available. Over the remote-HTTP transport, a mutating call is not simply refused: it creates a pending approval and returns an approval link rather than executing, so a human can approve it out of band; resubmitting the same call with the approval ID re-validates the exact input before running, so approving one request can never be reused to execute a different one. A pre-authorized trusted-automation opt-in remains available for CI that should never pause for approval. Model-facing inputs pass through the prompt-injection guard in every case.
 
 Use the same supported scan modes as the API: SAFE, QUICK, STANDARD, DEEP, or CUSTOM. Dashboard users should normally prefer the named presets rather than raw modes.
+
+### GitHub Action
+
+For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai@v1` (the `action.yml` at the repository root) runs a diff-aware gate — secret detection plus risky-pattern checks, emitting SARIF — entirely in your own runner with your own `GITHUB_TOKEN`. It needs no LyraShield account or API key. See the [GitHub Action integration guide](https://lyrashieldai.com/docs/integrations/github-action) for the workflow file and inputs.
 
 ## 23. Current availability
 

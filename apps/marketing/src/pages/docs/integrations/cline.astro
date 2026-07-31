@@ -52,6 +52,15 @@ const jsonLd: unknown[] = [
     in VS Code via the Cline MCP settings panel.
   </p>
 
+  <h2>Get the exact values with the CLI</h2>
+  <p>
+    There's no config file LyraShield can safely write for Cline yet. Run{" "}
+    <code>npx lyrashield install cline</code> anyway — it won't write anything, but it prints the
+    exact command, arguments, and environment values below, generated from the current registry, so
+    this page can't drift out of sync with what you actually need to paste in.
+  </p>
+  <pre><code>npx lyrashield install cline</code></pre>
+
   <h2>Local stdio setup</h2>
   <AgentSnippet agentId="cline" transport="stdio" />
 

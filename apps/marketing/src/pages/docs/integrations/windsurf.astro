@@ -77,6 +77,16 @@ const jsonLd: unknown[] = [
     <code>~/.codeium/windsurf/mcp_config.json</code>. The file applies to all projects.
   </p>
 
+  <h2>Install with the CLI (fastest)</h2>
+  <p>
+    Run <code>npx lyrashield install windsurf</code> from your project root. It detects Windsurf,
+    writes the correct config automatically, and never inlines your API key into a file you might
+    commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+  </p>
+  <pre><code>npx lyrashield install windsurf</code></pre>
+  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+
   <h2>Local stdio setup</h2>
   <p>
     Add the following to <code>~/.codeium/windsurf/mcp_config.json</code>. Create the file if it

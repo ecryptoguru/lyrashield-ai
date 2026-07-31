@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/gemini-cli", origin).toString()
 const title = "LyraShield MCP for Gemini CLI — Setup Guide"
 const description =
   "Connect LyraShield to Gemini CLI. Two important gotchas: declare LYRASHIELD_API_KEY in the env block (Gemini CLI strips env vars containing KEY/TOKEN/SECRET from subprocesses) and avoid underscores in the server name."
-const updatedDate = "2026-07-24"
+const updatedDate = "2026-07-31"
 
 const jsonLd: unknown[] = [
   {
@@ -51,6 +51,16 @@ const jsonLd: unknown[] = [
     Gemini CLI reads MCP servers from <code>~/.gemini/settings.json</code> under the{" "}
     <code>mcpServers</code> key.
   </p>
+
+  <h2>Install with the CLI (fastest)</h2>
+  <p>
+    Run <code>npx lyrashield install gemini-cli</code> from your project root. It detects Gemini
+    CLI, writes the correct config automatically, and never inlines your API key into a file you
+    might commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+  </p>
+  <pre><code>npx lyrashield install gemini-cli</code></pre>
+  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
 
   <div class="callout callout--warn">
     <strong>Two critical gotchas for Gemini CLI:</strong>

@@ -52,6 +52,15 @@ const jsonLd: unknown[] = [
     under the <code>mcp_servers:</code> key with stdio transport.
   </p>
 
+  <h2>Get the exact values with the CLI</h2>
+  <p>
+    There's no config file LyraShield can safely write for OpenClaw yet. Run{" "}
+    <code>npx lyrashield install openclaw</code> anyway — it won't write anything, but it prints the
+    exact command, arguments, and environment values below, generated from the current registry, so
+    this page can't drift out of sync with what you actually need to paste in.
+  </p>
+  <pre><code>npx lyrashield install openclaw</code></pre>
+
   <h2>MCPorter YAML configuration</h2>
   <p>
     Add the following to your MCPorter YAML configuration file (typically <code>

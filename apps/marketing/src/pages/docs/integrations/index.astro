@@ -9,7 +9,7 @@ const title = "Connect LyraShield to AI Coding Tools | Integrations"
 const description =
   "Connect LyraShield AI to Claude Code, Cursor, Windsurf, VS Code, GitHub Actions, and more. Step-by-step MCP server setup, REST API keys, and agent rules for every AI coding environment."
 
-const updatedDate = "2026-07-24"
+const updatedDate = "2026-07-31"
 
 const agents = listAgents()
 
@@ -46,6 +46,10 @@ const faqItems = [
   {
     q: "Can I use LyraShield in a CI pipeline without an AI editor?",
     a: "Yes. The GitHub Action integration runs LyraShield checks directly in your workflow without any AI assistant. It is the recommended path for cloud-only editors and for teams that want automated checks on every pull request.",
+  },
+  {
+    q: "Is there a CLI, or do I have to hand-edit config files?",
+    a: "There's a CLI. lyrashield (also published as the scoped alias @lyrashield/cli) is on npm — run npx lyrashield init to detect installed agents and configure them in one command, or npx lyrashield doctor to check what's already set up. It writes the same config shown in each agent's guide below, so the guides double as a reference for what the CLI does under the hood.",
   },
 ]
 
@@ -100,6 +104,21 @@ const jsonLd: unknown[] = [
   <p>
     Connect LyraShield to your AI coding environment to run security checks inline while you build.
     Choose the setup that matches your editor or workflow.
+  </p>
+
+  <h2>Fastest path: the CLI</h2>
+  <p>
+    Run <code>npx lyrashield init</code> from your project root. It detects which of the agents below
+    are installed and configures each one automatically — no per-agent config-file editing required
+    for most of them. <code>npx lyrashield doctor</code> reports what's configured at any time.
+  </p>
+  <pre><code>npx lyrashield init</code></pre>
+  <p>
+    <code>lyrashield</code> is published on npm (also as the scoped alias <code>@lyrashield/cli</code
+    >). It writes files directly for 9 of the 15 agents below, shells out to the vendor's own CLI for
+    Amp, and prints exact copy-paste values for the remaining 5 whose tooling has no config file to
+    safely write. Every per-agent guide below still documents the manual path — useful to see exactly
+    what gets written, or if you'd rather not use Node.js.
   </p>
 
   <h2>Local MCP server (stdio)</h2>

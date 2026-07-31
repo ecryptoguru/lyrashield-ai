@@ -6,7 +6,7 @@ const canonical = new URL("/docs/integrations/rest-api", origin).toString()
 const title = "LyraShield REST API & API Keys — Reference"
 const description =
   "Create and manage LyraShield workspace API keys (lsk_ prefix) in Settings → API keys. Use keys for Bearer auth on the REST API and remote MCP endpoint. Read-only and read-and-write scopes."
-const updatedDate = "2026-07-24"
+const updatedDate = "2026-07-31"
 
 const jsonLd: unknown[] = [
   {
@@ -67,6 +67,15 @@ const jsonLd: unknown[] = [
     <strong>Copy immediately:</strong> The full key value is only shown once at creation time. Store
     it securely in a secrets manager, a CI secret, or an environment variable. Never commit an API
     key to source control.
+  </div>
+
+  <div class="callout">
+    <strong>Using the CLI?</strong> <code>npx lyrashield login</code> stores this same key for you in
+    <code>~/.lyrashield/credentials.json</code>, created with file permissions restricted to your
+    user only — so you don't need to manage the environment variable yourself for CLI use. It's still
+    the same <code>lsk_</code> key created here. Setting <code>LYRASHIELD_API_KEY</code> in your
+    environment always overrides the stored value, which is what CI should use instead of a
+    persisted login.
   </div>
 
   <h2>Key format and scopes</h2>
