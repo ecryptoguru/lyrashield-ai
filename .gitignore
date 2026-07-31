@@ -62,7 +62,7 @@ docker-data/
 # TypeScript build info
 *.tsbuildinfo
 artifacts/
-scripts/
+/scripts/
 
 # Generated documentation build outputs (keep source .md; ignore rendered PDFs/images)
 docs/papers/
