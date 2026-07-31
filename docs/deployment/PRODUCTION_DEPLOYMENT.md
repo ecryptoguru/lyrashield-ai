@@ -135,8 +135,8 @@ real backup completes before trusting the nightly schedule.
 ### 6. GitHub App connect path requires app creation + 4 secrets — currently unprovisioned (blocks new signups)
 
 **Status:** intentionally degraded, but unblocked by F1's four-way onboarding. As of 2026-07-30,
-`GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, and `GITHUB_WEBHOOK_SECRET` are
-not set as repo secrets and not present in the Container Apps.
+`LYRASHIELD_GITHUB_APP_ID`, `LYRASHIELD_GITHUB_APP_SLUG`, `LYRASHIELD_GITHUB_APP_PRIVATE_KEY`, and `LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET` are
+set as repo secrets and injected as `GITHUB_APP_*` env vars in the Container Apps.
 
 **Exposure.** `POST /api/integrations/github/install` calls `getInstallAppUrl()`, which throws
 `GITHUB_APP_SLUG not configured` when `GITHUB_APP_SLUG` is empty. The route catches it and
@@ -168,7 +168,7 @@ rule.
 1. **Create the GitHub App** (owner: `ecryptoguru`, same account that owns `lyrashield-ai`):
    - `https://github.com/settings/apps/new`
    - **General**: name `LyraShield AI (app.lyrashieldai.com)`, description `Release assurance for AI-built apps — authorized repository scanning.`, homepage `https://lyrashieldai.com`.
-   - **Webhook**: active; URL `https://app.lyrashieldai.com/api/webhooks/github`; generate a webhook secret now and save its value (it becomes `GITHUB_WEBHOOK_SECRET`). Subscribe to `Installation` (deleted signal) and `Pull request` (if Fix PR automation is on) delivery — unsubscribe from everything else.
+   - **Webhook**: active; URL `https://app.lyrashieldai.com/api/webhooks/github`; generate a webhook secret now and save its value (it becomes `LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET`). Subscribe to `Installation` (deleted signal) and `Pull request` (if Fix PR automation is on) delivery — unsubscribe from everything else.
    - **Repository permissions — start minimal** (expand only when the first flow that needs more lands; every permission addition requires re-authorizing installs):
      - `Contents: Read` — scan authorized code.
      - `Metadata: Read` — list repos for the `POST /api/integrations/github/repos` call.
@@ -183,7 +183,7 @@ rule.
    - `GITHUB_WEBHOOK_SECRET` — the webhook secret you generated in step 1.
 
 3. **Add them as repository secrets** in `ecryptoguru/lyrashield-ai` (Settings → Secrets and variables → Actions → Repository secrets):
-   - `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`.
+   - `LYRASHIELD_GITHUB_APP_ID`, `LYRASHIELD_GITHUB_APP_SLUG`, `LYRASHIELD_GITHUB_APP_PRIVATE_KEY`, `LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET`.
 
 4. **Deploy wiring — already shipped in `.github/workflows/deploy-azure.yml` (PR #180+):**
    - `Verify GitHub App credentials` — warns (not errors) if any of the 4 secrets are missing, so existing deploys keep working; onboarding's three non-GitHub paths cover signups in the meantime.
@@ -197,6 +197,7 @@ rule.
    - `POST /api/webhooks/github` deliveries (GitHub App settings → Advanced → Recent Deliveries → Redeliver) should 200 and write `webhookEvent` rows (`@@unique([provider, externalId])` idempotency).
 
 **Do not:**
+
 - Hard-code PEM keys or webhook secrets in GitHub workflow files, Terraform, or `*.md` examples.
 - Set any `GITHUB_APP_*` env var from workflow `vars` (non-secret) — they must come through `secrets` + `secretref:`.
 - Add broader GitHub App permissions (e.g. `Administration`, `Organization`, `Checks: Write`) until the first flow that requires them lands and the extra permission is reviewed as part of that PR's threat model.
