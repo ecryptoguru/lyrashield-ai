@@ -211,54 +211,6 @@ jobs:
               --secrets "upstash-redis-rest-url=${UPSTASH_REDIS_REST_URL}" "upstash-redis-rest-token=${UPSTASH_REDIS_REST_TOKEN}"
           fi
 
-      # Garbage-collect GitHub App secrets so rotation deletes what is no longer needed.
-      # A runbook lives in docs/deployment/PRODUCTION_DEPLOYMENT.md "Known production
-      # blockers" #6 and lays out app creation, credential inventory, webhook wiring, and
-      # secret naming. Every deploy reconciles this list with Container App secrets:
-      # existing secrets keep their type (PEM private key survives intact), and a secret
-      # that vanishes from the set below is removed so stale material does not linger.
-      # This block is independent of whether the app still needs rotation.
-      - name: Verify GitHub App credentials
-        env:
-          GITHUB_APP_ID: ${{ secrets.GITHUB_APP_ID }}
-          GITHUB_APP_SLUG: ${{ secrets.GITHUB_APP_SLUG }}
-          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-        run: |
-          if [ -z "${GITHUB_APP_ID}" ] || [ -z "${GITHUB_APP_SLUG}" ] || [ -z "${GITHUB_APP_PRIVATE_KEY}" ] || [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
-            echo "::warning::GITHUB_APP_ID / GITHUB_APP_SLUG / GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET are not all set. GitHub connect path will 500 CONFIG_ERROR until they are. F1's four-way onboarding (URL/API/Skip) keeps signups alive in the meantime — see PRODUCTION_DEPLOYMENT.md #6 for runbook."
-          else
-            if ! echo "${GITHUB_APP_PRIVATE_KEY}" | grep -q "BEGIN"; then
-              echo "::error::GITHUB_APP_PRIVATE_KEY must be a PEM-formatted key starting with -----BEGIN."
-              exit 1
-            fi
-            echo "GitHub App credentials present."
-          fi
-
-      - name: Sync GitHub App secrets to Container Apps
-        env:
-          GITHUB_APP_ID: ${{ secrets.GITHUB_APP_ID }}
-          GITHUB_APP_SLUG: ${{ secrets.GITHUB_APP_SLUG }}
-          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-        run: |
-          if [ -z "${GITHUB_APP_ID}" ] || [ -z "${GITHUB_APP_SLUG}" ] || [ -z "${GITHUB_APP_PRIVATE_KEY}" ] || [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
-            echo "Skipping GitHub App secret sync — not all secrets set (see verify step above)."
-            exit 0
-          fi
-          if [ -n "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" ]; then
-            az containerapp secret set \
-              --name "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-              --secrets "github-app-id=${GITHUB_APP_ID}" "github-app-slug=${GITHUB_APP_SLUG}" "github-app-private-key=${GITHUB_APP_PRIVATE_KEY}" "github-webhook-secret=${GITHUB_WEBHOOK_SECRET}"
-          fi
-          if [ -n "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}" ]; then
-            az containerapp secret set \
-              --name "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-              --secrets "github-app-id=${GITHUB_APP_ID}" "github-app-slug=${GITHUB_APP_SLUG}" "github-app-private-key=${GITHUB_APP_PRIVATE_KEY}" "github-webhook-secret=${GITHUB_WEBHOOK_SECRET}"
-          fi
-
       - name: Deploy app Container App
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
@@ -274,11 +226,7 @@ jobs:
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
-              "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
-              "GITHUB_APP_ID=secretref:github-app-id" \
-              "GITHUB_APP_SLUG=secretref:github-app-slug" \
-              "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
-              "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret"
+              "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token"
 
       - name: Deploy scanner Container App
         if: vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
@@ -295,11 +243,7 @@ jobs:
               "BETTER_AUTH_URL=${{ env.APP_URL }}" \
               "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}" \
               "UPSTASH_REDIS_REST_URL=secretref:upstash-redis-rest-url" \
-              "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token" \
-              "GITHUB_APP_ID=secretref:github-app-id" \
-              "GITHUB_APP_SLUG=secretref:github-app-slug" \
-              "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
-              "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret"
+              "UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token"
 
       - name: Smoke app health
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
