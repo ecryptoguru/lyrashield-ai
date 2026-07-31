@@ -52,6 +52,16 @@ const jsonLd: unknown[] = [
     <strong>Zed → Settings → Open Settings</strong> (<code>Cmd/Ctrl + ,</code>).
   </p>
 
+  <h2>Install with the CLI (fastest)</h2>
+  <p>
+    Run <code>npx lyrashield install zed</code> from your project root. It detects Zed, writes the
+    correct config automatically, and never inlines your API key into a file you might commit. Add{" "}
+    <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+  </p>
+  <pre><code>npx lyrashield install zed</code></pre>
+  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+
   <div class="callout callout--warn">
     <strong>Critical gotcha:</strong> Zed uses the key <code>context_servers</code> — not{" "}
     <code>mcpServers</code>. Using <code>mcpServers</code> will have no effect.

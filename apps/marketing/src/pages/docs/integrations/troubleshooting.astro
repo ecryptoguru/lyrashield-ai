@@ -98,6 +98,16 @@ const jsonLd: unknown[] = [
     Here is a quick reference for each known gotcha, followed by detailed answers.
   </p>
 
+  <div class="callout">
+    <strong>Faster than reading this page:</strong> every gotcha below is exactly what <code
+      >npx lyrashield install &lt;agent&gt;</code
+    > writes correctly for you automatically — that's the same reason it exists. If you've hand-edited
+    a config and something's wrong, run <code>npx lyrashield doctor</code> first; it checks whether
+    your file has the LyraShield entry at the <em>correct root key</em> for your agent and tells you
+    exactly which file and key are wrong, rather than making you compare your file against this table
+    by eye.
+  </div>
+
   <h2>Quick reference — per-agent gotchas</h2>
   <table>
     <thead>
@@ -140,6 +150,11 @@ const jsonLd: unknown[] = [
 
   <h2>General debugging steps</h2>
   <ol>
+    <li>
+      Run <code>npx lyrashield doctor</code>. It reports your API key source, whether the API is
+      reachable, and for every detected agent whether LyraShield is configured at the correct root
+      key — this covers most of the gotchas on this page in one command.
+    </li>
     <li>
       Confirm the <code>LYRASHIELD_API_KEY</code> environment variable is set <em>inside the server
         entry's <code>env</code> block</em> — not just in the shell.

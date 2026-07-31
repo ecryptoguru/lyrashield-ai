@@ -83,6 +83,21 @@ const jsonLd: unknown[] = [
     can register a server with the <code>claude mcp add</code> CLI command.
   </p>
 
+  <h2>Install with the CLI (fastest)</h2>
+  <p>
+    Run <code>npx lyrashield install claude-code</code> from your project root. It detects Claude
+    Code, writes the correct config automatically, and never inlines your API key into a file you
+    might commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+  </p>
+  <pre><code>npx lyrashield install claude-code</code></pre>
+  <p>
+    Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand
+    below. Running <code>npx lyrashield install claude-code</code> writes Option A (
+    <code>.mcp.json</code>) for you; Option B below remains available if you prefer Claude Code's
+    own command.
+  </p>
+
   <h2>Option A — .mcp.json (recommended for teams)</h2>
   <p>
     Create or open <code>.mcp.json</code> in your project root and add the following. Commit the

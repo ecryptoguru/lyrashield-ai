@@ -57,6 +57,15 @@ const jsonLd: unknown[] = [
     Set your API key as a shell environment variable rather than hardcoding it in the command.
   </div>
 
+  <h2>Install with the CLI (fastest)</h2>
+  <p>
+    Run <code>npx lyrashield install amp</code>. It shells out to <code>amp mcp add</code> on your
+    behalf with the correct command and arguments filled in — the same result as the manual step
+    below, without retyping it. You still need <code>LYRASHIELD_API_KEY</code> exported in your
+    shell profile first, since Amp reads it from the environment rather than from the command.
+  </p>
+  <pre><code>npx lyrashield install amp</code></pre>
+
   <h2>Register via CLI</h2>
   <p>
     Run the following command in your terminal. Export <code>LYRASHIELD_API_KEY</code> in your
