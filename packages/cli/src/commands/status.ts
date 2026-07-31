@@ -12,7 +12,7 @@ export async function handleStatus(args: string[], output: Output): Promise<numb
   if (scanId) {
     const res = await client.request(
       "GET",
-      `/api/v1/scans/${scanId}?workspaceId=${encodeURIComponent(workspaceId)}`
+      `/scans/${scanId}?workspaceId=${encodeURIComponent(workspaceId)}`
     )
     output.result(res)
     if (parsed.watch) output.warn("--watch not yet implemented")
@@ -21,7 +21,7 @@ export async function handleStatus(args: string[], output: Output): Promise<numb
 
   const res = await client.request(
     "GET",
-    `/api/v1/scans?workspaceId=${encodeURIComponent(workspaceId)}`
+    `/scans?workspaceId=${encodeURIComponent(workspaceId)}`
   )
   output.result(res)
   if (parsed.watch) output.warn("--watch not yet implemented")

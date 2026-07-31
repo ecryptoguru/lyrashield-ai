@@ -10,7 +10,7 @@ export async function handleVerify(args: string[], output: Output): Promise<numb
   }
   const workspaceId = requireWorkspace(await getEffectiveCredentials())
   const client = await createClient()
-  const res = await client.request("POST", `/api/v1/findings/${findingId}/retests`, {
+  const res = await client.request("POST", `/findings/${findingId}/retests`, {
     body: { workspaceId },
   })
   output.result(res)

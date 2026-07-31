@@ -42,7 +42,7 @@ export async function handleScan(args: string[], output: Output): Promise<number
   const client = await createClient()
   const workspaceId = requireWorkspace(await getEffectiveCredentials())
 
-  const res = (await client.request("POST", "/api/v1/scans", {
+  const res = (await client.request("POST", "/scans", {
     body: { workspaceId, targetId: resolvedTarget, goal, mode },
   })) as { id: string }
 

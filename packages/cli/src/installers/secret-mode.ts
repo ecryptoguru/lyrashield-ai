@@ -46,55 +46,45 @@ export async function resolveSecretMode(opts: SecretModeOptions): Promise<Resolv
 
   const envVar = "LYRASHIELD_API_KEY"
 
+  let mode: ResolvedSecretMode["mode"]
   if (agent.id === "gemini-cli") {
-    return { mode: "inline", envVar }
+    mode = "inline"
+  } else if (agent.credential.kind === "interpolated-env") {
+    mode = "interpolated"
+  } else if (agent.credential.kind === "shell-env") {
+    mode = "shell"
+  } else if (agent.credential.kind === "http-header") {
+    mode = "header"
+  } else {
+    mode = "inline"
   }
 
-  if (agent.credential.kind === "interpolated-env") {
-    return { mode: "interpolated", envVar, syntax: agent.credential.syntax }
-  }
-
-  if (agent.credential.kind === "shell-env") {
-    return { mode: "shell", envVar }
-  }
-
-  if (agent.credential.kind === "http-header") {
-    return { mode: "header", header: agent.credential.header, envVar }
-  }
-
-  if (location.sharedByConvention) {
-    if (inlineSecret) {
-      const tracked = await isFileGitTracked(location.path, cwd)
-      const ignored = await isFileGitIgnored(location.path, cwd)
-      if (tracked && !ignored) {
-        return {
-          mode: "manual",
-          reason: `Refusing to inline secret into ${location.path}: file is tracked by git and not ignored. Use a .env or shell export instead.`,
-        }
+  const writesRawSecret = mode === "inline" || mode === "header"
+  if (location.sharedByConvention && writesRawSecret) {
+    if (!inlineSecret) {
+      return {
+        mode: "manual",
+        reason: `Refusing to inline secret into shared config ${location.path}. Pass --inline-secret only if the file is gitignored.`,
       }
-      return { mode: "inline", envVar }
     }
 
-    return {
-      mode: "manual",
-      reason: `Refusing to inline secret into shared config ${location.path}. Pass --inline-secret only if the file is gitignored.`,
+    const tracked = await isFileGitTracked(location.path, cwd)
+    const ignored = await isFileGitIgnored(location.path, cwd)
+    if (tracked && !ignored) {
+      return {
+        mode: "manual",
+        reason: `Refusing to inline secret into ${location.path}: file is tracked by git and not ignored. Use a .env or shell export instead.`,
+      }
     }
   }
 
-  // Global, non-shared files may contain the secret.
-  return { mode: "inline", envVar }
-}
-
-export function secretValue(
-  mode: ResolvedSecretMode,
-  apiKey: string | undefined
-): string | undefined {
-  if (mode.mode === "manual") return undefined
-  if (mode.mode === "shell") return undefined
-  if (mode.mode === "header") return undefined
-  if (mode.mode === "interpolated") return mode.syntax.replace(/VAR|KEY|NAME/g, mode.envVar)
-  if (mode.mode === "inline") return apiKey
-  return undefined
+  if (mode === "interpolated") {
+    return { mode: "interpolated", envVar, syntax: (agent.credential as { syntax: string }).syntax }
+  }
+  if (mode === "header") {
+    return { mode: "header", header: (agent.credential as { header: string }).header, envVar }
+  }
+  return { mode: mode as "inline" | "shell", envVar }
 }
 
 export function secretWarning(

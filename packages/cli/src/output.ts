@@ -6,7 +6,7 @@ export interface Output {
   log(...args: unknown[]): void
   notice(...args: unknown[]): void
   warn(...args: unknown[]): void
-  error(...args: unknown[]): void
+  error(message: unknown, exitCode?: number): void
   result(data: unknown): void
   fail(error: string, exitCode?: number): never
 }
@@ -72,15 +72,13 @@ export function createOutput({ json, quiet = false }: { json: boolean; quiet?: b
       if (quiet || json) return
       console.error(yellow("warning:"), ...args)
     },
-    error(...args) {
+    error(message, exitCode = 2) {
       if (quiet) return
       if (json) {
-        console.log(
-          JSON.stringify({ ok: false, error: args.map(stringifyForConsole).join(" ") }, null, 2)
-        )
-        process.exit(1)
+        console.log(JSON.stringify({ ok: false, error: stringifyForConsole(message) }, null, 2))
+        process.exit(exitCode)
       }
-      console.error(red("error:"), ...args)
+      console.error(red("error:"), message)
     },
     result(data) {
       if (json) {

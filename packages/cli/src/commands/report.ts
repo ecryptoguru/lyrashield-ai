@@ -9,7 +9,7 @@ export async function handleReport(args: string[], output: Output): Promise<numb
   const client = await createClient()
 
   if (parsed.title) {
-    const res = await client.request("POST", "/api/v1/reports", {
+    const res = await client.request("POST", "/reports", {
       body: {
         workspaceId,
         scanId: parsed.scan,
@@ -21,7 +21,7 @@ export async function handleReport(args: string[], output: Output): Promise<numb
   } else {
     const res = await client.request(
       "GET",
-      `/api/v1/reports?workspaceId=${encodeURIComponent(workspaceId)}`
+      `/reports?workspaceId=${encodeURIComponent(workspaceId)}`
     )
     output.result(res)
   }

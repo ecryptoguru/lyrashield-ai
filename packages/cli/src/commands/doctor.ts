@@ -18,7 +18,7 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
   if (creds.apiKey) {
     try {
       const client = await createClient()
-      const workspaces = (await client.request("GET", "/api/v1/workspaces")) as unknown[]
+      const workspaces = (await client.request("GET", "/workspaces")) as unknown[]
       report.workspacesAvailable = workspaces.length
       apiReachable = true
       if (

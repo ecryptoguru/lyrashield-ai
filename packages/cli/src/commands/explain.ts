@@ -12,7 +12,7 @@ export async function handleExplain(args: string[], output: Output): Promise<num
   const client = await createClient()
   const res = await client.request(
     "GET",
-    `/api/v1/findings/${findingId}?workspaceId=${encodeURIComponent(workspaceId)}`
+    `/findings/${findingId}?workspaceId=${encodeURIComponent(workspaceId)}`
   )
   output.result(res)
   return 0

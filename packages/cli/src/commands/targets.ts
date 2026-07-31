@@ -16,12 +16,12 @@ export async function handleTargets(args: string[], output: Output): Promise<num
     }
     if (parsed.url) body.url = parsed.url
     if (parsed.repo) body.repository = parsed.repo
-    const res = await client.request("POST", "/api/v1/targets", { body })
+    const res = await client.request("POST", "/targets", { body })
     output.result(res)
   } else {
     const res = await client.request(
       "GET",
-      `/api/v1/targets?workspaceId=${encodeURIComponent(workspaceId)}`
+      `/targets?workspaceId=${encodeURIComponent(workspaceId)}`
     )
     output.result(res)
   }

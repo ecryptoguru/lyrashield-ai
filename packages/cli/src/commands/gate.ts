@@ -46,7 +46,7 @@ export async function handleGate(args: string[], output: Output): Promise<number
       const client = await createClient()
       const res = (await client.request(
         "GET",
-        `/api/v1/findings?workspaceId=${encodeURIComponent(workspaceId)}`
+        `/findings?workspaceId=${encodeURIComponent(workspaceId)}`
       )) as { severity: string; message?: string }[]
       apiFindings = res
     }

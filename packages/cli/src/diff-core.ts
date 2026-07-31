@@ -36,7 +36,7 @@ const RISKY_PATTERNS: {
   },
   {
     ruleId: "eval-exec",
-    severity: "HIGH",
+    severity: "MEDIUM",
     regex: /(^|[^.\w])(eval|exec)\s*\(/i,
     message: (file) => `Use of eval/exec in ${file}`,
   },

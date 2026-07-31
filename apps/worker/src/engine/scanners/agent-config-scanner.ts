@@ -1,6 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { lstat, readFile, readdir } from "fs/promises"
-import { createHash } from "node:crypto"
 import { join } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
@@ -62,44 +61,6 @@ const PROTECTIVE_INSTRUCTION_PATTERNS = [
   /^(?:do not|never|must not)\s+(?:disable|skip|bypass).{0,40}(?:security|tests?|review|approval)\s*[.!]?$/i,
   /^(?:do not|never|must not)\s+(?:upload|send|exfiltrate).{0,50}(?:\.env|secrets?|credentials?|tokens?)\s*[.!]?$/i,
 ]
-
-// Security-critical: only a checksum-valid LyraShield managed block is treated as
-// protective. We key on the full marker including the declared SHA-256 truncated to
-// 12 hex characters, not a bare string, so an attacker cannot bypass scanning by
-// naming an unrelated malicious block "lyrashield".
-const MANAGED_BLOCK_PATTERN =
-  /<!--\s*lyrashield:begin\s+v=([\w.]+)\s+sha=([0-9a-f]{12})\s*-->([\s\S]*?)<!--\s*lyrashield:end\s*-->/gi
-
-function hashManagedBody(body: string): string {
-  return createHash("sha256").update(body).digest("hex").slice(0, 12)
-}
-
-function stripManagedBlocks(content: string): string {
-  const matches: Array<{ start: number; end: number }> = []
-  MANAGED_BLOCK_PATTERN.lastIndex = 0
-  let match: RegExpExecArray | null
-  while ((match = MANAGED_BLOCK_PATTERN.exec(content)) !== null) {
-    const declaredSha = match[2] ?? ""
-    const body = match[3] ?? ""
-    if (hashManagedBody(body) === declaredSha) {
-      matches.push({ start: match.index, end: match.index + match[0].length })
-    }
-  }
-
-  if (matches.length === 0) return content
-
-  let cleaned = ""
-  let last = 0
-  for (const { start, end } of matches) {
-    cleaned += content.slice(last, start)
-    // Preserve line count so line numbers remain stable for the rest of the file.
-    const lineCount = content.slice(start, end).split("\n").length - 1
-    cleaned += "\n".repeat(lineCount)
-    last = end
-  }
-  cleaned += content.slice(last)
-  return cleaned
-}
 
 function finding(
   id: string,
@@ -208,9 +169,7 @@ async function scanInstructionFiles(
     throwIfAborted(signal)
     const rawContent = await readBoundedFile(repoPath, file, coverageIssues)
     if (!rawContent) continue
-    // Strip checksum-valid LyraShield managed blocks before scanning. An invalid or
-    // missing checksum is not considered protective and is scanned like any other text.
-    const content = stripManagedBlocks(rawContent)
+    const content = rawContent
     let inCodeFence = false
     for (const [index, line] of content.split("\n").entries()) {
       throwIfAborted(signal)
@@ -222,7 +181,7 @@ async function scanInstructionFiles(
       const hasDangerousClause = line
         .split(/[;]|(?:\.\s+)/)
         .some(
-          (clause) =>
+          (clause: string) =>
             !PROTECTIVE_INSTRUCTION_PATTERNS.some((pattern) => pattern.test(clause.trim())) &&
             DANGEROUS_INSTRUCTION_PATTERNS.some((pattern) => pattern.test(clause))
         )

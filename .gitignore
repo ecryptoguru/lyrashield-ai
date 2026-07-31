@@ -61,9 +61,15 @@ docker-data/
 
 # TypeScript build info
 *.tsbuildinfo
-docs/
 artifacts/
 scripts/
+
+# Generated documentation build outputs (keep source .md; ignore rendered PDFs/images)
+docs/papers/
+
+# DevPost video recording notes, not the canonical script/storyboard/design .md files
+docs/devpost/video/RECORDING*.md
+docs/devpost/video/TEST_RECORDING*.md
 
 # Engine source belongs in the sibling ../lyrashield-engine repo; never commit an extracted copy here.
 extracted-engine/

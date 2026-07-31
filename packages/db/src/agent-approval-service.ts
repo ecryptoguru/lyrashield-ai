@@ -30,7 +30,7 @@ export class ApprovalMutationError extends Error {
 
 export async function createApproval(params: CreateApprovalParams): Promise<AgentApproval> {
   const inputHash = hashInput(params.actionName, params.input)
-  const expiresAt = params.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000)
+  const expiresAt = params.expiresAt ?? new Date(Date.now() + 15 * 60 * 1000)
 
   const approval = await prisma.agentApproval.create({
     data: {

@@ -79,8 +79,12 @@
     "lint": {
       "dependsOn": ["^build"]
     },
+    "test": {
+      "dependsOn": ["^build", "generate"],
+      "cache": false
+    },
     "typecheck": {
-      "dependsOn": ["^build", "pretypecheck"]
+      "dependsOn": ["^build", "pretypecheck", "generate"]
     },
     "pretypecheck": {
       "cache": false,

@@ -43,7 +43,7 @@ async function apiCall(
   body?: Record<string, unknown>
 ): Promise<unknown> {
   const client = getClient(context)
-  const sdkPath = path.startsWith("/api/") ? path.slice(4) : path
+  const sdkPath = path.replace(/^\/api\/v1/, "").replace(/^\/api/, "") || "/"
   return client.request(method, sdkPath, body ? { body } : undefined)
 }
 

@@ -1,4 +1,5 @@
 import { createApproval, listApprovals } from "@lyrashield/db"
+import { checkApprovalCreateRateLimit } from "../../../lib/rate-limit"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -64,6 +65,10 @@ export async function POST(request: Request) {
 
   try {
     const { session } = await requirePermission(typed.workspaceId, PERMISSIONS.agent.act)
+    const rate = await checkApprovalCreateRateLimit(typed.workspaceId)
+    if (rate.limited) {
+      return apiError("RATE_LIMITED", "Approval creation rate limit exceeded", 429)
+    }
     const expiresAt = typed.expiresAt
       ? new Date(typed.expiresAt)
       : new Date(Date.now() + 15 * 60 * 1000)

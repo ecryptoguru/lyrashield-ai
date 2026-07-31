@@ -152,6 +152,11 @@ main(process.argv.slice(2)).then(
   (code) => process.exit(code),
   (err) => {
     const output = createOutput({ json: !!process.argv.includes("--json") })
-    output.fail(err instanceof Error ? err.message : String(err), 1)
+    let exitCode = 4
+    if (err && typeof err === "object" && "status" in err && typeof err.status === "number") {
+      if (err.status === 401 || err.status === 403) exitCode = 3
+      else if (err.status === 429) exitCode = 5
+    }
+    output.fail(err instanceof Error ? err.message : String(err), exitCode)
   }
 )

@@ -18,7 +18,7 @@ export async function handleFindings(args: string[], output: Output): Promise<nu
   if (parsed.verified) params.set("verified", parsed.verified as string)
 
   const client = await createClient()
-  const res = await client.request("GET", `/api/v1/findings?${params.toString()}`)
+  const res = await client.request("GET", `/findings?${params.toString()}`)
 
   if (parsed.stats && Array.isArray(res)) {
     const bySeverity = new Map<string, number>()

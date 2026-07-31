@@ -97,7 +97,12 @@ const vscode: AgentEntry = {
     },
     {
       scope: "global",
-      path: "user settings.json",
+      path: "~/.config/Code/User/settings.json",
+      platform: {
+        darwin: "~/Library/Application Support/Code/User/settings.json",
+        linux: "~/.config/Code/User/settings.json",
+        win32: "~/AppData/Roaming/Code/User/settings.json",
+      },
       sharedByConvention: false,
     },
   ],
@@ -111,6 +116,7 @@ const vscode: AgentEntry = {
   gotchas: [
     "VS Code uses `servers`, not `mcpServers`; using `mcpServers` silently fails.",
     'VS Code stdio entries require `type: "stdio"`; remote entries use `type: "http"`.',
+    "Global VS Code settings.json is per-platform; verify the resolved path against your installation.",
   ],
 }
 
@@ -227,7 +233,7 @@ const zed: AgentEntry = {
   locations: [
     {
       scope: "global",
-      path: "user settings.json",
+      path: "~/.config/zed/settings.json",
       sharedByConvention: false,
     },
   ],
@@ -237,6 +243,7 @@ const zed: AgentEntry = {
   rulesFiles: ["AGENTS.md"],
   gotchas: [
     "Zed uses `context_servers`, and nests args/env inside a `command` object whose executable field is `path`, not `command`.",
+    "Zed's global settings path is `~/.config/zed/settings.json`; verify it for your platform.",
   ],
 }
 

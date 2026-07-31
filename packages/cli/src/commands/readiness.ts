@@ -9,7 +9,7 @@ export async function handleReadiness(args: string[], output: Output): Promise<n
   const client = await createClient()
   const params = new URLSearchParams({ workspaceId })
   if (parsed.target) params.set("targetId", parsed.target as string)
-  const res = await client.request("GET", `/api/v1/launch-readiness?${params.toString()}`)
+  const res = await client.request("GET", `/launch-readiness?${params.toString()}`)
   output.result(res)
   return 0
 }
