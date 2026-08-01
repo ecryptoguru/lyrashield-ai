@@ -1,4 +1,5 @@
 import { listAgents } from "@lyrashield/agent-registry"
+import { env } from "@lyrashield/config"
 import { Puzzle } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -42,6 +43,14 @@ export default async function AgentsPage() {
     rulesFiles: [...a.rulesFiles],
   }))
 
+  // The integration guides live on the marketing site, not the app domain, so
+  // the cards link out with an absolute URL (same pattern as the Integrations
+  // page). A relative /docs/... path would 404 inside the app.
+  const marketingUrl =
+    (env.NEXT_PUBLIC_MARKETING_URL as string | undefined)?.replace(/\/+$/, "") ??
+    "https://lyrashield.ai"
+  const docsBaseUrl = `${marketingUrl}/docs/integrations`
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -74,7 +83,7 @@ export default async function AgentsPage() {
         / <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">remove</code>.
       </div>
 
-      <AgentsGrid agents={agents} />
+      <AgentsGrid agents={agents} docsBaseUrl={docsBaseUrl} />
     </div>
   )
 }

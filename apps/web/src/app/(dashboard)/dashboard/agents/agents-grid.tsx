@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui"
 import { Check, Copy, ExternalLink, Terminal } from "lucide-react"
 import { writeClipboard } from "@/components/scorecard-share-composer"
@@ -39,7 +38,7 @@ function StrategyBadge({ strategy }: { strategy: AgentCardData["installStrategy"
   )
 }
 
-function AgentCard({ agent }: { agent: AgentCardData }) {
+function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: string }) {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
   const installCmd = `npx lyrashield install ${agent.id}`
@@ -129,13 +128,15 @@ function AgentCard({ agent }: { agent: AgentCardData }) {
           ) : null}
 
           <div className="flex gap-2">
-            <Link
-              href={`/docs/integrations/${agent.docsSlug}`}
+            <a
+              href={`${docsBaseUrl}/${agent.docsSlug}`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="bg-card hover:bg-accent inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors sm:min-h-9"
             >
               <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
               Docs
-            </Link>
+            </a>
             <div
               className="bg-muted/60 text-muted-foreground inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-md border px-2 font-mono text-[11px] sm:min-h-9"
               title={installCmd}
@@ -150,14 +151,20 @@ function AgentCard({ agent }: { agent: AgentCardData }) {
   )
 }
 
-export function AgentsGrid({ agents }: { agents: AgentCardData[] }) {
+export function AgentsGrid({
+  agents,
+  docsBaseUrl,
+}: {
+  agents: AgentCardData[]
+  docsBaseUrl: string
+}) {
   if (agents.length === 0) {
     return <p className="text-muted-foreground text-sm">No agents registered.</p>
   }
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {agents.map((agent) => (
-        <AgentCard key={agent.id} agent={agent} />
+        <AgentCard key={agent.id} agent={agent} docsBaseUrl={docsBaseUrl} />
       ))}
     </div>
   )
