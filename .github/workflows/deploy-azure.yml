@@ -62,7 +62,7 @@ jobs:
           echo "worker_image=${{ env.WORKER_IMAGE }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push web image
-        uses: docker/build-push-action@v6.18.0
+        uses: docker/build-push-action@v7.3.0
         with:
           context: .
           target: runner
@@ -79,7 +79,7 @@ jobs:
       - name: Build and push worker image
         id: build-worker
         if: steps.engine.outcome == 'success' && hashFiles('lyrashield-engine/pyproject.toml') != ''
-        uses: docker/build-push-action@v6.18.0
+        uses: docker/build-push-action@v7.3.0
         with:
           context: .
           target: worker
