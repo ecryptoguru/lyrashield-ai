@@ -297,3 +297,20 @@ exports[`renderConfig snapshot — every agent × every transport > copilot-cli 
 exports[`renderConfig snapshot — every agent × every transport > goose × remote-http 1`] = `[Error: Agent "goose" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > goose × stdio 1`] = `[Error: Agent "goose" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+exports[`renderConfig snapshot — every agent × every transport > devin-cli × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
+      }
+    }
+  }
+}"
+`;

@@ -71,7 +71,7 @@ const cursor: AgentEntry = {
 
 const windsurf: AgentEntry = {
   id: "windsurf",
-  displayName: "Windsurf",
+  displayName: "Devin Desktop (Windsurf)",
   docsSlug: "windsurf",
   installStrategy: "config-file",
   format: "json",
@@ -91,9 +91,12 @@ const windsurf: AgentEntry = {
   rulesFiles: [".windsurf/rules/lyrashield.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://docs.windsurf.com/plugins/cascade/mcp",
+    url: "https://docs.devin.ai/windsurf/plugins/cascade/mcp",
   },
-  gotchas: ["Windsurf's remote form uses `serverUrl`, not `url`."],
+  gotchas: [
+    "Windsurf is now Devin Desktop (June 2026); the config path ~/.codeium/windsurf/mcp_config.json is unchanged. This entry is the Devin Desktop (Cascade) surface — the separate Devin CLI uses .devin/config.local.json (see the devin-cli entry).",
+    "Windsurf's remote form uses `serverUrl`, not `url`. Add via the MCP Marketplace UI or View raw config, then click Refresh.",
+  ],
 }
 
 const vscode: AgentEntry = {
@@ -540,6 +543,34 @@ const aider: AgentEntry = {
   ],
 }
 
+const devinCli: AgentEntry = {
+  id: "devin-cli",
+  displayName: "Devin CLI",
+  docsSlug: "devin-cli",
+  installStrategy: "config-file",
+  format: "json",
+  rootKey: "mcpServers",
+  locations: [
+    {
+      scope: "project",
+      path: ".devin/config.local.json",
+      sharedByConvention: false,
+    },
+  ],
+  transports: ["stdio"],
+  credential: { kind: "inline-env" },
+  vendorCli: { command: "devin", args: ["mcp", "add"] },
+  rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://cognitionai.mintlify.app/cli/extensibility/mcp/overview",
+  },
+  gotchas: [
+    "Devin CLI (separate from Devin Desktop) uses .devin/config.local.json (gitignored) with a mcpServers object; stdio only.",
+    "Manage servers with `devin mcp add|login|enable|disable`; remote servers needing OAuth authenticate via `devin mcp login <server>`. MCP tools are namespaced mcp__<server>__<tool>.",
+  ],
+}
+
 export const AGENTS: readonly AgentEntry[] = [
   claudeCode,
   cursor,
@@ -560,4 +591,5 @@ export const AGENTS: readonly AgentEntry[] = [
   copilotCli,
   goose,
   aider,
+  devinCli,
 ] as const
