@@ -16,7 +16,7 @@ export default async function AgentsPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Agent integrations</h1>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-6">
             Connect LyraShield to your coding agent so it can scan and apply approval-bound fixes.
           </p>
         </div>
@@ -46,24 +46,32 @@ export default async function AgentsPage() {
     <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold tracking-tight">Agent integrations</h1>
-        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-          Connect LyraShield to your coding agent so it can scan and apply approval-bound fixes directly
-          in your workflow.
+        <p className="text-muted-foreground max-w-3xl text-sm leading-6">
+          Connect LyraShield to your coding agent so it can scan and apply approval-bound fixes
+          directly in your workflow.
         </p>
-        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+        <p className="text-muted-foreground max-w-3xl text-sm leading-6">
           Rules and skills stay in sync with{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">lyrashield rules add</code> — it
-          writes the right file for each agent (<span className="font-mono text-xs">CLAUDE.md</span>,{" "}
+          <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+            lyrashield rules add
+          </code>{" "}
+          — it writes the right file for each agent (
+          <span className="font-mono text-xs">CLAUDE.md</span>,{" "}
           <span className="font-mono text-xs">.cursor/rules/lyrashield.mdc</span>, etc.).
         </p>
       </div>
 
-      <div className="rounded-lg border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
-        <span className="font-medium text-foreground">How it works:</span> Install the integration with{" "}
-        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">npx lyrashield install &lt;agent-id&gt;</code>{" "}
+      <div className="bg-muted/30 text-muted-foreground rounded-lg border p-4 text-sm leading-6">
+        <span className="text-foreground font-medium">How it works:</span> Install the integration
+        with{" "}
+        <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+          npx lyrashield install &lt;agent-id&gt;
+        </code>{" "}
         and then manage rules with{" "}
-        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">lyrashield rules add</code> /{" "}
-        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">remove</code>.
+        <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+          lyrashield rules add
+        </code>{" "}
+        / <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">remove</code>.
       </div>
 
       <AgentsGrid agents={agents} />

@@ -20,7 +20,12 @@ import { formatDateTime } from "@/lib/date-format"
 import { RUN_PLURAL, RUN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
 import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
-import { getScanPreset, SCAN_PRESETS, SCAN_PRESET_ORDER, type ScanPresetId } from "@/lib/scan-presets"
+import {
+  getScanPreset,
+  SCAN_PRESETS,
+  SCAN_PRESET_ORDER,
+  type ScanPresetId,
+} from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { getGoalLabel } from "@/lib/labels"
 
@@ -283,7 +288,9 @@ export function ScansClient({
         <Card className="mb-6 p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">Start a {RUN_SINGULAR.toLowerCase()}</h2>
+              <h2 className="text-lg font-semibold tracking-tight">
+                Start a {RUN_SINGULAR.toLowerCase()}
+              </h2>
               <p className="text-muted-foreground mt-1 text-sm">
                 Choose a {TARGET_SINGULAR.toLowerCase()} and how thorough the review should be.
               </p>
@@ -359,9 +366,9 @@ export function ScansClient({
                         }
                       }}
                       className={cn(
-                        "group relative flex min-h-[92px] w-full flex-col items-start rounded-lg border p-4 text-left shadow-xs transition-[border-color,box-shadow,background-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        "group focus-visible:ring-ring relative flex min-h-[92px] w-full flex-col items-start rounded-lg border p-4 text-left shadow-xs transition-[border-color,box-shadow,background-color] duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
                         isSelected
-                          ? "border-primary bg-primary/[0.06] dark:bg-primary/[0.12] shadow-sm ring-1 ring-primary/20"
+                          ? "border-primary bg-primary/[0.06] dark:bg-primary/[0.12] ring-primary/20 shadow-sm ring-1"
                           : "border-border bg-card hover:border-border/80 hover:bg-accent/50"
                       )}
                     >
@@ -464,8 +471,15 @@ export function ScansClient({
                           </div>
                         </div>
                         <p className="text-muted-foreground text-[11px] leading-relaxed">
-                          No extra fields — we send <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">goal</code> and{" "}
-                          <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">mode</code> from this preset.{" "}
+                          No extra fields — we send{" "}
+                          <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">
+                            goal
+                          </code>{" "}
+                          and{" "}
+                          <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">
+                            mode
+                          </code>{" "}
+                          from this preset.{" "}
                           {selectedTarget && !selectedTargetUsesEngine
                             ? "This URL target uses deterministic scanners."
                             : "Engine targets get a protected run budget automatically."}
@@ -496,11 +510,7 @@ export function ScansClient({
                 </>
               )}
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => setShowCreate(false)}
-              className="min-h-11"
-            >
+            <Button variant="outline" onClick={() => setShowCreate(false)} className="min-h-11">
               Cancel
             </Button>
           </div>

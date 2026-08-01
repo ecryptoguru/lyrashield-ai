@@ -43,7 +43,7 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
         <div className="space-y-1.5">
           <span className="text-sm font-medium">Install</span>
           <div className="flex w-full min-w-0 items-center gap-2">
-            <code className="bg-muted min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md px-3 py-2.5 font-mono text-xs sm:text-sm">
+            <code className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm">
               {INSTALL_CMD}
             </code>
             <Button
@@ -58,15 +58,18 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
               ) : (
                 <Copy className="size-4" aria-hidden="true" />
               )}
-              <span className="sr-only sm:not-sr-only sm:ml-1">{copiedKey === "install" ? "Copied" : "Copy"}</span>
+              <span className="sr-only sm:not-sr-only sm:ml-1">
+                {copiedKey === "install" ? "Copied" : "Copy"}
+              </span>
             </Button>
           </div>
           <p className="text-muted-foreground text-xs leading-relaxed">
             Replace{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">&lt;agent&gt;</code> with your agent — e.g.{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">claude-code</code>,{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">cursor</code>,{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">vscode</code> — see{" "}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">&lt;agent&gt;</code>{" "}
+            with your agent — e.g.{" "}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">claude-code</code>,{" "}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">cursor</code>,{" "}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">vscode</code> — see{" "}
             <Link
               href={docsUrl}
               target="_blank"
@@ -95,13 +98,19 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
             <li className="space-y-2 leading-6">
               <div>
                 Run{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">{LOGIN_CMD}</code> and
-                paste your <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">lsk_</code> key. It is saved
-                to{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">~/.lyrashield/credentials.json</code>.
+                <code className="bg-muted text-foreground rounded px-1 py-0.5 font-mono text-xs">
+                  {LOGIN_CMD}
+                </code>{" "}
+                and paste your{" "}
+                <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">lsk_</code> key. It
+                is saved to{" "}
+                <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">
+                  ~/.lyrashield/credentials.json
+                </code>
+                .
               </div>
               <div className="flex w-full min-w-0 items-center gap-2">
-                <code className="bg-muted min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md px-3 py-2.5 font-mono text-xs sm:text-sm">
+                <code className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm">
                   {LOGIN_CMD}
                 </code>
                 <Button
@@ -116,19 +125,26 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
                   ) : (
                     <Copy className="size-4" aria-hidden="true" />
                   )}
-                  <span className="sr-only sm:not-sr-only sm:ml-1">{copiedKey === "login" ? "Copied" : "Copy"}</span>
+                  <span className="sr-only sm:not-sr-only sm:ml-1">
+                    {copiedKey === "login" ? "Copied" : "Copy"}
+                  </span>
                 </Button>
               </div>
             </li>
             <li className="space-y-2 leading-6">
               <div>
                 Run{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">{DOCTOR_CMD}</code> to
-                verify. Then try{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">lyrashield scan</code>.
+                <code className="bg-muted text-foreground rounded px-1 py-0.5 font-mono text-xs">
+                  {DOCTOR_CMD}
+                </code>{" "}
+                to verify. Then try{" "}
+                <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">
+                  lyrashield scan
+                </code>
+                .
               </div>
               <div className="flex w-full min-w-0 items-center gap-2">
-                <code className="bg-muted min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md px-3 py-2.5 font-mono text-xs sm:text-sm">
+                <code className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm">
                   {DOCTOR_CMD}
                 </code>
                 <Button
@@ -143,7 +159,9 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
                   ) : (
                     <Copy className="size-4" aria-hidden="true" />
                   )}
-                  <span className="sr-only sm:not-sr-only sm:ml-1">{copiedKey === "doctor" ? "Copied" : "Copy"}</span>
+                  <span className="sr-only sm:not-sr-only sm:ml-1">
+                    {copiedKey === "doctor" ? "Copied" : "Copy"}
+                  </span>
                 </Button>
               </div>
             </li>
@@ -156,14 +174,15 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
           </p>
         ) : null}
 
-        <p className="text-muted-foreground rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs leading-relaxed">
-          For most agents the CLI writes the config file for you; for some (Cline, JetBrains, PiCode, OpenClaw, Hermes)
-          print values to paste, Amp shells out to its vendor CLI.
+        <p className="text-muted-foreground bg-muted/40 rounded-md border border-dashed px-3 py-2 text-xs leading-relaxed">
+          For most agents the CLI writes the config file for you; for some (Cline, JetBrains,
+          PiCode, OpenClaw, Hermes) print values to paste, Amp shells out to its vendor CLI.
         </p>
 
         <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           <span>
-            Also available as <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">@lyrashield/cli</code>.
+            Also available as{" "}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">@lyrashield/cli</code>.
           </span>
           <Link
             href={docsUrl}

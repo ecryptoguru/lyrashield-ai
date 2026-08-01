@@ -6,13 +6,7 @@ import { Check, Copy, Plug } from "lucide-react"
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 
-export function McpIntegration({
-  endpointUrl,
-  docsUrl,
-}: {
-  endpointUrl: string
-  docsUrl: string
-}) {
+export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; docsUrl: string }) {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
 
@@ -39,8 +33,8 @@ export function McpIntegration({
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-muted-foreground text-sm">
-          Connect coding agents like Claude Code, Cursor, and cloud IDEs to LyraShield so they can read
-          evidence and scan results from this workspace.
+          Connect coding agents like Claude Code, Cursor, and cloud IDEs to LyraShield so they can
+          read evidence and scan results from this workspace.
         </p>
 
         <div className="space-y-1.5">
@@ -82,11 +76,12 @@ export function McpIntegration({
               >
                 Settings → API keys
               </Link>{" "}
-              (key starts with <code className="rounded bg-muted px-1 font-mono text-xs">lsk_</code>).
+              (key starts with <code className="bg-muted rounded px-1 font-mono text-xs">lsk_</code>
+              ).
             </li>
             <li>
               Add this endpoint to your agent as an MCP server authenticated with{" "}
-              <code className="rounded bg-muted px-1 font-mono text-xs">Bearer &lt;key&gt;</code>.
+              <code className="bg-muted rounded px-1 font-mono text-xs">Bearer &lt;key&gt;</code>.
             </li>
           </ol>
           <p className="text-sm">
@@ -108,11 +103,14 @@ export function McpIntegration({
           </p>
         </div>
 
-        <p className="text-muted-foreground rounded-md border bg-muted/40 px-3 py-2 text-xs leading-relaxed">
-          Remote use is read-only by default. Your agent can fetch evidence and scan results; changes that
-          write data happen on the local stdio MCP server where you approve them. A trusted automation can opt
-          in to remote writes with{" "}
-          <code className="rounded bg-muted px-1 font-mono">LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true</code>.
+        <p className="text-muted-foreground bg-muted/40 rounded-md border px-3 py-2 text-xs leading-relaxed">
+          Remote use is read-only by default. Your agent can fetch evidence and scan results;
+          changes that write data happen on the local stdio MCP server where you approve them. A
+          trusted automation can opt in to remote writes with{" "}
+          <code className="bg-muted rounded px-1 font-mono">
+            LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true
+          </code>
+          .
         </p>
       </CardContent>
     </Card>
