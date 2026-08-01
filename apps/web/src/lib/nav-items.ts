@@ -10,6 +10,7 @@ import {
   Plug,
   CalendarClock,
   ClipboardCheck,
+  Puzzle,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -108,6 +109,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: NOTIFICATION_PLURAL,
     shortLabel: NOTIFICATION_PLURAL,
     icon: Bell,
+  },
+  {
+    href: "/dashboard/agents",
+    label: "Agents",
+    shortLabel: "Agents",
+    icon: Puzzle,
   },
   {
     href: "/dashboard/integrations",

@@ -28,6 +28,7 @@ const nextConfig: NextConfig = {
     "@lyrashield/types",
     "@lyrashield/logger",
     "@lyrashield/integrations",
+    "@lyrashield/agent-registry",
   ],
   serverExternalPackages: ["@prisma/client", "@prisma/adapter-pg", "@prisma/client-runtime-utils"],
   images: {
