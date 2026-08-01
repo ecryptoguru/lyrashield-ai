@@ -143,7 +143,12 @@ vi.mock("../engine/scanner-orchestrator", () => ({
   }),
 }))
 
-import { extractActualCostUsd, extractUsageSummary, processScanJob } from "./run-scan.job"
+import {
+  extractActualCostUsd,
+  extractUsageSummary,
+  processScanJob,
+  resolveScannerPhaseTimeoutMs,
+} from "./run-scan.job"
 import { runPreflight } from "./preflight.job"
 import { runEngine, cleanupEngineWorkspace, interpretExitCode } from "../engine/runner"
 import { persistFindings } from "../engine/finding-persister"
@@ -248,6 +253,13 @@ it("extracts a privacy-bounded provider usage summary", () => {
 })
 
 describe("processScanJob", () => {
+  it("reserves the actual remaining scan time for deterministic scanners", () => {
+    expect(resolveScannerPhaseTimeoutMs(15 * 60 * 1000, 7 * 60 * 1000 + 27 * 1000)).toBe(
+      7 * 60 * 1000 + 33 * 1000
+    )
+    expect(resolveScannerPhaseTimeoutMs(30 * 60 * 1000, 0)).toBe(10 * 60 * 1000)
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     // Restore default mock implementations after clearAllMocks
@@ -407,7 +419,7 @@ describe("processScanJob", () => {
       expect.any(Function)
     )
     expect(runScannerOrchestrator).toHaveBeenCalledWith(
-      expect.objectContaining({ scannerPhaseTimeoutMs: 5 * 60 * 1000 })
+      expect.objectContaining({ scannerPhaseTimeoutMs: 10 * 60 * 1000 })
     )
   })
 
@@ -828,6 +840,13 @@ describe("processScanJob", () => {
 
     expect(result.status).toBe("failed")
     expect(result.errorMessage).toBe("Unexpected DB error")
+  })
+
+  it("rethrows when it cannot persist a terminal failure", async () => {
+    vi.mocked(runPreflight).mockRejectedValue(new Error("database unavailable") as never)
+    vi.mocked(updateScanStatus).mockRejectedValue(new Error("database unavailable") as never)
+
+    await expect(processScanJob(mockJob)).rejects.toThrow("database unavailable")
   })
 
   it("rethrows a transient failure while BullMQ attempts remain", async () => {
