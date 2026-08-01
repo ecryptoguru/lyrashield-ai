@@ -10,8 +10,9 @@ vi.mock("./client", () => ({
   },
 }))
 
+import { randomBytes } from "crypto"
 import { prisma } from "./client"
-import { getShareableReport } from "./report-service"
+import { getReportByShareToken, getShareableReport } from "./report-service"
 
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
@@ -146,5 +147,65 @@ describe("getShareableReport", () => {
     // FORCE-RLS policy returns zero rows for the restricted production role.
     expect(mockPrisma.$transaction).toHaveBeenCalled()
     expect(mockPrisma.$executeRaw).toHaveBeenCalled()
+  })
+})
+
+describe("getReportByShareToken", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const validToken = randomBytes(32).toString("hex")
+
+  it("rejects tokens that do not match the 64-hex share format", async () => {
+    for (const token of ["", "short", "g".repeat(64), validToken.slice(0, 63)]) {
+      const report = await getReportByShareToken(token)
+      expect(report).toBeNull()
+    }
+    expect(mockPrisma.report.findFirst).not.toHaveBeenCalled()
+  })
+
+  it("returns null when no unrevoked report matches the token hash", async () => {
+    mockPrisma.report.findFirst.mockResolvedValue(null)
+
+    const report = await getReportByShareToken(validToken)
+
+    expect(report).toBeNull()
+    expect(mockPrisma.report.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          revokedAt: null,
+          deletedAt: null,
+        }),
+      })
+    )
+  })
+
+  it("returns null when the shared report has expired", async () => {
+    mockPrisma.report.findFirst.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      shareExpiresAt: new Date(Date.now() - 60_000),
+    })
+
+    const report = await getReportByShareToken(validToken)
+
+    expect(report).toBeNull()
+  })
+
+  it("returns the report when the token is valid, unrevoked, and not expired", async () => {
+    mockPrisma.report.findFirst.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      shareExpiresAt: new Date(Date.now() + 60_000),
+    })
+
+    const report = await getReportByShareToken(validToken)
+
+    expect(report).toEqual({
+      id: "report-1",
+      workspaceId: "ws-1",
+      shareExpiresAt: expect.any(Date),
+    })
   })
 })

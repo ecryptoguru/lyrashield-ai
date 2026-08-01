@@ -77,6 +77,38 @@ describe("POST /api/lite-scan", () => {
     ).toBe(403)
   })
 
+  it("fails closed when Turnstile verification returns success: false", async () => {
+    process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret"
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: false }),
+      })
+    )
+
+    const response = await POST(
+      request({ url: "https://example.com", authorized: true, turnstileToken: "test-token" })
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({ error: "bot_check_failed" })
+    expect(checkScanUrlSafe).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when Turnstile verification network request fails", async () => {
+    process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret"
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network timeout")))
+
+    const response = await POST(
+      request({ url: "https://example.com", authorized: true, turnstileToken: "test-token" })
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({ error: "bot_check_failed" })
+    expect(checkScanUrlSafe).not.toHaveBeenCalled()
+  })
+
   it("rejects private or reserved targets before fetching", async () => {
     process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret"
     checkScanUrlSafe.mockResolvedValue({ safe: false, reason: "blocked_ip" })

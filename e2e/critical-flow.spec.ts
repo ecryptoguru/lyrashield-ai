@@ -10,7 +10,12 @@ const otherEmail = "e2e-other@example.com"
 const workspaceName = `E2E ${suffix}`
 let createdWorkspaceId: string | null = null
 
-async function signUp(page: import("@playwright/test").Page, email: string, name: string) {
+async function signUp(
+  page: import("@playwright/test").Page,
+  forwardedFor: string,
+  email: string,
+  name: string
+) {
   await page.goto("/sign-up")
   await page.getByLabel("Name").fill(name)
   await page.getByLabel("Email").fill(email)
@@ -31,6 +36,7 @@ async function signUp(page: import("@playwright/test").Page, email: string, name
   await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
   const skipOnboarding = await page.request.patch("/api/onboarding", {
     data: { skipped: true },
+    headers: { "x-forwarded-for": forwardedFor },
   })
   await expect(skipOnboarding).toBeOK()
   await page.goto("/dashboard")
@@ -77,13 +83,16 @@ test.afterAll(async () => {
   }
 })
 
-test("anonymous APIs reject access", async ({ request }) => {
+test("anonymous APIs reject access", async ({ request }, testInfo) => {
+  // Give this request its own bucket so parallel E2E workers do not share
+  // the "unknown" IP rate-limit window with page-driven tests.
+  const forwardedFor = `192.0.2.${((simulatedClientOctet + testInfo.workerIndex) % 250) + 1}`
   for (const path of [
     "/api/scans?workspaceId=unknown",
     "/api/findings?workspaceId=unknown",
     "/api/reports?workspaceId=unknown",
   ]) {
-    expect((await request.get(path)).status()).toBe(401)
+    expect((await request.get(path, { headers: { "x-forwarded-for": forwardedFor } })).status()).toBe(401)
   }
 })
 
@@ -117,10 +126,11 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   // a single IP bucket.
   const forwardedFor = `198.51.100.${((simulatedClientOctet + testInfo.workerIndex) % 250) + 1}`
   await page.setExtraHTTPHeaders({ "x-forwarded-for": forwardedFor })
-  await signUp(page, ownerEmail, "E2E Owner")
+  await signUp(page, forwardedFor, ownerEmail, "E2E Owner")
 
   const workspaceResponse = await page.request.post("/api/workspaces", {
     data: { name: workspaceName, mode: "VIBE" },
+    headers: { "x-forwarded-for": forwardedFor },
   })
   await expect(workspaceResponse).toBeOK()
   const { data: workspace } = await workspaceResponse.json()
@@ -136,6 +146,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
       environment: "STAGING",
       ownershipAttested: true,
     },
+    headers: { "x-forwarded-for": forwardedFor },
   })
   await expect(targetResponse).toBeOK()
   const { data: target } = await targetResponse.json()
@@ -166,9 +177,13 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   })
   try {
     const otherPage = await other.newPage()
-    await signUp(otherPage, otherEmail, "E2E Other")
+    await signUp(otherPage, forwardedFor, otherEmail, "E2E Other")
     for (const path of ["/api/scans", "/api/findings", "/api/reports"]) {
-      expect((await otherPage.request.get(`${path}?workspaceId=${workspaceId}`)).status()).toBe(403)
+      expect(
+        (await otherPage.request.get(`${path}?workspaceId=${workspaceId}`, {
+          headers: { "x-forwarded-for": forwardedFor },
+        })).status()
+      ).toBe(403)
     }
     await otherPage.goto(`/dashboard/targets/${targetId}`)
     await expect(otherPage.getByRole("heading", { name: /404|Not in evidence/i })).toBeVisible()
