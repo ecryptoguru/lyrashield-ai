@@ -203,9 +203,13 @@ export async function addScanEvent(
   // Defense-in-depth: verify the scan belongs to the current workspace before
   // writing an event. ScanEvent is a child table without its own workspaceId, so
   // this prevents cross-tenant event injection if a caller has a valid scanId
-  // from another workspace.
-  const scan = await prisma.scan.findUnique({ where: { id: scanId } })
-  if (!scan) {
+  // from another workspace. The existence check alone is not sufficient — we must
+  // compare the scan's workspaceId to the active workspace context.
+  const scan = await prisma.scan.findUnique({
+    where: { id: scanId },
+    select: { workspaceId: true },
+  })
+  if (!scan || scan.workspaceId !== workspaceId) {
     throw new Error(`Scan not found in workspace: ${scanId}`)
   }
 

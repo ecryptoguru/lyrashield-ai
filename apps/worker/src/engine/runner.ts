@@ -523,15 +523,16 @@ export async function findRunOutputDir(workDir: string): Promise<string | null> 
 
 async function readTextFileBounded(path: string, maxBytes: number): Promise<string> {
   // The artifact location is selected only from a validated engine output directory.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const fileStat = await lstat(path)
-  if (!fileStat.isFile()) {
-    throw new Error(`Engine artifact is not a regular file: ${path}`)
-  }
-
+  // Open first, then fstat the live handle: this avoids the TOCTOU window where an
+  // attacker swaps the path for a symlink between a prior lstat and the open.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const handle = await open(path, "r")
   try {
+    const fileStat = await handle.stat()
+    if (!fileStat.isFile()) {
+      throw new Error(`Engine artifact is not a regular file: ${path}`)
+    }
+
     const buffer = Buffer.allocUnsafe(maxBytes + 1)
     let offset = 0
     while (offset <= maxBytes) {

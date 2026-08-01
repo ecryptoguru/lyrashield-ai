@@ -18,8 +18,11 @@ vi.mock("./client", () => ({
 
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn() } }))
 
+const mockGetWorkspaceContext = vi.fn()
+vi.mock("./extension", () => ({ getWorkspaceContext: () => mockGetWorkspaceContext() }))
+
 import { prisma } from "./client"
-import { createScan, getScanWithEvents, listScans, updateScanStatus } from "./scan-service"
+import { addScanEvent, createScan, getScanWithEvents, listScans, updateScanStatus } from "./scan-service"
 
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
@@ -61,6 +64,57 @@ describe("updateScanStatus", () => {
         where: { id: "scan-1", status: "RUNNING" },
       })
     )
+  })
+})
+
+describe("addScanEvent — cross-tenant guard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPrisma.scanEvent.create.mockResolvedValue({ id: "event-1" })
+  })
+
+  it("rejects when there is no workspace context", async () => {
+    mockGetWorkspaceContext.mockReturnValue(null)
+    await expect(addScanEvent("scan-1", "queued", "info", "msg")).rejects.toThrow(
+      "workspace context is required"
+    )
+    expect(mockPrisma.scanEvent.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects a scanId that belongs to a different workspace (cross-tenant injection)", async () => {
+    mockGetWorkspaceContext.mockReturnValue("ws-attacker")
+    mockPrisma.scan.findUnique.mockResolvedValue({ workspaceId: "ws-victim" })
+
+    await expect(addScanEvent("scan-victim", "queued", "info", "msg")).rejects.toThrow(
+      "Scan not found in workspace"
+    )
+    // The ownership comparison must happen before any event row is written.
+    expect(mockPrisma.scan.findUnique).toHaveBeenCalledWith({
+      where: { id: "scan-victim" },
+      select: { workspaceId: true },
+    })
+    expect(mockPrisma.scanEvent.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects a scanId that does not exist", async () => {
+    mockGetWorkspaceContext.mockReturnValue("ws-1")
+    mockPrisma.scan.findUnique.mockResolvedValue(null)
+    await expect(addScanEvent("scan-missing", "queued", "info", "msg")).rejects.toThrow(
+      "Scan not found in workspace"
+    )
+    expect(mockPrisma.scanEvent.create).not.toHaveBeenCalled()
+  })
+
+  it("writes the event when the scan belongs to the active workspace", async () => {
+    mockGetWorkspaceContext.mockReturnValue("ws-1")
+    mockPrisma.scan.findUnique.mockResolvedValue({ workspaceId: "ws-1" })
+
+    await expect(addScanEvent("scan-1", "queued", "info", "msg")).resolves.toEqual({
+      id: "event-1",
+    })
+    expect(mockPrisma.scanEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ scanId: "scan-1", stage: "queued", level: "info" }),
+    })
   })
 })
 
