@@ -74,7 +74,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         id="mobile-menu"
         aria-label="Mobile navigation"
         aria-modal="true"
-        class="fixed m-0 w-56 max-w-[calc(100%-2rem)] grid gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20 open:grid"
+        class="fixed m-0 w-56 max-w-[calc(100%-2rem)] gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20 md:hidden"
         style="top: 4.5rem; right: 1rem; bottom: auto; left: auto;"
       >
         <a href="/methodology" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Methodology</a>
@@ -151,6 +151,17 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       menu.querySelectorAll<HTMLAnchorElement>(".menu-link").forEach((link) => {
         link.addEventListener("click", () => menu.close())
       })
+
+      // The top navbar is visible from md up, so the mobile menu must never stay open
+      // there. If the viewport crosses to desktop while the menu is open (e.g. the
+      // window is widened, or a desktop browser restores a small-window state), close
+      // it so the two navs never render at once.
+      const desktopMq = window.matchMedia("(min-width: 48rem)") // Tailwind md
+      const closeOnDesktop = () => {
+        if (desktopMq.matches && menu.open) menu.close()
+      }
+      desktopMq.addEventListener("change", closeOnDesktop)
+      closeOnDesktop()
     }
   }
 </script>
@@ -158,5 +169,10 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
 <style is:global>
   #mobile-menu::backdrop {
     background: transparent;
+  }
+  /* The menu is mobile-only. When open (and only on small screens) lay it out as a
+     vertical grid; on md+ it is hidden entirely by the md:hidden utility above. */
+  #mobile-menu[open] {
+    display: grid;
   }
 </style>
