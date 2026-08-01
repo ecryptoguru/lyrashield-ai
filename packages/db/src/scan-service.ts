@@ -179,7 +179,10 @@ export async function updateScanStatus(
     throw new Error(`workspaceId or workspace context is required for updateScanStatus`)
   }
 
-  const { updated, currentStatus } = await withWorkspaceRLS(resolvedWorkspaceId, updateInTransaction)
+  const { updated, currentStatus } = await withWorkspaceRLS(
+    resolvedWorkspaceId,
+    updateInTransaction
+  )
 
   logger.info("Scan status updated", { scanId, from: currentStatus, to: newStatus })
   return updated

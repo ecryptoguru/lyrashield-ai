@@ -17,15 +17,17 @@ describe("GET /api/reports/shared/[id]", () => {
   it("rejects a request without a token", async () => {
     const response = await GET(request("report-1"), { params: Promise.resolve({ id: "report-1" }) })
     expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toMatchObject({ success: false, error: { code: "MISSING_PARAM" } })
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: { code: "MISSING_PARAM" },
+    })
   })
 
   it("rejects a malformed share token before querying the database", async () => {
     getReportByShareToken.mockResolvedValue(null)
-    const response = await GET(
-      request("report-1", "not-a-valid-token"),
-      { params: Promise.resolve({ id: "report-1" }) }
-    )
+    const response = await GET(request("report-1", "not-a-valid-token"), {
+      params: Promise.resolve({ id: "report-1" }),
+    })
     expect(response.status).toBe(404)
     await expect(response.json()).resolves.toMatchObject({
       success: false,
@@ -41,10 +43,9 @@ describe("GET /api/reports/shared/[id]", () => {
       shareExpiresAt: null,
     })
 
-    const response = await GET(
-      request("report-1", "a".repeat(64)),
-      { params: Promise.resolve({ id: "report-1" }) }
-    )
+    const response = await GET(request("report-1", "a".repeat(64)), {
+      params: Promise.resolve({ id: "report-1" }),
+    })
 
     expect(response.status).toBe(404)
     expect(getShareableReport).not.toHaveBeenCalled()
@@ -68,10 +69,9 @@ describe("GET /api/reports/shared/[id]", () => {
       createdAt: new Date(),
     })
 
-    const response = await GET(
-      request("report-1", "b".repeat(64)),
-      { params: Promise.resolve({ id: "report-1" }) }
-    )
+    const response = await GET(request("report-1", "b".repeat(64)), {
+      params: Promise.resolve({ id: "report-1" }),
+    })
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ success: true })
@@ -81,10 +81,9 @@ describe("GET /api/reports/shared/[id]", () => {
   it("returns a 500 when the share lookup throws", async () => {
     getReportByShareToken.mockRejectedValue(new Error("db down"))
 
-    const response = await GET(
-      request("report-1", "c".repeat(64)),
-      { params: Promise.resolve({ id: "report-1" }) }
-    )
+    const response = await GET(request("report-1", "c".repeat(64)), {
+      params: Promise.resolve({ id: "report-1" }),
+    })
 
     expect(response.status).toBe(500)
     await expect(response.json()).resolves.toMatchObject({

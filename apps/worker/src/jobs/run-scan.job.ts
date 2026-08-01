@@ -411,7 +411,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     }
   }
 
-  const { scanId, workspaceId: claimedWorkspaceId, targetId, goal, mode, policyId } = parseResult.data
+  const {
+    scanId,
+    workspaceId: claimedWorkspaceId,
+    targetId,
+    goal,
+    mode,
+    policyId,
+  } = parseResult.data
 
   log.info("Processing scan job", { scanId, targetId, mode, jobId: job.id })
 
@@ -429,7 +436,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       `Failed to verify scan ownership: ${err instanceof Error ? err.message : String(err)}`
     )
   }
-  if (!scanRecord || scanRecord.workspaceId !== claimedWorkspaceId || scanRecord.targetId !== targetId) {
+  if (
+    !scanRecord ||
+    scanRecord.workspaceId !== claimedWorkspaceId ||
+    scanRecord.targetId !== targetId
+  ) {
     try {
       await updateScanStatus(scanId, "FAILED" as ScanStatus, {
         errorCategory: "INVALID_JOB",

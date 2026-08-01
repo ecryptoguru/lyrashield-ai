@@ -5,7 +5,7 @@ vi.mock("@lyrashield/db", () => ({
   claimDueSchedule: vi.fn(),
   getDueSchedules: vi.fn(),
   getNextRunAt: vi.fn(),
-  runWithWorkspaceContext: <T,>(_wsId: string, fn: () => T): T => fn(),
+  runWithWorkspaceContext: <T>(_wsId: string, fn: () => T): T => fn(),
   updateScanStatus: vi.fn(),
   prisma: {
     scan: {

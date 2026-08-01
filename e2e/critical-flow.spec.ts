@@ -92,7 +92,9 @@ test("anonymous APIs reject access", async ({ request }, testInfo) => {
     "/api/findings?workspaceId=unknown",
     "/api/reports?workspaceId=unknown",
   ]) {
-    expect((await request.get(path, { headers: { "x-forwarded-for": forwardedFor } })).status()).toBe(401)
+    expect(
+      (await request.get(path, { headers: { "x-forwarded-for": forwardedFor } })).status()
+    ).toBe(401)
   }
 })
 
@@ -180,9 +182,11 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
     await signUp(otherPage, forwardedFor, otherEmail, "E2E Other")
     for (const path of ["/api/scans", "/api/findings", "/api/reports"]) {
       expect(
-        (await otherPage.request.get(`${path}?workspaceId=${workspaceId}`, {
-          headers: { "x-forwarded-for": forwardedFor },
-        })).status()
+        (
+          await otherPage.request.get(`${path}?workspaceId=${workspaceId}`, {
+            headers: { "x-forwarded-for": forwardedFor },
+          })
+        ).status()
       ).toBe(403)
     }
     await otherPage.goto(`/dashboard/targets/${targetId}`)

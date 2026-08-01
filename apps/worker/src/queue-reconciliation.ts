@@ -148,10 +148,15 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
 
         try {
           lease.assertOwned()
-          await updateScanStatus(scan.id, "FAILED", {
-            errorCategory: "QUEUE",
-            errorMessage: "QUEUE_ORPHANED: active scan has no processable queue job",
-          }, scan.workspaceId)
+          await updateScanStatus(
+            scan.id,
+            "FAILED",
+            {
+              errorCategory: "QUEUE",
+              errorMessage: "QUEUE_ORPHANED: active scan has no processable queue job",
+            },
+            scan.workspaceId
+          )
           result.failedOrphanedScans += 1
         } catch (error) {
           logger.warn("Could not reconcile orphaned scan", {
@@ -220,10 +225,15 @@ export async function reconcileFailedQueueJob(jobId: string, failedReason: strin
     })
     if (!scan || !ACTIVE_SCAN_STATUSES.has(scan.status)) return
 
-    await updateScanStatus(jobId, "FAILED", {
-      errorCategory: "QUEUE",
-      errorMessage: `Queue job failed: ${failedReason.slice(0, 500)}`,
-    }, scan.workspaceId)
+    await updateScanStatus(
+      jobId,
+      "FAILED",
+      {
+        errorCategory: "QUEUE",
+        errorMessage: `Queue job failed: ${failedReason.slice(0, 500)}`,
+      },
+      scan.workspaceId
+    )
   } catch (error) {
     logger.warn("Could not reconcile failed queue job", {
       jobId,

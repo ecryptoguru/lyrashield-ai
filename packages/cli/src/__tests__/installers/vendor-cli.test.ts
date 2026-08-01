@@ -61,10 +61,12 @@ describe("vendor CLI allowlist", () => {
   })
 
   it("delegates to an allowlisted vendor CLI", async () => {
-    mockedExec.mockImplementation((_cmd: unknown, _args: unknown, _opts: unknown, callback: unknown) => {
-      if (typeof callback === "function") callback(null, "", "")
-      return undefined as never
-    })
+    mockedExec.mockImplementation(
+      (_cmd: unknown, _args: unknown, _opts: unknown, callback: unknown) => {
+        if (typeof callback === "function") callback(null, "", "")
+        return undefined as never
+      }
+    )
 
     const result = await installAgent({
       agent: fakeVendorAgent("claude"),
@@ -88,10 +90,12 @@ describe("vendor CLI allowlist", () => {
   })
 
   it("reports failure when the allowlisted vendor CLI exits with an error", async () => {
-    mockedExec.mockImplementation((_cmd: unknown, _args: unknown, _opts: unknown, callback: unknown) => {
-      if (typeof callback === "function") callback(new Error("exit code 1"))
-      return undefined as never
-    })
+    mockedExec.mockImplementation(
+      (_cmd: unknown, _args: unknown, _opts: unknown, callback: unknown) => {
+        if (typeof callback === "function") callback(new Error("exit code 1"))
+        return undefined as never
+      }
+    )
 
     const result = await installAgent({
       agent: fakeVendorAgent("amp"),
