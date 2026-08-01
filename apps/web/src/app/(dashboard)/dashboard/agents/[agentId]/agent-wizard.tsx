@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Check, Copy, ExternalLink } from "lucide-react"
-import { Button, cn } from "@lyrashield/ui"
+import { Button } from "@lyrashield/ui"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import type { AgentWizardData, WizardStep } from "@/lib/agent-wizard"
 
