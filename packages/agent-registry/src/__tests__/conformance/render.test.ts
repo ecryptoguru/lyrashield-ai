@@ -67,6 +67,12 @@ describe("conformance: renderConfig round-trips through the format parser", () =
             expect(wrapper).toHaveProperty("path")
             expect(wrapper).toHaveProperty("args")
             expect(wrapper).toHaveProperty("env")
+          } else if (agent.stdioStyle === "array-command-environment") {
+            // MiMo Code: command is an array and env lives under `environment` (no `args`).
+            expect(entry).toHaveProperty("command")
+            expect(Array.isArray(entry.command)).toBe(true)
+            expect(entry).toHaveProperty("environment")
+            expect(entry).not.toHaveProperty("args")
           } else {
             expect(entry).toHaveProperty("command")
             expect(entry).toHaveProperty("args")
