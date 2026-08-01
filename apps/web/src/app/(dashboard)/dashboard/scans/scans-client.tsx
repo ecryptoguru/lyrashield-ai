@@ -350,7 +350,7 @@ export function ScansClient({
                         if (e.key === "ArrowRight" || e.key === "ArrowDown") {
                           e.preventDefault()
                           const idx = SCAN_PRESET_ORDER.indexOf(presetId)
-                          const next = SCAN_PRESET_ORDER[(idx + 1) % SCAN_PRESET_ORDER.length]
+                          const next = SCAN_PRESET_ORDER[(idx + 1) % SCAN_PRESET_ORDER.length]!
                           setSelectedPreset(next)
                           document.getElementById(`preset-${next}`)?.focus()
                         }
@@ -360,7 +360,7 @@ export function ScansClient({
                           const prev =
                             SCAN_PRESET_ORDER[
                               (idx - 1 + SCAN_PRESET_ORDER.length) % SCAN_PRESET_ORDER.length
-                            ]
+                            ]!
                           setSelectedPreset(prev)
                           document.getElementById(`preset-${prev}`)?.focus()
                         }

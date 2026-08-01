@@ -42,7 +42,8 @@
     "../../packages/logger/src/**/*.tsx",
     "../../packages/config/src/**/*.ts",
     "../../packages/config/src/**/*.tsx",
-    "../../packages/mcp/src/**/*.ts"
+    "../../packages/mcp/src/**/*.ts",
+    "../../packages/agent-registry/src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
