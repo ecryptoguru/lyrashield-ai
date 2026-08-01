@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi, afterEach } from "vitest"
 import { createHmac } from "crypto"
 
 // Mock the env module to avoid loading real env vars
@@ -8,6 +8,8 @@ vi.mock("@lyrashield/config", () => ({
     GITHUB_APP_SLUG: "test-app",
     GITHUB_APP_PRIVATE_KEY: "test-private-key",
     GITHUB_WEBHOOK_SECRET: "test-webhook-secret",
+    GITHUB_APP_CLIENT_ID: "test-client-id",
+    GITHUB_APP_CLIENT_SECRET: "test-client-secret",
     NEXT_PUBLIC_APP_URL: "https://test.example.com",
   },
 }))
@@ -29,7 +31,13 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 // Import after mocks are set up
-import { verifyWebhookSignature, getInstallAppUrl } from "./github"
+import {
+  verifyWebhookSignature,
+  getInstallAppUrl,
+  exchangeInstallUserCode,
+  userCanAdminInstallation,
+  GitHubOwnershipError,
+} from "./github"
 
 describe("verifyWebhookSignature", () => {
   const payload = JSON.stringify({
@@ -85,5 +93,113 @@ describe("getInstallAppUrl", () => {
   it("does not include caller state", () => {
     const url = getInstallAppUrl()
     expect(url).not.toContain("state=")
+  })
+})
+
+// Ownership verification for the install callback. These guard the S2b boundary:
+// `installation_id` is enumerable, so binding it to a workspace must depend on
+// GitHub confirming the *user* can administer it. Every failure mode here must
+// fail closed — a false "verified" would reopen the original vulnerability.
+describe("install-callback ownership verification", () => {
+  function mockFetchOnce(status: number, body: unknown) {
+    return vi.fn().mockResolvedValue({
+      ok: status >= 200 && status < 300,
+      status,
+      headers: { get: () => null },
+      json: async () => body,
+    })
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  describe("exchangeInstallUserCode", () => {
+    it("returns the access token GitHub issues for the code", async () => {
+      vi.stubGlobal("fetch", mockFetchOnce(200, { access_token: "ghu_token" }))
+      await expect(exchangeInstallUserCode("valid-code")).resolves.toBe("ghu_token")
+    })
+
+    it("posts the code to GitHub's token endpoint and asks for JSON", async () => {
+      const fetchMock = mockFetchOnce(200, { access_token: "ghu_token" })
+      vi.stubGlobal("fetch", fetchMock)
+      await exchangeInstallUserCode("valid-code")
+
+      const [url, init] = fetchMock.mock.calls[0]
+      expect(url).toBe("https://github.com/login/oauth/access_token")
+      expect(init.method).toBe("POST")
+      expect(JSON.parse(init.body)).toMatchObject({
+        client_id: "test-client-id",
+        client_secret: "test-client-secret",
+        code: "valid-code",
+      })
+    })
+
+    it("throws when GitHub returns an error body instead of a token", async () => {
+      // GitHub answers 200 with `error` for an expired or reused code.
+      vi.stubGlobal("fetch", mockFetchOnce(200, { error: "bad_verification_code" }))
+      await expect(exchangeInstallUserCode("stale-code")).rejects.toBeInstanceOf(
+        GitHubOwnershipError
+      )
+    })
+
+    it("throws when the exchange request itself fails", async () => {
+      vi.stubGlobal("fetch", mockFetchOnce(401, {}))
+      await expect(exchangeInstallUserCode("any-code")).rejects.toBeInstanceOf(GitHubOwnershipError)
+    })
+  })
+
+  describe("userCanAdminInstallation", () => {
+    it("confirms an installation the user can administer", async () => {
+      vi.stubGlobal("fetch", mockFetchOnce(200, { installations: [{ id: 111 }, { id: 222 }] }))
+      await expect(userCanAdminInstallation("ghu_token", 222)).resolves.toBe(true)
+    })
+
+    it("denies an installation the user cannot administer", async () => {
+      vi.stubGlobal("fetch", mockFetchOnce(200, { installations: [{ id: 111 }] }))
+      await expect(userCanAdminInstallation("ghu_token", 999)).resolves.toBe(false)
+    })
+
+    it("denies when the user has no installations at all", async () => {
+      vi.stubGlobal("fetch", mockFetchOnce(200, { installations: [] }))
+      await expect(userCanAdminInstallation("ghu_token", 222)).resolves.toBe(false)
+    })
+
+    it("walks pagination rather than stopping at the first full page", async () => {
+      const firstPage = { installations: Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })) }
+      const secondPage = { installations: [{ id: 777 }] }
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => firstPage,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => secondPage,
+        })
+      vi.stubGlobal("fetch", fetchMock)
+
+      await expect(userCanAdminInstallation("ghu_token", 777)).resolves.toBe(true)
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it("throws rather than silently denying when the lookup fails", async () => {
+      // Must not collapse to `false` — the caller distinguishes "denied" from
+      // "could not check", and both fail closed but only one is a real answer.
+      vi.stubGlobal("fetch", mockFetchOnce(401, {}))
+      await expect(userCanAdminInstallation("bad_token", 222)).rejects.toBeInstanceOf(
+        GitHubOwnershipError
+      )
+    })
+
+    it("treats a malformed response as no access", async () => {
+      vi.stubGlobal("fetch", mockFetchOnce(200, {}))
+      await expect(userCanAdminInstallation("ghu_token", 222)).resolves.toBe(false)
+    })
   })
 })

@@ -56,6 +56,13 @@ const envSchema = z
         "GITHUB_APP_PRIVATE_KEY must be a PEM-formatted key starting with '-----BEGIN'"
       ),
     GITHUB_WEBHOOK_SECRET: z.string().optional().or(z.literal("")),
+    // The GitHub App's OWN OAuth credentials (App settings → General → Client
+    // ID / Client secret). Distinct from GITHUB_CLIENT_ID/SECRET above, which
+    // belong to the social-login OAuth app. Required by the install callback's
+    // ownership check: without them a first-time install cannot be verified and
+    // the flow fails closed.
+    GITHUB_APP_CLIENT_ID: z.string().optional().or(z.literal("")),
+    GITHUB_APP_CLIENT_SECRET: z.string().optional().or(z.literal("")),
 
     // MCP / Agent Action Layer
     LYRASHIELD_API_URL: z.string().url().optional().or(z.literal("")),

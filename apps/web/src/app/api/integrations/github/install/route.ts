@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from "next/server"
 import { prisma } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { getInstallAppUrl, getAppInstallations } from "@lyrashield/integrations"
+import {
+  getInstallAppUrl,
+  getAppInstallations,
+  exchangeInstallUserCode,
+  userCanAdminInstallation,
+} from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { createInstallState, verifyInstallState } from "../../../../../lib/github-install-state"
@@ -75,63 +80,123 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // A callback state proves our workspace flow, not ownership of an arbitrary
-    // app-global installation ID. Until the provider flow supplies an ownership
-    // assertion, only refresh an existing workspace binding; never create a new
-    // one from a caller-controlled callback parameter.
+    // Any prior binding for this installation in this workspace — soft-deleted
+    // rows included, so a workspace that disconnected and is reconnecting
+    // revives its row instead of colliding with @@unique([type, externalId]).
+    // (The `deletedAt: null` reset below was always the intent.)
     const existing = await prisma.integration.findFirst({
       where: {
         workspaceId,
         type: "GITHUB",
         externalId: canonicalInstallationId,
-        deletedAt: null,
       },
     })
+
+    // A signed state proves the flow started in this workspace from a caller
+    // holding `integration:manage`. It does NOT prove the caller administers
+    // this app-global, enumerable installation id — so a first-time bind also
+    // requires the provider's own assertion. With "Request user authorization
+    // (OAuth) during installation" enabled, GitHub appends `code`; exchanging
+    // it yields a user token whose /user/installations list is exactly the set
+    // that user may act on. Fails closed on a missing code or any error. (S2b)
     if (!existing) {
-      logger.warn("GitHub install callback requires provider ownership verification", {
-        installationId: canonicalInstallationId,
-        workspaceId,
-      })
-      const redirectUrl = new URL("/dashboard/integrations", request.url)
-      redirectUrl.searchParams.set("github", "verification_required")
-      return NextResponse.redirect(redirectUrl)
+      const code = searchParams.get("code")
+      let ownershipProven = false
+
+      if (!code) {
+        logger.warn("GitHub install callback carried no OAuth code", {
+          installationId: canonicalInstallationId,
+          workspaceId,
+        })
+      } else {
+        try {
+          const userToken = await exchangeInstallUserCode(code)
+          ownershipProven = await userCanAdminInstallation(
+            userToken,
+            Number(canonicalInstallationId)
+          )
+        } catch (err) {
+          logger.error("GitHub install ownership verification failed", {
+            error: String(err),
+            installationId: canonicalInstallationId,
+            workspaceId,
+          })
+        }
+      }
+
+      if (!ownershipProven) {
+        const redirectUrl = new URL("/dashboard/integrations", request.url)
+        redirectUrl.searchParams.set("github", "verification_required")
+        return NextResponse.redirect(redirectUrl)
+      }
     }
 
-    const integration = await prisma.integration.update({
-      where: { id: existing.id },
-      data: {
-        name: installation.account.login,
-        status: "active",
-        deletedAt: null,
-        metadata: {
-          installationId: Number(canonicalInstallationId),
-          accountLogin: installation.account.login,
-          accountId: installation.account.id,
-          accountType: installation.account.type,
-          setupAction,
+    const metadata = {
+      installationId: Number(canonicalInstallationId),
+      accountLogin: installation.account.login,
+      accountId: installation.account.id,
+      accountType: installation.account.type,
+      setupAction,
+    }
+
+    // AuditLog carries no unique constraints, so a P2002 raised anywhere in this
+    // block can only have come from the Integration write.
+    try {
+      const integration = existing
+        ? await prisma.integration.update({
+            where: { id: existing.id },
+            data: {
+              name: installation.account.login,
+              status: "active",
+              deletedAt: null,
+              metadata,
+            },
+          })
+        : await prisma.integration.create({
+            data: {
+              workspaceId,
+              type: "GITHUB",
+              externalId: canonicalInstallationId,
+              name: installation.account.login,
+              status: "active",
+              metadata,
+            },
+          })
+
+      await prisma.auditLog.create({
+        data: {
+          workspaceId,
+          actorUserId: authSession.userId,
+          action: "integration.github.connected",
+          resourceType: "integration",
+          resourceId: integration.id,
         },
-      },
-    })
+      })
 
-    await prisma.auditLog.create({
-      data: {
+      logger.info("GitHub App installation connected", {
+        installationId: canonicalInstallationId,
         workspaceId,
-        actorUserId: authSession.userId,
-        action: "integration.github.connected",
-        resourceType: "integration",
-        resourceId: integration.id,
-      },
-    })
+        account: installation.account.login,
+        firstTimeBind: !existing,
+      })
 
-    logger.info("GitHub App installation connected", {
-      installationId: canonicalInstallationId,
-      workspaceId,
-      account: installation.account.login,
-    })
-
-    const redirectUrl = new URL("/dashboard/integrations", request.url)
-    redirectUrl.searchParams.set("connected", "github")
-    return NextResponse.redirect(redirectUrl)
+      const redirectUrl = new URL("/dashboard/integrations", request.url)
+      redirectUrl.searchParams.set("connected", "github")
+      return NextResponse.redirect(redirectUrl)
+    } catch (err) {
+      // @@unique([type, externalId]) — this installation is already bound to a
+      // different workspace. Do not disclose which one.
+      if (err && typeof err === "object" && (err as { code?: string }).code === "P2002") {
+        logger.warn("GitHub installation already bound to another workspace", {
+          installationId: canonicalInstallationId,
+          workspaceId,
+        })
+        const redirectUrl = new URL("/dashboard/integrations", request.url)
+        redirectUrl.searchParams.set("github", "already_claimed")
+        return NextResponse.redirect(redirectUrl)
+      }
+      throw err
+    }
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

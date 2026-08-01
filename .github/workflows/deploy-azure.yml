@@ -241,6 +241,8 @@ jobs:
           GITHUB_APP_SLUG: ${{ secrets.LYRASHIELD_GITHUB_APP_SLUG }}
           GITHUB_APP_PRIVATE_KEY: ${{ secrets.LYRASHIELD_GITHUB_APP_PRIVATE_KEY }}
           GITHUB_WEBHOOK_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET }}
+          GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
+          GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
         run: |
           if [ -z "${GITHUB_APP_ID}" ] || [ -z "${GITHUB_APP_SLUG}" ] || [ -z "${GITHUB_APP_PRIVATE_KEY}" ] || [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
             echo "::warning::GITHUB_APP_ID / GITHUB_APP_SLUG / GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET are not all set. GitHub connect path will 500 CONFIG_ERROR until they are. F1's four-way onboarding (URL/API/Skip) keeps signups alive in the meantime — see PRODUCTION_DEPLOYMENT.md #6 for runbook."
@@ -251,6 +253,16 @@ jobs:
             fi
             echo "GitHub App credentials present."
           fi
+          # OAuth client credentials are a separate, independently-optional group:
+          # they are only needed to ownership-verify a FIRST-TIME install. Absent
+          # them the callback fails closed (github=verification_required) while
+          # already-connected workspaces keep working, so this warns and never
+          # blocks a deploy.
+          if [ -z "${GITHUB_APP_CLIENT_ID}" ] || [ -z "${GITHUB_APP_CLIENT_SECRET}" ]; then
+            echo "::warning::GITHUB_APP_CLIENT_ID / GITHUB_APP_CLIENT_SECRET are not set. No new workspace can complete a GitHub install — the callback cannot verify installation ownership and fails closed. See PRODUCTION_DEPLOYMENT.md #6."
+          else
+            echo "GitHub App OAuth credentials present."
+          fi
 
       - name: Sync GitHub App secrets to Container Apps
         env:
@@ -258,29 +270,47 @@ jobs:
           GITHUB_APP_SLUG: ${{ secrets.LYRASHIELD_GITHUB_APP_SLUG }}
           GITHUB_APP_PRIVATE_KEY: ${{ secrets.LYRASHIELD_GITHUB_APP_PRIVATE_KEY }}
           GITHUB_WEBHOOK_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET }}
+          GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
+          GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
         run: |
           if [ -z "${GITHUB_APP_ID}" ] || [ -z "${GITHUB_APP_SLUG}" ] || [ -z "${GITHUB_APP_PRIVATE_KEY}" ] || [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
             echo "Skipping GitHub App secret sync — not all secrets set (see verify step above)."
             exit 0
           fi
+          # Appended only when both OAuth values are present, so a deploy made
+          # before they are provisioned syncs exactly the same four secrets it
+          # does today.
+          OAUTH_SECRETS=()
+          if [ -n "${GITHUB_APP_CLIENT_ID}" ] && [ -n "${GITHUB_APP_CLIENT_SECRET}" ]; then
+            OAUTH_SECRETS=("github-app-client-id=${GITHUB_APP_CLIENT_ID}" "github-app-client-secret=${GITHUB_APP_CLIENT_SECRET}")
+          fi
           if [ -n "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" ]; then
             az containerapp secret set \
               --name "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" \
               --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-              --secrets "github-app-id=${GITHUB_APP_ID}" "github-app-slug=${GITHUB_APP_SLUG}" "github-app-private-key=${GITHUB_APP_PRIVATE_KEY}" "github-webhook-secret=${GITHUB_WEBHOOK_SECRET}"
+              --secrets "github-app-id=${GITHUB_APP_ID}" "github-app-slug=${GITHUB_APP_SLUG}" "github-app-private-key=${GITHUB_APP_PRIVATE_KEY}" "github-webhook-secret=${GITHUB_WEBHOOK_SECRET}" "${OAUTH_SECRETS[@]}"
           fi
           if [ -n "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}" ]; then
             az containerapp secret set \
               --name "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}" \
               --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-              --secrets "github-app-id=${GITHUB_APP_ID}" "github-app-slug=${GITHUB_APP_SLUG}" "github-app-private-key=${GITHUB_APP_PRIVATE_KEY}" "github-webhook-secret=${GITHUB_WEBHOOK_SECRET}"
+              --secrets "github-app-id=${GITHUB_APP_ID}" "github-app-slug=${GITHUB_APP_SLUG}" "github-app-private-key=${GITHUB_APP_PRIVATE_KEY}" "github-webhook-secret=${GITHUB_WEBHOOK_SECRET}" "${OAUTH_SECRETS[@]}"
           fi
 
       - name: Deploy app Container App
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
           IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}
+          GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
+          GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
         run: |
+          # A secretref to a secret the Container App does not define is a hard
+          # failure, so these are referenced only when the sync step above
+          # actually provisioned them.
+          OAUTH_ENV=()
+          if [ -n "${GITHUB_APP_CLIENT_ID}" ] && [ -n "${GITHUB_APP_CLIENT_SECRET}" ]; then
+            OAUTH_ENV=("GITHUB_APP_CLIENT_ID=secretref:github-app-client-id" "GITHUB_APP_CLIENT_SECRET=secretref:github-app-client-secret")
+          fi
           az containerapp update \
             --name "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
@@ -295,13 +325,20 @@ jobs:
               "GITHUB_APP_ID=secretref:github-app-id" \
               "GITHUB_APP_SLUG=secretref:github-app-slug" \
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
-              "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret"
+              "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
+              "${OAUTH_ENV[@]}"
 
       - name: Deploy scanner Container App
         if: vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
         env:
           IMAGE: ${{ needs.build.outputs.web_image }}@${{ needs.build.outputs.web_digest }}
+          GITHUB_APP_CLIENT_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID }}
+          GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
         run: |
+          OAUTH_ENV=()
+          if [ -n "${GITHUB_APP_CLIENT_ID}" ] && [ -n "${GITHUB_APP_CLIENT_SECRET}" ]; then
+            OAUTH_ENV=("GITHUB_APP_CLIENT_ID=secretref:github-app-client-id" "GITHUB_APP_CLIENT_SECRET=secretref:github-app-client-secret")
+          fi
           az containerapp update \
             --name "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
@@ -316,7 +353,8 @@ jobs:
               "GITHUB_APP_ID=secretref:github-app-id" \
               "GITHUB_APP_SLUG=secretref:github-app-slug" \
               "GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key" \
-              "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret"
+              "GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret" \
+              "${OAUTH_ENV[@]}"
 
       - name: Smoke app health
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
