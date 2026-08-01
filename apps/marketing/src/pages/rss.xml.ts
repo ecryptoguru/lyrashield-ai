@@ -16,6 +16,8 @@ export const GET: APIRoute = async (context) => {
     context.site?.toString() ||
     (import.meta.env.PUBLIC_SITE_URL as string | undefined) ||
     "http://localhost:4321"
+  const origin = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl
+  const feedUrl = `${origin}/rss.xml`
   const posts = await getCollection("blog", (entry) => !entry.data.draft)
   const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
 
@@ -32,6 +34,7 @@ export const GET: APIRoute = async (context) => {
       "LyraShield AI research and practical guidance on securing AI-built apps, interpreting security evidence, verifying findings, and retesting fixes.",
     site: siteUrl,
     items,
-    customData: `<language>en-us</language>`,
+    customData: `<language>en-us</language><atom:link href="${feedUrl}" rel="self" type="application/rss+xml" />`,
+    xmlns: { atom: "http://www.w3.org/2005/Atom" },
   })
 }

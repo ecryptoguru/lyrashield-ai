@@ -12,10 +12,8 @@ import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
 import { createMotionMediaManifest } from "../lib/motion-manifest"
 
-const siteUrl = Astro.site?.toString() || "http://localhost:4321"
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const pageUrl = new URL("/", siteOrigin).toString()
-const xUrl = __MARKETING_X_URL__ || undefined
 const mediaUrl = import.meta.env.DEV ? "/media-local" : import.meta.env.PUBLIC_MEDIA_URL
 const renderHash = import.meta.env.DEV ? "local" : import.meta.env.PUBLIC_MOTION_RENDER_HASH
 const motionManifest = createMotionMediaManifest(mediaUrl, renderHash)
@@ -51,32 +49,6 @@ const faqItems = [
 ]
 
 const jsonLd = [
-  {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    "@id": `${siteOrigin}/#organization`,
-    name: "LyraShield AI",
-    url: siteUrl,
-    logo: new URL("/logo.svg", siteOrigin).toString(),
-    description,
-    knowsAbout: [
-      "AI application security",
-      "release assurance",
-      "security evidence",
-      "independent finding verification",
-      "security retesting",
-    ],
-    ...(xUrl ? { sameAs: [xUrl] } : {}),
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    "@id": `${siteOrigin}/#website`,
-    name: "LyraShield AI",
-    url: siteUrl,
-    inLanguage: "en-US",
-    publisher: { "@id": `${siteOrigin}/#organization` },
-  },
   {
     "@context": "https://schema.org",
     "@type": "WebPage",
@@ -151,23 +123,23 @@ const jsonLd = [
 
   .cinematic-threshold--to-light {
     background:
-      radial-gradient(ellipse at 50% 0%, rgba(84, 214, 223, 0.08), transparent 62%),
+      radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--terminal-cyan) 8%, transparent), transparent 62%),
       linear-gradient(
         to bottom,
-        #08111c,
-        color-mix(in srgb, #08111c 42%, var(--bg)) 58%,
+        var(--hero-void),
+        color-mix(in srgb, var(--hero-void) 42%, var(--bg)) 58%,
         var(--bg)
       );
   }
 
   .cinematic-threshold--to-dark {
     background:
-      radial-gradient(ellipse at 50% 100%, rgba(84, 214, 223, 0.08), transparent 62%),
+      radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--terminal-cyan) 8%, transparent), transparent 62%),
       linear-gradient(
         to bottom,
         var(--bg),
-        color-mix(in srgb, #08111c 42%, var(--bg)) 42%,
-        #08111c
+        color-mix(in srgb, var(--hero-void) 42%, var(--bg)) 42%,
+        var(--hero-void)
       );
   }
 </style>

@@ -471,8 +471,9 @@ async function hasEngineOutputArtifact(runDir: string): Promise<boolean> {
   for (const artifact of ENGINE_OUTPUT_ARTIFACTS) {
     try {
       // artifact names are fixed and joined to a validated run directory.
+      // Use lstat so a symlink (even one pointing to a file) does not count.
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      const artifactStat = await stat(join(runDir, artifact))
+      const artifactStat = await lstat(join(runDir, artifact))
       if (artifactStat.isFile()) return true
     } catch {
       // Try the next expected artifact.
@@ -522,6 +523,12 @@ export async function findRunOutputDir(workDir: string): Promise<string | null> 
 
 async function readTextFileBounded(path: string, maxBytes: number): Promise<string> {
   // The artifact location is selected only from a validated engine output directory.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  const fileStat = await lstat(path)
+  if (!fileStat.isFile()) {
+    throw new Error(`Engine artifact is not a regular file: ${path}`)
+  }
+
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const handle = await open(path, "r")
   try {

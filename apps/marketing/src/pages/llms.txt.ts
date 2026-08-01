@@ -1,7 +1,37 @@
 import type { APIRoute } from "astro"
 import { getCollection, getEntry } from "astro:content"
+import { tools } from "../lib/tools"
 
 export const prerender = false
+
+const docsPaths = [
+  "/docs/api",
+  "/docs/approvals",
+  "/docs/integrations",
+  "/docs/integrations/agent-rules",
+  "/docs/integrations/amp",
+  "/docs/integrations/claude-code",
+  "/docs/integrations/cline",
+  "/docs/integrations/cursor",
+  "/docs/integrations/gemini-cli",
+  "/docs/integrations/github-action",
+  "/docs/integrations/hermes",
+  "/docs/integrations/jetbrains",
+  "/docs/integrations/kilo-code",
+  "/docs/integrations/openai-codex",
+  "/docs/integrations/openclaw",
+  "/docs/integrations/opencode",
+  "/docs/integrations/picode",
+  "/docs/integrations/remote-mcp",
+  "/docs/integrations/rest-api",
+  "/docs/integrations/troubleshooting",
+  "/docs/integrations/vscode",
+  "/docs/integrations/windsurf",
+  "/docs/integrations/zed",
+]
+
+// Paths that are always noindex or scanner-gated and should not be cited.
+const excludedPathnames = new Set(["/terms", "/scan", "/404"])
 
 export const GET: APIRoute = async (context) => {
   const indexable = __MARKETING_INDEXABLE__
@@ -27,10 +57,30 @@ export const GET: APIRoute = async (context) => {
     sortedPosts.map(async (post) => ({ post, image: await getEntry(post.data.heroImage) }))
   )
 
+  const toolSlugs = tools.map((tool) => `${origin}/tools/${tool.slug}`)
+
+  const publicPaths = [
+    `${origin}/`,
+    `${origin}/methodology`,
+    `${origin}/tools`,
+    ...toolSlugs,
+    `${origin}/vibe-security-50`,
+    `${origin}/sample-report`,
+    `${origin}/blog`,
+    `${origin}/blog/editorial-policy`,
+    ...docsPaths
+      .map((path) => `${origin}${path}`)
+      .filter((url) => !excludedPathnames.has(new URL(url).pathname)),
+    ...postRecords.flatMap(({ post, image }) => [
+      `${origin}/blog/${post.id}`,
+      ...(image ? [`  Representative image: ${origin}${image.data.og}`] : []),
+    ]),
+  ]
+
   const sections = [
     "# LyraShield AI — llms.txt",
     "",
-    "Last updated: 2026-07-17",
+    `Last updated: ${new Date().toISOString().split("T")[0]}`,
     "",
     "LyraShield AI is a pre-launch release-assurance platform for AI-built apps.",
     "Core loop: scan an authorized target, record coverage and evidence state, prepare a fix proposal, retest, and share an immutable report.",
@@ -43,38 +93,7 @@ export const GET: APIRoute = async (context) => {
     "Vibe Security 50: 43 controls are machine-testable and 7 require retained human evidence.",
     "",
     "## Public URLs",
-    `${origin}/`,
-    `${origin}/methodology`,
-    `${origin}/scan`,
-    `${origin}/tools`,
-    `${origin}/sample-report`,
-    `${origin}/blog`,
-    `${origin}/blog/editorial-policy`,
-    `${origin}/docs/integrations`,
-    `${origin}/docs/integrations/claude-code`,
-    `${origin}/docs/integrations/cursor`,
-    `${origin}/docs/integrations/windsurf`,
-    `${origin}/docs/integrations/vscode`,
-    `${origin}/docs/integrations/openai-codex`,
-    `${origin}/docs/integrations/cline`,
-    `${origin}/docs/integrations/opencode`,
-    `${origin}/docs/integrations/kilo-code`,
-    `${origin}/docs/integrations/zed`,
-    `${origin}/docs/integrations/gemini-cli`,
-    `${origin}/docs/integrations/jetbrains`,
-    `${origin}/docs/integrations/amp`,
-    `${origin}/docs/integrations/picode`,
-    `${origin}/docs/integrations/openclaw`,
-    `${origin}/docs/integrations/hermes`,
-    `${origin}/docs/integrations/remote-mcp`,
-    `${origin}/docs/integrations/github-action`,
-    `${origin}/docs/integrations/rest-api`,
-    `${origin}/docs/integrations/agent-rules`,
-    `${origin}/docs/integrations/troubleshooting`,
-    ...postRecords.flatMap(({ post, image }) => [
-      `${origin}/blog/${post.id}`,
-      ...(image ? [`  Representative image: ${origin}${image.data.og}`] : []),
-    ]),
+    ...publicPaths,
     "",
     "## Copy-safe summary for LLM context",
     "No automatic Fix PR claim, no pricing, no free-tier promises, no benchmark claims, no customer names.",

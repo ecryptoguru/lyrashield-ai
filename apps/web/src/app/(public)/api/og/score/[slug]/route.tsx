@@ -148,7 +148,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       width,
       height,
       headers: {
-        "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=3600",
+        "Cache-Control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400",
         "Content-Disposition": `inline; filename="lyrashield-${variant}-${format}.png"`,
       },
     }

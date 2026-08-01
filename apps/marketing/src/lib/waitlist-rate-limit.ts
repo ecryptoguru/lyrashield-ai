@@ -26,7 +26,8 @@ export async function checkD1RateLimit(db: Env["DB"], ipHash: string): Promise<b
       .run()
     return (result.meta.changes ?? 0) > 0
   } catch {
-    // Keep the public funnel available when the fallback limiter itself is unavailable.
-    return true
+    // Fail closed: if the fallback rate limiter cannot record or verify the
+    // request, deny instead of allowing unbounded submissions.
+    return false
   }
 }

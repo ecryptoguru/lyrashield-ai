@@ -10,6 +10,7 @@ import { logger } from "@lyrashield/logger"
 import { DeterminismModeSchema, type DeterminismMode } from "@lyrashield/types"
 import { isValidTransition } from "./scan-transitions"
 import { withWorkspaceRLS } from "./rls"
+import { getWorkspaceContext } from "./extension"
 
 export interface CreateScanParams {
   workspaceId: string
@@ -173,9 +174,15 @@ export async function updateScanStatus(
     })
     return { updated, currentStatus }
   }
-  const { updated, currentStatus } = workspaceId
-    ? await withWorkspaceRLS(workspaceId, updateInTransaction)
-    : await prisma.$transaction(updateInTransaction)
+  const resolvedWorkspaceId = workspaceId ?? getWorkspaceContext()
+  if (!resolvedWorkspaceId) {
+    throw new Error(`workspaceId or workspace context is required for updateScanStatus`)
+  }
+
+  const { updated, currentStatus } = await withWorkspaceRLS(
+    resolvedWorkspaceId,
+    updateInTransaction
+  )
 
   logger.info("Scan status updated", { scanId, from: currentStatus, to: newStatus })
   return updated
@@ -188,6 +195,20 @@ export async function addScanEvent(
   message: string,
   metadata?: Record<string, unknown>
 ): Promise<ScanEvent> {
+  const workspaceId = getWorkspaceContext()
+  if (!workspaceId) {
+    throw new Error("workspace context is required for addScanEvent")
+  }
+
+  // Defense-in-depth: verify the scan belongs to the current workspace before
+  // writing an event. ScanEvent is a child table without its own workspaceId, so
+  // this prevents cross-tenant event injection if a caller has a valid scanId
+  // from another workspace.
+  const scan = await prisma.scan.findUnique({ where: { id: scanId } })
+  if (!scan) {
+    throw new Error(`Scan not found in workspace: ${scanId}`)
+  }
+
   return prisma.scanEvent.create({
     data: {
       scanId,

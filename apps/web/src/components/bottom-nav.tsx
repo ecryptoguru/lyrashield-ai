@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { cn, Button } from "@lyrashield/ui"
+import { cn, Button, Badge } from "@lyrashield/ui"
 import { MOBILE_PRIMARY_NAV_ITEMS, MORE_NAV_ITEMS, type NavItem } from "@/lib/nav-items"
 import {
   Sheet,
@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/sheet"
 import { ChevronRight, Menu } from "lucide-react"
 import { useState } from "react"
-import { useFeatureFlags } from "./feature-flags-provider"
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/dashboard") {
@@ -30,9 +29,9 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "relative flex h-full w-full flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]",
+        "relative flex h-full w-full flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-colors duration-(--duration-fast) ease-out",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset",
-        "active:scale-[0.97] active:transition-transform active:duration-[var(--duration-instant)]",
+        "active:scale-[0.97] active:transition-transform active:duration-(--duration-instant)",
         active ? "text-primary" : "text-muted-foreground hover:text-foreground"
       )}
     >
@@ -40,7 +39,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       <span
         aria-hidden="true"
         className={cn(
-          "bg-primary absolute top-0 h-0.5 w-8 rounded-full transition-opacity duration-[var(--duration-fast)] ease-[var(--ease-out)]",
+          "bg-primary absolute top-0 h-0.5 w-8 rounded-full transition-opacity duration-(--duration-fast) ease-out",
           active ? "opacity-100" : "opacity-0"
         )}
       />
@@ -54,10 +53,12 @@ function MoreNavRow({
   item,
   pathname,
   onNavigate,
+  unreadNotifications,
 }: {
   item: NavItem
   pathname: string
   onNavigate: () => void
+  unreadNotifications: number
 }) {
   const active = isActive(pathname, item.href)
   return (
@@ -66,7 +67,7 @@ function MoreNavRow({
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]",
+        "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-(--duration-fast) ease-out",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
         active ? "bg-primary/8 text-primary" : "text-foreground hover:bg-muted"
       )}
@@ -76,17 +77,19 @@ function MoreNavRow({
         aria-hidden="true"
       />
       <span className="flex-1 truncate">{item.label}</span>
+      {item.href === "/dashboard/notifications" && unreadNotifications > 0 ? (
+        <Badge variant="danger" className="mr-1 ml-2 shrink-0">
+          {unreadNotifications}
+        </Badge>
+      ) : null}
       <ChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
     </Link>
   )
 }
 
 export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: number }) {
-  const flags = useFeatureFlags()
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = useState(false)
-
-  if (!flags.uxV2Shell) return null
 
   return (
     <nav
@@ -100,13 +103,20 @@ export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: n
         <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
           <SheetTrigger asChild>
             <Button
+              type="button"
               variant="ghost"
               size="icon"
-              aria-label="More navigation"
-              className="text-muted-foreground focus-visible:ring-ring flex h-full w-full flex-col items-center justify-center gap-1 rounded-none text-[10px] font-medium focus-visible:ring-2 focus-visible:ring-inset"
+              aria-label="Workspace navigation"
+              className="text-muted-foreground focus-visible:ring-ring relative flex h-full w-full flex-col items-center justify-center gap-1 rounded-none text-[10px] font-medium focus-visible:ring-2 focus-visible:ring-inset"
             >
               <Menu className="size-5" aria-hidden="true" />
-              <span>More</span>
+              <span>Workspace</span>
+              {unreadNotifications > 0 ? (
+                <span
+                  className="bg-destructive absolute top-2 right-4 size-2 rounded-full"
+                  aria-hidden="true"
+                />
+              ) : null}
             </Button>
           </SheetTrigger>
           <SheetContent
@@ -114,9 +124,9 @@ export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: n
             className="max-h-[80vh] overflow-y-auto rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
           >
             <SheetHeader className="px-1 text-left">
-              <SheetTitle className="text-base">More</SheetTitle>
+              <SheetTitle className="text-base">Workspace</SheetTitle>
               <SheetDescription className="sr-only">
-                Additional navigation and settings.
+                Additional workspace navigation and settings.
               </SheetDescription>
             </SheetHeader>
             {/* A single-column list rather than a grid: the list is the exact complement of
@@ -129,6 +139,7 @@ export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: n
                   item={item}
                   pathname={pathname}
                   onNavigate={() => setMoreOpen(false)}
+                  unreadNotifications={unreadNotifications}
                 />
               ))}
             </div>

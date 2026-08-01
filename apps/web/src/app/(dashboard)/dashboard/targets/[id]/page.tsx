@@ -7,6 +7,7 @@ import { Card, Badge } from "@lyrashield/ui"
 import { ScorecardControls } from "./scorecard-controls"
 import { formatDate, formatDateTime } from "@/lib/date-format"
 import { modeLabel } from "@/lib/labels"
+import { TARGET_SINGULAR } from "@/lib/terminology"
 
 export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -111,21 +112,21 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="group p-5 transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out)] hover:shadow-md">
+        <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Crosshair className="text-primary h-4 w-4" aria-hidden="true" />
             Total Trust Runs
           </div>
           <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.scans}</p>
         </Card>
-        <Card className="group p-5 transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out)] hover:shadow-md">
+        <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Bug className="text-primary h-4 w-4" aria-hidden="true" />
             Total Issues
           </div>
           <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.findings}</p>
         </Card>
-        <Card className="group p-5 transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out)] hover:shadow-md">
+        <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
           <div className="text-muted-foreground text-sm">Last Scan</div>
           <p className="mt-2 text-2xl font-bold tracking-tight">
             {target.lastScanAt ? formatDate(target.lastScanAt) : "Never"}
@@ -225,7 +226,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         </div>
         {target.scans.length === 0 ? (
           <div className="text-muted-foreground p-8 text-center text-sm">
-            No trust runs yet for this product.
+            No trust runs yet for this {TARGET_SINGULAR.toLowerCase()}.
           </div>
         ) : (
           <table className="w-full text-sm">

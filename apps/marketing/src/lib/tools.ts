@@ -19,6 +19,7 @@ export const tools = [
       "Checking a box does not verify that a control is implemented correctly",
       "It is not a penetration test, compliance assessment, or security guarantee",
     ],
+    updatedDate: "2026-07-31",
     references: [
       {
         label: "OWASP Application Security Verification Standard",
@@ -46,6 +47,7 @@ export const tools = [
       "It checks a focused set of names and patterns, not whether every policy value is safe",
       "A clear result does not establish exploitability or overall application security",
     ],
+    updatedDate: "2026-07-31",
     references: [
       {
         label: "MDN: Content-Security-Policy",
@@ -77,6 +79,7 @@ export const tools = [
       "Pattern matching can miss custom formats and can flag test or example values",
       "It does not scan Git history, deployed bundles, logs, cloud stores, or already leaked credentials",
     ],
+    updatedDate: "2026-07-31",
     references: [
       {
         label: "OWASP Secrets Management Cheat Sheet",
@@ -104,6 +107,7 @@ export const tools = [
       "Static pattern matching cannot evaluate full SQL semantics or application authorization",
       "You still need positive and negative tests with at least two real accounts",
     ],
+    updatedDate: "2026-07-31",
     references: [
       {
         label: "Supabase: Row Level Security",
@@ -131,6 +135,7 @@ export const tools = [
       "Decoded claims are untrusted input and do not prove a session is valid",
       "Use only non-production tokens; this page does not inspect server-side session behavior",
     ],
+    updatedDate: "2026-07-31",
     references: [
       {
         label: "RFC 7519: JSON Web Token",

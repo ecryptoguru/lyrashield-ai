@@ -1,6 +1,7 @@
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { TargetsClient } from "./targets-client"
+import { TARGET_PLURAL } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 
 export default async function TargetsPage({
@@ -20,7 +21,7 @@ export default async function TargetsPage({
       <div className="rounded-lg border border-dashed p-12 text-center">
         <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
         <p className="text-muted-foreground text-sm">
-          Create a workspace first to start managing targets.
+          Create a workspace first to start managing {TARGET_PLURAL.toLowerCase()}.
         </p>
       </div>
     )

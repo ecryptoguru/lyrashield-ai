@@ -32,6 +32,7 @@ import {
 } from "@lyrashield/ui"
 import { apiGet, apiGetPaginated, apiPost, apiPatch } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
+import { ISSUE_PLURAL, RUN_PLURAL, RUN_SINGULAR } from "@/lib/terminology"
 import { getFindingNextStep } from "@/lib/finding-next-step"
 import {
   Sheet,
@@ -213,7 +214,7 @@ export function FindingsClient({
         setNextCursor(res.nextCursor)
       } catch {
         setFindings([])
-        setError("Failed to load findings. Please try again.")
+        setError(`Failed to load ${ISSUE_PLURAL.toLowerCase()}. Please try again.`)
       } finally {
         setLoading(false)
       }
@@ -256,13 +257,13 @@ export function FindingsClient({
                 <ChevronRight className="h-3 w-3" />
               </li>
               <li aria-current="page" className="text-foreground font-medium">
-                Findings
+                {ISSUE_PLURAL}
               </li>
             </ol>
           </nav>
-          <h1 className="text-2xl font-bold tracking-tight">Findings</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{ISSUE_PLURAL}</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Potential and verified security findings reported by your scans
+            Potential and verified security {ISSUE_PLURAL.toLowerCase()} reported by your trust runs
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -296,7 +297,7 @@ export function FindingsClient({
                 setSortMode(next)
                 updateQueryParams({ filter, sort: next })
               }}
-              aria-label="Sort findings"
+              aria-label={`Sort ${ISSUE_PLURAL.toLowerCase()}`}
               className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
             >
               <option value="severity">Severity (high first)</option>
@@ -325,7 +326,11 @@ export function FindingsClient({
       )}
 
       {loading && findings.length === 0 ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading findings">
+        <div
+          className="space-y-3"
+          aria-busy="true"
+          aria-label={`Loading ${ISSUE_PLURAL.toLowerCase()}`}
+        >
           {[0, 1, 2].map((item) => (
             <Skeleton key={item} className="h-32 w-full" />
           ))}
@@ -333,11 +338,11 @@ export function FindingsClient({
       ) : findings.length === 0 ? (
         <EmptyState
           icon={Bug}
-          title="No findings yet"
-          description="Security vulnerabilities detected by scans will appear here. Run a scan to get started."
+          title={`No ${ISSUE_PLURAL.toLowerCase()} yet`}
+          description={`Security ${ISSUE_PLURAL.toLowerCase()} detected by ${RUN_PLURAL.toLowerCase()} will appear here. Start a ${RUN_SINGULAR.toLowerCase()} to get started.`}
           action={
             <Link href="/dashboard/scans" className={buttonVariants()}>
-              Start a review
+              Start a {RUN_SINGULAR.toLowerCase()}
             </Link>
           }
         />

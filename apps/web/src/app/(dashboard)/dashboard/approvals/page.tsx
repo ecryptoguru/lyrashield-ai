@@ -1,5 +1,6 @@
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { listApprovals, prisma } from "@lyrashield/db"
+import { APPROVAL_CENTER, APPROVAL_PLURAL } from "@/lib/terminology"
 import { ClipboardCheck } from "lucide-react"
 import { ApprovalsClient } from "./approvals-client"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
@@ -30,7 +31,7 @@ export default async function ApprovalsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Approval Centre</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{APPROVAL_CENTER}</h1>
         <p className="text-muted-foreground text-sm">
           Review and approve agent actions and fix proposals before they are applied.
         </p>
@@ -39,7 +40,7 @@ export default async function ApprovalsPage() {
       {!workspaceId ? (
         <NoWorkspaceState
           icon={ClipboardCheck}
-          description="Create a workspace during onboarding to view approvals."
+          description={`Create a workspace during onboarding to view ${APPROVAL_PLURAL.toLowerCase()}.`}
         />
       ) : (
         <ApprovalsClient

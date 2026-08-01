@@ -19,7 +19,11 @@ const title =
   page.currentPage === 1
     ? "AI App Security Resources | LyraShield AI"
     : `AI App Security Resources — Page ${page.currentPage} | LyraShield AI`
-const description = "Read LyraShield AI research and practical guidance on securing AI-built apps, interpreting security evidence, verifying findings, and retesting fixes."
+const baseDescription = "Read LyraShield AI research and practical guidance on securing AI-built apps, interpreting security evidence, verifying findings, and retesting fixes."
+const description =
+  page.currentPage === 1
+    ? baseDescription
+    : `${baseDescription} — Page ${page.currentPage}`
 const featuredPost = page.currentPage === 1 ? page.data[0] : undefined
 const remainingPosts = featuredPost ? page.data.slice(1) : page.data
 // All six categories with counts computed from the FULL published set —

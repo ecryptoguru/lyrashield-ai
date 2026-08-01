@@ -107,7 +107,7 @@ export default async function DashboardPage() {
             label: "Needs evidence",
             description: "Run a scan before making a launch decision.",
             href: "/dashboard/scans?new=1",
-            action: "Start a safe scan",
+            action: "Run first scan",
             className: "border-warning bg-warning/10",
           }
         : {
@@ -349,9 +349,12 @@ export default async function DashboardPage() {
                 title="No scan activity yet"
                 description="Run your first scan to see activity here."
                 action={
-                  <Link href="/dashboard/scans" className={buttonVariants({ size: "sm" })}>
+                  <Link
+                    href="/dashboard/scans"
+                    className={buttonVariants({ variant: "secondary", size: "sm" })}
+                  >
                     <Play className="size-4" aria-hidden="true" />
-                    Start a scan
+                    Go to scans
                   </Link>
                 }
               />

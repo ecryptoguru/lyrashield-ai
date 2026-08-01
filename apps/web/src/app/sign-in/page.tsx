@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { authClient, getAuthErrorMessage, isEmailNotVerifiedError } from "@lyrashield/auth"
-import { ShieldCheck } from "lucide-react"
+import { ShieldCheck, AlertCircle } from "lucide-react"
 import {
   Button,
   Input,
@@ -16,6 +16,7 @@ import {
 } from "@lyrashield/ui"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthSplitLayout } from "@/components/auth-split-layout"
+import { PasswordInput } from "@/components/password-input"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -238,34 +239,44 @@ export default function SignInPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
+                autoFocus
                 placeholder="you@example.com"
+                aria-describedby={error ? "signin-error" : undefined}
+                aria-invalid={error ? true : undefined}
               />
             </FormField>
             <FormField label="Password" htmlFor="password">
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
                 placeholder="••••••••"
+                aria-describedby={error ? "signin-error" : undefined}
+                aria-invalid={error ? true : undefined}
               />
             </FormField>
-            {providers.passwordReset && (
-              <div className="flex justify-end">
+            <div className="flex min-h-11 items-center justify-end">
+              {providers.passwordReset ? (
                 <Link
                   href="/forgot-password"
-                  className="text-primary min-h-11 py-2 text-sm font-medium hover:underline"
+                  className="text-primary inline-flex min-h-11 items-center py-2 text-sm font-medium hover:underline"
                 >
                   Forgot password?
                 </Link>
-              </div>
-            )}
+              ) : null}
+            </div>
 
             {error && (
-              <p className="text-destructive text-sm" role="alert">
-                {error}
+              <p
+                id="signin-error"
+                role="alert"
+                aria-live="polite"
+                className="bg-destructive/10 text-destructive border-destructive/30 flex items-start gap-2 rounded-md border p-3 text-sm font-medium"
+              >
+                <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <span>{error}</span>
               </p>
             )}
 
@@ -304,7 +315,7 @@ export default function SignInPage() {
                     className="w-full"
                     size="lg"
                   >
-                    <GoogleIcon className="mr-2 h-4 w-4" />
+                    <GoogleIcon className="mr-2 h-4 w-4" aria-hidden="true" />
                     Continue with Google
                   </Button>
                 )}

@@ -632,7 +632,7 @@ export function ScanDetailClient({
               <p className="font-semibold">{presentation.headline}</p>
               <p className="text-foreground/80 mt-1">{presentation.description}</p>
               {scan.errorMessage && (
-                <details className="text-foreground/80 mt-3">
+                <details className="text-foreground mt-3">
                   <summary className="cursor-pointer font-medium">Failure details</summary>
                   <p className="mt-2 wrap-break-word">
                     {scan.errorCategory ? `${scan.errorCategory}: ` : ""}

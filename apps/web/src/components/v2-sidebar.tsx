@@ -31,7 +31,7 @@ function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
       href={item.href}
       aria-current={isActive ? "page" : undefined}
       className={cn(
-        "group flex min-h-11 items-center gap-3 border-l-2 px-3 text-sm font-medium transition-[background-color,border-color,color] duration-[var(--duration-fast)] ease-[var(--ease-out)]",
+        "group flex min-h-11 items-center gap-3 border-l-2 px-3 text-sm font-medium transition-[background-color,border-color,color] duration-(--duration-fast) ease-out",
         isActive
           ? "border-primary bg-primary/8 text-primary"
           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border-transparent"
@@ -86,7 +86,7 @@ export function V2Sidebar({
     <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r md:block">
       <div className="bg-sidebar flex h-full min-h-0 flex-col">
         <div className="flex h-16 shrink-0 items-center gap-3 border-b px-5">
-          <div className="shadow-primary-glow flex size-9 items-center justify-center rounded-xl border bg-[#07111f] p-1">
+          <div className="shadow-primary-glow bg-card flex size-9 items-center justify-center rounded-xl border p-1">
             <Image
               src="/icon.svg"
               alt=""

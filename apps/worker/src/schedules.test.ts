@@ -5,6 +5,7 @@ vi.mock("@lyrashield/db", () => ({
   claimDueSchedule: vi.fn(),
   getDueSchedules: vi.fn(),
   getNextRunAt: vi.fn(),
+  runWithWorkspaceContext: <T>(_wsId: string, fn: () => T): T => fn(),
   updateScanStatus: vi.fn(),
   prisma: {
     scan: {
@@ -155,10 +156,15 @@ describe("processDueSchedules", () => {
     const enqueued = await processDueSchedules()
 
     expect(enqueued).toBe(0)
-    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", {
-      errorCategory: "QUEUE",
-      errorMessage: "Scan worker became unavailable while queueing the scheduled scan",
-    })
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      {
+        errorCategory: "QUEUE",
+        errorMessage: "Scan worker became unavailable while queueing the scheduled scan",
+      },
+      "workspace-1"
+    )
   })
 
   it("continues processing other schedules when one schedule fails", async () => {

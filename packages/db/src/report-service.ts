@@ -1,5 +1,7 @@
 import { prisma } from "./client"
 import { createHash, randomBytes } from "crypto"
+
+const SHARE_TOKEN_PATTERN = /^[a-f0-9]{64}$/i
 import { logger } from "@lyrashield/logger"
 import type { Report } from "./generated/prisma"
 import { gatherReportData } from "./report-generator"
@@ -210,11 +212,16 @@ export async function revokeShareToken(reportId: string): Promise<Date> {
   return revokedAt
 }
 
-export async function getReportByShareToken(token: string): Promise<Report | null> {
+export async function getReportByShareToken(
+  token: string
+): Promise<Pick<Report, "id" | "workspaceId" | "shareExpiresAt"> | null> {
+  if (!SHARE_TOKEN_PATTERN.test(token)) return null
+
   const tokenHash = createHash("sha256").update(token).digest("hex")
 
   const report = await getSystemPrisma().report.findFirst({
     where: { shareTokenHash: tokenHash, revokedAt: null, deletedAt: null },
+    select: { id: true, workspaceId: true, shareExpiresAt: true },
   })
 
   if (!report) return null

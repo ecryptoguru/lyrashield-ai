@@ -5,8 +5,9 @@ import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ShieldCheck } from "lucide-react"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
-import { Button, FormField, Input, Spinner } from "@lyrashield/ui"
+import { Button, FormField, Spinner } from "@lyrashield/ui"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { PasswordInput } from "@/components/password-input"
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -49,16 +50,20 @@ export default function ResetPasswordPage() {
         <div className="bg-card border p-6 shadow-sm sm:p-8">
           <form onSubmit={submit} className="space-y-4">
             <FormField label="New password" htmlFor="password">
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="new-password"
                 required
                 minLength={8}
                 placeholder="At least 8 characters"
+                aria-describedby="password-hint"
               />
+              <p id="password-hint" className="text-muted-foreground mt-1.5 text-xs">
+                At least 8 characters. Use a mix of letters, numbers, and symbols for a stronger
+                password.
+              </p>
             </FormField>
             {error && (
               <p role="alert" className="text-destructive text-sm">

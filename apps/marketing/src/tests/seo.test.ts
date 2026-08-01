@@ -48,7 +48,8 @@ describe("marketing SEO metadata", () => {
     expect(home).toContain('inLanguage: "en-US"')
     expect(methodology).toContain('dateModified: "2026-07-29"')
     expect(llms).toContain("43 controls are machine-testable and 7 require retained human evidence")
-    expect(llms).toContain("`${origin}/scan`")
+    expect(llms).toContain("`${origin}/vibe-security-50`")
+    expect(llms).not.toContain("`${origin}/scan`")
   })
 
   it("keeps the 100-post blog surface crawlable, attributable, and draft-gated", () => {

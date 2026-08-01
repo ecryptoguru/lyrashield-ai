@@ -6,12 +6,11 @@ import { usePathname } from "next/navigation"
 import { Bell, ChevronLeft } from "lucide-react"
 import { buttonVariants } from "@lyrashield/ui"
 import { NAV_ITEMS } from "@/lib/nav-items"
-import { useFeatureFlags } from "./feature-flags-provider"
 import { ThemeToggle } from "./theme-toggle"
 
 /**
  * Resolves the current destination's label from the shared nav definition, preferring the
- * longest matching href so "/dashboard/products" wins over "/dashboard".
+ * longest matching href so "/dashboard/targets" wins over "/dashboard".
  */
 function usePageTitle(explicit?: string): string {
   const pathname = usePathname()
@@ -23,9 +22,7 @@ function usePageTitle(explicit?: string): string {
 }
 
 export function MobilePageHeader({ title, backHref }: { title?: string; backHref?: string }) {
-  const flags = useFeatureFlags()
   const pageTitle = usePageTitle(title)
-  if (!flags.uxV2Shell) return null
 
   return (
     <header className="bg-background fixed top-0 z-30 flex h-[calc(4rem+env(safe-area-inset-top))] w-full items-center justify-between border-b px-4 pt-[env(safe-area-inset-top)] md:hidden">
@@ -41,7 +38,7 @@ export function MobilePageHeader({ title, backHref }: { title?: string; backHref
         ) : (
           // The brand mark keeps the mobile shell recognisably the same product as the
           // desktop sidebar, without spending the title slot on the brand name.
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border bg-[#07111f] p-1">
+          <span className="bg-card flex size-8 shrink-0 items-center justify-center rounded-lg border p-1">
             <Image
               src="/icon.svg"
               alt=""

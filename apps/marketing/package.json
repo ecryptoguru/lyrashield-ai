@@ -1,6 +1,7 @@
 {
   "name": "@lyrashield/marketing",
   "private": true,
+  "type": "module",
   "version": "0.0.0",
   "scripts": {
     "predev": "wrangler types && pnpm exec tsx scripts/generate-openapi.ts",

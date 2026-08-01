@@ -20,14 +20,13 @@ export default defineConfig({
     {
       name: "visual-desktop",
       testMatch: /visual\/.*\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1000 } },
     },
   ],
   webServer: {
     command:
       "export BETTER_AUTH_URL=http://127.0.0.1:3100 NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 " +
       "ADDITIONAL_TRUSTED_ORIGINS=http://127.0.0.1:3100 TRUSTED_PROXY_IP_HEADER=x-forwarded-for " +
-      "UX_V2_INTERNAL_USER_IDS= UX_V2_NEW_USERS_FROM=2099-01-01T00:00:00Z " +
       "HOSTNAME=127.0.0.1 PORT=3100 NODE_ENV=production LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0; " +
       (process.env.CI ? "" : "pnpm --filter @lyrashield/web build && ") +
       "rm -rf apps/web/.next/standalone/apps/web/.next/static apps/web/.next/standalone/apps/web/public && " +

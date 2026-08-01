@@ -10,10 +10,10 @@ export default function NotFound() {
         className="security-grid pointer-events-none absolute inset-0 opacity-[0.03]"
         aria-hidden="true"
       />
-      <div className="relative w-full max-w-[440px]">
+      <div className="relative w-full max-w-110">
         <div className="bg-card/80 rounded-xl border p-8 shadow-sm backdrop-blur-[2px] sm:p-10">
           <div className="flex flex-col items-center text-center">
-            <div className="shadow-primary-glow flex size-12 items-center justify-center rounded-xl border bg-[#07111f] p-1.5">
+            <div className="shadow-primary-glow flex size-12 items-center justify-center rounded-xl border bg-(--surface-void-logo) p-1.5">
               <Image
                 src="/icon.svg"
                 alt=""

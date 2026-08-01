@@ -23,6 +23,7 @@ import { createScan, getScanWithEvents, listScans, updateScanStatus } from "./sc
 
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
+  $executeRaw: ReturnType<typeof vi.fn>
   scan: {
     findUnique: ReturnType<typeof vi.fn>
     findFirst: ReturnType<typeof vi.fn>
@@ -52,7 +53,9 @@ describe("updateScanStatus", () => {
       })
     mockPrisma.scan.updateMany.mockResolvedValue({ count: 0 })
 
-    await expect(updateScanStatus("scan-1", "VERIFYING")).rejects.toThrow("CANCELLED")
+    await expect(updateScanStatus("scan-1", "VERIFYING", undefined, "ws-1")).rejects.toThrow(
+      "CANCELLED"
+    )
     expect(mockPrisma.scan.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "scan-1", status: "RUNNING" },

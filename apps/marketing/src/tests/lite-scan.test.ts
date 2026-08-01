@@ -124,6 +124,11 @@ describe("Lite Check marketing surface", () => {
     }
   })
 
+  it("normalizes IDN homograph digits to the same canonical host", () => {
+    expect(normalizePublicHttpUrl("0.¹.0.0")).toBe("https://0.1.0.0/")
+    expect(normalizePublicHttpUrl("https://１２７.０.０.１/")).toBe("https://127.0.0.1/")
+  })
+
   it("distinguishes the live URL scan from browser-local analyzers", () => {
     expect(page).toContain("Live URL scan · passive and read-only")
     expect(homeScan).toContain("Live URL scan · passive and read-only")

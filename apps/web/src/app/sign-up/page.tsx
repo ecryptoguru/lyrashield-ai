@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { AlertCircle } from "lucide-react"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import {
   Button,
@@ -15,6 +16,7 @@ import {
 } from "@lyrashield/ui"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthSplitLayout } from "@/components/auth-split-layout"
+import { PasswordInput } from "@/components/password-input"
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -31,7 +33,6 @@ export default function SignUpPage() {
     github: false,
     google: false,
     microsoft: false,
-    socialSignUp: false,
     emailVerification: false,
   })
 
@@ -53,7 +54,6 @@ export default function SignUpPage() {
             github?: boolean
             google?: boolean
             microsoft?: boolean
-            socialSignUp?: boolean
             emailVerification?: boolean
           } | null
         ) => {
@@ -62,7 +62,6 @@ export default function SignUpPage() {
               github: Boolean(data.github),
               google: Boolean(data.google),
               microsoft: Boolean(data.microsoft),
-              socialSignUp: Boolean(data.socialSignUp),
               emailVerification: Boolean(data.emailVerification),
             })
           }
@@ -278,9 +277,8 @@ export default function SignUpPage() {
               />
             </FormField>
             <FormField label="Password" htmlFor="password">
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -296,8 +294,13 @@ export default function SignUpPage() {
             </FormField>
 
             {error && (
-              <p className="text-destructive text-sm" role="alert">
-                {error}
+              <p
+                role="alert"
+                aria-live="polite"
+                className="bg-destructive/10 text-destructive border-destructive/30 flex items-start gap-2 rounded-md border p-3 text-sm font-medium"
+              >
+                <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <span>{error}</span>
               </p>
             )}
 
@@ -308,62 +311,71 @@ export default function SignUpPage() {
 
             <p className="text-muted-foreground text-center text-xs leading-relaxed">
               By creating an account you agree to the{" "}
-              <Link href="https://lyrashieldai.com/terms" className="text-primary hover:underline">
-                Terms
+              <Link
+                href="https://lyrashieldai.com/terms"
+                className="text-foreground hover:text-primary font-medium underline underline-offset-4"
+              >
+                Terms of Service
               </Link>{" "}
-              and acknowledge our privacy practices.
+              and{" "}
+              <Link
+                href="https://lyrashieldai.com/privacy"
+                className="text-foreground hover:text-primary font-medium underline underline-offset-4"
+              >
+                Privacy Policy
+              </Link>
+              .
             </p>
           </form>
 
-          {providers.socialSignUp &&
-            (providers.github || providers.google || providers.microsoft) && (
-              <>
-                <div className="my-6 flex items-center gap-3">
-                  <div className="bg-border h-px flex-1" />
-                  <span className="text-muted-foreground text-xs font-medium">OR</span>
-                  <div className="bg-border h-px flex-1" />
-                </div>
+          {(providers.github || providers.google || providers.microsoft) && (
+            <>
+              <div className="my-6 flex items-center gap-3">
+                <div className="bg-border h-px flex-1" />
+                <span className="text-muted-foreground text-xs font-medium">OR</span>
+                <div className="bg-border h-px flex-1" />
+              </div>
 
-                <div className="space-y-3">
-                  {providers.github && (
-                    <Button
-                      onClick={handleGitHub}
-                      disabled={loading}
-                      variant="secondary"
-                      className="w-full"
-                      size="lg"
-                    >
-                      <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-                      Sign up with GitHub
-                    </Button>
-                  )}
-                  {providers.google && (
-                    <Button
-                      onClick={handleGoogle}
-                      disabled={loading}
-                      variant="secondary"
-                      className="w-full"
-                      size="lg"
-                    >
-                      <GoogleIcon className="mr-2 h-4 w-4" />
-                      Sign up with Google
-                    </Button>
-                  )}
-                  {providers.microsoft && (
-                    <Button
-                      onClick={handleMicrosoft}
-                      disabled={loading}
-                      variant="secondary"
-                      className="w-full"
-                      size="lg"
-                    >
-                      <MicrosoftIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-                      Sign up with Microsoft
-                    </Button>
-                  )}
-                </div>
-              </>
-            )}
+              <div className="space-y-3">
+                {providers.github && (
+                  <Button
+                    onClick={handleGitHub}
+                    disabled={loading}
+                    variant="secondary"
+                    className="w-full"
+                    size="lg"
+                  >
+                    <GithubIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Sign up with GitHub
+                  </Button>
+                )}
+                {providers.google && (
+                  <Button
+                    onClick={handleGoogle}
+                    disabled={loading}
+                    variant="secondary"
+                    className="w-full"
+                    size="lg"
+                  >
+                    <GoogleIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Sign up with Google
+                  </Button>
+                )}
+                {providers.microsoft && (
+                  <Button
+                    onClick={handleMicrosoft}
+                    disabled={loading}
+                    variant="secondary"
+                    className="w-full"
+                    size="lg"
+                  >
+                    <MicrosoftIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Sign up with Microsoft
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </AuthSplitLayout>
     </>

@@ -26,7 +26,6 @@ describe("auth provider configuration", () => {
       github: true,
       google: false,
       microsoft: false,
-      socialSignUp: true,
       emailVerification: false,
       passwordReset: false,
     })

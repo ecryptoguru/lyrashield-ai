@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Check, Copy, KeyRound, Plus, ShieldAlert } from "lucide-react"
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Spinner } from "@lyrashield/ui"
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  Spinner,
+} from "@lyrashield/ui"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { apiDelete, apiGet, apiPost, ApiError } from "@/lib/api-client"
@@ -76,7 +85,26 @@ export function ApiKeysSection({
     }
   }, [canManage, workspaceId])
 
-  if (!canManage) return null
+  if (!canManage) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="flex items-center gap-2">
+            <KeyRound className="size-4" aria-hidden="true" />
+            API keys
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EmptyState
+            icon={KeyRound}
+            title="API keys are admin-only"
+            description="Only workspace owners and admins can create or manage API keys. Contact an admin if you need access."
+            action={null}
+          />
+        </CardContent>
+      </Card>
+    )
+  }
 
   /**
    * Reset the create form to its defaults. Scope MUST be reset along with the

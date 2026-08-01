@@ -33,6 +33,19 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     </div>
     <p class="premium-hero__boundary">Passive public-surface check · No account required · Full platform open for registration</p>
   </div>
+
+  <div class="premium-hero__artifact hidden lg:block" aria-hidden="true">
+    <div class="premium-hero__artifact-card">
+      <div class="premium-hero__artifact-header">
+        <span class="premium-hero__artifact-dot"></span>
+        <span class="premium-hero__artifact-status">Verified finding</span>
+      </div>
+      <p class="premium-hero__artifact-title">Server credential referenced by client build</p>
+      <p class="premium-hero__artifact-meta">Target: mock-app.example</p>
+      <p class="premium-hero__artifact-meta">Evidence: independent verification</p>
+    </div>
+  </div>
+
   <div class="premium-hero__rail" aria-hidden="true"><span>01</span><i></i><span>07</span></div>
 </section>
 
@@ -41,11 +54,20 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     --hero-cyan: #54d6df;
     position: relative;
     display: grid;
-    min-height: min(760px, calc(100svh - 3.5rem));
+    grid-template-columns: 1fr;
+    min-height: min(720px, calc(100svh - 3.5rem));
     overflow: hidden;
     isolation: isolate;
     color: #edf6fb;
     background: #08111c;
+  }
+
+  @media (min-width: 1024px) {
+    .premium-hero {
+      grid-template-columns: 1fr minmax(18rem, 22rem);
+      align-items: center;
+      padding-inline: max(1rem, calc((100% - 1280px) / 2));
+    }
   }
 
   .premium-hero__poster,
@@ -79,7 +101,15 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     align-self: center;
     width: min(100% - 2rem, 1280px);
     margin-inline: auto;
-    padding-block: clamp(5rem, 10vh, 7.5rem) clamp(3rem, 6vh, 4rem);
+    padding-block: clamp(4rem, 8vh, 6.5rem) clamp(2.5rem, 5vh, 3.5rem);
+  }
+
+  @media (min-width: 1024px) {
+    .premium-hero__content {
+      width: auto;
+      margin-inline: 0;
+      max-width: none;
+    }
   }
 
   .premium-hero__eyebrow,
@@ -179,6 +209,68 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     width: min(10vw, 7rem);
     height: 1px;
     background: linear-gradient(90deg, var(--hero-cyan), rgba(84, 214, 223, 0.15));
+  }
+
+  .premium-hero__artifact {
+    align-self: center;
+    justify-self: end;
+    width: 100%;
+    padding-right: clamp(0.5rem, 2vw, 1.5rem);
+    z-index: 2;
+  }
+
+  .premium-hero__artifact-card {
+    width: 100%;
+    max-width: 22rem;
+    border: 1px solid rgba(84, 214, 223, 0.24);
+    border-radius: 0.35rem;
+    padding: 1.1rem 1.25rem;
+    background: rgba(8, 17, 28, 0.82);
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(8px);
+  }
+
+  .premium-hero__artifact-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .premium-hero__artifact-dot {
+    display: block;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: var(--hero-cyan);
+    box-shadow: 0 0 14px var(--hero-cyan);
+  }
+
+  .premium-hero__artifact-status {
+    color: var(--hero-cyan);
+    font: 600 0.7rem/1 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .premium-hero__artifact-title {
+    margin: 0;
+    color: #edf6fb;
+    font-size: clamp(1rem, 1.35vw, 1.15rem);
+    font-weight: 650;
+    line-height: 1.35;
+  }
+
+  .premium-hero__artifact-meta {
+    margin: 0.4rem 0 0;
+    color: #91a7b8;
+    font: 500 0.75rem/1.5 "JetBrains Mono Variable", monospace;
+  }
+
+  @media (max-width: 1023px) {
+    .premium-hero__artifact {
+      display: none;
+    }
   }
 
   @media (max-width: 720px) {

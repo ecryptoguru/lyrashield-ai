@@ -1,18 +1,9 @@
-import { access, readFile, writeFile, rename } from "node:fs/promises"
+import { access, readFile } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import YAML from "yaml"
 import { backupFile } from "./backup.js"
-
-async function atomicWrite(filePath: string, content: string): Promise<void> {
-  const tmp = `${filePath}.lyrashield-tmp`
-  // tmp is a sibling file generated from the same resolved target path.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  await writeFile(tmp, content, "utf-8")
-  // filePath is the resolved installer target path selected for this workspace.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  await rename(tmp, filePath)
-}
+import { atomicWrite } from "./atomic-write.js"
 
 function equals(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)

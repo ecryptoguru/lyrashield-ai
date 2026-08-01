@@ -1,22 +1,13 @@
-import { readFile, writeFile, rename, access } from "node:fs/promises"
+import { readFile, access } from "node:fs/promises"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { backupFile } from "./backup.js"
+import { atomicWrite } from "./atomic-write.js"
 
 function detectIndent(text: string): string {
   const m = text.match(/^(\s+)\S/m)
   if (m && m[1]) return m[1].startsWith("\t") ? "\t" : m[1]
   return "  "
-}
-
-async function atomicWrite(filePath: string, content: string): Promise<void> {
-  const tmp = `${filePath}.lyrashield-tmp`
-  // tmp is a sibling file generated from the same resolved target path.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  await writeFile(tmp, content, "utf-8")
-  // filePath is the resolved installer target path selected for this workspace.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  await rename(tmp, filePath)
 }
 
 function setIn(

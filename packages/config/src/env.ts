@@ -70,10 +70,6 @@ const envSchema = z
     // Product analytics (PostHog) — mirrors marketing privacy config
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional().or(z.literal("")),
-    // UX V2 rollout flags (Phase 0). Comma-separated user IDs for internal preview;
-    // ISO date for new-account beta. Leave blank to keep flags off.
-    UX_V2_INTERNAL_USER_IDS: z.string().optional().or(z.literal("")),
-    UX_V2_NEW_USERS_FROM: z.string().datetime().optional().or(z.literal("")),
     // Cloudflare Turnstile secret (server-side). Public site key lives in apps/marketing/.env.example.
     TURNSTILE_SECRET_KEY: z.string().optional().or(z.literal("")),
     TRUSTED_PROXY_IP_HEADER: z

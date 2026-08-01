@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import type Redis from "ioredis"
-import { prisma, type ScanStatus, updateScanStatus } from "@lyrashield/db"
+import { getSystemPrisma, type ScanStatus, updateScanStatus } from "@lyrashield/db"
 import { getRedis } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 import { getScanQueue } from "./queue"
@@ -128,13 +128,13 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
     const queue = getScanQueue()
     let scanCursor: string | undefined
     do {
-      const staleScans = await prisma.scan.findMany({
+      const staleScans = await getSystemPrisma().scan.findMany({
         where: {
           status: { in: [...ACTIVE_SCAN_STATUSES] },
           deletedAt: null,
           updatedAt: { lt: new Date(now.getTime() - ORPHAN_GRACE_MS) },
         },
-        select: { id: true },
+        select: { id: true, workspaceId: true },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take: BATCH_SIZE,
         ...(scanCursor ? { cursor: { id: scanCursor }, skip: 1 } : {}),
@@ -148,10 +148,15 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
 
         try {
           lease.assertOwned()
-          await updateScanStatus(scan.id, "FAILED", {
-            errorCategory: "QUEUE",
-            errorMessage: "QUEUE_ORPHANED: active scan has no processable queue job",
-          })
+          await updateScanStatus(
+            scan.id,
+            "FAILED",
+            {
+              errorCategory: "QUEUE",
+              errorMessage: "QUEUE_ORPHANED: active scan has no processable queue job",
+            },
+            scan.workspaceId
+          )
           result.failedOrphanedScans += 1
         } catch (error) {
           logger.warn("Could not reconcile orphaned scan", {
@@ -177,7 +182,7 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
     }
     const jobIds = jobs.map((job) => job.id).filter((id): id is string => Boolean(id))
     const scans = jobIds.length
-      ? await prisma.scan.findMany({
+      ? await getSystemPrisma().scan.findMany({
           where: { id: { in: jobIds } },
           select: { id: true, status: true },
         })
@@ -214,16 +219,21 @@ export async function reconcileScanQueue(now = new Date()): Promise<QueueReconci
 
 export async function reconcileFailedQueueJob(jobId: string, failedReason: string): Promise<void> {
   try {
-    const scan = await prisma.scan.findUnique({
+    const scan = await getSystemPrisma().scan.findUnique({
       where: { id: jobId },
-      select: { status: true },
+      select: { status: true, workspaceId: true },
     })
     if (!scan || !ACTIVE_SCAN_STATUSES.has(scan.status)) return
 
-    await updateScanStatus(jobId, "FAILED", {
-      errorCategory: "QUEUE",
-      errorMessage: `Queue job failed: ${failedReason.slice(0, 500)}`,
-    })
+    await updateScanStatus(
+      jobId,
+      "FAILED",
+      {
+        errorCategory: "QUEUE",
+        errorMessage: `Queue job failed: ${failedReason.slice(0, 500)}`,
+      },
+      scan.workspaceId
+    )
   } catch (error) {
     logger.warn("Could not reconcile failed queue job", {
       jobId,

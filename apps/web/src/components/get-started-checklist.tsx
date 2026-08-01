@@ -100,7 +100,7 @@ export function GetStartedChecklist({
         aria-label="Get started progress"
       >
         <div
-          className="bg-primary h-full rounded-full transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-out)]"
+          className="bg-primary h-full rounded-full transition-[width] duration-(--duration-slow) ease-out"
           style={{ width: `${(doneCount / steps.length) * 100}%` }}
         />
       </div>

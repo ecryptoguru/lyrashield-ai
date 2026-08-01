@@ -28,6 +28,24 @@
   --accent: #087f78;
   --accent-dim: #ccebe7;
   --danger: #e5534b;
+
+  /* Terminal / evidence palette — recurring dark void surfaces. */
+  --terminal-void: #07131d;
+  --terminal-raised: #0e1a28;
+  --terminal-edge: #203246;
+  --terminal-panel: #365069;
+  --terminal-text: #edf8fb;
+  --terminal-muted: #91a7b8;
+  --terminal-dim: #b7c8d4;
+  --terminal-faint: #6f8495;
+  --terminal-cyan: #54d6df;
+  --terminal-cyan-hover: #77e0e6;
+  --terminal-amber: #f3b95f;
+  --terminal-warning: #b57a14;
+  --terminal-warning-text: #9b6509;
+  --logo-void: #07111f;
+  --hero-void: #08111c;
+
   --font-ui: "Inter Variable", system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
