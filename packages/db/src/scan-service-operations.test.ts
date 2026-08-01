@@ -23,6 +23,7 @@ import { createScan, getScanWithEvents, listScans, updateScanStatus } from "./sc
 
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
+  $executeRaw: ReturnType<typeof vi.fn>
   scan: {
     findUnique: ReturnType<typeof vi.fn>
     findFirst: ReturnType<typeof vi.fn>
