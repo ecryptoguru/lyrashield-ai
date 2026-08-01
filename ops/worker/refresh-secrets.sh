@@ -50,6 +50,7 @@ write_secret() {
 }
 
 write_secret DATABASE_URL worker-database-url
+write_secret DATABASE_SYSTEM_URL worker-database-system-url
 write_secret REDIS_URL worker-redis-url
 write_secret BETTER_AUTH_SECRET worker-better-auth-secret
 write_secret BETTER_AUTH_URL worker-better-auth-url

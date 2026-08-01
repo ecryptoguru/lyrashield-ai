@@ -162,18 +162,12 @@ function resolveScanRuntimeBudgetMs(maxDurationMinutes: number | null | undefine
   return Math.min(configuredMaxMs, MAX_SCAN_RUNTIME_MS)
 }
 
-function resolveScannerPhaseTimeoutMs(engineTimeoutMs: number, globalScanBudgetMs: number): number {
-  const totalRuntimeBudgetMs = Math.min(
-    globalScanBudgetMs,
-    env.SCANNER_PHASE_TIMEOUT_MS + engineTimeoutMs
-  )
-  const remainingForScannersMs = Math.max(0, totalRuntimeBudgetMs - engineTimeoutMs)
-
-  if (remainingForScannersMs <= 0) {
-    return 0
-  }
-
-  return Math.min(env.SCANNER_PHASE_TIMEOUT_MS, remainingForScannersMs)
+export function resolveScannerPhaseTimeoutMs(
+  globalScanBudgetMs: number,
+  elapsedMs: number
+): number {
+  // ponytail: spend only the wall-clock time the engine actually used.
+  return Math.max(0, Math.min(env.SCANNER_PHASE_TIMEOUT_MS, globalScanBudgetMs - elapsedMs))
 }
 
 function requireEngineModel(model: string | undefined): string {
@@ -605,7 +599,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const scanStartedAtMs = Date.now()
       scanRuntimeBudgetMs = resolveScanRuntimeBudgetMs(policy?.maxDurationMinutes)
       const maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
-      const engineTimeoutMs = resolveEngineTimeoutMs(policy?.maxDurationMinutes)
       const engineProfile = resolveEngineProfile(mode)
       const engineModel =
         target.type === "REPO" ? requireEngineModel(engineProfile.model) : engineProfile.model
@@ -870,8 +863,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
       await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
       const scannerPhaseTimeoutMs = resolveScannerPhaseTimeoutMs(
-        engineTimeoutMs,
-        scanRuntimeBudgetMs
+        scanRuntimeBudgetMs,
+        Date.now() - scanStartedAtMs
       )
 
       const orchestratorResult = await runScannerOrchestrator({
@@ -1171,6 +1164,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           scanId,
           error: updateErr instanceof Error ? updateErr.message : String(updateErr),
         })
+        // ponytail: let BullMQ retain the terminal infrastructure failure when the DB cannot.
+        throw error
       }
 
       return {
