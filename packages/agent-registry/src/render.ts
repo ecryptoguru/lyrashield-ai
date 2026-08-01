@@ -4,7 +4,7 @@ import type {
   InstallOptions,
   RenderedConfig,
   RenderedEntry,
-} from "./types.js"
+} from "./types"
 
 export const API_URL_PLACEHOLDER = "<apiUrl>"
 

@@ -18,7 +18,9 @@
       "@lyrashield/config": ["../../packages/config/src/index.ts"],
       "@lyrashield/config/*": ["../../packages/config/src/*"],
       "@lyrashield/mcp": ["../../packages/mcp/src/index.ts"],
-      "@lyrashield/mcp/*": ["../../packages/mcp/src/*"]
+      "@lyrashield/mcp/*": ["../../packages/mcp/src/*"],
+      "@lyrashield/agent-registry": ["../../packages/agent-registry/src/index.ts"],
+      "@lyrashield/agent-registry/*": ["../../packages/agent-registry/src/*"]
     }
   },
   "include": [
@@ -40,7 +42,8 @@
     "../../packages/logger/src/**/*.tsx",
     "../../packages/config/src/**/*.ts",
     "../../packages/config/src/**/*.tsx",
-    "../../packages/mcp/src/**/*.ts"
+    "../../packages/mcp/src/**/*.ts",
+    "../../packages/agent-registry/src/**/*.ts"
   ],
   "exclude": [
     "node_modules",

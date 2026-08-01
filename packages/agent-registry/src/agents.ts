@@ -1,5 +1,5 @@
-import type { AgentEntry } from "./types.js"
-import { API_URL_PLACEHOLDER } from "./render.js"
+import type { AgentEntry } from "./types"
+import { API_URL_PLACEHOLDER } from "./render"
 
 const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-07-31"
 
@@ -71,7 +71,7 @@ const cursor: AgentEntry = {
 
 const windsurf: AgentEntry = {
   id: "windsurf",
-  displayName: "Windsurf",
+  displayName: "Devin Desktop (Windsurf)",
   docsSlug: "windsurf",
   installStrategy: "config-file",
   format: "json",
@@ -91,9 +91,12 @@ const windsurf: AgentEntry = {
   rulesFiles: [".windsurf/rules/lyrashield.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://docs.windsurf.com/plugins/cascade/mcp",
+    url: "https://docs.devin.ai/windsurf/plugins/cascade/mcp",
   },
-  gotchas: ["Windsurf's remote form uses `serverUrl`, not `url`."],
+  gotchas: [
+    "Windsurf is now Devin Desktop (June 2026); the config path ~/.codeium/windsurf/mcp_config.json is unchanged. This entry is the Devin Desktop (Cascade) surface — the separate Devin CLI uses .devin/config.local.json (see the devin-cli entry).",
+    "Windsurf's remote form uses `serverUrl`, not `url`. Add via the MCP Marketplace UI or View raw config, then click Refresh.",
+  ],
 }
 
 const vscode: AgentEntry = {
@@ -418,6 +421,156 @@ const hermes: AgentEntry = {
   ],
 }
 
+const antigravity: AgentEntry = {
+  id: "antigravity",
+  displayName: "Antigravity",
+  docsSlug: "antigravity",
+  installStrategy: "config-file",
+  format: "json",
+  rootKey: "mcpServers",
+  locations: [
+    {
+      scope: "global",
+      path: "~/.gemini/config/mcp_config.json",
+      sharedByConvention: true,
+    },
+    {
+      scope: "project",
+      path: ".agents/mcp_config.json",
+      sharedByConvention: true,
+    },
+  ],
+  transports: ["stdio", "remote-http"],
+  credential: { kind: "inline-env" },
+  transportFields: {
+    // Antigravity uses `serverUrl` (not `url`) for HTTP-based MCP servers.
+    "remote-http": { serverUrl: API_URL_PLACEHOLDER },
+  },
+  rulesFiles: ["GEMINI.md", "AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://antigravity.google/docs/cli/mcp",
+  },
+  gotchas: [
+    "Antigravity uses `serverUrl`, not `url`, for HTTP servers — `url` is rejected.",
+    "One shared config at ~/.gemini/config/mcp_config.json serves the IDE, the agy CLI, and 2.0; the workspace .agents/mcp_config.json scopes to one project.",
+    "Shared skills live in ~/.gemini/skills; project rules go in GEMINI.md (project) or AGENTS.md (global).",
+  ],
+}
+
+const copilotCli: AgentEntry = {
+  id: "copilot-cli",
+  displayName: "GitHub Copilot CLI",
+  docsSlug: "copilot-cli",
+  installStrategy: "config-file",
+  format: "json",
+  rootKey: "mcpServers",
+  locations: [
+    {
+      scope: "global",
+      path: "~/.copilot/mcp-config.json",
+      sharedByConvention: false,
+    },
+    {
+      scope: "project",
+      path: ".mcp.json",
+      sharedByConvention: true,
+    },
+    {
+      scope: "project",
+      path: ".github/mcp.json",
+      sharedByConvention: true,
+    },
+  ],
+  transports: ["stdio", "remote-http"],
+  credential: { kind: "inline-env" },
+  transportFields: {
+    stdio: { type: "local" },
+    "remote-http": { type: "http", url: API_URL_PLACEHOLDER },
+  },
+  vendorCli: { command: "copilot", args: ["mcp", "add"] },
+  rulesFiles: [".github/copilot-instructions.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers",
+  },
+  gotchas: [
+    'Copilot CLI stdio entries use `type: "local"` (or `"stdio"`); remote uses `type: "http"`.',
+    'Each entry may carry a `tools` array (e.g. ["*"]) to allowlist server tools.',
+    "GitHub's own MCP server is built in — you don't add it manually.",
+  ],
+}
+
+const goose: AgentEntry = {
+  id: "goose",
+  displayName: "Goose",
+  docsSlug: "goose",
+  installStrategy: "guided-manual",
+  format: null,
+  rootKey: null,
+  locations: [],
+  transports: ["stdio", "remote-http"],
+  credential: { kind: "inline-env" },
+  rulesFiles: [".goosehints"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://block-goose.mintlify.app/guides/mcp-integration",
+  },
+  gotchas: [
+    "Goose configures MCP servers as `extensions` in ~/.config/goose/config.yaml (YAML, nested map) — not a `mcpServers` JSON dict. Stdio entry: {type: stdio, cmd, args}; remote: {type: streamable_http, uri, headers}.",
+    "Goose has no MCP rules file; project hints live in .goosehints.",
+  ],
+}
+
+const aider: AgentEntry = {
+  id: "aider",
+  displayName: "Aider",
+  docsSlug: "aider",
+  installStrategy: "guided-manual",
+  format: null,
+  rootKey: null,
+  locations: [],
+  transports: ["stdio", "remote-http"],
+  credential: { kind: "inline-env" },
+  rulesFiles: [],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://modelpiper.com/blog/aider-mcp-setup",
+  },
+  gotchas: [
+    "Aider's MCP is configured as a YAML list under `mcp-servers` in ~/.aider.conf.yml (or a `--mcp-servers '<json>'` CLI flag) — not a `mcpServers` JSON dict. Remote entries use `transport: http` + `url`.",
+    "Aider has no MCP rules file.",
+  ],
+}
+
+const devinCli: AgentEntry = {
+  id: "devin-cli",
+  displayName: "Devin CLI",
+  docsSlug: "devin-cli",
+  installStrategy: "config-file",
+  format: "json",
+  rootKey: "mcpServers",
+  locations: [
+    {
+      scope: "project",
+      path: ".devin/config.local.json",
+      sharedByConvention: false,
+    },
+  ],
+  transports: ["stdio"],
+  credential: { kind: "inline-env" },
+  vendorCli: { command: "devin", args: ["mcp", "add"] },
+  rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://cognitionai.mintlify.app/cli/extensibility/mcp/overview",
+  },
+  gotchas: [
+    "Devin CLI (separate from Devin Desktop) uses .devin/config.local.json (gitignored) with a mcpServers object; stdio only.",
+    "Manage servers with `devin mcp add|login|enable|disable`; remote servers needing OAuth authenticate via `devin mcp login <server>`. MCP tools are namespaced mcp__<server>__<tool>.",
+  ],
+}
+
 export const AGENTS: readonly AgentEntry[] = [
   claudeCode,
   cursor,
@@ -434,4 +587,9 @@ export const AGENTS: readonly AgentEntry[] = [
   picode,
   openclaw,
   hermes,
+  antigravity,
+  copilotCli,
+  goose,
+  aider,
+  devinCli,
 ] as const

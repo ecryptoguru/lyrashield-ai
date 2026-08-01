@@ -425,3 +425,165 @@ exports[`conformance: renderConfig round-trips through the format parser > zed �
   }
 }"
 `;
+exports[`conformance: renderConfig round-trips through the format parser > antigravity × remote-http — inline secret may contain the literal key > antigravity × remote-http — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "serverUrl": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_testkey123"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > antigravity × remote-http — interpolated secret is safe > antigravity × remote-http — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "serverUrl": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <LYRASHIELD_API_KEY>"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > antigravity × stdio — inline secret may contain the literal key > antigravity × stdio — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_testkey123"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > antigravity × stdio — interpolated secret is safe > antigravity × stdio — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > copilot-cli × remote-http — inline secret may contain the literal key > copilot-cli × remote-http — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_testkey123"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > copilot-cli × remote-http — interpolated secret is safe > copilot-cli × remote-http — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <LYRASHIELD_API_KEY>"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > copilot-cli × stdio — inline secret may contain the literal key > copilot-cli × stdio — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_testkey123"
+      },
+      "type": "local"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > copilot-cli × stdio — interpolated secret is safe > copilot-cli × stdio — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
+      },
+      "type": "local"
+    }
+  }
+}"
+`;
+exports[`conformance: renderConfig round-trips through the format parser > devin-cli × stdio — inline secret may contain the literal key > devin-cli × stdio — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_testkey123"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > devin-cli × stdio — interpolated secret is safe > devin-cli × stdio — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
+      }
+    }
+  }
+}"
+`;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Radar, Play, X, RefreshCw, ChevronRight, ChevronDown } from "lucide-react"
+import { Radar, Play, X, RefreshCw, ChevronRight, ChevronDown, Check } from "lucide-react"
 import {
   Button,
   buttonVariants,
@@ -12,6 +12,7 @@ import {
   Select,
   EmptyState,
   Spinner,
+  cn,
 } from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
@@ -19,9 +20,27 @@ import { formatDateTime } from "@/lib/date-format"
 import { RUN_PLURAL, RUN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
 import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
-import { getScanPreset, SCAN_PRESETS, type ScanPresetId } from "@/lib/scan-presets"
+import {
+  getScanPreset,
+  SCAN_PRESETS,
+  SCAN_PRESET_ORDER,
+  type ScanPresetId,
+} from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { getGoalLabel } from "@/lib/labels"
+
+function modeBadgeVariant(mode: string): "default" | "success" | "info" | "warning" | "muted" {
+  switch (mode) {
+    case "SAFE":
+      return "success"
+    case "STANDARD":
+      return "info"
+    case "DEEP":
+      return "warning"
+    default:
+      return "default"
+  }
+}
 
 interface ScanItem {
   id: string
@@ -267,25 +286,34 @@ export function ScansClient({
 
       {showCreate && (
         <Card className="mb-6 p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Start a trust run</h2>
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">
+                Start a {RUN_SINGULAR.toLowerCase()}
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Choose a {TARGET_SINGULAR.toLowerCase()} and how thorough the review should be.
+              </p>
+            </div>
             <Button
               variant="ghost"
               size="sm"
               aria-label="Close"
               onClick={() => setShowCreate(false)}
+              className="min-h-11 min-w-11 shrink-0"
             >
               <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Target" htmlFor="scan-target">
+
+          <div className="space-y-5">
+            <FormField label={TARGET_SINGULAR} htmlFor="scan-target">
               <Select
                 id="scan-target"
                 value={selectedTarget}
                 onChange={(e) => setSelectedTarget(e.target.value)}
               >
-                <option value="">Select a target…</option>
+                <option value="">Select a {TARGET_SINGULAR.toLowerCase()}…</option>
                 {targets.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name} ({t.type})
@@ -293,45 +321,183 @@ export function ScansClient({
                 ))}
               </Select>
             </FormField>
-          </div>
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium"
-            >
-              <ChevronDown
-                className={`size-4 transition-transform duration-(--duration-fast) ease-out ${showAdvanced ? "rotate-180" : ""}`}
-                aria-hidden="true"
-              />
-              Advanced
-            </button>
-            {showAdvanced && (
-              <div className="mt-3">
-                <FormField label="Review depth" htmlFor="scan-preset">
-                  <Select
-                    id="scan-preset"
-                    value={selectedPreset}
-                    onChange={(e) => setSelectedPreset(e.target.value as ScanPresetId)}
-                  >
-                    {(["RELEASE_CHECK", "CODE_REVIEW", "DEEP_REVIEW"] as const).map((id) => (
-                      <option key={id} value={id}>
-                        {SCAN_PRESETS[id].label}
-                      </option>
-                    ))}
-                  </Select>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {getScanPreset(selectedPreset).description}{" "}
-                    {selectedTarget && !selectedTargetUsesEngine
-                      ? "This target uses deterministic scanners."
-                      : "A protected run limit is applied automatically."}
-                  </p>
-                </FormField>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="block text-sm font-medium">Review type</p>
+                <span className="text-muted-foreground text-[11px]">Simple options — pick one</span>
               </div>
-            )}
+
+              <div
+                role="radiogroup"
+                aria-label="Review type"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+              >
+                {SCAN_PRESET_ORDER.map((presetId) => {
+                  const preset = SCAN_PRESETS[presetId]
+                  const isSelected = selectedPreset === presetId
+                  return (
+                    <button
+                      key={presetId}
+                      id={`preset-${presetId}`}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      aria-label={`${preset.label}: ${preset.description}`}
+                      tabIndex={isSelected ? 0 : -1}
+                      onClick={() => setSelectedPreset(presetId)}
+                      onKeyDown={(e) => {
+                        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                          e.preventDefault()
+                          const idx = SCAN_PRESET_ORDER.indexOf(presetId)
+                          const next = SCAN_PRESET_ORDER[(idx + 1) % SCAN_PRESET_ORDER.length]!
+                          setSelectedPreset(next)
+                          document.getElementById(`preset-${next}`)?.focus()
+                        }
+                        if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                          e.preventDefault()
+                          const idx = SCAN_PRESET_ORDER.indexOf(presetId)
+                          const prev =
+                            SCAN_PRESET_ORDER[
+                              (idx - 1 + SCAN_PRESET_ORDER.length) % SCAN_PRESET_ORDER.length
+                            ]!
+                          setSelectedPreset(prev)
+                          document.getElementById(`preset-${prev}`)?.focus()
+                        }
+                      }}
+                      className={cn(
+                        "group focus-visible:ring-ring relative flex min-h-[92px] w-full flex-col items-start rounded-lg border p-4 text-left shadow-xs transition-[border-color,box-shadow,background-color] duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+                        isSelected
+                          ? "border-primary bg-primary/[0.06] dark:bg-primary/[0.12] ring-primary/20 shadow-sm ring-1"
+                          : "border-border bg-card hover:border-border/80 hover:bg-accent/50"
+                      )}
+                    >
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <span className="text-sm font-semibold tracking-tight">{preset.label}</span>
+                        <div className="flex items-center gap-1.5">
+                          <Badge
+                            variant={modeBadgeVariant(preset.mode)}
+                            className="px-2 py-0 text-[10px] font-semibold tracking-wide uppercase"
+                          >
+                            {preset.mode}
+                          </Badge>
+                          {isSelected ? (
+                            <span className="bg-primary text-primary-foreground inline-flex size-5 items-center justify-center rounded-full">
+                              <Check className="size-3" aria-hidden="true" />
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <span className="text-muted-foreground mt-1.5 line-clamp-3 text-xs leading-relaxed">
+                        {preset.description}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <p className="text-muted-foreground mt-2 text-xs">
+                {getScanPreset(selectedPreset).hint}{" "}
+                {selectedTarget && !selectedTargetUsesEngine
+                  ? "This target uses deterministic scanners."
+                  : "A protected limit is applied automatically."}
+              </p>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                aria-expanded={showAdvanced}
+                aria-controls="scan-advanced-panel"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex min-h-11 items-center gap-1 rounded-md px-1 text-xs font-medium focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
+              >
+                <ChevronDown
+                  className={cn(
+                    "size-4 transition-transform duration-(--duration-fast) ease-out",
+                    showAdvanced ? "rotate-180" : ""
+                  )}
+                  aria-hidden="true"
+                />
+                Details
+              </button>
+
+              {showAdvanced && (
+                <div
+                  id="scan-advanced-panel"
+                  className="bg-muted/40 border-border mt-2 rounded-lg border p-4"
+                >
+                  {(() => {
+                    const preset = getScanPreset(selectedPreset)
+                    return (
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-sm font-medium">{preset.label}</p>
+                          <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                            {preset.hint}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div className="bg-card border-border rounded-md border px-3 py-2.5">
+                            <p className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+                              Goal
+                            </p>
+                            <p className="mt-1 text-xs font-medium">
+                              {getGoalLabel(preset.goal)}
+                              <span className="text-muted-foreground ml-1.5 font-normal">
+                                · {preset.goal}
+                              </span>
+                            </p>
+                          </div>
+                          <div className="bg-card border-border rounded-md border px-3 py-2.5">
+                            <p className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+                              Mode
+                            </p>
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <Badge
+                                variant={modeBadgeVariant(preset.mode)}
+                                className="text-[11px] font-semibold tracking-wide uppercase"
+                              >
+                                {preset.mode}
+                              </Badge>
+                              <span className="text-muted-foreground text-xs">
+                                {preset.mode === "SAFE"
+                                  ? "Bounded, fast"
+                                  : preset.mode === "STANDARD"
+                                    ? "Repo + deps"
+                                    : "Cross-file deep"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-muted-foreground text-[11px] leading-relaxed">
+                          No extra fields — we send{" "}
+                          <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">
+                            goal
+                          </code>{" "}
+                          and{" "}
+                          <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">
+                            mode
+                          </code>{" "}
+                          from this preset.{" "}
+                          {selectedTarget && !selectedTargetUsesEngine
+                            ? "This URL target uses deterministic scanners."
+                            : "Engine targets get a protected run budget automatically."}
+                        </p>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="mt-4 flex gap-2">
-            <Button onClick={handleCreateScan} disabled={creating || !selectedTarget}>
+
+          <div className="mt-6 flex gap-2">
+            <Button
+              onClick={handleCreateScan}
+              disabled={creating || !selectedTarget}
+              className="min-h-11"
+            >
               {creating ? (
                 <>
                   <Spinner className="mr-2 h-4 w-4" />
@@ -340,11 +506,11 @@ export function ScansClient({
               ) : (
                 <>
                   <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Start Trust Run
+                  Start {RUN_SINGULAR}
                 </>
               )}
             </Button>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>
+            <Button variant="outline" onClick={() => setShowCreate(false)} className="min-h-11">
               Cancel
             </Button>
           </div>

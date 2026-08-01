@@ -203,6 +203,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@lyrashield/agent-registry':
+        specifier: workspace:*
+        version: link:../../packages/agent-registry
       '@lyrashield/auth':
         specifier: workspace:*
         version: link:../../packages/auth

@@ -1,6 +1,10 @@
 import { prisma } from "@lyrashield/db"
+import { env } from "@lyrashield/config"
+import Link from "next/link"
 import { Plug } from "lucide-react"
 import { GithubIntegration } from "./github-integration"
+import { McpIntegration } from "./mcp-integration"
+import { CliIntegration } from "./cli-integration"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 
@@ -43,12 +47,34 @@ export default async function IntegrationsPage({
   const githubIntegration = integrations.find((i) => i.type === "GITHUB")
   const githubVerificationRequired = (await searchParams).github === "verification_required"
 
+  const appOriginRaw = (env.NEXT_PUBLIC_APP_URL as string | undefined) ?? ""
+  const appOrigin = appOriginRaw.replace(/\/+$/, "")
+  const mcpEndpointUrl = appOrigin ? `${appOrigin}/api/mcp` : "/api/mcp"
+  const marketingUrl =
+    (env.NEXT_PUBLIC_MARKETING_URL as string | undefined)?.replace(/\/+$/, "") ??
+    "https://lyrashield.ai"
+  const docsUrl = `${marketingUrl}/docs/integrations`
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
         <p className="text-muted-foreground text-sm">
           Connect external services to your workspace ({workspaceName}).
+        </p>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-6">
+          Three ways to plug in: <span className="text-foreground font-medium">GitHub</span> to scan
+          repositories, the <span className="text-foreground font-medium">MCP server</span> to give
+          your coding agent live evidence, or the{" "}
+          <span className="text-foreground font-medium">CLI</span> to scan from your terminal or CI.
+          Looking for per-agent setup? See{" "}
+          <Link
+            href="/dashboard/agents"
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+          >
+            Agent integrations
+          </Link>
+          .
         </p>
       </div>
 
@@ -68,6 +94,10 @@ export default async function IntegrationsPage({
         connected={!!githubIntegration}
         accountLogin={githubIntegration?.metadata as { accountLogin?: string } | null}
       />
+
+      <McpIntegration endpointUrl={mcpEndpointUrl} docsUrl={docsUrl} />
+
+      <CliIntegration docsUrl={docsUrl} />
     </div>
   )
 }
