@@ -53,6 +53,21 @@ describe("checkScanUrlSafe", () => {
     expect(result.safe).toBe(false)
   })
 
+  it("blocks IDN/punycode homographs that normalize to blocked IP literals", async () => {
+    // Superscript, fullwidth, and circled digits collapse to ASCII under UTS-46.
+    const homographs = [
+      "http://127.¹.0.1/",
+      "http://10.0.0.¹/",
+      "http://１２７.０.０.１/",
+      "http://127.0.0.①/",
+      "http://①②⑦.⓪.⓪.①/",
+    ]
+    for (const url of homographs) {
+      const result = await checkScanUrlSafe(url, stub)
+      expect(result.safe).toBe(false)
+    }
+  })
+
   const allowed: string[] = [
     "http://8.8.8.8/",
     "https://1.1.1.1/",

@@ -34,7 +34,7 @@ const effectiveSecretMode: InstallOptions["secretMode"] = secretMode ?? defaultS
 
 function buildKeyNote(snippet: string): string {
   if (snippet.includes("<LYRASHIELD_API_KEY>")) {
-    return "Replace &lt;LYRASHIELD_API_KEY&gt; with your workspace API key."
+    return "Replace <LYRASHIELD_API_KEY> with your workspace API key."
   }
   if (snippet.includes("{env:LYRASHIELD_API_KEY}")) {
     return "Make sure LYRASHIELD_API_KEY is exported in your shell or .env file."
@@ -85,6 +85,8 @@ const strategyNotes: Record<string, string> = {
 
 let snippet = ""
 let note = ""
+let notePrefix: "config" | "remote" | "manual" | "none" = "none"
+let notePath = ""
 let strategyNote = ""
 
 if (safeAgent.installStrategy === "config-file") {
@@ -113,11 +115,13 @@ if (safeAgent.installStrategy === "config-file") {
 
   const primaryLocation =
     safeAgent.locations.find((loc) => loc.sharedByConvention) ?? safeAgent.locations[0]
-  const path = primaryLocation?.path ?? "your agent's config file"
-  note = `Add the following to <code>${path}</code>. ${buildKeyNote(snippet)}`
+  notePath = primaryLocation?.path ?? "your agent's config file"
+  notePrefix = "config"
+  note = buildKeyNote(snippet)
 } else if (safeAgent.installStrategy === "vendor-cli") {
   snippet = buildVendorCommand(safeAgent)
   note = buildKeyNote(snippet)
+  notePrefix = "none"
   strategyNote =
     strategyNotes[safeAgent.id] ??
     `${safeAgent.displayName}: configured through its vendor CLI.`
@@ -125,10 +129,12 @@ if (safeAgent.installStrategy === "config-file") {
   // guided-manual
   if (effectiveTransport === "remote-http" && safeAgent.transportFields?.["remote-http"]) {
     snippet = buildRemoteManualCommand(safeAgent)
-    note = `Remote Streamable-HTTP setup. ${buildKeyNote(snippet)}`
+    notePrefix = "remote"
+    note = buildKeyNote(snippet)
   } else {
     snippet = buildManualCommand()
-    note = `Use this command in a terminal, or enter the same values in the agent's MCP settings UI. ${buildKeyNote(snippet)}`
+    notePrefix = "manual"
+    note = buildKeyNote(snippet)
   }
   strategyNote =
     strategyNotes[safeAgent.id] ?? `${safeAgent.displayName}: requires manual configuration.`
@@ -141,7 +147,18 @@ if (safeAgent.installStrategy === "config-file") {
   </div>
 )}
 
-{note && <p class="callout" set:html={note} />}
+{note && (
+  <p class="callout">
+    {notePrefix === "config" && (
+      <>Add the following to <code>{notePath}</code>.{" "}</>
+    )}
+    {notePrefix === "remote" && <>Remote Streamable-HTTP setup.{" "}</>}
+    {notePrefix === "manual" && (
+      <>Use this command in a terminal, or enter the same values in the agent's MCP settings UI.{" "}</>
+    )}
+    {note}
+  </p>
+)}
 
 <pre><code>{snippet}</code></pre>
 

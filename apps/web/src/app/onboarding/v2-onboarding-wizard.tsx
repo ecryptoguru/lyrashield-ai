@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-react"
 import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
-import { apiGet, apiPost, apiPatch } from "@/lib/api-client"
+import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
 import { GOAL_OPTIONS } from "@/lib/labels"
@@ -61,6 +61,18 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
     if (n <= 10) return "4-10"
     if (n <= 50) return "11-50"
     return "50+"
+  }
+
+  function friendlyTargetError(cause: unknown): string {
+    if (cause instanceof ApiError) {
+      if (cause.code === "SSRF_BLOCKED") {
+        return "That URL isn't allowed because it points to an internal, private, or unresolvable address. Use a public target you own or are authorized to scan."
+      }
+      if (cause.code === "VALIDATION_ERROR") {
+        return "We couldn't save your target. Please check the name and URL and try again."
+      }
+    }
+    return cause instanceof Error ? cause.message : "Could not start the review."
   }
 
   const fetchRepos = useCallback(() => {
@@ -316,7 +328,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
       router.push(`/dashboard/scans/${scan.id}`)
       router.refresh()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not start the review.")
+      setError(friendlyTargetError(cause))
     } finally {
       setLoading(false)
     }
@@ -455,19 +467,6 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                   Scan an API&apos;s public surface — no repo access needed.
                 </span>
               </button>
-
-              <button
-                type="button"
-                onClick={() => choosePath("skip")}
-                disabled={loading}
-                className="hover:bg-accent rounded-lg border border-dashed p-4 text-left transition-colors disabled:opacity-60"
-              >
-                <ChevronRight className="text-muted-foreground mb-2 size-6" aria-hidden="true" />
-                <span className="block text-sm font-medium">Skip for now</span>
-                <span className="text-muted-foreground mt-1 block text-xs">
-                  Go to your dashboard. You can add a target anytime.
-                </span>
-              </button>
             </div>
 
             <div className="flex justify-start">
@@ -479,7 +478,13 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
         )}
 
         {step === 1 && (path === "url" || path === "api") && (
-          <div className="space-y-5">
+          <form
+            className="space-y-5"
+            onSubmit={(e) => {
+              e.preventDefault()
+              continueWithUrlTarget()
+            }}
+          >
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
                 Step 2
@@ -519,17 +524,27 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
               />
             </FormField>
 
-            <label className="flex items-start gap-2 text-sm">
+            <div className="flex items-start gap-2">
               <input
+                id="ownership-check"
                 type="checkbox"
+                name="ownershipAttested"
                 checked={urlForm.ownershipAttested}
                 onChange={(e) => setUrlForm({ ...urlForm, ownershipAttested: e.target.checked })}
-                className="mt-0.5"
+                required
+                aria-required="true"
+                aria-describedby="ownership-help"
+                className="border-border text-primary focus:ring-ring mt-1 h-4 w-4 rounded focus:ring-2"
               />
-              <span className="text-muted-foreground">
-                I own or am authorized to scan this target.
-              </span>
-            </label>
+              <div className="flex-1">
+                <label htmlFor="ownership-check" className="text-sm">
+                  I own or am authorized to scan this target.
+                </label>
+                <p id="ownership-help" className="text-muted-foreground text-xs">
+                  This confirms you have permission to test this target.
+                </p>
+              </div>
+            </div>
 
             <div className="flex justify-between gap-3">
               <Button
@@ -540,11 +555,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
               >
                 <ChevronLeft className="size-4" /> Back
               </Button>
-              <Button
-                type="button"
-                onClick={continueWithUrlTarget}
-                disabled={loading || !urlForm.ownershipAttested}
-              >
+              <Button type="submit" disabled={loading || !urlForm.ownershipAttested}>
                 {loading ? (
                   <Spinner className="mr-2" />
                 ) : (
@@ -553,7 +564,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
                 Continue
               </Button>
             </div>
-          </div>
+          </form>
         )}
 
         {step === 2 && (
@@ -720,6 +731,18 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
             </div>
           </div>
         )}
+
+        <div className="mt-6 flex justify-center border-t pt-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void skipOnboarding()}
+            disabled={loading}
+          >
+            Skip / finish later
+          </Button>
+        </div>
       </section>
     </div>
   )

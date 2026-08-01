@@ -1,4 +1,5 @@
 import { lookup } from "node:dns/promises"
+import { domainToASCII } from "node:url"
 import net from "node:net"
 
 /**
@@ -287,8 +288,15 @@ export async function resolveScanUrlSafe(
     return { safe: false, reason: "credential_or_query_not_allowed" }
   }
 
-  const host = url.hostname.toLowerCase()
-  if (!host) return { safe: false, reason: "empty_host" }
+  const rawHost = url.hostname.toLowerCase()
+  if (!rawHost) return { safe: false, reason: "empty_host" }
+
+  // UTS-46/IDNA normalization collapses homograph digits (superscript, fullwidth,
+  // circled) and punycode to their canonical ASCII form. This prevents attackers
+  // from bypassing the IP-literal parser with URLs like http://127.¹.0.1/ that
+  // resolve to http://127.1.0.1/ after DNS normalization.
+  const host = domainToASCII(rawHost.normalize("NFKC"))
+  if (!host) return { safe: false, reason: "invalid_url" }
 
   const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host
   if (bare.endsWith(".")) return { safe: false, reason: "trailing_dot" }

@@ -6,7 +6,9 @@ let warnedUnknownIp = false
 const READ_ONLY_AUTH_PATHS = new Set(["/api/auth/providers", "/api/auth/get-session"])
 
 function generateNonce(): string {
-  return Buffer.from(crypto.randomUUID()).toString("base64")
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("")
+  return btoa(binary)
 }
 
 function buildCspHeader(nonce: string, upgradeInsecureRequests: boolean): string {

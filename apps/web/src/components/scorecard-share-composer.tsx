@@ -215,7 +215,7 @@ export function ScorecardShareComposer({
               ))}
             </div>
           </div>
-          <div className="relative aspect-1200/630 overflow-hidden rounded-lg border bg-[#07110f] shadow-lg">
+          <div className="relative aspect-1200/630 overflow-hidden rounded-lg border bg-(--surface-void) shadow-lg">
             <Image
               key={cardPath}
               src={cardPath}

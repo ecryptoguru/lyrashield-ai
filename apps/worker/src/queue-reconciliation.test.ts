@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@lyrashield/integrations", () => ({ getRedis: () => mocks.redis }))
 vi.mock("@lyrashield/db", () => ({
+  getSystemPrisma: () => mocks.prisma,
   prisma: mocks.prisma,
   updateScanStatus: mocks.updateScanStatus,
 }))
@@ -76,15 +77,22 @@ describe("scan queue reconciliation", () => {
   })
 
   it("fails stale queued scans without recreating jobs", async () => {
-    mocks.prisma.scan.findMany.mockResolvedValueOnce([{ id: "scan-1" }]).mockResolvedValueOnce([])
+    mocks.prisma.scan.findMany
+      .mockResolvedValueOnce([{ id: "scan-1", workspaceId: "ws-1" }])
+      .mockResolvedValueOnce([])
 
     const result = await reconcileScanQueue(new Date("2026-07-18T12:00:00Z"))
 
     expect(result.failedOrphanedScans).toBe(1)
-    expect(mocks.updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", {
-      errorCategory: "QUEUE",
-      errorMessage: expect.stringContaining("QUEUE_ORPHANED"),
-    })
+    expect(mocks.updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      {
+        errorCategory: "QUEUE",
+        errorMessage: expect.stringContaining("QUEUE_ORPHANED"),
+      },
+      "ws-1"
+    )
     expect(mocks.lockRedis.set).toHaveBeenCalledWith(
       "lyrashield:scan-queue:reconciliation",
       expect.any(String),
@@ -147,14 +155,19 @@ describe("scan queue reconciliation", () => {
   })
 
   it("marks an active scan failed when BullMQ reports final failure", async () => {
-    mocks.prisma.scan.findUnique.mockResolvedValue({ status: "RUNNING" })
+    mocks.prisma.scan.findUnique.mockResolvedValue({ status: "RUNNING", workspaceId: "ws-1" })
 
     await reconcileFailedQueueJob("scan-1", "worker crashed")
 
-    expect(mocks.updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", {
-      errorCategory: "QUEUE",
-      errorMessage: "Queue job failed: worker crashed",
-    })
+    expect(mocks.updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      {
+        errorCategory: "QUEUE",
+        errorMessage: "Queue job failed: worker crashed",
+      },
+      "ws-1"
+    )
   })
 
   it("contains database failures from the queue failure callback", async () => {

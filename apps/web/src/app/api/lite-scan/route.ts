@@ -62,7 +62,7 @@ function isOriginAllowed(request: Request): boolean {
 
 async function verifyTurnstile(token: string | undefined): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY
-  if (!secret) return process.env.NODE_ENV !== "production"
+  if (!secret) return false
   if (!token) return false
   try {
     const body = new URLSearchParams({ secret, response: token })

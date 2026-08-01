@@ -1,4 +1,5 @@
 import { createScan, getFinding, prisma, updateScanStatus } from "@lyrashield/db"
+import type { ScanMode } from "@lyrashield/types"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -91,7 +92,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         workspaceId,
         targetId: sourceScan.targetId,
         goal: sourceScan.goal,
-        mode: retestProfile.mode,
+        mode: retestProfile.mode as ScanMode,
         policyId: sourceScan.policyId ?? undefined,
         createdById: session.userId,
         triggerType: "retest",
@@ -133,7 +134,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         workspaceId,
         targetId: sourceScan.targetId,
         goal: sourceScan.goal,
-        mode: retestProfile.mode,
+        mode: retestProfile.mode as ScanMode,
         policyId: sourceScan.policyId ?? undefined,
       })
     } catch (enqueueError) {

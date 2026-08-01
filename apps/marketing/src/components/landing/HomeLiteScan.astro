@@ -19,7 +19,7 @@ const scannerAvailable = Boolean(appOrigin)
         <button type="submit" data-cta-id="homepage_lite_scan" disabled={!scannerAvailable} class="min-h-13 rounded-xl bg-accent px-6 font-semibold text-bg shadow-sm hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-55">{scannerAvailable ? "Scan my app" : "Scanner unavailable"}</button>
       </div>
       <label class="mt-4 flex cursor-pointer items-start gap-3 text-sm leading-6 text-text-muted">
-        <input id="home-scan-authorized" type="checkbox" required disabled={!scannerAvailable} class="mt-1 size-4 shrink-0 accent-[var(--accent)]" />
+        <input id="home-scan-authorized" type="checkbox" required disabled={!scannerAvailable} class="mt-1 size-4 shrink-0 accent-(--accent)" />
         <span>I own this app or have permission to test it. The check is passive and read-only. By scanning I agree to the <a href="/terms" class="font-medium text-accent underline underline-offset-4">Terms</a>.</span>
       </label>
       {!scannerAvailable && <p class="mt-4 text-sm leading-6 text-text-muted" role="status">The separately protected scanner API is not connected in this environment.</p>}

@@ -1,1 +1,6 @@
-export { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "@lyrashield/types"
+export {
+  SCAN_QUEUE_NAME,
+  ScanJobDataSchema,
+  type ScanJobData,
+  type ScanJobResult,
+} from "@lyrashield/types"

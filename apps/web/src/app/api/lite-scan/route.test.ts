@@ -32,6 +32,13 @@ describe("POST /api/lite-scan", () => {
       urlHistory: ["https://example.com/"],
     })
     analyzeLiteSurface.mockReturnValue({ checks: [], liteResultSummary: { findingCount: 0 } })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      })
+    )
   })
 
   it("requires an explicit own-or-authorized attestation", async () => {
@@ -71,14 +78,18 @@ describe("POST /api/lite-scan", () => {
   })
 
   it("rejects private or reserved targets before fetching", async () => {
+    process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret"
     checkScanUrlSafe.mockResolvedValue({ safe: false, reason: "blocked_ip" })
-    const response = await POST(request({ url: "http://169.254.169.254", authorized: true }))
+    const response = await POST(
+      request({ url: "http://169.254.169.254", authorized: true, turnstileToken: "test-token" })
+    )
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({ error: "ssrf_blocked" })
     expect(safeFetch).not.toHaveBeenCalled()
   })
 
   it("uses the pinned passive fetch limits and scans only linked same-origin assets", async () => {
+    process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret"
     safeFetch
       .mockResolvedValueOnce({
         html: '<script src="/assets/app.js"></script><script src="https://cdn.evil.test/x.js"></script>',
@@ -95,7 +106,13 @@ describe("POST /api/lite-scan", () => {
         urlHistory: [],
       })
 
-    const response = await POST(request({ url: "https://example.com", authorized: true }))
+    const response = await POST(
+      request({
+        url: "https://example.com",
+        authorized: true,
+        turnstileToken: "test-token",
+      })
+    )
     expect(response.status).toBe(200)
     expect(safeFetch).toHaveBeenCalledTimes(2)
     expect(safeFetch).toHaveBeenNthCalledWith(

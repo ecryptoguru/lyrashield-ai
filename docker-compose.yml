@@ -21,6 +21,7 @@ services:
     image: postgres:16-alpine
     container_name: lyrashield-postgres
     restart: unless-stopped
+    # DEV ONLY: predictable local credentials. Never reuse in production.
     environment:
       POSTGRES_USER: lyrashield
       POSTGRES_PASSWORD: lyrashield
@@ -43,6 +44,7 @@ services:
     image: redis:7-alpine
     container_name: lyrashield-redis
     restart: unless-stopped
+    # DEV ONLY: weak default password. Rotate before any shared environment.
     command: redis-server --requirepass "${REDIS_PASSWORD:-lyrashield-dev-redis}"
     ports:
       - "127.0.0.1:6379:6379"
@@ -70,6 +72,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      # DEV ONLY: plaintext local database credentials. Production uses a managed secret store.
       DATABASE_URL: "postgresql://${POSTGRES_USER:-lyrashield}:${POSTGRES_PASSWORD:-lyrashield}@postgres:5432/${POSTGRES_DB:-lyrashield}?schema=public"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required — set it in .env or your environment}"
       BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3000}"
@@ -98,6 +101,7 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
+      # DEV ONLY: plaintext local database credentials. Production uses a managed secret store.
       DATABASE_URL: "postgresql://${POSTGRES_USER:-lyrashield}:${POSTGRES_PASSWORD:-lyrashield}@postgres:5432/${POSTGRES_DB:-lyrashield}?schema=public"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required — set it in .env or your environment}"
       # Docker Compose exposes the web app on host port 3000; keep these
@@ -151,6 +155,7 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
+      # DEV ONLY: plaintext local database credentials. Production uses a managed secret store.
       DATABASE_URL: "postgresql://${POSTGRES_USER:-lyrashield}:${POSTGRES_PASSWORD:-lyrashield}@postgres:5432/${POSTGRES_DB:-lyrashield}?schema=public"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}"
       BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3000}"

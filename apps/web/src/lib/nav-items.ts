@@ -12,6 +12,20 @@ import {
   ClipboardCheck,
   type LucideIcon,
 } from "lucide-react"
+import {
+  HOME_LABEL,
+  TARGET_PLURAL,
+  RUN_PLURAL,
+  ISSUE_PLURAL,
+  APPROVAL_CENTER,
+  APPROVAL_PLURAL,
+  EVIDENCE_PLURAL,
+  AUTOMATION_PLURAL,
+  NOTIFICATION_PLURAL,
+  INTEGRATION_PLURAL,
+  TEAM_PLURAL,
+  SETTINGS_PLURAL,
+} from "./terminology"
 
 export interface NavItem {
   href: string
@@ -33,27 +47,27 @@ export interface NavItem {
   mobilePrimary?: boolean
 }
 
-// Canonical internal routes. UI labels come from terminology.ts where needed.
+// Canonical internal routes. UI labels come from terminology.ts.
 export const NAV_ITEMS: NavItem[] = [
   {
     href: "/dashboard",
-    label: "Home",
-    shortLabel: "Home",
+    label: HOME_LABEL,
+    shortLabel: HOME_LABEL,
     icon: LayoutDashboard,
     primary: true,
     mobilePrimary: true,
   },
   {
-    href: "/dashboard/products",
-    label: "Products",
-    shortLabel: "Products",
+    href: "/dashboard/targets",
+    label: TARGET_PLURAL,
+    shortLabel: TARGET_PLURAL,
     icon: Crosshair,
     primary: true,
     mobilePrimary: true,
   },
   {
     href: "/dashboard/scans",
-    label: "Trust Runs",
+    label: RUN_PLURAL,
     shortLabel: "Runs",
     icon: Radar,
     primary: true,
@@ -61,51 +75,51 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/dashboard/findings",
-    label: "Issues",
-    shortLabel: "Issues",
+    label: ISSUE_PLURAL,
+    shortLabel: ISSUE_PLURAL,
     icon: Bug,
     primary: true,
     mobilePrimary: true,
   },
   {
     href: "/dashboard/approvals",
-    label: "Approvals",
-    shortLabel: "Approvals",
+    label: APPROVAL_CENTER,
+    shortLabel: APPROVAL_PLURAL,
     icon: ClipboardCheck,
     primary: true,
   },
   {
     href: "/dashboard/evidence",
-    label: "Evidence",
-    shortLabel: "Evidence",
+    label: EVIDENCE_PLURAL,
+    shortLabel: EVIDENCE_PLURAL,
     icon: ShieldCheck,
     primary: true,
   },
   {
     href: "/dashboard/automations",
-    label: "Automations",
-    shortLabel: "Automations",
+    label: AUTOMATION_PLURAL,
+    shortLabel: AUTOMATION_PLURAL,
     icon: CalendarClock,
     primary: true,
   },
   // Secondary / More
   {
     href: "/dashboard/notifications",
-    label: "Notifications",
-    shortLabel: "Notifications",
+    label: NOTIFICATION_PLURAL,
+    shortLabel: NOTIFICATION_PLURAL,
     icon: Bell,
   },
   {
     href: "/dashboard/integrations",
-    label: "Integrations",
-    shortLabel: "Integrations",
+    label: INTEGRATION_PLURAL,
+    shortLabel: INTEGRATION_PLURAL,
     icon: Plug,
   },
-  { href: "/dashboard/team", label: "Team", shortLabel: "Team", icon: Users },
+  { href: "/dashboard/team", label: TEAM_PLURAL, shortLabel: TEAM_PLURAL, icon: Users },
   {
     href: "/dashboard/settings",
-    label: "Settings",
-    shortLabel: "Settings",
+    label: SETTINGS_PLURAL,
+    shortLabel: SETTINGS_PLURAL,
     icon: Settings,
   },
 ]

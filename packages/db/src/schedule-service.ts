@@ -1,4 +1,5 @@
 import { prisma } from "./client"
+import { getSystemPrisma } from "./system-client"
 import type { Schedule, ScanGoal, ScanMode } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 
@@ -212,7 +213,9 @@ export async function claimDueSchedule(
 }
 
 export async function getDueSchedules(now: Date): Promise<ScheduleWithDetails[]> {
-  const schedules = await prisma.schedule.findMany({
+  // The schedule runner is a cross-workspace background process. Use the
+  // privileged system client so it can read due schedules from all tenants.
+  const schedules = await getSystemPrisma().schedule.findMany({
     where: {
       enabled: true,
       deletedAt: null,

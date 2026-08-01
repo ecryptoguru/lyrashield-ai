@@ -8,3 +8,13 @@ interface Window {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   posthog?: any
 }
+
+// Work around Astro 7.1.4 Picture.astro typing: it uses props.inferSize on
+// LocalImageProps | RemoteImageProps, but inferSize is only declared on RemoteImageProps.
+declare global {
+  namespace Astro {
+    interface CustomImageProps {
+      inferSize?: boolean
+    }
+  }
+}

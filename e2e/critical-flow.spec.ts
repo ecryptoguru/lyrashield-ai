@@ -27,11 +27,14 @@ async function signUp(page: import("@playwright/test").Page, email: string, name
   await page.getByLabel("Email").fill(email)
   await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "Sign in" }).click()
+  // New users land on onboarding; skip it so the rest of the suite can use the dashboard.
   await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
-  await page.goto("/sign-in")
-  await expect(page).toHaveURL(/\/(dashboard|onboarding)/)
-  await page.goto("/onboarding")
-  await expect(page).toHaveURL(/\/onboarding/)
+  const skipOnboarding = await page.request.patch("/api/onboarding", {
+    data: { skipped: true },
+  })
+  await expect(skipOnboarding).toBeOK()
+  await page.goto("/dashboard")
+  await expect(page).toHaveURL("/dashboard")
 }
 
 test.afterAll(async () => {
@@ -107,10 +110,7 @@ test("auth forms recover from a network failure", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled()
 })
 
-test("onboarding creates a target and tenant boundaries deny another user", async ({
-  page,
-  browser,
-}, testInfo) => {
+test("tenant boundaries deny another user", async ({ page, browser }, testInfo) => {
   // The production proxy accepts this header only from configured trusted
   // ingress. Give repeated E2E workers distinct simulated clients so the
   // production auth limiter is exercised without unrelated fixtures sharing
@@ -119,26 +119,27 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
   await page.setExtraHTTPHeaders({ "x-forwarded-for": forwardedFor })
   await signUp(page, ownerEmail, "E2E Owner")
 
-  const workspaceResponse = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/workspaces") && response.request().method() === "POST"
-  )
-  await page.getByLabel("Workspace name").fill(workspaceName)
-  await page.getByRole("button", { name: "Continue" }).click()
-  const workspaceBody = await (await workspaceResponse).json()
-  const workspaceId = workspaceBody.data.id as string
+  const workspaceResponse = await page.request.post("/api/workspaces", {
+    data: { name: workspaceName, mode: "VIBE" },
+  })
+  await expect(workspaceResponse).toBeOK()
+  const { data: workspace } = await workspaceResponse.json()
+  const workspaceId = workspace.id as string
   createdWorkspaceId = workspaceId
 
-  const targetResponse = page.waitForResponse(
-    (response) => response.url().endsWith("/api/targets") && response.request().method() === "POST"
-  )
-  await page.locator("#target-name").fill("Example target")
-  await page.locator("#repo-owner").fill("octocat")
-  await page.locator("#repo-name").fill("Hello-World")
-  await page.getByRole("button", { name: "Continue" }).click()
-  const targetBody = await (await targetResponse).json()
-  const targetId = targetBody.data.id as string
-  await expect(page.getByRole("heading", { name: "Review and start" })).toBeVisible()
+  const targetResponse = await page.request.post("/api/targets", {
+    data: {
+      workspaceId,
+      name: "Example target",
+      type: "WEB_APP",
+      url: "https://example.com",
+      environment: "STAGING",
+      ownershipAttested: true,
+    },
+  })
+  await expect(targetResponse).toBeOK()
+  const { data: target } = await targetResponse.json()
+  const targetId = target.id as string
 
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: ownerEmail } })
   const scan = await withWorkspaceRLS(workspaceId, async (tx) => {
@@ -157,10 +158,6 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
     })
     return created
   })
-  const skipOwnerOnboarding = await page.request.patch("/api/onboarding", {
-    data: { skipped: true },
-  })
-  await expect(skipOwnerOnboarding).toBeOK()
   await page.goto(`/dashboard/scans/${scan.id}`)
   await expect(page.getByRole("heading", { name: "Scan queued", level: 1 })).toBeVisible()
 
@@ -173,10 +170,6 @@ test("onboarding creates a target and tenant boundaries deny another user", asyn
     for (const path of ["/api/scans", "/api/findings", "/api/reports"]) {
       expect((await otherPage.request.get(`${path}?workspaceId=${workspaceId}`)).status()).toBe(403)
     }
-    const skipOtherOnboarding = await otherPage.request.patch("/api/onboarding", {
-      data: { skipped: true },
-    })
-    await expect(skipOtherOnboarding).toBeOK()
     await otherPage.goto(`/dashboard/targets/${targetId}`)
     await expect(otherPage.getByRole("heading", { name: /404|Not in evidence/i })).toBeVisible()
     await otherPage.goto(`/dashboard/scans/${scan.id}`)

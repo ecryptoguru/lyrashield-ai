@@ -24,6 +24,24 @@ const evidenceStates = [
     meaning: "The available retest evidence cannot establish that the condition is gone. The uncertainty remains visible.",
   },
 ]
+const faq = [
+  {
+    q: "What is an evidence state?",
+    a: "An evidence state describes how much support a finding has. Detected, independently verified, retest-confirmed, and inconclusive are separate states, not interchangeable labels.",
+  },
+  {
+    q: "Does a clean or high score prove an app is secure?",
+    a: "No. A score is an interpretation aid derived from the evidence. It does not override the underlying findings, coverage limits, or retest receipts.",
+  },
+  {
+    q: "What does 'no finding returned' mean?",
+    a: "It means the assigned check completed without reporting anything in scope. It is not the same as 'passed' or 'secure'; it only records that the check ran and returned nothing.",
+  },
+  {
+    q: "What is the Vibe Security 50?",
+    a: "It is a fixed list of 50 controls LyraShield AI reviews on AI-built apps. 43 are machine-testable and 7 require retained human evidence because a repository or URL scan cannot establish them safely.",
+  },
+]
 const jsonLd = [
   {
     "@context": "https://schema.org",
@@ -49,6 +67,15 @@ const jsonLd = [
       { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
       { "@type": "ListItem", position: 2, name: "Methodology", item: canonical },
     ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
   },
 ]
 ---
@@ -133,6 +160,18 @@ const jsonLd = [
       <h2 id="interpret-heading" class="text-2xl font-semibold text-text" data-reveal>How should you interpret a LyraShield AI result?</h2>
       <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected candidates from independently verified findings, then read the retest receipt and retained limitations. A score or confidence value never replaces those facts.</p>
       <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>For a broader catalog of web application verification requirements, consult the <a href="https://owasp.org/www-project-application-security-verification-standard/" rel="noreferrer" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">OWASP Application Security Verification Standard</a>. This reference does not imply certification or full ASVS coverage.</p>
+    </section>
+
+    <section aria-labelledby="faq-heading" class="py-16">
+      <h2 id="faq-heading" class="text-2xl font-semibold text-text" data-reveal>Methodology questions</h2>
+      <div class="mt-6 divide-y divide-border rounded-xl border border-border bg-bg-raised" data-reveal="scale">
+        {faq.map((item, i) => (
+          <details class="faq-item p-4" data-question-id={`methodology-faq-${i + 1}`}>
+            <summary class="cursor-pointer font-medium text-text">{item.q}</summary>
+            <p class="mt-3 text-sm leading-6 text-text-muted">{item.a}</p>
+          </details>
+        ))}
+      </div>
     </section>
 
     <section class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between" data-reveal>

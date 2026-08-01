@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft } from "lucide-react"
+import { Plus, Crosshair, Bug, Globe, GitBranch, ArrowLeft, Info } from "lucide-react"
 import {
   Button,
   Badge,
@@ -15,6 +15,8 @@ import {
   Select,
 } from "@lyrashield/ui"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { TARGET_PLURAL, TARGET_SINGULAR, RUN_PLURAL, ISSUE_PLURAL } from "@/lib/terminology"
 
 interface Target {
   id: string
@@ -143,7 +145,9 @@ export function TargetsClient({
       setNextCursor(result.nextCursor)
       setFetchError(null)
     } catch (e) {
-      setFetchError(e instanceof Error ? e.message : "Failed to load targets")
+      setFetchError(
+        e instanceof Error ? e.message : `Failed to load ${TARGET_PLURAL.toLowerCase()}`
+      )
     } finally {
       setLoading(false)
     }
@@ -180,7 +184,7 @@ export function TargetsClient({
       await fetchTargets()
       router.refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create target")
+      setError(e instanceof Error ? e.message : `Failed to create ${TARGET_SINGULAR.toLowerCase()}`)
     } finally {
       setCreating(false)
     }
@@ -203,7 +207,7 @@ export function TargetsClient({
       await fetchTargets()
       router.refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create target")
+      setError(e instanceof Error ? e.message : `Failed to create ${TARGET_SINGULAR.toLowerCase()}`)
     } finally {
       setCreating(false)
     }
@@ -222,7 +226,7 @@ export function TargetsClient({
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
         <Spinner className="h-6 w-6" />
-        <p className="text-muted-foreground text-sm">Loading targets...</p>
+        <p className="text-muted-foreground text-sm">Loading {TARGET_PLURAL.toLowerCase()}…</p>
       </div>
     )
   }
@@ -254,15 +258,15 @@ export function TargetsClient({
               className="text-muted-foreground hover:text-foreground mb-2 flex cursor-pointer items-center gap-1 text-sm transition-colors"
             >
               <ArrowLeft className="h-3 w-3" aria-hidden="true" />
-              All targets
+              All {TARGET_PLURAL.toLowerCase()}
             </button>
           )}
-          <h1 className="text-2xl font-bold tracking-tight">Targets</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{TARGET_PLURAL}</h1>
           <p className="text-muted-foreground mt-1 text-sm">Repositories and URLs to scan</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} className="shrink-0">
           <Plus className="h-4 w-4" aria-hidden="true" />
-          New Target
+          New {TARGET_SINGULAR}
         </Button>
       </div>
 
@@ -344,7 +348,7 @@ export function TargetsClient({
               )}
               {(!githubConnected || repoMode === "manual") && (
                 <>
-                  <FormField label="Target Name" htmlFor="repo-name-input">
+                  <FormField label={`${TARGET_SINGULAR} name`} htmlFor="repo-name-input">
                     <Input
                       id="repo-name-input"
                       type="text"
@@ -400,7 +404,7 @@ export function TargetsClient({
                       : false)
                   }
                 >
-                  {creating ? "Creating..." : "Create Target"}
+                  {creating ? "Creating..." : `Create ${TARGET_SINGULAR}`}
                 </Button>
                 <Button
                   type="button"
@@ -437,7 +441,7 @@ export function TargetsClient({
                   </Button>
                 </div>
               </FormField>
-              <FormField label="Target Name" htmlFor="url-name">
+              <FormField label={`${TARGET_SINGULAR} name`} htmlFor="url-name">
                 <Input
                   id="url-name"
                   type="text"
@@ -472,12 +476,24 @@ export function TargetsClient({
                   required
                 />
                 <span className="text-muted-foreground">
-                  I own or am authorized to scan this target.
+                  I own or am authorized to scan this {TARGET_SINGULAR.toLowerCase()}.
                 </span>
+                <Tooltip>
+                  <TooltipTrigger aria-label="Why ownership attestation is required">
+                    <Info
+                      className="text-muted-foreground hover:text-foreground size-4"
+                      aria-hidden="true"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    LyraShield can only review targets you own or have permission to test. This
+                    attestation is recorded for your security audit log.
+                  </TooltipContent>
+                </Tooltip>
               </label>
               <div className="flex gap-2">
                 <Button type="submit" disabled={creating || !urlForm.ownershipAttested}>
-                  {creating ? "Creating..." : "Create Target"}
+                  {creating ? "Creating..." : `Create ${TARGET_SINGULAR}`}
                 </Button>
                 <Button
                   type="button"
@@ -498,12 +514,12 @@ export function TargetsClient({
       {targets.length === 0 ? (
         <EmptyState
           icon={Crosshair}
-          title="No targets yet"
+          title={`No ${TARGET_PLURAL.toLowerCase()} yet`}
           description="Add a repository or URL target to start scanning."
           action={
             <Button onClick={() => setShowForm(true)}>
               <Plus className="h-4 w-4" aria-hidden="true" />
-              Add target
+              Add {TARGET_SINGULAR.toLowerCase()}
             </Button>
           }
         />
@@ -515,9 +531,11 @@ export function TargetsClient({
                 <th className="px-4 py-3 text-left font-semibold">Name</th>
                 <th className="px-4 py-3 text-left font-semibold">Type</th>
                 <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
-                  Trust Runs
+                  {RUN_PLURAL}
                 </th>
-                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">Issues</th>
+                <th className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                  {ISSUE_PLURAL}
+                </th>
                 <th className="px-4 py-3 text-left font-semibold">Status</th>
                 <th className="px-4 py-3 text-left font-semibold">
                   <span className="sr-only">View</span>
@@ -562,7 +580,7 @@ export function TargetsClient({
                     <Link
                       href={`/dashboard/targets/${t.id}`}
                       className="text-primary text-xs font-medium hover:underline"
-                      aria-label={`View target ${t.name}`}
+                      aria-label={`View ${TARGET_SINGULAR.toLowerCase()} ${t.name}`}
                     >
                       View
                     </Link>

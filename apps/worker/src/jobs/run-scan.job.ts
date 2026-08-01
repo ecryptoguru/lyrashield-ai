@@ -1,11 +1,12 @@
 import type { Job } from "bullmq"
-import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
+import { prisma, runWithWorkspaceContext, getSystemPrisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import {
   buildVibeSecurityInstruction,
   summarizeVibeSecurityCoverage,
   checkInstructionSafety,
+  containsPromptInjection,
 } from "@lyrashield/security"
 import {
   updateScanStatus,
@@ -45,7 +46,7 @@ import {
   persistResultManifest,
 } from "../engine/result-integrity"
 import { notifyScanCompleted, notifyScanFailed, notifyCriticalFinding } from "../notifications"
-import type { ScanJobData, ScanJobResult } from "../types"
+import { ScanJobDataSchema, type ScanJobData, type ScanJobResult } from "../types"
 
 export function extractActualCostUsd(usage: Record<string, unknown> | undefined): number | null {
   if (!usage) return null
@@ -382,10 +383,71 @@ export async function persistEngineUsageCheckpoint(params: {
 }
 
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
-  const { scanId, workspaceId, targetId, goal, mode, policyId } = job.data
   const log = logger
 
+  // Prompt-injection checks happen before any schema trust: an attacker could
+  // place arbitrary text in the queue payload and the goal field is later used
+  // to build the engine instruction.
+  if (typeof job.data?.goal === "string" && containsPromptInjection(job.data.goal)) {
+    log.warn("Scan job goal contains prompt-injection patterns", { jobId: job.id })
+    return {
+      status: "failed",
+      errorCategory: "PROMPT_INJECTION",
+      errorMessage: "Scan goal contains disallowed instruction patterns",
+    }
+  }
+
+  // Validate and coerce the untrusted BullMQ payload before trusting any field.
+  const parseResult = ScanJobDataSchema.safeParse(job.data)
+  if (!parseResult.success) {
+    log.warn("Scan job payload failed schema validation", {
+      jobId: job.id,
+      errors: parseResult.error.issues.map((i) => i.message),
+    })
+    return {
+      status: "failed",
+      errorCategory: "INVALID_JOB",
+      errorMessage: parseResult.error.message,
+    }
+  }
+
+  const { scanId, workspaceId: claimedWorkspaceId, targetId, goal, mode, policyId } = parseResult.data
+
   log.info("Processing scan job", { scanId, targetId, mode, jobId: job.id })
+
+  // Do not trust the workspaceId from the queue payload. Load the scan record
+  // with a privileged client and verify the claimed tenant matches the stored
+  // tenant; otherwise a forged job could read or mutate another workspace.
+  let scanRecord
+  try {
+    scanRecord = await getSystemPrisma().scan.findUnique({
+      where: { id: scanId },
+      select: { id: true, workspaceId: true, targetId: true },
+    })
+  } catch (err) {
+    throw new Error(
+      `Failed to verify scan ownership: ${err instanceof Error ? err.message : String(err)}`
+    )
+  }
+  if (!scanRecord || scanRecord.workspaceId !== claimedWorkspaceId || scanRecord.targetId !== targetId) {
+    try {
+      await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+        errorCategory: "INVALID_JOB",
+        errorMessage: "Scan job does not match the stored scan record",
+      })
+    } catch (statusErr) {
+      log.warn("Failed to mark invalid scan job as failed", {
+        scanId,
+        error: statusErr instanceof Error ? statusErr.message : String(statusErr),
+      })
+    }
+    return {
+      status: "failed",
+      errorCategory: "INVALID_JOB",
+      errorMessage: "Scan job does not match the stored scan record",
+    }
+  }
+  const workspaceId = scanRecord.workspaceId
 
   // Wrap the entire job in workspace context so the Prisma client extension's
   // auto-scoping safety net is active for all DB queries. Without this, a

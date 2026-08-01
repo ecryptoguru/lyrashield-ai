@@ -121,7 +121,6 @@ jobs:
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
           GITLEAKS_ENABLE_SUMMARY: true
           GITLEAKS_LOG_OPTS: ${{ steps.diff.outputs.base_sha }}..${{ steps.diff.outputs.head_sha }}
-        continue-on-error: true
 
       - name: Normalize secrets result
         id: secrets_result
@@ -141,6 +140,7 @@ jobs:
 
       - name: Check for vulnerable dependencies
         id: deps
+        if: always()
         env:
           BASE_SHA: ${{ steps.diff.outputs.base_sha }}
           HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
@@ -206,6 +206,7 @@ jobs:
 
       - name: Scan changed files for security issues
         id: scan
+        if: always()
         env:
           BASE_SHA: ${{ steps.diff.outputs.base_sha }}
           HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
@@ -391,6 +392,7 @@ jobs:
 
       - name: Diff-gate decision
         id: gate
+        if: always()
         env:
           SECRETS: ${{ steps.secrets_result.outputs.secrets_found }}
           VULN: ${{ steps.deps.outputs.vuln_found }}

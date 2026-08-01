@@ -55,35 +55,35 @@ const jsonLd = [
         <form id="scan-form" class="mt-9 max-w-2xl" data-reveal data-api-origin={appOrigin} data-turnstile-site-key={turnstileSiteKey}>
           <label for="scan-url" class="block text-sm font-semibold text-text">Public app URL</label>
           <div class="mt-2 flex flex-col gap-3 sm:flex-row">
-            <input id="scan-url" name="url" type="text" inputmode="url" autocomplete="url" required maxlength="2048" placeholder="example.com or https://your-app.com" disabled={!scannerAvailable} class="min-h-13 flex-1 rounded-xl border border-border bg-bg-raised px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
+            <input id="scan-url" name="url" type="text" inputmode="url" autocomplete="url" required={scannerAvailable} maxlength="2048" placeholder="example.com or https://your-app.com" disabled={!scannerAvailable} aria-describedby="scan-error" class="min-h-13 flex-1 rounded-xl border border-border bg-bg-raised px-4 text-base text-text shadow-sm placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-60" />
             <button id="scan-button" type="submit" disabled={!scannerAvailable} class="min-h-13 rounded-xl bg-accent px-6 font-semibold text-bg shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-55">{scannerAvailable ? "Scan my app" : "Scanner API not connected"}</button>
           </div>
           <label class="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-bg-raised/70 p-4 text-sm leading-6 text-text-muted">
-            <input id="authorized" name="authorized" type="checkbox" required disabled={!scannerAvailable} class="mt-1 size-4 shrink-0 accent-(--accent)" />
+            <input id="authorized" name="authorized" type="checkbox" required={scannerAvailable} disabled={!scannerAvailable} aria-describedby="scan-error" class="mt-1 size-4 shrink-0 accent-(--accent)" />
             <span>Scan only apps you own or have permission to test. We run a passive, read-only check — nothing intrusive. By scanning you agree to our <a href="/terms" class="font-medium text-accent underline underline-offset-4">Terms</a>.</span>
           </label>
           <div id="turnstile-container" class="mt-4"></div>
-          {!scannerAvailable && <p class="mt-4 rounded-lg border border-[#b57a14]/40 bg-[#f3b95f]/10 p-3 text-sm leading-6 text-text-muted" role="status">Live scanning requires the separately deployed LyraShield app API. This preview will not send a target to localhost or another fallback service.</p>}
+          {!scannerAvailable && <p class="mt-4 rounded-lg border border-(--terminal-warning)/40 bg-(--terminal-amber)/10 p-3 text-sm leading-6 text-text-muted" role="status">Live scanning requires the separately deployed LyraShield app API. This preview will not send a target to localhost or another fallback service.</p>}
           <p id="scan-error" class="mt-4 hidden rounded-lg border border-danger/40 bg-danger/5 p-3 text-sm text-danger" role="alert"></p>
         </form>
       </div>
 
-      <div class="rounded-2xl border border-border bg-[#07131d] p-5 text-[#edf8fb] shadow-2xl sm:p-7" data-reveal="right" aria-label="Lite Check preview">
-        <div class="flex items-center justify-between border-b border-[#203246] pb-4 font-mono text-xs"><span class="text-[#54d6df]">lyrashield / lite-check</span><span class="text-[#91a7b8]">PASSIVE</span></div>
+      <div class="rounded-2xl border border-border bg-(--terminal-void) p-5 text-(--terminal-text) shadow-2xl sm:p-7" data-reveal="right" aria-label="Lite Check preview">
+        <div class="flex items-center justify-between border-b border-(--terminal-edge) pb-4 font-mono text-xs"><span class="text-(--terminal-cyan)">lyrashield / lite-check</span><span class="text-(--terminal-muted)">PASSIVE</span></div>
         <div class="space-y-4 py-6 font-mono text-sm leading-6" data-reveal-group>
-          <p data-reveal="fade"><span class="mr-3 text-[#54d6df]" data-countup="1">01</span>Fetch only public browser assets</p>
-          <p data-reveal="fade"><span class="mr-3 text-[#54d6df]" data-countup="2">02</span>Keep credentials out of results</p>
-          <p data-reveal="fade"><span class="mr-3 text-[#f3b95f]" data-countup="3">03</span>Separate signals from proof</p>
-          <p data-reveal="fade"><span class="mr-3 text-[#91a7b8]" data-countup="4">04</span>State every important limit</p>
+          <p data-reveal="fade"><span class="mr-3 text-(--terminal-cyan)" data-countup="1">01</span>Fetch only public browser assets</p>
+          <p data-reveal="fade"><span class="mr-3 text-(--terminal-cyan)" data-countup="2">02</span>Keep credentials out of results</p>
+          <p data-reveal="fade"><span class="mr-3 text-(--terminal-amber)" data-countup="3">03</span>Separate signals from proof</p>
+          <p data-reveal="fade"><span class="mr-3 text-(--terminal-muted)" data-countup="4">04</span>State every important limit</p>
         </div>
-        <p class="border-t border-[#203246] pt-4 text-sm leading-6 text-[#91a7b8]">No login · no exploit payloads · no table queries · no active RLS test</p>
+        <p class="border-t border-(--terminal-edge) pt-4 text-sm leading-6 text-(--terminal-muted)">No login · no exploit payloads · no table queries · no active RLS test</p>
       </div>
     </div>
   </section>
 
   <section id="scanning" class="mx-auto hidden max-w-5xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="scanning-heading">
-    <div class="overflow-hidden rounded-2xl border border-border bg-[#07131d] text-[#edf8fb] shadow-xl">
-      <div class="flex items-center justify-between border-b border-[#203246] px-5 py-4 font-mono text-xs sm:px-7"><span class="text-[#54d6df]">public-surface.log</span><span class="flex items-center gap-2 text-[#f3b95f]"><span class="scan-running-dot" aria-hidden="true"></span>RUNNING</span></div>
+    <div class="overflow-hidden rounded-2xl border border-border bg-(--terminal-void) text-(--terminal-text) shadow-xl">
+      <div class="flex items-center justify-between border-b border-(--terminal-edge) px-5 py-4 font-mono text-xs sm:px-7"><span class="text-(--terminal-cyan)">public-surface.log</span><span class="flex items-center gap-2 text-(--terminal-amber)"><span class="scan-running-dot" aria-hidden="true"></span>RUNNING</span></div>
       <div class="grid items-center gap-8 px-5 py-8 sm:px-7 md:grid-cols-[.75fr_1.25fr] md:py-10">
         <div class="scan-radar mx-auto" aria-hidden="true">
           <div class="scan-orbit scan-orbit-outer"><span></span><span></span><span></span></div>
@@ -92,10 +92,10 @@ const jsonLd = [
         </div>
 
         <div>
-          <p class="font-mono text-xs tracking-[.18em] text-[#91a7b8] uppercase">Passive review in progress</p>
+          <p class="font-mono text-xs tracking-[.18em] text-(--terminal-muted) uppercase">Passive review in progress</p>
           <h2 id="scanning-heading" class="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Reading the public surface</h2>
           <p class="sr-only" role="status" aria-live="polite">Lite Check in progress. Results will appear below when the passive review finishes.</p>
-          <p id="scan-activity" class="mt-3 min-h-6 text-sm leading-6 text-[#b7c8d4]">Establishing a bounded, read-only connection.</p>
+          <p id="scan-activity" class="mt-3 min-h-6 text-sm leading-6 text-(--terminal-dim)">Establishing a bounded, read-only connection.</p>
 
           <ol id="scan-steps" class="mt-6 space-y-2 font-mono text-sm" aria-label="What the Lite Check is reviewing">
             <li class="scan-stage" data-step="0" data-state="active" data-status="Establishing a bounded, read-only connection." aria-current="step"><span class="scan-stage-marker" aria-hidden="true"></span>Safe public connection</li>
@@ -106,7 +106,7 @@ const jsonLd = [
           </ol>
         </div>
       </div>
-      <p class="border-t border-[#203246] px-5 py-4 text-sm text-[#91a7b8] sm:px-7">We only read what your app already sends to any visitor. The highlighted row shows activity, not a claimed completion percentage.</p>
+      <p class="border-t border-(--terminal-edge) px-5 py-4 text-sm text-(--terminal-muted) sm:px-7">We only read what your app already sends to any visitor. The highlighted row shows activity, not a claimed completion percentage.</p>
     </div>
   </section>
 
@@ -124,7 +124,7 @@ const jsonLd = [
       content: "";
       position: absolute;
       border-radius: 999px;
-      border: 1px solid #203246;
+      border: 1px solid var(--terminal-edge);
     }
 
     .scan-radar::before { inset: 7%; }
@@ -149,12 +149,12 @@ const jsonLd = [
       width: .55rem;
       height: .55rem;
       border-radius: 999px;
-      background: #54d6df;
-      box-shadow: 0 0 0 .35rem rgb(84 214 223 / 10%), 0 0 1.5rem rgb(84 214 223 / 55%);
+      background: var(--terminal-cyan);
+      box-shadow: 0 0 0 .35rem color-mix(in srgb, var(--terminal-cyan) 10%, transparent), 0 0 1.5rem color-mix(in srgb, var(--terminal-cyan) 55%, transparent);
     }
 
     .scan-orbit span:nth-child(1) { top: -.25rem; left: 50%; }
-    .scan-orbit span:nth-child(2) { right: 5%; bottom: 18%; background: #f3b95f; }
+    .scan-orbit span:nth-child(2) { right: 5%; bottom: 18%; background: var(--terminal-amber); }
     .scan-orbit span:nth-child(3) { bottom: 10%; left: 10%; }
     .scan-orbit-inner span:nth-child(2) { top: 65%; right: -4%; bottom: auto; }
 
@@ -165,10 +165,10 @@ const jsonLd = [
       width: 5.25rem;
       aspect-ratio: 1;
       place-items: center;
-      border: 1px solid #365069;
+      border: 1px solid var(--terminal-panel);
       border-radius: 1.25rem;
-      background: #0e1a28;
-      box-shadow: 0 0 0 1rem rgb(84 214 223 / 4%);
+      background: var(--terminal-raised);
+      box-shadow: 0 0 0 1rem color-mix(in srgb, var(--terminal-cyan) 4%, transparent);
       animation: scan-core 2.4s ease-in-out infinite;
     }
 
@@ -179,8 +179,8 @@ const jsonLd = [
       height: .55rem;
       flex: 0 0 auto;
       border-radius: 999px;
-      background: #f3b95f;
-      box-shadow: 0 0 0 .25rem rgb(243 185 95 / 12%);
+      background: var(--terminal-amber);
+      box-shadow: 0 0 0 .25rem color-mix(in srgb, var(--terminal-amber) 12%, transparent);
       animation: scan-pulse 1.4s ease-in-out infinite;
     }
 
@@ -189,29 +189,29 @@ const jsonLd = [
       min-height: 2.5rem;
       align-items: center;
       gap: .85rem;
-      border-left: 1px solid #203246;
+      border-left: 1px solid var(--terminal-edge);
       padding: .5rem 0 .5rem 1rem;
-      color: #6f8495;
+      color: var(--terminal-faint);
       transition: color .35s ease, transform .35s cubic-bezier(.2, .8, .2, 1), border-color .35s ease;
     }
 
     .scan-stage-marker {
       width: .45rem;
       height: .45rem;
-      background: #365069;
+      background: var(--terminal-panel);
       box-shadow: none;
       animation: none;
     }
 
     .scan-stage[data-state="active"] {
       transform: translateX(.45rem);
-      border-left-color: #54d6df;
-      color: #edf8fb;
+      border-left-color: var(--terminal-cyan);
+      color: var(--terminal-text);
     }
 
     .scan-stage[data-state="active"] .scan-stage-marker {
-      background: #54d6df;
-      box-shadow: 0 0 0 .3rem rgb(84 214 223 / 12%);
+      background: var(--terminal-cyan);
+      box-shadow: 0 0 0 .3rem color-mix(in srgb, var(--terminal-cyan) 12%, transparent);
       animation: scan-pulse 1.4s ease-in-out infinite;
     }
 
@@ -237,18 +237,18 @@ const jsonLd = [
     <div id="clean-result" class="mt-8 hidden rounded-2xl border border-accent/40 bg-accent-dim/25 p-6 sm:p-8"><h3 class="text-2xl font-semibold text-text">No surface issues found in this passive check.</h3><p class="mt-3 max-w-3xl leading-7 text-text-muted">That's a good sign — but it's a limited, outside-only look. Deeper classes of vulnerability (business-logic flaws, authenticated access issues, exploit validation) need an authorized full scan. Sign up below to run a full check or save a scorecard.</p></div>
     <div id="findings" class="mt-8 space-y-4"></div>
 
-    <section id="upsell" class="mt-10 rounded-2xl border border-border bg-[#07131d] p-6 text-[#edf8fb] sm:p-9">
-      <p class="font-mono text-xs font-semibold tracking-[.2em] text-[#54d6df] uppercase">Full loop · open registration</p>
+    <section id="upsell" class="mt-10 rounded-2xl border border-border bg-(--terminal-void) p-6 text-(--terminal-text) sm:p-9">
+      <p class="font-mono text-xs font-semibold tracking-[.2em] text-(--terminal-cyan) uppercase">Full loop · open registration</p>
       <h2 class="mt-4 text-3xl font-semibold tracking-tight">This is the surface. LyraShield goes the whole loop.</h2>
-      <p class="mt-4 max-w-3xl leading-7 text-[#b7c8d4]">The full platform runs an agentic repository scan, records evidence state, prepares a fix proposal, retests, and hands you a shareable report. PR execution stays blocked until an exact server-generated patch is bound to approval, and every result retains its coverage limits.</p>
-      {dashboardOrigin && <a href={`${dashboardOrigin}/sign-up`} class="mt-7 inline-flex min-h-12 items-center justify-center rounded-lg bg-[#54d6df] px-5 font-semibold text-[#07131d] hover:bg-[#77e0e6] focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Create free account</a>}
+      <p class="mt-4 max-w-3xl leading-7 text-(--terminal-dim)">The full platform runs an agentic repository scan, records evidence state, prepares a fix proposal, retests, and hands you a shareable report. PR execution stays blocked until an exact server-generated patch is bound to approval, and every result retains its coverage limits.</p>
+      {dashboardOrigin && <a href={`${dashboardOrigin}/sign-up`} class="mt-7 inline-flex min-h-12 items-center justify-center rounded-lg bg-(--terminal-cyan) px-5 font-semibold text-(--terminal-void) hover:bg-(--terminal-cyan-hover) focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Create free account</a>}
       <form id="capture-form" class="mt-7 max-w-2xl">
         <label for="result-email" class="block text-sm font-semibold">Email for product updates and scorecards</label>
-        <div class="mt-2 flex flex-col gap-3 sm:flex-row"><input id="result-email" type="email" required autocomplete="email" placeholder="you@example.com" class="min-h-12 flex-1 rounded-lg border border-[#365069] bg-[#0e1a28] px-4 text-[#edf8fb] placeholder:text-[#91a7b8]" /><button type="submit" data-capture-action="waitlist" class="min-h-12 rounded-lg bg-[#54d6df] px-5 font-semibold text-[#07131d]">Get product updates</button></div>
-        <div class="mt-3 flex flex-col gap-3 sm:flex-row"><button type="submit" data-capture-action="scorecard" class="min-h-12 rounded-lg border border-[#54d6df] px-5 font-semibold text-[#54d6df]">Get my shareable scorecard</button><a href="/sample-report" data-upsell="sample_report" class="inline-flex min-h-12 items-center justify-center rounded-lg px-5 font-semibold text-[#b7c8d4] hover:text-white">See a sample full report</a></div>
-        <p id="capture-status" class="mt-4 text-sm text-[#b7c8d4]" role="status"></p>
+        <div class="mt-2 flex flex-col gap-3 sm:flex-row"><input id="result-email" type="email" required autocomplete="email" placeholder="you@example.com" class="min-h-12 flex-1 rounded-lg border border-(--terminal-panel) bg-(--terminal-raised) px-4 text-(--terminal-text) placeholder:text-(--terminal-muted)" /><button type="submit" data-capture-action="waitlist" class="min-h-12 rounded-lg bg-(--terminal-cyan) px-5 font-semibold text-(--terminal-void)">Get product updates</button></div>
+        <div class="mt-3 flex flex-col gap-3 sm:flex-row"><button type="submit" data-capture-action="scorecard" class="min-h-12 rounded-lg border border-(--terminal-cyan) px-5 font-semibold text-(--terminal-cyan)">Get my shareable scorecard</button><a href="/sample-report" data-upsell="sample_report" class="inline-flex min-h-12 items-center justify-center rounded-lg px-5 font-semibold text-(--terminal-dim) hover:text-white">See a sample full report</a></div>
+        <p id="capture-status" class="mt-4 text-sm text-(--terminal-dim)" role="status"></p>
       </form>
-      <div id="scorecard-actions" class="mt-5 hidden flex-wrap gap-3"><a id="scorecard-link" href="#" target="_blank" rel="noreferrer" class="inline-flex min-h-11 items-center rounded-lg bg-[#54d6df] px-4 font-semibold text-[#07131d]">Open scorecard</a><button id="share-scorecard" type="button" class="min-h-11 rounded-lg border border-[#365069] px-4 font-semibold">Share scorecard</button></div>
+      <div id="scorecard-actions" class="mt-5 hidden flex-wrap gap-3"><a id="scorecard-link" href="#" target="_blank" rel="noreferrer" class="inline-flex min-h-11 items-center rounded-lg bg-(--terminal-cyan) px-4 font-semibold text-(--terminal-void)">Open scorecard</a><button id="share-scorecard" type="button" class="min-h-11 rounded-lg border border-(--terminal-panel) px-4 font-semibold">Share scorecard</button></div>
     </section>
   </section>
 
@@ -350,7 +350,7 @@ const jsonLd = [
 
     function chip(label: string, value: number, tone: string): HTMLElement { const el = document.createElement("span"); el.className = `rounded-full border px-3 py-1.5 text-xs font-semibold ${tone}`; el.textContent = `${value} ${label}`; return el }
     const severityLabel = { needs_attention: "Needs attention", worth_reviewing: "Worth reviewing", ok: "Looks OK" }
-    const severityTone = { needs_attention: "border-danger/40 bg-danger/10 text-danger", worth_reviewing: "border-[#b57a14]/40 bg-[#f3b95f]/10 text-[#9b6509] dark:text-[#f3b95f]", ok: "border-accent/40 bg-accent-dim/35 text-accent" }
+    const severityTone = { needs_attention: "border-danger/40 bg-danger/10 text-danger", worth_reviewing: "border-[var(--terminal-warning)]/40 bg-[var(--terminal-amber)]/10 text-[var(--terminal-warning-text)] dark:text-[var(--terminal-amber)]", ok: "border-accent/40 bg-accent-dim/35 text-accent" }
 
     function renderResult(result: LiteResult, durationMs: number) {
       currentResult = result

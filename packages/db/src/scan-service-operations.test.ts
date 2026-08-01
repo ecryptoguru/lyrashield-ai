@@ -52,7 +52,9 @@ describe("updateScanStatus", () => {
       })
     mockPrisma.scan.updateMany.mockResolvedValue({ count: 0 })
 
-    await expect(updateScanStatus("scan-1", "VERIFYING")).rejects.toThrow("CANCELLED")
+    await expect(updateScanStatus("scan-1", "VERIFYING", undefined, "ws-1")).rejects.toThrow(
+      "CANCELLED"
+    )
     expect(mockPrisma.scan.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "scan-1", status: "RUNNING" },

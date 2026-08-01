@@ -297,14 +297,16 @@ export interface ScanCostControls {
 
 export const SCAN_QUEUE_NAME = "scans"
 
-export interface ScanJobData {
-  scanId: string
-  workspaceId: string
-  targetId: string
-  goal: string
-  mode: string
-  policyId?: string
-}
+export const ScanJobDataSchema = z.object({
+  scanId: z.string().min(1),
+  workspaceId: z.string().min(1),
+  targetId: z.string().min(1),
+  goal: ScanGoalSchema,
+  mode: ScanModeSchema,
+  policyId: z.string().optional(),
+})
+
+export type ScanJobData = z.infer<typeof ScanJobDataSchema>
 
 export type ScanJobResult = {
   status: "completed" | "failed"

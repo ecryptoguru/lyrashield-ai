@@ -31,6 +31,15 @@ vi.mock("@lyrashield/db", () => ({
       updateMany: vi.fn(),
     },
   },
+  getSystemPrisma: vi.fn(() => ({
+    scan: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-1",
+      }),
+    },
+  })),
   updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
   completeScanWithScore: vi.fn().mockResolvedValue({}),
   qualifyReferralForWorkspace: vi.fn().mockResolvedValue(null),

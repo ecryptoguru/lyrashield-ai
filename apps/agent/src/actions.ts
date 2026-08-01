@@ -129,10 +129,15 @@ export const runScanAction: AgentActionDefinition<z.infer<typeof RunScanInputSch
         scanId: scan.id,
         error: enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr),
       })
-      await updateScanStatus(scan.id, "FAILED", {
-        errorCategory: "QUEUE",
-        errorMessage: "Scan worker became unavailable while queueing the agent scan",
-      })
+      await updateScanStatus(
+        scan.id,
+        "FAILED",
+        {
+          errorCategory: "QUEUE",
+          errorMessage: "Scan worker became unavailable while queueing the agent scan",
+        },
+        input.workspaceId
+      )
       throw new Error("Scanning became unavailable while starting the agent scan")
     }
 

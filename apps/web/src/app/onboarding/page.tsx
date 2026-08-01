@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@lyrashield/auth/server"
 import { ShieldCheck } from "lucide-react"
-import { OnboardingWizard } from "./onboarding-wizard"
 import { V2OnboardingWizard } from "./v2-onboarding-wizard"
 import { ReferralClaim } from "./referral-claim"
+import { SignOutButton } from "./sign-out-button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
-import { getFlags } from "@/lib/flags"
 
 export default async function OnboardingPage() {
   const session = await getSession()
@@ -16,7 +15,6 @@ export default async function OnboardingPage() {
   }
 
   const state = await getOrCreateOnboardingState(session.userId)
-  const flags = await getFlags(session, state?.workspaceId ? { id: state.workspaceId } : null)
 
   if (state?.completed) {
     redirect("/dashboard")
@@ -33,7 +31,8 @@ export default async function OnboardingPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center px-4 py-8">
-      <ThemeToggle className="fixed top-4 right-4 z-10" />
+      <SignOutButton />
+      <ThemeToggle className="absolute top-4 right-4 z-10" />
       <ReferralClaim />
       <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
       <div className="relative mb-8 flex flex-col items-center">
@@ -46,11 +45,7 @@ export default async function OnboardingPage() {
         </p>
       </div>
 
-      {flags.uxV2Onboarding ? (
-        <V2OnboardingWizard initialState={initialState} />
-      ) : (
-        <OnboardingWizard initialState={initialState} />
-      )}
+      <V2OnboardingWizard initialState={initialState} />
     </div>
   )
 }

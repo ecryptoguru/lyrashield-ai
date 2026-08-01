@@ -37,6 +37,43 @@ const {
   article,
   jsonLd,
 } = Astro.props
+
+const siteUrl = Astro.site?.toString() || "http://localhost:4321"
+const siteOrigin = Astro.site?.origin || "http://localhost:4321"
+const xUrl = __MARKETING_X_URL__
+const siteDescription =
+  "LyraShield AI records what was tested, separates detected risks from retest-confirmed fixes, and creates an assurance report for AI-built apps."
+
+const siteGraph: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${siteOrigin}/#organization`,
+    name: "LyraShield AI",
+    url: siteUrl,
+    logo: new URL("/logo.svg", siteOrigin).toString(),
+    description: siteDescription,
+    knowsAbout: [
+      "AI application security",
+      "release assurance",
+      "security evidence",
+      "independent finding verification",
+      "security retesting",
+    ],
+    ...(xUrl ? { sameAs: [xUrl] } : {}),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": `${siteOrigin}/#website`,
+    name: "LyraShield AI",
+    url: siteUrl,
+    inLanguage: "en-US",
+    publisher: { "@id": `${siteOrigin}/#organization` },
+  },
+]
+
+const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
 ---
 
 <!doctype html>
@@ -54,7 +91,7 @@ const {
       noindex={noindex}
       article={article}
     />
-    {jsonLd && jsonLd.length > 0 && <JsonLd data={jsonLd} />}
+    {allJsonLd.length > 0 && <JsonLd data={allJsonLd} />}
     <meta name="theme-color" content="#08111c" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#f5f9fc" media="(prefers-color-scheme: light)" />
     <link rel="preload" as="font" type="font/woff2" href={bricolageWoff2} crossorigin="anonymous" />

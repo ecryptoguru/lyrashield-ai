@@ -4,7 +4,9 @@ export function normalizePublicHttpUrl(value: string): string {
     throw new Error("invalid URL")
 
   const url = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`)
-  const hostname = url.hostname.replace(/^\[|\]$/g, "")
+  const bracketed = url.hostname.startsWith("[") && url.hostname.endsWith("]")
+  const rawHostname = url.hostname.replace(/^\[|\]$/g, "")
+  const hostname = rawHostname.normalize("NFKC")
   if (
     !["http:", "https:"].includes(url.protocol) ||
     !hostname ||
@@ -17,6 +19,12 @@ export function normalizePublicHttpUrl(value: string): string {
     (!hostname.includes(".") && !hostname.includes(":"))
   ) {
     throw new Error("invalid public HTTP URL")
+  }
+
+  // Re-apply the normalized hostname so server-side validation sees the same
+  // ASCII representation of homograph digits (superscript, fullwidth, circled).
+  if (!bracketed) {
+    url.hostname = hostname
   }
 
   return url.toString()

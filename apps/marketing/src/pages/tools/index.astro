@@ -4,9 +4,15 @@ import { tools, toolUrl } from "../../lib/tools"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/tools", origin).toString()
 const description = "Use five free browser-local security tools to review AI app launch controls, HTTP headers, exposed secrets, Supabase RLS policies, and JWT sessions."
+const faq = [
+  { q: "How do these free security tools work?", a: "Each tool performs a focused deterministic check in your browser. The page explains exactly what input it reviews, what signals it reports, and what the result cannot establish." },
+  { q: "Are inputs uploaded?", a: "No. The checklist, pasted headers, selected files, SQL, JWTs, and cookie values are processed on your device by the page code. Use non-production tokens and review each tool's stated limits." },
+  { q: "Does a clear result mean my app is secure?", a: "No. Each tool reports a focused set of signals. A clear result does not prove the whole application is secure; it only means the specific checks did not find a signal." },
+]
 const jsonLd = [
   { "@context": "https://schema.org", "@type": "CollectionPage", name: "Free Security Tools for AI-Built Apps", description, url: canonical, isPartOf: { "@id": `${origin}/#website` }, mainEntity: { "@type": "ItemList", numberOfItems: tools.length, itemListElement: tools.map((tool, index) => ({ "@type": "ListItem", position: index + 1, name: tool.title, url: new URL(toolUrl(tool.slug), origin).toString() })) } },
   { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` }, { "@type": "ListItem", position: 2, name: "Tools", item: canonical }] },
+  { "@context": "https://schema.org", "@type": "FAQPage", mainEntity: faq.map((item) => ({ "@type": "Question", name: item.q, acceptedAnswer: { "@type": "Answer", text: item.a } })) },
 ]
 ---
 <Base title="Free Security Tools for AI-Built Apps | LyraShield AI" description={description} canonical={canonical} jsonLd={jsonLd}>
@@ -28,10 +34,18 @@ const jsonLd = [
         </article>
       ))}
     </div>
-    <section class="mt-16 grid gap-8 border-y border-border py-10 md:grid-cols-2" data-reveal-group>
-      <div data-reveal="left"><h2 class="text-2xl font-semibold text-text">How do these free security tools work?</h2><p class="mt-4 leading-7 text-text-muted">Each tool performs a focused deterministic check in your browser. The page explains exactly what input it reviews, what signals it reports, and what the result cannot establish.</p></div>
-      <div data-reveal="right"><h2 class="text-2xl font-semibold text-text">Are inputs uploaded?</h2><p class="mt-4 leading-7 text-text-muted">No. The checklist, pasted headers, selected files, SQL, JWTs, and cookie values are processed on your device by the page code. Use non-production tokens and review each tool's stated limits.</p></div>
+    <section aria-labelledby="tools-faq-heading" class="mt-20" data-reveal="scale">
+      <h2 id="tools-faq-heading" class="text-2xl font-semibold text-text">Free tools questions</h2>
+      <div class="mt-6 divide-y divide-border rounded-xl border border-border bg-bg-raised">
+        {faq.map((item, i) => (
+          <details class="p-4" data-question-id={`tools-faq-${i + 1}`}>
+            <summary class="cursor-pointer font-medium text-text">{item.q}</summary>
+            <p class="mt-3 text-sm leading-6 text-text-muted">{item.a}</p>
+          </details>
+        ))}
+      </div>
     </section>
+
     <section class="mt-20 grid gap-8 border-y border-border py-10 lg:grid-cols-[1fr_auto] lg:items-center" data-reveal>
       <div class="max-w-3xl">
         <h2 class="text-2xl font-semibold text-text">Need an app-wide assurance record?</h2>

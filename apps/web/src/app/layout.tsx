@@ -12,11 +12,11 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "LyraShield — AI AppSec Agent Platform",
+  title: "LyraShield AI — Release assurance for AI-built apps",
   description:
     "Connect a GitHub repo or paste an app URL. LyraShield safely scans it, verifies real vulnerabilities, explains the risk, and helps create fix PRs.",
   openGraph: {
-    title: "LyraShield — AI AppSec Agent Platform",
+    title: "LyraShield AI — Release assurance for AI-built apps",
     description:
       "Connect a GitHub repo or paste an app URL. LyraShield safely scans it, verifies real vulnerabilities, explains the risk, and helps create fix PRs.",
     type: "website",

@@ -16,6 +16,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
+import { RUN_PLURAL, RUN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
 import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanPreset, SCAN_PRESETS, type ScanPresetId } from "@/lib/scan-presets"
@@ -233,9 +234,9 @@ export function ScansClient({
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Trust Runs</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{RUN_PLURAL}</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Run and monitor trust runs against your products
+            Run and monitor {RUN_PLURAL.toLowerCase()} against your {TARGET_PLURAL.toLowerCase()}
           </p>
         </div>
         <div className="flex gap-2">
@@ -249,7 +250,7 @@ export function ScansClient({
           {targets.length > 0 && (
             <Button onClick={() => setShowCreate(!showCreate)}>
               <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-              New Scan
+              New {RUN_SINGULAR}
             </Button>
           )}
         </div>
@@ -351,7 +352,11 @@ export function ScansClient({
       )}
 
       {refreshing && scans.length === 0 ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading trust runs">
+        <div
+          className="space-y-3"
+          aria-busy="true"
+          aria-label={`Loading ${RUN_PLURAL.toLowerCase()}`}
+        >
           {[0, 1, 2].map((item) => (
             <Skeleton key={item} className="h-32 w-full" />
           ))}
@@ -359,21 +364,21 @@ export function ScansClient({
       ) : scans.length === 0 ? (
         <EmptyState
           icon={Radar}
-          title="No trust runs yet"
+          title={`No ${RUN_PLURAL.toLowerCase()} yet`}
           description={
             targets.length > 0
-              ? 'Start your first trust run by clicking "New Trust Run" above.'
-              : "Add a product first, then you can run trust reviews against it."
+              ? `Start your first ${RUN_SINGULAR.toLowerCase()} by clicking "New ${RUN_SINGULAR}" above.`
+              : `Add a ${TARGET_SINGULAR.toLowerCase()} first, then you can run ${RUN_PLURAL.toLowerCase()} against it.`
           }
           action={
             targets.length > 0 ? (
               <Button onClick={() => setShowCreate(true)}>
                 <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-                New Trust Run
+                New {RUN_SINGULAR}
               </Button>
             ) : (
-              <Link href="/dashboard/products" className={buttonVariants()}>
-                Add a product
+              <Link href="/dashboard/targets" className={buttonVariants()}>
+                Add a {TARGET_SINGULAR.toLowerCase()}
               </Link>
             )
           }
@@ -402,7 +407,7 @@ export function ScansClient({
                       <p className="text-muted-foreground text-sm">{scan.summary}</p>
                     )}
                     {scan.errorMessage && (
-                      <p className="text-destructive text-sm">{presentation.description}</p>
+                      <p className="text-destructive text-sm">{scan.errorMessage}</p>
                     )}
                     <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       <span className="whitespace-nowrap">{formatDateTime(scan.createdAt)}</span>

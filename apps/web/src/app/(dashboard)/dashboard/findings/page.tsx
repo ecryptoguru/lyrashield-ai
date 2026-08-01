@@ -1,3 +1,4 @@
+import { ISSUE_PLURAL } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId, getCachedFindings } from "@/lib/cache"
 import { prisma } from "@lyrashield/db"
 import { ShieldAlert } from "lucide-react"
@@ -16,10 +17,10 @@ export default async function FindingsPage({
   if (!workspaceId) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Findings</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{ISSUE_PLURAL}</h1>
         <NoWorkspaceState
           icon={ShieldAlert}
-          description="Create a workspace during onboarding to view findings."
+          description={`Create a workspace during onboarding to view ${ISSUE_PLURAL.toLowerCase()}.`}
         />
       </div>
     )

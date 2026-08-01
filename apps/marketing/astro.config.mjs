@@ -1,10 +1,13 @@
 import { readFileSync, readdirSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { dirname, extname, relative } from "node:path"
 import { defineConfig, envField } from "astro/config"
 import cloudflare from "@astrojs/cloudflare"
 import mdx from "@astrojs/mdx"
 import sitemap from "@astrojs/sitemap"
 import tailwindcss from "@tailwindcss/vite"
 import { parseJsonc } from "./src/lib/jsonc"
+import { tools } from "./src/lib/tools"
 
 // Astro resolves `site` and prerendered metadata during the build, before the
 // Cloudflare Worker receives runtime vars. Keep those values in this one build
@@ -25,18 +28,20 @@ function wranglerVar(name) {
 // deploy, which is worse than saying nothing.
 function contentLastmod() {
   const map = new Map()
-  const dir = new URL("./src/content/blog/", import.meta.url)
+
+  // Blog posts: use updatedDate then pubDate.
+  const blogDir = new URL("./src/content/blog/", import.meta.url)
   let files = []
   try {
-    files = readdirSync(dir)
+    files = readdirSync(blogDir)
   } catch {
-    return map
+    // continue to other sources
   }
   for (const file of files) {
     if (!/\.(md|mdx)$/.test(file)) continue
     let frontmatter = ""
     try {
-      frontmatter = readFileSync(new URL(file, dir), "utf8").split(/^---\s*$/m)[1] || ""
+      frontmatter = readFileSync(new URL(file, blogDir), "utf8").split(/^---\s*$/m)[1] || ""
     } catch {
       continue
     }
@@ -47,6 +52,49 @@ function contentLastmod() {
     if (Number.isNaN(date.valueOf())) continue
     map.set(`/blog/${file.replace(/\.(md|mdx)$/, "")}`, date)
   }
+
+  // Docs pages: parse updatedDate from the Astro frontmatter and map to the route.
+  const docsDir = new URL("./src/pages/docs/", import.meta.url)
+  function walkDocs(dir, basePath) {
+    let entries = []
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const child = new URL(`${entry.name}`, dir)
+      if (entry.isDirectory()) {
+        walkDocs(new URL(`${entry.name}/`, dir), basePath)
+      } else if (entry.isFile() && entry.name.endsWith(".astro")) {
+        const content = readFileSync(child, "utf8")
+        const match = content.match(/(?:const\s+updatedDate|dateModified)\s*=\s*["']([0-9]{4}-[0-9]{2}-[0-9]{2})["']/)
+        if (!match) continue
+        const date = new Date(match[1])
+        if (Number.isNaN(date.valueOf())) continue
+        const rel = relative(fileURLToPath(basePath), fileURLToPath(child))
+          .replace(/\\/g, "/")
+          .replace(/\.astro$/, "")
+          .replace(/\/index$/, "")
+        if (!rel) continue
+        map.set(`/docs/${rel}`, date)
+      }
+    }
+  }
+  walkDocs(docsDir, docsDir)
+
+  // Free tools: the registry now carries an updatedDate for every tool.
+  const toolDate = tools[0]?.updatedDate ? new Date(tools[0].updatedDate) : undefined
+  if (toolDate && !Number.isNaN(toolDate.valueOf())) {
+    map.set("/tools", toolDate)
+    for (const tool of tools) {
+      if (tool.updatedDate) {
+        const date = new Date(tool.updatedDate)
+        if (!Number.isNaN(date.valueOf())) map.set(`/tools/${tool.slug}`, date)
+      }
+    }
+  }
+
   return map
 }
 

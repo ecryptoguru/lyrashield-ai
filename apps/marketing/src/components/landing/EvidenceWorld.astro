@@ -181,7 +181,7 @@ const { manifest } = Astro.props
 
   .evidence-world__chapter {
     display: grid;
-    min-height: 82svh;
+    min-height: min(720px, 76svh);
     align-items: center;
     padding: 3.25rem max(1rem, calc((100% - 1280px) / 2));
   }
@@ -334,7 +334,7 @@ const { manifest } = Astro.props
 
   @media (max-width: 767px) {
     .evidence-world__chapter {
-      min-height: 84svh;
+      min-height: min(600px, 76svh);
       align-items: center;
       padding: 2.75rem 1rem;
     }

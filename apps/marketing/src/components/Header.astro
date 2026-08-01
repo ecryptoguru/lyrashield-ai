@@ -5,14 +5,14 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
 <header class="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur-xl">
   <div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
     <a href="/" class="flex min-h-11 shrink-0 items-center gap-2 rounded-lg text-sm font-semibold tracking-tight whitespace-nowrap text-text hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:gap-2.5 sm:text-base">
-      <span class="flex size-9 items-center justify-center rounded-xl border border-border bg-[#07111f] p-1 shadow-sm" aria-hidden="true">
+      <span class="flex size-9 items-center justify-center rounded-xl border border-border bg-(--logo-void) p-1 shadow-sm" aria-hidden="true">
         <img src="/logo.svg" alt="" width="32" height="32" class="size-8" />
       </span>
       <span>LyraShield AI</span>
       <span class="rounded border border-accent/50 bg-accent-dim/40 px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-accent uppercase">Open beta</span>
     </a>
     <nav aria-label="Main" class="flex items-center gap-1 sm:gap-2">
-      <ul class="hidden items-center gap-1 lg:flex lg:gap-2">
+      <ul class="hidden items-center gap-1 md:flex md:gap-2">
         <li>
           <a href="/methodology" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             Methodology
@@ -58,25 +58,37 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
           </li>
         )}
       </ul>
-      <details class="group relative lg:hidden">
-        <summary class="inline-flex size-11 cursor-pointer list-none items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
-          <span class="sr-only">Open navigation menu</span>
-          <svg viewBox="0 0 24 24" class="size-5 group-open:hidden" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-          <svg viewBox="0 0 24 24" class="hidden size-5 group-open:block" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
-        </summary>
-        <div class="absolute top-[calc(100%+0.5rem)] right-0 grid w-56 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20">
-          <a href="/methodology" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Methodology</a>
-          <a href="/#how-it-works" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">How it works</a>
-          <a href="/scan" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
-          <a href="/tools" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Tools</a>
-          <a href="/blog" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Resources</a>
-          <a href="/docs/integrations" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Docs</a>
-          {appUrl && (
-            <a href={`${appUrl}/sign-in`} class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_sign_in_mobile">Sign in</a>
-            <a href={`${appUrl}/sign-up`} class="mt-1 inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">Get started</a>
-          )}
-        </div>
-      </details>
+      <button
+        id="menu-toggle"
+        type="button"
+        class="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent md:hidden"
+        aria-controls="mobile-menu"
+        aria-expanded="false"
+        aria-label="Open navigation menu"
+      >
+        <svg viewBox="0 0 24 24" class="size-5 menu-open-icon" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <svg viewBox="0 0 24 24" class="hidden size-5 menu-close-icon" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+
+      <dialog
+        id="mobile-menu"
+        aria-label="Mobile navigation"
+        aria-modal="true"
+        class="fixed m-0 w-56 max-w-[calc(100%-2rem)] grid gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/20 open:grid"
+        style="top: 4.5rem; right: 1rem; bottom: auto; left: auto;"
+      >
+        <a href="/methodology" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Methodology</a>
+        <a href="/scan" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
+        <a href="/tools" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Tools</a>
+        <a href="/blog" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Resources</a>
+        <a href="/docs/integrations" class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Docs</a>
+        {appUrl && (
+          <>
+            <a href={`${appUrl}/sign-in`} class="menu-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_sign_in_mobile">Sign in</a>
+            <a href={`${appUrl}/sign-up`} class="menu-link mt-1 inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">Get started</a>
+          </>
+        )}
+      </dialog>
       <button id="theme-toggle" type="button" class="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-bg-raised text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Change color theme">
         <svg viewBox="0 0 24 24" class="size-4.5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v2m0 14v2M3 12h2m14 0h2m-3.64-6.36-1.42 1.42M8.06 15.94l-1.42 1.42m0-11.72 1.42 1.42m7.88 8.88 1.42 1.42"/><circle cx="12" cy="12" r="4"/></svg>
       </button>
@@ -96,4 +108,55 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
     document.documentElement.dataset.themePreference = next
     button.setAttribute("aria-label", `${next} theme active. Change color theme`)
   })
+
+  const menuToggle = document.querySelector<HTMLButtonElement>("#menu-toggle")
+  const menu = document.querySelector<HTMLDialogElement>("#mobile-menu")
+
+  if (menuToggle && menu) {
+    const openIcon = menuToggle.querySelector<SVGElement>(".menu-open-icon")
+    const closeIcon = menuToggle.querySelector<SVGElement>(".menu-close-icon")
+
+    if (openIcon && closeIcon) {
+      const setMenuOpen = (open: boolean) => {
+        menuToggle.setAttribute("aria-expanded", String(open))
+        menuToggle.setAttribute("aria-label", open ? "Close navigation menu" : "Open navigation menu")
+        openIcon.classList.toggle("hidden", open)
+        closeIcon.classList.toggle("hidden", !open)
+      }
+
+      menuToggle.addEventListener("click", () => {
+        if (menu.open) {
+          menu.close()
+        } else {
+          menu.showModal()
+          setMenuOpen(true)
+          document.body.dataset.previousOverflow = document.body.style.overflow || ""
+          document.body.style.overflow = "hidden"
+        }
+      })
+
+      menu.addEventListener("close", () => {
+        setMenuOpen(false)
+        if (document.body.dataset.previousOverflow) {
+          document.body.style.overflow = document.body.dataset.previousOverflow
+        }
+      })
+
+      menu.addEventListener("click", (event) => {
+        if (event.target === menu) {
+          menu.close()
+        }
+      })
+
+      menu.querySelectorAll<HTMLAnchorElement>(".menu-link").forEach((link) => {
+        link.addEventListener("click", () => menu.close())
+      })
+    }
+  }
 </script>
+
+<style is:global>
+  #mobile-menu::backdrop {
+    background: transparent;
+  }
+</style>

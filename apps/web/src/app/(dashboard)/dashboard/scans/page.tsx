@@ -2,6 +2,7 @@ import { prisma, listScans } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { ScansClient } from "./scans-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { RUN_PLURAL } from "@/lib/terminology"
 
 export default async function ScansPage({
   searchParams,
@@ -18,7 +19,7 @@ export default async function ScansPage({
       <div className="rounded-lg border border-dashed p-12 text-center">
         <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
         <p className="text-muted-foreground text-sm">
-          Create a workspace first to start running scans.
+          Create a workspace first to start running {RUN_PLURAL.toLowerCase()}.
         </p>
       </div>
     )

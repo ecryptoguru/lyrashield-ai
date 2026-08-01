@@ -71,6 +71,20 @@ export function revalidateDashboardAggregates() {
   revalidateTag(DASHBOARD_CACHE_TAG, "default")
 }
 
+export const getCachedUnreadNotifications = cache(
+  async (userId: string, workspaceId: string | null): Promise<number> => {
+    if (!workspaceId) return 0
+    return prisma.notification.count({
+      where: {
+        workspaceId,
+        status: { not: "read" },
+        deletedAt: null,
+        OR: [{ userId }, { userId: null }],
+      },
+    })
+  }
+)
+
 export const getCachedDashboardAggregates = unstable_cache(
   async (workspaceId: string) => {
     const [

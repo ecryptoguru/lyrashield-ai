@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import { basename } from "node:path"
 import process from "node:process"
 import path from "node:path"
 import type {
@@ -26,6 +27,10 @@ export interface InstallAgentOptions {
   yes?: boolean
   cwd?: string
 }
+
+// Vendor CLIs must be explicitly allowlisted. A compromised registry entry or
+// local config must not be able to invoke arbitrary binaries.
+const VENDOR_COMMAND_ALLOWLIST = new Set(["claude", "amp"])
 
 export interface InstallAgentResult {
   agent: string
@@ -132,7 +137,17 @@ async function runVendorCli(
     }
   }
 
-  const command = agent.vendorCli.command
+  const rawCommand = agent.vendorCli.command
+  const command = basename(rawCommand).trim()
+  if (!command || !VENDOR_COMMAND_ALLOWLIST.has(command)) {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "FAILED",
+      message: `Vendor CLI command is not allowlisted: ${rawCommand}`,
+    }
+  }
+
   const args = [...agent.vendorCli.args]
   const env = {
     ...process.env,

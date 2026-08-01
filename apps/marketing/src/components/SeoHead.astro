@@ -22,12 +22,23 @@ const {
   canonical,
   ogImage = "/og/og-default.png",
   ogImageAlt,
-  ogImageWidth,
-  ogImageHeight,
+  ogImageWidth = 1200,
+  ogImageHeight = 630,
   ogType = "website",
   noindex = false,
   article,
 } = Astro.props
+
+const xUrl = __MARKETING_X_URL__
+let twitterSite = "@lyrashieldai"
+if (xUrl) {
+  try {
+    const handle = new URL(xUrl).pathname.replace(/^\/+|\/+$/g, "").split("/")[0]
+    if (handle) twitterSite = `@${handle}`
+  } catch {
+    // Keep the fallback handle if the configured X URL is not a valid URL.
+  }
+}
 
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const pageUrl = canonical ?? new URL(Astro.url.pathname, siteOrigin).toString()
@@ -42,6 +53,8 @@ const indexable = __MARKETING_INDEXABLE__
 <title>{title}</title>
 <meta name="description" content={description} />
 <link rel="canonical" href={pageUrl} />
+<link rel="alternate" hreflang="en" href={pageUrl} />
+<link rel="alternate" hreflang="x-default" href={pageUrl} />
 {!indexable ? (
   <meta name="robots" content="noindex, nofollow" />
 ) : noindex ? (
@@ -61,7 +74,7 @@ const indexable = __MARKETING_INDEXABLE__
 <meta property="og:site_name" content="LyraShield AI" />
 <meta property="og:locale" content="en_US" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:site" content="@lyrashieldai" />
+<meta name="twitter:site" content={twitterSite} />
 <meta name="twitter:title" content={title} />
 <meta name="twitter:description" content={description} />
 <meta name="twitter:image" content={imageUrl} />
