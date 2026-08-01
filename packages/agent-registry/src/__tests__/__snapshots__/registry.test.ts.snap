@@ -226,3 +226,74 @@ exports[`renderConfig snapshot — every agent × every transport > zed × stdio
   }
 }"
 `;
+exports[`renderConfig snapshot — every agent × every transport > aider × remote-http 1`] = `[Error: Agent "aider" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > aider × stdio 1`] = `[Error: Agent "aider" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > antigravity × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "serverUrl": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_test_lyrashield_api_key"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > antigravity × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
+      }
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > copilot-cli × remote-http 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_test_lyrashield_api_key"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > copilot-cli × stdio 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
+      },
+      "type": "local"
+    }
+  }
+}"
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > goose × remote-http 1`] = `[Error: Agent "goose" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > goose × stdio 1`] = `[Error: Agent "goose" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;

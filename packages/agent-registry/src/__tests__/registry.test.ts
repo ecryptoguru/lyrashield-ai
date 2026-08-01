@@ -176,6 +176,39 @@ describe("renderEntry returns correct structural patch", () => {
     })
     expect(entry.value).not.toHaveProperty("url")
   })
+
+  it("antigravity — remote uses `serverUrl` instead of `url`", () => {
+    const agent = getAgent("antigravity")!
+    const opts = testOptions(agent, "remote-http")
+    const entry = renderEntry(agent, opts)
+    expect(entry.rootKey).toBe("mcpServers")
+    expect(entry.value).toMatchObject({
+      serverUrl: TEST_MCP_URL,
+      headers: {
+        Authorization: `Bearer ${TEST_API_KEY}`,
+      },
+    })
+    expect(entry.value).not.toHaveProperty("url")
+  })
+
+  it("copilot-cli — stdio declares `type: local` and remote `type: http`", () => {
+    const agent = getAgent("copilot-cli")!
+    const stdioEntry = renderEntry(agent, testOptions(agent, "stdio"))
+    expect(stdioEntry.rootKey).toBe("mcpServers")
+    expect(stdioEntry.value).toMatchObject({
+      command: "npx",
+      args: ["-y", "@lyrashield/mcp"],
+      type: "local",
+    })
+    const remoteEntry = renderEntry(agent, testOptions(agent, "remote-http"))
+    expect(remoteEntry.value).toMatchObject({
+      url: TEST_MCP_URL,
+      type: "http",
+      headers: {
+        Authorization: `Bearer ${TEST_API_KEY}`,
+      },
+    })
+  })
 })
 
 describe("gotchas from §3.4 are represented", () => {
