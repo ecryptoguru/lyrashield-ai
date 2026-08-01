@@ -45,6 +45,10 @@ export function formatForRulesFile(rulesFile: string): RuleFormat | undefined {
   const lower = rulesFile.toLowerCase()
   if (lower === "claude.md") return "claude-code"
   if (lower === "agents.md") return "agents-md"
+  // Antigravity (GEMINI.md) and Goose (.goosehints) are plain markdown rules /
+  // hints files; render them with the generic AGENTS.md markdown body.
+  if (lower === "gemini.md") return "agents-md"
+  if (lower === ".goosehints") return "agents-md"
   if (lower === ".cursorrules") return "cursor"
   if (lower.includes("lyrashield.mdc")) return "cursor"
   if (lower.includes("copilot-instructions.md")) return "copilot"
