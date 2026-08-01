@@ -22,7 +22,13 @@ const mockGetWorkspaceContext = vi.fn()
 vi.mock("./extension", () => ({ getWorkspaceContext: () => mockGetWorkspaceContext() }))
 
 import { prisma } from "./client"
-import { addScanEvent, createScan, getScanWithEvents, listScans, updateScanStatus } from "./scan-service"
+import {
+  addScanEvent,
+  createScan,
+  getScanWithEvents,
+  listScans,
+  updateScanStatus,
+} from "./scan-service"
 
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
