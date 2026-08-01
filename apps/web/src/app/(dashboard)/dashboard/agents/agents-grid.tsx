@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui"
 import { Check, Copy, ExternalLink, Terminal } from "lucide-react"
 import { writeClipboard } from "@/components/scorecard-share-composer"
@@ -128,6 +129,12 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
           ) : null}
 
           <div className="flex gap-2">
+            <Link
+              href={`/dashboard/agents/${agent.id}`}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors sm:min-h-9"
+            >
+              Set up
+            </Link>
             <a
               href={`${docsBaseUrl}/${agent.docsSlug}`}
               target="_blank"
