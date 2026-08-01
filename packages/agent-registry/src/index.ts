@@ -1,10 +1,10 @@
-export * from "./types.js"
-export * from "./schema.js"
-export * from "./render.js"
-export * from "./agents.js"
+export * from "./types"
+export * from "./schema"
+export * from "./render"
+export * from "./agents"
 
-import { AGENTS } from "./agents.js"
-import type { AgentEntry, InstallStrategy } from "./types.js"
+import { AGENTS } from "./agents"
+import type { AgentEntry, InstallStrategy } from "./types"
 
 export function getAgent(id: string): AgentEntry | undefined {
   return AGENTS.find((a) => a.id === id)

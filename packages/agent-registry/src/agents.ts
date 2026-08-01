@@ -1,5 +1,5 @@
-import type { AgentEntry } from "./types.js"
-import { API_URL_PLACEHOLDER } from "./render.js"
+import type { AgentEntry } from "./types"
+import { API_URL_PLACEHOLDER } from "./render"
 
 const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-07-31"
 
