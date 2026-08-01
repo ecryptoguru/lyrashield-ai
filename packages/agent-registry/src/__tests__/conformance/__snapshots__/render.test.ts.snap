@@ -587,3 +587,235 @@ exports[`conformance: renderConfig round-trips through the format parser > devin
   }
 }"
 `;
+
+exports[`conformance: renderConfig round-trips through the format parser > roo-code × stdio — inline secret may contain the literal key > roo-code × stdio — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_testkey123"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > roo-code × stdio — interpolated secret is safe > roo-code × stdio — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > roo-code × remote-http — inline secret may contain the literal key > roo-code × remote-http — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_testkey123"
+      },
+      "type": "streamable-http"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > roo-code × remote-http — interpolated secret is safe > roo-code × remote-http — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <LYRASHIELD_API_KEY>"
+      },
+      "type": "streamable-http"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > mimo-code × stdio — inline secret may contain the literal key > mimo-code × stdio — inline 1`] = `
+"{
+  "mcp": {
+    "lyrashield": {
+      "command": [
+        "npx",
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "environment": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_testkey123"
+      },
+      "enabled": true,
+      "type": "local"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > mimo-code × stdio — interpolated secret is safe > mimo-code × stdio — interpolated 1`] = `
+"{
+  "mcp": {
+    "lyrashield": {
+      "command": [
+        "npx",
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "environment": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
+      },
+      "enabled": true,
+      "type": "local"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > mimo-code × remote-http — inline secret may contain the literal key > mimo-code × remote-http — inline 1`] = `
+"{
+  "mcp": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_testkey123"
+      },
+      "type": "remote"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > mimo-code × remote-http — interpolated secret is safe > mimo-code × remote-http — interpolated 1`] = `
+"{
+  "mcp": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <LYRASHIELD_API_KEY>"
+      },
+      "type": "remote"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > codebuff × stdio — inline secret may contain the literal key > codebuff × stdio — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_testkey123"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > codebuff × stdio — interpolated secret is safe > codebuff × stdio — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > oh-my-pi × stdio — inline secret may contain the literal key > oh-my-pi × stdio — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "lsk_testkey123"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > oh-my-pi × stdio — interpolated secret is safe > oh-my-pi × stdio — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@lyrashield/mcp"
+      ],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
+        "LYRASHIELD_API_KEY": "<LYRASHIELD_API_KEY>"
+      }
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > oh-my-pi × remote-http — inline secret may contain the literal key > oh-my-pi × remote-http — inline 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_testkey123"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;
+
+exports[`conformance: renderConfig round-trips through the format parser > oh-my-pi × remote-http — interpolated secret is safe > oh-my-pi × remote-http — interpolated 1`] = `
+"{
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <LYRASHIELD_API_KEY>"
+      },
+      "type": "http"
+    }
+  }
+}"
+`;

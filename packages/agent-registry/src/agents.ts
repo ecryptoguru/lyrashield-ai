@@ -290,7 +290,7 @@ const zed: AgentEntry = {
 
 const geminiCli: AgentEntry = {
   id: "gemini-cli",
-  displayName: "Gemini CLI",
+  displayName: "Gemini CLI (legacy → Antigravity)",
   docsSlug: "gemini-cli",
   installStrategy: "config-file",
   format: "json",
@@ -312,6 +312,7 @@ const geminiCli: AgentEntry = {
     url: "https://github.com/google-gemini/gemini-cli/blob/HEAD/docs/tools/mcp-server.md",
   },
   gotchas: [
+    "Gemini CLI is being transitioned to Antigravity CLI (agy). Free/Pro/Ultra stopped June 2026; enterprise/Code Assist licenses are unaffected. For new setups use the `antigravity` entry — Antigravity auto-migrates Gemini CLI configs (skills, MCP servers, gemini.md). This entry remains for enterprise-legacy Gemini CLI only.",
     "Gemini CLI strips env vars whose names contain KEY, TOKEN or SECRET from subprocess environments; LYRASHIELD_API_KEY must be declared inline in the entry's env block.",
     "Server name must not contain underscores; use `lyrashield`, never `lyra_shield`.",
   ],
@@ -571,6 +572,129 @@ const devinCli: AgentEntry = {
   ],
 }
 
+const rooCode: AgentEntry = {
+  id: "roo-code",
+  displayName: "Roo Code",
+  docsSlug: "roo-code",
+  installStrategy: "config-file",
+  format: "json",
+  rootKey: "mcpServers",
+  locations: [
+    {
+      scope: "project",
+      path: ".roo/mcp.json",
+      sharedByConvention: true,
+    },
+  ],
+  transports: ["stdio", "remote-http"],
+  credential: { kind: "inline-env" },
+  transportFields: {
+    "remote-http": { type: "streamable-http", url: API_URL_PLACEHOLDER },
+  },
+  rulesFiles: [".roo/rules/lyrashield.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://roocodeinc.github.io/Roo-Code/features/mcp/using-mcp-in-roo/",
+  },
+  gotchas: [
+    'Remote entries MUST use `type: "streamable-http"` (hyphenated); `type: "http"` or `streamableHttp` fails — Roo validates the literal string.',
+    "Project `.roo/mcp.json` overrides the global `mcp_settings.json` in VS Code globalStorage. Entries may carry `alwaysAllow: string[]` and `disabled: boolean`.",
+  ],
+}
+
+const mimoCode: AgentEntry = {
+  id: "mimo-code",
+  displayName: "MiMo Code",
+  docsSlug: "mimo-code",
+  installStrategy: "config-file",
+  format: "json",
+  rootKey: "mcp",
+  locations: [
+    { scope: "project", path: ".mimicode/mimocode.jsonc", sharedByConvention: false },
+    { scope: "global", path: "~/.config/mimocode/mimocode.jsonc", sharedByConvention: false },
+  ],
+  transports: ["stdio", "remote-http"],
+  credential: { kind: "inline-env" },
+  stdioStyle: "array-command-environment",
+  transportFields: {
+    stdio: { type: "local" },
+    "remote-http": { type: "remote", url: API_URL_PLACEHOLDER },
+  },
+  rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://mimo.xiaomi.com/mimocode/mcp-servers",
+  },
+  gotchas: [
+    "Root key is `mcp`, not `mcpServers` — using `mcpServers` silently fails.",
+    'Local uses `type: "local"` with `command` as an ARRAY (["npx","-y","<cmd>"]) and `environment` (not `command`+`args`+`env`), plus an `enabled` boolean.',
+    'Remote uses `type: "remote"` with `url` + `headers` and `enabled`; OAuth is handled automatically.',
+  ],
+}
+
+const codebuff: AgentEntry = {
+  id: "codebuff",
+  displayName: "Codebuff",
+  docsSlug: "codebuff",
+  installStrategy: "config-file",
+  format: "json",
+  rootKey: "mcpServers",
+  locations: [
+    {
+      scope: "project",
+      path: ".agents/mcp.json",
+      sharedByConvention: true,
+    },
+  ],
+  transports: ["stdio"],
+  credential: { kind: "inline-env" },
+  rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://www.codebuff.com/",
+  },
+  gotchas: [
+    "Config lives at `.agents/mcp.json` with a `mcpServers` object of `{ command, args, env }`; open-source terminal agent installed via `npm i -g codebuff`.",
+    "Only stdio transport is documented, so this entry is stdio-only. Supports `/init` and `/publish` and an agent store.",
+  ],
+}
+
+const ohMyPi: AgentEntry = {
+  id: "oh-my-pi",
+  displayName: "Oh-My-Pi",
+  docsSlug: "oh-my-pi",
+  installStrategy: "config-file",
+  format: "json",
+  rootKey: "mcpServers",
+  locations: [
+    {
+      scope: "project",
+      path: ".omp/mcp.json",
+      sharedByConvention: true,
+    },
+    {
+      scope: "global",
+      path: "~/.omp/agent/mcp.json",
+      sharedByConvention: false,
+    },
+  ],
+  transports: ["stdio", "remote-http"],
+  credential: { kind: "inline-env" },
+  transportFields: {
+    "remote-http": { type: "http", url: API_URL_PLACEHOLDER },
+  },
+  vendorCli: { command: "omp", args: ["mcp", "add"] },
+  rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://omp.sh",
+  },
+  gotchas: [
+    "Project config is `.omp/mcp.json`; user config is `~/.omp/agent/mcp.json` (profile-aware at `~/.omp/profiles/<profile>/agent/mcp.json`). Oh-My-Pi also auto-discovers MCP servers from other tools like Claude Code and Cursor.",
+    'Remote uses `type: "http"` for Streamable HTTP; stdio `type` may be omitted (default stdio `{command, args, env}`). Supports OAuth via `auth`/`oauth` fields, plus `/mcp add` and `omp plugin`.',
+  ],
+}
+
 export const AGENTS: readonly AgentEntry[] = [
   claudeCode,
   cursor,
@@ -592,4 +716,8 @@ export const AGENTS: readonly AgentEntry[] = [
   goose,
   aider,
   devinCli,
+  rooCode,
+  mimoCode,
+  codebuff,
+  ohMyPi,
 ] as const
