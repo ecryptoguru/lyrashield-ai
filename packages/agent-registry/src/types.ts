@@ -31,6 +31,12 @@ export interface AgentEntry {
   /** Per-transport fields. Use "<apiUrl>" as a placeholder; stdio env blocks receive the base apiUrl, remote HTTP entries receive the MCP endpoint. */
   transportFields?: Partial<Record<Transport, Record<string, string>>>
   commandWrapperKey?: string | null
+  /**
+   * Stdio entry shape override for agents whose local MCP config does not use the
+   * standard `{command, args, env}` triple. "array-command-environment" renders
+   * `{type, command: string[], environment: env, enabled: true}` (MiMo Code).
+   */
+  stdioStyle?: "array-command-environment"
   vendorCli?: { command: string; args: string[] }
   rulesFiles: string[]
   forceInlineEnv?: boolean

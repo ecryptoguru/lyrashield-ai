@@ -49,6 +49,8 @@ export function formatForRulesFile(rulesFile: string): RuleFormat | undefined {
   // hints files; render them with the generic AGENTS.md markdown body.
   if (lower === "gemini.md") return "agents-md"
   if (lower === ".goosehints") return "agents-md"
+  // Roo Code rules live under .roo/rules/*.md as plain markdown.
+  if (lower.includes(".roo") && lower.includes("lyrashield.md")) return "agents-md"
   if (lower === ".cursorrules") return "cursor"
   if (lower.includes("lyrashield.mdc")) return "cursor"
   if (lower.includes("copilot-instructions.md")) return "copilot"

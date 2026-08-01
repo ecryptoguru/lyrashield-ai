@@ -62,6 +62,20 @@ function buildEnvBlock(agent: AgentEntry, opts: InstallOptions): Record<string, 
 function buildStdioEntry(agent: AgentEntry, opts: InstallOptions): Record<string, unknown> {
   const env = buildEnvBlock(agent, opts)
 
+  // Agents whose local MCP config uses a command ARRAY + `environment` map (MiMo
+  // Code) instead of the standard command string + args + env triple.
+  if (agent.stdioStyle === "array-command-environment") {
+    const entry: Record<string, unknown> = {
+      command: ["npx", "-y", "@lyrashield/mcp"],
+      environment: env,
+      enabled: true,
+    }
+    if (agent.transportFields?.stdio) {
+      Object.assign(entry, agent.transportFields.stdio)
+    }
+    return entry
+  }
+
   let entry: Record<string, unknown>
 
   if (agent.commandWrapperKey) {
