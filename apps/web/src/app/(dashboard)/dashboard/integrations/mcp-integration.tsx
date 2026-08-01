@@ -7,17 +7,43 @@ import { Button, Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui
 import { writeClipboard } from "@/components/scorecard-share-composer"
 
 export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; docsUrl: string }) {
-  const [copied, setCopied] = useState(false)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
 
-  async function handleCopy() {
+  // Copy-paste-ready config for the two most common setups. The endpoint URL is
+  // pre-filled; the user only replaces the key placeholder. This is the single
+  // biggest DX win for an MCP product — no manual JSON assembly.
+  const localConfig = `{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "<paste lsk_ key>"
+      }
+    }
+  }
+}`
+  const remoteConfig = `{
+  "mcpServers": {
+    "lyrashield": {
+      "type": "http",
+      "url": "${endpointUrl}",
+      "headers": {
+        "Authorization": "Bearer <paste lsk_ key>"
+      }
+    }
+  }
+}`
+
+  async function copy(value: string, key: string) {
     setCopyError(null)
     try {
-      await writeClipboard(endpointUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await writeClipboard(value)
+      setCopiedKey(key)
+      window.setTimeout(() => setCopiedKey((c) => (c === key ? null : c)), 2000)
     } catch {
-      setCopyError("Copy failed. Select the URL manually.")
+      setCopyError(key)
     }
   }
 
@@ -46,23 +72,75 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
             <Button
               size="sm"
               variant="outline"
-              onClick={() => void handleCopy()}
+              onClick={() => void copy(endpointUrl, "endpoint")}
               aria-label="Copy MCP endpoint URL"
               className="min-h-11 min-w-11 shrink-0 sm:min-h-9"
             >
-              {copied ? (
+              {copiedKey === "endpoint" ? (
                 <Check className="size-4" aria-hidden="true" />
               ) : (
                 <Copy className="size-4" aria-hidden="true" />
               )}
-              <span className="sr-only sm:not-sr-only sm:ml-1">{copied ? "Copied" : "Copy"}</span>
+              <span className="sr-only sm:not-sr-only sm:ml-1">
+                {copiedKey === "endpoint" ? "Copied" : "Copy"}
+              </span>
             </Button>
           </div>
           {copyError ? (
             <p role="alert" className="text-destructive text-xs">
-              {copyError}
+              Copy failed. Select the text manually.
             </p>
           ) : null}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium">
+              Local config (Claude Code, Cursor, most agents)
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void copy(localConfig, "local")}
+              aria-label="Copy local MCP config"
+              className="min-h-11 shrink-0 sm:min-h-9"
+            >
+              {copiedKey === "local" ? (
+                <Check className="size-4" aria-hidden="true" />
+              ) : (
+                <Copy className="size-4" aria-hidden="true" />
+              )}
+              <span className="ml-1">{copiedKey === "local" ? "Copied" : "Copy"}</span>
+            </Button>
+          </div>
+          <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5">
+            <code>{localConfig}</code>
+          </pre>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium">
+              Remote config (cloud IDEs — Lovable, Bolt, Replit, v0)
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void copy(remoteConfig, "remote")}
+              aria-label="Copy remote MCP config"
+              className="min-h-11 shrink-0 sm:min-h-9"
+            >
+              {copiedKey === "remote" ? (
+                <Check className="size-4" aria-hidden="true" />
+              ) : (
+                <Copy className="size-4" aria-hidden="true" />
+              )}
+              <span className="ml-1">{copiedKey === "remote" ? "Copied" : "Copy"}</span>
+            </Button>
+          </div>
+          <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5">
+            <code>{remoteConfig}</code>
+          </pre>
         </div>
 
         <div className="space-y-1.5">
