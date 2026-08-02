@@ -1,6 +1,6 @@
 # @lyrashield/cli
 
-This is a scoped npm alias for the primary [`lyrashield`](../cli) CLI. It exposes the same `lyrashield` binary, so you can install or run it from either package name.
+This is a scoped npm alias for the primary [`lyrashield`](../cli) CLI. It exposes the same CLI under the `lyrashield-cli` binary, so you can install or run it from either package name.
 
 ## Usage
 
@@ -12,7 +12,7 @@ Or install it globally:
 
 ```sh
 npm install -g @lyrashield/cli
-lyrashield login
+lyrashield-cli login
 ```
 
 For the canonical unscoped package:

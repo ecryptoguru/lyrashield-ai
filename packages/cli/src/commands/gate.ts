@@ -25,6 +25,8 @@ export async function handleGate(args: string[], output: Output): Promise<number
     parsed.head as string
   )
 
+  let hadError = false
+
   let localFindings: {
     ruleId: string
     severity: string
@@ -35,6 +37,7 @@ export async function handleGate(args: string[], output: Output): Promise<number
   try {
     localFindings = await runRiskyPatternChecks(base, head)
   } catch (err) {
+    hadError = true
     output.warn(`Could not run diff checks: ${err instanceof Error ? err.message : String(err)}`)
   }
 
@@ -51,6 +54,7 @@ export async function handleGate(args: string[], output: Output): Promise<number
       apiFindings = res
     }
   } catch (err) {
+    hadError = true
     output.warn(
       `Could not fetch findings from API: ${err instanceof Error ? err.message : String(err)}`
     )
@@ -90,11 +94,17 @@ export async function handleGate(args: string[], output: Output): Promise<number
     await writeFile(parsed.sarif as string, JSON.stringify(sarif, null, 2), "utf-8")
   }
 
+  const failed = hadError || atOrAbove.length > 0
+
   if (output.json) {
-    output.result({ threshold, findings: allFindings, failed: atOrAbove.length > 0 })
+    output.result({ threshold, findings: allFindings, failed })
   } else {
-    if (atOrAbove.length > 0) {
-      output.error(`Gate failed: ${atOrAbove.length} finding(s) at or above ${threshold}`)
+    if (failed) {
+      if (hadError) {
+        output.error("Gate failed: could not complete the security check", 1)
+      } else {
+        output.error(`Gate failed: ${atOrAbove.length} finding(s) at or above ${threshold}`, 1)
+      }
       for (const f of atOrAbove) {
         output.log(`[${f.severity}] ${f.ruleId}: ${f.message}`)
       }
@@ -103,5 +113,5 @@ export async function handleGate(args: string[], output: Output): Promise<number
     }
   }
 
-  return atOrAbove.length > 0 ? 1 : 0
+  return failed ? 1 : 0
 }

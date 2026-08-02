@@ -62,5 +62,5 @@ export function getScan(client: LyraShieldClient, id: string, opts?: GetScanOpti
 export function cancelScan(client: LyraShieldClient, id: string, workspaceId?: string) {
   const ws = workspaceId ?? client.workspaceId
   const body = ws ? { workspaceId: ws } : {}
-  return client.request("POST", `/scans/${encodeURIComponent(id)}/cancel`, { body })
+  return client.request("POST", `/scans/${encodeURIComponent(id)}`, { body })
 }

@@ -67,7 +67,9 @@ async function withScannerPhaseTimeout<T>(
       new Promise<T>((_resolve, reject) => {
         timer = setTimeout(() => {
           controller.abort()
-          void addScanEvent(scanId, "scanner", "error", "Scanner phase timed out", { timeoutMs })
+          void addScanEvent(scanId, "scanner", "error", "Scanner phase timed out", {
+            timeoutMs,
+          }).catch(() => undefined)
           reject(new Error(`Scanner phase timed out after ${timeoutMs}ms`))
         }, timeoutMs)
         if (isCancelled) {

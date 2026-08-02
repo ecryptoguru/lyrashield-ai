@@ -4,7 +4,7 @@ import { redactKey } from "../output.js"
 import { resolveSecretMode } from "../installers/secret-mode.js"
 import { mergeJson } from "../installers/json.js"
 import { mergeFile, removeFile } from "../installers/merge.js"
-import { mkdtemp, writeFile, rm, readFile, access } from "node:fs/promises"
+import { mkdtemp, writeFile, rm, readFile, access, realpath } from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "node:os"
 import type { AgentEntry, ConfigLocation } from "@lyrashield/agent-registry"
@@ -89,7 +89,7 @@ describe("secret mode", () => {
 describe("json merge", () => {
   let tmp: string
   beforeAll(async () => {
-    tmp = await mkdtemp(path.join(tmpdir(), "lyrashield-cli-"))
+    tmp = await realpath(await mkdtemp(path.join(tmpdir(), "lyrashield-cli-")))
   })
   afterAll(async () => {
     await rm(tmp, { recursive: true, force: true })
