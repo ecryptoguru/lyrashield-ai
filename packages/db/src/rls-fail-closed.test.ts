@@ -164,7 +164,25 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
    * not Postgres enforces anything. These two cases close that gap: one checks
    * the catalog flags directly, one exercises the join policy for real.
    */
-  describe("child tables scoped through a parent (DB-07)", () => {
+  /**
+   * SKIPPED because child-table RLS is currently DISABLED in production.
+   *
+   * Enabling it (20260803000002) broke the scan pipeline: every run failed with
+   * 42501 `new row violates row-level security policy for table "ScanEvent"`,
+   * even though all four write paths go through `withWorkspaceRLS`. It was
+   * rolled back in 20260803000003 while the cause is diagnosed.
+   *
+   * These assertions are correct and should be UN-SKIPPED as part of re-enabling
+   * — they are the tripwire that proves the policies are live. Do not delete
+   * them. Before flipping RLS back on, the checklist is:
+   *
+   *   1. Reproduce the 42501 write failure in CI against a real Postgres.
+   *   2. Add a WRITE-path case here (insert through `withWorkspaceRLS`), not
+   *      just the read cases below. Reads passing while writes fail is exactly
+   *      how this reached production.
+   *   3. Re-enable, then un-skip.
+   */
+  describe.skip("child tables scoped through a parent (DB-07)", () => {
     const CHILD_TABLES = [
       "ScanEvent",
       "Evidence",
