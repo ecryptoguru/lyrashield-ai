@@ -193,6 +193,24 @@ describe("install-callback ownership verification", () => {
       expect(fetchMock).toHaveBeenCalledTimes(2)
     })
 
+    it("fails closed instead of paging forever when every page is full", async () => {
+      // A remote response that always claims a full page must not spin the
+      // request thread — it must terminate and refuse.
+      const fullPage = { installations: Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })) }
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => fullPage,
+      })
+      vi.stubGlobal("fetch", fetchMock)
+
+      await expect(userCanAdminInstallation("tok-x", 999999)).rejects.toBeInstanceOf(
+        GitHubOwnershipError
+      )
+      expect(fetchMock).toHaveBeenCalledTimes(20)
+    })
+
     it("throws rather than silently denying when the lookup fails", async () => {
       // Must not collapse to `false` — the caller distinguishes "denied" from
       // "could not check", and both fail closed but only one is a real answer.

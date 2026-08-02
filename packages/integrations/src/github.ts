@@ -301,9 +301,12 @@ export async function userCanAdminInstallation(
   userToken: string,
   installationId: number
 ): Promise<boolean> {
-  let page = 1
+  // Bounded rather than `while (true)`: this runs inside a request path, and an
+  // unbounded pager driven by a remote response length is a hang waiting to
+  // happen. 20 pages = 2,000 installations, far past any real account.
+  const MAX_PAGES = 20
 
-  while (true) {
+  for (let page = 1; page <= MAX_PAGES; page++) {
     const res = await githubFetch(
       `${GITHUB_API_BASE}/user/installations?per_page=100&page=${page}`,
       {
@@ -319,8 +322,12 @@ export async function userCanAdminInstallation(
     const installations = data.installations ?? []
     if (installations.some((i) => i.id === installationId)) return true
     if (installations.length < 100) return false
-    page++
   }
+
+  // Ran out of pages without a match: fail closed rather than guessing.
+  throw new GitHubOwnershipError(
+    `Exceeded ${MAX_PAGES} pages listing user installations without a match`
+  )
 }
 
 export function verifyWebhookSignature(payload: string, signature: string | null): boolean {
