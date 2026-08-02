@@ -22,6 +22,7 @@ import {
   consumeApproval,
   denyApproval,
   hashInput,
+  saveApprovalResult,
   verifyInputHash,
 } from "./agent-approval-service"
 
@@ -70,6 +71,15 @@ describe("Agent Approval Service — hash functions", () => {
     })
     agentApproval.updateMany.mockResolvedValue({ count: 0 })
     await expect(consumeApproval("approval-1", "workspace-1")).resolves.toBe(false)
+  })
+
+  it("saves an approval result scoped to the right workspace", async () => {
+    agentApproval.update.mockResolvedValue({ id: "approval-1" })
+    await saveApprovalResult("approval-1", "workspace-1", { success: true })
+    expect(agentApproval.update).toHaveBeenCalledWith({
+      where: { id: "approval-1", workspaceId: "workspace-1" },
+      data: { result: { success: true } },
+    })
   })
 })
 

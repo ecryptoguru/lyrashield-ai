@@ -1,6 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises"
+import { mkdtemp, rm, symlink, writeFile, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -81,6 +81,22 @@ describe("atomicWrite", () => {
     await import("node:fs/promises").then(({ symlink }) => symlink(other, expectedTmp))
 
     await expect(atomicWrite(target, "hello")).rejects.toThrow()
+  })
+
+  it("rejects when the destination directory itself is a symlink", async () => {
+    const realDir = await mkdtemp(path.join(tmpdir(), "lyrashield-atomic-real-"))
+    const linkDir = path.join(tmpdir(), "lyrashield-atomic-link-")
+    await symlink(realDir, linkDir)
+
+    try {
+      const target = path.join(linkDir, "config.json")
+      await expect(atomicWrite(target, "hello")).rejects.toThrow(
+        /Refusing to write through a symlinked directory/
+      )
+    } finally {
+      await rm(linkDir, { force: true })
+      await rm(realDir, { recursive: true, force: true })
+    }
   })
 
   it("rejects the final path when it is not a regular file after rename", async () => {
