@@ -45,7 +45,9 @@ export default async function IntegrationsPage({
   })
 
   const githubIntegration = integrations.find((i) => i.type === "GITHUB")
-  const githubVerificationRequired = (await searchParams).github === "verification_required"
+  const githubStatus = (await searchParams).github
+  const githubVerificationRequired = githubStatus === "verification_required"
+  const githubAlreadyClaimed = githubStatus === "already_claimed"
 
   const appOriginRaw = (env.NEXT_PUBLIC_APP_URL as string | undefined) ?? ""
   const appOrigin = appOriginRaw.replace(/\/+$/, "")
@@ -83,9 +85,20 @@ export default async function IntegrationsPage({
           className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm"
           role="alert"
         >
-          GitHub did not provide enough information to verify this installation for your workspace.
-          It was not connected. Reopen the installation from this workspace after the GitHub
-          ownership verification flow is available.
+          We could not confirm with GitHub that you administer this installation, so it was not
+          connected. Start the install from the Connect button below — approving GitHub&apos;s
+          authorization prompt is what proves ownership. If you cancelled that prompt, try again.
+        </div>
+      )}
+
+      {githubAlreadyClaimed && (
+        <div
+          className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm"
+          role="alert"
+        >
+          This GitHub installation is already connected to a different LyraShield workspace. An
+          installation can only be linked to one workspace at a time — disconnect it there first, or
+          install the app on a different GitHub account or organisation.
         </div>
       )}
 

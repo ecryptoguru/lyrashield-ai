@@ -179,26 +179,33 @@ rule.
      - `Metadata: Read` — list repos for the `POST /api/integrations/github/repos` call.
      - `Pull requests: Read and write` — **only** when server-generated, approval-bound Fix PRs are implemented; until then `Read` is enough.
    - **Account permissions**: none required for today's beta (the install-URL uses the slug; listing installs needs the App JWT only).
-   - **Privacy**: public App, but installable on specific `ecryptoguru` repos (or "all repos on the account" if the boundary is governed by the per-workspace allowed-repo list instead). Never enable "any account" until the multi-tenant billing / allowlist is gated.
+   - **Identifying and authorizing users**: tick **"Request user authorization (OAuth) during installation"** and set the **Callback URL** to `https://app.lyrashieldai.com/api/integrations/github/install` (the same route that receives the install callback). This is REQUIRED, not cosmetic. `installation_id` on its own is a global, enumerable value that proves nothing about who is calling, so the callback binds a workspace only after exchanging the `code` GitHub appends for a user token and confirming through `GET /user/installations` that the installer actually administers that installation. With the box unticked no `code` ever arrives, every first-time install fails closed with `?github=verification_required`, and nobody can connect the integration.
+   - **Privacy / visibility**: the App must be **Public** for any account other than the owner to install it — a Private App 404s `https://github.com/apps/<slug>/installations/new` for everyone else, which surfaces to users as GitHub claiming the app does not exist. "Public" governs who may _install_; it does not grant anyone access to your repos. Keep installs scoped to specific `ecryptoguru` repos (or "all repos on the account" if the boundary is governed by the per-workspace allowed-repo list instead).
 
-2. **Note the four values the deploy pipeline needs:**
+2. **Note the six values the deploy pipeline needs:**
    - `GITHUB_APP_ID` — numeric app id from the App settings page (e.g. `1234567`).
    - `GITHUB_APP_SLUG` — the slug from the URL `https://github.com/apps/<slug>` (e.g. `lyrashield-ai`).
    - `GITHUB_APP_PRIVATE_KEY` — PEM private key: scroll to the bottom of the App settings page, `Generate a private key`, download the `.pem`, paste the full contents including `-----BEGIN RSA PRIVATE KEY-----`/`-----END RSA PRIVATE KEY-----`. GitHub rotates this immediately when a new one is generated — the old one stops working the instant the new one exists.
    - `GITHUB_WEBHOOK_SECRET` — the webhook secret you generated in step 1.
+   - `GITHUB_APP_CLIENT_ID` — the App's own OAuth **Client ID** (App settings → General). NOT `GITHUB_CLIENT_ID`, which belongs to the separate social-sign-in OAuth app.
+   - `GITHUB_APP_CLIENT_SECRET` — App settings → General → `Generate a new client secret`. Shown once; copy it immediately.
 
 3. **Add them as repository secrets** in `ecryptoguru/lyrashield-ai` (Settings → Secrets and variables → Actions → Repository secrets):
-   - `LYRASHIELD_GITHUB_APP_ID`, `LYRASHIELD_GITHUB_APP_SLUG`, `LYRASHIELD_GITHUB_APP_PRIVATE_KEY`, `LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET`.
+   - `LYRASHIELD_GITHUB_APP_ID`, `LYRASHIELD_GITHUB_APP_SLUG`, `LYRASHIELD_GITHUB_APP_PRIVATE_KEY`, `LYRASHIELD_GITHUB_APP_WEBHOOK_SECRET`, `LYRASHIELD_GITHUB_APP_CLIENT_ID`, `LYRASHIELD_GITHUB_APP_CLIENT_SECRET`.
 
 4. **Deploy wiring — already shipped in `.github/workflows/deploy-azure.yml` (PR #180+):**
    - `Verify GitHub App credentials` — warns (not errors) if any of the 4 secrets are missing, so existing deploys keep working; onboarding's three non-GitHub paths cover signups in the meantime.
    - `Sync GitHub App secrets to Container Apps` — when all 4 secrets are set, on every deploy it runs `az containerapp secret set` on both the app and scanner Container Apps with 4 secret names (`github-app-id`, `github-app-slug`, `github-app-private-key`, `github-webhook-secret`). Rotating a GitHub secret therefore also rotates the Container App's copy. When any one secret is missing the entire sync step is skipped (avoids half-configured deploys that would 500 on a different path).
    - `Deploy app Container App` / `Deploy scanner Container App` — `--set-env-vars` now includes `GITHUB_APP_ID=secretref:github-app-id` etc. `secretref:` requires the Container App to already define a secret with that name — provisioned by the sync step just above on every deploy, so rotation is automatic and a fresh Container App gets its secrets for the first time.
 
-5. **Verify after the deploy:**
+5. **Verify after the deploy — run the flow to completion, not just to the redirect.** The previous version of this checklist stopped at "the install URL opens", which is exactly why a callback that could never create a binding went unnoticed:
    - `curl https://app.lyrashieldai.com/api/ready` should still be `{"status":"ready",...}`.
    - As a brand-new signup, step 2 should show all 4 options and "Connect GitHub" should be enabled (not "GitHub connect is unavailable right now…").
    - Clicking "Connect GitHub" should open `https://github.com/apps/<slug>/installations/new?state=...` in a new tab (the `state` param is workspace-bound and signed — S2 defense), not 500.
+   - **Complete the install on a real account.** GitHub should show its authorization prompt (proof the OAuth-during-installation box is ticked), then land back on `/dashboard/integrations?connected=github` with the account name rendered — NOT `?github=verification_required`.
+   - **Confirm the row exists**: one `Integration` row with `type=GITHUB`, `status=active`, `externalId` = the installation id, plus an `integration.github.connected` audit-log entry.
+   - **Negative check**: installing the same installation from a second workspace must land on `?github=already_claimed` (the `@@unique([type, externalId])` guard), not bind twice.
+   - **Reconnect check**: disconnect, then install again — the soft-deleted row should revive rather than collide.
    - `POST /api/webhooks/github` deliveries (GitHub App settings → Advanced → Recent Deliveries → Redeliver) should 200 and write `webhookEvent` rows (`@@unique([provider, externalId])` idempotency).
 
 **Do not:**

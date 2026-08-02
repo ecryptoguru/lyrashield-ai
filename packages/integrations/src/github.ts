@@ -242,6 +242,94 @@ export async function getAppInstallations(): Promise<InstallationInfo[]> {
   return installations
 }
 
+// ── Install-callback ownership verification ──────────────────────────────────
+// `installation_id` on the install callback is a global, enumerable identifier.
+// On its own it proves nothing about the caller, so binding a workspace to it
+// from the callback alone let a user claim someone else's installation (S2).
+// The missing half is an assertion from GitHub about the *user*: with "Request
+// user authorization (OAuth) during installation" enabled, GitHub appends a
+// `code` to the callback. Exchanging it yields a user token whose
+// GET /user/installations list is exactly the set of installations that user is
+// allowed to act on. Membership in that list is the ownership proof.
+//
+// The token is used for this one check and then discarded — never persisted.
+
+/** Raised when the provider-side ownership handshake cannot be completed. */
+export class GitHubOwnershipError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "GitHubOwnershipError"
+  }
+}
+
+/** Exchange an install-callback `code` for a short-lived GitHub user token. */
+export async function exchangeInstallUserCode(code: string): Promise<string> {
+  const clientId = env.GITHUB_APP_CLIENT_ID
+  const clientSecret = env.GITHUB_APP_CLIENT_SECRET
+  if (!clientId || !clientSecret) {
+    throw new GitHubOwnershipError(
+      "GitHub App OAuth credentials not configured (GITHUB_APP_CLIENT_ID / GITHUB_APP_CLIENT_SECRET)"
+    )
+  }
+
+  const res = await githubFetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
+  })
+
+  if (!res.ok) {
+    throw new GitHubOwnershipError(`Install code exchange failed: ${res.status}`)
+  }
+
+  const data = (await res.json()) as { access_token?: string; error?: string }
+  if (!data.access_token) {
+    // GitHub returns 200 with an `error` body for bad/expired codes.
+    throw new GitHubOwnershipError(
+      `Install code exchange returned no token${data.error ? `: ${data.error}` : ""}`
+    )
+  }
+  return data.access_token
+}
+
+/**
+ * True when `installationId` appears among the installations the bearer of
+ * `userToken` may administer. Fails closed: any transport or parse problem
+ * raises rather than returning false-negative-as-success.
+ */
+export async function userCanAdminInstallation(
+  userToken: string,
+  installationId: number
+): Promise<boolean> {
+  // Bounded rather than `while (true)`: this runs inside a request path, and an
+  // unbounded pager driven by a remote response length is a hang waiting to
+  // happen. 20 pages = 2,000 installations, far past any real account.
+  const MAX_PAGES = 20
+
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const res = await githubFetch(
+      `${GITHUB_API_BASE}/user/installations?per_page=100&page=${page}`,
+      {
+        headers: { Authorization: `Bearer ${userToken}`, ...GITHUB_HEADERS },
+      }
+    )
+
+    if (!res.ok) {
+      throw new GitHubOwnershipError(`Failed to list user installations: ${res.status}`)
+    }
+
+    const data = (await res.json()) as { installations?: { id: number }[] }
+    const installations = data.installations ?? []
+    if (installations.some((i) => i.id === installationId)) return true
+    if (installations.length < 100) return false
+  }
+
+  // Ran out of pages without a match: fail closed rather than guessing.
+  throw new GitHubOwnershipError(
+    `Exceeded ${MAX_PAGES} pages listing user installations without a match`
+  )
+}
+
 export function verifyWebhookSignature(payload: string, signature: string | null): boolean {
   const secret = env.GITHUB_WEBHOOK_SECRET
   if (!secret) {
