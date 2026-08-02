@@ -2,6 +2,15 @@ import { lstat, open, realpath, rename } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { dirname, resolve } from "node:path"
 
+function expectedRealpath(path: string): string {
+  if (process.platform === "darwin") {
+    for (const alias of ["/etc", "/tmp", "/var"]) {
+      if (path === alias || path.startsWith(`${alias}/`)) return `/private${path}`
+    }
+  }
+  return path
+}
+
 /**
  * Reject a destination whose directory chain passes through a symlink ANYWHERE,
  * not just at the immediate parent.
@@ -34,7 +43,7 @@ async function assertNoSymlinkedAncestor(dir: string): Promise<void> {
 
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const real = await realpath(probe)
-  if (real !== probe) {
+  if (real !== expectedRealpath(probe)) {
     throw new Error(`Refusing to write through a symlinked directory: ${probe} resolves to ${real}`)
   }
 }
