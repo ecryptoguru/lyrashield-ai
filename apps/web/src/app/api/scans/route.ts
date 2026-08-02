@@ -199,15 +199,35 @@ export async function POST(request: Request) {
 
     revalidateDashboardAggregates()
 
+    // Return the same shape the list endpoint returns. The client prepends this
+    // straight into its scan list and validates it against the list-item schema,
+    // so a narrower payload here fails response validation and surfaces to the
+    // user as "Start Trust Run" erroring — on a scan that was in fact created
+    // and enqueued. `target` is the row already loaded and authorised above, and
+    // findingCount is 0 by construction for a scan that has not run yet.
     return apiSuccess(
-      {
+      serializeScanListItem({
         id: scan.id,
         status: scan.status,
         goal: scan.goal,
         mode: scan.mode,
-        targetId: scan.targetId,
+        triggerType: scan.triggerType,
+        startedAt: scan.startedAt,
+        endedAt: scan.endedAt,
+        durationMs: scan.durationMs,
+        summary: scan.summary,
+        errorCategory: scan.errorCategory,
+        errorMessage: scan.errorMessage,
         createdAt: scan.createdAt,
-      },
+        findingCount: 0,
+        target: {
+          id: target.id,
+          name: target.name,
+          type: target.type,
+          url: target.url,
+          repoFullName: target.repoFullName,
+        },
+      }),
       201
     )
   } catch (error) {
