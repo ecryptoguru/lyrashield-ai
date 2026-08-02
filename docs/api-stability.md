@@ -39,6 +39,7 @@ After the 90-day window, the deprecated surface may be removed from v1. If remov
 The public `/api/v1` URL surface is unchanged. Client-side changes that do not affect the wire contract are recorded here for integrators and operators:
 
 - **2026-07-31 — CLI and MCP path normalization:** The CLI and MCP server now pass bare API paths (e.g., `/findings`) to the `@lyrashield/sdk` client, which continues to prepend `/api/v1` in `buildUrl()`. This fixes an earlier double-prefix bug where some tool calls produced `/api/v1/v1/...` paths. Existing v1 route URLs remain valid.
+- **2026-08-01 — OpenAPI builder packaged:** The OpenAPI 3.1 spec builder moved from `apps/web/src/lib/openapi/` to a declared `@lyrashield/types/openapi` export. The generated `/api/v1/openapi.json` response and the marketing build that consumes the same spec are unchanged; only the internal package boundary moved.
 
 ## No migrations in the API contract
 
