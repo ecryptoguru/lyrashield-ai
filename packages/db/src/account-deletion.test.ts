@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { randomUUID } from "node:crypto"
 import { prisma } from "./client"
 import { verifyAuditChain } from "./audit-hash"
 
-const suffix = `${Date.now()}`
+const suffix = randomUUID().replace(/-/g, "")
 const userId = `delete-user-${suffix}`
 const otherUserId = `keep-user-${suffix}`
 const workspaceId = `delete-workspace-${suffix}`
@@ -39,7 +40,6 @@ describe("account deletion", () => {
     await prisma.user.deleteMany({
       where: { id: { in: [userId, otherUserId, `delete-rewarded-${suffix}`] } },
     })
-    await prisma.$disconnect()
   })
 
   it("blocks sole owners, then anonymizes attribution without breaking the audit chain", async () => {

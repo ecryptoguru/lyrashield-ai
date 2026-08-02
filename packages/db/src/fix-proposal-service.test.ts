@@ -66,8 +66,8 @@ const baseProposal = {
 describe("fix-proposal-service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => unknown) =>
-      callback(mockPrisma)
+    mockPrisma.$transaction.mockImplementation(
+      async (callback: (tx: typeof mockPrisma) => unknown) => callback(mockPrisma)
     )
   })
 

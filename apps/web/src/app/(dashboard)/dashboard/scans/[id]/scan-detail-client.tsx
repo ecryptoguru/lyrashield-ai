@@ -22,6 +22,8 @@ import { formatTime } from "@/lib/date-format"
 import { getScannerCoverageWarnings } from "@/lib/scan-coverage"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getScanReviewProfile } from "@/lib/scan-review-profile"
+import { z } from "zod"
+import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import { getScanGoalLabel, getScanModeLabel, getScanTriggerLabel } from "@/lib/enum-labels"
 import { ScanInProgress } from "./scan-in-progress"
@@ -117,6 +119,77 @@ interface FindingItem {
   verificationReason: string | null
   createdAt: string
 }
+
+const findingItemSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    severity: z.string(),
+    status: z.string(),
+    cwe: z.string().nullable(),
+    cvssScore: z.number().nullable(),
+    summary: z.string().nullable(),
+    verified: z.boolean(),
+    verificationStatus: z.string(),
+    verificationMethod: z.string().nullable(),
+    verificationReason: z.string().nullable(),
+    createdAt: z.string().datetime().or(z.string()),
+  })
+  .passthrough()
+
+const findingsPaginatedSchema = paginatedResponseSchema(findingItemSchema)
+
+const scanPollEventSchema = z
+  .object({
+    id: z.string(),
+    stage: z.string(),
+    level: z.string(),
+    message: z.string(),
+    metadata: z.unknown().optional(),
+    createdAt: z.string().datetime().or(z.string()).or(z.date()),
+  })
+  .passthrough()
+
+const scanPollCoverageReceiptSchema = z
+  .object({
+    scanner: z.string(),
+    controlId: z.string(),
+    status: z.string(),
+    reason: z.string().nullable().optional(),
+    subject: z.string().nullable().optional(),
+    metadata: z.unknown().optional(),
+  })
+  .passthrough()
+
+const scanPollDataSchema = z
+  .object({
+    id: z.string(),
+    workspaceId: z.string(),
+    status: z.string(),
+    goal: z.string(),
+    mode: z.string(),
+    triggerType: z.string(),
+    startedAt: z.string().datetime().or(z.string()).or(z.date()).nullable(),
+    endedAt: z.string().datetime().or(z.string()).or(z.date()).nullable(),
+    summary: z.string().nullable(),
+    errorCategory: z.string().nullable(),
+    errorMessage: z.string().nullable(),
+    llmRequestCount: z.number().nullable().optional(),
+    llmInputTokens: z.number().nullable().optional(),
+    llmCachedInputTokens: z.number().nullable().optional(),
+    llmOutputTokens: z.number().nullable().optional(),
+    createdAt: z.string().datetime().or(z.string()).or(z.date()),
+    events: z.array(scanPollEventSchema).optional(),
+    resultManifest: z
+      .object({
+        checksum: z.string().nullable().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    coverageReceipts: z.array(scanPollCoverageReceiptSchema).optional(),
+  })
+  .passthrough()
 
 const SEVERITY_ORDER: Record<string, number> = {
   CRITICAL: 0,
@@ -248,7 +321,7 @@ export function ScanDetailClient({
       try {
         const { data, etag } = await apiGetConditional<ScanPollData>(
           `/api/scans/${scan.id}?workspaceId=${encodeURIComponent(scan.workspaceId)}`,
-          { signal, etag: etagRef.current }
+          { signal, etag: etagRef.current, schema: scanPollDataSchema }
         )
         etagRef.current = etag
         if (!data || signal.aborted) return
@@ -299,7 +372,7 @@ export function ScanDetailClient({
           const page = await apiGetPaginated<FindingItem>(
             "/api/findings",
             { workspaceId: updated.workspaceId, scanId: scan.id, limit: "100" },
-            { signal }
+            { signal, schema: findingsPaginatedSchema }
           )
           refreshedFindings = page.items
         }

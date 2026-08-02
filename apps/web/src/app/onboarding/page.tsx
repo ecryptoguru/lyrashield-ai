@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@lyrashield/auth/server"
 import { ShieldCheck } from "lucide-react"
-import { V2OnboardingWizard } from "./v2-onboarding-wizard"
+import { OnboardingWizard } from "./onboarding-wizard"
 import { ReferralClaim } from "./referral-claim"
 import { SignOutButton } from "./sign-out-button"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -45,7 +45,7 @@ export default async function OnboardingPage() {
         </p>
       </div>
 
-      <V2OnboardingWizard initialState={initialState} />
+      <OnboardingWizard initialState={initialState} />
     </div>
   )
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { UserPlus, Mail, Clock, Users } from "lucide-react"
 import { Button, Badge, FormField, Input, Select, Spinner } from "@lyrashield/ui"
+import { z } from "zod"
 import { apiGet, apiPost } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
 
@@ -26,6 +27,37 @@ interface Invitation {
   createdAt: string
 }
 
+const memberSchema = z
+  .object({
+    id: z.string(),
+    userId: z.string(),
+    name: z.string(),
+    email: z.string(),
+    image: z.string().nullable(),
+    role: z.string(),
+    status: z.string(),
+    createdAt: z.string().datetime().or(z.string()),
+  })
+  .passthrough()
+
+const invitationSchema = z
+  .object({
+    id: z.string(),
+    email: z.string(),
+    role: z.string(),
+    status: z.string(),
+    expiresAt: z.string().datetime().or(z.string()),
+    createdAt: z.string().datetime().or(z.string()),
+  })
+  .passthrough()
+
+const teamSchema = z
+  .object({
+    members: z.array(memberSchema),
+    invitations: z.array(invitationSchema),
+  })
+  .passthrough()
+
 export function TeamClient({
   workspaceId,
   initialData,
@@ -47,7 +79,8 @@ export function TeamClient({
     setLoading(true)
     try {
       const data = await apiGet<{ members: Member[]; invitations: Invitation[] }>(
-        `/api/team?workspaceId=${workspaceId}`
+        `/api/team?workspaceId=${workspaceId}`,
+        { schema: teamSchema }
       )
       setMembers(data.members)
       setInvitations(data.invitations)

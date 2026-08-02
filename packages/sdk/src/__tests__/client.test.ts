@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { z } from "zod"
 import { LyraShieldClient } from "../client"
 import { LyraShieldError, NotModified } from "../errors"
 import { paginate, type Paginated } from "../pagination"
@@ -200,6 +201,61 @@ describe("LyraShieldClient", () => {
       expect(e.message).toContain("Internal Server Error")
     }
   })
+
+  it("wraps Zod validation failures in LyraShieldError with VALIDATION_ERROR", async () => {
+    const schema = z.object({ id: z.string(), count: z.number() })
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        body: { success: true, data: { id: "1", count: "not-a-number" } },
+      })
+    )
+    try {
+      await client.request("GET", "/scans", { parse: (d) => schema.parse(d) })
+      expect.fail("should have thrown")
+    } catch (err) {
+      const e = err as LyraShieldError
+      expect(e).toBeInstanceOf(LyraShieldError)
+      expect(e.code).toBe("VALIDATION_ERROR")
+      expect(e.status).toBe(200)
+      expect(e.message).toContain("Response validation failed")
+    }
+  })
+
+  it("wraps invalid JSON responses in LyraShieldError with PARSE_ERROR", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers(),
+      json: async () => {
+        throw new SyntaxError("Unexpected token < in JSON at position 0")
+      },
+    })
+    try {
+      await client.request("GET", "/scans")
+      expect.fail("should have thrown")
+    } catch (err) {
+      const e = err as LyraShieldError
+      expect(e).toBeInstanceOf(LyraShieldError)
+      expect(e.code).toBe("PARSE_ERROR")
+      expect(e.status).toBe(200)
+      expect(e.message).toContain("Invalid JSON response")
+    }
+  })
+
+  it("returns undefined for 204 No Content responses", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      statusText: "No Content",
+      headers: new Headers(),
+      json: async () => {
+        throw new SyntaxError("Unexpected end of JSON input")
+      },
+    })
+    const result = await client.request("DELETE", "/scans/s-1")
+    expect(result).toBeUndefined()
+  })
 })
 
 describe("paginate", () => {
@@ -214,15 +270,20 @@ describe("paginate", () => {
       .mockResolvedValueOnce({ items: [{ id: "1" }], nextCursor: "c2", total: 3 })
       .mockResolvedValueOnce({ items: [{ id: "2" }], nextCursor: null, total: 3 })
 
+    const itemSchema = z.object({ id: z.string() })
     const pages: Paginated<{ id: string }>[] = []
-    for await (const page of paginate<{ id: string }>(client, "GET", "/findings", { limit: 1 })) {
+    for await (const page of paginate(client, "GET", "/findings", { limit: 1 }, itemSchema)) {
       pages.push(page)
     }
 
     expect(pages).toHaveLength(2)
     expect(pages[0]?.items[0]?.id).toBe("1")
     expect(pages[1]?.items[0]?.id).toBe("2")
-    expect(request).toHaveBeenCalledWith("GET", "/findings?limit=1")
-    expect(request).toHaveBeenLastCalledWith("GET", "/findings?limit=1&cursor=c2")
+    expect(request).toHaveBeenCalledWith("GET", "/findings?limit=1", { parse: expect.any(Function) })
+    expect(request).toHaveBeenLastCalledWith(
+      "GET",
+      "/findings?limit=1&cursor=c2",
+      { parse: expect.any(Function) }
+    )
   })
 })

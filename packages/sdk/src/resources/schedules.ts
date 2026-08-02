@@ -1,4 +1,6 @@
 import type { LyraShieldClient } from "../client"
+import { z } from "zod"
+import { ScheduleListSchema, ScheduleSchema } from "../schemas"
 
 export interface ListSchedulesQuery {
   workspaceId?: string
@@ -14,7 +16,10 @@ export interface CreateScheduleInput {
   mode?: string
 }
 
-export function listSchedules(client: LyraShieldClient, query: ListSchedulesQuery = {}) {
+export function listSchedules(
+  client: LyraShieldClient,
+  query: ListSchedulesQuery = {}
+): Promise<z.infer<typeof ScheduleListSchema>> {
   const params = new URLSearchParams()
   const workspaceId = query.workspaceId ?? client.workspaceId
   if (workspaceId) params.set("workspaceId", workspaceId)
@@ -22,13 +27,21 @@ export function listSchedules(client: LyraShieldClient, query: ListSchedulesQuer
   if (query.cursor) params.set("cursor", query.cursor)
   if (query.limit) params.set("limit", String(query.limit))
   const qs = params.toString()
-  return client.request("GET", qs ? `/schedules?${qs}` : "/schedules")
+  return client.request("GET", qs ? `/schedules?${qs}` : "/schedules", {
+    parse: (data) => ScheduleListSchema.parse(data),
+  })
 }
 
-export function createSchedule(client: LyraShieldClient, input: CreateScheduleInput) {
+export function createSchedule(
+  client: LyraShieldClient,
+  input: CreateScheduleInput
+): Promise<z.infer<typeof ScheduleSchema>> {
   const body = {
     ...input,
     workspaceId: input.workspaceId ?? client.workspaceId,
   }
-  return client.request("POST", "/schedules", { body })
+  return client.request("POST", "/schedules", {
+    body,
+    parse: (data) => ScheduleSchema.parse(data),
+  })
 }

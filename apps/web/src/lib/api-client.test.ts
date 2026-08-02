@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterAll } from "vitest"
+import { z } from "zod"
 
 // Mock global fetch
 const mockFetch = vi.fn()
@@ -21,6 +22,9 @@ function jsonResponse(data: unknown, success = true, status = 200) {
 describe("api-client", () => {
   beforeEach(() => {
     mockFetch.mockReset()
+  })
+  afterAll(() => {
+    vi.unstubAllGlobals()
   })
 
   describe("apiGet", () => {
@@ -245,6 +249,55 @@ describe("api-client", () => {
         code: "PARSE_ERROR",
         status: 200,
       })
+    })
+
+    it("reports schema validation failure as VALIDATION_ERROR with real status", async () => {
+      const schema = z.object({ id: z.string(), count: z.number() })
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({
+          success: true,
+          data: { id: "1", count: "not-a-number" },
+        }),
+      })
+
+      await expect(apiGetConditional("/api/test", { schema })).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+        status: 200,
+      })
+    })
+  })
+
+  describe("schema validation", () => {
+    it("returns parsed data when the response matches the schema", async () => {
+      const schema = z.object({ id: z.string(), count: z.number() })
+      mockFetch.mockResolvedValue(jsonResponse({ id: "1", count: 5 }))
+      const result = await apiGet("/api/test", { schema })
+      expect(result).toEqual({ id: "1", count: 5 })
+    })
+
+    it("throws a VALIDATION_ERROR when the response does not match the schema", async () => {
+      const schema = z.object({ id: z.string(), count: z.number() })
+      mockFetch.mockResolvedValue(jsonResponse({ id: "1", count: "five" }))
+      await expect(apiGet("/api/test", { schema })).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+        status: 200,
+      })
+    })
+
+    it("validates POST responses when a schema is provided", async () => {
+      const schema = z.object({ id: z.string() })
+      mockFetch.mockResolvedValue(jsonResponse({ id: "created" }))
+      const result = await apiPost("/api/test", { name: "foo" }, { schema })
+      expect(result).toEqual({ id: "created" })
+    })
+
+    it("does not require a schema and returns raw data", async () => {
+      mockFetch.mockResolvedValue(jsonResponse({ id: "raw" }))
+      const result = await apiGet("/api/test")
+      expect(result).toEqual({ id: "raw" })
     })
   })
 })

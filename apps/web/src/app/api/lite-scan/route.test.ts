@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 const safeFetch = vi.fn()
 const checkScanUrlSafe = vi.fn()
@@ -18,6 +18,10 @@ function request(body: unknown, origin = "http://localhost:4321") {
 }
 
 describe("POST /api/lite-scan", () => {
+  afterAll(() => {
+    vi.unstubAllGlobals()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.NODE_ENV = "test"

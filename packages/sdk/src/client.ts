@@ -1,3 +1,4 @@
+import { z } from "zod"
 import { LyraShieldError, NotModified } from "./errors"
 
 export const VERSION = "0.1.0"
@@ -16,11 +17,31 @@ export interface LyraShieldClientOptions {
   userAgent?: string
 }
 
-export interface RequestOptions {
+export interface RequestOptions<T = unknown> {
   body?: unknown
   headers?: Record<string, string>
   etag?: string
+  /** Optional parser that validates `data` at runtime instead of casting it. */
+  parse?: (data: unknown) => T
 }
+
+const ApiEnvelopeSchema = z.union([
+  z.object({
+    success: z.literal(true),
+    data: z.unknown().optional(),
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z
+      .object({
+        code: z.string().optional(),
+        message: z.string().optional(),
+      })
+      .optional(),
+  }),
+])
+
+type ApiEnvelope = z.infer<typeof ApiEnvelopeSchema>
 
 const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "PUT", "DELETE", "OPTIONS"])
 
@@ -42,12 +63,22 @@ export class LyraShieldClient {
   request<T = unknown>(
     method: string,
     path: string,
-    options?: RequestOptions
+    options: RequestOptions<T> & { parse: (data: unknown) => T; etag?: never }
+  ): Promise<T>
+  request<T = unknown>(
+    method: string,
+    path: string,
+    options: RequestOptions<T> & { parse: (data: unknown) => T; etag: string }
+  ): Promise<T | NotModified>
+  request<T = unknown>(
+    method: string,
+    path: string,
+    options?: RequestOptions<T>
   ): Promise<T | NotModified>
   async request<T = unknown>(
     method: string,
     path: string,
-    options?: RequestOptions
+    options?: RequestOptions<T>
   ): Promise<T | NotModified> {
     const url = this.buildUrl(path)
     const isIdempotent = IDEMPOTENT_METHODS.has(method.toUpperCase())
@@ -65,6 +96,7 @@ export class LyraShieldClient {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      let lastStatus = 0
 
       try {
         const res = await this.fetchFn(url, {
@@ -73,6 +105,7 @@ export class LyraShieldClient {
           body,
           signal: controller.signal,
         })
+        lastStatus = res.status
         clearTimeout(timeout)
 
         if (res.status === 304) {
@@ -108,14 +141,10 @@ export class LyraShieldClient {
 
         const json = await this.parseJson(res)
         if (json === undefined || json === null) {
-          return undefined as T
+          return options?.parse ? options.parse(json) : (undefined as T)
         }
 
-        const envelope = json as {
-          success?: unknown
-          data?: unknown
-          error?: { code?: string; message?: string }
-        }
+        const envelope: ApiEnvelope = ApiEnvelopeSchema.parse(json)
         if (envelope.success !== true) {
           throw new LyraShieldError({
             status: res.status,
@@ -125,7 +154,7 @@ export class LyraShieldClient {
           })
         }
 
-        return envelope.data as T
+        return (options?.parse ? options.parse(envelope.data) : envelope.data) as T
       } catch (err) {
         clearTimeout(timeout)
         if (err instanceof LyraShieldError) throw err
@@ -134,6 +163,20 @@ export class LyraShieldClient {
             status: 0,
             code: "REQUEST_TIMEOUT",
             message: "Request timed out",
+          })
+        }
+        if (err instanceof z.ZodError) {
+          throw new LyraShieldError({
+            status: lastStatus,
+            code: "VALIDATION_ERROR",
+            message: `Response validation failed: ${err.issues.map((issue) => issue.message).join(", ")}`,
+          })
+        }
+        if (err instanceof SyntaxError) {
+          throw new LyraShieldError({
+            status: lastStatus,
+            code: "PARSE_ERROR",
+            message: `Invalid JSON response: ${err.message}`,
           })
         }
         throw err
@@ -172,10 +215,14 @@ export class LyraShieldClient {
   }
 
   private async parseJson(res: Response): Promise<unknown> {
+    if (res.status === 204 || res.status === 205) {
+      return undefined
+    }
     try {
       return await res.json()
-    } catch {
-      return undefined
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid JSON response"
+      throw new SyntaxError(message)
     }
   }
 
@@ -183,9 +230,14 @@ export class LyraShieldClient {
     let message = `${res.status} ${res.statusText ?? ""}`.trim()
     let code: string | undefined
     try {
-      const json = (await res.json()) as { error?: { code?: string; message?: string } } | undefined
-      if (json?.error?.message) message = json.error.message
-      if (json?.error?.code) code = json.error.code
+      const json = await res.json()
+      const parsed = z
+        .object({ error: z.object({ code: z.string().optional(), message: z.string().optional() }).optional() })
+        .safeParse(json)
+      if (parsed.success) {
+        if (parsed.data.error?.message) message = parsed.data.error.message
+        if (parsed.data.error?.code) code = parsed.data.error.code
+      }
     } catch {
       // fall through
     }

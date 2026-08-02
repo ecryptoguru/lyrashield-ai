@@ -1,3 +1,4 @@
+import { z } from "zod"
 import type { ApiResponse, PaginatedResponse } from "@lyrashield/types"
 
 export class ApiError extends Error {
@@ -11,17 +12,34 @@ export class ApiError extends Error {
   }
 }
 
-interface FetchOptions extends RequestInit {
+interface FetchOptions<T = unknown> extends RequestInit {
   /** Parse the response as JSON and return `data` on success, throw on failure. */
   parseJson?: boolean
   /** Request timeout in milliseconds. Defaults to 30 seconds. */
   timeout?: number
+  /** Optional Zod schema to validate the response `data` instead of casting it. */
+  schema?: z.ZodType<T>
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000
 
-async function request<T>(url: string, options: FetchOptions = {}): Promise<T> {
-  const { parseJson = true, timeout = DEFAULT_TIMEOUT_MS, ...init } = options
+function parseWithSchema<T>(data: unknown, schema: z.ZodType<T>, status: number): T {
+  try {
+    return schema.parse(data)
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      throw new ApiError(
+        "VALIDATION_ERROR",
+        `Response validation failed: ${err.issues.map((issue) => issue.message).join(", ")}`,
+        status
+      )
+    }
+    throw err
+  }
+}
+
+async function request<T>(url: string, options: FetchOptions<T> = {}): Promise<T> {
+  const { parseJson = true, timeout = DEFAULT_TIMEOUT_MS, schema, ...init } = options
 
   const controller = new AbortController()
   let timedOut = false
@@ -73,10 +91,14 @@ async function request<T>(url: string, options: FetchOptions = {}): Promise<T> {
     throw new ApiError(code, message, res.status)
   }
 
+  if (schema) {
+    return parseWithSchema(json.data, schema, res.status)
+  }
+
   return json.data as T
 }
 
-export async function apiGet<T>(url: string, options?: FetchOptions): Promise<T> {
+export async function apiGet<T>(url: string, options?: FetchOptions<T>): Promise<T> {
   return request<T>(url, { ...options, method: "GET" })
 }
 
@@ -88,11 +110,12 @@ interface ConditionalResponse<T> {
 
 export async function apiGetConditional<T>(
   url: string,
-  options: FetchOptions & { etag?: string } = {}
+  options: FetchOptions<T> & { etag?: string } = {}
 ): Promise<ConditionalResponse<T>> {
+  const { schema, ...fetchOptions } = options
   const controller = new AbortController()
   let timedOut = false
-  const conditionalTimeoutMs = options.timeout ?? DEFAULT_TIMEOUT_MS
+  const conditionalTimeoutMs = fetchOptions.timeout ?? DEFAULT_TIMEOUT_MS
   const timeoutId = setTimeout(() => {
     timedOut = true
     controller.abort()
@@ -103,19 +126,19 @@ export async function apiGetConditional<T>(
   // dropped by the spread below and a polling effect's cleanup cannot cancel an
   // in-flight request, which then runs until the timeout fires.
   const onCallerAbort = () => controller.abort()
-  if (options.signal) {
-    if (options.signal.aborted) controller.abort()
-    else options.signal.addEventListener("abort", onCallerAbort, { once: true })
+  if (fetchOptions.signal) {
+    if (fetchOptions.signal.aborted) controller.abort()
+    else fetchOptions.signal.addEventListener("abort", onCallerAbort, { once: true })
   }
 
-  const headers = new Headers(options.headers)
+  const headers = new Headers(fetchOptions.headers)
   if (options.etag) {
     headers.set("If-None-Match", options.etag)
   }
 
   try {
     const res = await fetch(url, {
-      ...options,
+      ...fetchOptions,
       method: "GET",
       headers,
       signal: controller.signal,
@@ -149,7 +172,7 @@ export async function apiGetConditional<T>(
       )
     }
 
-    return { data: json.data as T, etag, status: res.status }
+    return { data: schema ? parseWithSchema(json.data, schema, res.status) : (json.data as T), etag, status: res.status }
   } catch (err) {
     if (typeof err === "object" && err !== null && "name" in err && err.name === "AbortError") {
       if (!timedOut) throw new ApiError("ABORTED", "Request was cancelled", 0)
@@ -159,11 +182,15 @@ export async function apiGetConditional<T>(
     throw new ApiError("NETWORK_ERROR", "Network request failed", 0)
   } finally {
     clearTimeout(timeoutId)
-    options.signal?.removeEventListener("abort", onCallerAbort)
+    fetchOptions.signal?.removeEventListener("abort", onCallerAbort)
   }
 }
 
-export async function apiPost<T>(url: string, body?: unknown, options?: FetchOptions): Promise<T> {
+export async function apiPost<T>(
+  url: string,
+  body?: unknown,
+  options?: FetchOptions<T>
+): Promise<T> {
   return request<T>(url, {
     ...options,
     method: "POST",
@@ -172,7 +199,11 @@ export async function apiPost<T>(url: string, body?: unknown, options?: FetchOpt
   })
 }
 
-export async function apiPatch<T>(url: string, body?: unknown, options?: FetchOptions): Promise<T> {
+export async function apiPatch<T>(
+  url: string,
+  body?: unknown,
+  options?: FetchOptions<T>
+): Promise<T> {
   return request<T>(url, {
     ...options,
     method: "PATCH",
@@ -181,7 +212,7 @@ export async function apiPatch<T>(url: string, body?: unknown, options?: FetchOp
   })
 }
 
-export async function apiDelete<T>(url: string, options?: FetchOptions): Promise<T> {
+export async function apiDelete<T>(url: string, options?: FetchOptions<T>): Promise<T> {
   return request<T>(url, { ...options, method: "DELETE" })
 }
 
@@ -192,7 +223,7 @@ export async function apiDelete<T>(url: string, options?: FetchOptions): Promise
 export async function apiGetPaginated<T>(
   url: string,
   params?: Record<string, string | undefined>,
-  options?: FetchOptions
+  options?: FetchOptions<PaginatedResponse<T>>
 ): Promise<PaginatedResponse<T>> {
   const searchParams = new URLSearchParams()
   if (params) {
@@ -215,7 +246,7 @@ export async function apiGetPaginated<T>(
 export async function apiGetPaginatedConditional<T>(
   url: string,
   params?: Record<string, string | undefined>,
-  options: FetchOptions & { etag?: string } = {}
+  options: FetchOptions<PaginatedResponse<T>> & { etag?: string } = {}
 ): Promise<ConditionalResponse<PaginatedResponse<T>>> {
   const searchParams = new URLSearchParams()
   if (params) {

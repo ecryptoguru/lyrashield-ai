@@ -14,8 +14,18 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   error: 3,
 }
 
+function getProcessEnv(): Record<string, string | undefined> | undefined {
+  try {
+    return (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } })
+      .process?.env
+  } catch {
+    return undefined
+  }
+}
+
 function getMinLevel(): LogLevel {
-  const envLevel = process.env.LOG_LEVEL?.toLowerCase() as LogLevel | undefined
+  const env = getProcessEnv()
+  const envLevel = env?.LOG_LEVEL?.toLowerCase() as LogLevel | undefined
   return envLevel && envLevel in LOG_LEVELS ? envLevel : "info"
 }
 

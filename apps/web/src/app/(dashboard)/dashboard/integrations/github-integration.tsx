@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { Check, RefreshCw, Plus, ChevronRight } from "lucide-react"
 import { Button, Badge, Spinner, GithubIcon } from "@lyrashield/ui"
+import { githubReposSchema, idSchema, installUrlSchema } from "@/lib/api-schemas"
 import { apiGet, apiPost } from "@/lib/api-client"
 
 interface Repo {
@@ -37,9 +38,9 @@ export function GithubIntegration({
     setLoading(true)
     setError(null)
     try {
-      const data = await apiPost<{ installUrl: string }>("/api/integrations/github/install", {
+      const data = await apiPost("/api/integrations/github/install", {
         workspaceId,
-      })
+      }, { schema: installUrlSchema })
       window.location.href = data.installUrl
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to connect")
@@ -51,7 +52,7 @@ export function GithubIntegration({
     setLoading(true)
     setError(null)
     try {
-      const data = await apiGet<Repo[]>(`/api/integrations/github/repos?workspaceId=${workspaceId}`)
+      const data = await apiGet<Repo[]>(`/api/integrations/github/repos?workspaceId=${workspaceId}`, { schema: githubReposSchema })
       setRepos(data)
       setReposLoaded(true)
     } catch (e) {
@@ -76,7 +77,7 @@ export function GithubIntegration({
         installationId: selectedRepo.installationId,
         branch: selectedRepo.defaultBranch,
         environment: "STAGING",
-      })
+      }, { schema: idSchema })
       setTargetCreated(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create target")

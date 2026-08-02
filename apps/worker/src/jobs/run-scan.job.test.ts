@@ -330,7 +330,11 @@ describe("processScanJob", () => {
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "PREFLIGHT")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "RUNNING")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
-    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", "Scan completed with 0 findings")
+    expect(completeScanWithScore).toHaveBeenCalledWith(
+      "scan-1",
+      "ws-1",
+      "Scan completed with 0 findings"
+    )
     expect(vi.mocked(completeRetestsForScan).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(completeScanWithScore).mock.invocationCallOrder[0]!
     )
@@ -692,7 +696,11 @@ describe("processScanJob", () => {
     const result = await processScanJob(mockJob)
 
     expect(result.status).toBe("completed")
-    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", "Scan completed with 0 findings")
+    expect(completeScanWithScore).toHaveBeenCalledWith(
+      "scan-1",
+      "ws-1",
+      "Scan completed with 0 findings"
+    )
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
@@ -704,7 +712,11 @@ describe("processScanJob", () => {
     const result = await processScanJob(mockJob)
 
     expect(result.status).toBe("completed")
-    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", "Scan completed with 0 findings")
+    expect(completeScanWithScore).toHaveBeenCalledWith(
+      "scan-1",
+      "ws-1",
+      "Scan completed with 0 findings"
+    )
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
@@ -1129,5 +1141,65 @@ describe("processScanJob", () => {
     expect(persistFindings).not.toHaveBeenCalled()
     expect(completeRetestsForScan).not.toHaveBeenCalled()
     expect(notifyScanCompleted).not.toHaveBeenCalled()
+  })
+
+  it("fails INVALID_JOB when the job workspaceId does not match the scan record", async () => {
+    const forgedJob = {
+      id: "job-forged",
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-evil",
+        targetId: "target-1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      },
+    } as never
+
+    const result = await processScanJob(forgedJob)
+
+    expect(result.status).toBe("failed")
+    expect(result.errorCategory).toBe("INVALID_JOB")
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({ errorCategory: "INVALID_JOB" })
+    )
+    expect(runEngine).not.toHaveBeenCalled()
+  })
+
+  it("fails INVALID_JOB when the job targetId does not match the scan record", async () => {
+    const forgedJob = {
+      id: "job-forged-target",
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        targetId: "target-evil",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      },
+    } as never
+
+    const result = await processScanJob(forgedJob)
+
+    expect(result.status).toBe("failed")
+    expect(result.errorCategory).toBe("INVALID_JOB")
+    expect(runEngine).not.toHaveBeenCalled()
+  })
+
+  it("fails INVALID_JOB when the BullMQ payload does not match the schema", async () => {
+    const malformedJob = {
+      id: "job-malformed",
+      data: {
+        scanId: "scan-1",
+        workspaceId: "ws-1",
+        goal: "TEST_APP",
+      },
+    } as never
+
+    const result = await processScanJob(malformedJob)
+
+    expect(result.status).toBe("failed")
+    expect(result.errorCategory).toBe("INVALID_JOB")
+    expect(runEngine).not.toHaveBeenCalled()
   })
 })

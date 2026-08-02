@@ -15,6 +15,8 @@ import {
   cn,
 } from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
+import { z } from "zod"
+import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
 import { RUN_PLURAL, RUN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
@@ -72,6 +74,44 @@ interface TargetItem {
   repoFullName: string | null
 }
 
+const scanTargetSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string(),
+    url: z.string().nullable(),
+    repoFullName: z.string().nullable(),
+  })
+  .passthrough()
+
+const scanCancelSchema = z
+  .object({
+    id: z.string(),
+    status: z.string(),
+    endedAt: z.string().datetime().or(z.string()).nullable(),
+  })
+  .passthrough()
+
+const scanItemSchema = z
+  .object({
+    id: z.string(),
+    status: z.string(),
+    goal: z.string(),
+    mode: z.string(),
+    triggerType: z.string(),
+    startedAt: z.string().datetime().or(z.string()).nullable(),
+    endedAt: z.string().datetime().or(z.string()).nullable(),
+    summary: z.string().nullable(),
+    errorCategory: z.string().nullable(),
+    errorMessage: z.string().nullable(),
+    findingCount: z.number().optional(),
+    target: scanTargetSchema.nullable(),
+    createdAt: z.string().datetime().or(z.string()),
+  })
+  .passthrough()
+
+const scansPaginatedSchema = paginatedResponseSchema(scanItemSchema)
+
 interface ScansClientProps {
   workspaceId: string
   targets: TargetItem[]
@@ -108,12 +148,12 @@ export function ScansClient({
     setError(null)
     try {
       const preset = getScanPreset(selectedPreset)
-      const result = await apiPost<ScanItem>("/api/scans", {
+      const result = await apiPost("/api/scans", {
         workspaceId,
         targetId: selectedTarget,
         goal: preset.goal,
         mode: preset.mode,
-      })
+      }, { schema: scanItemSchema })
       setScans((prev) => [result, ...prev])
       setShowCreate(false)
       setSelectedTarget("")
@@ -128,9 +168,10 @@ export function ScansClient({
     setCancelling(scanId)
     setError(null)
     try {
-      const result = await apiPost<{ id: string; status: string; endedAt: string | null }>(
+      const result = await apiPost(
         `/api/scans/${scanId}`,
-        { workspaceId }
+        { workspaceId },
+        { schema: scanCancelSchema }
       )
       setScans((prev) =>
         prev.map((s) =>
@@ -151,7 +192,7 @@ export function ScansClient({
       const result = await apiGetPaginated<ScanItem>("/api/scans", {
         workspaceId,
         cursor: nextCursor,
-      })
+      }, { schema: scansPaginatedSchema })
       setScans((prev) => [...prev, ...result.items])
       setNextCursor(result.nextCursor)
     } catch {
@@ -165,7 +206,7 @@ export function ScansClient({
     setRefreshing(true)
     setError(null)
     try {
-      const result = await apiGetPaginated<ScanItem>("/api/scans", { workspaceId })
+      const result = await apiGetPaginated<ScanItem>("/api/scans", { workspaceId }, { schema: scansPaginatedSchema })
       setScans(result.items)
       setNextCursor(result.nextCursor)
     } catch {
@@ -213,10 +254,10 @@ export function ScansClient({
         // Poll only active-status scans to keep the payload small. Merge the
         // refreshed active rows into the full list so completed scans are preserved.
         // The ETag from the previous tick makes an unchanged list a bodyless 304.
-        const { data, etag } = await apiGetPaginatedConditional<ScanItem>(
+        const { data, etag } = await apiGetPaginatedConditional(
           "/api/scans",
           { workspaceId, status: ACTIVE_STATUS_PARAM },
-          { signal: controller.signal, ...(pollEtag ? { etag: pollEtag } : {}) }
+          { signal: controller.signal, schema: scansPaginatedSchema, ...(pollEtag ? { etag: pollEtag } : {}) }
         )
         if (etag) pollEtag = etag
         if (data && !controller.signal.aborted) {
@@ -366,9 +407,9 @@ export function ScansClient({
                         }
                       }}
                       className={cn(
-                        "group focus-visible:ring-ring relative flex min-h-[92px] w-full flex-col items-start rounded-lg border p-4 text-left shadow-xs transition-[border-color,box-shadow,background-color] duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+                        "group focus-visible:ring-ring relative flex min-h-23 w-full flex-col items-start rounded-lg border p-4 text-left shadow-xs transition-[border-color,box-shadow,background-color] duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
                         isSelected
-                          ? "border-primary bg-primary/[0.06] dark:bg-primary/[0.12] ring-primary/20 shadow-sm ring-1"
+                          ? "border-primary bg-primary/6 dark:bg-primary/12 ring-primary/20 shadow-sm ring-1"
                           : "border-border bg-card hover:border-border/80 hover:bg-accent/50"
                       )}
                     >

@@ -1,4 +1,6 @@
 import type { LyraShieldClient } from "../client"
+import { z } from "zod"
+import { TargetListSchema } from "../schemas"
 
 export interface ListTargetsQuery {
   workspaceId?: string
@@ -7,7 +9,10 @@ export interface ListTargetsQuery {
   limit?: number
 }
 
-export function listTargets(client: LyraShieldClient, query: ListTargetsQuery = {}) {
+export function listTargets(
+  client: LyraShieldClient,
+  query: ListTargetsQuery = {}
+): Promise<z.infer<typeof TargetListSchema>> {
   const params = new URLSearchParams()
   const workspaceId = query.workspaceId ?? client.workspaceId
   if (workspaceId) params.set("workspaceId", workspaceId)
@@ -15,5 +20,7 @@ export function listTargets(client: LyraShieldClient, query: ListTargetsQuery = 
   if (query.cursor) params.set("cursor", query.cursor)
   if (query.limit) params.set("limit", String(query.limit))
   const qs = params.toString()
-  return client.request("GET", qs ? `/targets?${qs}` : "/targets")
+  return client.request("GET", qs ? `/targets?${qs}` : "/targets", {
+    parse: (data) => TargetListSchema.parse(data),
+  })
 }

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { getSecret } from "astro:env/server"
 import { env } from "cloudflare:workers"
 import { createHash } from "node:crypto"
+import { logger } from "@lyrashield/logger"
 import { parseBoundedBody, RequestBodyError } from "../../lib/request-body"
 import { checkD1RateLimit, getClientIp } from "../../lib/waitlist-rate-limit"
 
@@ -91,7 +92,7 @@ function isTrustedOrigin(request: Request, siteOrigin: string): boolean {
     }
   }
 
-  return true
+  return false
 }
 
 function htmlResponse(status: number, body: string): Response {
@@ -283,12 +284,9 @@ export const POST: APIRoute = async ({ request, site }) => {
       }
     }
 
-    console.error(
-      JSON.stringify({
-        event: "waitlist_signup_failed",
-        errorName: error instanceof Error ? error.name : "UnknownError",
-      })
-    )
+    logger.error("waitlist_signup_failed", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    })
 
     if (acceptsHtml(request)) {
       return htmlResponse(500, "<p>Something went wrong. Please try again.</p>")

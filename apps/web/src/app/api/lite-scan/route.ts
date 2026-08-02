@@ -57,7 +57,7 @@ function response(request: Request, body: unknown, status: number): Response {
 
 function isOriginAllowed(request: Request): boolean {
   const origin = request.headers.get("origin")
-  return !origin || trustedOrigins().has(origin)
+  return origin ? trustedOrigins().has(origin) : false
 }
 
 async function verifyTurnstile(token: string | undefined): Promise<boolean> {

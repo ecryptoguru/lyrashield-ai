@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { z } from "zod"
 import { Bell, Mail, Smartphone } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Switch } from "@lyrashield/ui"
 import { apiGet, apiPatch } from "@/lib/api-client"
@@ -18,13 +19,27 @@ interface NotificationPreference {
   quietHoursEnd: number | null
 }
 
+const notificationPreferenceSchema = z
+  .object({
+    id: z.string(),
+    userId: z.string(),
+    emailDigest: z.boolean(),
+    emailInstant: z.boolean(),
+    inAppInstant: z.boolean(),
+    inAppDigest: z.boolean(),
+    pushEnabled: z.boolean(),
+    quietHoursStart: z.number().nullable(),
+    quietHoursEnd: z.number().nullable(),
+  })
+  .passthrough()
+
 export function NotificationPreferences() {
   const [prefs, setPrefs] = useState<NotificationPreference | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    apiGet<NotificationPreference>("/api/notifications/preferences")
+    apiGet("/api/notifications/preferences", { schema: notificationPreferenceSchema })
       .then(setPrefs)
       .finally(() => setLoading(false))
   }, [])
@@ -35,9 +50,10 @@ export function NotificationPreferences() {
     setPrefs(next)
     setSaving(true)
     try {
-      const saved = await apiPatch<NotificationPreference>(
+      const saved = await apiPatch(
         "/api/notifications/preferences",
-        updates
+        updates,
+        { schema: notificationPreferenceSchema }
       )
       setPrefs(saved)
       track("notification_opened", { event_type: "preferences_updated" })

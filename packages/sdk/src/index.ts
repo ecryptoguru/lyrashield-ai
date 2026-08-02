@@ -6,6 +6,7 @@ export {
 } from "./client"
 export { LyraShieldError, NotModified, isNotModified, type LyraShieldErrorOptions } from "./errors"
 export { paginate, listAll, type Paginated, type PaginationParams } from "./pagination"
+export * from "./schemas"
 
 export * from "./resources/scans"
 export * from "./resources/findings"

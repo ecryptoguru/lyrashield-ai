@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { randomUUID } from "node:crypto"
 import { prisma } from "./client"
 import { verifyAuditChain } from "./audit-hash"
 
-const workspaceId = `audit-concurrency-${Date.now()}`
+const workspaceId = `audit-concurrency-${randomUUID().replace(/-/g, "")}`
 
 describe("audit hash chain concurrency", () => {
   beforeAll(async () => {
@@ -14,7 +15,6 @@ describe("audit hash chain concurrency", () => {
   afterAll(async () => {
     await prisma.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspaceId}`
     await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspaceId}`
-    await prisma.$disconnect()
   })
 
   it("keeps concurrent writes in one linear chain", async () => {

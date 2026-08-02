@@ -1,5 +1,5 @@
 /**
- * Pure decision logic for the V2 onboarding four-way flow.
+ * Pure decision logic for the onboarding four-way flow.
  *
  * Step 2 ("Add your first target") offers four ways forward — Connect GitHub,
  * Add app URL, Add API endpoint, or Skip. This module owns the transitions and

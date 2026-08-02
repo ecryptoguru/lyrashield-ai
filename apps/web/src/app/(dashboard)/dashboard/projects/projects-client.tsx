@@ -14,6 +14,8 @@ import {
   Spinner,
   LoadMore,
 } from "@lyrashield/ui"
+import { z } from "zod"
+import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
 
 interface Project {
@@ -26,6 +28,21 @@ interface Project {
   scanCount: number
   findingCount: number
 }
+
+const projectSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string().nullable(),
+    riskScore: z.number(),
+    createdAt: z.string().datetime().or(z.string()),
+    targetCount: z.number(),
+    scanCount: z.number(),
+    findingCount: z.number(),
+  })
+  .passthrough()
+
+const projectsPaginatedSchema = paginatedResponseSchema(projectSchema)
 
 export function ProjectsClient({
   workspaceId,
@@ -50,7 +67,7 @@ export function ProjectsClient({
   const fetchProjects = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await apiGetPaginated<Project>(`/api/projects`, { workspaceId })
+      const result = await apiGetPaginated<Project>(`/api/projects`, { workspaceId }, { schema: projectsPaginatedSchema })
       setProjects(result.items)
       setNextCursor(result.nextCursor)
       setFetchError(null)
@@ -90,7 +107,7 @@ export function ProjectsClient({
 
   const loadMore = useCallback(
     async (cursor: string) => {
-      return apiGetPaginated<Project>(`/api/projects`, { workspaceId, cursor })
+      return apiGetPaginated<Project>(`/api/projects`, { workspaceId, cursor }, { schema: projectsPaginatedSchema })
     },
     [workspaceId]
   )
@@ -241,7 +258,7 @@ export function ProjectsClient({
       <LoadMore
         cursor={nextCursor}
         onLoadMore={loadMore}
-        onItems={(items) => setProjects((prev) => [...prev, ...(items as Project[])])}
+        onItems={(items) => setProjects((prev) => [...prev, ...items])}
         onNextCursor={setNextCursor}
       />
     </div>

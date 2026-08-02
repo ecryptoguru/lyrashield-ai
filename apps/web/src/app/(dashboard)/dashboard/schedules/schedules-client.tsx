@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { z } from "zod"
 import { Calendar, Plus, AlertCircle, Trash2, Power, ChevronDown } from "lucide-react"
 import {
   Button,
@@ -14,6 +15,7 @@ import {
   FormField,
 } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
+import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { formatDate, formatDateTime } from "@/lib/date-format"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getScanPreset, SCAN_PRESETS, type ScanPresetId } from "@/lib/scan-presets"
@@ -37,6 +39,40 @@ interface TargetOption {
   name: string
   type: string
 }
+
+const targetOptionSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string(),
+  })
+  .passthrough()
+
+const targetOptionsPaginatedSchema = paginatedResponseSchema(targetOptionSchema)
+
+const scheduleItemSchema = z
+  .object({
+    id: z.string(),
+    targetId: z.string(),
+    cron: z.string(),
+    goal: z.string(),
+    mode: z.string(),
+    enabled: z.boolean(),
+    lastRunAt: z.string().datetime().or(z.string()).nullable(),
+    nextRunAt: z.string().datetime().or(z.string()).nullable(),
+    createdAt: z.string().datetime().or(z.string()),
+    target: z
+      .object({
+        id: z.string(),
+        name: z.string(),
+        type: z.string(),
+        url: z.string().nullable(),
+      })
+      .passthrough(),
+  })
+  .passthrough()
+
+const schedulesPaginatedSchema = paginatedResponseSchema(scheduleItemSchema)
 
 function describeCron(cron: string): string {
   const presets: Record<string, string> = {
@@ -67,7 +103,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   const loadSchedules = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await apiGetPaginated<ScheduleItem>(`/api/schedules`, { workspaceId })
+      const res = await apiGetPaginated(`/api/schedules`, { workspaceId }, { schema: schedulesPaginatedSchema })
       setSchedules(res.items)
       setNextCursor(res.nextCursor)
       setError(null)
@@ -81,7 +117,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
 
   useEffect(() => {
     let cancelled = false
-    apiGetPaginated<ScheduleItem>(`/api/schedules`, { workspaceId })
+    apiGetPaginated(`/api/schedules`, { workspaceId }, { schema: schedulesPaginatedSchema })
       .then((res) => {
         if (cancelled) return
         setSchedules(res.items)
@@ -97,7 +133,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
         setLoading(false)
       })
 
-    apiGetPaginated<TargetOption>(`/api/targets`, { workspaceId })
+    apiGetPaginated(`/api/targets`, { workspaceId }, { schema: targetOptionsPaginatedSchema })
       .then((res) => {
         if (cancelled) return
         setTargets(res.items)
@@ -382,13 +418,13 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated<ScheduleItem>(`/api/schedules`, {
+              const res = await apiGetPaginated(`/api/schedules`, {
                 workspaceId,
                 cursor,
-              })
-              return { items: res.items as unknown[], nextCursor: res.nextCursor }
+              }, { schema: schedulesPaginatedSchema })
+              return { items: res.items, nextCursor: res.nextCursor }
             }}
-            onItems={(items) => setSchedules((prev) => [...prev, ...(items as ScheduleItem[])])}
+            onItems={(items) => setSchedules((prev) => [...prev, ...items])}
             onNextCursor={setNextCursor}
           />
         </div>

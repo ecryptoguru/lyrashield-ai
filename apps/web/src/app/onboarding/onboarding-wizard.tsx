@@ -4,6 +4,12 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-react"
 import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
+import {
+  githubReposSchema,
+  idSchema,
+  installUrlSchema,
+  onboardingDataSchema,
+} from "@/lib/api-schemas"
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
@@ -16,7 +22,7 @@ import {
   type OnboardingPath,
 } from "./onboarding-flow.utils"
 
-interface V2OnboardingData {
+interface OnboardingData {
   currentStep: number
   completed: boolean
   skipped: boolean
@@ -36,9 +42,9 @@ interface Repo {
   installationId: string
 }
 
-export function V2OnboardingWizard({ initialState }: { initialState: V2OnboardingData }) {
+export function OnboardingWizard({ initialState }: { initialState: OnboardingData }) {
   const router = useRouter()
-  const [step, setStep] = useState(initialState.workspaceId ? 1 : 0)
+  const [step, setStep] = useState(initialState.currentStep ?? (initialState.workspaceId ? 1 : 0))
   const [data, setData] = useState(initialState)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,8 +54,10 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
   const [productName, setProductName] = useState("")
   const [environment, setEnvironment] = useState("STAGING")
-  const [selectedGoal, setSelectedGoal] = useState<string>("LAUNCH_REVIEW")
+  const [selectedGoal, setSelectedGoal] = useState<string>(initialState.selectedGoal ?? "LAUNCH_REVIEW")
   // Four-way step 2: which way the user chose to add their first target.
+  // If the user already created a target (targetId is set) but we don't know
+  // which path they took, leave path null — the step is already past step 2.
   const [path, setPath] = useState<OnboardingPath>(null)
   const [githubUnavailable, setGithubUnavailable] = useState(false)
   const [urlForm, setUrlForm] = useState({ name: "", url: "", ownershipAttested: false })
@@ -77,7 +85,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
 
   const fetchRepos = useCallback(() => {
     if (!data.workspaceId) return Promise.resolve<Repo[]>([])
-    return apiGet<Repo[]>(`/api/integrations/github/repos?workspaceId=${data.workspaceId}`)
+    return apiGet<Repo[]>(`/api/integrations/github/repos?workspaceId=${data.workspaceId}`, { schema: githubReposSchema })
   }, [data.workspaceId])
 
   const loadRepos = useCallback(async () => {
@@ -114,8 +122,8 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
       })
   }, [step, data.workspaceId, fetchRepos])
 
-  async function persist(updates: Partial<V2OnboardingData>) {
-    const next = await apiPatch<V2OnboardingData>("/api/onboarding", updates)
+  async function persist(updates: Partial<OnboardingData>) {
+    const next = await apiPatch("/api/onboarding", updates, { schema: onboardingDataSchema })
     setData(next)
     return next
   }
@@ -128,10 +136,10 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
     setLoading(true)
     setError(null)
     try {
-      const workspace = await apiPost<{ id: string }>("/api/workspaces", {
+      const workspace = await apiPost("/api/workspaces", {
         name: workspaceName.trim(),
         mode: "VIBE",
-      })
+      }, { schema: idSchema })
       await persist({ workspaceId: workspace.id, currentStep: 1, skipped: false })
       setStep(1)
       track("signup_started", { method: "web" })
@@ -147,9 +155,9 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
     setLoading(true)
     setError(null)
     try {
-      const res = await apiPost<{ installUrl: string }>("/api/integrations/github/install", {
+      const res = await apiPost("/api/integrations/github/install", {
         workspaceId: data.workspaceId,
-      })
+      }, { schema: installUrlSchema })
       track("github_connect_started")
       window.open(res.installUrl, "_blank", "noopener,noreferrer")
       setPath("github")
@@ -285,7 +293,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
     try {
       let targetId = data.targetId
       if (needsRepo && selectedRepo) {
-        const target = await apiPost<{ id: string }>("/api/targets", {
+        const target = await apiPost("/api/targets", {
           workspaceId: data.workspaceId,
           name: productName.trim(),
           type: "REPO",
@@ -295,7 +303,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
           installationId: selectedRepo.installationId,
           branch: selectedRepo.defaultBranch,
           environment,
-        })
+        }, { schema: idSchema })
         targetId = target.id
       } else if (!needsRepo) {
         const payload = buildUrlTargetPayload({
@@ -307,17 +315,17 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
           ownershipAttested: urlForm.ownershipAttested,
         })
         if (payload) {
-          const target = await apiPost<{ id: string }>("/api/targets", payload)
+          const target = await apiPost("/api/targets", payload, { schema: idSchema })
           targetId = target.id
         }
       }
       await persist({ targetId, selectedGoal, currentStep: 3, skipped: false })
-      const scan = await apiPost<{ id: string }>("/api/scans", {
+      const scan = await apiPost("/api/scans", {
         workspaceId: data.workspaceId,
         targetId,
         goal: selectedGoal,
         mode: "SAFE",
-      })
+      }, { schema: idSchema })
       await persist({ currentStep: 4, completed: true, skipped: false, selectedGoal })
       track("first_run_started", {
         preset: selectedGoal,
@@ -334,14 +342,24 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
     }
   }
 
-  const steps = ["Workspace", "Add target", "Select repository", `${PRODUCT_SINGULAR} details`]
+  // The progress bar adapts to the chosen path: GitHub users see a
+  // "Select repository" step; URL/API users skip it, so we collapse it
+  // and show "Product details" as the third step instead.
+  const isGithubFlow = path === "github" || (path === null && step <= 2)
+  const steps = isGithubFlow
+    ? ["Workspace", "Add target", "Select repository", `${PRODUCT_SINGULAR} details`]
+    : ["Workspace", "Add target", `${PRODUCT_SINGULAR} details`]
+  const displayStep = isGithubFlow ? step : Math.min(step, steps.length - 1)
 
   return (
     <div className="w-full max-w-2xl">
-      <ol className="mb-2 grid grid-cols-4 border-y" aria-label="Getting started progress">
+      <ol
+        className={`mb-2 grid border-y ${steps.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}
+        aria-label="Getting started progress"
+      >
         {steps.map((label, index) => {
-          const current = index === step
-          const done = index < step
+          const current = index === displayStep
+          const done = index < displayStep
           return (
             <li
               key={label}
@@ -364,7 +382,7 @@ export function V2OnboardingWizard({ initialState }: { initialState: V2Onboardin
         })}
       </ol>
       <p className="text-muted-foreground mb-4 text-xs sm:hidden" aria-live="polite">
-        Step {step + 1} of {steps.length}
+        Step {displayStep + 1} of {steps.length}
       </p>
 
       {error && (

@@ -12,6 +12,7 @@ import {
   Info,
 } from "lucide-react"
 import { Card, Badge, Button, Spinner, EmptyState } from "@lyrashield/ui"
+import { z } from "zod"
 import { apiGet } from "@/lib/api-client"
 import { ScoreGauge } from "@/components/security-visuals"
 
@@ -26,6 +27,20 @@ interface LaunchReadinessReport {
   conditions: string[]
   recommendations: string[]
 }
+
+const launchReadinessReportSchema = z
+  .object({
+    verdict: z.enum(["NOT_EVALUATED", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
+    score: z.number().nullable(),
+    summary: z.string(),
+    blockingFindings: z.number(),
+    totalFindings: z.number(),
+    verifiedFindings: z.number(),
+    bySeverity: z.record(z.string(), z.number()),
+    conditions: z.array(z.string()),
+    recommendations: z.array(z.string()),
+  })
+  .passthrough()
 
 const VERDICT_CONFIG = {
   NOT_EVALUATED: {
@@ -114,7 +129,7 @@ export function LaunchReadinessClient({
       if (!silent) setLoading(true)
       apiGet<LaunchReadinessReport>(
         `/api/launch-readiness?workspaceId=${encodeURIComponent(workspaceId)}`,
-        signal ? { signal } : undefined
+        { signal, schema: launchReadinessReportSchema }
       )
         .then((data) => {
           setReport(data)

@@ -24,6 +24,8 @@ import {
   Select,
   FormField,
 } from "@lyrashield/ui"
+import { z } from "zod"
+import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 import { formatDate } from "@/lib/date-format"
@@ -44,6 +46,53 @@ interface ReportItem {
   scanId: string | null
 }
 
+const reportItemSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    type: z.string(),
+    status: z.string(),
+    format: z.string(),
+    shareTokenHash: z.string().nullable(),
+    shareExpiresAt: z.string().datetime().or(z.string()).nullable(),
+    revokedAt: z.string().datetime().or(z.string()).nullable(),
+    createdAt: z.string().datetime().or(z.string()),
+    scanId: z.string().nullable(),
+  })
+  .passthrough()
+
+const reportsPaginatedSchema = paginatedResponseSchema(reportItemSchema)
+
+const reportScanSchema = z
+  .object({
+    id: z.string(),
+    target: z
+      .object({
+        name: z.string(),
+      })
+      .passthrough(),
+    status: z.string(),
+  })
+  .passthrough()
+
+const reportScansPaginatedSchema = paginatedResponseSchema(reportScanSchema)
+
+const reportShareSchema = z
+  .object({
+    token: z.string(),
+    tokenHash: z.string(),
+    expiresAt: z.string().datetime().or(z.string()),
+    shareUrl: z.string(),
+  })
+  .passthrough()
+
+const reportRevokeSchema = z
+  .object({
+    revoked: z.boolean(),
+    revokedAt: z.string().datetime().or(z.string()),
+  })
+  .passthrough()
+
 export function ReportsClient({
   workspaceId,
   initialScanId,
@@ -62,7 +111,7 @@ export function ReportsClient({
   const loadReports = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await apiGetPaginated<ReportItem>(`/api/reports`, { workspaceId })
+      const res = await apiGetPaginated<ReportItem>(`/api/reports`, { workspaceId }, { schema: reportsPaginatedSchema })
       setReports(res.items)
       setNextCursor(res.nextCursor)
       setError(null)
@@ -96,7 +145,7 @@ export function ReportsClient({
           id: string
           target: { name: string }
           status: string
-        }>(`/api/scans`, { workspaceId, status: "COMPLETED" })
+        }>(`/api/scans`, { workspaceId, status: "COMPLETED" }, { schema: reportScansPaginatedSchema })
         const completedScans = res.items
         let linkedScanAvailable =
           !initialScanId || completedScans.some((scan) => scan.id === initialScanId)
@@ -107,7 +156,7 @@ export function ReportsClient({
               id: string
               target: { name: string }
               status: string
-            }>(`/api/scans/${initialScanId}?workspaceId=${encodeURIComponent(workspaceId)}`)
+            }>(`/api/scans/${initialScanId}?workspaceId=${encodeURIComponent(workspaceId)}`, { schema: reportScanSchema })
             if (linkedScan.status === "COMPLETED") {
               completedScans.unshift(linkedScan)
               linkedScanAvailable = true
@@ -160,12 +209,7 @@ export function ReportsClient({
 
   const handleShare = async (reportId: string) => {
     try {
-      const res = await apiPost<{
-        token: string
-        tokenHash: string
-        expiresAt: string
-        shareUrl: string
-      }>(`/api/reports/${reportId}`, { workspaceId, action: "share" })
+      const res = await apiPost(`/api/reports/${reportId}`, { workspaceId, action: "share" }, { schema: reportShareSchema })
       const fullUrl = `${window.location.origin}${res.shareUrl}`
       setShareUrl(fullUrl)
       setSharedReportId(reportId)
@@ -188,9 +232,10 @@ export function ReportsClient({
 
   const handleRevoke = async (reportId: string) => {
     try {
-      const result = await apiPost<{ revoked: true; revokedAt: string }>(
+      const result = await apiPost(
         `/api/reports/${reportId}`,
-        { workspaceId, action: "revoke" }
+        { workspaceId, action: "revoke" },
+        { schema: reportRevokeSchema }
       )
       setReports((prev) =>
         prev.map((r) => (r.id === reportId ? { ...r, revokedAt: result.revokedAt } : r))
@@ -470,10 +515,10 @@ export function ReportsClient({
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated<ReportItem>(`/api/reports`, { workspaceId, cursor })
-              return { items: res.items as unknown[], nextCursor: res.nextCursor }
+              const res = await apiGetPaginated<ReportItem>(`/api/reports`, { workspaceId, cursor }, { schema: reportsPaginatedSchema })
+              return { items: res.items, nextCursor: res.nextCursor }
             }}
-            onItems={(items) => setReports((prev) => [...prev, ...(items as ReportItem[])])}
+            onItems={(items) => setReports((prev) => [...prev, ...items])}
             onNextCursor={setNextCursor}
           />
         </div>

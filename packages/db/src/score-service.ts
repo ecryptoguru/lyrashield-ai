@@ -362,13 +362,18 @@ export async function createScorecardShare(targetId: string, workspaceId: string
 }
 
 async function getScorecardShareStats(
-  tx: { scorecardEvent: { count: typeof prisma.scorecardEvent.count }; referralAttribution: { count: typeof prisma.referralAttribution.count } },
+  tx: {
+    scorecardEvent: { count: typeof prisma.scorecardEvent.count }
+    referralAttribution: { count: typeof prisma.referralAttribution.count }
+  },
   shareId: string,
   referralCodeId: string | null
 ) {
   const [shareHandoffs, referredSignups] = await Promise.all([
     tx.scorecardEvent.count({ where: { shareId, eventType: "SHARE" } }),
-    referralCodeId ? tx.referralAttribution.count({ where: { codeId: referralCodeId } }) : Promise.resolve(0),
+    referralCodeId
+      ? tx.referralAttribution.count({ where: { codeId: referralCodeId } })
+      : Promise.resolve(0),
   ])
   return { shareHandoffs, referredSignups }
 }

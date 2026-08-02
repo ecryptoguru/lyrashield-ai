@@ -1,22 +1,6 @@
 import type { LyraShieldClient } from "../client"
-
-export interface AgentApproval {
-  id: string
-  workspaceId: string
-  actionName: string
-  inputHash: string
-  status: "PENDING" | "APPROVED" | "EXECUTED" | "DENIED" | "EXPIRED"
-  input: Record<string, unknown>
-  requestedById: string
-  approvedById?: string | null
-  approvedAt?: string | null
-  deniedAt?: string | null
-  executedAt?: string | null
-  expiresAt?: string | null
-  result?: Record<string, unknown> | null
-  createdAt: string
-  updatedAt: string
-}
+import { z } from "zod"
+import { AgentApprovalListSchema, AgentApprovalSchema } from "../schemas"
 
 export interface AgentApprovalQuery {
   workspaceId?: string
@@ -32,13 +16,6 @@ export interface CreateAgentApprovalInput {
   expiresAt?: string
 }
 
-export interface PendingApprovalResult {
-  status: "PENDING"
-  approvalId: string
-  approvalUrl: string
-  message: string
-}
-
 function buildParams(query: AgentApprovalQuery, client: LyraShieldClient): URLSearchParams {
   const params = new URLSearchParams()
   const workspaceId = query.workspaceId ?? client.workspaceId
@@ -49,41 +26,53 @@ function buildParams(query: AgentApprovalQuery, client: LyraShieldClient): URLSe
   return params
 }
 
-export function listAgentApprovals(client: LyraShieldClient, query: AgentApprovalQuery = {}) {
+export function listAgentApprovals(
+  client: LyraShieldClient,
+  query: AgentApprovalQuery = {}
+): Promise<z.infer<typeof AgentApprovalListSchema>> {
   const qs = buildParams(query, client).toString()
-  return client.request<{
-    items: AgentApproval[]
-    nextCursor: string | null
-  }>("GET", qs ? `/agent-approvals?${qs}` : "/agent-approvals")
+  return client.request("GET", qs ? `/agent-approvals?${qs}` : "/agent-approvals", {
+    parse: (data) => AgentApprovalListSchema.parse(data),
+  })
 }
 
-export function createAgentApproval(client: LyraShieldClient, input: CreateAgentApprovalInput) {
+export function createAgentApproval(
+  client: LyraShieldClient,
+  input: CreateAgentApprovalInput
+): Promise<z.infer<typeof AgentApprovalSchema>> {
   const body = {
     ...input,
     workspaceId: input.workspaceId ?? client.workspaceId,
   }
-  return client.request<AgentApproval>("POST", "/agent-approvals", { body })
+  return client.request("POST", "/agent-approvals", {
+    body,
+    parse: (data) => AgentApprovalSchema.parse(data),
+  })
 }
 
 export function approveAgentApproval(
   client: LyraShieldClient,
   id: string,
   input: { workspaceId?: string; input: Record<string, unknown> }
-) {
+): Promise<z.infer<typeof AgentApprovalSchema>> {
   const body = {
     ...input,
     workspaceId: input.workspaceId ?? client.workspaceId,
   }
-  return client.request<AgentApproval>(
-    "POST",
-    `/agent-approvals/${encodeURIComponent(id)}/approve`,
-    { body }
-  )
+  return client.request("POST", `/agent-approvals/${encodeURIComponent(id)}/approve`, {
+    body,
+    parse: (data) => AgentApprovalSchema.parse(data),
+  })
 }
 
-export function denyAgentApproval(client: LyraShieldClient, id: string, workspaceId?: string) {
+export function denyAgentApproval(
+  client: LyraShieldClient,
+  id: string,
+  workspaceId?: string
+): Promise<z.infer<typeof AgentApprovalSchema>> {
   const body = { workspaceId: workspaceId ?? client.workspaceId }
-  return client.request<AgentApproval>("POST", `/agent-approvals/${encodeURIComponent(id)}/deny`, {
+  return client.request("POST", `/agent-approvals/${encodeURIComponent(id)}/deny`, {
     body,
+    parse: (data) => AgentApprovalSchema.parse(data),
   })
 }

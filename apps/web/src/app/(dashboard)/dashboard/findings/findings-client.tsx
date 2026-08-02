@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { z } from "zod"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import Link from "next/link"
 import {
@@ -30,6 +31,7 @@ import {
   buttonVariants,
   cn,
 } from "@lyrashield/ui"
+import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGet, apiGetPaginated, apiPost, apiPatch } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
 import { ISSUE_PLURAL, RUN_PLURAL, RUN_SINGULAR } from "@/lib/terminology"
@@ -67,6 +69,43 @@ export interface FindingListItem {
   firstSeenAt: string
   lastSeenAt: string
 }
+
+const findingTargetSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string(),
+  })
+  .passthrough()
+
+const findingListItemSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    summary: z.string(),
+    severity: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]),
+    status: z.string(),
+    verified: z.boolean(),
+    verificationStatus: z.string(),
+    verificationMethod: z.string().nullable().optional(),
+    verificationReason: z.string().nullable().optional(),
+    confidence: z.string(),
+    cwe: z.string().nullable().optional(),
+    cvssScore: z.number().nullable().optional(),
+    target: findingTargetSchema.nullable().optional(),
+    _count: z
+      .object({
+        evidence: z.number(),
+        fixProposals: z.number(),
+      })
+      .passthrough()
+      .optional(),
+    firstSeenAt: z.string().datetime().or(z.string()),
+    lastSeenAt: z.string().datetime().or(z.string()),
+  })
+  .passthrough()
+
+const findingsPaginatedSchema = paginatedResponseSchema(findingListItemSchema)
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
 
@@ -209,7 +248,7 @@ export function FindingsClient({
         } else if (newFilter === "VERIFIED") {
           params.verified = "true"
         }
-        const res = await apiGetPaginated<FindingListItem>(`/api/findings`, params)
+        const res = await apiGetPaginated(`/api/findings`, params, { schema: findingsPaginatedSchema })
         setFindings(res.items)
         setNextCursor(res.nextCursor)
       } catch {
@@ -445,7 +484,7 @@ export function FindingsClient({
               } else if (filter === "VERIFIED") {
                 params.verified = "true"
               }
-              const res = await apiGetPaginated<FindingListItem>(`/api/findings`, params)
+              const res = await apiGetPaginated(`/api/findings`, params, { schema: findingsPaginatedSchema })
               return { items: res.items, nextCursor: res.nextCursor }
             }}
             onItems={(items) => setFindings((prev) => [...prev, ...items])}
@@ -548,6 +587,98 @@ interface FindingDetail {
   scanId?: string | null
   plainLanguage?: PlainLanguage
 }
+
+const retestResultSchema = z
+  .object({
+    scan: z.object({ id: z.string(), status: z.string() }).passthrough(),
+  })
+  .passthrough()
+
+const findingPatchResultSchema = z
+  .object({
+    id: z.string(),
+    status: z.string(),
+  })
+  .passthrough()
+
+const findingDetailSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    summary: z.string(),
+    category: z.string().nullable().optional(),
+    cwe: z.string().nullable().optional(),
+    cvssScore: z.number().nullable().optional(),
+    technicalDetail: z.string().nullable().optional(),
+    recommendedFix: z.string().nullable().optional(),
+    businessImpact: z.string().nullable().optional(),
+    exploitability: z.string().nullable().optional(),
+    verificationStatus: z.string().optional(),
+    verificationMethod: z.string().nullable().optional(),
+    verificationReason: z.string().nullable().optional(),
+    statusReason: z.string().nullable().optional(),
+    scanId: z.string().nullable().optional(),
+    verificationReceipts: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            status: z.string(),
+            method: z.string(),
+            reason: z.string(),
+            createdAt: z.string().datetime().or(z.string()),
+          })
+          .passthrough()
+      )
+      .optional(),
+    evidence: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            type: z.string(),
+            storageUri: z.string().nullable(),
+            redactionStatus: z.string(),
+          })
+          .passthrough()
+      )
+      .optional(),
+    fixProposals: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            status: z.string(),
+            summary: z.string(),
+          })
+          .passthrough()
+      )
+      .optional(),
+    retests: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            scanId: z.string(),
+            status: z.string(),
+            createdAt: z.string().datetime().or(z.string()),
+          })
+          .passthrough()
+      )
+      .optional(),
+    plainLanguage: z
+      .object({
+        title: z.string(),
+        whatItIs: z.string(),
+        whyItMatters: z.string(),
+        howToFix: z.string(),
+        difficulty: z.string(),
+        estimatedTimeToFix: z.string(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough()
 
 // ---------------------------------------------------------------------------
 // StatusActionConfirm — inline confirm with required comment
@@ -652,7 +783,7 @@ function FindingDetailDrawer({
   const epssSummary = extractEpssPercentage(detail?.technicalDetail)
 
   const fetchDetail = useCallback(
-    () => apiGet<FindingDetail>(`/api/findings/${finding.id}?workspaceId=${workspaceId}`),
+    () => apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, { schema: findingDetailSchema }),
     [finding.id, workspaceId]
   )
 
@@ -701,13 +832,15 @@ function FindingDetailDrawer({
     setCreatingRetest(true)
     setRetestError(null)
     try {
-      const result = await apiPost<{ scan: { id: string; status: string } }>(
+      const result = await apiPost(
         `/api/findings/${finding.id}/retests`,
-        { workspaceId }
+        { workspaceId },
+        { schema: retestResultSchema }
       )
       setQueuedRetestScanId(result.scan.id)
-      const res = await apiGet<FindingDetail>(
-        `/api/findings/${finding.id}?workspaceId=${workspaceId}`
+      const res = await apiGet(
+        `/api/findings/${finding.id}?workspaceId=${workspaceId}`,
+        { schema: findingDetailSchema }
       )
       setDetail(res ?? null)
     } catch (err) {
@@ -721,15 +854,16 @@ function FindingDetailDrawer({
     setPatchLoading(true)
     setPatchError(null)
     try {
-      const result = await apiPatch<{ id: string; status: string }>(`/api/findings/${finding.id}`, {
+      const result = await apiPatch(`/api/findings/${finding.id}`, {
         workspaceId,
         action: "accept_risk",
         reason: comment,
-      })
+      }, { schema: findingPatchResultSchema })
       onStatusChange(finding.id, result.status)
       setShowAcceptRisk(false)
-      const res = await apiGet<FindingDetail>(
-        `/api/findings/${finding.id}?workspaceId=${workspaceId}`
+      const res = await apiGet(
+        `/api/findings/${finding.id}?workspaceId=${workspaceId}`,
+        { schema: findingDetailSchema }
       )
       setDetail(res ?? null)
     } catch (err) {
@@ -743,15 +877,16 @@ function FindingDetailDrawer({
     setPatchLoading(true)
     setPatchError(null)
     try {
-      const result = await apiPatch<{ id: string; status: string }>(`/api/findings/${finding.id}`, {
+      const result = await apiPatch(`/api/findings/${finding.id}`, {
         workspaceId,
         action: "false_positive",
         reason: comment,
-      })
+      }, { schema: findingPatchResultSchema })
       onStatusChange(finding.id, result.status)
       setShowFalsePositive(false)
-      const res = await apiGet<FindingDetail>(
-        `/api/findings/${finding.id}?workspaceId=${workspaceId}`
+      const res = await apiGet(
+        `/api/findings/${finding.id}?workspaceId=${workspaceId}`,
+        { schema: findingDetailSchema }
       )
       setDetail(res ?? null)
     } catch (err) {
@@ -974,8 +1109,9 @@ function FindingDetailDrawer({
                               })
                               setShowFixForm(false)
                               setFixSummary("")
-                              const res = await apiGet<FindingDetail>(
-                                `/api/findings/${finding.id}?workspaceId=${workspaceId}`
+                              const res = await apiGet(
+                                `/api/findings/${finding.id}?workspaceId=${workspaceId}`,
+                                { schema: findingDetailSchema }
                               )
                               setDetail(res ?? null)
                             } catch (err) {

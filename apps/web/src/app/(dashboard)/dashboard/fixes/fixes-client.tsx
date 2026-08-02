@@ -4,6 +4,8 @@ import { useState } from "react"
 import { Wrench, GitPullRequest, ShieldCheck, ExternalLink, Info } from "lucide-react"
 import Link from "next/link"
 import { Badge, buttonVariants, Card, EmptyState, LoadMore } from "@lyrashield/ui"
+import { z } from "zod"
+import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -55,6 +57,52 @@ export interface FixProposalItem {
     status: string
   }>
 }
+
+const fixProposalItemSchema = z
+  .object({
+    id: z.string(),
+    kind: z.string(),
+    summary: z.string(),
+    status: z.string(),
+    safetyScore: z.number().nullable().optional(),
+    generatedByModel: z.string().nullable().optional(),
+    createdAt: z.string().datetime().or(z.string()),
+    finding: z
+      .object({
+        id: z.string(),
+        title: z.string(),
+        severity: z.string(),
+        status: z.string(),
+        cwe: z.string().nullable().optional(),
+        target: z
+          .object({
+            id: z.string(),
+            name: z.string(),
+            repoFullName: z.string().nullable().optional(),
+          })
+          .passthrough()
+          .nullable()
+          .optional(),
+      })
+      .passthrough(),
+    pullRequests: z.array(
+      z
+        .object({
+          id: z.string(),
+          provider: z.string(),
+          repoOwner: z.string(),
+          repoName: z.string(),
+          branchName: z.string(),
+          prNumber: z.number().nullable().optional(),
+          prUrl: z.string().nullable().optional(),
+          status: z.string(),
+        })
+        .passthrough()
+    ),
+  })
+  .passthrough()
+
+const fixProposalsPaginatedSchema = paginatedResponseSchema(fixProposalItemSchema)
 
 export function FixesClient({
   workspaceId,
@@ -192,10 +240,10 @@ export function FixesClient({
               const res = await apiGetPaginated<FixProposalItem>(`/api/fix-proposals`, {
                 workspaceId,
                 cursor,
-              })
-              return { items: res.items as unknown[], nextCursor: res.nextCursor }
+              }, { schema: fixProposalsPaginatedSchema })
+              return { items: res.items, nextCursor: res.nextCursor }
             }}
-            onItems={(items) => setProposals((prev) => [...prev, ...(items as FixProposalItem[])])}
+            onItems={(items) => setProposals((prev) => [...prev, ...items])}
             onNextCursor={setNextCursor}
           />
         </div>

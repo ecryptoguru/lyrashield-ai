@@ -14,6 +14,7 @@ import {
 } from "@lyrashield/ui"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { writeClipboard } from "@/components/scorecard-share-composer"
+import { z } from "zod"
 import { apiDelete, apiGet, apiPost, ApiError } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
 
@@ -31,6 +32,23 @@ interface ApiKeyRow {
 interface CreatedKey extends ApiKeyRow {
   rawKey: string
 }
+
+const apiKeyRowSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    prefix: z.string(),
+    scopes: z.array(z.string()),
+    lastUsedAt: z.string().datetime().or(z.string()).nullable(),
+    expiresAt: z.string().datetime().or(z.string()).nullable(),
+    revokedAt: z.string().datetime().or(z.string()).nullable(),
+    createdAt: z.string().datetime().or(z.string()),
+  })
+  .passthrough()
+
+const apiKeysSchema = z.array(apiKeyRowSchema)
+
+const createdKeySchema = apiKeyRowSchema.and(z.object({ rawKey: z.string() }).passthrough())
 
 /**
  * Workspace API keys — used by the LyraShield MCP server, CLI, and CI.
@@ -57,7 +75,7 @@ export function ApiKeysSection({
 
   const load = useCallback(async () => {
     try {
-      const data = await apiGet<ApiKeyRow[]>(`/api/api-keys?workspaceId=${workspaceId}`)
+      const data = await apiGet<ApiKeyRow[]>(`/api/api-keys?workspaceId=${workspaceId}`, { schema: apiKeysSchema })
       setKeys(data)
       setError(null)
     } catch (err) {
@@ -69,7 +87,7 @@ export function ApiKeysSection({
   useEffect(() => {
     if (!canManage) return
     let active = true
-    apiGet<ApiKeyRow[]>(`/api/api-keys?workspaceId=${workspaceId}`)
+    apiGet<ApiKeyRow[]>(`/api/api-keys?workspaceId=${workspaceId}`, { schema: apiKeysSchema })
       .then((data) => {
         if (!active) return
         setKeys(data)
@@ -122,11 +140,11 @@ export function ApiKeysSection({
     setCreating(true)
     setError(null)
     try {
-      const created = await apiPost<CreatedKey>("/api/api-keys", {
+      const created = await apiPost("/api/api-keys", {
         workspaceId,
         name: name.trim(),
         scopes: scope === "write" ? ["read", "write"] : ["read"],
-      })
+      }, { schema: createdKeySchema })
       setCreatedKey(created)
       setHasCopiedKey(false)
       closeCreateForm()

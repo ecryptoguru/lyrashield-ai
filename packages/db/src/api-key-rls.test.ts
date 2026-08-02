@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { createHash, randomBytes } from "node:crypto"
+import { createHash, randomBytes, randomUUID } from "node:crypto"
 import { prisma } from "./client"
 
 /**
@@ -19,7 +19,7 @@ import { prisma } from "./client"
  * fails spuriously.
  */
 
-const suffix = Date.now().toString()
+const suffix = randomUUID().replace(/-/g, "")
 const role = `apikey_rls_test_${suffix}`
 const workspaceId = `apikey-rls-ws-${suffix}`
 const userId = `apikey-rls-user-${suffix}`
@@ -53,9 +53,7 @@ describe("verifyApiKey under restricted-role RLS", () => {
     await prisma.workspace.create({
       data: { id: workspaceId, name: "RLS", slug: workspaceId },
     })
-    await prisma.$executeRawUnsafe(
-      `SELECT set_config('app.current_workspace_id', '${workspaceId}', false)`
-    )
+    await prisma.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, false)`
     await prisma.apiKey.create({
       data: {
         workspaceId,
@@ -66,7 +64,7 @@ describe("verifyApiKey under restricted-role RLS", () => {
         createdById: userId,
       },
     })
-    await prisma.$executeRawUnsafe(`SELECT set_config('app.current_workspace_id', '', false)`)
+    await prisma.$executeRaw`SELECT set_config('app.current_workspace_id', '', false)`
 
     // Grant the restricted role what the production app role holds, then the
     // migration's DO block grant target (EXECUTE on the definer fns).
@@ -82,14 +80,13 @@ describe("verifyApiKey under restricted-role RLS", () => {
       try {
         await prisma.$executeRawUnsafe(`RESET ROLE`)
         await prisma.apiKey.deleteMany({ where: { workspaceId } })
-        await prisma.$executeRawUnsafe(`DELETE FROM "Workspace" WHERE id = '${workspaceId}'`)
+        await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspaceId}`
         await prisma.user.deleteMany({ where: { id: userId } })
         await prisma.$executeRawUnsafe(`DROP ROLE IF EXISTS "${role}"`)
       } catch {
         /* best-effort cleanup */
       }
     }
-    await prisma.$disconnect()
   })
 
   it("reproduces the RLS block on a direct pre-auth lookup, and the definer function fixes it", async () => {
@@ -102,7 +99,7 @@ describe("verifyApiKey under restricted-role RLS", () => {
     // Act as the restricted, NOBYPASSRLS application role with NO workspace
     // context — exactly the pre-auth verify posture.
     await prisma.$executeRawUnsafe(`SET ROLE "${role}"`)
-    await prisma.$executeRawUnsafe(`SELECT set_config('app.current_workspace_id', '', true)`)
+    await prisma.$executeRaw`SELECT set_config('app.current_workspace_id', '', true)`
 
     // (bug) Direct RLS-scoped lookup returns nothing pre-auth.
     const direct = await prisma.$queryRawUnsafe<Array<{ id: string }>>(

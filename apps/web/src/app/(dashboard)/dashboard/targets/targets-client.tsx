@@ -14,6 +14,7 @@ import {
   LoadMore,
   Select,
 } from "@lyrashield/ui"
+import { githubReposSchema, paginatedResponseSchema, targetSchema } from "@/lib/api-schemas"
 import { apiGet, apiGetPaginated, apiPost } from "@/lib/api-client"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { TARGET_PLURAL, TARGET_SINGULAR, RUN_PLURAL, ISSUE_PLURAL } from "@/lib/terminology"
@@ -44,6 +45,8 @@ interface GithubRepo {
   htmlUrl: string
   installationId: string
 }
+
+const targetsPaginatedSchema = paginatedResponseSchema(targetSchema)
 
 export function TargetsClient({
   workspaceId,
@@ -103,9 +106,9 @@ export function TargetsClient({
     void (async () => {
       try {
         setReposLoading(true)
-        const repos = await apiGet<GithubRepo[]>(
-          `/api/integrations/github/repos?workspaceId=${workspaceId}`
-        )
+        const repos = await apiGet(`/api/integrations/github/repos?workspaceId=${workspaceId}`, {
+          schema: githubReposSchema,
+        })
         if (cancelled) return
         setGithubRepos(repos)
       } catch {
@@ -140,7 +143,7 @@ export function TargetsClient({
     try {
       const params: Record<string, string | undefined> = { workspaceId }
       if (filterProjectId) params.projectId = filterProjectId
-      const result = await apiGetPaginated<Target>(`/api/targets`, params)
+      const result = await apiGetPaginated(`/api/targets`, params, { schema: targetsPaginatedSchema })
       setTargets(result.items)
       setNextCursor(result.nextCursor)
       setFetchError(null)
@@ -217,7 +220,7 @@ export function TargetsClient({
     async (cursor: string) => {
       const params: Record<string, string | undefined> = { workspaceId, cursor }
       if (filterProjectId) params.projectId = filterProjectId
-      return apiGetPaginated<Target>(`/api/targets`, params)
+      return apiGetPaginated(`/api/targets`, params, { schema: targetsPaginatedSchema })
     },
     [workspaceId, filterProjectId]
   )
@@ -595,7 +598,7 @@ export function TargetsClient({
       <LoadMore
         cursor={nextCursor}
         onLoadMore={loadMore}
-        onItems={(items) => setTargets((prev) => [...prev, ...(items as Target[])])}
+        onItems={(items) => setTargets((prev) => [...prev, ...items])}
         onNextCursor={setNextCursor}
       />
     </div>

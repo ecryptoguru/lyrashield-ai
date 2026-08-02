@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { randomUUID } from "node:crypto"
 import { prisma } from "./client"
 import { isDatabaseRLSContextBound, runWithWorkspaceContext } from "./scoping"
 import { withWorkspaceRLS } from "./rls"
 import { createScan } from "./scan-service"
 
-const suffix = `${Date.now()}`
+const suffix = randomUUID().replace(/-/g, "")
 const workspaceId = `soft-delete-workspace-${suffix}`
 let targetId = ""
 
@@ -32,7 +33,6 @@ describe("Prisma extension soft delete", () => {
       )
     }
     await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspaceId}`
-    await prisma.$disconnect()
   })
 
   it("creates a scan and its initial event inside strict workspace RLS", async () => {

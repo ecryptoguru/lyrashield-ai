@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react"
 import { Bell, AlertCircle, CheckCircle2, Mail, MessageSquare } from "lucide-react"
 import { Button, Badge, type BadgeProps, Card, EmptyState, LoadMore } from "@lyrashield/ui"
+import { z } from "zod"
+import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated, apiPatch } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -17,6 +19,21 @@ interface NotificationItem {
   sentAt: string | null
   createdAt: string
 }
+
+const notificationItemSchema = z
+  .object({
+    id: z.string(),
+    channel: z.string(),
+    type: z.string(),
+    title: z.string(),
+    body: z.string(),
+    status: z.string(),
+    sentAt: z.string().datetime().or(z.string()).nullable(),
+    createdAt: z.string().datetime().or(z.string()),
+  })
+  .passthrough()
+
+const notificationsPaginatedSchema = paginatedResponseSchema(notificationItemSchema)
 
 const CHANNEL_ICONS: Record<string, typeof Bell> = {
   email: Mail,
@@ -41,7 +58,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
   const [error, setError] = useState<string | null>(null)
 
   const fetchNotifications = useCallback(async () => {
-    return apiGetPaginated<NotificationItem>(`/api/notifications`, { workspaceId })
+    return apiGetPaginated<NotificationItem>(`/api/notifications`, { workspaceId }, { schema: notificationsPaginatedSchema })
   }, [workspaceId])
 
   const loadNotifications = useCallback(async () => {
@@ -204,12 +221,10 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
               const res = await apiGetPaginated<NotificationItem>(`/api/notifications`, {
                 workspaceId,
                 cursor,
-              })
-              return { items: res.items as unknown[], nextCursor: res.nextCursor }
+              }, { schema: notificationsPaginatedSchema })
+              return { items: res.items, nextCursor: res.nextCursor }
             }}
-            onItems={(items) =>
-              setNotifications((prev) => [...prev, ...(items as NotificationItem[])])
-            }
+            onItems={(items) => setNotifications((prev) => [...prev, ...items])}
             onNextCursor={setNextCursor}
           />
         </div>

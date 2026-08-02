@@ -1,4 +1,6 @@
 import type { LyraShieldClient } from "../client"
+import { z } from "zod"
+import { FindingListSchema, FindingSchema } from "../schemas"
 
 export interface FindingQuery {
   workspaceId?: string
@@ -25,13 +27,22 @@ function buildFindingParams(query: FindingQuery, client: LyraShieldClient): URLS
   return params
 }
 
-export function listFindings(client: LyraShieldClient, query: FindingQuery = {}) {
+export function listFindings(
+  client: LyraShieldClient,
+  query: FindingQuery = {}
+): Promise<z.infer<typeof FindingListSchema>> {
   const params = buildFindingParams(query, client)
   const qs = params.toString()
-  return client.request("GET", qs ? `/findings?${qs}` : "/findings")
+  return client.request("GET", qs ? `/findings?${qs}` : "/findings", {
+    parse: (data) => FindingListSchema.parse(data),
+  })
 }
 
-export function getFinding(client: LyraShieldClient, id: string, query: GetFindingQuery = {}) {
+export function getFinding(
+  client: LyraShieldClient,
+  id: string,
+  query: GetFindingQuery = {}
+): Promise<z.infer<typeof FindingSchema>> {
   const params = new URLSearchParams()
   const workspaceId = query.workspaceId ?? client.workspaceId
   if (workspaceId) params.set("workspaceId", workspaceId)
@@ -39,5 +50,7 @@ export function getFinding(client: LyraShieldClient, id: string, query: GetFindi
   const path = qs
     ? `/findings/${encodeURIComponent(id)}?${qs}`
     : `/findings/${encodeURIComponent(id)}`
-  return client.request("GET", path)
+  return client.request("GET", path, {
+    parse: (data) => FindingSchema.parse(data),
+  })
 }

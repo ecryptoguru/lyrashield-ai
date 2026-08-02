@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { randomUUID } from "node:crypto"
 import { PrismaClient } from "./generated/prisma"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { prisma } from "./client"
@@ -30,7 +31,7 @@ if (!runtimeUrl) {
   )
 }
 
-const suffix = `${Date.now()}`
+const suffix = randomUUID().replace(/-/g, "")
 const workspaceId = `rls-fc-owner-${suffix}`
 const otherWorkspaceId = `rls-fc-other-${suffix}`
 let targetId = ""
@@ -81,7 +82,6 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     }
     await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id IN (${workspaceId}, ${otherWorkspaceId})`
     await restricted?.$disconnect()
-    await prisma.$disconnect()
   })
 
   /**

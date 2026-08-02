@@ -23,11 +23,11 @@ let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
 const RECONCILIATION_INTERVAL_MS = 60_000
-async function refreshWorkerReadiness(): Promise<void> {
+export async function refreshWorkerReadiness(): Promise<void> {
   await writeFile(readinessPath, new Date().toISOString(), { mode: 0o600 })
 }
 
-async function removeWorkerReadiness(): Promise<void> {
+export async function removeWorkerReadiness(): Promise<void> {
   await unlink(readinessPath).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error
   })
@@ -180,7 +180,9 @@ async function main(): Promise<void> {
   logger.info("Schedule runner started", { intervalMs: 60_000 })
 }
 
-main().catch((error) => {
-  logger.error("Worker failed to start", { error: String(error) })
-  process.exit(1)
-})
+if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+  main().catch((error) => {
+    logger.error("Worker failed to start", { error: String(error) })
+    process.exit(1)
+  })
+}
