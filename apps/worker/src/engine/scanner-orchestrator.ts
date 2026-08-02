@@ -15,7 +15,7 @@ import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
 import type { ScannerCoverageIssue } from "./scanner-coverage"
-import { redactUrlForLogs } from "@lyrashield/security"
+import { redactUrlForLogs, createEgressProxyFetchFn } from "@lyrashield/security"
 import { join, resolve } from "path"
 import { mkdir } from "fs/promises"
 
@@ -144,7 +144,20 @@ async function runUrlScan(
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting URL scan phase", { scanId, targetUrl: redactUrlForLogs(targetUrl) })
-    const findings = await scanUrl({ targetUrl, repoPath: workspaceDir, coverageIssues, signal })
+    const fetchFn =
+      env.LYRASHIELD_EGRESS_PROXY_URL && env.LYRASHIELD_EGRESS_PROXY_SECRET
+        ? createEgressProxyFetchFn({
+            url: env.LYRASHIELD_EGRESS_PROXY_URL,
+            secret: env.LYRASHIELD_EGRESS_PROXY_SECRET,
+          })
+        : undefined
+    const findings = await scanUrl({
+      targetUrl,
+      repoPath: workspaceDir,
+      coverageIssues,
+      signal,
+      fetchFn,
+    })
     logger.info("URL scan phase complete", { scanId, findingCount: findings.length })
     return findings
   } catch (err) {

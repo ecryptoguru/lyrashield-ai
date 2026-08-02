@@ -24,6 +24,7 @@ COPY packages/score/package.json ./packages/score/
 COPY packages/sdk/package.json ./packages/sdk/
 COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/security/package.json ./packages/security/
+COPY packages/egress-proxy/package.json ./packages/egress-proxy/
 COPY apps/worker/package.json ./apps/worker/
 COPY apps/agent/package.json ./apps/agent/
 

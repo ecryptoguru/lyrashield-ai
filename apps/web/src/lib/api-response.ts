@@ -9,9 +9,14 @@ export function apiError(
   message: string,
   status: number,
   /** Extra response headers — e.g. Retry-After on a 429 so clients back off correctly. */
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
+  /** Structured extra data for the client to render actionable errors. */
+  details?: unknown
 ) {
-  return NextResponse.json({ success: false, error: { code, message } }, { status, headers })
+  return NextResponse.json(
+    { success: false, error: { code, message, ...(details !== undefined ? { details } : {}) } },
+    { status, headers }
+  )
 }
 
 export function apiPaginated<T>(items: T[], nextCursor: string | null, total?: number) {

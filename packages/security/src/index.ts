@@ -13,12 +13,19 @@ export {
 export {
   safeFetch,
   safeFetchDetailed,
+  safeFetchOnce,
+  EgressProxyError,
   SAFE_FETCH_REASON_TEXT,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_MAX_REDIRECTS,
+  DEFAULT_MAX_BYTES,
   type SafeFetchResult,
   type SafeFetchOptions,
   type SafeFetchOutcome,
   type SafeFetchFailureReason,
 } from "./safe-fetch"
+
+export { createEgressProxyFetchFn, type EgressProxyFetchFnOptions } from "./egress-proxy-client"
 
 export {
   analyzeLiteSurface,

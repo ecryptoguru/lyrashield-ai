@@ -2,7 +2,7 @@ import Link from "next/link"
 import type { ComponentType, SVGProps } from "react"
 import { Bell, CalendarClock, Plug, Settings, Users } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, buttonVariants } from "@lyrashield/ui"
-import { prisma } from "@lyrashield/db"
+import { prisma, getAccountDeletionPlan } from "@lyrashield/db"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { DeleteAccount } from "./delete-account"
 import { ConnectedAccounts } from "./connected-accounts"
@@ -26,31 +26,38 @@ export default async function SettingsPage() {
     )
   }
 
-  const [workspace, integrationCount, unreadNotifications, enabledSchedules, membership] =
-    await Promise.all([
-      prisma.workspace.findUnique({
-        where: { id: workspaceId },
-        select: {
-          name: true,
-          plan: true,
-          retentionDays: true,
-          _count: {
-            select: {
-              members: true,
-            },
+  const [
+    workspace,
+    integrationCount,
+    unreadNotifications,
+    enabledSchedules,
+    membership,
+    deletionPlan,
+  ] = await Promise.all([
+    prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: {
+        name: true,
+        plan: true,
+        retentionDays: true,
+        _count: {
+          select: {
+            members: true,
           },
         },
-      }),
-      prisma.integration.count({ where: { workspaceId, deletedAt: null } }),
-      prisma.notification.count({
-        where: { workspaceId, status: { not: "read" }, deletedAt: null },
-      }),
-      prisma.schedule.count({ where: { workspaceId, enabled: true, deletedAt: null } }),
-      prisma.workspaceMember.findUnique({
-        where: { workspaceId_userId: { workspaceId, userId: session.userId } },
-        select: { role: true, status: true },
-      }),
-    ])
+      },
+    }),
+    prisma.integration.count({ where: { workspaceId, deletedAt: null } }),
+    prisma.notification.count({
+      where: { workspaceId, status: { not: "read" }, deletedAt: null },
+    }),
+    prisma.schedule.count({ where: { workspaceId, enabled: true, deletedAt: null } }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: session.userId } },
+      select: { role: true, status: true },
+    }),
+    getAccountDeletionPlan(session.userId),
+  ])
 
   const canManageApiKeys =
     membership?.status === "active" && ["OWNER", "ADMIN"].includes(membership.role)
@@ -130,7 +137,7 @@ export default async function SettingsPage() {
         />
       </div>
 
-      <DeleteAccount />
+      <DeleteAccount plan={deletionPlan} />
     </div>
   )
 }

@@ -2,65 +2,164 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { randomUUID } from "node:crypto"
 import { prisma } from "./client"
 import { verifyAuditChain } from "./audit-hash"
+import {
+  deleteUserAccount,
+  getAccountDeletionPlan,
+  AccountDeletionBlockedError,
+  AccountDeletionConfirmationRequiredError,
+} from "./account-deletion"
 
 const suffix = randomUUID().replace(/-/g, "")
 const userId = `delete-user-${suffix}`
-const otherUserId = `keep-user-${suffix}`
-const workspaceId = `delete-workspace-${suffix}`
+const otherOwnerId = `other-owner-${suffix}`
+const otherMemberId = `other-member-${suffix}`
+const soloUserId = `solo-user-${suffix}`
+const rewardedUserId = `delete-rewarded-${suffix}`
+
+const deletableWorkspaceId = `deletable-ws-${suffix}`
+const retainWorkspaceId = `retain-ws-${suffix}`
+const blockedWorkspaceId = `blocked-ws-${suffix}`
+const soloWorkspaceId = `solo-ws-${suffix}`
+
+const deletableWorkspaceName = `Deletable ${suffix}`
+const retainWorkspaceName = `Retention ${suffix}`
+const blockedWorkspaceName = `Blocked ${suffix}`
+const soloWorkspaceName = `Solo ${suffix}`
+
 const referralCode = `234567${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
 const rewardedReferralCode = `765432${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
+
+async function cleanup() {
+  for (const workspaceId of [
+    deletableWorkspaceId,
+    retainWorkspaceId,
+    blockedWorkspaceId,
+    soloWorkspaceId,
+  ]) {
+    await prisma.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspaceId}`.catch(
+      () => {}
+    )
+    await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspaceId}`.catch(() => {})
+  }
+  await prisma.user.deleteMany({
+    where: { id: { in: [userId, otherOwnerId, otherMemberId, soloUserId, rewardedUserId] } },
+  })
+  await prisma.referralCode.deleteMany({
+    where: { code: { in: [referralCode, rewardedReferralCode] } },
+  })
+}
 
 describe("account deletion", () => {
   it("exports the privacy lifecycle service", async () => {
     const exports = (await import("./index")) as Record<string, unknown>
     expect(exports.deleteUserAccount).toBeTypeOf("function")
+    expect(exports.getAccountDeletionPlan).toBeTypeOf("function")
   })
 
   beforeAll(async () => {
     await prisma.user.createMany({
       data: [
         { id: userId, name: "Delete", email: `${userId}@example.com` },
-        { id: otherUserId, name: "Keep", email: `${otherUserId}@example.com` },
+        { id: otherOwnerId, name: "Keep", email: `${otherOwnerId}@example.com` },
+        { id: otherMemberId, name: "Member", email: `${otherMemberId}@example.com` },
+        { id: soloUserId, name: "Solo", email: `${soloUserId}@example.com` },
+        { id: rewardedUserId, name: "Rewarded", email: `${rewardedUserId}@example.com` },
       ],
     })
-    await prisma.workspace.create({
-      data: { id: workspaceId, name: "Deletion", slug: workspaceId },
+    await prisma.workspace.createMany({
+      data: [
+        { id: deletableWorkspaceId, name: deletableWorkspaceName, slug: deletableWorkspaceId },
+        { id: retainWorkspaceId, name: retainWorkspaceName, slug: retainWorkspaceId },
+        { id: blockedWorkspaceId, name: blockedWorkspaceName, slug: blockedWorkspaceId },
+        { id: soloWorkspaceId, name: soloWorkspaceName, slug: soloWorkspaceId },
+      ],
     })
-    await prisma.workspaceMember.create({
-      data: { workspaceId, userId, role: "OWNER", status: "active" },
+    await prisma.workspaceMember.createMany({
+      data: [
+        { workspaceId: deletableWorkspaceId, userId, role: "OWNER", status: "active" },
+        { workspaceId: retainWorkspaceId, userId, role: "OWNER", status: "active" },
+        { workspaceId: retainWorkspaceId, userId: otherOwnerId, role: "OWNER", status: "active" },
+        { workspaceId: blockedWorkspaceId, userId, role: "OWNER", status: "active" },
+        {
+          workspaceId: blockedWorkspaceId,
+          userId: otherMemberId,
+          role: "MEMBER",
+          status: "active",
+        },
+        { workspaceId: soloWorkspaceId, userId: soloUserId, role: "OWNER", status: "active" },
+      ],
     })
   })
 
-  afterAll(async () => {
-    await prisma.referralCode.deleteMany({
-      where: { code: { in: [referralCode, rewardedReferralCode] } },
+  afterAll(cleanup)
+
+  it("previews workspaces as deletable, retained or blocked", async () => {
+    const plan = await getAccountDeletionPlan(userId)
+    expect(plan.deletable).toEqual([{ id: deletableWorkspaceId, name: deletableWorkspaceName }])
+    expect(plan.retained).toEqual([{ id: retainWorkspaceId, name: retainWorkspaceName }])
+    expect(plan.blocked).toHaveLength(1)
+    expect(plan.blocked[0]?.id).toBe(blockedWorkspaceId)
+    expect(plan.blocked[0]?.members).toEqual([
+      { id: otherMemberId, name: "Member", email: `${otherMemberId}@example.com` },
+    ])
+  })
+
+  it("blocks sole owners until another member is promoted", async () => {
+    await expect(deleteUserAccount(userId, "DELETE")).rejects.toBeInstanceOf(
+      AccountDeletionBlockedError
+    )
+  })
+
+  it("rejects an incorrect confirmation for a deletable workspace", async () => {
+    await expect(deleteUserAccount(soloUserId, "wrong")).rejects.toBeInstanceOf(
+      AccountDeletionConfirmationRequiredError
+    )
+  })
+
+  it("deletes a sole-owner/sole-member workspace and the account", async () => {
+    const code = await prisma.referralCode.create({
+      data: { userId: soloUserId, code: referralCode },
     })
-    await prisma.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspaceId}`
-    await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspaceId}`
-    await prisma.user.deleteMany({
-      where: { id: { in: [userId, otherUserId, `delete-rewarded-${suffix}`] } },
+    await prisma.referralAttribution.create({
+      data: { codeId: code.id, referredUserId: soloUserId, source: "test" },
+    })
+
+    await deleteUserAccount(soloUserId, soloWorkspaceName)
+
+    expect(await prisma.user.findUnique({ where: { id: soloUserId } })).toBeNull()
+    expect(await prisma.workspace.findUnique({ where: { id: soloWorkspaceId } })).toBeNull()
+    expect(await prisma.workspaceMember.count({ where: { workspaceId: soloWorkspaceId } })).toBe(0)
+    expect(await prisma.referralCode.findUnique({ where: { code: referralCode } })).toMatchObject({
+      userId: `deleted-user:${code.id}`,
     })
   })
 
-  it("blocks sole owners, then anonymizes attribution without breaking the audit chain", async () => {
-    const { AccountDeletionBlockedError, deleteUserAccount } = await import("./account-deletion")
-    await expect(deleteUserAccount(userId)).rejects.toBeInstanceOf(AccountDeletionBlockedError)
-
-    await prisma.workspaceMember.create({
-      data: { workspaceId, userId: otherUserId, role: "OWNER", status: "active" },
+  it("anonymizes attribution in a co-owned workspace and keeps the audit chain", async () => {
+    await prisma.project.create({
+      data: { workspaceId: retainWorkspaceId, name: "Owned project", ownerUserId: otherOwnerId },
     })
     await prisma.project.create({
-      data: { workspaceId, name: "Owned project", ownerUserId: userId },
+      data: { workspaceId: retainWorkspaceId, name: "Anonymized project", ownerUserId: userId },
     })
     const target = await prisma.target.create({
-      data: { workspaceId, type: "REPO", name: "Deletion target", repoFullName: `repo-${suffix}` },
+      data: {
+        workspaceId: retainWorkspaceId,
+        type: "REPO",
+        name: "Deletion target",
+        repoFullName: `repo-${suffix}`,
+      },
     })
     const scan = await prisma.scan.create({
-      data: { workspaceId, targetId: target.id, goal: "CHECK_PR", createdById: userId },
+      data: {
+        workspaceId: retainWorkspaceId,
+        targetId: target.id,
+        goal: "CHECK_PR",
+        createdById: otherOwnerId,
+      },
     })
     const snapshot = await prisma.scoreSnapshot.create({
       data: {
-        workspaceId,
+        workspaceId: retainWorkspaceId,
         targetId: target.id,
         scanId: scan.id,
         modelVersion: "test",
@@ -71,66 +170,42 @@ describe("account deletion", () => {
         expiresAt: new Date(Date.now() + 86400000),
       },
     })
-    const code = await prisma.referralCode.create({ data: { userId, code: referralCode } })
-    await prisma.referralAttribution.create({
-      data: { codeId: code.id, referredUserId: userId, source: "test" },
-    })
-    // A user can only ever be referred once (referredUserId is UNIQUE), so the
-    // already-rewarded case needs its own user: on deletion the attribution must
-    // keep its terminal REWARDED status (only the user identifier is anonymized)
-    // so reward history stays truthful.
-    const rewardedUserId = `delete-rewarded-${suffix}`
-    await prisma.user.create({
-      data: { id: rewardedUserId, name: "Rewarded", email: `${rewardedUserId}@example.com` },
-    })
-    const rewardedCode = await prisma.referralCode.create({
-      data: { userId: rewardedUserId, code: rewardedReferralCode },
-    })
-    const rewardedAttribution = await prisma.referralAttribution.create({
-      data: {
-        codeId: code.id,
-        referredUserId: rewardedUserId,
-        source: "test",
-        status: "REWARDED",
-      },
-    })
     await prisma.scorecardShare.create({
       data: {
         snapshotId: snapshot.id,
         slug: `share-${suffix}`,
         publicPayload: {},
-        createdById: userId,
+        createdById: otherOwnerId,
       },
     })
     await prisma.auditLog.create({
       data: {
-        workspaceId,
-        actorUserId: userId,
+        workspaceId: retainWorkspaceId,
+        actorUserId: otherOwnerId,
         action: "privacy.test",
         resourceType: "user",
       },
     })
 
-    await deleteUserAccount(userId)
+    const rewardedCode = await prisma.referralCode.create({
+      data: { userId: rewardedUserId, code: rewardedReferralCode },
+    })
+    const rewardedAttribution = await prisma.referralAttribution.create({
+      data: {
+        codeId: rewardedCode.id,
+        referredUserId: otherOwnerId,
+        source: "test",
+        status: "REWARDED",
+      },
+    })
 
-    expect(await prisma.user.findUnique({ where: { id: userId } })).toBeNull()
-    expect(await prisma.workspaceMember.count({ where: { userId } })).toBe(0)
-    expect(await prisma.referralCode.findUnique({ where: { code: referralCode } })).toMatchObject({
-      userId: `deleted-user:${code.id}`,
+    await deleteUserAccount(otherOwnerId, "DELETE")
+
+    expect(await prisma.user.findUnique({ where: { id: otherOwnerId } })).toBeNull()
+    expect(await prisma.workspace.findUnique({ where: { id: retainWorkspaceId } })).toMatchObject({
+      name: retainWorkspaceName,
     })
-    const rejected = await prisma.referralAttribution.findFirst({
-      where: { codeId: code.id, status: "REJECTED" },
-    })
-    // The anonymized value is per-row unique (referredUserId is UNIQUE): a
-    // shared sentinel would make every deletion after the first one fail.
-    expect(rejected?.referredUserId).toBe(`deleted-user:${rejected?.id}`)
-    // Deleting the rewarded user's account keeps the attribution's terminal
-    // REWARDED status while anonymizing the user reference.
-    const { deleteUserAccount: deleteRewardedUser } = await import("./account-deletion")
-    await deleteRewardedUser(rewardedUserId)
-    expect(
-      await prisma.referralCode.findUnique({ where: { code: rewardedReferralCode } })
-    ).toMatchObject({ userId: `deleted-user:${rewardedCode.id}` })
+    expect(await prisma.workspaceMember.count({ where: { userId: otherOwnerId } })).toBe(0)
     expect(
       await prisma.referralAttribution.findUnique({ where: { id: rewardedAttribution.id } })
     ).toMatchObject({
@@ -138,15 +213,31 @@ describe("account deletion", () => {
       status: "REWARDED",
     })
     expect(
+      await prisma.project.findFirst({
+        where: { workspaceId: retainWorkspaceId, name: "Owned project" },
+      })
+    ).toMatchObject({
+      ownerUserId: null,
+    })
+    expect(
+      await prisma.project.findFirst({
+        where: { workspaceId: retainWorkspaceId, name: "Anonymized project" },
+      })
+    ).toMatchObject({
+      ownerUserId: userId,
+    })
+    expect(
+      await prisma.scan.findFirst({ where: { workspaceId: retainWorkspaceId, id: scan.id } })
+    ).toMatchObject({
+      createdById: "deleted-user",
+    })
+    expect(
       await prisma.scorecardShare.findUnique({ where: { slug: `share-${suffix}` } })
     ).toMatchObject({
       createdById: "deleted-user",
     })
-    expect(await prisma.project.findFirst({ where: { workspaceId } })).toMatchObject({
-      ownerUserId: null,
-    })
     const entries = await prisma.auditLog.findMany({
-      where: { workspaceId },
+      where: { workspaceId: retainWorkspaceId },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     })
     expect(entries.some((entry) => entry.action === "account.deleted")).toBe(true)
