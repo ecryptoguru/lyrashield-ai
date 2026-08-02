@@ -13,11 +13,7 @@ export interface FindingForReadiness {
 }
 
 export type ReadinessVerdict =
-  | "NOT_EVALUATED"
-  | "INCONCLUSIVE"
-  | "GO"
-  | "GO_WITH_CONDITIONS"
-  | "NO_GO"
+  "NOT_EVALUATED" | "INCONCLUSIVE" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
 
 /**
  * Whether a completed scan actually managed to evaluate the target.
