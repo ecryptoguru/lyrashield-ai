@@ -5259,26 +5259,32 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 A fifth code-grounded pass over `main` (post-PR #115 / UX V2), structured in five batches. All changes are on the unmerged branch `codex/deep-review-v11`.
 
 ### Batch A — stop-bleeding P0s
+
 - CLI install/agent P0s resolved across `packages/cli`, `packages/cli-alias`, and `packages/sdk`.
 
 ### Batch B — structural tenancy
+
 - `workspaceId` enforcement added to `packages/db/src/fix-proposal-service.ts`, `retest-service.ts`, `report-service.ts`, `agent-approval-service.ts`, and `schedule-service.ts`.
 - `packages/db/src/score-service.ts` and `apps/worker/src/jobs/run-scan.job.ts` updated to pass `workspaceId` and use `withWorkspaceRLS` where required.
 - New Prisma migration `20260803000001_child_table_rls` adds fail-closed RLS policies for `ScanEvent`, `Evidence`, `ScorecardShare`, `ScorecardEvent`, `ReferralCode`, `ReferralAttribution`, `NotificationPreference`, and `OnboardingState`, bringing RLS coverage to 29 tables.
 
 ### Batch C — worker recovery
+
 - `apps/worker/src/engine/command-builder.ts`, `finding-persister.ts`, `result-integrity.ts`, `scanner-orchestrator.ts`, and `apps/worker/src/index.ts` hardened worker recovery, result integrity, and engine command building.
 - `apps/worker/src/jobs/run-scan.job.ts` and its test updated.
 
 ### Batch D — build/deploy integrity
+
 - OpenAPI spec builder moved from `apps/web/src/lib/openapi/` to a declared `@lyrashield/types/openapi` export; `apps/marketing` now depends on `@lyrashield/types`.
 - `.github/workflows/deploy-azure.yml` pins all Docker and registry-cleanup actions to release SHAs, emits `web_digest`/`worker_digest`, deploys app/scanner images as `image:tag@sha256:<digest>`, and splits worker GC to `keep-n-tagged: 100` so a VM-pinned digest is not garbage-collected.
 
 ### Batch E — polish and test regression fixes
+
 - `packages/cli/src/installers/atomic-write.ts` now only rejects when the immediate destination directory is a symlink, fixing a macOS `/var` → `/private/var` false positive.
 - Unit tests added/updated for `saveApprovalResult` workspace scoping, `evidence.createMany`, `atomic-write` symlink handling, and agent-registry snapshots.
 
 ### Verification
+
 - `pnpm lint` and `pnpm typecheck` pass for all 20 packages; `git diff --check` is clean.
 - Package unit tests pass; full `pnpm test` is **1337 passed / 10 skipped / 3 failed**, with failures limited to DB integration suites requiring a live Postgres/Redis stack.
 - `python3 .devin/scripts/checklist.py .` required checks (Security, Lint, Schema) pass.
