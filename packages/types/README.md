@@ -19,6 +19,7 @@ Shared Zod schemas and TypeScript types across the LyraShield monorepo.
 - `CreateFixProposalSchema`, `CreateRetestSchema`, `CreateReportSchema`, `CreateScheduleSchema`
 - `ScanJobData`, `AgentActionDefinition`, `AgentActionResult`
 - `SarifReport`, `SarifRun`, `SarifRule`, `SarifResult`, `CvssScore`
+- `@lyrashield/types/openapi` — `buildOpenApiSpec()` and `OpenApiComponents` used by `apps/web/api/v1/openapi.json` and `apps/marketing/scripts/generate-openapi.ts`
 
 ## See also
 
