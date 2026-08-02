@@ -117,13 +117,13 @@ export function generateLaunchReadinessReportFromAggregate(
   // clean result. Absence of evidence is reported as absence of evidence, with
   // no numeric score to misread and no GO verdict to act on.
   if (coverage && !coverage.evaluated) {
+    const why = coverage.reason ?? "No scanner was able to inspect the target."
     return {
       verdict: "INCONCLUSIVE",
       score: null,
       summary:
-        "The scan completed but could not evaluate this target, so no findings could be produced. " +
-        "This is not a clean result. " +
-        (coverage.reason ?? "No scanner was able to inspect the target."),
+        "The scan completed but could not evaluate this target, so no findings could " +
+        `be produced. This is not a clean result. ${why}`,
       blockingFindings: 0,
       totalFindings: total,
       verifiedFindings: verified,

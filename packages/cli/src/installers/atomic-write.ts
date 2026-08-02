@@ -35,9 +35,7 @@ async function assertNoSymlinkedAncestor(dir: string): Promise<void> {
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const real = await realpath(probe)
   if (real !== probe) {
-    throw new Error(
-      `Refusing to write through a symlinked directory: ${probe} resolves to ${real}`
-    )
+    throw new Error(`Refusing to write through a symlinked directory: ${probe} resolves to ${real}`)
   }
 }
 
