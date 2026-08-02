@@ -17,7 +17,7 @@ import { apiGet } from "@/lib/api-client"
 import { ScoreGauge } from "@/components/security-visuals"
 
 interface LaunchReadinessReport {
-  verdict: "NOT_EVALUATED" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
+  verdict: "NOT_EVALUATED" | "INCONCLUSIVE" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
   score: number | null
   summary: string
   blockingFindings: number
@@ -30,7 +30,7 @@ interface LaunchReadinessReport {
 
 const launchReadinessReportSchema = z
   .object({
-    verdict: z.enum(["NOT_EVALUATED", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
+    verdict: z.enum(["NOT_EVALUATED", "INCONCLUSIVE", "GO", "GO_WITH_CONDITIONS", "NO_GO"]),
     score: z.number().nullable(),
     summary: z.string(),
     blockingFindings: z.number(),
@@ -43,6 +43,16 @@ const launchReadinessReportSchema = z
   .passthrough()
 
 const VERDICT_CONFIG = {
+  // A completed run that evaluated nothing. Deliberately not styled as a pass:
+  // zero findings from zero coverage is the absence of evidence.
+  INCONCLUSIVE: {
+    icon: ShieldAlert,
+    label: "Inconclusive — Nothing Checked",
+    color: "text-amber-600 dark:text-amber-400",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/20",
+    badgeVariant: "warning" as const,
+  },
   NOT_EVALUATED: {
     icon: ShieldAlert,
     label: "Not Evaluated",

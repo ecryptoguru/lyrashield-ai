@@ -93,6 +93,7 @@ export const getCachedDashboardAggregates = unstable_cache(
       reportCount,
       findingGroups,
       completedScanCount,
+      evaluatedCoverageCount,
       scoreSnapshots,
       recentScans,
       project,
@@ -113,6 +114,18 @@ export const getCachedDashboardAggregates = unstable_cache(
       }),
       prisma.scan.count({
         where: { workspaceId, deletedAt: null, status: "COMPLETED" },
+      }),
+      // Did any completed scan actually manage to evaluate its target? A scan
+      // can finish having checked nothing (URL scanner blocked, engine skipped
+      // for the target type, no source checkout for SCA/secrets). Counting
+      // COMPLETED coverage receipts is what separates "we looked and it was
+      // clean" from "we could not look" — without it the dashboard scores an
+      // unevaluated target 100/100 and calls it ready to launch.
+      prisma.scanCoverageReceipt.count({
+        where: {
+          status: "COMPLETED",
+          scan: { workspaceId, deletedAt: null, status: "COMPLETED" },
+        },
       }),
       prisma.scoreSnapshot.findMany({
         where: { workspaceId },
@@ -146,6 +159,7 @@ export const getCachedDashboardAggregates = unstable_cache(
       reportCount,
       findingGroups,
       completedScanCount,
+      evaluatedCoverageCount,
       scoreSnapshots,
       recentScans,
       project,

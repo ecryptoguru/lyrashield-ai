@@ -22,7 +22,7 @@ export default async function LaunchReadinessPage() {
     )
   }
 
-  const [groups, completedScanCount] = await Promise.all([
+  const [groups, completedScanCount, evaluatedCoverageCount] = await Promise.all([
     prisma.finding.groupBy({
       by: ["severity", "status", "verified"],
       where: { workspaceId, deletedAt: null },
@@ -31,11 +31,22 @@ export default async function LaunchReadinessPage() {
     prisma.scan.count({
       where: { workspaceId, status: "COMPLETED", deletedAt: null },
     }),
+    prisma.scanCoverageReceipt.count({
+      where: {
+        status: "COMPLETED",
+        scan: { workspaceId, status: "COMPLETED", deletedAt: null },
+      },
+    }),
   ])
 
   const initialReport = generateLaunchReadinessReportFromAggregate(
     groups.map((g) => ({ ...g, count: g._count._all })),
-    completedScanCount > 0
+    completedScanCount > 0,
+    {
+      evaluated: evaluatedCoverageCount > 0,
+      reason:
+        "No scanner successfully evaluated this target. Open the latest run's coverage notice for the specific reason.",
+    }
   )
 
   return <LaunchReadinessClient workspaceId={workspaceId} initialReport={initialReport} />

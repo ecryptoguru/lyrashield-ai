@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
     await requirePermission(workspaceId, PERMISSIONS.finding.view)
 
-    const [groups, completedScanCount] = await Promise.all([
+    const [groups, completedScanCount, evaluatedCoverageCount] = await Promise.all([
       prisma.finding.groupBy({
         by: ["severity", "status", "verified"],
         where: {
@@ -36,11 +36,29 @@ export async function GET(request: Request) {
           ...(targetId ? { targetId } : {}),
         },
       }),
+      // Whether any completed scan actually evaluated the target. Zero findings
+      // with zero coverage must not read as a pass.
+      prisma.scanCoverageReceipt.count({
+        where: {
+          status: "COMPLETED",
+          scan: {
+            workspaceId,
+            status: "COMPLETED",
+            deletedAt: null,
+            ...(targetId ? { targetId } : {}),
+          },
+        },
+      }),
     ])
 
     const report = generateLaunchReadinessReportFromAggregate(
       groups.map((group) => ({ ...group, count: group._count._all })),
-      completedScanCount > 0
+      completedScanCount > 0,
+      {
+        evaluated: evaluatedCoverageCount > 0,
+        reason:
+          "No scanner successfully evaluated this target. Open the latest run's coverage notice for the specific reason.",
+      }
     )
 
     const response = apiSuccess(report)
