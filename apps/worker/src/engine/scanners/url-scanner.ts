@@ -2,7 +2,12 @@
 import { logger } from "@lyrashield/logger"
 import { readFile } from "fs/promises"
 import { join } from "path"
-import { redactUrlForLogs, safeFetch, type HostResolver } from "@lyrashield/security"
+import {
+  redactUrlForLogs,
+  safeFetchDetailed,
+  SAFE_FETCH_REASON_TEXT,
+  type HostResolver,
+} from "@lyrashield/security"
 import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 
@@ -62,15 +67,19 @@ async function fetchUrl(
   fetchFn?: typeof fetch,
   resolver?: HostResolver,
   signal?: AbortSignal
-): Promise<{
-  html: string
-  status: number
-  headers: Record<string, string>
-  finalUrl: string
-  urlHistory: string[]
-} | null> {
-  const result = await safeFetch(url, { fetchFn, resolver, signal })
-  if (!result) return null
+): Promise<
+  | {
+      html: string
+      status: number
+      headers: Record<string, string>
+      finalUrl: string
+      urlHistory: string[]
+    }
+  | { failureReason: string }
+> {
+  const outcome = await safeFetchDetailed(url, { fetchFn, resolver, signal })
+  if (!outcome.ok) return { failureReason: describeFetchFailure(outcome) }
+  const { result } = outcome
   return {
     html: result.html,
     status: result.status,
@@ -78,6 +87,17 @@ async function fetchUrl(
     finalUrl: result.finalUrl,
     urlHistory: result.urlHistory,
   }
+}
+
+/**
+ * Turn a typed fetch failure into a sentence an operator can act on. The
+ * previous single "could not be fetched" line could not distinguish the guard
+ * doing its job from the scanner having no egress at all.
+ */
+function describeFetchFailure(outcome: { reason: string; detail?: string }): string {
+  const base = SAFE_FETCH_REASON_TEXT[outcome.reason as keyof typeof SAFE_FETCH_REASON_TEXT]
+  const explanation = base ?? outcome.reason
+  return outcome.detail ? `${explanation} (${outcome.detail})` : explanation
 }
 
 function detectSupabaseAnonKey(html: string): EngineVulnerability[] {
@@ -501,21 +521,22 @@ export async function scanUrl(config: UrlScanConfig): Promise<EngineVulnerabilit
   const { targetUrl, repoPath, fetchFn, resolver, coverageIssues, signal } = config
   logger.info("Starting AI-builder-aware URL scan", { targetUrl: redactUrlForLogs(targetUrl) })
 
-  const result = await fetchUrl(targetUrl, fetchFn, resolver, signal)
-  if (!result) {
+  const fetched = await fetchUrl(targetUrl, fetchFn, resolver, signal)
+  if ("failureReason" in fetched) {
     logger.warn("URL scan skipped — could not fetch target", {
       targetUrl: redactUrlForLogs(targetUrl),
+      reason: fetched.failureReason,
     })
     recordCoverageIssue(coverageIssues, {
       scanner: "url",
       status: "partial",
       subject: redactUrlForLogs(targetUrl),
-      reason: "URL content could not be fetched through the SSRF-safe transport",
+      reason: `URL content could not be fetched: ${fetched.failureReason}`,
     })
     return []
   }
 
-  const { html, headers, urlHistory } = result
+  const { html, headers, urlHistory } = fetched
   const allFindings: EngineVulnerability[] = []
 
   allFindings.push(...detectSupabaseAnonKey(html))

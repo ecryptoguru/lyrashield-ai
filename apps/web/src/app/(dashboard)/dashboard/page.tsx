@@ -56,6 +56,7 @@ export default async function DashboardPage() {
     reportCount,
     findingGroups,
     completedScanCount,
+    evaluatedCoverageCount,
     scoreSnapshots,
     recentScans,
     project,
@@ -80,7 +81,12 @@ export default async function DashboardPage() {
       verified: group.verified,
       count: group._count._all,
     })),
-    completedScanCount > 0
+    completedScanCount > 0,
+    {
+      evaluated: evaluatedCoverageCount > 0,
+      reason:
+        "No scanner successfully evaluated a target in this workspace. Open the latest run's coverage notice for the specific reason.",
+    }
   )
   const fixed = statuses.FIXED ?? 0
   const inProgress =
@@ -89,10 +95,20 @@ export default async function DashboardPage() {
     (statuses.TICKET_CREATED ?? 0) +
     (statuses.FIXED_PENDING_RETEST ?? 0)
   const riskAccepted = statuses.ACCEPTED_RISK ?? 0
-  const latestScore = scoreSnapshots[0] ?? null
-  const trend = [...scoreSnapshots]
-    .reverse()
-    .map((snapshot) => ({ label: formatDate(snapshot.computedAt), score: snapshot.score }))
+  const snapshotScore = scoreSnapshots[0] ?? null
+
+  // A score computed from scans that evaluated nothing is not a grade — it is
+  // the absence of one. Showing "100 / A+" there reads as a clean bill of
+  // health for a target nobody managed to inspect, so the number is withheld
+  // entirely rather than qualified with a footnote the user will not open.
+  const coverageEvaluated = evaluatedCoverageCount > 0
+  const latestScore = coverageEvaluated ? snapshotScore : null
+
+  const trend = coverageEvaluated
+    ? [...scoreSnapshots]
+        .reverse()
+        .map((snapshot) => ({ label: formatDate(snapshot.computedAt), score: snapshot.score }))
+    : []
   const readinessConfig =
     readiness.verdict === "GO"
       ? {
@@ -102,28 +118,38 @@ export default async function DashboardPage() {
           action: "Review launch decision",
           className: "border-success bg-success/10",
         }
-      : readiness.verdict === "NOT_EVALUATED"
+      : readiness.verdict === "INCONCLUSIVE"
         ? {
-            label: "Needs evidence",
-            description: "Run a scan before making a launch decision.",
-            href: "/dashboard/scans?new=1",
-            action: "Run first scan",
+            label: "Inconclusive — nothing was checked",
+            description:
+              "The last run completed but no scanner could evaluate the target, so there is no evidence to judge. This is not a clean result.",
+            href: "/dashboard/scans",
+            action: "Review coverage",
             className: "border-warning bg-warning/10",
           }
-        : {
-            label: "Needs action",
-            description:
-              readiness.conditions[0] ?? "Review the remaining evidence before you launch.",
-            href: "/dashboard/findings",
-            action: "Review blockers",
-            className: "border-destructive bg-destructive/10",
-          }
+        : readiness.verdict === "NOT_EVALUATED"
+          ? {
+              label: "Needs evidence",
+              description: "Run a scan before making a launch decision.",
+              href: "/dashboard/scans?new=1",
+              action: "Run first scan",
+              className: "border-warning bg-warning/10",
+            }
+          : {
+              label: "Needs action",
+              description:
+                readiness.conditions[0] ?? "Review the remaining evidence before you launch.",
+              href: "/dashboard/findings",
+              action: "Review blockers",
+              className: "border-destructive bg-destructive/10",
+            }
 
   const assuranceSteps = [
     { label: "Target ready", complete: targetCount > 0, href: "/dashboard/targets" },
     {
+      // A completed run that evaluated nothing has not captured evidence.
       label: "Evidence captured",
-      complete: completedScanCount > 0,
+      complete: completedScanCount > 0 && coverageEvaluated,
       href: "/dashboard/scans?new=1",
     },
     {

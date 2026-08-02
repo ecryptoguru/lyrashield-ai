@@ -12,7 +12,25 @@ export interface FindingForReadiness {
   summary: string
 }
 
-export type ReadinessVerdict = "NOT_EVALUATED" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
+export type ReadinessVerdict =
+  "NOT_EVALUATED" | "INCONCLUSIVE" | "GO" | "GO_WITH_CONDITIONS" | "NO_GO"
+
+/**
+ * Whether a completed scan actually managed to evaluate the target.
+ *
+ * A scan can finish successfully having checked nothing — the URL scanner is
+ * blocked, the engine is skipped for the target type, SCA/secrets have no source
+ * checkout. Zero findings then means "we could not look", which is the opposite
+ * of "we looked and it was clean". Without this distinction the readiness report
+ * scores such a run 100/100 and returns GO, which is a false all-clear on the
+ * one screen a customer forwards to their team.
+ */
+export interface ReadinessCoverage {
+  /** True when at least one scanner successfully evaluated the target. */
+  evaluated: boolean
+  /** Operator-facing explanation shown when `evaluated` is false. */
+  reason?: string
+}
 
 export interface LaunchReadinessReport {
   verdict: ReadinessVerdict
@@ -45,7 +63,8 @@ const BLOCKING_STATUSES = new Set<string>(["OPEN", "FIX_READY"])
 
 export function generateLaunchReadinessReport(
   findings: FindingForReadiness[],
-  hasCompletedScan: boolean
+  hasCompletedScan: boolean,
+  coverage?: ReadinessCoverage
 ): LaunchReadinessReport {
   const grouped = new Map<string, FindingReadinessAggregate>()
   for (const finding of findings) {
@@ -60,12 +79,14 @@ export function generateLaunchReadinessReport(
         count: 1,
       })
   }
-  return generateLaunchReadinessReportFromAggregate([...grouped.values()], hasCompletedScan)
+  const aggregates = [...grouped.values()]
+  return generateLaunchReadinessReportFromAggregate(aggregates, hasCompletedScan, coverage)
 }
 
 export function generateLaunchReadinessReportFromAggregate(
   groups: FindingReadinessAggregate[],
-  hasCompletedScan: boolean
+  hasCompletedScan: boolean,
+  coverage?: ReadinessCoverage
 ): LaunchReadinessReport {
   const total = groups.reduce((sum, group) => sum + group.count, 0)
   const verified = groups.reduce((sum, group) => sum + (group.verified ? group.count : 0), 0)
@@ -82,6 +103,26 @@ export function generateLaunchReadinessReportFromAggregate(
       bySeverity: {},
       conditions: ["Complete at least one security scan before launch"],
       recommendations: [],
+    }
+  }
+
+  // A scan that completed without evaluating anything must never present as a
+  // clean result. Absence of evidence is reported as absence of evidence, with
+  // no numeric score to misread and no GO verdict to act on.
+  if (coverage && !coverage.evaluated) {
+    const why = coverage.reason ?? "No scanner was able to inspect the target."
+    const summary = `The scan completed but could not evaluate this target, so no findings could be produced. This is not a clean result. ${why}`
+    const condition = "Resolve the coverage failure and re-run before treating this as assessed"
+    return {
+      verdict: "INCONCLUSIVE",
+      score: null,
+      summary,
+      blockingFindings: 0,
+      totalFindings: total,
+      verifiedFindings: verified,
+      bySeverity: {},
+      conditions: [condition],
+      recommendations: coverage.reason ? [coverage.reason] : [],
     }
   }
 

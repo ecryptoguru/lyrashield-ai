@@ -10,7 +10,15 @@ export {
   type HostResolver,
 } from "./ssrf"
 
-export { safeFetch, type SafeFetchResult, type SafeFetchOptions } from "./safe-fetch"
+export {
+  safeFetch,
+  safeFetchDetailed,
+  SAFE_FETCH_REASON_TEXT,
+  type SafeFetchResult,
+  type SafeFetchOptions,
+  type SafeFetchOutcome,
+  type SafeFetchFailureReason,
+} from "./safe-fetch"
 
 export {
   analyzeLiteSurface,

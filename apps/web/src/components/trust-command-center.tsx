@@ -199,7 +199,10 @@ export function TrustCommandCenter({
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={verdictVariant as "success" | "warning" | "danger" | "muted"}>
-            {animatedScore}/100
+            {/* Withhold the number entirely when nothing has been evaluated — a
+                large "100/100" next to a muted "Not evaluated" badge still reads
+                as a pass at a glance, which is the misread this prevents. */}
+            {hasCompletedReview ? `${animatedScore}/100` : "Not scored"}
           </Badge>
           <Link
             href="/dashboard/scans?new=1"

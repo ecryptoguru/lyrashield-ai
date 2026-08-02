@@ -117,4 +117,51 @@ describe("generateLaunchReadinessReport", () => {
     expect(report.blockingFindings).toBe(125)
     expect(report.verdict).toBe("NO_GO")
   })
+
+  /**
+   * Observed live in production on 2026-08-02: a URL scan whose fetch was
+   * blocked completed in 1s with zero findings, and the dashboard reported
+   * 100/100, Grade A+, "Ready to launch". Zero findings from zero coverage is
+   * the absence of evidence, not evidence of absence.
+   */
+  describe("coverage gating", () => {
+    it("returns INCONCLUSIVE with no score when a completed scan evaluated nothing", () => {
+      const report = generateLaunchReadinessReportFromAggregate([], true, {
+        evaluated: false,
+        reason: "URL content could not be fetched: the connection failed",
+      })
+
+      expect(report.verdict).toBe("INCONCLUSIVE")
+      // The critical assertion: no number for a user to read as a pass.
+      expect(report.score).toBeNull()
+      expect(report.summary).toContain("not a clean result")
+      expect(report.recommendations).toContain(
+        "URL content could not be fetched: the connection failed"
+      )
+    })
+
+    it("never returns GO when coverage failed, even with zero findings", () => {
+      const report = generateLaunchReadinessReportFromAggregate([], true, { evaluated: false })
+      expect(report.verdict).not.toBe("GO")
+    })
+
+    it("scores normally when coverage succeeded and nothing was found", () => {
+      const report = generateLaunchReadinessReportFromAggregate([], true, { evaluated: true })
+      expect(report.verdict).toBe("GO")
+      expect(report.score).toBe(100)
+    })
+
+    it("is unchanged when no coverage information is supplied", () => {
+      // Callers that cannot yet report coverage keep the previous behaviour
+      // rather than being silently downgraded to INCONCLUSIVE.
+      const report = generateLaunchReadinessReportFromAggregate([], true)
+      expect(report.verdict).toBe("GO")
+      expect(report.score).toBe(100)
+    })
+
+    it("still reports NOT_EVALUATED when no scan has completed at all", () => {
+      const report = generateLaunchReadinessReportFromAggregate([], false, { evaluated: false })
+      expect(report.verdict).toBe("NOT_EVALUATED")
+    })
+  })
 })

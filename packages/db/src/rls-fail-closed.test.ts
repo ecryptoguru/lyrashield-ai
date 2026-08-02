@@ -151,4 +151,90 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
     })
     expect(name).toBe("RLS fail-closed target")
   })
+
+  /**
+   * `Target` carries workspaceId directly. The nine DB-07 child tables do not —
+   * they are scoped through an EXISTS join to a parent, which is a structurally
+   * different policy shape, and none of them was covered by any executing test.
+   *
+   * That gap let a real bug ship: migration 20260803000001 ran
+   * `FORCE ROW LEVEL SECURITY` on all nine but never `ENABLE`, and FORCE without
+   * ENABLE is a no-op — the policies existed and were never consulted. The only
+   * test added alongside it asserted `Set` membership, which passes whether or
+   * not Postgres enforces anything. These two cases close that gap: one checks
+   * the catalog flags directly, one exercises the join policy for real.
+   */
+  describe("child tables scoped through a parent (DB-07)", () => {
+    const CHILD_TABLES = [
+      "ScanEvent",
+      "Evidence",
+      "ScanResultManifest",
+      "ScanCoverageReceipt",
+      "FixProposal",
+      "PullRequest",
+      "Ticket",
+      "ScorecardShare",
+      "ScorecardEvent",
+    ]
+
+    it("has RLS both ENABLED and FORCED on every child table", async () => {
+      const rows = await prisma.$queryRaw<
+        Array<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>
+      >`SELECT relname, relrowsecurity, relforcerowsecurity
+          FROM pg_class
+         WHERE relname = ANY(${CHILD_TABLES})`
+
+      expect(rows.length).toBe(CHILD_TABLES.length)
+
+      // relrowsecurity is the one that actually matters: false means every
+      // policy on the table is inert, no matter how correct the policy SQL is.
+      const notEnabled = rows.filter((r) => !r.relrowsecurity).map((r) => r.relname)
+      expect(notEnabled).toEqual([])
+
+      const notForced = rows.filter((r) => !r.relforcerowsecurity).map((r) => r.relname)
+      expect(notForced).toEqual([])
+    })
+
+    it("fails closed on an EXISTS-join policy, not just a direct-column one", async () => {
+      // Seed a Scan (owner workspace) and a ScanEvent hanging off it. ScanEvent
+      // has no workspaceId of its own — isolation depends entirely on the join.
+      const scan = await prisma.scan.create({
+        data: {
+          workspaceId,
+          targetId,
+          goal: "LAUNCH_REVIEW",
+          status: "COMPLETED",
+          createdById: `rls-fc-user-${suffix}`,
+        },
+      })
+      const event = await prisma.scanEvent.create({
+        data: { scanId: scan.id, stage: "completed", message: "rls fail-closed probe" },
+      })
+
+      const countThisEvent = async (
+        tx: Omit<PrismaClient, "$transaction" | "$connect" | "$disconnect">
+      ) => {
+        const rows = await tx.$queryRaw<
+          Array<{ count: bigint }>
+        >`SELECT count(*)::bigint AS count FROM "ScanEvent" WHERE id = ${event.id}`
+        return Number(rows[0]?.count ?? 0)
+      }
+
+      try {
+        expect(await asWorkspace(workspaceId, countThisEvent)).toBe(1)
+        // Both of these returning 1 is the cross-tenant leak DB-07 exists to stop.
+        expect(await asWorkspace(null, countThisEvent)).toBe(0)
+        expect(await asWorkspace(otherWorkspaceId, countThisEvent)).toBe(0)
+
+        const affected = await asWorkspace(
+          otherWorkspaceId,
+          (tx) => tx.$executeRaw`DELETE FROM "ScanEvent" WHERE id = ${event.id}`
+        )
+        expect(affected).toBe(0)
+      } finally {
+        await prisma.$executeRaw`DELETE FROM "ScanEvent" WHERE id = ${event.id}`
+        await prisma.$executeRaw`DELETE FROM "Scan" WHERE id = ${scan.id}`
+      }
+    })
+  })
 })
