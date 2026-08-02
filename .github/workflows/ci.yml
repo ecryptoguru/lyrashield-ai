@@ -47,8 +47,87 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      docs-only: ${{ steps.classify.outputs.docs-only }}
+      marketing: ${{ steps.classify.outputs.marketing }}
+      app: ${{ steps.classify.outputs.app }}
+      shared: ${{ steps.classify.outputs.shared }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: classify
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Determine the diff range.
+          # - pull_request: base..head SHA from the event payload.
+          # - push to main: before..after, falling back to HEAD~1 for the
+          #   first push (before = 0000000).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              BASE="HEAD~1"
+            else
+              BASE="$BEFORE"
+            fi
+            HEAD="${{ github.event.after }}"
+          fi
+          if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
+            BASE="HEAD~1"
+          fi
+          if ! git rev-parse --verify "$HEAD" >/dev/null 2>&1; then
+            HEAD="HEAD"
+          fi
+
+          files=$(git diff --name-only "$BASE" "$HEAD" || true)
+          echo "Changed files:"
+          echo "$files"
+
+          # Path classification patterns
+          docs_pattern='^(\.gitignore|\.prettierignore|\.prettierrc\.json|\.editorconfig|\.gitattributes|\.nvmrc|\.python-version|LICENSE|renovate\.json|.*\.md|\.devin/|\.claude/|\.codeium/|\.cursor/|\.agents/|\.windsurf/)$'
+          marketing_pattern='^apps/(marketing|marketing-motion)/'
+          app_pattern='^apps/(web|worker|agent)/'
+          shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|\.github/)'
+
+          docs_only=true
+          marketing=false
+          app=false
+          shared=false
+
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if ! echo "$f" | grep -qE "$docs_pattern"; then
+              docs_only=false
+            fi
+            if echo "$f" | grep -qE "$marketing_pattern"; then
+              marketing=true
+            fi
+            if echo "$f" | grep -qE "$app_pattern"; then
+              app=true
+            fi
+            if echo "$f" | grep -qE "$shared_pattern"; then
+              shared=true
+            fi
+          done <<< "$files"
+
+          echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          echo "shared=$shared" >> "$GITHUB_OUTPUT"
+
   lint-and-typecheck:
     name: Lint, Typecheck, Test & Build
+    needs: changes
     runs-on: ubuntu-latest
 
     services:
@@ -90,18 +169,22 @@ jobs:
 
     steps:
       - name: Checkout
+        if: needs.changes.outputs.docs-only != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
+        if: needs.changes.outputs.docs-only != 'true'
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
       - name: Setup Node.js
+        if: needs.changes.outputs.docs-only != 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
 
       - name: Cache Turbo
+        if: needs.changes.outputs.docs-only != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo
@@ -111,15 +194,19 @@ jobs:
             turbo-${{ runner.os }}-main-
 
       - name: Install dependencies
+        if: needs.changes.outputs.docs-only != 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma Client
+        if: needs.changes.outputs.docs-only != 'true'
         run: pnpm db:generate
 
       - name: Create shadow database
+        if: needs.changes.outputs.docs-only != 'true'
         run: docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -c 'CREATE DATABASE lyrashield_shadow;'
 
       - name: Migration drift check
+        if: needs.changes.outputs.docs-only != 'true'
         run: |
           pnpm --filter @lyrashield/db exec prisma migrate diff \
             --from-migrations ./prisma/migrations \
@@ -127,9 +214,11 @@ jobs:
             --exit-code
 
       - name: Run database migrations
+        if: needs.changes.outputs.docs-only != 'true'
         run: pnpm --filter @lyrashield/db migrate:deploy
 
       - name: Use a restricted RLS runtime role
+        if: needs.changes.outputs.docs-only != 'true'
         shell: bash
         run: |
           docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
@@ -141,36 +230,47 @@ jobs:
           echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
 
       - name: Lint
+        if: needs.changes.outputs.docs-only != 'true'
         run: pnpm lint
 
       - name: Format check
+        if: needs.changes.outputs.docs-only != 'true'
         run: pnpm format:check
 
       - name: Typecheck
+        if: needs.changes.outputs.docs-only != 'true'
         run: pnpm typecheck
 
       - name: Test
+        if: needs.changes.outputs.docs-only != 'true'
         run: pnpm test
 
       - name: Build
+        if: needs.changes.outputs.docs-only != 'true'
         run: pnpm build
 
       - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium webkit
+        if: needs.changes.outputs.docs-only != 'true'
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Browser E2E
+        if: needs.changes.outputs.docs-only != 'true'
         run: DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" pnpm exec playwright test --grep-invert '@visual'
+
+      - name: No code changes
+        if: needs.changes.outputs.docs-only == 'true'
+        run: echo "No code changes detected — skipping lint, typecheck, test, and build."
 
   deploy-marketing:
     name: Deploy Marketing to Cloudflare
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [security, lint-and-typecheck]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true')
+    needs: [security, lint-and-typecheck, changes]
     runs-on: ubuntu-latest
     environment:
       name: cloudflare-production
       url: https://lyrashieldai.com
     steps:
-      # This job deliberately has NO path filter.
+      # This job deploys when marketing or shared dependencies change.
       #
       # It previously skipped unless the single push diff (github.event.before..github.sha)
       # touched apps/marketing. That stranded builds: when a push containing marketing
@@ -178,9 +278,12 @@ jobs:
       # without touching apps/marketing then evaluated changed=false and skipped it again.
       # The marketing fix from 2026-07-29 sat merged-but-undeployed for exactly this reason.
       #
-      # Deploying unconditionally on main is idempotent and the Astro build is cached, so
-      # the reliability is worth more than the saved minutes. The smoke step below is what
-      # actually proves the deploy landed.
+      # Shared changes (packages/, root config) can affect the marketing build, so they
+      # also trigger a deploy. App-only changes (apps/web, apps/worker, apps/agent) do not
+      # affect the Cloudflare marketing Worker and skip this deploy. If a direct push to
+      # main includes marketing changes that fail CI, fix them in a push that touches
+      # marketing or shared files — or run this workflow manually from the Actions tab.
+      # The smoke step below is what actually proves the deploy landed.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -272,8 +375,8 @@ jobs:
 
   deploy-azure:
     name: Deploy to Azure
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [security, lint-and-typecheck]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true')
+    needs: [security, lint-and-typecheck, changes]
     uses: ./.github/workflows/deploy-azure.yml
     secrets: inherit
     permissions:

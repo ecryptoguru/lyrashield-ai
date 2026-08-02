@@ -29,7 +29,7 @@ npx lyrashield init                # detect installed agents and configure them
 npx lyrashield gate                # CI-friendly diff-aware security gate
 ```
 
-`lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`). It writes agent configs directly — merging, not overwriting, and never inlining a raw API key into a file your team commits — for 9 agents, shells out to the vendor's own CLI for Amp, and prints exact copy-paste values for the 5 agents whose tooling has no config file to write (JetBrains, Cline, PiCode, OpenClaw, Hermes). Run `npx lyrashield doctor` any time to check what's configured and what's missing.
+`lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`). It writes agent configs directly — merging, not overwriting, and never inlining a raw API key into a file your team commits — for 16 agents, shells out to the vendor's own CLI for Amp, and prints exact copy-paste values for the 7 agents whose tooling has no config file to write (Cline, JetBrains, PiCode, OpenClaw, Hermes, Goose, Aider). Run `npx lyrashield doctor` any time to check what's configured and what's missing.
 
 **MCP server** — for editors that speak Model Context Protocol directly:
 
@@ -45,7 +45,7 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 }
 ```
 
-`@lyrashield/mcp` is published on npm with 14 tools (read-only inspection plus scan/fix/retest actions gated behind human approval) and both stdio and remote Streamable-HTTP transports. Full per-agent setup for Claude Code, Cursor, Windsurf, VS Code, Zed, and 10 others is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations).
+`@lyrashield/mcp` is published on npm with 14 tools (read-only inspection plus scan/fix/retest actions gated behind human approval) and both stdio and remote Streamable-HTTP transports. Full per-agent setup for Claude Code, Cursor, Windsurf, VS Code, Zed, and 19 others is at [lyrashieldai.com/docs/integrations](https://lyrashieldai.com/docs/integrations).
 
 **GitHub Action** — a diff-aware CI gate that needs no LyraShield account, using `action.yml` at the repository root:
 
@@ -64,7 +64,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `apps/agent` — approval-gated agent actions.
 - `apps/marketing` — Astro 7 / Cloudflare Workers marketing site.
 - `packages/cli` / `packages/cli-alias` — the published `lyrashield` / `@lyrashield/cli` command-line tool.
-- `packages/agent-registry` — the single source of truth for all 15 supported coding agents (config paths, formats, install strategy); the CLI installers and the docs site are both generated against it.
+- `packages/agent-registry` — the single source of truth for all 24 supported coding agents (config paths, formats, install strategy); the CLI installers and the docs site are both generated against it.
 - `packages/agent-rules` — renders LyraShield's security policy into each agent's native rules/instructions format (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others).
 - `packages/mcp` — the published `@lyrashield/mcp` server.
 - `packages/sdk` — the typed REST client shared by the CLI and the MCP server, so their behavior can't drift apart.
@@ -120,7 +120,7 @@ Upgrades are deliberately review-gated: the engine records its incorporated Stri
 
 ## Security and release boundaries
 
-- Workspace data is tenant-scoped; sensitive operations are audit-logged; and child tables (`ScanEvent`, `Evidence`, `ScorecardShare`, `ScorecardEvent`, `ReferralCode`, `ReferralAttribution`, `NotificationPreference`, `OnboardingState`) are protected by Postgres RLS.
+- Workspace data is tenant-scoped; sensitive operations are audit-logged; and child tables (`ScanEvent`, `Evidence`, `FixProposal`, `PullRequest`, `ScanCoverageReceipt`, `ScanResultManifest`, `ScorecardShare`, `ScorecardEvent`, `Ticket`) are protected by Postgres RLS.
 - Engine output is treated as untrusted; only independent verifier evidence can mark a finding verified.
 - URL targets use pinned deterministic URL scanners rather than the repository engine.
 - Queue admission fails closed without a healthy worker heartbeat.

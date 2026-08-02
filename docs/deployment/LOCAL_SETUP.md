@@ -75,7 +75,7 @@ pnpm build
 git diff --check
 ```
 
-Current `main` passes **1034 core tests in 116 files**, **81 marketing tests in 12 files**, **16 motion tests**, and **4 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+Current `main` passes **1357 core tests in 138 files**, **82 marketing tests in 12 files**, **16 motion tests**, and **3 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Use the CLI
 

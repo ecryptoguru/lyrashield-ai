@@ -28,6 +28,10 @@ env:
   DATABASE_DIRECT_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
   R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
   R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
+  # Keep the most recent N days of daily backups. Older objects under daily/ are
+  # deleted after each successful upload. 30 days covers a month of audit recovery;
+  # adjust here (or override via a repository variable of the same name).
+  BACKUP_RETENTION_DAYS: "30"
 
 jobs:
   backup:
@@ -79,6 +83,71 @@ jobs:
             --endpoint-url "$R2_S3_ENDPOINT" --query 'Metadata.sha256' --output text)"
           test "$remote_sha256" = "$dump_sha256"
           rm -f "$dump_path" "$encrypted_path"
+
+      - name: Retain last N days of backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only delete old backups after the current upload succeeds, so a failed
+          # backup never deletes the recovery path it was meant to replace.
+          retention_days="${BACKUP_RETENTION_DAYS:-30}"
+          cutoff_epoch="$(date -u -d "-${retention_days} days" +%s)"
+          cutoff_human="$(date -u -d "@${cutoff_epoch}" +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Retention: keeping backups newer than ${cutoff_human} (${retention_days} days)"
+
+          # List all objects under daily/ with their LastModified timestamps.
+          objects_json="$(aws s3api list-objects-v2 \
+            --bucket "$R2_BACKUP_BUCKET" \
+            --prefix "daily/" \
+            --endpoint-url "$R2_S3_ENDPOINT" \
+            --query 'Contents' --output json)"
+
+          # Handle empty bucket.
+          if [ "$objects_json" = "null" ] || [ -z "$objects_json" ]; then
+            echo "No objects found under daily/ — nothing to retain."
+            exit 0
+          fi
+
+          # Partition into keep vs delete by LastModified epoch. Use process
+          # substitution (not a pipe) so the while loop runs in this shell and
+          # the counters persist.
+          keep_count=0
+          delete_count=0
+          delete_keys_file="$(mktemp)"
+          : > "$delete_keys_file"
+
+          while IFS=$'\t' read -r key epoch modified; do
+            if [ "$epoch" -ge "$cutoff_epoch" ]; then
+              keep_count=$((keep_count + 1))
+              echo "  keep   ${modified}  ${key}"
+            else
+              delete_count=$((delete_count + 1))
+              echo "  delete ${modified}  ${key}"
+              jq -n --arg k "$key" '{Key: $k}' >> "$delete_keys_file"
+            fi
+          done < <(jq -r '.[] | [.Key, (.LastModified | fromdateiso8601 | tostring), .LastModified] | @tsv' \
+            <<< "$objects_json")
+
+          echo ""
+          echo "Summary: ${keep_count} kept, ${delete_count} to delete"
+
+          if [ "$delete_count" -eq 0 ]; then
+            echo "No backups exceeded the ${retention_days}-day retention window."
+            rm -f "$delete_keys_file"
+            exit 0
+          fi
+
+          # Batch-delete via delete-objects (up to 1000 per call; daily backups
+          # won't approach that, but the loop handles it if retention is large).
+          jq -s '{Objects: .}' < "$delete_keys_file" > "${delete_keys_file}.payload"
+          aws s3api delete-objects \
+            --bucket "$R2_BACKUP_BUCKET" \
+            --endpoint-url "$R2_S3_ENDPOINT" \
+            --delete "file://${delete_keys_file}.payload" \
+            --output text
+
+          echo "Deleted ${delete_count} backup(s) older than ${retention_days} days."
+          rm -f "$delete_keys_file" "${delete_keys_file}.payload"
 
   restore:
     name: Weekly isolated restore drill

@@ -39,7 +39,7 @@ Accepted risks that are live right now. Each one is a deliberate decision, not a
 
 **Status:** unverified. Needs one query against production before the next traffic increase.
 
-**Why it matters.** All 21 workspace-scoped tables carry fail-closed RLS policies and
+**Why it matters.** All 30 tenant-scoped tables (21 workspace tables plus 9 child tables: `Evidence`, `FixProposal`, `PullRequest`, `ScanCoverageReceipt`, `ScanEvent`, `ScanResultManifest`, `ScorecardEvent`, `ScorecardShare`, `Ticket`) carry fail-closed RLS policies and
 `FORCE ROW LEVEL SECURITY`. `FORCE` subjects the table _owner_ to those policies — it does
 **not** affect superusers or any role with `BYPASSRLS`. A superuser connection bypasses
 row-level security unconditionally, so if `DATABASE_URL` connects as one, every policy is
@@ -366,7 +366,7 @@ git diff --check
 
 Then, in the target environment:
 
-1. Deploy all 28 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, `20260716151000_scorecard_share_active_snapshot_unique`, `20260718110000_scan_cost_ledger`, `20260725132208_add_finding_status_reason`, `20260725160000_scan_workspace_status_index`, and `20260803000000_uxv2_schema`; run the migration-diff gate against a fresh shadow database.
+1. Deploy all 30 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, `20260716151000_scorecard_share_active_snapshot_unique`, `20260718110000_scan_cost_ledger`, `20260725132208_add_finding_status_reason`, `20260725160000_scan_workspace_status_index`, `20260803000000_uxv2_schema`, and `20260803000001_child_table_rls`; run the migration-diff gate against a fresh shadow database.
 2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. The scan-specific endpoint must become `503` within 30 seconds of stopping every worker and recover only after a BullMQ-ready worker registers its lease.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.

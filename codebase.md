@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current merged baseline — 2026-07-29:** 4 apps, 10 shared packages (including `packages/score`), 31 web page files, 50 API route files, 40 Prisma models, 18 enums, 28 migrations, and 20 directly RLS-protected workspace tables. PR #115 plus UX V2 Phases 0–10 and follow-up merges pass lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks. The follow-up merges add `Finding.statusReason`, engine PRs #20–#40 on the sibling repo, dashboard polling/ETag/API hardening, Redis architecture separation, deploy workflow smoke-check retries, UX V2 (mobile shell, terminology mapping, feature flags, notification preferences, V2 route aliases, Trust Command Center), a UX V2 polish batch (safe-area insets, bottom sheet animations, shared enum labels, ownership attestation, release verdict documentation, parallel queries, font preload, skeleton radius matching), and reach **1034 core tests in 116 files**, **81 marketing tests in 12 files**, **16 motion tests**, and **4 Playwright Chromium tests**. Sections 17–57 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current merged baseline — 2026-08-02:** 5 apps, 15 shared packages (including `packages/score`), 33 web page files, 69 API route files, 40 Prisma models, 18 enums, 30 migrations, and 30 RLS-protected tables (21 workspace + 9 child). PR #115 plus UX V2 Phases 0–10 and follow-up merges pass lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks. The follow-up merges add `Finding.statusReason`, engine PRs #20–#40 on the sibling repo, dashboard polling/ETag/API hardening, Redis architecture separation, deploy workflow smoke-check retries, UX V2 (mobile shell, terminology mapping, feature flags, notification preferences, V2 route aliases, Trust Command Center), a UX V2 polish batch (safe-area insets, bottom sheet animations, shared enum labels, ownership attestation, release verdict documentation, parallel queries, font preload, skeleton radius matching), and reach **1357 core tests in 138 files**, **82 marketing tests in 12 files**, **16 motion tests**, and **3 Playwright Chromium tests**. Sections 17–57 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -68,7 +68,7 @@ Public copy uses **LyraShield AI**. Internal package scopes (`@lyrashield/*`), e
 | Component variants      | class-variance-authority (cva)   | 0.7.x                                                 |
 | Icons                   | lucide-react                     | 1.23.x                                                |
 | Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                       |
-| Testing                 | Vitest + Playwright              | 1034 core + 81 marketing + 16 motion + 4 Chromium E2E |
+| Testing                 | Vitest + Playwright              | 1357 core + 82 marketing + 16 motion + 3 Chromium E2E |
 | Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration  |
 | Job queue               | BullMQ                           | 5.80.x                                                |
 | Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate       |
@@ -438,8 +438,8 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **1034 core tests in 116 files**, **81 marketing tests in 12 files**, and **16 motion tests**, pass
-- `pnpm test:e2e`: **4 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
+- `pnpm test`: **1357 core tests in 138 files**, **82 marketing tests in 12 files**, and **16 motion tests**, pass
+- `pnpm test:e2e`: **3 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `pnpm format:check`: pass
 - `pnpm audit --prod --audit-level high`: pass, no known production vulnerabilities
@@ -2105,7 +2105,7 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - **Worker hardening:** `apps/worker/src/jobs/run-scan.job.ts` adds a single-model cost fallback for mixed-model usage, post-engine cancellation check, and target field projection before preflight. `apps/worker/src/engine/finding-persister.ts` recovers from unique-constraint races during finding creation by updating the recovered row.
 - **Dashboard UX:** the scans list (`apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx`) uses adaptive polling backoff and `visibilitychange` handling. Findings list syncs filter/sort with URL query params. `api-keys.tsx` uses a shared clipboard helper and surfaces copy errors. `inline-confirm.tsx` restores focus after confirm/cancel.
 - **API hardening:** `apps/web/src/app/api/scans/[id]/route.ts` returns an ETag based on scan status/events and respects `If-None-Match`. Scorecard create/revoke routes enforce write scope for API keys. `apps/web/src/lib/api-client.ts` adds `apiGetConditional` for ETag-aware conditional GETs with timeouts.
-- **Verification:** the merged `main` passes `pnpm lint`, `pnpm typecheck`, `pnpm test` (1034 core tests in 116 files, 81 marketing tests, 16 motion tests), `pnpm build`, `git diff --check`, and 28 applied Prisma migrations.
+- **Verification:** the merged `main` passes `pnpm lint`, `pnpm typecheck`, `pnpm test` (1357 core tests in 138 files, 82 marketing tests, 16 motion tests), `pnpm build`, `git diff --check`, and 30 applied Prisma migrations.
 
 ## §56 — Azure Foundry capability boundary and worker usage resilience
 
@@ -2121,9 +2121,9 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - The dashboard home renders a `TrustCommandCenter` using workspace project trust-plan data, completed scan count, and latest score. Evidence and Approvals pages are functional. Notification preferences UI is live. A share sheet with privacy-safe channels is implemented.
 - The worker schema accepts engine `run.json` progress fields (`phase`, `seq`, `turn_count`) via `engineRunRecordSchema`.
 - Onboarding state creation is race-free via raw `INSERT ... ON CONFLICT DO NOTHING` in `apps/web/src/lib/onboarding-state.ts`, replacing the Prisma `upsert` that could surface P2002/23505 under concurrent server-component and API calls.
-- Playwright visual baseline snapshots exist for dashboard, products, runs, issues, and onboarding at desktop, iPad, and iPhone viewports. Visual E2E tests are skipped in CI (`--grep-invert '@visual'`) until Linux baselines are generated; the 4 Chromium E2E critical-flow tests remain in CI.
+- Playwright visual baseline snapshots exist for dashboard, products, runs, issues, and onboarding at desktop, iPad, and iPhone viewports. Visual E2E tests are skipped in CI (`--grep-invert '@visual'`) until Linux baselines are generated; the 3 Chromium E2E critical-flow tests remain in CI.
 - The marketing homepage includes a V2 launch highlight section.
-- The merged `main` passes 1034 core tests in 116 files, 81 marketing tests in 12 files, 16 motion tests, 4 Chromium E2E tests, lint, typecheck, production build, formatting, 28 applied Prisma migrations, SCA/secret scanning, and `git diff --check`.
+- The merged `main` passes 1357 core tests in 138 files, 82 marketing tests in 12 files, 16 motion tests, 3 Chromium E2E tests, lint, typecheck, production build, formatting, 30 applied Prisma migrations, SCA/secret scanning, and `git diff --check`.
 
 ## §58 — UX V2 polish batch (2026-07-29)
 
