@@ -56,6 +56,22 @@ describe("atomicWrite", () => {
     expect(mockedLstat).toHaveBeenCalledWith(target)
   })
 
+  it.runIf(process.platform === "darwin" && osTmpdir().startsWith("/var/"))(
+    "allows the macOS /var system alias",
+    async () => {
+      const rawTempDir = await mkdtemp(path.join(osTmpdir(), "lyrashield-atomic-var-"))
+      const target = path.join(rawTempDir, "config.json")
+      mockedRandomUUID.mockReturnValue("00000000-0000-0000-0000-000000000008")
+
+      try {
+        await atomicWrite(target, "hello")
+        expect(await readFile(target, "utf-8")).toBe("hello")
+      } finally {
+        await rm(rawTempDir, { recursive: true, force: true })
+      }
+    }
+  )
+
   it("overwrites an existing regular file with new content", async () => {
     const target = path.join(cwd, "config.json")
     await writeFile(target, "old", "utf-8")
