@@ -183,32 +183,37 @@ export async function createReport(params: CreateReportParams): Promise<Report> 
 }
 
 export async function generateShareToken(
-  reportId: string
+  reportId: string,
+  workspaceId: string
 ): Promise<{ token: string; tokenHash: string; expiresAt: Date }> {
   const token = randomBytes(32).toString("hex")
   const tokenHash = createHash("sha256").update(token).digest("hex")
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 
-  await prisma.report.update({
-    where: { id: reportId },
-    data: {
-      shareTokenHash: tokenHash,
-      shareExpiresAt: expiresAt,
-      revokedAt: null,
-    },
-  })
+  await withWorkspaceRLS(workspaceId, (tx) =>
+    tx.report.update({
+      where: { id: reportId },
+      data: {
+        shareTokenHash: tokenHash,
+        shareExpiresAt: expiresAt,
+        revokedAt: null,
+      },
+    })
+  )
 
   return { token, tokenHash, expiresAt }
 }
 
-export async function revokeShareToken(reportId: string): Promise<Date> {
+export async function revokeShareToken(reportId: string, workspaceId: string): Promise<Date> {
   const revokedAt = new Date()
-  await prisma.report.update({
-    where: { id: reportId },
-    data: {
-      revokedAt,
-    },
-  })
+  await withWorkspaceRLS(workspaceId, (tx) =>
+    tx.report.update({
+      where: { id: reportId },
+      data: {
+        revokedAt,
+      },
+    })
+  )
   return revokedAt
 }
 

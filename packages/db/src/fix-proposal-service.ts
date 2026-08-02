@@ -17,6 +17,17 @@ export interface FixProposalWithDetails extends FixProposal {
 }
 
 export async function createFixProposal(params: CreateFixProposalParams): Promise<FixProposal> {
+  const finding = await prisma.finding.findFirst({
+    where: {
+      id: params.findingId,
+      workspaceId: params.workspaceId,
+      deletedAt: null,
+    },
+  })
+  if (!finding) {
+    throw new Error(`Finding not found in workspace: ${params.findingId}`)
+  }
+
   const proposal = await prisma.fixProposal.create({
     data: {
       findingId: params.findingId,
@@ -133,6 +144,7 @@ export async function updateFixProposalStatus(
 
 export async function createPullRequestRecord(
   proposalId: string,
+  workspaceId: string,
   data: {
     provider: string
     repoOwner: string
@@ -142,6 +154,17 @@ export async function createPullRequestRecord(
     prUrl?: string
   }
 ): Promise<PullRequest> {
+  const proposal = await prisma.fixProposal.findFirst({
+    where: {
+      id: proposalId,
+      finding: { workspaceId, deletedAt: null },
+      deletedAt: null,
+    },
+  })
+  if (!proposal) {
+    throw new Error(`Fix proposal not found in workspace: ${proposalId}`)
+  }
+
   const pr = await prisma.pullRequest.create({
     data: {
       fixProposalId: proposalId,

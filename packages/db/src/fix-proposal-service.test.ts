@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("./client", () => ({
   prisma: {
+    finding: {
+      findFirst: vi.fn(),
+    },
     fixProposal: {
       create: vi.fn(),
       findFirst: vi.fn(),
@@ -28,6 +31,9 @@ import {
 } from "./fix-proposal-service"
 
 const mockPrisma = prisma as unknown as {
+  finding: {
+    findFirst: ReturnType<typeof vi.fn>
+  }
   fixProposal: {
     create: ReturnType<typeof vi.fn>
     findFirst: ReturnType<typeof vi.fn>
@@ -60,6 +66,7 @@ describe("fix-proposal-service", () => {
 
   describe("createFixProposal", () => {
     it("creates a fix proposal with required fields", async () => {
+      mockPrisma.finding.findFirst.mockResolvedValue({ id: "finding-1", workspaceId: "ws-1" })
       mockPrisma.fixProposal.create.mockResolvedValue(baseProposal)
 
       const result = await createFixProposal({
@@ -80,6 +87,7 @@ describe("fix-proposal-service", () => {
     })
 
     it("creates a fix proposal with optional fields", async () => {
+      mockPrisma.finding.findFirst.mockResolvedValue({ id: "finding-1", workspaceId: "ws-1" })
       mockPrisma.fixProposal.create.mockResolvedValue({
         ...baseProposal,
         diffRef: "encrypted://diffs/prop-1",
@@ -236,6 +244,8 @@ describe("fix-proposal-service", () => {
 
   describe("createPullRequestRecord", () => {
     it("creates a PR record with all fields", async () => {
+      mockPrisma.fixProposal.findFirst.mockResolvedValue(baseProposal)
+
       const prRecord = {
         id: "pr-1",
         fixProposalId: "prop-1",
@@ -249,7 +259,7 @@ describe("fix-proposal-service", () => {
       }
       mockPrisma.pullRequest.create.mockResolvedValue(prRecord)
 
-      const result = await createPullRequestRecord("prop-1", {
+      const result = await createPullRequestRecord("prop-1", "ws-1", {
         provider: "github",
         repoOwner: "owner",
         repoName: "repo",
@@ -274,6 +284,7 @@ describe("fix-proposal-service", () => {
     })
 
     it("creates a PR record without optional fields", async () => {
+      mockPrisma.fixProposal.findFirst.mockResolvedValue(baseProposal)
       mockPrisma.pullRequest.create.mockResolvedValue({
         id: "pr-2",
         fixProposalId: "prop-1",
@@ -286,7 +297,7 @@ describe("fix-proposal-service", () => {
         status: "open",
       })
 
-      await createPullRequestRecord("prop-1", {
+      await createPullRequestRecord("prop-1", "ws-1", {
         provider: "github",
         repoOwner: "owner",
         repoName: "repo",

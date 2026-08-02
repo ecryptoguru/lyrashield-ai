@@ -54,6 +54,8 @@ describe("retest-service", () => {
 
   describe("createRetest", () => {
     it("creates a retest with pending status", async () => {
+      mockPrisma.finding.findFirst.mockResolvedValue(baseFinding)
+      mockPrisma.scan.findFirst.mockResolvedValue(baseScan)
       mockPrisma.retest.create.mockResolvedValue(baseRetest)
 
       const result = await createRetest({
@@ -88,7 +90,12 @@ describe("retest-service", () => {
       expect(result?.finding.title).toBe("XSS")
       expect(result?.scan.status).toBe("completed")
       expect(mockPrisma.retest.findFirst).toHaveBeenCalledWith({
-        where: { id: "retest-1", workspaceId: "ws-1" },
+        where: {
+          id: "retest-1",
+          workspaceId: "ws-1",
+          finding: { workspaceId: "ws-1" },
+          scan: { workspaceId: "ws-1" },
+        },
         include: {
           finding: { select: { id: true, title: true, severity: true, status: true } },
           scan: { select: { id: true, status: true, summary: true } },
@@ -117,7 +124,11 @@ describe("retest-service", () => {
       expect(result.nextCursor).toBeNull()
       expect(mockPrisma.retest.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { workspaceId: "ws-1" },
+          where: {
+            workspaceId: "ws-1",
+            finding: { workspaceId: "ws-1" },
+            scan: { workspaceId: "ws-1" },
+          },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 21,
         })
@@ -149,6 +160,8 @@ describe("retest-service", () => {
           where: {
             workspaceId: "ws-1",
             findingId: "finding-1",
+            finding: { workspaceId: "ws-1" },
+            scan: { workspaceId: "ws-1" },
             status: "passed",
           },
         })

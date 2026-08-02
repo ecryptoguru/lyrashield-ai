@@ -180,7 +180,7 @@ export class ActionRegistry {
 
       if (context.approvalId) {
         try {
-          await saveApprovalResult(context.approvalId, { success: true })
+          await saveApprovalResult(context.approvalId, context.workspaceId, { success: true })
         } catch (resultErr) {
           logger.warn("Failed to save agent approval result", {
             action: actionName,

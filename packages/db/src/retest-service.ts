@@ -14,6 +14,21 @@ export async function createRetest(params: {
   findingId: string
   scanId: string
 }): Promise<Retest> {
+  const [finding, scan] = await Promise.all([
+    prisma.finding.findFirst({
+      where: { id: params.findingId, workspaceId: params.workspaceId, deletedAt: null },
+    }),
+    prisma.scan.findFirst({
+      where: { id: params.scanId, workspaceId: params.workspaceId, deletedAt: null },
+    }),
+  ])
+  if (!finding) {
+    throw new Error(`Finding not found in workspace: ${params.findingId}`)
+  }
+  if (!scan) {
+    throw new Error(`Scan not found in workspace: ${params.scanId}`)
+  }
+
   const retest = await prisma.retest.create({
     data: {
       workspaceId: params.workspaceId,
@@ -39,6 +54,8 @@ export async function getRetest(
     where: {
       id: retestId,
       workspaceId,
+      finding: { workspaceId },
+      scan: { workspaceId },
     },
     include: {
       finding: {
@@ -65,6 +82,8 @@ export async function listRetests(params: {
   const retests = await prisma.retest.findMany({
     where: {
       workspaceId: params.workspaceId,
+      finding: { workspaceId: params.workspaceId },
+      scan: { workspaceId: params.workspaceId },
       ...(params.findingId ? { findingId: params.findingId } : {}),
       ...(params.status ? { status: params.status } : {}),
     },

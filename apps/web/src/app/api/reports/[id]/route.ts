@@ -60,7 +60,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     switch (action) {
       case "share": {
-        const { token, tokenHash, expiresAt } = await generateShareToken(id)
+        const { token, tokenHash, expiresAt } = await generateShareToken(id, workspaceId)
         return apiSuccess({
           token,
           tokenHash,
@@ -69,7 +69,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         })
       }
       case "revoke": {
-        const revokedAt = await revokeShareToken(id)
+        const revokedAt = await revokeShareToken(id, workspaceId)
         return apiSuccess({ revoked: true, revokedAt: revokedAt.toISOString() })
       }
     }

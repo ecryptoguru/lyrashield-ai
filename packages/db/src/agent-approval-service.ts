@@ -198,10 +198,11 @@ export async function denyApproval(
 
 export async function saveApprovalResult(
   approvalId: string,
+  workspaceId: string,
   result: Record<string, unknown>
 ): Promise<void> {
   await prisma.agentApproval.update({
-    where: { id: approvalId },
+    where: { id: approvalId, workspaceId },
     data: { result },
   })
 }

@@ -259,10 +259,10 @@ describe("schedule-service", () => {
       const lastRun = new Date("2026-01-01")
       const nextRun = new Date("2026-01-08")
 
-      await updateScheduleRunTimes("sched-1", lastRun, nextRun)
+      await updateScheduleRunTimes("sched-1", "ws-1", lastRun, nextRun)
 
       expect(mockPrisma.schedule.update).toHaveBeenCalledWith({
-        where: { id: "sched-1" },
+        where: { id: "sched-1", workspaceId: "ws-1" },
         data: { lastRunAt: lastRun, nextRunAt: nextRun },
       })
     })

@@ -181,11 +181,12 @@ export async function deleteSchedule(scheduleId: string, workspaceId: string): P
 
 export async function updateScheduleRunTimes(
   scheduleId: string,
+  workspaceId: string,
   lastRunAt: Date,
   nextRunAt: Date
 ): Promise<void> {
   await prisma.schedule.update({
-    where: { id: scheduleId },
+    where: { id: scheduleId, workspaceId },
     data: { lastRunAt, nextRunAt },
   })
 }
