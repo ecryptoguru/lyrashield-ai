@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { buildOpenApiSpec } from "../../web/src/lib/openapi/build.js"
+import { buildOpenApiSpec } from "@lyrashield/types/openapi"
 import { mkdirSync, writeFileSync } from "node:fs"
 
 const spec = buildOpenApiSpec()

@@ -19,7 +19,7 @@ import {
   PatchScheduleSchema,
   FindingQuerySchema,
   CreatePRSchema,
-} from "@lyrashield/types"
+} from ".."
 import {
   securitySchemes,
   workspaceIdParam,

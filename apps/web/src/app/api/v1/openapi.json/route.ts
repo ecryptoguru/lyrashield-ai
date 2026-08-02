@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { buildOpenApiSpec } from "../../../../lib/openapi/build"
+import { buildOpenApiSpec } from "@lyrashield/types/openapi"
 
 export async function GET() {
   return NextResponse.json(buildOpenApiSpec(), {
