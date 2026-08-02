@@ -330,7 +330,7 @@ describe("processScanJob", () => {
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "PREFLIGHT")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "RUNNING")
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "VERIFYING")
-    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Scan completed with 0 findings")
+    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", "Scan completed with 0 findings")
     expect(vi.mocked(completeRetestsForScan).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(completeScanWithScore).mock.invocationCallOrder[0]!
     )
@@ -692,7 +692,7 @@ describe("processScanJob", () => {
     const result = await processScanJob(mockJob)
 
     expect(result.status).toBe("completed")
-    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Scan completed with 0 findings")
+    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", "Scan completed with 0 findings")
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
@@ -704,7 +704,7 @@ describe("processScanJob", () => {
     const result = await processScanJob(mockJob)
 
     expect(result.status).toBe("completed")
-    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Scan completed with 0 findings")
+    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", "Scan completed with 0 findings")
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
@@ -887,7 +887,7 @@ describe("processScanJob", () => {
       summary: "Recovered finalization",
     })
 
-    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "Recovered finalization")
+    expect(completeScanWithScore).toHaveBeenCalledWith("scan-1", "ws-1", "Recovered finalization")
     expect(runEngine).not.toHaveBeenCalled()
     expect(runScannerOrchestrator).not.toHaveBeenCalled()
   })

@@ -1,5 +1,5 @@
 import { createHash } from "crypto"
-import { prisma } from "@lyrashield/db"
+import { getWorkspaceContext, prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { VIBE_SECURITY_CONTROLS, VIBE_SECURITY_COVERAGE_VERSION } from "@lyrashield/security"
 import type { EngineVulnerability } from "./output-parser"
 import type { NormalizedFinding } from "./normalizer"
@@ -232,6 +232,11 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
 }
 
 export async function persistResultManifest(input: ResultManifestInput): Promise<void> {
+  const workspaceId = getWorkspaceContext()
+  if (!workspaceId) {
+    throw new Error("workspace context is required for persistResultManifest")
+  }
+
   const coverage = buildCoverageReceipts(input)
   const manifest = {
     version: MANIFEST_VERSION,
@@ -252,7 +257,8 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
     coverage,
   }
   const manifestChecksum = checksum(manifest)
-  await prisma.$transaction(async (tx) => {
+
+  await withWorkspaceRLS(workspaceId, async (tx) => {
     const existing = await tx.scanResultManifest.findUnique({ where: { scanId: input.scanId } })
     if (existing && existing.checksum !== manifestChecksum) {
       throw new Error("Scan result manifest already exists with different contents")

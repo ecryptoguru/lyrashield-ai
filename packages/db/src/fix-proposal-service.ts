@@ -1,4 +1,4 @@
-import { prisma } from "./client"
+import { withWorkspaceRLS } from "./rls"
 import type { FixProposal, PullRequest, Finding } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 
@@ -17,56 +17,60 @@ export interface FixProposalWithDetails extends FixProposal {
 }
 
 export async function createFixProposal(params: CreateFixProposalParams): Promise<FixProposal> {
-  const finding = await prisma.finding.findFirst({
-    where: {
-      id: params.findingId,
-      workspaceId: params.workspaceId,
-      deletedAt: null,
-    },
-  })
-  if (!finding) {
-    throw new Error(`Finding not found in workspace: ${params.findingId}`)
-  }
+  return withWorkspaceRLS(params.workspaceId, async (tx) => {
+    const finding = await tx.finding.findFirst({
+      where: {
+        id: params.findingId,
+        workspaceId: params.workspaceId,
+        deletedAt: null,
+      },
+    })
+    if (!finding) {
+      throw new Error(`Finding not found in workspace: ${params.findingId}`)
+    }
 
-  const proposal = await prisma.fixProposal.create({
-    data: {
+    const proposal = await tx.fixProposal.create({
+      data: {
+        findingId: params.findingId,
+        kind: "patch",
+        summary: params.summary,
+        ...(params.diffRef ? { diffRef: params.diffRef } : {}),
+        ...(params.generatedByModel ? { generatedByModel: params.generatedByModel } : {}),
+        ...(params.safetyScore != null ? { safetyScore: params.safetyScore } : {}),
+        status: "draft",
+      },
+    })
+
+    logger.info("Fix proposal created", {
       findingId: params.findingId,
-      kind: "patch",
-      summary: params.summary,
-      ...(params.diffRef ? { diffRef: params.diffRef } : {}),
-      ...(params.generatedByModel ? { generatedByModel: params.generatedByModel } : {}),
-      ...(params.safetyScore != null ? { safetyScore: params.safetyScore } : {}),
-      status: "draft",
-    },
-  })
+      proposalId: proposal.id,
+    })
 
-  logger.info("Fix proposal created", {
-    findingId: params.findingId,
-    proposalId: proposal.id,
+    return proposal
   })
-
-  return proposal
 }
 
 export async function getFixProposal(
   proposalId: string,
   workspaceId: string
 ): Promise<FixProposalWithDetails | null> {
-  const proposal = await prisma.fixProposal.findFirst({
-    where: {
-      id: proposalId,
-      finding: { workspaceId, deletedAt: null },
-      deletedAt: null,
-    },
-    include: {
-      finding: {
-        select: { id: true, title: true, severity: true, status: true, cwe: true },
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const proposal = await tx.fixProposal.findFirst({
+      where: {
+        id: proposalId,
+        finding: { workspaceId, deletedAt: null },
+        deletedAt: null,
       },
-      pullRequests: true,
-    },
-  })
+      include: {
+        finding: {
+          select: { id: true, title: true, severity: true, status: true, cwe: true },
+        },
+        pullRequests: true,
+      },
+    })
 
-  return proposal as FixProposalWithDetails | null
+    return proposal as FixProposalWithDetails | null
+  })
 }
 
 export async function listFixProposals(params: {
@@ -76,34 +80,36 @@ export async function listFixProposals(params: {
   cursor?: string
   limit?: number
 }): Promise<{ items: FixProposalWithDetails[]; nextCursor: string | null }> {
-  const limit = Math.min(params.limit ?? 20, 50)
+  return withWorkspaceRLS(params.workspaceId, async (tx) => {
+    const limit = Math.min(params.limit ?? 20, 50)
 
-  const proposals = await prisma.fixProposal.findMany({
-    where: {
-      deletedAt: null,
-      finding: {
-        workspaceId: params.workspaceId,
+    const proposals = await tx.fixProposal.findMany({
+      where: {
         deletedAt: null,
-        ...(params.findingId ? { id: params.findingId } : {}),
+        finding: {
+          workspaceId: params.workspaceId,
+          deletedAt: null,
+          ...(params.findingId ? { id: params.findingId } : {}),
+        },
+        ...(params.status ? { status: params.status } : {}),
       },
-      ...(params.status ? { status: params.status } : {}),
-    },
-    include: {
-      finding: {
-        select: { id: true, title: true, severity: true, status: true, cwe: true },
+      include: {
+        finding: {
+          select: { id: true, title: true, severity: true, status: true, cwe: true },
+        },
+        pullRequests: true,
       },
-      pullRequests: true,
-    },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit + 1,
-    ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+    })
+
+    const hasMore = proposals.length > limit
+    const items = (hasMore ? proposals.slice(0, limit) : proposals) as FixProposalWithDetails[]
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
+
+    return { items, nextCursor }
   })
-
-  const hasMore = proposals.length > limit
-  const items = (hasMore ? proposals.slice(0, limit) : proposals) as FixProposalWithDetails[]
-  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
-
-  return { items, nextCursor }
 }
 
 const VALID_PROPOSAL_STATUSES = [
@@ -124,21 +130,23 @@ export async function updateFixProposalStatus(
     throw new Error(`Invalid fix proposal status: ${status}`)
   }
 
-  const proposal = await prisma.fixProposal.findFirst({
-    where: {
-      id: proposalId,
-      finding: { workspaceId, deletedAt: null },
-      deletedAt: null,
-    },
-  })
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const proposal = await tx.fixProposal.findFirst({
+      where: {
+        id: proposalId,
+        finding: { workspaceId, deletedAt: null },
+        deletedAt: null,
+      },
+    })
 
-  if (!proposal) {
-    throw new Error(`Fix proposal not found: ${proposalId}`)
-  }
+    if (!proposal) {
+      throw new Error(`Fix proposal not found: ${proposalId}`)
+    }
 
-  return prisma.fixProposal.update({
-    where: { id: proposalId },
-    data: { status },
+    return tx.fixProposal.update({
+      where: { id: proposalId },
+      data: { status },
+    })
   })
 }
 
@@ -154,35 +162,37 @@ export async function createPullRequestRecord(
     prUrl?: string
   }
 ): Promise<PullRequest> {
-  const proposal = await prisma.fixProposal.findFirst({
-    where: {
-      id: proposalId,
-      finding: { workspaceId, deletedAt: null },
-      deletedAt: null,
-    },
-  })
-  if (!proposal) {
-    throw new Error(`Fix proposal not found in workspace: ${proposalId}`)
-  }
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const proposal = await tx.fixProposal.findFirst({
+      where: {
+        id: proposalId,
+        finding: { workspaceId, deletedAt: null },
+        deletedAt: null,
+      },
+    })
+    if (!proposal) {
+      throw new Error(`Fix proposal not found in workspace: ${proposalId}`)
+    }
 
-  const pr = await prisma.pullRequest.create({
-    data: {
-      fixProposalId: proposalId,
-      provider: data.provider,
-      repoOwner: data.repoOwner,
-      repoName: data.repoName,
-      branchName: data.branchName,
-      ...(data.prNumber ? { prNumber: data.prNumber } : {}),
-      ...(data.prUrl ? { prUrl: data.prUrl } : {}),
-      status: "open",
-    },
-  })
+    const pr = await tx.pullRequest.create({
+      data: {
+        fixProposalId: proposalId,
+        provider: data.provider,
+        repoOwner: data.repoOwner,
+        repoName: data.repoName,
+        branchName: data.branchName,
+        ...(data.prNumber ? { prNumber: data.prNumber } : {}),
+        ...(data.prUrl ? { prUrl: data.prUrl } : {}),
+        status: "open",
+      },
+    })
 
-  logger.info("Pull request record created", {
-    proposalId,
-    prId: pr.id,
-    repo: `${data.repoOwner}/${data.repoName}`,
-  })
+    logger.info("Pull request record created", {
+      proposalId,
+      prId: pr.id,
+      repo: `${data.repoOwner}/${data.repoName}`,
+    })
 
-  return pr
+    return pr
+  })
 }

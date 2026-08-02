@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("./client", () => ({
   prisma: {
+    $transaction: vi.fn(),
+    $executeRaw: vi.fn(),
     finding: {
       findFirst: vi.fn(),
     },
@@ -31,6 +33,8 @@ import {
 } from "./fix-proposal-service"
 
 const mockPrisma = prisma as unknown as {
+  $transaction: ReturnType<typeof vi.fn>
+  $executeRaw: ReturnType<typeof vi.fn>
   finding: {
     findFirst: ReturnType<typeof vi.fn>
   }
@@ -62,6 +66,9 @@ const baseProposal = {
 describe("fix-proposal-service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => unknown) =>
+      callback(mockPrisma)
+    )
   })
 
   describe("createFixProposal", () => {

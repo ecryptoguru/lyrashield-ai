@@ -200,27 +200,29 @@ export async function addScanEvent(
     throw new Error("workspace context is required for addScanEvent")
   }
 
-  // Defense-in-depth: verify the scan belongs to the current workspace before
-  // writing an event. ScanEvent is a child table without its own workspaceId, so
-  // this prevents cross-tenant event injection if a caller has a valid scanId
-  // from another workspace. The existence check alone is not sufficient — we must
-  // compare the scan's workspaceId to the active workspace context.
-  const scan = await prisma.scan.findUnique({
-    where: { id: scanId },
-    select: { workspaceId: true },
-  })
-  if (!scan || scan.workspaceId !== workspaceId) {
-    throw new Error(`Scan not found in workspace: ${scanId}`)
-  }
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    // Defense-in-depth: verify the scan belongs to the current workspace before
+    // writing an event. ScanEvent is a child table without its own workspaceId, so
+    // this prevents cross-tenant event injection if a caller has a valid scanId
+    // from another workspace. The RLS context enforces this, but the explicit
+    // comparison keeps the guard visible and unit-testable without a live DB.
+    const scan = await tx.scan.findUnique({
+      where: { id: scanId },
+      select: { workspaceId: true },
+    })
+    if (!scan || scan.workspaceId !== workspaceId) {
+      throw new Error(`Scan not found in workspace: ${scanId}`)
+    }
 
-  return prisma.scanEvent.create({
-    data: {
-      scanId,
-      stage,
-      level,
-      message,
-      metadata: metadata ?? undefined,
-    },
+    return tx.scanEvent.create({
+      data: {
+        scanId,
+        stage,
+        level,
+        message,
+        metadata: metadata ?? undefined,
+      },
+    })
   })
 }
 

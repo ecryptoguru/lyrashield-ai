@@ -497,7 +497,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             errorMessage: "Protected run limit reached",
           }
         }
-        await completeScanWithScore(scanId, pendingFinalization.summary)
+        await completeScanWithScore(scanId, workspaceId, pendingFinalization.summary)
         try {
           await qualifyReferralForWorkspace(workspaceId)
         } catch (referralError) {
@@ -1036,7 +1036,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
       // Retests may validate a pending fix and change the target's scoreable
       // state. Freeze the score only after those outcomes are persisted.
-      await completeScanWithScore(scanId, engineResult.output.summary)
+      await completeScanWithScore(scanId, workspaceId, engineResult.output.summary)
       try {
         await qualifyReferralForWorkspace(workspaceId)
       } catch (referralError) {

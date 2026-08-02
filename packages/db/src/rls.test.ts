@@ -83,9 +83,10 @@ describe("RLS helpers", () => {
   })
 
   describe("RLS table coverage", () => {
-    // The RLS migration creates policies on these tables.
-    // WORKSPACE_SCOPED_MODELS must match exactly — if a model is in the set,
-    // it must have an RLS policy, and vice versa.
+    // Workspace-scoped tables carry their own workspaceId and are auto-guarded
+    // by the Prisma client extension. WORKSPACE_SCOPED_MODELS must match this
+    // set exactly — if a model is in the set, it must have an RLS policy, and
+    // vice versa.
     const RLS_TABLES = [
       "Project",
       "Target",
@@ -135,6 +136,27 @@ describe("RLS helpers", () => {
 
     it("excludes OnboardingState from RLS (per-user, not tenant data)", () => {
       expect(WORKSPACE_SCOPED_MODELS.has("OnboardingState")).toBe(false)
+    })
+
+    // Child tables do not carry a workspaceId, but they are still RLS-protected
+    // through their parent (DB-07). These must have FORCE ROW LEVEL SECURITY and
+    // an EXISTS-style policy in the latest RLS migration.
+    const CHILD_RLS_TABLES = [
+      "ScanEvent",
+      "Evidence",
+      "ScanResultManifest",
+      "ScanCoverageReceipt",
+      "FixProposal",
+      "PullRequest",
+      "Ticket",
+      "ScorecardShare",
+      "ScorecardEvent",
+    ]
+
+    it("excludes child RLS tables from WORKSPACE_SCOPED_MODELS (no workspaceId column)", () => {
+      for (const table of CHILD_RLS_TABLES) {
+        expect(WORKSPACE_SCOPED_MODELS.has(table)).toBe(false)
+      }
     })
   })
 })

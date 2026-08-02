@@ -76,6 +76,7 @@ describe("updateScanStatus", () => {
 describe("addScanEvent — cross-tenant guard", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
     mockPrisma.scanEvent.create.mockResolvedValue({ id: "event-1" })
   })
 

@@ -1,14 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@lyrashield/db", () => ({
-  prisma: {
+vi.mock("@lyrashield/db", () => {
+  const mockPrisma = {
     finding: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     evidence: { createMany: vi.fn(), findMany: vi.fn() },
     findingCandidate: { upsert: vi.fn() },
     findingVerification: { upsert: vi.fn() },
-  },
-  assertEvidenceEncrypted: vi.fn(),
-}))
+  }
+  return {
+    prisma: mockPrisma,
+    assertEvidenceEncrypted: vi.fn(),
+    getWorkspaceContext: vi.fn().mockReturnValue("ws-1"),
+    withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
+      fn(mockPrisma)
+    ),
+  }
+})
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))

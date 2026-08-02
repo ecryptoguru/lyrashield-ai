@@ -1,16 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@lyrashield/db", () => ({
-  prisma: {
+vi.mock("@lyrashield/db", () => {
+  const mockPrisma = {
     $transaction: vi.fn(),
+    $executeRaw: vi.fn(),
     scanResultManifest: { findUnique: vi.fn(), create: vi.fn() },
     scanCoverageReceipt: { createMany: vi.fn() },
     findingCandidate: { upsert: vi.fn() },
     findingVerification: { upsert: vi.fn() },
     finding: { update: vi.fn() },
     retest: { findMany: vi.fn(), update: vi.fn() },
-  },
-}))
+  }
+  return {
+    prisma: mockPrisma,
+    getWorkspaceContext: vi.fn().mockReturnValue("ws-1"),
+    withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
+      fn(mockPrisma)
+    ),
+  }
+})
 
 import { prisma } from "@lyrashield/db"
 import {

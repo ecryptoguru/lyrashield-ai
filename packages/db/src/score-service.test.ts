@@ -70,6 +70,9 @@ const CURRENT_PAYLOAD = {
 describe("score-service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) =>
+      callback(mockPrisma)
+    )
   })
 
   describe("buildScorecardPayload (disclosure allowlist)", () => {
@@ -368,6 +371,8 @@ describe("score-service", () => {
           }),
           create: vi.fn(),
         },
+        scorecardEvent: { count: vi.fn().mockResolvedValue(0) },
+        referralAttribution: { count: vi.fn().mockResolvedValue(0) },
       }
       mockPrisma.$transaction.mockImplementation(async (fn: (client: typeof tx) => unknown) =>
         fn(tx)
@@ -387,6 +392,7 @@ describe("score-service", () => {
   describe("completeScanWithScore", () => {
     it("is idempotent: an existing snapshot short-circuits without re-completing the scan", async () => {
       const tx = {
+        $executeRaw: vi.fn(),
         scan: {
           findUnique: vi.fn().mockResolvedValue({
             id: "scan-1",
@@ -407,7 +413,7 @@ describe("score-service", () => {
         scanEvent: { create: vi.fn() },
       }
       mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
-      const outcome = await completeScanWithScore("scan-1", "summary")
+      const outcome = await completeScanWithScore("scan-1", "ws-1", "summary")
       expect(outcome.created).toBe(false)
       expect(tx.scoreSnapshot.create).not.toHaveBeenCalled()
       expect(tx.scan.update).not.toHaveBeenCalled()
@@ -416,6 +422,7 @@ describe("score-service", () => {
 
     it("uses only each target's latest live score for project risk and records last scan time", async () => {
       const tx = {
+        $executeRaw: vi.fn(),
         scan: {
           findUnique: vi.fn().mockResolvedValue({
             id: "scan-1",
@@ -442,7 +449,7 @@ describe("score-service", () => {
       mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
       mockPrisma.scanEvent.create.mockResolvedValue({})
 
-      await completeScanWithScore("scan-1", "done")
+      await completeScanWithScore("scan-1", "ws-1", "done")
 
       expect(tx.scoreSnapshot.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ distinct: ["targetId"] })
@@ -459,6 +466,7 @@ describe("score-service", () => {
 
     it("keeps unvalidated FIXED findings in the score until a trusted receipt exists", async () => {
       const tx = {
+        $executeRaw: vi.fn(),
         scan: {
           findUnique: vi.fn().mockResolvedValue({
             id: "scan-1",
@@ -495,7 +503,7 @@ describe("score-service", () => {
       mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
       mockPrisma.scanEvent.create.mockResolvedValue({})
 
-      await completeScanWithScore("scan-1", "done")
+      await completeScanWithScore("scan-1", "ws-1", "done")
 
       expect(tx.scoreSnapshot.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ score: 90, grade: "B" }) })
@@ -504,6 +512,7 @@ describe("score-service", () => {
 
     it("does not make a scorecard shareable when retained coverage is incomplete", async () => {
       const tx = {
+        $executeRaw: vi.fn(),
         scan: {
           findUnique: vi.fn().mockResolvedValue({
             id: "scan-1",
@@ -529,7 +538,7 @@ describe("score-service", () => {
       }
       mockPrisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx))
 
-      await completeScanWithScore("scan-1", "done")
+      await completeScanWithScore("scan-1", "ws-1", "done")
 
       expect(tx.scoreSnapshot.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ shareEligible: false }) })

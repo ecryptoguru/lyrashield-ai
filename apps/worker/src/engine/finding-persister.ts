@@ -1,4 +1,4 @@
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import {
   type EngineVulnerability,
@@ -88,15 +88,26 @@ async function persistEvidence(
   // Reached through the tenant-scoped Finding rather than by findingId alone:
   // Evidence has no workspaceId of its own, so the relation predicate is what
   // ties this read to the caller's workspace.
-  const existing = await prisma.evidence.findMany({
-    where: {
-      findingId,
-      finding: { id: findingId, workspaceId },
-      checksum: { in: artifactChecksums.map((entry) => entry.checksum) },
-    },
-    select: { checksum: true },
-  })
+  const existing = await withWorkspaceRLS(workspaceId, async (tx) =>
+    tx.evidence.findMany({
+      where: {
+        findingId,
+        finding: { id: findingId, workspaceId },
+        checksum: { in: artifactChecksums.map((entry) => entry.checksum) },
+      },
+      select: { checksum: true },
+    })
+  )
   const existingChecksums = new Set(existing.map((row) => row.checksum))
+
+  const newEvidence: Array<{
+    findingId: string
+    type: string
+    redactionStatus: "pending"
+    encryptionKeyRef: string
+    storageUri: string
+    checksum: string
+  }> = []
 
   for (const { artifact, checksum } of artifactChecksums) {
     if (existingChecksums.has(checksum)) continue
@@ -110,17 +121,23 @@ async function persistEvidence(
       contentType: artifact.contentType,
     })
     assertEvidenceEncrypted(uploaded.encryptionKeyRef)
-    await prisma.evidence.createMany({
-      data: {
-        findingId,
-        type: artifact.type,
-        redactionStatus: "pending",
-        encryptionKeyRef: uploaded.encryptionKeyRef,
-        storageUri: uploaded.storageUri,
-        checksum: uploaded.checksum,
-      },
-      skipDuplicates: true,
+    newEvidence.push({
+      findingId,
+      type: artifact.type,
+      redactionStatus: "pending",
+      encryptionKeyRef: uploaded.encryptionKeyRef,
+      storageUri: uploaded.storageUri,
+      checksum: uploaded.checksum,
     })
+  }
+
+  if (newEvidence.length > 0) {
+    await withWorkspaceRLS(workspaceId, async (tx) =>
+      tx.evidence.createMany({
+        data: newEvidence,
+        skipDuplicates: true,
+      })
+    )
   }
 }
 

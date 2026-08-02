@@ -154,8 +154,12 @@ function scoreInput(
 }
 
 /** Completes a verified scan and creates its immutable score snapshot atomically. */
-export async function completeScanWithScore(scanId: string, summary: string | null) {
-  const outcome = await prisma.$transaction(async (tx) => {
+export async function completeScanWithScore(
+  scanId: string,
+  workspaceId: string,
+  summary: string | null
+) {
+  const outcome = await withWorkspaceRLS(workspaceId, async (tx) => {
     const scan = await tx.scan.findUnique({
       where: { id: scanId },
       include: {
@@ -315,7 +319,8 @@ export async function createScorecardShare(targetId: string, workspaceId: string
     },
   })
   const publicPayload = buildScorecardPayload(snapshot, resolvedFindings)
-  const outcome = await prisma.$transaction(async (tx) => {
+
+  return withWorkspaceRLS(workspaceId, async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${snapshot.id}, 0))`
     const existingShare = await tx.scorecardShare.findFirst({
       where: { snapshotId: snapshot.id, revokedAt: null },
@@ -326,6 +331,7 @@ export async function createScorecardShare(targetId: string, workspaceId: string
         share: existingShare,
         referralCode: existingShare.referralCode?.code ?? referralCode.code,
         created: false,
+        ...(await getScorecardShareStats(tx, existingShare.id, existingShare.referralCodeId)),
       }
     }
     const share = await tx.scorecardShare.create({
@@ -337,55 +343,57 @@ export async function createScorecardShare(targetId: string, workspaceId: string
         createdById: userId,
       },
     })
-    return { share, referralCode: referralCode.code, created: true }
-  })
-  if (outcome.created) {
-    await prisma.auditLog.create({
+    await tx.auditLog.create({
       data: {
         workspaceId,
         actorUserId: userId,
         action: "scorecard.share.created",
         resourceType: "scorecardShare",
-        resourceId: outcome.share.id,
+        resourceId: share.id,
       },
     })
-  }
-  return {
-    share: outcome.share,
-    referralCode: outcome.referralCode,
-    ...(await getScorecardShareStats(outcome.share.id, outcome.share.referralCodeId)),
-  }
+    return {
+      share,
+      referralCode: referralCode.code,
+      created: true,
+      ...(await getScorecardShareStats(tx, share.id, referralCode.id)),
+    }
+  })
 }
 
-async function getScorecardShareStats(shareId: string, referralCodeId: string | null) {
+async function getScorecardShareStats(
+  tx: { scorecardEvent: { count: typeof prisma.scorecardEvent.count }; referralAttribution: { count: typeof prisma.referralAttribution.count } },
+  shareId: string,
+  referralCodeId: string | null
+) {
   const [shareHandoffs, referredSignups] = await Promise.all([
-    prisma.scorecardEvent.count({ where: { shareId, eventType: "SHARE" } }),
-    referralCodeId
-      ? prisma.referralAttribution.count({ where: { codeId: referralCodeId } })
-      : Promise.resolve(0),
+    tx.scorecardEvent.count({ where: { shareId, eventType: "SHARE" } }),
+    referralCodeId ? tx.referralAttribution.count({ where: { codeId: referralCodeId } }) : Promise.resolve(0),
   ])
   return { shareHandoffs, referredSignups }
 }
 
 export async function revokeScorecardShare(id: string, workspaceId: string, userId: string) {
-  const share = await prisma.scorecardShare.findFirst({
-    where: { id, revokedAt: null, snapshot: { workspaceId } },
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const share = await tx.scorecardShare.findFirst({
+      where: { id, revokedAt: null, snapshot: { workspaceId } },
+    })
+    if (!share) return null
+    const updated = await tx.scorecardShare.update({
+      where: { id },
+      data: { revokedAt: new Date() },
+    })
+    await tx.auditLog.create({
+      data: {
+        workspaceId,
+        actorUserId: userId,
+        action: "scorecard.share.revoked",
+        resourceType: "scorecardShare",
+        resourceId: id,
+      },
+    })
+    return updated
   })
-  if (!share) return null
-  const updated = await prisma.scorecardShare.update({
-    where: { id },
-    data: { revokedAt: new Date() },
-  })
-  await prisma.auditLog.create({
-    data: {
-      workspaceId,
-      actorUserId: userId,
-      action: "scorecard.share.revoked",
-      resourceType: "scorecardShare",
-      resourceId: id,
-    },
-  })
-  return updated
 }
 
 export async function getPublicScorecard(slug: string) {
