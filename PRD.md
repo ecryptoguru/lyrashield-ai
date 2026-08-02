@@ -5254,11 +5254,40 @@ A second code-grounded pass over current `main` (post-merge), covering the never
 
 Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + Finding index), R-F (CI permissions + drift + cache), R-I quick wins (turbo globalEnv, seed guard, .gitignore, docker-compose, types bounds). Into **Batch 3**: R-D (token cache), R-E (auth hardening), R-H (supply chain + eslint-security), R-G (deploy-doc security). The **P0 security headers (R-A)** and **logger redaction (R-B)** are the two to pull to the very front — both are small, high-credibility, and independent of the unbuilt worker.
 
+## B13.8 Deep Review v11 remediation (2026-08-01, branch `codex/deep-review-v11`)
+
+A fifth code-grounded pass over `main` (post-PR #115 / UX V2), structured in five batches. All changes are on the unmerged branch `codex/deep-review-v11`.
+
+### Batch A — stop-bleeding P0s
+- CLI install/agent P0s resolved across `packages/cli`, `packages/cli-alias`, and `packages/sdk`.
+
+### Batch B — structural tenancy
+- `workspaceId` enforcement added to `packages/db/src/fix-proposal-service.ts`, `retest-service.ts`, `report-service.ts`, `agent-approval-service.ts`, and `schedule-service.ts`.
+- `packages/db/src/score-service.ts` and `apps/worker/src/jobs/run-scan.job.ts` updated to pass `workspaceId` and use `withWorkspaceRLS` where required.
+- New Prisma migration `20260803000001_child_table_rls` adds fail-closed RLS policies for `ScanEvent`, `Evidence`, `ScorecardShare`, `ScorecardEvent`, `ReferralCode`, `ReferralAttribution`, `NotificationPreference`, and `OnboardingState`, bringing RLS coverage to 29 tables.
+
+### Batch C — worker recovery
+- `apps/worker/src/engine/command-builder.ts`, `finding-persister.ts`, `result-integrity.ts`, `scanner-orchestrator.ts`, and `apps/worker/src/index.ts` hardened worker recovery, result integrity, and engine command building.
+- `apps/worker/src/jobs/run-scan.job.ts` and its test updated.
+
+### Batch D — build/deploy integrity
+- OpenAPI spec builder moved from `apps/web/src/lib/openapi/` to a declared `@lyrashield/types/openapi` export; `apps/marketing` now depends on `@lyrashield/types`.
+- `.github/workflows/deploy-azure.yml` pins all Docker and registry-cleanup actions to release SHAs, emits `web_digest`/`worker_digest`, deploys app/scanner images as `image:tag@sha256:<digest>`, and splits worker GC to `keep-n-tagged: 100` so a VM-pinned digest is not garbage-collected.
+
+### Batch E — polish and test regression fixes
+- `packages/cli/src/installers/atomic-write.ts` now only rejects when the immediate destination directory is a symlink, fixing a macOS `/var` → `/private/var` false positive.
+- Unit tests added/updated for `saveApprovalResult` workspace scoping, `evidence.createMany`, `atomic-write` symlink handling, and agent-registry snapshots.
+
+### Verification
+- `pnpm lint` and `pnpm typecheck` pass for all 20 packages; `git diff --check` is clean.
+- Package unit tests pass; full `pnpm test` is **1337 passed / 10 skipped / 3 failed**, with failures limited to DB integration suites requiring a live Postgres/Redis stack.
+- `python3 .devin/scripts/checklist.py .` required checks (Security, Lint, Schema) pass.
+
 ---
 
 # PART C — Current Implementation and Release Readiness
 
-> **Status date:** 2026-07-29. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
+> **Status date:** 2026-08-01. This section is the authoritative product/engineering snapshot. Update it whenever implementation coverage or a release gate changes materially.
 
 ## C0. Verified repository baseline
 
@@ -5267,9 +5296,10 @@ Fold into **Batch 2**: R-A (headers), R-B (logger redaction), R-C (Report FK + F
 - Monorepo: 4 apps (`web`, `worker`, `agent`, `marketing`) and 10 shared packages (`auth`, `config`, `db`, `integrations`, `logger`, `mcp`, `score`, `security`, `types`, `ui`).
 - Merged PR #115 baseline plus UX V2 Phases 0–10 and follow-up: lint, typecheck, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, security diff gate, CodeRabbit, `git diff --check`, **1034 core tests in 116 files**, **81 marketing tests in 12 files**, **16 motion tests**, and **4 passing Playwright Chromium tests**. Historical checkpoint counts below remain dated evidence, not the current release gate.
 - Current product surface: **31 page route files** and **50 API route files** in `apps/web`.
-- Current data surface: **40 Prisma models**, **18 enums**, and **28 committed migrations**. Postgres RLS covers 20 direct workspace-scoped tables; the manifest and coverage receipts are intentionally child-scoped through `Scan`.
+- Current data surface: **40 Prisma models**, **18 enums**, and **29 committed migrations**. Postgres RLS covers 20 direct workspace-scoped tables plus 9 child tables (`ScanEvent`, `Evidence`, `ScorecardShare`, `ScorecardEvent`, `ReferralCode`, `ReferralAttribution`, `NotificationPreference`, `OnboardingState`) protected by migration `20260803000001_child_table_rls`. The manifest and coverage receipts are intentionally child-scoped through `Scan`.
 - Monorepo packages now include `packages/score`: the pure, versioned LyraShield Score engine (`lyrashield-score/1.0.0`).
 - Current runtime shape: Next.js web, BullMQ worker over Redis, PostgreSQL/Prisma, separate Python engine CLI, and Astro/Cloudflare marketing app.
+- **Deep Review v11 remediation (unmerged branch `codex/deep-review-v11`, 2026-08-01):** five-batch review addressing stop-bleeding CLI P0s, structural `workspaceId` tenancy guards, fail-closed RLS for nine child tables, worker recovery hardening, build/deploy integrity (OpenAPI packaging, SHA-pinned GitHub Actions, image-digest deploys, worker image GC safety), and polish/test-regression fixes. lint, typecheck, `git diff --check`, and package unit tests pass; full `pnpm test` reports 1337 passed / 10 skipped / 3 failed, limited to DB integration suites that require a live Postgres/Redis stack.
 - Current Docker proof: fresh web/worker images build; the web container passes health plus database/Redis readiness; scan readiness reports the live worker heartbeat; and the engine-bearing worker image reports CLI `1.1.0.post1`. The PR #115 smoke retained zero enabled schedules, queued database scans, waiting jobs, or active jobs before and after restart. Docker/runtime health remains separate from a paid controlled-scan result.
 - Scan admission is fail-closed: manual scans, retests, schedules, and agent actions require a live worker before database creation and again at central enqueue. Five-minute queue/database orphans become `FAILED` and are never requeued automatically; non-active jobs without a live scan are removed under a renewable distributed lease. The 17 historical E2E fixtures were narrowly reconciled, and E2E teardown no longer creates BullMQ jobs.
 - Current merged-engine proof: engine PRs #6, #7, #20, #22, #26, #33, #35, #36, #39, and #40 are on `main`; the coordinated gate passes 597 tests (1 skipped), Ruff, formatting, headless mypy, Bandit, native-binary checks, sandbox build/smoke, and worker compatibility.

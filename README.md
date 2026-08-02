@@ -120,7 +120,7 @@ Upgrades are deliberately review-gated: the engine records its incorporated Stri
 
 ## Security and release boundaries
 
-- Workspace data is tenant-scoped and sensitive operations are audit-logged.
+- Workspace data is tenant-scoped; sensitive operations are audit-logged; and child tables (`ScanEvent`, `Evidence`, `ScorecardShare`, `ScorecardEvent`, `ReferralCode`, `ReferralAttribution`, `NotificationPreference`, `OnboardingState`) are protected by Postgres RLS.
 - Engine output is treated as untrusted; only independent verifier evidence can mark a finding verified.
 - URL targets use pinned deterministic URL scanners rather than the repository engine.
 - Queue admission fails closed without a healthy worker heartbeat.
