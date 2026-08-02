@@ -111,6 +111,9 @@ services:
       PORT: "3000"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-lyrashield-dev-redis}@redis:6379"
       NODE_ENV: "production"
+      # DEV ONLY: local environment has no mail provider, so make the unverified
+      # registration opt-in explicit instead of failing the auth env check.
+      LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "${LYRASHIELD_REQUIRE_EMAIL_VERIFICATION:-0}"
       # This file is local-development only and binds the app to localhost.
       # Production must explicitly set this to the header its ingress strips and rewrites.
       TRUSTED_PROXY_IP_HEADER: "${TRUSTED_PROXY_IP_HEADER:-x-forwarded-for}"
