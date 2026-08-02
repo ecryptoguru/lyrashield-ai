@@ -18,9 +18,11 @@ import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
+let reconciliationTimer: NodeJS.Timeout | null = null
 let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
+const RECONCILIATION_INTERVAL_MS = 60_000
 async function refreshWorkerReadiness(): Promise<void> {
   await writeFile(readinessPath, new Date().toISOString(), { mode: 0o600 })
 }
@@ -37,34 +39,30 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
 
   logger.info("Worker shutting down", { signal })
 
+  // Stop periodic work first so the worker cannot be handed new jobs while
+  // it is closing. The schedule runner can enqueue new scans; the heartbeat
+  // can re-register this worker after we have tried to unregister it.
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer)
     heartbeatTimer = null
   }
-  await removeWorkerReadiness().catch((error) => {
-    logger.warn("Could not remove worker readiness marker", {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  })
-  await unregisterScanWorker(workerId).catch((error) => {
-    logger.warn("Could not unregister scan worker", {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  })
-
-  const terminatedEngineProcesses = terminateActiveEngineProcesses()
-  if (terminatedEngineProcesses > 0) {
-    logger.info("Terminating active engine processes", { count: terminatedEngineProcesses })
+  if (reconciliationTimer) {
+    clearInterval(reconciliationTimer)
+    reconciliationTimer = null
   }
-
   if (scheduleRunner) {
     clearInterval(scheduleRunner)
     scheduleRunner = null
     logger.info("Schedule runner stopped")
   }
 
+  // Close the BullMQ worker before terminating engine processes. Once closed,
+  // no new jobs are accepted; active jobs are allowed to finish or are timed
+  // out, and then any remaining engine child processes are killed.
   if (worker) {
     const closed = worker.close()
+    const localWorker = worker
+    worker = null
     if (!closed) {
       logger.warn("Worker.close() returned null, forcing shutdown")
     } else {
@@ -76,8 +74,24 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
         process.exit(1)
       }
     }
-    logger.info("BullMQ worker closed")
+    logger.info("BullMQ worker closed", { workerId: localWorker.id })
   }
+
+  const terminatedEngineProcesses = terminateActiveEngineProcesses()
+  if (terminatedEngineProcesses > 0) {
+    logger.info("Terminating active engine processes", { count: terminatedEngineProcesses })
+  }
+
+  await unregisterScanWorker(workerId).catch((error) => {
+    logger.warn("Could not unregister scan worker", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
+  await removeWorkerReadiness().catch((error) => {
+    logger.warn("Could not remove worker readiness marker", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
 
   process.exit(exitCode)
 }
@@ -99,10 +113,11 @@ async function main(): Promise<void> {
     autorun: false,
     // BRPOP blocks for up to 10 min per call — but returns instantly when a
     // job is pushed to the queue. This gives instant scan pickup with only
-    // ~4.3K re-issue commands/month at idle. Stalled check is skipped because
-    // reconcileScanQueue() runs once on startup and catches orphaned jobs.
+    // ~4.3K re-issue commands/month at idle. Stalled checks run every minute
+    // so jobs that are genuinely stuck are retried; reconcileScanQueue() is the
+    // fail-closed backstop that runs both on startup and periodically.
     drainDelay: 600,
-    skipStalledCheck: true,
+    stalledInterval: 60_000,
   })
 
   await worker.waitUntilReady()
@@ -121,9 +136,16 @@ async function main(): Promise<void> {
     logger.error("Worker error", { error: error.message, stack: error.stack })
   })
 
-  // One-time sweep on startup — catches orphans from a previous crash.
-  // No background timer: reconciliation runs only when the worker starts.
+  // Reconcile once on startup and then every minute. The distributed lease
+  // inside reconcileScanQueue() ensures only one worker acts per interval.
   await reconcileScanQueue()
+  reconciliationTimer = setInterval(() => {
+    void reconcileScanQueue().catch((error) => {
+      logger.warn("Periodic scan queue reconciliation failed", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }, RECONCILIATION_INTERVAL_MS)
   await registerScanWorker(workerId)
   await refreshWorkerReadiness()
   void worker.run().catch((error) => {

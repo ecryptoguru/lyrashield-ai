@@ -599,6 +599,27 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const scanStartedAtMs = Date.now()
       scanRuntimeBudgetMs = resolveScanRuntimeBudgetMs(policy?.maxDurationMinutes)
       const maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
+      if (maxBudgetUsd <= 0) {
+        const errorMessage = "Protected run limit is zero"
+        log.warn("Scan rejected: zero budget", { scanId, workspaceId, policyMaxBudgetUsd })
+        try {
+          await addScanEvent(scanId, "budget_exceeded", "error", errorMessage, {
+            maxBudgetUsd,
+            policyMaxBudgetUsd,
+          })
+        } catch (eventErr) {
+          log.warn("Failed to persist budget_exceeded event", {
+            scanId,
+            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+          })
+        }
+        return {
+          status: "failed",
+          errorCategory: "BUDGET_EXCEEDED",
+          errorMessage,
+        }
+      }
+
       const engineProfile = resolveEngineProfile(mode)
       const engineModel =
         target.type === "REPO" ? requireEngineModel(engineProfile.model) : engineProfile.model

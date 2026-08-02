@@ -49,15 +49,16 @@ const DEFAULT_SCAN_BUDGET_USD: Record<string, number> = {
 /**
  * Every engine run must have a positive spend cap. A policy can reduce or
  * increase the default for its workspace; invalid or absent policy values
- * safely fall back to the cap for the selected scan mode.
+ * safely fall back to the cap for the selected scan mode. An explicitly zero
+ * budget is a deliberate policy choice and must fail the scan rather than
+ * silently falling back to the mode default.
  */
 export function resolveScanBudgetUsd(mode: string, policyMaxBudgetUsd?: number | null): number {
-  if (
-    typeof policyMaxBudgetUsd === "number" &&
-    Number.isFinite(policyMaxBudgetUsd) &&
-    policyMaxBudgetUsd > 0
-  ) {
-    return Math.min(policyMaxBudgetUsd, PLATFORM_MAX_SCAN_BUDGET_USD)
+  if (typeof policyMaxBudgetUsd === "number" && Number.isFinite(policyMaxBudgetUsd)) {
+    if (policyMaxBudgetUsd === 0) return 0
+    if (policyMaxBudgetUsd > 0) {
+      return Math.min(policyMaxBudgetUsd, PLATFORM_MAX_SCAN_BUDGET_USD)
+    }
   }
 
   return Math.min(

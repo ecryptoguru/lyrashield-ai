@@ -217,9 +217,14 @@ describe("command-builder", () => {
       expect(resolveScanBudgetUsd("DEEP", 6.5)).toBe(6.5)
     })
 
-    it("does not allow invalid policy budgets to remove the mode cap", () => {
-      expect(resolveScanBudgetUsd("STANDARD", 0)).toBe(3.2)
+    it("treats an explicit zero budget as a deliberate stop, not a fallback", () => {
+      expect(resolveScanBudgetUsd("STANDARD", 0)).toBe(0)
+    })
+
+    it("does not allow NaN/negative/undefined policy budgets to remove the mode cap", () => {
       expect(resolveScanBudgetUsd("STANDARD", Number.NaN)).toBe(3.2)
+      expect(resolveScanBudgetUsd("STANDARD", -1)).toBe(3.2)
+      expect(resolveScanBudgetUsd("STANDARD", undefined)).toBe(3.2)
     })
 
     it("clamps policy budgets to the platform maximum", () => {
