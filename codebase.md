@@ -2259,3 +2259,47 @@ A focused multi-package patch tightens the CLI contract, removes a scanner bypas
 ### Verification and follow-up
 
 - The patch should be verified with `pnpm lint`, `pnpm typecheck`, `pnpm --filter @lyrashield/cli test`, `pnpm --filter @lyrashield/agent-rules test`, `pnpm --filter @lyrashield/web typecheck`, `pnpm --filter @lyrashield/mcp typecheck`, and `git diff --check`. The new `middleware.ts` and the `eval-exec` severity change in particular need a security/operations review.
+
+## §61 — Deep Review v11 remediation (unmerged branch `codex/deep-review-v11`, 2026-08-01)
+
+A five-batch deep review remediation addressing stop-bleeding P0s, structural tenancy/RLS, worker recovery, build/deploy integrity, and polish/test regression fixes. Code, schema, and the new migration are the source of truth; this section maps the changes.
+
+### Batch A — stop-bleeding P0s
+
+- CLI install/agent P0s resolved. `packages/cli`, `packages/cli-alias`, and `packages/sdk` were adjusted to fix path/exit-code contract and installer behavior.
+
+### Batch B — structural tenancy and child-table RLS
+
+- `workspaceId` checks added to `packages/db/src/fix-proposal-service.ts`, `retest-service.ts`, `report-service.ts`, `agent-approval-service.ts`, and `schedule-service.ts`.
+- `packages/db/src/score-service.ts` and `apps/worker/src/jobs/run-scan.job.ts` updated to pass `workspaceId` and use `withWorkspaceRLS` where required.
+- New Prisma migration `packages/db/prisma/migrations/20260803000001_child_table_rls/migration.sql` adds fail-closed RLS policies for `ScanEvent`, `Evidence`, `ScorecardShare`, `ScorecardEvent`, `ReferralCode`, `ReferralAttribution`, `NotificationPreference`, and `OnboardingState`.
+- Corresponding tests updated in `packages/db/src/fix-proposal-service.test.ts`, `retest-service.test.ts`, `schedule-service.test.ts`, `rls.test.ts`, and `score-service.test.ts`.
+
+### Batch C — worker recovery
+
+- `apps/worker/src/engine/command-builder.ts`, `finding-persister.ts`, `result-integrity.ts`, `scanner-orchestrator.ts`, and `apps/worker/src/index.ts` hardened worker recovery, result integrity, and engine command building.
+- `apps/worker/src/jobs/run-scan.job.ts` and `run-scan.job.test.ts` updated.
+
+### Batch D — build/deploy integrity
+
+- OpenAPI spec builder moved from `apps/web/src/lib/openapi/` to `packages/types/src/openapi/` as a declared `@lyrashield/types/openapi` export. `apps/marketing/package.json` now depends on `@lyrashield/types`, and `apps/marketing/scripts/generate-openapi.ts` and `apps/web/src/app/api/v1/openapi.json/route.ts` consume the package export.
+- `packages/types/package.json` adds the `./openapi` export; `packages/types/src/openapi/index.ts` re-exports `buildOpenApiSpec` and `OpenApiComponents`.
+- `.github/workflows/deploy-azure.yml` pins all Docker and registry-cleanup actions to release SHAs (`docker/setup-buildx-action`, `docker/login-action`, `docker/build-push-action`, `dataaxiom/ghcr-cleanup-action`).
+- Build job emits `web_digest` and `worker_digest`; app and scanner Container Apps deploy as `image:tag@sha256:<digest>` for immutable provenance.
+- Worker image cleanup split to a separate `dataaxiom/ghcr-cleanup-action` invocation with `keep-n-tagged: 100` so a VM-pinned worker digest is not garbage-collected while still in use; web/scanner cleanup keeps `keep-n-tagged: 10`.
+
+### Batch E — polish and test regression fixes
+
+- `packages/cli/src/installers/atomic-write.ts` now checks only the immediate destination directory with `lstat` and `isSymbolicLink()`, fixing a false positive on macOS where `/var` is a symlink to `/private/var` and every temp path under it was rejected.
+- `packages/cli/src/__tests__/installers/atomic-write.test.ts` adds a test proving a symlinked destination directory is rejected while non-symlinked paths under a symlinked ancestor remain writable.
+- `packages/db/src/agent-approval-service.test.ts` adds a test proving `saveApprovalResult` scopes the update by both `id` and `workspaceId`.
+- `apps/agent/src/registry.test.ts` and `apps/worker/src/engine/finding-persister.test.ts` updated to match new call signatures.
+- `packages/agent-registry` snapshots regenerated to match the current 24-agent registry.
+
+### Verification
+
+- `pnpm lint` and `pnpm typecheck` pass for all 20 packages.
+- `git diff --check` clean.
+- Package unit tests pass for `@lyrashield/cli`, `@lyrashield/agent`, `@lyrashield/worker`, `@lyrashield/agent-registry`, `@lyrashield/types`, `@lyrashield/marketing`, `packages/db/src/agent-approval-service.test.ts`, `packages/db/src/score-service.test.ts`, `packages/db/src/scan-service.test.ts`, `packages/db/src/fix-proposal-service.test.ts`, `packages/db/src/retest-service.test.ts`, and `packages/db/src/rls.test.ts`.
+- Full `pnpm test` reports **1337 passed**, **10 skipped**, **3 failed**; failures are limited to DB integration suites (`account-deletion`, `audit-concurrency`, `soft-delete`) that require a live Postgres/Redis stack, which is not available in this environment.
+- `python3 .devin/scripts/checklist.py .` required checks (Security, Lint, Schema) pass.

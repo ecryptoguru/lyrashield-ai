@@ -88,11 +88,13 @@ behaviour against a real database, and refuses to run — rather than passing va
 when handed a role that can bypass RLS. CI provisions that restricted role and exports
 `RLS_RUNTIME_DATABASE_URL`.
 
-### 4. Container registry cleanup — RESOLVED 2026-07-30, now live
+### 4. Container registry cleanup — RESOLVED 2026-07-30, updated 2026-08-01
 
 **Status:** live. `cleanup-old-images` in `deploy-azure.yml` runs after every successful
-deploy with `dry-run: false`, keeping the most recent 10 tagged versions per package and
-removing dangling untagged manifests.
+deploy with `dry-run: false`, removing dangling untagged manifests. Web/scanner images
+keep the most recent 10 tagged versions; worker images keep the most recent 100 tagged
+versions because the worker VM pins images by digest and the approved digest may lag
+behind `main` deploys.
 
 **Why this existed.** Every merge to `main` pushes a new SHA-tagged image and re-points
 `:latest`; nothing ever deleted what it replaced. Multi-arch buildx pushes also leave several
@@ -110,7 +112,10 @@ than trusted blind.
 to delete" and "no untagged images found" for both packages — with `keep-n-tagged: 10` and
 only ~10 total accumulated versions, nothing had aged out yet. The first live run is a
 verified no-op, not a leap of faith; it starts actually pruning once deploy counts exceed the
-keep threshold.
+keep threshold. The 2026-08-01 update splits worker cleanup into its own step with
+`keep-n-tagged: 100`, emits `web_digest` and `worker_digest` from the build, and deploys
+app/scanner images as `image:tag@sha256:<digest>` so the running container is pinned to an
+immutable manifest even if the `:latest` tag moves.
 
 ### 5. Nightly backups have a schedule but no credentials — they are not actually running
 
