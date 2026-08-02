@@ -263,8 +263,11 @@ describe("POST /api/scans", () => {
       createdAt: new Date("2026-08-03T00:00:00.000Z"),
     } as never)
 
+    // Distinct workspace on purpose: POST is rate-limited per workspace and the
+    // limiter is shared across tests in this file, so reusing ws-1 would spend
+    // another request from its budget and push a later test into a 429.
     const res = await POST(
-      makeRequest({ workspaceId: "ws-1", targetId: "t1", goal: "TEST_APP", mode: "SAFE" })
+      makeRequest({ workspaceId: "ws-shape", targetId: "t1", goal: "TEST_APP", mode: "SAFE" })
     )
 
     expect(res.status).toBe(201)
