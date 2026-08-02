@@ -232,7 +232,11 @@ export class LyraShieldClient {
     try {
       const json = await res.json()
       const parsed = z
-        .object({ error: z.object({ code: z.string().optional(), message: z.string().optional() }).optional() })
+        .object({
+          error: z
+            .object({ code: z.string().optional(), message: z.string().optional() })
+            .optional(),
+        })
         .safeParse(json)
       if (parsed.success) {
         if (parsed.data.error?.message) message = parsed.data.error.message

@@ -148,12 +148,16 @@ export function ScansClient({
     setError(null)
     try {
       const preset = getScanPreset(selectedPreset)
-      const result = await apiPost("/api/scans", {
-        workspaceId,
-        targetId: selectedTarget,
-        goal: preset.goal,
-        mode: preset.mode,
-      }, { schema: scanItemSchema })
+      const result = await apiPost(
+        "/api/scans",
+        {
+          workspaceId,
+          targetId: selectedTarget,
+          goal: preset.goal,
+          mode: preset.mode,
+        },
+        { schema: scanItemSchema }
+      )
       setScans((prev) => [result, ...prev])
       setShowCreate(false)
       setSelectedTarget("")
@@ -189,10 +193,14 @@ export function ScansClient({
     if (!nextCursor) return
     setLoadingMore(true)
     try {
-      const result = await apiGetPaginated<ScanItem>("/api/scans", {
-        workspaceId,
-        cursor: nextCursor,
-      }, { schema: scansPaginatedSchema })
+      const result = await apiGetPaginated<ScanItem>(
+        "/api/scans",
+        {
+          workspaceId,
+          cursor: nextCursor,
+        },
+        { schema: scansPaginatedSchema }
+      )
       setScans((prev) => [...prev, ...result.items])
       setNextCursor(result.nextCursor)
     } catch {
@@ -206,7 +214,11 @@ export function ScansClient({
     setRefreshing(true)
     setError(null)
     try {
-      const result = await apiGetPaginated<ScanItem>("/api/scans", { workspaceId }, { schema: scansPaginatedSchema })
+      const result = await apiGetPaginated<ScanItem>(
+        "/api/scans",
+        { workspaceId },
+        { schema: scansPaginatedSchema }
+      )
       setScans(result.items)
       setNextCursor(result.nextCursor)
     } catch {
@@ -257,7 +269,11 @@ export function ScansClient({
         const { data, etag } = await apiGetPaginatedConditional(
           "/api/scans",
           { workspaceId, status: ACTIVE_STATUS_PARAM },
-          { signal: controller.signal, schema: scansPaginatedSchema, ...(pollEtag ? { etag: pollEtag } : {}) }
+          {
+            signal: controller.signal,
+            schema: scansPaginatedSchema,
+            ...(pollEtag ? { etag: pollEtag } : {}),
+          }
         )
         if (etag) pollEtag = etag
         if (data && !controller.signal.aborted) {

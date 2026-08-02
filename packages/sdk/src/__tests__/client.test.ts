@@ -279,11 +279,11 @@ describe("paginate", () => {
     expect(pages).toHaveLength(2)
     expect(pages[0]?.items[0]?.id).toBe("1")
     expect(pages[1]?.items[0]?.id).toBe("2")
-    expect(request).toHaveBeenCalledWith("GET", "/findings?limit=1", { parse: expect.any(Function) })
-    expect(request).toHaveBeenLastCalledWith(
-      "GET",
-      "/findings?limit=1&cursor=c2",
-      { parse: expect.any(Function) }
-    )
+    expect(request).toHaveBeenCalledWith("GET", "/findings?limit=1", {
+      parse: expect.any(Function),
+    })
+    expect(request).toHaveBeenLastCalledWith("GET", "/findings?limit=1&cursor=c2", {
+      parse: expect.any(Function),
+    })
   })
 })

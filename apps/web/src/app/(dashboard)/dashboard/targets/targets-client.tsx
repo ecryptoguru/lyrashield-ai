@@ -143,7 +143,9 @@ export function TargetsClient({
     try {
       const params: Record<string, string | undefined> = { workspaceId }
       if (filterProjectId) params.projectId = filterProjectId
-      const result = await apiGetPaginated(`/api/targets`, params, { schema: targetsPaginatedSchema })
+      const result = await apiGetPaginated(`/api/targets`, params, {
+        schema: targetsPaginatedSchema,
+      })
       setTargets(result.items)
       setNextCursor(result.nextCursor)
       setFetchError(null)

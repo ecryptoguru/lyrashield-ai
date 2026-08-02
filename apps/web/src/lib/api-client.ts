@@ -172,7 +172,11 @@ export async function apiGetConditional<T>(
       )
     }
 
-    return { data: schema ? parseWithSchema(json.data, schema, res.status) : (json.data as T), etag, status: res.status }
+    return {
+      data: schema ? parseWithSchema(json.data, schema, res.status) : (json.data as T),
+      etag,
+      status: res.status,
+    }
   } catch (err) {
     if (typeof err === "object" && err !== null && "name" in err && err.name === "AbortError") {
       if (!timedOut) throw new ApiError("ABORTED", "Request was cancelled", 0)

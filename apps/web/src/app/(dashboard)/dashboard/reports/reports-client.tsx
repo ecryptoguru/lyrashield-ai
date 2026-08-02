@@ -111,7 +111,11 @@ export function ReportsClient({
   const loadReports = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await apiGetPaginated<ReportItem>(`/api/reports`, { workspaceId }, { schema: reportsPaginatedSchema })
+      const res = await apiGetPaginated<ReportItem>(
+        `/api/reports`,
+        { workspaceId },
+        { schema: reportsPaginatedSchema }
+      )
       setReports(res.items)
       setNextCursor(res.nextCursor)
       setError(null)
@@ -145,7 +149,11 @@ export function ReportsClient({
           id: string
           target: { name: string }
           status: string
-        }>(`/api/scans`, { workspaceId, status: "COMPLETED" }, { schema: reportScansPaginatedSchema })
+        }>(
+          `/api/scans`,
+          { workspaceId, status: "COMPLETED" },
+          { schema: reportScansPaginatedSchema }
+        )
         const completedScans = res.items
         let linkedScanAvailable =
           !initialScanId || completedScans.some((scan) => scan.id === initialScanId)
@@ -156,7 +164,9 @@ export function ReportsClient({
               id: string
               target: { name: string }
               status: string
-            }>(`/api/scans/${initialScanId}?workspaceId=${encodeURIComponent(workspaceId)}`, { schema: reportScanSchema })
+            }>(`/api/scans/${initialScanId}?workspaceId=${encodeURIComponent(workspaceId)}`, {
+              schema: reportScanSchema,
+            })
             if (linkedScan.status === "COMPLETED") {
               completedScans.unshift(linkedScan)
               linkedScanAvailable = true
@@ -209,7 +219,11 @@ export function ReportsClient({
 
   const handleShare = async (reportId: string) => {
     try {
-      const res = await apiPost(`/api/reports/${reportId}`, { workspaceId, action: "share" }, { schema: reportShareSchema })
+      const res = await apiPost(
+        `/api/reports/${reportId}`,
+        { workspaceId, action: "share" },
+        { schema: reportShareSchema }
+      )
       const fullUrl = `${window.location.origin}${res.shareUrl}`
       setShareUrl(fullUrl)
       setSharedReportId(reportId)
@@ -515,7 +529,11 @@ export function ReportsClient({
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated<ReportItem>(`/api/reports`, { workspaceId, cursor }, { schema: reportsPaginatedSchema })
+              const res = await apiGetPaginated<ReportItem>(
+                `/api/reports`,
+                { workspaceId, cursor },
+                { schema: reportsPaginatedSchema }
+              )
               return { items: res.items, nextCursor: res.nextCursor }
             }}
             onItems={(items) => setReports((prev) => [...prev, ...items])}

@@ -103,7 +103,11 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   const loadSchedules = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await apiGetPaginated(`/api/schedules`, { workspaceId }, { schema: schedulesPaginatedSchema })
+      const res = await apiGetPaginated(
+        `/api/schedules`,
+        { workspaceId },
+        { schema: schedulesPaginatedSchema }
+      )
       setSchedules(res.items)
       setNextCursor(res.nextCursor)
       setError(null)
@@ -418,10 +422,14 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated(`/api/schedules`, {
-                workspaceId,
-                cursor,
-              }, { schema: schedulesPaginatedSchema })
+              const res = await apiGetPaginated(
+                `/api/schedules`,
+                {
+                  workspaceId,
+                  cursor,
+                },
+                { schema: schedulesPaginatedSchema }
+              )
               return { items: res.items, nextCursor: res.nextCursor }
             }}
             onItems={(items) => setSchedules((prev) => [...prev, ...items])}

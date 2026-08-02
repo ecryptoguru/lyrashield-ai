@@ -75,7 +75,9 @@ export function ApiKeysSection({
 
   const load = useCallback(async () => {
     try {
-      const data = await apiGet<ApiKeyRow[]>(`/api/api-keys?workspaceId=${workspaceId}`, { schema: apiKeysSchema })
+      const data = await apiGet<ApiKeyRow[]>(`/api/api-keys?workspaceId=${workspaceId}`, {
+        schema: apiKeysSchema,
+      })
       setKeys(data)
       setError(null)
     } catch (err) {
@@ -140,11 +142,15 @@ export function ApiKeysSection({
     setCreating(true)
     setError(null)
     try {
-      const created = await apiPost("/api/api-keys", {
-        workspaceId,
-        name: name.trim(),
-        scopes: scope === "write" ? ["read", "write"] : ["read"],
-      }, { schema: createdKeySchema })
+      const created = await apiPost(
+        "/api/api-keys",
+        {
+          workspaceId,
+          name: name.trim(),
+          scopes: scope === "write" ? ["read", "write"] : ["read"],
+        },
+        { schema: createdKeySchema }
+      )
       setCreatedKey(created)
       setHasCopiedKey(false)
       closeCreateForm()

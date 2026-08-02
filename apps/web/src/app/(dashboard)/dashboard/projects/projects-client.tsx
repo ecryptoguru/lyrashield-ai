@@ -67,7 +67,11 @@ export function ProjectsClient({
   const fetchProjects = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await apiGetPaginated<Project>(`/api/projects`, { workspaceId }, { schema: projectsPaginatedSchema })
+      const result = await apiGetPaginated<Project>(
+        `/api/projects`,
+        { workspaceId },
+        { schema: projectsPaginatedSchema }
+      )
       setProjects(result.items)
       setNextCursor(result.nextCursor)
       setFetchError(null)
@@ -107,7 +111,11 @@ export function ProjectsClient({
 
   const loadMore = useCallback(
     async (cursor: string) => {
-      return apiGetPaginated<Project>(`/api/projects`, { workspaceId, cursor }, { schema: projectsPaginatedSchema })
+      return apiGetPaginated<Project>(
+        `/api/projects`,
+        { workspaceId, cursor },
+        { schema: projectsPaginatedSchema }
+      )
     },
     [workspaceId]
   )

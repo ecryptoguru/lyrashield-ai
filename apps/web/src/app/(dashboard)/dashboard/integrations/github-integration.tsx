@@ -38,9 +38,13 @@ export function GithubIntegration({
     setLoading(true)
     setError(null)
     try {
-      const data = await apiPost("/api/integrations/github/install", {
-        workspaceId,
-      }, { schema: installUrlSchema })
+      const data = await apiPost(
+        "/api/integrations/github/install",
+        {
+          workspaceId,
+        },
+        { schema: installUrlSchema }
+      )
       window.location.href = data.installUrl
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to connect")
@@ -52,7 +56,10 @@ export function GithubIntegration({
     setLoading(true)
     setError(null)
     try {
-      const data = await apiGet<Repo[]>(`/api/integrations/github/repos?workspaceId=${workspaceId}`, { schema: githubReposSchema })
+      const data = await apiGet<Repo[]>(
+        `/api/integrations/github/repos?workspaceId=${workspaceId}`,
+        { schema: githubReposSchema }
+      )
       setRepos(data)
       setReposLoaded(true)
     } catch (e) {
@@ -67,17 +74,21 @@ export function GithubIntegration({
     setLoading(true)
     setError(null)
     try {
-      await apiPost("/api/targets", {
-        workspaceId,
-        type: "REPO",
-        name: selectedRepo.fullName,
-        repoProvider: "github",
-        repoOwner: selectedRepo.owner,
-        repoName: selectedRepo.name,
-        installationId: selectedRepo.installationId,
-        branch: selectedRepo.defaultBranch,
-        environment: "STAGING",
-      }, { schema: idSchema })
+      await apiPost(
+        "/api/targets",
+        {
+          workspaceId,
+          type: "REPO",
+          name: selectedRepo.fullName,
+          repoProvider: "github",
+          repoOwner: selectedRepo.owner,
+          repoName: selectedRepo.name,
+          installationId: selectedRepo.installationId,
+          branch: selectedRepo.defaultBranch,
+          environment: "STAGING",
+        },
+        { schema: idSchema }
+      )
       setTargetCreated(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create target")

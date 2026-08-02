@@ -58,7 +58,11 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
   const [error, setError] = useState<string | null>(null)
 
   const fetchNotifications = useCallback(async () => {
-    return apiGetPaginated<NotificationItem>(`/api/notifications`, { workspaceId }, { schema: notificationsPaginatedSchema })
+    return apiGetPaginated<NotificationItem>(
+      `/api/notifications`,
+      { workspaceId },
+      { schema: notificationsPaginatedSchema }
+    )
   }, [workspaceId])
 
   const loadNotifications = useCallback(async () => {
@@ -218,10 +222,14 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated<NotificationItem>(`/api/notifications`, {
-                workspaceId,
-                cursor,
-              }, { schema: notificationsPaginatedSchema })
+              const res = await apiGetPaginated<NotificationItem>(
+                `/api/notifications`,
+                {
+                  workspaceId,
+                  cursor,
+                },
+                { schema: notificationsPaginatedSchema }
+              )
               return { items: res.items, nextCursor: res.nextCursor }
             }}
             onItems={(items) => setNotifications((prev) => [...prev, ...items])}

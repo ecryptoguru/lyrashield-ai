@@ -237,10 +237,14 @@ export function FixesClient({
           <LoadMore
             cursor={nextCursor}
             onLoadMore={async (cursor) => {
-              const res = await apiGetPaginated<FixProposalItem>(`/api/fix-proposals`, {
-                workspaceId,
-                cursor,
-              }, { schema: fixProposalsPaginatedSchema })
+              const res = await apiGetPaginated<FixProposalItem>(
+                `/api/fix-proposals`,
+                {
+                  workspaceId,
+                  cursor,
+                },
+                { schema: fixProposalsPaginatedSchema }
+              )
               return { items: res.items, nextCursor: res.nextCursor }
             }}
             onItems={(items) => setProposals((prev) => [...prev, ...items])}

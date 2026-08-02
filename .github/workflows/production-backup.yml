@@ -63,11 +63,20 @@ jobs:
           encrypted_path="$dump_path.gpg"
           object_key="daily/${backup_name}.gpg"
 
+          # Supabase connection strings include ?uselibpqcompat=1 for the Node
+          # driver, but pg_dump inside postgres:17-alpine uses libpq and rejects
+          # that param. Strip only uselibpqcompat, keep everything else (sslmode,
+          # application_name, etc.) that pg_dump understands.
+          pg_dump_url="$DATABASE_DIRECT_URL"
+          pg_dump_url="${pg_dump_url//uselibpqcompat=1/}"
+          # Clean up any dangling & or ? left behind
+          pg_dump_url="$(sed 's/[?&]$//; s/&&/\&/g; s/?&/?/g' <<< "$pg_dump_url")"
+
           docker run --rm \
-            --env DATABASE_DIRECT_URL \
+            --env PG_URL="$pg_dump_url" \
             --volume "$RUNNER_TEMP:/backup" \
             postgres:17-alpine \
-            sh -ceu 'pg_dump --format=custom --schema=public --no-owner --no-acl --file="/backup/'"$backup_name"'" "$DATABASE_DIRECT_URL"'
+            sh -ceu 'pg_dump --format=custom --schema=public --no-owner --no-acl --file="/backup/'"$backup_name"'" "$PG_URL"'
 
           dump_sha256="$(sha256sum "$dump_path" | awk '{print $1}')"
           printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | \

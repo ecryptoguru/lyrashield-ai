@@ -54,7 +54,9 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
   const [productName, setProductName] = useState("")
   const [environment, setEnvironment] = useState("STAGING")
-  const [selectedGoal, setSelectedGoal] = useState<string>(initialState.selectedGoal ?? "LAUNCH_REVIEW")
+  const [selectedGoal, setSelectedGoal] = useState<string>(
+    initialState.selectedGoal ?? "LAUNCH_REVIEW"
+  )
   // Four-way step 2: which way the user chose to add their first target.
   // If the user already created a target (targetId is set) but we don't know
   // which path they took, leave path null — the step is already past step 2.
@@ -85,7 +87,9 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
 
   const fetchRepos = useCallback(() => {
     if (!data.workspaceId) return Promise.resolve<Repo[]>([])
-    return apiGet<Repo[]>(`/api/integrations/github/repos?workspaceId=${data.workspaceId}`, { schema: githubReposSchema })
+    return apiGet<Repo[]>(`/api/integrations/github/repos?workspaceId=${data.workspaceId}`, {
+      schema: githubReposSchema,
+    })
   }, [data.workspaceId])
 
   const loadRepos = useCallback(async () => {
@@ -136,10 +140,14 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
     setLoading(true)
     setError(null)
     try {
-      const workspace = await apiPost("/api/workspaces", {
-        name: workspaceName.trim(),
-        mode: "VIBE",
-      }, { schema: idSchema })
+      const workspace = await apiPost(
+        "/api/workspaces",
+        {
+          name: workspaceName.trim(),
+          mode: "VIBE",
+        },
+        { schema: idSchema }
+      )
       await persist({ workspaceId: workspace.id, currentStep: 1, skipped: false })
       setStep(1)
       track("signup_started", { method: "web" })
@@ -155,9 +163,13 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
     setLoading(true)
     setError(null)
     try {
-      const res = await apiPost("/api/integrations/github/install", {
-        workspaceId: data.workspaceId,
-      }, { schema: installUrlSchema })
+      const res = await apiPost(
+        "/api/integrations/github/install",
+        {
+          workspaceId: data.workspaceId,
+        },
+        { schema: installUrlSchema }
+      )
       track("github_connect_started")
       window.open(res.installUrl, "_blank", "noopener,noreferrer")
       setPath("github")
@@ -293,17 +305,21 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
     try {
       let targetId = data.targetId
       if (needsRepo && selectedRepo) {
-        const target = await apiPost("/api/targets", {
-          workspaceId: data.workspaceId,
-          name: productName.trim(),
-          type: "REPO",
-          repoProvider: "github",
-          repoOwner: selectedRepo.owner,
-          repoName: selectedRepo.name,
-          installationId: selectedRepo.installationId,
-          branch: selectedRepo.defaultBranch,
-          environment,
-        }, { schema: idSchema })
+        const target = await apiPost(
+          "/api/targets",
+          {
+            workspaceId: data.workspaceId,
+            name: productName.trim(),
+            type: "REPO",
+            repoProvider: "github",
+            repoOwner: selectedRepo.owner,
+            repoName: selectedRepo.name,
+            installationId: selectedRepo.installationId,
+            branch: selectedRepo.defaultBranch,
+            environment,
+          },
+          { schema: idSchema }
+        )
         targetId = target.id
       } else if (!needsRepo) {
         const payload = buildUrlTargetPayload({
@@ -320,12 +336,16 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
         }
       }
       await persist({ targetId, selectedGoal, currentStep: 3, skipped: false })
-      const scan = await apiPost("/api/scans", {
-        workspaceId: data.workspaceId,
-        targetId,
-        goal: selectedGoal,
-        mode: "SAFE",
-      }, { schema: idSchema })
+      const scan = await apiPost(
+        "/api/scans",
+        {
+          workspaceId: data.workspaceId,
+          targetId,
+          goal: selectedGoal,
+          mode: "SAFE",
+        },
+        { schema: idSchema }
+      )
       await persist({ currentStep: 4, completed: true, skipped: false, selectedGoal })
       track("first_run_started", {
         preset: selectedGoal,

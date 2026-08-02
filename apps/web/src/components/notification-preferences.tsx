@@ -50,11 +50,9 @@ export function NotificationPreferences() {
     setPrefs(next)
     setSaving(true)
     try {
-      const saved = await apiPatch(
-        "/api/notifications/preferences",
-        updates,
-        { schema: notificationPreferenceSchema }
-      )
+      const saved = await apiPatch("/api/notifications/preferences", updates, {
+        schema: notificationPreferenceSchema,
+      })
       setPrefs(saved)
       track("notification_opened", { event_type: "preferences_updated" })
     } catch {

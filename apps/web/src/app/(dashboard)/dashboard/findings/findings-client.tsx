@@ -248,7 +248,9 @@ export function FindingsClient({
         } else if (newFilter === "VERIFIED") {
           params.verified = "true"
         }
-        const res = await apiGetPaginated(`/api/findings`, params, { schema: findingsPaginatedSchema })
+        const res = await apiGetPaginated(`/api/findings`, params, {
+          schema: findingsPaginatedSchema,
+        })
         setFindings(res.items)
         setNextCursor(res.nextCursor)
       } catch {
@@ -484,7 +486,9 @@ export function FindingsClient({
               } else if (filter === "VERIFIED") {
                 params.verified = "true"
               }
-              const res = await apiGetPaginated(`/api/findings`, params, { schema: findingsPaginatedSchema })
+              const res = await apiGetPaginated(`/api/findings`, params, {
+                schema: findingsPaginatedSchema,
+              })
               return { items: res.items, nextCursor: res.nextCursor }
             }}
             onItems={(items) => setFindings((prev) => [...prev, ...items])}
@@ -783,7 +787,10 @@ function FindingDetailDrawer({
   const epssSummary = extractEpssPercentage(detail?.technicalDetail)
 
   const fetchDetail = useCallback(
-    () => apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, { schema: findingDetailSchema }),
+    () =>
+      apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+        schema: findingDetailSchema,
+      }),
     [finding.id, workspaceId]
   )
 
@@ -838,10 +845,9 @@ function FindingDetailDrawer({
         { schema: retestResultSchema }
       )
       setQueuedRetestScanId(result.scan.id)
-      const res = await apiGet(
-        `/api/findings/${finding.id}?workspaceId=${workspaceId}`,
-        { schema: findingDetailSchema }
-      )
+      const res = await apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+        schema: findingDetailSchema,
+      })
       setDetail(res ?? null)
     } catch (err) {
       setRetestError(err instanceof Error ? err.message : "Failed to create retest")
@@ -854,17 +860,20 @@ function FindingDetailDrawer({
     setPatchLoading(true)
     setPatchError(null)
     try {
-      const result = await apiPatch(`/api/findings/${finding.id}`, {
-        workspaceId,
-        action: "accept_risk",
-        reason: comment,
-      }, { schema: findingPatchResultSchema })
+      const result = await apiPatch(
+        `/api/findings/${finding.id}`,
+        {
+          workspaceId,
+          action: "accept_risk",
+          reason: comment,
+        },
+        { schema: findingPatchResultSchema }
+      )
       onStatusChange(finding.id, result.status)
       setShowAcceptRisk(false)
-      const res = await apiGet(
-        `/api/findings/${finding.id}?workspaceId=${workspaceId}`,
-        { schema: findingDetailSchema }
-      )
+      const res = await apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+        schema: findingDetailSchema,
+      })
       setDetail(res ?? null)
     } catch (err) {
       setPatchError(err instanceof Error ? err.message : "Failed to update status")
@@ -877,17 +886,20 @@ function FindingDetailDrawer({
     setPatchLoading(true)
     setPatchError(null)
     try {
-      const result = await apiPatch(`/api/findings/${finding.id}`, {
-        workspaceId,
-        action: "false_positive",
-        reason: comment,
-      }, { schema: findingPatchResultSchema })
+      const result = await apiPatch(
+        `/api/findings/${finding.id}`,
+        {
+          workspaceId,
+          action: "false_positive",
+          reason: comment,
+        },
+        { schema: findingPatchResultSchema }
+      )
       onStatusChange(finding.id, result.status)
       setShowFalsePositive(false)
-      const res = await apiGet(
-        `/api/findings/${finding.id}?workspaceId=${workspaceId}`,
-        { schema: findingDetailSchema }
-      )
+      const res = await apiGet(`/api/findings/${finding.id}?workspaceId=${workspaceId}`, {
+        schema: findingDetailSchema,
+      })
       setDetail(res ?? null)
     } catch (err) {
       setPatchError(err instanceof Error ? err.message : "Failed to update status")
