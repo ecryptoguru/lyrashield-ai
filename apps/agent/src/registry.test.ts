@@ -267,7 +267,7 @@ describe("ActionRegistry", () => {
     expect((await registry.execute("test-action", { value: "ok" }, context)).error?.code).toBe(
       "APPROVAL_ALREADY_USED"
     )
-    expect(saveApprovalResult).toHaveBeenCalledWith("approval-1", { success: true })
+    expect(saveApprovalResult).toHaveBeenCalledWith("approval-1", "ws-1", { success: true })
   })
 
   it("allows only one of two concurrent approval executions", async () => {

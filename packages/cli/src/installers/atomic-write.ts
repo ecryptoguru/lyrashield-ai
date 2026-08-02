@@ -1,4 +1,4 @@
-import { lstat, open, rename, realpath } from "node:fs/promises"
+import { lstat, open, rename } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { dirname, resolve } from "node:path"
 
@@ -19,8 +19,8 @@ export async function atomicWrite(filePath: string, content: string): Promise<vo
   const dir = dirname(absolutePath)
   try {
     // eslint-disable-next-line security/detect-non-literal-fs-filename
-    const realDir = await realpath(dir)
-    if (realDir !== dir) {
+    const dirStat = await lstat(dir)
+    if (dirStat.isSymbolicLink()) {
       throw new Error(`Refusing to write through a symlinked directory: ${dir}`)
     }
   } catch (error) {

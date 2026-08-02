@@ -109,7 +109,7 @@ describe("persistFindings", () => {
       expect.objectContaining({ data: expect.objectContaining({ status: "OPEN", fixedAt: null }) })
     )
     expect(prisma.evidence.createMany).toHaveBeenCalledWith({
-      data: expect.objectContaining({ findingId: "finding-1", checksum: "sha256-checksum" }),
+      data: [expect.objectContaining({ findingId: "finding-1", checksum: "sha256-checksum" })],
       skipDuplicates: true,
     })
   })
