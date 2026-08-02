@@ -83,11 +83,8 @@ export function generateLaunchReadinessReport(
         count: 1,
       })
   }
-  return generateLaunchReadinessReportFromAggregate(
-    [...grouped.values()],
-    hasCompletedScan,
-    coverage
-  )
+  const aggregates = [...grouped.values()]
+  return generateLaunchReadinessReportFromAggregate(aggregates, hasCompletedScan, coverage)
 }
 
 export function generateLaunchReadinessReportFromAggregate(
@@ -118,19 +115,17 @@ export function generateLaunchReadinessReportFromAggregate(
   // no numeric score to misread and no GO verdict to act on.
   if (coverage && !coverage.evaluated) {
     const why = coverage.reason ?? "No scanner was able to inspect the target."
+    const summary = `The scan completed but could not evaluate this target, so no findings could be produced. This is not a clean result. ${why}`
+    const condition = "Resolve the coverage failure and re-run before treating this as assessed"
     return {
       verdict: "INCONCLUSIVE",
       score: null,
-      summary:
-        "The scan completed but could not evaluate this target, so no findings could " +
-        `be produced. This is not a clean result. ${why}`,
+      summary,
       blockingFindings: 0,
       totalFindings: total,
       verifiedFindings: verified,
       bySeverity: {},
-      conditions: [
-        "Resolve the coverage failure and re-run before treating this target as assessed",
-      ],
+      conditions: [condition],
       recommendations: coverage.reason ? [coverage.reason] : [],
     }
   }
