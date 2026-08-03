@@ -1,10 +1,12 @@
 import { prisma, listScans } from "@lyrashield/db"
 import { redirect } from "next/navigation"
+import { Radar } from "lucide-react"
 import { ScansClient } from "./scans-client"
 import { SchedulesClient } from "../schedules/schedules-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { RUN_PLURAL, TARGET_PLURAL } from "@/lib/terminology"
 import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 const SCANS_TABS: SectionTab[] = [
   { value: "runs", label: "Runs", href: "/dashboard/scans?tab=runs" },
@@ -27,11 +29,12 @@ export default async function ScansPage({
 
   if (!workspaceId) {
     return (
-      <div className="rounded-lg border border-dashed p-12 text-center">
-        <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
-        <p className="text-muted-foreground text-sm">
-          Create a workspace first to start running {RUN_PLURAL.toLowerCase()}.
-        </p>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">{RUN_PLURAL}</h1>
+        <NoWorkspaceState
+          icon={Radar}
+          description={`Create a workspace first to start running ${RUN_PLURAL.toLowerCase()}.`}
+        />
       </div>
     )
   }

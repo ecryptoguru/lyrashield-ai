@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { UserPlus, Mail, Clock, Users } from "lucide-react"
 import { Button, Badge, FormField, Input, Select, Spinner } from "@lyrashield/ui"
+import { PageHeader } from "@/components/page-header"
 import { z } from "zod"
 import { apiGet, apiPost } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
@@ -140,18 +141,16 @@ export function TeamClient({
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Team Members</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Manage who has access to this workspace
-          </p>
-        </div>
-        <Button onClick={() => setShowInvite(!showInvite)} className="shrink-0">
-          <UserPlus className="h-4 w-4" aria-hidden="true" />
-          Invite Member
-        </Button>
-      </div>
+      <PageHeader
+        title="Team Members"
+        description="Manage who has access to this workspace"
+        action={
+          <Button onClick={() => setShowInvite(!showInvite)}>
+            <UserPlus className="h-4 w-4" aria-hidden="true" />
+            Invite Member
+          </Button>
+        }
+      />
 
       {showInvite && (
         <form

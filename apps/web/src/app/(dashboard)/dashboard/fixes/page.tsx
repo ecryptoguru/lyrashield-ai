@@ -1,7 +1,9 @@
 import { prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
+import { Wrench } from "lucide-react"
 import { FixesClient } from "./fixes-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 
 export default async function FixesPage() {
   const session = await getCachedSession()
@@ -11,11 +13,12 @@ export default async function FixesPage() {
 
   if (!workspaceId) {
     return (
-      <div className="rounded-lg border border-dashed p-12 text-center">
-        <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
-        <p className="text-muted-foreground text-sm">
-          Create a workspace first to manage fix proposals.
-        </p>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">Fix proposals</h1>
+        <NoWorkspaceState
+          icon={Wrench}
+          description="Create a workspace first to manage fix proposals."
+        />
       </div>
     )
   }

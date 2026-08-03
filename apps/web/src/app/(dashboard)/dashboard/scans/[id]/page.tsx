@@ -1,6 +1,8 @@
 import { getScanWithEvents, prisma } from "@lyrashield/db"
 import { redirect } from "next/navigation"
+import { Radar } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { ScanDetailClient } from "./scan-detail-client"
 
 export default async function ScanDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,9 +14,12 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
 
   if (!workspaceId) {
     return (
-      <div className="rounded-lg border border-dashed p-12 text-center">
-        <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
-        <p className="text-muted-foreground text-sm">Create a workspace before viewing scans.</p>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">Trust Run</h1>
+        <NoWorkspaceState
+          icon={Radar}
+          description="Create a workspace before viewing trust runs."
+        />
       </div>
     )
   }
