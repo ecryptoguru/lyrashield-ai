@@ -228,6 +228,74 @@ describe("POST /api/scans", () => {
       })
     )
     expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ policyId: "default-policy" }))
+  })
+
+  /**
+   * The Trust Runs page prepends this response straight into its scan list and
+   * validates it against the list-item schema. When POST returned only
+   * {id,status,goal,mode,targetId,createdAt}, that validation failed and the
+   * user saw "Response validation failed" — on a scan that HAD been created and
+   * enqueued. Asserting the full contract here keeps the two shapes from
+   * drifting apart again.
+   */
+  it("returns the full scan-list-item shape the client validates against", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "t1",
+      name: "Staging Site",
+      type: "WEB_APP",
+      url: "https://example.com",
+      repoFullName: null,
+    } as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-shape",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      triggerType: "manual",
+      startedAt: null,
+      endedAt: null,
+      durationMs: null,
+      summary: null,
+      errorCategory: null,
+      errorMessage: null,
+      targetId: "t1",
+      createdAt: new Date("2026-08-03T00:00:00.000Z"),
+    } as never)
+
+    // Distinct workspace on purpose: POST is rate-limited per workspace and the
+    // limiter is shared across tests in this file, so reusing ws-1 would spend
+    // another request from its budget and push a later test into a 429.
+    const res = await POST(
+      makeRequest({ workspaceId: "ws-shape", targetId: "t1", goal: "TEST_APP", mode: "SAFE" })
+    )
+
+    expect(res.status).toBe(201)
+    const { data } = await res.json()
+
+    // Every field the client's scanItemSchema requires must be present.
+    expect(data).toMatchObject({
+      id: "scan-shape",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      triggerType: "manual",
+      startedAt: null,
+      endedAt: null,
+      summary: null,
+      errorCategory: null,
+      errorMessage: null,
+    })
+    // `target` must be the nested object, not a bare targetId.
+    expect(data.target).toEqual({
+      id: "t1",
+      name: "Staging Site",
+      type: "WEB_APP",
+      url: "https://example.com",
+      repoFullName: null,
+    })
+    // Dates serialize to ISO strings, matching the SSR-rendered payload.
+    expect(data.createdAt).toBe("2026-08-03T00:00:00.000Z")
     expect(prisma.auditLog.create).toHaveBeenCalled()
   })
 
