@@ -6,7 +6,7 @@ LyraShield AI helps builders review an application before release and retain an 
 
 ## Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report
 
-This guide covers the public Lite Check, authenticated dashboard, scan choices, findings, fixes, reports, scorecards, teams, integrations, schedules, notifications, the CLI, MCP tools, and current limitations.
+This guide covers the public Lite Check, authenticated dashboard, scan choices, findings, fixes, reports, scorecards, teams, integrations (agents and services), schedules, notifications, the CLI, MCP tools, and current limitations.
 
 ## 1. Important product boundaries
 
@@ -124,7 +124,7 @@ The primary navigation contains four lifecycle destinations:
 
 **Review Queue** appears in the Workspace section of the sidebar and mobile More sheet only when pending agent approvals or fix proposals exist. It carries a count badge and links to the approval page. The route remains reachable by URL for authorized users even when the queue is empty.
 
-Open **More** (mobile) or the **Workspace** sidebar group (desktop) for Agents, Team, Integrations, Notifications, and Settings. Use the workspace switcher above the navigation to change the active workspace. Every page and action is evaluated against the active workspace and your role.
+Open **More** (mobile) or the **Workspace** sidebar group (desktop) for Integrations, Team, Notifications, and Settings. Integrations contains two tabs: **Services** (GitHub, MCP, CLI) and **Agents** (coding-agent setup). Use the workspace switcher above the navigation to change the active workspace. Every page and action is evaluated against the active workspace and your role.
 
 ## 6. Projects
 
@@ -171,7 +171,7 @@ URL and API targets use the pinned deterministic URL scanner. The external AI en
 
 ### 7.3 GitHub-connected target
 
-You may also create a repository target from **More → Integrations → GitHub**:
+You may also create a repository target from **More → Integrations → Services → GitHub**:
 
 1. Connect the GitHub App.
 2. Load repositories the installation is authorized to access.
@@ -379,6 +379,11 @@ Available roles:
 The server checks permissions for every protected API action. A visible page does not override the role check.
 
 ## 20. Integrations
+
+The **Integrations** page has two tabs:
+
+- **Services** — GitHub, MCP, and CLI connections.
+- **Agents** — coding-agent setup (Claude, Cursor, VS Code, and others) with install commands and rules files.
 
 ### GitHub
 
