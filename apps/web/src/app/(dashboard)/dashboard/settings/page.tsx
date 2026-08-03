@@ -100,7 +100,7 @@ export default async function SettingsPage() {
 
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader>
-          <CardTitle>Production beta</CardTitle>
+          <CardTitle as="h2">Production beta</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-sm leading-6">
@@ -130,7 +130,7 @@ export default async function SettingsPage() {
           description={`${unreadNotifications} unread`}
         />
         <SettingsLink
-          href="/dashboard/schedules"
+          href="/dashboard/scans?tab=monitoring"
           icon={CalendarClock}
           title="Schedules"
           description={`${enabledSchedules} active`}

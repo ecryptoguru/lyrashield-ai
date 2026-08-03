@@ -2,7 +2,9 @@ import { cache } from "react"
 import { revalidateTag, unstable_cache } from "next/cache"
 import { cookies } from "next/headers"
 import { listFindings, prisma } from "@lyrashield/db"
+import type { MemberRole } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { selectActiveWorkspaceId } from "./workspace-selection"
 
 export const getCachedSession = cache(async () => {
@@ -64,6 +66,15 @@ export const getCachedOnboardingState = cache(async (userId: string) => {
 export const getCachedFindings = cache(async (workspaceId: string) => {
   return listFindings({ workspaceId })
 })
+
+export const getCachedPendingApprovals = cache(
+  async (workspaceId: string, role: MemberRole): Promise<number> => {
+    if (!hasPermission(role, PERMISSIONS.agent.view)) return 0
+    return prisma.agentApproval.count({
+      where: { workspaceId, status: "PENDING" },
+    })
+  }
+)
 
 export const DASHBOARD_CACHE_TAG = "dashboard-aggregates"
 

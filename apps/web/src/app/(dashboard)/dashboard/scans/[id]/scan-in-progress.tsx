@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { Badge, Button, Card } from "@lyrashield/ui"
 import { formatTime } from "@/lib/date-format"
+import { estimateRunMinutes, formatEstimate } from "@/lib/estimator"
 
 interface ScanEvent {
   id: string
@@ -115,6 +116,7 @@ function derivePhases(status: string, events: ScanEvent[]): Phase[] {
 
 interface ScanInProgressProps {
   status: string
+  mode: string
   startedAt: string | null
   elapsedTime: string
   events: ScanEvent[]
@@ -130,6 +132,7 @@ interface ScanInProgressProps {
 
 export function ScanInProgress({
   status,
+  mode,
   startedAt,
   elapsedTime,
   events,
@@ -139,6 +142,7 @@ export function ScanInProgress({
 }: ScanInProgressProps) {
   const currentStage = deriveCurrentStage(status, events)
   const phases = derivePhases(status, events)
+  const estimatedTime = formatEstimate(estimateRunMinutes(mode))
   const feedRef = useRef<HTMLUListElement>(null)
 
   // Auto-scroll the feed to show newest events
@@ -204,6 +208,7 @@ export function ScanInProgress({
                     </span>
                   </span>
                 )}
+                <span className="font-medium">Estimated time: {estimatedTime}</span>
                 {onRefresh && (
                   <Button
                     type="button"
@@ -336,6 +341,7 @@ export function ScanInProgress({
             aria-live="polite"
             aria-relevant="additions"
             aria-label="Scan activity feed"
+            tabIndex={0}
           >
             {recentEvents.map((event, idx) => {
               const isNewest = idx === recentEvents.length - 1

@@ -162,7 +162,11 @@ export default async function DashboardPage() {
       href:
         readiness.verdict === "NOT_EVALUATED" ? "/dashboard/scans?new=1" : "/dashboard/findings",
     },
-    { label: "Assurance shared", complete: reportCount > 0, href: "/dashboard/reports" },
+    {
+      label: "Assurance shared",
+      complete: reportCount > 0,
+      href: "/dashboard/findings?tab=reports",
+    },
   ]
 
   const latestScan = recentScans[0]

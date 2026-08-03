@@ -2,10 +2,10 @@
 // These are conservative UX estimates, not runtime guarantees.
 
 const MINUTES_BY_MODE: Record<string, { low: number; high: number }> = {
-  SAFE: { low: 1, high: 3 },
-  QUICK: { low: 3, high: 8 },
-  STANDARD: { low: 8, high: 20 },
-  DEEP: { low: 20, high: 60 },
+  SAFE: { low: 5, high: 8 },
+  QUICK: { low: 5, high: 8 },
+  STANDARD: { low: 8, high: 15 },
+  DEEP: { low: 25, high: 40 },
   CUSTOM: { low: 20, high: 60 },
 }
 

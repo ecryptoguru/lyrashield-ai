@@ -1,29 +1,18 @@
-import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { FileText } from "lucide-react"
-import { ReportsClient } from "./reports-client"
-import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { redirect } from "next/navigation"
 
+/**
+ * Compatibility route. Reports now live under the Issues → Reports tab at
+ * /dashboard/findings?tab=reports. This permanent redirect preserves the
+ * `scanId` query parameter used by report-generation deep links.
+ */
 export default async function ReportsPage({
   searchParams,
 }: {
   searchParams: Promise<{ scanId?: string }>
 }) {
-  const session = await getCachedSession()
-  if (!session) return null
-
-  const workspaceId = await getCachedWorkspaceId(session.userId)
-  if (!workspaceId) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
-        <NoWorkspaceState
-          icon={FileText}
-          description="Create a workspace during onboarding to manage reports."
-        />
-      </div>
-    )
-  }
-
   const { scanId } = await searchParams
-  return <ReportsClient workspaceId={workspaceId} initialScanId={scanId} />
+  const target = scanId
+    ? `/dashboard/findings?tab=reports&scanId=${encodeURIComponent(scanId)}`
+    : "/dashboard/findings?tab=reports"
+  redirect(target)
 }

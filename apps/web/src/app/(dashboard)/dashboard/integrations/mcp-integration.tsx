@@ -113,7 +113,11 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
               <span className="ml-1">{copiedKey === "local" ? "Copied" : "Copy"}</span>
             </Button>
           </div>
-          <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5">
+          <pre
+            className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5"
+            tabIndex={0}
+            aria-label="MCP local configuration"
+          >
             <code>{localConfig}</code>
           </pre>
         </div>
@@ -138,7 +142,11 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
               <span className="ml-1">{copiedKey === "remote" ? "Copied" : "Copy"}</span>
             </Button>
           </div>
-          <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5">
+          <pre
+            className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5"
+            tabIndex={0}
+            aria-label="MCP remote configuration"
+          >
             <code>{remoteConfig}</code>
           </pre>
         </div>

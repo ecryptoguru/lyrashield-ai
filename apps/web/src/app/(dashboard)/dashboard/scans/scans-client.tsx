@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Radar, Play, X, RefreshCw, ChevronRight, ChevronDown, Check } from "lucide-react"
+import { Radar, Play, X, RefreshCw, ChevronRight, ChevronDown, Check, Clock } from "lucide-react"
 import {
   Button,
   buttonVariants,
@@ -19,17 +19,19 @@ import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
-import { RUN_PLURAL, RUN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
+import { RUN_PLURAL, RUN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import {
   getScanPreset,
+  getScanPresetEstimate,
   SCAN_PRESETS,
   SCAN_PRESET_ORDER,
   type ScanPresetId,
 } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { getGoalLabel } from "@/lib/labels"
+import { formatEstimate } from "@/lib/estimator"
 
 function modeBadgeVariant(mode: string): "default" | "success" | "info" | "warning" | "muted" {
   switch (mode) {
@@ -308,28 +310,20 @@ export function ScansClient({
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{RUN_PLURAL}</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Run and monitor {RUN_PLURAL.toLowerCase()} against your {TARGET_PLURAL.toLowerCase()}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshCw
-              className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              aria-hidden="true"
-            />
-            Refresh
+      <div className="mb-4 flex justify-end gap-2">
+        <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+          <RefreshCw
+            className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+            aria-hidden="true"
+          />
+          Refresh
+        </Button>
+        {targets.length > 0 && (
+          <Button onClick={() => setShowCreate(!showCreate)}>
+            <Play className="mr-2 h-4 w-4" aria-hidden="true" />
+            New {RUN_SINGULAR}
           </Button>
-          {targets.length > 0 && (
-            <Button onClick={() => setShowCreate(!showCreate)}>
-              <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-              New {RUN_SINGULAR}
-            </Button>
-          )}
-        </div>
+        )}
       </div>
 
       {error && (
@@ -458,6 +452,13 @@ export function ScansClient({
                 {selectedTarget && !selectedTargetUsesEngine
                   ? "This target uses deterministic scanners."
                   : "A protected limit is applied automatically."}
+              </p>
+              <p
+                className="text-foreground mt-3 flex items-center gap-1.5 text-sm font-medium"
+                role="status"
+              >
+                <Clock className="text-muted-foreground size-4" aria-hidden="true" />
+                Estimated time: {formatEstimate(getScanPresetEstimate(selectedPreset))}
               </p>
             </div>
 

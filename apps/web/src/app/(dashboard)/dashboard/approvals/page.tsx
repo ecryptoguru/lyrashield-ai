@@ -1,15 +1,57 @@
-import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { getCachedSession, getCachedWorkspaceId, getCachedWorkspaces } from "@/lib/cache"
 import { listApprovals, prisma } from "@lyrashield/db"
-import { APPROVAL_CENTER, APPROVAL_PLURAL } from "@/lib/terminology"
-import { ClipboardCheck } from "lucide-react"
+import type { MemberRole } from "@lyrashield/db"
+import { REVIEW_QUEUE_LABEL, APPROVAL_PLURAL } from "@/lib/terminology"
+import { ClipboardCheck, ShieldX } from "lucide-react"
+import { EmptyState } from "@lyrashield/ui"
 import { ApprovalsClient } from "./approvals-client"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 
 export default async function ApprovalsPage() {
   const session = await getCachedSession()
   if (!session) return null
 
   const workspaceId = await getCachedWorkspaceId(session.userId)
+  const workspaces = await getCachedWorkspaces(session.userId)
+  const active = workspaceId ? workspaces.find((w) => w.id === workspaceId) : null
+  const canView = active ? hasPermission(active.role as MemberRole, PERMISSIONS.agent.view) : false
+
+  if (!workspaceId) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{REVIEW_QUEUE_LABEL}</h1>
+          <p className="text-muted-foreground text-sm">
+            Review and approve agent actions and fix proposals before they are applied.
+          </p>
+        </div>
+        <NoWorkspaceState
+          icon={ClipboardCheck}
+          description={`Create a workspace during onboarding to view ${APPROVAL_PLURAL.toLowerCase()}.`}
+        />
+      </div>
+    )
+  }
+
+  if (!canView) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{REVIEW_QUEUE_LABEL}</h1>
+          <p className="text-muted-foreground text-sm">
+            Review and approve agent actions and fix proposals before they are applied.
+          </p>
+        </div>
+        <EmptyState
+          icon={ShieldX}
+          title="Access restricted"
+          description="You do not have permission to view the Review Queue."
+          action={null}
+        />
+      </div>
+    )
+  }
 
   const [approvals, hasProposals] = await Promise.all([
     workspaceId
@@ -31,24 +73,17 @@ export default async function ApprovalsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{APPROVAL_CENTER}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{REVIEW_QUEUE_LABEL}</h1>
         <p className="text-muted-foreground text-sm">
           Review and approve agent actions and fix proposals before they are applied.
         </p>
       </div>
 
-      {!workspaceId ? (
-        <NoWorkspaceState
-          icon={ClipboardCheck}
-          description={`Create a workspace during onboarding to view ${APPROVAL_PLURAL.toLowerCase()}.`}
-        />
-      ) : (
-        <ApprovalsClient
-          workspaceId={workspaceId}
-          approvals={approvals}
-          hasProposals={hasProposals}
-        />
-      )}
+      <ApprovalsClient
+        workspaceId={workspaceId}
+        approvals={approvals}
+        hasProposals={hasProposals}
+      />
     </div>
   )
 }

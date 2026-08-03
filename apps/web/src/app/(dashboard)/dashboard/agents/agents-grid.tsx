@@ -60,7 +60,7 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
     <Card className="flex min-h-full flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="min-w-0 flex-1 text-base leading-tight tracking-tight">
+          <CardTitle as="h2" className="min-w-0 flex-1 text-base leading-tight tracking-tight">
             {agent.displayName}
           </CardTitle>
           <StrategyBadge strategy={agent.installStrategy} />
@@ -99,7 +99,7 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
             </p>
           </div>
         ) : (
-          <div className="min-h-[2rem]" />
+          <div className="min-h-8" />
         )}
 
         <div className="mt-auto flex flex-col gap-2">

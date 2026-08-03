@@ -202,13 +202,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Schedules</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Set up recurring scans to monitor your targets
-          </p>
-        </div>
+      <div className="mb-4 flex justify-end">
         <Button size="sm" onClick={() => setShowCreateForm(!showCreateForm)}>
           <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
           New Schedule

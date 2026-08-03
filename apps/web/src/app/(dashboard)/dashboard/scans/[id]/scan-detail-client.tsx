@@ -550,6 +550,7 @@ export function ScanDetailClient({
         <div className="mb-6">
           <ScanInProgress
             status={scan.status}
+            mode={scan.mode}
             startedAt={scan.startedAt}
             elapsedTime={elapsedTime}
             events={displayEvents}
@@ -686,7 +687,7 @@ export function ScanDetailClient({
                   href={
                     topFinding
                       ? `/dashboard/findings?finding=${encodeURIComponent(topFinding.id)}`
-                      : `/dashboard/reports?scanId=${encodeURIComponent(scan.id)}`
+                      : `/dashboard/findings?tab=reports&scanId=${encodeURIComponent(scan.id)}`
                   }
                   className={buttonVariants({ className: "shrink-0" })}
                 >

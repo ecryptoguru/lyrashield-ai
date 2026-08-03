@@ -33,6 +33,7 @@ export const AUTOMATION_PLURAL = "Automations"
 export const APPROVAL_SINGULAR = "Approval"
 export const APPROVAL_PLURAL = "Approvals"
 export const APPROVAL_CENTER = "Approval Centre"
+export const REVIEW_QUEUE_LABEL = "Review Queue"
 
 export const NOTIFICATION_SINGULAR = "Notification"
 export const NOTIFICATION_PLURAL = "Notifications"

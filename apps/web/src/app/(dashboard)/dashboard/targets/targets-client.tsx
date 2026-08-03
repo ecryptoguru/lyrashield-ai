@@ -529,7 +529,11 @@ export function TargetsClient({
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border shadow-sm">
+        <div
+          className="overflow-x-auto rounded-xl border shadow-sm"
+          tabIndex={0}
+          aria-label="Targets list"
+        >
           <table className="w-full text-sm">
             <thead className="bg-muted/30 border-b">
               <tr>
