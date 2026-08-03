@@ -153,7 +153,13 @@ export function ScanInProgress({
   return (
     <div className="space-y-4">
       {/* Status hero card */}
-      <Card className="overflow-hidden p-0" role="status" aria-live="polite" aria-busy="true" aria-label="Scan in progress">
+      <Card
+        className="overflow-hidden p-0"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        aria-label="Scan in progress"
+      >
         {/*
           Indeterminate progress affordance: a pulsing bar.
           The global prefers-reduced-motion rule kills the animation;

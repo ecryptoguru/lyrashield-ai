@@ -29,9 +29,7 @@ export function AuthSplitLayout({
   return (
     <main className="relative flex min-h-screen">
       {/* Product panel — desktop only */}
-      <aside
-        className="relative hidden w-[46%] flex-col justify-between overflow-hidden border-r md:flex"
-      >
+      <aside className="relative hidden w-[46%] flex-col justify-between overflow-hidden border-r md:flex">
         <div className="security-grid pointer-events-none absolute inset-0 opacity-[0.05]" />
         <div className="gradient-hero pointer-events-none absolute inset-0" />
         <div className="relative flex flex-col gap-8 p-10 lg:p-14">

@@ -356,7 +356,13 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       )}
 
       {loading && schedules.length === 0 ? (
-        <div className="space-y-3" role="status" aria-live="polite" aria-busy="true" aria-label="Loading schedules">
+        <div
+          className="space-y-3"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          aria-label="Loading schedules"
+        >
           {[0, 1, 2].map((item) => (
             <Skeleton key={item} className="h-28 w-full" />
           ))}

@@ -144,8 +144,12 @@ function PreferenceRow({
       <div className="flex items-start gap-3">
         <Icon className="text-primary mt-0.5 size-5" aria-hidden={true} />
         <div>
-          <p id={labelId} className="font-medium">{title}</p>
-          <p id={descId} className="text-muted-foreground text-sm">{description}</p>
+          <p id={labelId} className="font-medium">
+            {title}
+          </p>
+          <p id={descId} className="text-muted-foreground text-sm">
+            {description}
+          </p>
         </div>
       </div>
       <Switch
