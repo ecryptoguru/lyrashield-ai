@@ -155,7 +155,7 @@ describe("account deletion", () => {
    * If this test throws, the failure message IS the answer we don't have from
    * production logs — read it before touching account-deletion.ts again.
    */
-  it("deletes a sole-owner workspace with real usage: target, scans, events, coverage, notifications, and its own audit trail", async () => {
+  it("deletes a sole-owner workspace with real usage: target, scans, events, coverage, audit trail", async () => {
     const target = await prisma.target.create({
       data: {
         workspaceId: richWorkspaceId,
@@ -187,7 +187,12 @@ describe("account deletion", () => {
       await prisma.scanCoverageReceipt.createMany({
         data: [
           { scanId: scan.id, scanner: "url", controlId: "url-scan", status: "BLOCKED" },
-          { scanId: scan.id, scanner: "url", controlId: "missing-headers", status: "NOT_APPLICABLE" },
+          {
+            scanId: scan.id,
+            scanner: "url",
+            controlId: "missing-headers",
+            status: "NOT_APPLICABLE",
+          },
         ],
       })
     }
@@ -207,14 +212,31 @@ describe("account deletion", () => {
     // extension's own advisory-locked hash-chain logic) so this matches
     // production byte-for-byte rather than a raw insert.
     await prisma.auditLog.create({
-      data: { workspaceId: richWorkspaceId, actorUserId: richUserId, action: "workspace.created", resourceType: "workspace" },
+      data: {
+        workspaceId: richWorkspaceId,
+        actorUserId: richUserId,
+        action: "workspace.created",
+        resourceType: "workspace",
+      },
     })
     await prisma.auditLog.create({
-      data: { workspaceId: richWorkspaceId, actorUserId: richUserId, action: "target.created", resourceType: "target", resourceId: target.id },
+      data: {
+        workspaceId: richWorkspaceId,
+        actorUserId: richUserId,
+        action: "target.created",
+        resourceType: "target",
+        resourceId: target.id,
+      },
     })
     for (const scan of scans) {
       await prisma.auditLog.create({
-        data: { workspaceId: richWorkspaceId, actorUserId: richUserId, action: "scan.completed", resourceType: "scan", resourceId: scan.id },
+        data: {
+          workspaceId: richWorkspaceId,
+          actorUserId: richUserId,
+          action: "scan.completed",
+          resourceType: "scan",
+          resourceId: scan.id,
+        },
       })
     }
 
@@ -224,11 +246,10 @@ describe("account deletion", () => {
     expect(await prisma.workspace.findUnique({ where: { id: richWorkspaceId } })).toBeNull()
     expect(await prisma.target.findUnique({ where: { id: target.id } })).toBeNull()
     expect(await prisma.scan.count({ where: { workspaceId: richWorkspaceId } })).toBe(0)
-    expect(
-      await prisma.$queryRaw<
-        Array<{ count: bigint }>
-      >`SELECT count(*)::bigint AS count FROM "ScanEvent" WHERE "scanId" = ANY(${scans.map((s) => s.id)})`
-    ).toMatchObject([{ count: 0n }])
+    const scanIds = scans.map((scan) => scan.id)
+    const remainingEvents = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT count(*)::bigint AS count FROM "ScanEvent" WHERE "scanId" = ANY(${scanIds})`
+    expect(remainingEvents).toMatchObject([{ count: 0n }])
   })
 
   it("anonymizes attribution in a co-owned workspace and keeps the audit chain", async () => {
