@@ -1,17 +1,46 @@
+import { listAgents } from "@lyrashield/agent-registry"
 import { prisma } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
-import Link from "next/link"
 import { Plug } from "lucide-react"
+import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
+import { AgentsGrid, type AgentCardData } from "../agents/agents-grid"
 import { GithubIntegration } from "./github-integration"
 import { McpIntegration } from "./mcp-integration"
 import { CliIntegration } from "./cli-integration"
-import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { NoWorkspaceState } from "@/components/no-workspace-state"
+
+const INTEGRATION_TABS: SectionTab[] = [
+  { value: "services", label: "Services", href: "/dashboard/integrations?tab=services" },
+  { value: "agents", label: "Agents", href: "/dashboard/integrations?tab=agents" },
+]
+
+type IntegrationTab = "services" | "agents"
+
+function normalizeTab(value: string | undefined): IntegrationTab {
+  if (value === "agents") return "agents"
+  return "services"
+}
+
+function mapAgentsToCardData(): AgentCardData[] {
+  return listAgents().map((a) => ({
+    id: a.id,
+    displayName: a.displayName,
+    docsSlug: a.docsSlug,
+    installStrategy: a.installStrategy,
+    locations: a.locations.map((l) => ({
+      scope: l.scope,
+      path: l.path,
+      sharedByConvention: l.sharedByConvention,
+    })),
+    rulesFiles: [...a.rulesFiles],
+  }))
+}
 
 export default async function IntegrationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ github?: string }>
+  searchParams: Promise<{ github?: string; tab?: string }>
 }) {
   const session = await getCachedSession()
   if (!session) return null
@@ -20,12 +49,7 @@ export default async function IntegrationsPage({
   if (!workspaceId) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
-          <p className="text-muted-foreground text-sm">
-            Connect external services to your workspace.
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
         <NoWorkspaceState
           icon={Plug}
           description="Create a workspace during onboarding to manage integrations."
@@ -34,20 +58,9 @@ export default async function IntegrationsPage({
     )
   }
 
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: workspaceId },
-    select: { name: true },
-  })
-  const workspaceName = workspace?.name ?? "your workspace"
-
-  const integrations = await prisma.integration.findMany({
-    where: { workspaceId, deletedAt: null },
-  })
-
-  const githubIntegration = integrations.find((i) => i.type === "GITHUB")
-  const githubStatus = (await searchParams).github
-  const githubVerificationRequired = githubStatus === "verification_required"
-  const githubAlreadyClaimed = githubStatus === "already_claimed"
+  const params = await searchParams
+  const tab = normalizeTab(params.tab)
+  const tabs = INTEGRATION_TABS
 
   const appOriginRaw = (env.NEXT_PUBLIC_APP_URL as string | undefined) ?? ""
   const appOrigin = appOriginRaw.replace(/\/+$/, "")
@@ -57,32 +70,41 @@ export default async function IntegrationsPage({
     "https://lyrashield.ai"
   const docsUrl = `${marketingUrl}/docs/integrations`
 
-  return (
-    <div className="space-y-6">
+  const integrations = await prisma.integration.findMany({
+    where: { workspaceId, deletedAt: null },
+  })
+  const githubIntegration = integrations.find((i) => i.type === "GITHUB")
+  const githubStatus = params.github
+  const githubVerificationRequired = githubStatus === "verification_required"
+  const githubAlreadyClaimed = githubStatus === "already_claimed"
+
+  if (tab === "agents") {
+    const agents = mapAgentsToCardData()
+    return (
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
-        <p className="text-muted-foreground text-sm">
-          Connect external services to your workspace ({workspaceName}).
-        </p>
-        <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-6">
-          Three ways to plug in: <span className="text-foreground font-medium">GitHub</span> to scan
-          repositories, the <span className="text-foreground font-medium">MCP server</span> to give
-          your coding agent live evidence, or the{" "}
-          <span className="text-foreground font-medium">CLI</span> to scan from your terminal or CI.
-          Looking for per-agent setup? See{" "}
-          <Link
-            href="/dashboard/agents"
-            className="text-foreground underline underline-offset-2 hover:no-underline"
-          >
-            Agent integrations
-          </Link>
-          .
-        </p>
+        <DashboardSectionTabs
+          title="Integrations"
+          description="Connect LyraShield to your coding agent or external services."
+          tabs={tabs}
+          activeTab={tab}
+        />
+        <AgentsGrid agents={agents} docsBaseUrl={docsUrl} />
       </div>
+    )
+  }
+
+  return (
+    <div>
+      <DashboardSectionTabs
+        title="Integrations"
+        description="Connect external services to your workspace."
+        tabs={tabs}
+        activeTab={tab}
+      />
 
       {githubVerificationRequired && (
         <div
-          className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm"
+          className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm"
           role="alert"
         >
           We could not confirm with GitHub that you administer this installation, so it was not
@@ -93,7 +115,7 @@ export default async function IntegrationsPage({
 
       {githubAlreadyClaimed && (
         <div
-          className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm"
+          className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm"
           role="alert"
         >
           This GitHub installation is already connected to a different LyraShield workspace. An
@@ -102,15 +124,17 @@ export default async function IntegrationsPage({
         </div>
       )}
 
-      <GithubIntegration
-        workspaceId={workspaceId}
-        connected={!!githubIntegration}
-        accountLogin={githubIntegration?.metadata as { accountLogin?: string } | null}
-      />
+      <div className="space-y-6">
+        <GithubIntegration
+          workspaceId={workspaceId}
+          connected={!!githubIntegration}
+          accountLogin={githubIntegration?.metadata as { accountLogin?: string } | null}
+        />
 
-      <McpIntegration endpointUrl={mcpEndpointUrl} docsUrl={docsUrl} />
+        <McpIntegration endpointUrl={mcpEndpointUrl} docsUrl={docsUrl} />
 
-      <CliIntegration docsUrl={docsUrl} />
+        <CliIntegration docsUrl={docsUrl} />
+      </div>
     </div>
   )
 }
