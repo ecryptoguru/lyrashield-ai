@@ -220,7 +220,11 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border shadow-sm">
+      <div
+        className="overflow-x-auto rounded-xl border shadow-sm"
+        tabIndex={0}
+        aria-label="Recent trust runs"
+      >
         <div className="border-b p-4">
           <h2 className="text-lg font-semibold">Recent Trust Runs</h2>
         </div>

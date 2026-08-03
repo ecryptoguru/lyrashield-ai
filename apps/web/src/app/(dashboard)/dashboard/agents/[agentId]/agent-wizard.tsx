@@ -61,7 +61,11 @@ function StepBody({
             <p className="text-muted-foreground font-mono text-[11px]">{step.snippetPath}</p>
           ) : null}
           <div className="relative">
-            <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5">
+            <pre
+              className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-5"
+              tabIndex={0}
+              aria-label="Configuration snippet"
+            >
               <code>{step.snippet}</code>
             </pre>
             <div className="absolute top-2 right-2">
@@ -79,7 +83,11 @@ function StepBody({
 
       {step.command ? (
         <div className="flex w-full min-w-0 items-center gap-2">
-          <code className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm">
+          <code
+            className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm"
+            tabIndex={0}
+            aria-label="Setup command"
+          >
             {step.command}
           </code>
           <CopyButton

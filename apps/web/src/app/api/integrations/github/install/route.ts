@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { env } from "@lyrashield/config"
 import { prisma } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -12,10 +13,39 @@ import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { createInstallState, verifyInstallState } from "../../../../../lib/github-install-state"
 
+/**
+ * Returns the canonical, browser-safe app origin for post-install redirects.
+ * Falls back to the incoming request origin, and normalises loopback addresses
+ * (0.0.0.0 / 127.0.0.1 / ::1) to `localhost` with plain HTTP so local dev
+ * callbacks don't resolve to an invalid `https://0.0.0.0:3000` page.
+ */
+function getAppOrigin(request: NextRequest): URL {
+  const configured = env.NEXT_PUBLIC_APP_URL || env.BETTER_AUTH_URL
+  const base = configured ? new URL(configured) : new URL(request.url)
+
+  if (
+    base.hostname === "0.0.0.0" ||
+    base.hostname === "127.0.0.1" ||
+    base.hostname === "::1" ||
+    base.hostname === "[::]"
+  ) {
+    base.hostname = "localhost"
+    if (base.protocol === "https:") {
+      base.protocol = "http:"
+    }
+  }
+
+  // Drop any path so callers use this as a clean origin base.
+  base.pathname = "/"
+  base.search = ""
+  base.hash = ""
+  return base
+}
+
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) {
-    const loginUrl = new URL("/sign-in", request.url)
+    const loginUrl = new URL("/sign-in", getAppOrigin(request))
     loginUrl.searchParams.set("callbackUrl", "/api/integrations/github/install")
     return NextResponse.redirect(loginUrl)
   }
@@ -125,7 +155,7 @@ export async function GET(request: NextRequest) {
       }
 
       if (!ownershipProven) {
-        const redirectUrl = new URL("/dashboard/integrations", request.url)
+        const redirectUrl = new URL("/dashboard/integrations", getAppOrigin(request))
         redirectUrl.searchParams.set("github", "verification_required")
         return NextResponse.redirect(redirectUrl)
       }
@@ -180,7 +210,7 @@ export async function GET(request: NextRequest) {
         firstTimeBind: !existing,
       })
 
-      const redirectUrl = new URL("/dashboard/integrations", request.url)
+      const redirectUrl = new URL("/dashboard/integrations", getAppOrigin(request))
       redirectUrl.searchParams.set("connected", "github")
       return NextResponse.redirect(redirectUrl)
     } catch (err) {
@@ -191,7 +221,7 @@ export async function GET(request: NextRequest) {
           installationId: canonicalInstallationId,
           workspaceId,
         })
-        const redirectUrl = new URL("/dashboard/integrations", request.url)
+        const redirectUrl = new URL("/dashboard/integrations", getAppOrigin(request))
         redirectUrl.searchParams.set("github", "already_claimed")
         return NextResponse.redirect(redirectUrl)
       }

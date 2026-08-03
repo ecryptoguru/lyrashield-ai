@@ -281,13 +281,7 @@ export function ReportsClient({
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Create immutable assurance snapshots from completed scan evidence
-          </p>
-        </div>
+      <div className="mb-4 flex justify-end">
         <Button
           className="self-start sm:self-auto"
           onClick={() => setShowCreateForm(!showCreateForm)}

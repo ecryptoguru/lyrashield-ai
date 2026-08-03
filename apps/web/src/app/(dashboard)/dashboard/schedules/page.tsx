@@ -1,24 +1,10 @@
-import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { CalendarClock } from "lucide-react"
-import { SchedulesClient } from "./schedules-client"
-import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { redirect } from "next/navigation"
 
-export default async function SchedulesPage() {
-  const session = await getCachedSession()
-  if (!session) return null
-
-  const workspaceId = await getCachedWorkspaceId(session.userId)
-  if (!workspaceId) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Schedules</h1>
-        <NoWorkspaceState
-          icon={CalendarClock}
-          description="Create a workspace during onboarding to manage schedules."
-        />
-      </div>
-    )
-  }
-
-  return <SchedulesClient workspaceId={workspaceId} />
+/**
+ * Compatibility route. Schedules now live under the Trust Runs → Monitoring tab
+ * at /dashboard/scans?tab=monitoring. This permanent redirect preserves all
+ * existing bookmarks and internal links.
+ */
+export default function SchedulesPage() {
+  redirect("/dashboard/scans?tab=monitoring")
 }

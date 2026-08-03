@@ -1,13 +1,24 @@
 import { prisma, listScans } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { ScansClient } from "./scans-client"
+import { SchedulesClient } from "../schedules/schedules-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
-import { RUN_PLURAL } from "@/lib/terminology"
+import { RUN_PLURAL, TARGET_PLURAL } from "@/lib/terminology"
+import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
+
+const SCANS_TABS: SectionTab[] = [
+  { value: "runs", label: "Runs", href: "/dashboard/scans?tab=runs" },
+  { value: "monitoring", label: "Monitoring", href: "/dashboard/scans?tab=monitoring" },
+]
+
+function normalizeTab(value: string | undefined): "runs" | "monitoring" {
+  return value === "monitoring" ? "monitoring" : "runs"
+}
 
 export default async function ScansPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string }>
+  searchParams: Promise<{ new?: string; tab?: string }>
 }) {
   const session = await getCachedSession()
   if (!session) redirect("/sign-in")
@@ -21,6 +32,25 @@ export default async function ScansPage({
         <p className="text-muted-foreground text-sm">
           Create a workspace first to start running {RUN_PLURAL.toLowerCase()}.
         </p>
+      </div>
+    )
+  }
+
+  const params = await searchParams
+  const tab = normalizeTab(params.tab)
+
+  const tabs: SectionTab[] = SCANS_TABS
+
+  if (tab === "monitoring") {
+    return (
+      <div>
+        <DashboardSectionTabs
+          title={RUN_PLURAL}
+          description={`Schedule recurring ${RUN_PLURAL.toLowerCase()} to monitor your ${TARGET_PLURAL.toLowerCase()}`}
+          tabs={tabs}
+          activeTab={tab}
+        />
+        <SchedulesClient workspaceId={workspaceId} />
       </div>
     )
   }
@@ -54,22 +84,29 @@ export default async function ScansPage({
     createdAt: s.createdAt.toISOString(),
   }))
 
-  const params = await searchParams
   const autoOpen = params.new === "1" || (initialData.length === 0 && targets.length > 0)
 
   return (
-    <ScansClient
-      workspaceId={workspaceId}
-      targets={targets.map((t) => ({
-        id: t.id,
-        name: t.name,
-        type: t.type,
-        url: t.url,
-        repoFullName: t.repoFullName,
-      }))}
-      initialData={initialData}
-      initialNextCursor={nextCursor}
-      initialShowCreate={autoOpen}
-    />
+    <div>
+      <DashboardSectionTabs
+        title={RUN_PLURAL}
+        description={`Run and monitor ${RUN_PLURAL.toLowerCase()} against your ${TARGET_PLURAL.toLowerCase()}`}
+        tabs={tabs}
+        activeTab={tab}
+      />
+      <ScansClient
+        workspaceId={workspaceId}
+        targets={targets.map((t) => ({
+          id: t.id,
+          name: t.name,
+          type: t.type,
+          url: t.url,
+          repoFullName: t.repoFullName,
+        }))}
+        initialData={initialData}
+        initialNextCursor={nextCursor}
+        initialShowCreate={autoOpen}
+      />
+    </div>
   )
 }

@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Bell, ChevronLeft } from "lucide-react"
 import { buttonVariants } from "@lyrashield/ui"
-import { NAV_ITEMS } from "@/lib/nav-items"
+import { NAV_TITLE_ITEMS } from "@/lib/nav-items"
 import { ThemeToggle } from "./theme-toggle"
 
 /**
@@ -15,7 +15,7 @@ import { ThemeToggle } from "./theme-toggle"
 function usePageTitle(explicit?: string): string {
   const pathname = usePathname()
   if (explicit) return explicit
-  const match = NAV_ITEMS.filter(
+  const match = NAV_TITLE_ITEMS.filter(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
   ).sort((a, b) => b.href.length - a.href.length)[0]
   return match?.label ?? "LyraShield AI"

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn, Button, Badge } from "@lyrashield/ui"
-import { MOBILE_PRIMARY_NAV_ITEMS, MORE_NAV_ITEMS, type NavItem } from "@/lib/nav-items"
+import { resolveNav, type NavItem } from "@/lib/nav-items"
 import {
   Sheet,
   SheetContent,
@@ -77,6 +77,11 @@ function MoreNavRow({
         aria-hidden="true"
       />
       <span className="flex-1 truncate">{item.label}</span>
+      {item.badgeCount ? (
+        <Badge variant="danger" className="mr-1 ml-2 shrink-0">
+          {item.badgeCount}
+        </Badge>
+      ) : null}
       {item.href === "/dashboard/notifications" && unreadNotifications > 0 ? (
         <Badge variant="danger" className="mr-1 ml-2 shrink-0">
           {unreadNotifications}
@@ -87,9 +92,16 @@ function MoreNavRow({
   )
 }
 
-export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: number }) {
+export function BottomNav({
+  unreadNotifications = 0,
+  pendingApprovals = 0,
+}: {
+  unreadNotifications?: number
+  pendingApprovals?: number
+}) {
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = useState(false)
+  const { mobilePrimary, more } = resolveNav({ pendingApprovals })
 
   return (
     <nav
@@ -97,7 +109,7 @@ export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: n
       className="bg-background fixed right-0 bottom-0 left-0 z-40 flex h-[calc(4rem+env(safe-area-inset-bottom))] items-center border-t pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <div className="grid h-16 w-full grid-cols-5 items-center">
-        {MOBILE_PRIMARY_NAV_ITEMS.map((item) => (
+        {mobilePrimary.map((item) => (
           <NavLink key={item.href} item={item} pathname={pathname} />
         ))}
         <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
@@ -111,7 +123,7 @@ export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: n
             >
               <Menu className="size-5" aria-hidden="true" />
               <span>Workspace</span>
-              {unreadNotifications > 0 ? (
+              {unreadNotifications > 0 || pendingApprovals > 0 ? (
                 <span
                   className="bg-destructive absolute top-2 right-4 size-2 rounded-full"
                   aria-hidden="true"
@@ -133,7 +145,7 @@ export function BottomNav({ unreadNotifications = 0 }: { unreadNotifications?: n
                 the bottom bar, so it grows as destinations are added and a grid leaves a
                 ragged final row. */}
             <div className="flex flex-col gap-0.5 py-2">
-              {MORE_NAV_ITEMS.map((item) => (
+              {more.map((item) => (
                 <MoreNavRow
                   key={item.href}
                   item={item}

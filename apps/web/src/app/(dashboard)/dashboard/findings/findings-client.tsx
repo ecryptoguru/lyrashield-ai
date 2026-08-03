@@ -284,67 +284,43 @@ export function FindingsClient({
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          {/* Breadcrumb — Findings page root */}
-          <nav aria-label="Breadcrumb" className="mb-1">
-            <ol className="text-muted-foreground flex items-center gap-1 text-xs">
-              <li>
-                <Link href="/dashboard" className="hover:text-foreground">
-                  Dashboard
-                </Link>
-              </li>
-              <li aria-hidden="true">
-                <ChevronRight className="h-3 w-3" />
-              </li>
-              <li aria-current="page" className="text-foreground font-medium">
-                {ISSUE_PLURAL}
-              </li>
-            </ol>
-          </nav>
-          <h1 className="text-2xl font-bold tracking-tight">{ISSUE_PLURAL}</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Potential and verified security {ISSUE_PLURAL.toLowerCase()} reported by your trust runs
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {filterChips.map((chip) => (
-            <button
-              key={chip.value}
-              type="button"
-              onClick={() => void handleFilterChange(chip.value)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                filter === chip.value
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-              )}
-            >
-              {chip.label}
-            </button>
-          ))}
-
-          {/* Sort control */}
-          <div className="flex items-center gap-1 rounded-full border px-3 py-1">
-            {sortMode === "severity" ? (
-              <SortDesc className="text-muted-foreground h-3 w-3" aria-hidden="true" />
-            ) : (
-              <Calendar className="text-muted-foreground h-3 w-3" aria-hidden="true" />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {filterChips.map((chip) => (
+          <button
+            key={chip.value}
+            type="button"
+            onClick={() => void handleFilterChange(chip.value)}
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+              filter === chip.value
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
             )}
-            <select
-              value={sortMode}
-              onChange={(e) => {
-                const next = e.target.value as SortMode
-                setSortMode(next)
-                updateQueryParams({ filter, sort: next })
-              }}
-              aria-label={`Sort ${ISSUE_PLURAL.toLowerCase()}`}
-              className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
-            >
-              <option value="severity">Severity (high first)</option>
-              <option value="newest">Newest</option>
-            </select>
-          </div>
+          >
+            {chip.label}
+          </button>
+        ))}
+
+        {/* Sort control */}
+        <div className="flex items-center gap-1 rounded-full border px-3 py-1">
+          {sortMode === "severity" ? (
+            <SortDesc className="text-muted-foreground h-3 w-3" aria-hidden="true" />
+          ) : (
+            <Calendar className="text-muted-foreground h-3 w-3" aria-hidden="true" />
+          )}
+          <select
+            value={sortMode}
+            onChange={(e) => {
+              const next = e.target.value as SortMode
+              setSortMode(next)
+              updateQueryParams({ filter, sort: next })
+            }}
+            aria-label={`Sort ${ISSUE_PLURAL.toLowerCase()}`}
+            className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <option value="severity">Severity (high first)</option>
+            <option value="newest">Newest</option>
+          </select>
         </div>
       </div>
 
@@ -1060,7 +1036,7 @@ function FindingDetailDrawer({
                         result.
                       </p>
                       <Link
-                        href={`/dashboard/reports?scanId=${encodeURIComponent(latestRetest.scanId)}`}
+                        href={`/dashboard/findings?tab=reports&scanId=${encodeURIComponent(latestRetest.scanId)}`}
                         className={buttonVariants({ size: "sm", className: "mt-3" })}
                       >
                         Generate report
@@ -1395,7 +1371,11 @@ function FindingDetailDrawer({
                 {detail.technicalDetail && (
                   <div>
                     <h3 className="mb-1 text-sm font-medium">Technical Details</h3>
-                    <pre className="bg-muted mt-1 overflow-x-auto rounded-lg p-3 text-xs whitespace-pre-wrap">
+                    <pre
+                      className="bg-muted mt-1 overflow-x-auto rounded-lg p-3 text-xs whitespace-pre-wrap"
+                      tabIndex={0}
+                      aria-label="Technical details"
+                    >
                       {detail.technicalDetail}
                     </pre>
                   </div>

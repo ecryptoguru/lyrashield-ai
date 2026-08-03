@@ -1,3 +1,5 @@
+import { estimateRunMinutes } from "./estimator"
+
 export const SCAN_PRESETS = {
   RELEASE_CHECK: {
     label: "Release check",
@@ -40,6 +42,10 @@ export const SCAN_PRESET_ORDER: ScanPresetId[] = [
 
 export function getScanPreset(id: string) {
   return SCAN_PRESETS[id as ScanPresetId] ?? SCAN_PRESETS.RELEASE_CHECK
+}
+
+export function getScanPresetEstimate(id: string) {
+  return estimateRunMinutes(getScanPreset(id).mode)
 }
 
 export function isScanPresetId(id: string): id is ScanPresetId {

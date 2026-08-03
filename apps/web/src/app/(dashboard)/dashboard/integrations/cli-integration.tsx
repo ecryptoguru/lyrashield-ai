@@ -43,7 +43,11 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
         <div className="space-y-1.5">
           <span className="text-sm font-medium">Install</span>
           <div className="flex w-full min-w-0 items-center gap-2">
-            <code className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm">
+            <code
+              className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm"
+              tabIndex={0}
+              aria-label="Install command"
+            >
               {INSTALL_CMD}
             </code>
             <Button
@@ -110,7 +114,11 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
                 .
               </div>
               <div className="flex w-full min-w-0 items-center gap-2">
-                <code className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm">
+                <code
+                  className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm"
+                  tabIndex={0}
+                  aria-label="Login command"
+                >
                   {LOGIN_CMD}
                 </code>
                 <Button
@@ -144,7 +152,11 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
                 .
               </div>
               <div className="flex w-full min-w-0 items-center gap-2">
-                <code className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm">
+                <code
+                  className="bg-muted min-w-0 flex-1 overflow-x-auto rounded-md px-3 py-2.5 font-mono text-xs whitespace-nowrap sm:text-sm"
+                  tabIndex={0}
+                  aria-label="Doctor command"
+                >
                   {DOCTOR_CMD}
                 </code>
                 <Button

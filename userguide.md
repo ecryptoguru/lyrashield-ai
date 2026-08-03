@@ -106,20 +106,25 @@ The goal explains the intended outcome. Review depth determines the model, reaso
 
 ### Step 3: First scan
 
-Review the workspace, target, and goal, then select **Start safe scan**. The first scan always uses Safe mode. Other review depths are available from the Scans page afterward.
+Review the workspace, target, and goal, then select **Start safe scan**. The first scan always uses Safe mode. Other review depths are available from the Trust Runs page afterward.
 
 ## 5. Navigation and workspace switching
 
-The primary navigation contains:
+The primary navigation contains four lifecycle destinations:
 
-- **Overview** — current launch verdict, assurance progress, risk posture, remediation flow, retained finding mix, recent scans, and monthly usage.
-- **Assets** — repository, web-application, and API targets.
-- **Scans** — create, monitor, cancel, and inspect scans.
-- **Findings** — filter and work through detected risks.
-- **Reports** — create, download, share, and revoke assurance reports.
-- **Settings** — workspace posture, counts, retention, telemetry state, connected surfaces, and account deletion.
+- **Home** — current launch verdict, assurance progress, risk posture, remediation flow, retained finding mix, recent scans, and monthly usage.
+- **Targets** — repository, web-application, and API targets.
+- **Trust Runs** — create, monitor, cancel, and inspect scans. Two tabs:
+  - **Runs** — one-off and manual scans.
+  - **Monitoring** — scheduled recurring scans (formerly the Schedules page).
+- **Issues** — filter and work through detected risks. Three tabs:
+  - **Issues** — the finding queue.
+  - **Evidence** — independently verified evidence behind findings (formerly the Evidence page).
+  - **Reports** — create, download, share, and revoke assurance reports (formerly the Reports page).
 
-Open **More** for Projects, Fix proposals, Schedules, Team, Integrations, and Notifications. Use the workspace switcher above the navigation to change the active workspace. Every page and action is evaluated against the active workspace and your role.
+**Review Queue** appears in the Workspace section of the sidebar and mobile More sheet only when pending agent approvals or fix proposals exist. It carries a count badge and links to the approval page. The route remains reachable by URL for authorized users even when the queue is empty.
+
+Open **More** (mobile) or the **Workspace** sidebar group (desktop) for Agents, Team, Integrations, Notifications, and Settings. Use the workspace switcher above the navigation to change the active workspace. Every page and action is evaluated against the active workspace and your role.
 
 ## 6. Projects
 
@@ -333,7 +338,7 @@ Private report links expire after 30 days. Shared report pages are noindex and u
 
 ## 17. Schedules
 
-Open **More → Schedules → New Schedule** and configure:
+Open **Trust Runs → Monitoring → New Schedule** and configure:
 
 - target;
 - UTC cron expression;
@@ -390,7 +395,7 @@ The Settings page displays:
 - retention period;
 - product-telemetry state;
 - active security-control summary;
-- shortcuts to Team, Integrations, Notifications, and Schedules.
+- shortcuts to Team, Integrations, Notifications, and Schedules (Trust Runs → Monitoring).
 
 The current settings surface reports retention and telemetry configuration but does not provide self-service editors for every field.
 

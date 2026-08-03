@@ -211,7 +211,11 @@ export function TeamClient({
         </form>
       )}
 
-      <div className="mb-6 overflow-x-auto rounded-xl border shadow-sm">
+      <div
+        className="mb-6 overflow-x-auto rounded-xl border shadow-sm"
+        tabIndex={0}
+        aria-label="Workspace members"
+      >
         <div className="border-b p-4">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <Users className="text-primary h-5 w-5" aria-hidden="true" />
@@ -249,7 +253,11 @@ export function TeamClient({
       </div>
 
       {invitations.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border shadow-sm">
+        <div
+          className="overflow-x-auto rounded-xl border shadow-sm"
+          tabIndex={0}
+          aria-label="Pending invitations"
+        >
           <div className="border-b p-4">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
               <Mail className="text-primary h-5 w-5" aria-hidden="true" />

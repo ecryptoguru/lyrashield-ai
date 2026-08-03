@@ -9,8 +9,9 @@ import { LogOut } from "lucide-react"
 import { Button, cn } from "@lyrashield/ui"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 import { ThemeToggle } from "./theme-toggle"
-import { PRIMARY_NAV_ITEMS, SECONDARY_NAV_ITEMS, type NavItem } from "@/lib/nav-items"
+import { PRIMARY_NAV_ITEMS, resolveNav, type NavItem } from "@/lib/nav-items"
 import { apiPost } from "@/lib/api-client"
+import { Badge } from "@lyrashield/ui"
 
 interface Workspace {
   id: string
@@ -46,7 +47,12 @@ function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
         )}
         aria-hidden="true"
       />
-      {item.label}
+      <span className="flex-1 truncate">{item.label}</span>
+      {item.badgeCount ? (
+        <Badge variant="danger" className="ml-2 shrink-0">
+          {item.badgeCount}
+        </Badge>
+      ) : null}
     </Link>
   )
 }
@@ -56,15 +62,18 @@ export function V2Sidebar({
   userEmail,
   workspaces,
   activeWorkspaceId: initialWorkspaceId,
+  pendingApprovals = 0,
 }: {
   userName: string
   userEmail: string
   workspaces: Workspace[]
   activeWorkspaceId: string | null
+  pendingApprovals?: number
 }) {
   const pathname = usePathname()
   const router = useRouter()
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(initialWorkspaceId)
+  const { secondary } = resolveNav({ pendingApprovals })
 
   async function handleSelectWorkspace(id: string) {
     try {
@@ -133,7 +142,7 @@ export function V2Sidebar({
               Workspace
             </p>
             <div className="flex flex-col gap-1">
-              {SECONDARY_NAV_ITEMS.map((item) => (
+              {secondary.map((item) => (
                 <SidebarLink key={item.href} item={item} pathname={pathname} />
               ))}
             </div>

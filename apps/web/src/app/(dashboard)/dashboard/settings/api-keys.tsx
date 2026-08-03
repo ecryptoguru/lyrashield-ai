@@ -109,7 +109,7 @@ export function ApiKeysSection({
     return (
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle as="h2" className="flex items-center gap-2">
             <KeyRound className="size-4" aria-hidden="true" />
             API keys
           </CardTitle>
@@ -196,7 +196,7 @@ export function ApiKeysSection({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle as="h2" className="flex items-center gap-2">
           <KeyRound className="size-4" aria-hidden="true" />
           API keys
         </CardTitle>

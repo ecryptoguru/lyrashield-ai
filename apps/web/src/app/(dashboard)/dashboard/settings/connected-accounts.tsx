@@ -103,7 +103,7 @@ export function ConnectedAccounts() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sign-in methods</CardTitle>
+        <CardTitle as="h2">Sign-in methods</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-muted-foreground text-sm leading-6">
