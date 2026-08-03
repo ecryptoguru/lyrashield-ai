@@ -18,6 +18,7 @@ import {
   SeverityDonut,
 } from "@/components/security-visuals"
 import { formatDate } from "@/lib/date-format"
+import { HOME_LABEL } from "@/lib/terminology"
 import {
   getCachedSession,
   getCachedWorkspaceId,
@@ -41,10 +42,13 @@ export default async function DashboardPage() {
 
   if (!workspaceId || workspaces.length === 0) {
     return (
-      <NoWorkspaceState
-        icon={ShieldCheck}
-        description="Create your first workspace to start scanning your apps."
-      />
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">{HOME_LABEL}</h1>
+        <NoWorkspaceState
+          icon={ShieldCheck}
+          description="Create your first workspace to start scanning your apps."
+        />
+      </div>
     )
   }
 

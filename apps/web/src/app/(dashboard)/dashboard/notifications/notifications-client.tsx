@@ -164,7 +164,7 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
       )}
 
       {loading && notifications.length === 0 ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading notifications">
+        <div className="space-y-3" role="status" aria-live="polite" aria-busy="true" aria-label="Loading notifications">
           {[0, 1, 2].map((item) => (
             <Skeleton key={item} className="h-28 w-full" />
           ))}

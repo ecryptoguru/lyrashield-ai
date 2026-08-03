@@ -18,11 +18,14 @@ export default async function TargetsPage({
 
   if (!workspaceId) {
     return (
-      <div className="rounded-lg border border-dashed p-12 text-center">
-        <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
-        <p className="text-muted-foreground text-sm">
-          Create a workspace first to start managing {TARGET_PLURAL.toLowerCase()}.
-        </p>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">{TARGET_PLURAL}</h1>
+        <div className="rounded-lg border border-dashed p-12 text-center">
+          <h2 className="mb-2 text-lg font-semibold">No workspace yet</h2>
+          <p className="text-muted-foreground text-sm">
+            Create a workspace first to start managing {TARGET_PLURAL.toLowerCase()}.
+          </p>
+        </div>
       </div>
     )
   }

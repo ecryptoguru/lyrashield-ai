@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { z } from "zod"
 import { Bell, Mail, Smartphone } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Switch } from "@lyrashield/ui"
@@ -135,16 +135,26 @@ function PreferenceRow({
   onChange: (checked: boolean) => void
   disabled?: boolean
 }) {
+  const baseId = useId()
+  const labelId = `${baseId}-label`
+  const descId = `${baseId}-desc`
+
   return (
     <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
       <div className="flex items-start gap-3">
         <Icon className="text-primary mt-0.5 size-5" aria-hidden={true} />
         <div>
-          <p className="font-medium">{title}</p>
-          <p className="text-muted-foreground text-sm">{description}</p>
+          <p id={labelId} className="font-medium">{title}</p>
+          <p id={descId} className="text-muted-foreground text-sm">{description}</p>
         </div>
       </div>
-      <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} />
+      <Switch
+        checked={checked}
+        onCheckedChange={onChange}
+        disabled={disabled}
+        aria-labelledby={labelId}
+        aria-describedby={descId}
+      />
     </div>
   )
 }

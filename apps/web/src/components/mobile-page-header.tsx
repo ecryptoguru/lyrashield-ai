@@ -49,7 +49,7 @@ export function MobilePageHeader({ title, backHref }: { title?: string; backHref
             />
           </span>
         )}
-        <h1 className="min-w-0 truncate text-lg font-semibold">{pageTitle}</h1>
+        <span className="min-w-0 truncate text-lg font-semibold">{pageTitle}</span>
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <ThemeToggle

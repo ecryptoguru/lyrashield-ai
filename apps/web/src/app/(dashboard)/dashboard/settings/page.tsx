@@ -17,7 +17,7 @@ export default async function SettingsPage() {
   if (!workspaceId) {
     return (
       <div>
-        <h2 className="mb-6 text-2xl font-bold tracking-tight">Settings</h2>
+        <h1 className="mb-6 text-2xl font-bold tracking-tight">Settings</h1>
         <NoWorkspaceState
           icon={Settings}
           description="Create a workspace during onboarding to manage settings."

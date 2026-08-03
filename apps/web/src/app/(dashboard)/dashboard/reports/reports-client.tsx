@@ -438,7 +438,7 @@ export function ReportsClient({
       )}
 
       {loading && reports.length === 0 ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading reports">
+        <div className="space-y-3" role="status" aria-live="polite" aria-busy="true" aria-label="Loading reports">
           {[0, 1, 2].map((item) => (
             <Skeleton key={item} className="h-24 w-full" />
           ))}

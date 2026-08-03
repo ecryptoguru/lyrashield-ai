@@ -37,6 +37,7 @@ export default async function AgentWizardPage({
     return (
       <div className="space-y-6">
         <BackLink />
+        <h1 className="text-2xl font-bold tracking-tight">Set up {data.displayName}</h1>
         <NoWorkspaceState
           icon={Puzzle}
           description="Create a workspace during onboarding to set up agent integrations."
