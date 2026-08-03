@@ -5,7 +5,7 @@ export default defineConfig({
     index: "src/index.ts",
   },
   format: ["esm"],
-  target: "node20",
+  target: "node24",
   tsconfig: "tsconfig.build.json",
   dts: true,
   sourcemap: true,

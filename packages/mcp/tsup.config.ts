@@ -13,7 +13,7 @@ export default defineConfig({
     "stdio-transport": "src/stdio-transport.ts",
   },
   format: ["esm"],
-  target: "node20",
+  target: "node24",
   tsconfig: "tsconfig.build.json",
   dts: { entry: { index: "src/index.ts" } },
   sourcemap: true,

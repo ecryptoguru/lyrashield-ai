@@ -11,7 +11,7 @@ const dockerfile = readFileSync(
 
 describe("worker Docker runtime", () => {
   it("starts with the vendored TypeScript runner without invoking Corepack", () => {
-    const workerStage = dockerfile.slice(dockerfile.indexOf("FROM node:22-alpine AS worker"))
+    const workerStage = dockerfile.slice(dockerfile.indexOf("FROM node:24-alpine AS worker"))
 
     expect(workerStage).not.toContain("corepack")
     expect(workerStage).toContain(

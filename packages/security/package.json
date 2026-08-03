@@ -13,7 +13,7 @@
     "undici": "7.29.0"
   },
   "devDependencies": {
-    "@types/node": "^22.20.1",
+    "@types/node": "^24.0.0",
     "typescript": "^6.0.0"
   }
 }

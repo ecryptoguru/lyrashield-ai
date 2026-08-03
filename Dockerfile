@@ -1,5 +1,5 @@
 # ─── Stage 1: Install deps ─────────────────────────────────────────────────────
-FROM node:22-alpine AS deps
+FROM node:24-alpine AS deps
 RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
@@ -31,7 +31,7 @@ COPY apps/agent/package.json ./apps/agent/
 RUN pnpm install --frozen-lockfile
 
 # ─── Stage 2: Build ────────────────────────────────────────────────────────────
-FROM node:22-alpine AS workspace-builder
+FROM node:24-alpine AS workspace-builder
 RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
 
 WORKDIR /app
@@ -67,7 +67,7 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     pnpm exec turbo run build --filter=@lyrashield/web
 
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 RUN addgroup --system lyrashield && \
     adduser --system --ingroup lyrashield --home /app lyrashield
 
@@ -95,7 +95,7 @@ CMD ["node", "server.js"]
 # The `engine` named build context is supplied only by the worker service in
 # docker-compose.yml, so web/migration builds remain independent of the sibling
 # engine repository.
-FROM node:22-alpine AS worker-engine
+FROM node:24-alpine AS worker-engine
 
 RUN apk add --no-cache python3 py3-pip build-base python3-dev git
 
@@ -116,7 +116,7 @@ RUN python3 -m venv /opt/uv-bootstrap && \
 # worker image to be needlessly large. The worker needs only workspace runtime
 # packages, its TypeScript entry point, the generated Prisma client, and the
 # isolated engine virtual environment.
-FROM node:22-alpine AS worker
+FROM node:24-alpine AS worker
 
 RUN apk add --no-cache docker-cli git python3 && \
     npm install -g pnpm@11.6.0 && \
