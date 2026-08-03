@@ -165,7 +165,7 @@ describe("account deletion", () => {
       },
     })
     const scans = await Promise.all(
-      [1, 2].map((n) =>
+      [0, 1].map(() =>
         prisma.scan.create({
           data: {
             workspaceId: richWorkspaceId,
