@@ -149,8 +149,9 @@ export async function getAccountDeletionPlan(userId: string): Promise<AccountDel
  * Confirmation rules:
  *  - Workspaces with another active owner are retained; no special confirmation.
  *  - Sole-owner workspaces with other active members block deletion.
- *  - Sole-owner/sole-member workspaces are physically deleted and require the
- *    user to type the list of workspace names being destroyed.
+ *  - Sole-owner/sole-member workspaces are physically deleted — including their
+ *    audit history, deliberately purged to allow the hard delete — and require
+ *    the user to type the list of workspace names being destroyed.
  *  - Otherwise the user must type "DELETE".
  */
 export async function deleteUserAccount(
@@ -309,9 +310,22 @@ export async function deleteUserAccount(
     // removes their dependent rows. The Workspace model has a deletedAt column and
     // is soft-deleted by the Prisma client extension, so this must bypass the
     // extension and use raw SQL.
+    //
+    // A BEFORE DELETE trigger (workspace_prevent_hard_delete, added in
+    // 20260707120000 as S3) refuses to hard-delete a Workspace while any
+    // AuditLog row still references it, specifically to keep the hash-chained
+    // audit trail immutable — it is not represented in schema.prisma, the same
+    // way the RLS policies aren't, so it's easy to miss. This deletion path is
+    // a user-initiated, right-to-erasure request, so audit history for THIS
+    // workspace is deliberately purged first rather than preserved: erasure was
+    // chosen over indefinite retention for the account+workspace a user asks to
+    // delete outright. This does not weaken the trigger elsewhere — the RETAINED
+    // path above keeps and anonymizes its audit chain untouched, and any other
+    // hard-delete of a workspace with history is still blocked.
     for (const workspace of [...plan.deletable].sort((a, b) => a.id.localeCompare(b.id))) {
       await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspace.id}, true)`
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspace.id}, 0))`
+      await tx.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspace.id}`
       await tx.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspace.id}`
     }
 

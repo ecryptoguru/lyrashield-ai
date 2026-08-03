@@ -144,16 +144,21 @@ describe("account deletion", () => {
   })
 
   /**
-   * Diagnostic case. Reproduced live in production on 2026-08-03: a real
+   * Regression test. Reproduced live in production on 2026-08-03: a real
    * account (sole owner, sole member, single workspace) with real usage —
    * one target, two completed scans, their events and coverage receipts, a
    * notification, and the audit-log trail those actions generated in the SAME
    * workspace being destroyed — failed `DELETE /api/account` with a generic
    * 500 after the confirmation check passed. The "solo" case above only
-   * covers an otherwise-empty workspace and never exercises any of this.
+   * covers an otherwise-empty workspace and never exercised this.
    *
-   * If this test throws, the failure message IS the answer we don't have from
-   * production logs — read it before touching account-deletion.ts again.
+   * Root cause: `workspace_prevent_hard_delete` (migration 20260707120000, S3)
+   * is a BEFORE DELETE trigger — not represented in schema.prisma — that
+   * refuses to hard-delete a Workspace while any AuditLog row still
+   * references it, to keep the audit trail immutable. `deleteUserAccount` now
+   * purges that workspace's audit history first: erasure was chosen over
+   * retention for a workspace the user asks to delete outright. This test
+   * pins that behavior end to end.
    */
   it("deletes a sole-owner workspace with real usage: target, scans, events, coverage, audit trail", async () => {
     const target = await prisma.target.create({
@@ -250,6 +255,12 @@ describe("account deletion", () => {
     const remainingEvents = await prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT count(*)::bigint AS count FROM "ScanEvent" WHERE "scanId" = ANY(${scanIds})`
     expect(remainingEvents).toMatchObject([{ count: 0n }])
+    // The audit trail for the erased workspace must be gone, not orphaned —
+    // this is what workspace_prevent_hard_delete blocked before the purge was
+    // added, and what makes this a real erasure rather than a partial one.
+    const remainingAuditLogs = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT count(*)::bigint AS count FROM "AuditLog" WHERE "workspaceId" = ${richWorkspaceId}`
+    expect(remainingAuditLogs).toMatchObject([{ count: 0n }])
   })
 
   it("anonymizes attribution in a co-owned workspace and keeps the audit chain", async () => {
