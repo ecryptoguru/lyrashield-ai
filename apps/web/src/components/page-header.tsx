@@ -28,7 +28,9 @@ export function PageHeader({
           ) : null}
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-            {description ? <p className="text-muted-foreground mt-1 text-sm">{description}</p> : null}
+            {description ? (
+              <p className="text-muted-foreground mt-1 text-sm">{description}</p>
+            ) : null}
           </div>
         </div>
         {action ? <div className="flex gap-2">{action}</div> : null}
