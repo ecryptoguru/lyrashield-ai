@@ -44,9 +44,12 @@ export interface SafeFetchOptions {
   signal?: AbortSignal
 }
 
-const DEFAULT_TIMEOUT_MS = 15_000
-const DEFAULT_MAX_REDIRECTS = 5
-const DEFAULT_MAX_BYTES = 5 * 1024 * 1024
+export const DEFAULT_TIMEOUT_MS = 15_000
+export const DEFAULT_MAX_REDIRECTS = 5
+export const DEFAULT_MAX_BYTES = 5 * 1024 * 1024
+
+// Extra properties passed to a custom fetchFn (egress proxy) so per-hop limits
+// stay in sync. They are ignored by the standard fetch API.
 
 /**
  * Why a safe fetch did not return content.
@@ -95,6 +98,21 @@ export const SAFE_FETCH_REASON_TEXT: Record<SafeFetchFailureReason, string> = {
 }
 
 /**
+ * Error thrown by an egress-proxy `fetchFn` when the proxy refuses a request.
+ * Carrying the typed reason lets `safeFetchOnce` surface it without losing the
+ * diagnostic that the worker-side guard would have produced.
+ */
+export class EgressProxyError extends Error {
+  constructor(
+    public reason: SafeFetchFailureReason,
+    public detail?: string
+  ) {
+    super(`Egress proxy refused fetch: ${reason}${detail ? ` (${detail})` : ""}`)
+    this.name = "EgressProxyError"
+  }
+}
+
+/**
  * Perform an SSRF-safe GET, following (and re-validating) redirects manually.
  * Returns `null` if the URL — or any redirect target — is unsafe or the request
  * fails. Never throws for an unsafe/blocked URL; it is logged and skipped.
@@ -119,89 +137,27 @@ export async function safeFetchDetailed(
   rawUrl: string,
   options: SafeFetchOptions = {}
 ): Promise<SafeFetchOutcome> {
-  const {
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-    maxRedirects = DEFAULT_MAX_REDIRECTS,
-    maxBytes = DEFAULT_MAX_BYTES,
-    userAgent = "LyraShield-Scanner/1.0",
-    fetchFn,
-    resolver,
-    signal: externalSignal,
-  } = options
+  const { maxRedirects = DEFAULT_MAX_REDIRECTS, signal: externalSignal } = options
 
   let currentUrl = rawUrl
   const urlHistory: string[] = []
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
     if (externalSignal?.aborted) return { ok: false, reason: "aborted" }
-    const controller = new AbortController()
-    const onExternalAbort = () => controller.abort()
-    externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    const check = await Promise.race([
-      resolveScanUrlSafe(currentUrl, resolver),
-      new Promise<null>((resolve) =>
-        controller.signal.addEventListener("abort", () => resolve(null), { once: true })
-      ),
-    ])
-    if (!check) {
-      clearTimeout(timer)
-      externalSignal?.removeEventListener("abort", onExternalAbort)
-      return { ok: false, reason: "dns_timeout" }
-    }
-    if (!check.safe) {
-      clearTimeout(timer)
-      externalSignal?.removeEventListener("abort", onExternalAbort)
-      logger.warn("safeFetch blocked URL (SSRF guard)", {
-        url: redactUrlForLogs(currentUrl),
-        reason: check.reason,
-        hop,
-      })
-      return { ok: false, reason: "ssrf_blocked", detail: check.reason }
-    }
 
-    const dispatcher = fetchFn ? undefined : createPinnedDispatcher(check.addresses)
-    let res: Response
-    try {
-      urlHistory.push(currentUrl)
-      const init = {
-        method: "GET",
-        redirect: "manual" as const,
-        signal: controller.signal,
-        headers: { "User-Agent": userAgent },
-      }
-      res = fetchFn
-        ? await fetchFn(currentUrl, init)
-        : ((await undiciFetch(currentUrl, { ...init, dispatcher })) as unknown as Response)
-    } catch (err) {
-      clearTimeout(timer)
-      externalSignal?.removeEventListener("abort", onExternalAbort)
-      await dispatcher?.destroy()
-      const detail = err instanceof Error ? err.message : String(err)
-      logger.warn("safeFetch request failed", {
-        url: redactUrlForLogs(currentUrl),
-        error: detail,
-      })
-      return { ok: false, reason: "request_failed", detail }
-    }
-    if (!res || typeof res.status !== "number") {
-      clearTimeout(timer)
-      externalSignal?.removeEventListener("abort", onExternalAbort)
-      await dispatcher?.destroy()
-      logger.warn("safeFetch received an invalid response", { url: redactUrlForLogs(currentUrl) })
-      return { ok: false, reason: "invalid_response" }
-    }
+    urlHistory.push(currentUrl)
+    const outcome = await safeFetchOnce(currentUrl, options)
 
-    // Redirect: re-validate the next hop instead of letting fetch follow it.
-    if (res.status >= 300 && res.status < 400) {
-      const location = res.headers.get("location")
+    if (!outcome.ok) return outcome
+
+    const { result } = outcome
+
+    if (result.status >= 300 && result.status < 400) {
+      const location = result.headers["location"]
       if (!location) {
-        clearTimeout(timer)
-        externalSignal?.removeEventListener("abort", onExternalAbort)
-        await dispatcher?.destroy()
         logger.warn("safeFetch redirect without Location header", {
           url: redactUrlForLogs(currentUrl),
-          status: res.status,
+          status: result.status,
         })
         return { ok: false, reason: "redirect_no_location" }
       }
@@ -209,57 +165,169 @@ export async function safeFetchDetailed(
       try {
         nextUrl = new URL(location, currentUrl).toString()
       } catch {
-        clearTimeout(timer)
-        externalSignal?.removeEventListener("abort", onExternalAbort)
-        await dispatcher?.destroy()
         logger.warn("safeFetch redirect to invalid URL", { url: redactUrlForLogs(currentUrl) })
         return { ok: false, reason: "redirect_invalid_url" }
       }
       if (hop === maxRedirects) {
-        clearTimeout(timer)
-        externalSignal?.removeEventListener("abort", onExternalAbort)
-        await dispatcher?.destroy()
         logger.warn("safeFetch exceeded max redirects", {
           url: redactUrlForLogs(rawUrl),
           maxRedirects,
         })
         return { ok: false, reason: "too_many_redirects" }
       }
-      await res.body?.cancel().catch(() => {})
-      clearTimeout(timer)
-      externalSignal?.removeEventListener("abort", onExternalAbort)
-      await dispatcher?.destroy()
       currentUrl = nextUrl
       continue
     }
 
-    const headers: Record<string, string> = {}
-    res.headers.forEach((value, key) => {
-      headers[key.toLowerCase()] = value
-    })
-
-    // Bound the body size so a hostile target can't exhaust worker memory.
-    try {
-      const html = await readBounded(res, maxBytes)
-      return {
-        ok: true,
-        result: { html, status: res.status, headers, finalUrl: currentUrl, urlHistory },
-      }
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err)
-      logger.warn("safeFetch response body read failed", {
-        url: redactUrlForLogs(currentUrl),
-        error: detail,
-      })
-      return { ok: false, reason: "body_read_failed", detail }
-    } finally {
-      clearTimeout(timer)
-      externalSignal?.removeEventListener("abort", onExternalAbort)
-      await dispatcher?.destroy()
+    return {
+      ok: true,
+      result: { ...result, finalUrl: currentUrl, urlHistory },
     }
   }
 
   return { ok: false, reason: "too_many_redirects" }
+}
+
+/**
+ * SSRF-safe single-hop fetch. Resolves and validates the URL, pins the
+ * connection to the resolved addresses, and returns the raw (non-followed)
+ * response. Used directly by the egress proxy and by {@link safeFetchDetailed}
+ * for each redirect hop.
+ *
+ * If `fetchFn` is provided, the pinning step is skipped and the caller-supplied
+ * fetch implementation is used instead. This is how the worker routes URL scans
+ * through the authenticated egress proxy while keeping the worker-side SSRF
+ * checks and redirect handling intact.
+ */
+export async function safeFetchOnce(
+  rawUrl: string,
+  options: SafeFetchOptions = {}
+): Promise<SafeFetchOutcome> {
+  const {
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxBytes = DEFAULT_MAX_BYTES,
+    userAgent = "LyraShield-Scanner/1.0",
+    fetchFn,
+    resolver,
+    signal: externalSignal,
+  } = options
+
+  if (externalSignal?.aborted) return { ok: false, reason: "aborted" }
+
+  const controller = new AbortController()
+  const onExternalAbort = () => controller.abort()
+  externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  const check = await Promise.race([
+    resolveScanUrlSafe(rawUrl, resolver),
+    new Promise<null>((resolve) =>
+      controller.signal.addEventListener("abort", () => resolve(null), { once: true })
+    ),
+  ])
+  if (!check) {
+    clearTimeout(timer)
+    externalSignal?.removeEventListener("abort", onExternalAbort)
+    return { ok: false, reason: "dns_timeout" }
+  }
+  if (!check.safe) {
+    clearTimeout(timer)
+    externalSignal?.removeEventListener("abort", onExternalAbort)
+    logger.warn("safeFetch blocked URL (SSRF guard)", {
+      url: redactUrlForLogs(rawUrl),
+      reason: check.reason,
+    })
+    return { ok: false, reason: "ssrf_blocked", detail: check.reason }
+  }
+
+  const headers: Record<string, string> = {
+    "User-Agent": userAgent,
+  }
+
+  const dispatcher = fetchFn ? undefined : createPinnedDispatcher(check.addresses)
+  let res: Response
+  try {
+    const baseInit = {
+      method: "GET",
+      redirect: "manual" as const,
+      signal: controller.signal,
+      headers,
+    }
+    res = fetchFn
+      ? await fetchFn(rawUrl, { ...baseInit, timeoutMs, maxBytes } as RequestInit)
+      : ((await undiciFetch(rawUrl, { ...baseInit, dispatcher } as never)) as unknown as Response)
+  } catch (err) {
+    clearTimeout(timer)
+    externalSignal?.removeEventListener("abort", onExternalAbort)
+    await dispatcher?.destroy()
+
+    if (err instanceof EgressProxyError) {
+      return { ok: false, reason: err.reason, detail: err.detail }
+    }
+
+    const detail = err instanceof Error ? err.message : String(err)
+    logger.warn("safeFetch request failed", {
+      url: redactUrlForLogs(rawUrl),
+      error: detail,
+    })
+    return { ok: false, reason: "request_failed", detail }
+  }
+  if (!res || typeof res.status !== "number") {
+    clearTimeout(timer)
+    externalSignal?.removeEventListener("abort", onExternalAbort)
+    await dispatcher?.destroy()
+    logger.warn("safeFetch received an invalid response", { url: redactUrlForLogs(rawUrl) })
+    return { ok: false, reason: "invalid_response" }
+  }
+
+  const responseHeaders: Record<string, string> = {}
+  res.headers.forEach((value, key) => {
+    responseHeaders[key.toLowerCase()] = value
+  })
+
+  if (res.status >= 300 && res.status < 400) {
+    await res.body?.cancel().catch(() => {})
+    clearTimeout(timer)
+    externalSignal?.removeEventListener("abort", onExternalAbort)
+    await dispatcher?.destroy()
+    return {
+      ok: true,
+      result: {
+        html: "",
+        status: res.status,
+        headers: responseHeaders,
+        finalUrl: rawUrl,
+        urlHistory: [rawUrl],
+      },
+    }
+  }
+
+  try {
+    const html = await readBounded(res, maxBytes)
+    clearTimeout(timer)
+    externalSignal?.removeEventListener("abort", onExternalAbort)
+    await dispatcher?.destroy()
+    return {
+      ok: true,
+      result: {
+        html,
+        status: res.status,
+        headers: responseHeaders,
+        finalUrl: rawUrl,
+        urlHistory: [rawUrl],
+      },
+    }
+  } catch (err) {
+    clearTimeout(timer)
+    externalSignal?.removeEventListener("abort", onExternalAbort)
+    await dispatcher?.destroy()
+    const detail = err instanceof Error ? err.message : String(err)
+    logger.warn("safeFetch response body read failed", {
+      url: redactUrlForLogs(rawUrl),
+      error: detail,
+    })
+    return { ok: false, reason: "body_read_failed", detail }
+  }
 }
 
 function createPinnedDispatcher(addresses: string[]): Agent {

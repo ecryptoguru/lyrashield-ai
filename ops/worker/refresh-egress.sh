@@ -27,6 +27,7 @@ DATABASE_URL=$(read_environment_value DATABASE_URL)
 REDIS_URL=$(read_environment_value REDIS_URL)
 AZURE_AI_API_BASE=$(read_environment_value AZURE_AI_API_BASE)
 S3_ENDPOINT=$(read_environment_value S3_ENDPOINT)
+LYRASHIELD_EGRESS_PROXY_URL=$(read_environment_value LYRASHIELD_EGRESS_PROXY_URL)
 
 worker_subnet=$(docker network inspect "$worker_network" --format '{{(index .IPAM.Config 0).Subnet}}')
 worker_bridge=$(docker network inspect "$worker_network" --format '{{index .Options "com.docker.network.bridge.name"}}')
@@ -151,6 +152,7 @@ append_endpoint_rules "https://api.github.com" 443
 append_endpoint_rules "https://api.osv.dev" 443
 append_endpoint_rules "https://www.cisa.gov" 443
 append_endpoint_rules "https://api.first.org" 443
+append_endpoint_rules "$LYRASHIELD_EGRESS_PROXY_URL" 443
 
 cat >>"$temporary_rules" <<EOF
 -A ${chain_name} -j REJECT --reject-with icmp-admin-prohibited

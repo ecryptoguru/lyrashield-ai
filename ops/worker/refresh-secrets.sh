@@ -66,6 +66,8 @@ write_secret S3_ENDPOINT worker-r2-endpoint
 write_secret S3_BUCKET worker-r2-bucket
 write_secret S3_ACCESS_KEY worker-r2-access-key
 write_secret S3_SECRET_KEY worker-r2-secret-key
+write_secret LYRASHIELD_EGRESS_PROXY_URL worker-egress-proxy-url
+write_secret LYRASHIELD_EGRESS_PROXY_SECRET worker-egress-proxy-secret
 
 uses_ghcr=false
 for image in "${LYRASHIELD_WORKER_IMAGE:-}" "${LYRASHIELD_SANDBOX_IMAGE:-}"; do

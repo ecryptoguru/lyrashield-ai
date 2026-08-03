@@ -101,6 +101,10 @@ const envSchema = z
     LYRASHIELD_ENGINE_WORK_ROOT: z.string().optional().or(z.literal("")),
     LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
     SCANNER_PHASE_TIMEOUT_MS: z.coerce.number().int().positive().max(3_600_000).default(600_000),
+    // Optional authenticated egress proxy for URL scanning. When both URL and secret are
+    // set, the worker routes safeFetchDetailed through this proxy instead of direct egress.
+    LYRASHIELD_EGRESS_PROXY_URL: z.string().url().optional().or(z.literal("")),
+    LYRASHIELD_EGRESS_PROXY_SECRET: z.string().optional().or(z.literal("")),
     PLATFORM_MAX_SCAN_BUDGET_USD: z.coerce.number().positive().max(1000).default(50),
     // Docker sandbox resource limits passed to the Strix engine (e.g. "4g", "2", "512").
     STRIX_SANDBOX_MEM_LIMIT: z.string().optional().default("4g"),

@@ -4,35 +4,103 @@ import type { AuditLog } from "./generated/prisma"
 
 const DELETED_USER = "deleted-user"
 
+export interface AccountDeletionWorkspace {
+  id: string
+  name: string
+}
+
+export interface AccountDeletionBlockedWorkspace extends AccountDeletionWorkspace {
+  members: Array<{ id: string; name: string | null; email: string }>
+}
+
+export interface AccountDeletionPlan {
+  /** Workspaces that will be physically deleted along with the account. */
+  deletable: AccountDeletionWorkspace[]
+  /** Workspaces the user owns alone but that have other active members. */
+  blocked: AccountDeletionBlockedWorkspace[]
+  /** Workspaces that survive with anonymized attribution. */
+  retained: AccountDeletionWorkspace[]
+}
+
 export class AccountDeletionBlockedError extends Error {
-  constructor(public workspaces: Array<{ id: string; name: string }>) {
+  constructor(
+    public workspaces: AccountDeletionBlockedWorkspace[],
+    public expectedConfirmation: string | null = null
+  ) {
     super("Transfer ownership before deleting this account")
     this.name = "AccountDeletionBlockedError"
   }
 }
 
-export async function deleteUserAccount(userId: string): Promise<{ workspaceIds: string[] }> {
+export class AccountDeletionConfirmationRequiredError extends Error {
+  constructor(
+    public deletableWorkspaces: AccountDeletionWorkspace[],
+    public expectedConfirmation: string
+  ) {
+    super("Confirmation required before deleting this account")
+    this.name = "AccountDeletionConfirmationRequiredError"
+  }
+}
+
+/**
+ * Preview the workspaces that will be deleted, blocked, or retained when an
+ * account is removed. This is intentionally side-effect free and may be called
+ * from UI server paths to decide which confirmation to ask for.
+ */
+export async function getAccountDeletionPlan(userId: string): Promise<AccountDeletionPlan> {
   const ownerMemberships = await prisma.workspaceMember.findMany({
     where: { userId, role: "OWNER", status: "active" },
     select: { workspaceId: true, workspace: { select: { name: true } } },
   })
-  const workspaceIds = ownerMemberships.map((membership) => membership.workspaceId)
+  const ownedWorkspaceIds = ownerMemberships.map((membership) => membership.workspaceId)
 
-  if (workspaceIds.length > 0) {
-    const otherOwners = await prisma.workspaceMember.findMany({
-      where: {
-        workspaceId: { in: workspaceIds },
-        userId: { not: userId },
-        role: "OWNER",
-        status: "active",
-      },
-      select: { workspaceId: true },
+  let allActiveMembers: Array<{ workspaceId: string; userId: string; role: string }> = []
+  if (ownedWorkspaceIds.length > 0) {
+    allActiveMembers = await prisma.workspaceMember.findMany({
+      where: { workspaceId: { in: ownedWorkspaceIds }, status: "active" },
+      select: { workspaceId: true, userId: true, role: true },
     })
-    const transferable = new Set(otherOwners.map((owner) => owner.workspaceId))
-    const blocked = ownerMemberships
-      .filter((membership) => !transferable.has(membership.workspaceId))
-      .map((membership) => ({ id: membership.workspaceId, name: membership.workspace.name }))
-    if (blocked.length > 0) throw new AccountDeletionBlockedError(blocked)
+  }
+
+  const otherMemberUserIds = [
+    ...new Set(
+      allActiveMembers.filter((member) => member.userId !== userId).map((member) => member.userId)
+    ),
+  ]
+  const users =
+    otherMemberUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: otherMemberUserIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : []
+  const userById = new Map(users.map((user) => [user.id, user]))
+
+  const deletable: AccountDeletionWorkspace[] = []
+  const blocked: AccountDeletionBlockedWorkspace[] = []
+
+  for (const membership of ownerMemberships) {
+    const workspaceId = membership.workspaceId
+    const otherActiveMembers = allActiveMembers.filter(
+      (member) => member.workspaceId === workspaceId && member.userId !== userId
+    )
+    const otherOwners = otherActiveMembers.filter((member) => member.role === "OWNER")
+    const otherNonOwners = otherActiveMembers.filter((member) => member.role !== "OWNER")
+
+    if (otherOwners.length > 0) continue
+
+    const workspace = { id: workspaceId, name: membership.workspace.name }
+    if (otherNonOwners.length === 0) {
+      deletable.push(workspace)
+    } else {
+      blocked.push({
+        ...workspace,
+        members: otherNonOwners.map((member) => {
+          const user = userById.get(member.userId)
+          return { id: member.userId, name: user?.name ?? null, email: user?.email ?? "" }
+        }),
+      })
+    }
   }
 
   const memberships = await prisma.workspaceMember.findMany({
@@ -49,6 +117,81 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
       ...actorWorkspaces.map((entry) => entry.workspaceId),
     ]),
   ]
+
+  const retainedIds = affectedWorkspaceIds.filter(
+    (id) =>
+      !deletable.some((workspace) => workspace.id === id) &&
+      !blocked.some((workspace) => workspace.id === id)
+  )
+
+  const retainedWorkspaces =
+    retainedIds.length > 0
+      ? await prisma.workspace.findMany({
+          where: { id: { in: retainedIds } },
+          select: { id: true, name: true },
+        })
+      : []
+  const retainedById = new Map(
+    retainedWorkspaces.map((workspace) => [workspace.id, workspace.name])
+  )
+
+  return {
+    deletable,
+    blocked,
+    retained: retainedIds.map((id) => ({ id, name: retainedById.get(id) ?? id })),
+  }
+}
+
+/**
+ * Physically delete the user, removing sole-owner/sole-member workspaces and
+ * anonymizing attribution in any workspace the user co-owned or contributed to.
+ *
+ * Confirmation rules:
+ *  - Workspaces with another active owner are retained; no special confirmation.
+ *  - Sole-owner workspaces with other active members block deletion.
+ *  - Sole-owner/sole-member workspaces are physically deleted and require the
+ *    user to type the list of workspace names being destroyed.
+ *  - Otherwise the user must type "DELETE".
+ */
+export async function deleteUserAccount(
+  userId: string,
+  confirmation = "DELETE"
+): Promise<{ workspaceIds: string[] }> {
+  const plan = await getAccountDeletionPlan(userId)
+
+  if (plan.blocked.length > 0) {
+    throw new AccountDeletionBlockedError(plan.blocked)
+  }
+
+  const expectedConfirmation =
+    plan.deletable.length > 0
+      ? plan.deletable
+          .map((workspace) => workspace.name)
+          .sort()
+          .join(", ")
+      : "DELETE"
+
+  if (confirmation !== expectedConfirmation) {
+    throw new AccountDeletionConfirmationRequiredError(plan.deletable, expectedConfirmation)
+  }
+
+  const memberships = await prisma.workspaceMember.findMany({
+    where: { userId },
+    select: { workspaceId: true },
+  })
+  const actorWorkspaces = await prisma.auditLog.findMany({
+    where: { actorUserId: userId },
+    select: { workspaceId: true },
+  })
+  const affectedWorkspaceIds = [
+    ...new Set([
+      ...memberships.map((membership) => membership.workspaceId),
+      ...actorWorkspaces.map((entry) => entry.workspaceId),
+    ]),
+  ]
+  const retainedWorkspaceIds = affectedWorkspaceIds.filter(
+    (id) => !plan.deletable.some((workspace) => workspace.id === id)
+  )
 
   await prisma.$transaction(async (tx) => {
     // These models are deliberately not workspace-RLS scoped. Keep their user
@@ -91,7 +234,7 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
       tx.workspaceMember.deleteMany({ where: { userId } }),
     ])
 
-    for (const workspaceId of [...affectedWorkspaceIds].sort()) {
+    for (const workspaceId of [...retainedWorkspaceIds].sort()) {
       await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspaceId}, true)`
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspaceId}, 0))`
 
@@ -161,10 +304,21 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
         prevHash = hash
       }
     }
+
+    // Physically delete sole-owner/sole-member workspaces. The database cascade
+    // removes their dependent rows. The Workspace model has a deletedAt column and
+    // is soft-deleted by the Prisma client extension, so this must bypass the
+    // extension and use raw SQL.
+    for (const workspace of [...plan.deletable].sort((a, b) => a.id.localeCompare(b.id))) {
+      await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspace.id}, true)`
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${workspace.id}, 0))`
+      await tx.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspace.id}`
+    }
+
     await tx.user.delete({ where: { id: userId } })
   })
 
-  for (const workspaceId of affectedWorkspaceIds) {
+  for (const workspaceId of retainedWorkspaceIds) {
     await prisma.auditLog.create({
       data: {
         workspaceId,
@@ -175,5 +329,5 @@ export async function deleteUserAccount(userId: string): Promise<{ workspaceIds:
     })
   }
 
-  return { workspaceIds: affectedWorkspaceIds }
+  return { workspaceIds: retainedWorkspaceIds }
 }

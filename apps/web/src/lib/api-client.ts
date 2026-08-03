@@ -2,6 +2,8 @@ import { z } from "zod"
 import type { ApiResponse, PaginatedResponse } from "@lyrashield/types"
 
 export class ApiError extends Error {
+  details?: unknown
+
   constructor(
     public code: string,
     message: string,
@@ -88,7 +90,9 @@ async function request<T>(url: string, options: FetchOptions<T> = {}): Promise<T
   if (!json.success) {
     const code = json.error?.code ?? "UNKNOWN_ERROR"
     const message = json.error?.message ?? "An unknown error occurred"
-    throw new ApiError(code, message, res.status)
+    const err = new ApiError(code, message, res.status)
+    err.details = json.error?.details
+    throw err
   }
 
   if (schema) {
@@ -165,11 +169,13 @@ export async function apiGetConditional<T>(
       )
     }
     if (!json.success) {
-      throw new ApiError(
+      const err = new ApiError(
         json.error?.code ?? "UNKNOWN_ERROR",
         json.error?.message ?? "An unknown error occurred",
         res.status
       )
+      err.details = json.error?.details
+      throw err
     }
 
     return {
