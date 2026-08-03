@@ -12,6 +12,7 @@ import {
   Info,
 } from "lucide-react"
 import { Card, Badge, Button, Spinner, EmptyState } from "@lyrashield/ui"
+import { PageHeader } from "@/components/page-header"
 import { z } from "zod"
 import { apiGet } from "@/lib/api-client"
 import { ScoreGauge } from "@/components/security-visuals"
@@ -198,10 +199,7 @@ export function LaunchReadinessClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Rocket className="text-primary h-6 w-6" aria-hidden="true" />
-        <h1 className="text-2xl font-bold tracking-tight">Launch Readiness</h1>
-      </div>
+      <PageHeader title="Launch Readiness" icon={Rocket} />
 
       {/* Verdict Card */}
       <Card className={`p-6 ${config.bg} ${config.border}`}>

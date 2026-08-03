@@ -17,6 +17,7 @@ import {
 import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated, apiPost } from "@/lib/api-client"
+import { PageHeader } from "@/components/page-header"
 
 interface Project {
   id: string
@@ -144,18 +145,16 @@ export function ProjectsClient({
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Organize your scan targets and findings
-          </p>
-        </div>
-        <Button onClick={() => setShowForm(!showForm)} className="shrink-0">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          New Project
-        </Button>
-      </div>
+      <PageHeader
+        title="Projects"
+        description="Organize your scan targets and findings"
+        action={
+          <Button onClick={() => setShowForm(!showForm)}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            New Project
+          </Button>
+        }
+      />
 
       {showForm && (
         <form

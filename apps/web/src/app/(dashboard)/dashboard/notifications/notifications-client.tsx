@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { Bell, AlertCircle, CheckCircle2, Mail, MessageSquare } from "lucide-react"
 import { Button, Badge, type BadgeProps, Card, EmptyState, LoadMore } from "@lyrashield/ui"
+import { PageHeader } from "@/components/page-header"
 import { z } from "zod"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiGetPaginated, apiPatch } from "@/lib/api-client"
@@ -128,20 +129,18 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Scan alerts, finding warnings, and fix PR updates
-          </p>
-        </div>
-        {notifications.some((n) => n.status !== "read") && (
-          <Button size="sm" variant="ghost" onClick={() => void handleMarkAllRead()}>
-            <CheckCircle2 className="mr-1 h-4 w-4" aria-hidden="true" />
-            Mark all as read
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Notifications"
+        description="Scan alerts, finding warnings, and fix PR updates"
+        action={
+          notifications.some((n) => n.status !== "read") ? (
+            <Button size="sm" variant="ghost" onClick={() => void handleMarkAllRead()}>
+              <CheckCircle2 className="mr-1 h-4 w-4" aria-hidden="true" />
+              Mark all as read
+            </Button>
+          ) : null
+        }
+      />
 
       {error && (
         <Card className="border-destructive/50 mb-4 p-4">

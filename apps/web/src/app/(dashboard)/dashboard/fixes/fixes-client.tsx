@@ -10,6 +10,7 @@ import { apiGetPaginated } from "@/lib/api-client"
 import { formatDate } from "@/lib/date-format"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { severityLabel } from "@/lib/labels"
+import { PageHeader } from "@/components/page-header"
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
 
@@ -118,14 +119,10 @@ export function FixesClient({
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Proposed fixes</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Review proposed fixes and track pull requests for your issues.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Proposed fixes"
+        description="Review proposed fixes and track pull requests for your issues."
+      />
 
       {proposals.length === 0 && !nextCursor ? (
         <EmptyState

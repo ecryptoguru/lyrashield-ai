@@ -8,6 +8,7 @@ import { DeleteAccount } from "./delete-account"
 import { ConnectedAccounts } from "./connected-accounts"
 import { ApiKeysSection } from "./api-keys"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 
 export default async function SettingsPage() {
   const session = await getCachedSession()
@@ -66,14 +67,10 @@ export default async function SettingsPage() {
 
   return (
     <div className="min-w-0 space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Workspace access, automation, and connected services.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="Workspace access, automation, and connected services."
+      />
 
       <Card>
         <CardContent className="space-y-3 p-5">

@@ -6,6 +6,7 @@ import { ClipboardCheck, ShieldX } from "lucide-react"
 import { EmptyState } from "@lyrashield/ui"
 import { ApprovalsClient } from "./approvals-client"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 
 export default async function ApprovalsPage() {
@@ -19,13 +20,11 @@ export default async function ApprovalsPage() {
 
   if (!workspaceId) {
     return (
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{REVIEW_QUEUE_LABEL}</h1>
-          <p className="text-muted-foreground text-sm">
-            Review and approve agent actions and fix proposals before they are applied.
-          </p>
-        </div>
+      <div>
+        <PageHeader
+          title={REVIEW_QUEUE_LABEL}
+          description="Review and approve agent actions and fix proposals before they are applied."
+        />
         <NoWorkspaceState
           icon={ClipboardCheck}
           description={`Create a workspace during onboarding to view ${APPROVAL_PLURAL.toLowerCase()}.`}
@@ -36,13 +35,11 @@ export default async function ApprovalsPage() {
 
   if (!canView) {
     return (
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{REVIEW_QUEUE_LABEL}</h1>
-          <p className="text-muted-foreground text-sm">
-            Review and approve agent actions and fix proposals before they are applied.
-          </p>
-        </div>
+      <div>
+        <PageHeader
+          title={REVIEW_QUEUE_LABEL}
+          description="Review and approve agent actions and fix proposals before they are applied."
+        />
         <EmptyState
           icon={ShieldX}
           title="Access restricted"
@@ -71,13 +68,11 @@ export default async function ApprovalsPage() {
   ])
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{REVIEW_QUEUE_LABEL}</h1>
-        <p className="text-muted-foreground text-sm">
-          Review and approve agent actions and fix proposals before they are applied.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title={REVIEW_QUEUE_LABEL}
+        description="Review and approve agent actions and fix proposals before they are applied."
+      />
 
       <ApprovalsClient
         workspaceId={workspaceId}
