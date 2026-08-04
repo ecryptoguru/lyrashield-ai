@@ -2303,3 +2303,11 @@ A five-batch deep review remediation addressing stop-bleeding P0s, structural te
 - Package unit tests pass for `@lyrashield/cli`, `@lyrashield/agent`, `@lyrashield/worker`, `@lyrashield/agent-registry`, `@lyrashield/types`, `@lyrashield/marketing`, `packages/db/src/agent-approval-service.test.ts`, `packages/db/src/score-service.test.ts`, `packages/db/src/scan-service.test.ts`, `packages/db/src/fix-proposal-service.test.ts`, `packages/db/src/retest-service.test.ts`, and `packages/db/src/rls.test.ts`.
 - Full `pnpm test` reports **1337 passed**, **10 skipped**, **3 failed**; failures are limited to DB integration suites (`account-deletion`, `audit-concurrency`, `soft-delete`) that require a live Postgres/Redis stack, which is not available in this environment.
 - `python3 .devin/scripts/checklist.py .` required checks (Security, Lint, Schema) pass.
+
+## §62 — Dashboard UX final pass (unmerged branch `dashboard-ux-final-pass`, 2026-08-03)
+
+The dashboard pages received a final UX pass focused on consistent headers and no-workspace empty states.
+
+- `apps/web/src/components/page-header.tsx` introduces a shared `PageHeader` component that renders a title, optional `Lucide` icon, description, and action slot. It is used in place of page-specific header markup across `approvals`, `fixes`, `launch-readiness`, `notifications`, `projects`, `scans`, `scans/[id]`, `settings`, `targets`, and `team`.
+- `apps/web/src/components/no-workspace-state.tsx` provides a consistent empty-state placeholder when a user has not yet created a workspace. The `scans`, `settings`, `targets`, `projects`, `team`, `approvals`, `fixes`, `launch-readiness`, `notifications`, and `scans/[id]` pages now surface it instead of hand-rolled copy.
+- `page-header.tsx` was run through Prettier after the component was added.

@@ -52,7 +52,6 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
         })
         setItems((prev) => prev.filter((i) => i.id !== approval.id))
       } catch (err) {
-        console.error("Failed to approve", err)
         setError(err instanceof Error ? err.message : "Approval failed")
       } finally {
         setPending((prev) => ({ ...prev, [approval.id]: false }))
@@ -69,7 +68,6 @@ export function ApprovalsClient({ workspaceId, approvals, hasProposals }: Approv
         await apiPost(`/api/agent-approvals/${approval.id}/deny`, { workspaceId })
         setItems((prev) => prev.filter((i) => i.id !== approval.id))
       } catch (err) {
-        console.error("Failed to deny", err)
         setError(err instanceof Error ? err.message : "Deny failed")
       } finally {
         setPending((prev) => ({ ...prev, [approval.id]: false }))

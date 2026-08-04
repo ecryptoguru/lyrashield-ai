@@ -66,6 +66,13 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 - **Batch E (polish/test regression fixes):** `packages/cli/src/installers/atomic-write.ts` no longer rejects paths under a symlinked ancestor such as macOS `/var`; it only refuses when the immediate destination directory is a symlink. Unit tests were added/updated for `saveApprovalResult` workspace scoping, `evidence.createMany`, and the `atomic-write` symlink guard.
 - **Verification:** lint, typecheck, `git diff --check`, and package-level unit tests pass. Full `pnpm test` is at **1337 passed / 10 skipped / 3 failed**, with the failures limited to DB integration suites (`account-deletion`, `audit-concurrency`, `soft-delete`) that require a live Postgres/Redis stack. The `python3 .devin/scripts/checklist.py .` required checks (Security, Lint, Schema) pass.
 
+### Dashboard UX final pass (unmerged branch `dashboard-ux-final-pass`, 2026-08-03)
+
+- A shared `PageHeader` component (`apps/web/src/components/page-header.tsx`) now provides consistent title, icon, description, and action layout across dashboard list and detail pages.
+- `NoWorkspaceState` (`apps/web/src/components/no-workspace-state.tsx`) replaces ad-hoc empty-state copy when a user has not yet created a workspace on the dashboard pages that need one.
+- The affected server and client pages (`approvals`, `fixes`, `launch-readiness`, `notifications`, `projects`, `scans`, `scans/[id]`, `settings`, `targets`, `team`) were updated to use `PageHeader` and the new no-workspace placeholder where applicable.
+- Prettier formatting was applied to `page-header.tsx`.
+
 ### UX V2 merge (Phases 0–10, merged on `main`)
 
 - UX V2 Phases 0–10 are merged on `main`. The dashboard now has a mobile-first shell (`V2Sidebar`, `BottomNav`, `MobilePageHeader`), a feature-flags system with env and per-workspace cookie override, a PostHog product analytics wrapper with privacy-safe allowlist, and a terminology mapping module (`apps/web/src/lib/terminology.ts`) that maps internal identifiers to user-facing labels (Scan→Trust Run, Finding→Issue, Project→Product, Target→Asset).

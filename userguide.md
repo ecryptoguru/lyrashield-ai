@@ -124,7 +124,7 @@ The primary navigation contains four lifecycle destinations:
 
 **Review Queue** appears in the Workspace section of the sidebar and mobile More sheet only when pending agent approvals or fix proposals exist. It carries a count badge and links to the approval page. The route remains reachable by URL for authorized users even when the queue is empty.
 
-Open **More** (mobile) or the **Workspace** sidebar group (desktop) for Integrations, Team, Notifications, and Settings. Integrations contains two tabs: **Services** (GitHub, MCP, CLI) and **Agents** (coding-agent setup). Use the workspace switcher above the navigation to change the active workspace. Every page and action is evaluated against the active workspace and your role.
+Open **More** (mobile) or the **Workspace** sidebar group (desktop) for Integrations, Team, Notifications, and Settings. The **Integrations** page is tabbed: **Services** (GitHub, MCP, CLI) and **Agents** (coding-agent setup). Use the workspace switcher above the navigation to change the active workspace. Every page and action is evaluated against the active workspace and your role.
 
 ## 6. Projects
 
@@ -414,7 +414,7 @@ LyraShield ships three ways to run checks from a coding agent, an editor, or a t
 
 The `lyrashield` command-line tool (published on npm; also available as the scoped alias `@lyrashield/cli`) installs, configures, and drives scans without hand-editing any config file:
 
-```
+```bash
 npx lyrashield login              # store a workspace API key
 npx lyrashield init                # detect installed coding agents and configure them
 npx lyrashield doctor              # check what's configured and what's missing
@@ -429,7 +429,7 @@ Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `
 
 LyraShield exposes an MCP server for local editors and a hosted remote endpoint. The full tool catalog lives in `packages/mcp/README.md`; the current set is:
 
-**Read tools**
+#### Read tools
 
 - `lyrashield_list_workspaces` — list workspaces the API key can access;
 - `lyrashield_list_targets` — list targets in a workspace;
@@ -441,7 +441,7 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 - `lyrashield_create_pr_security_recap` — generate a markdown security recap for a PR comment;
 - `lyrashield_check_diff` — fast **advisory** heuristic pre-filter on a diff (not a verified scan).
 
-**Write tools**
+#### Write tools
 
 - `lyrashield_scan_target` — start a scan on a registered target;
 - `lyrashield_run_pr_scan` — start a PR-focused (CHECK_PR) scan;
