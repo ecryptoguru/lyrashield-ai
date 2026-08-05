@@ -29,7 +29,7 @@ The canonical engine repo is `ecryptoguru/lyrashield-engine`. It is a controlled
 - **Recorded upstream release/base:** `v1.1.0` / `7d5a67d234bd3faef34d22be8c6f5a9607de41a3`
 - **Adapter version:** `1.1.0.post1`
 - **Compatibility:** maps `LYRASHIELD_*` only when the corresponding `STRIX_*` value is unset; explicit upstream values win; the product entry point forces upstream telemetry to `0`
-- **Model config:** the engine accepts only GPT-5.6 Terra or Luna deployment names. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for the Deep/Custom coordinator, falling back to `LYRASHIELD_LLM`; Deep/Custom child specialists receive Luna/medium through the separate delegate route. Empty allowlisted environment values are not forwarded to the engine, preventing them from shadowing a valid fallback. Per-request receipts retain their actual model for mixed-model reconciliation. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel is not configured.
+- **Model config:** the engine accepts only GPT-5.6 Terra or Luna deployment names. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for the Deep/Custom coordinator, falling back to `LYRASHIELD_LLM`; Deep/Custom child specialists receive Luna/medium through the separate delegate route. Empty allowlisted environment values are not forwarded to the engine, preventing them from shadowing a valid fallback. Per-request receipts retain their actual model for mixed-model reconciliation. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel Search is configured through `LYRASHIELD_WEB_SEARCH_*` values and requires `LYRASHIELD_WEB_SEARCH_API_KEY` to be useful.
 - **Artifacts:** worker accepts `strix_runs` and legacy `lyrashield_runs`, with `run.json` or `vulnerabilities.json`
 - **Sync model:** stable-release tree imports on review branches; human approval and green CI are required, with no force-push or automatic conflict resolution
 - **Verification:** 597 tests (1 skipped), Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox build/smoke, and public worker compatibility
@@ -337,6 +337,7 @@ The root `.env.example` is the canonical template. `@lyrashield/config` validate
 | GitHub App              | `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`                                                                                                            |
 | Public app              | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_MARKETING_URL`, `PORT`                                                                                                                                       |
 | Engine                  | `LYRASHIELD_LLM` fallback, `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `LLM_API_*`, `LYRASHIELD_IMAGE`, Azure aliases; programmatic tools only after the engine provider-contract gate passes |
+| Web Search              | `LYRASHIELD_WEB_SEARCH_ENABLED`, `LYRASHIELD_WEB_SEARCH_API_KEY`, optional `LYRASHIELD_WEB_SEARCH_MODE`, `MAX_RESULTS`, `MAX_CHARS_TOTAL`, `MAX_CALLS_PER_SCAN`, `BUDGET_USD`                    |
 | Evidence storage        | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`                                                                                                                        |
 | Email/notifications     | `BREVO_API_KEY`, `EMAIL_FROM`, `NOTIFICATION_FROM_EMAIL`, `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`                                                                                             |
 | Billing placeholders    | Polar and Razorpay variables; no billing runtime exists yet                                                                                                                                      |
@@ -1906,6 +1907,13 @@ Implements the "LyraShield Score, Shareable Scorecard & Referral System — Engi
 - Deep/Custom now use a deterministic within-scan route: Terra/medium owns coordination and cross-file judgment while Luna/medium runs focused child work. Only the root can create or stop specialists, specialists start without copied parent history unless explicitly requested, stable per-scan prompt-cache keys improve repeated-prefix reuse, and per-request model buckets keep reconciliation exact. Adaptive evidence-triggered promotion, billing-plan quotas, and cross-workspace cost policy remain roadmap work.
 - Configuration is propagated through `packages/config`, `turbo.json`, `docker-compose.yml`, `.env.example`, and the deployment runbooks. Regression tests cover every mode, fallback routing, policy overrides, invalid policy budgets, and CLI cap propagation. The full local gate passes 689 Vitest tests in 65 files, lint, typecheck, and production build.
 
+## §35.5 — Parallel Search web_search integration (2026-08-04)
+
+- The engine gained a `web_search` tool backed by Parallel Search (`/v1/search`). `LYRASHIELD_WEB_SEARCH_API_KEY` (Parallel API key) is the primary credential; the engine also accepts `PARALLEL_API_KEY` as a fallback. `packages/config` now models `LYRASHIELD_WEB_SEARCH_ENABLED`, `LYRASHIELD_WEB_SEARCH_API_KEY`, `LYRASHIELD_WEB_SEARCH_MODE`, `LYRASHIELD_WEB_SEARCH_MAX_RESULTS`, `LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL`, `LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN`, and `LYRASHIELD_WEB_SEARCH_BUDGET_USD`.
+- `apps/worker/src/engine/runner.ts` forwards the `LYRASHIELD_WEB_SEARCH_*` allowlist to the engine process. `docker-compose.yml` and `.env.example` pass these values to the worker container.
+- Production ops: `ops/worker/refresh-secrets.sh` conditionally loads `worker-web-search-api-key` into `LYRASHIELD_WEB_SEARCH_API_KEY`; `ops/worker/refresh-egress.sh` adds `api.parallel.ai:443` to the worker egress allowlist; `ops/worker/run-worker.sh` sets the default `LYRASHIELD_WEB_SEARCH_ENABLED=1` and passes through the tuning variables.
+- The engine redacts target hostnames, secrets, IPs, and PII from the query before it reaches Parallel, reserves per-call cost, and enforces `max_calls_per_scan` and a separate `budget_usd`. The tool is available to all scan modes while the product evaluates per-mode gating; no `lyrashieldai` mode gating exists yet.
+
 ## §36 — Deep Review v3 remediation (2026-07-14, PRs #54–#57)
 
 This pass closed the review queue in four focused, CI-gated merges while preserving the existing package and service boundaries.
@@ -2303,3 +2311,11 @@ A five-batch deep review remediation addressing stop-bleeding P0s, structural te
 - Package unit tests pass for `@lyrashield/cli`, `@lyrashield/agent`, `@lyrashield/worker`, `@lyrashield/agent-registry`, `@lyrashield/types`, `@lyrashield/marketing`, `packages/db/src/agent-approval-service.test.ts`, `packages/db/src/score-service.test.ts`, `packages/db/src/scan-service.test.ts`, `packages/db/src/fix-proposal-service.test.ts`, `packages/db/src/retest-service.test.ts`, and `packages/db/src/rls.test.ts`.
 - Full `pnpm test` reports **1337 passed**, **10 skipped**, **3 failed**; failures are limited to DB integration suites (`account-deletion`, `audit-concurrency`, `soft-delete`) that require a live Postgres/Redis stack, which is not available in this environment.
 - `python3 .devin/scripts/checklist.py .` required checks (Security, Lint, Schema) pass.
+
+## §62 — Dashboard UX final pass (unmerged branch `dashboard-ux-final-pass`, 2026-08-03)
+
+The dashboard pages received a final UX pass focused on consistent headers and no-workspace empty states.
+
+- `apps/web/src/components/page-header.tsx` introduces a shared `PageHeader` component that renders a title, optional `Lucide` icon, description, and action slot. It is used in place of page-specific header markup across `approvals`, `fixes`, `launch-readiness`, `notifications`, `projects`, `scans`, `scans/[id]`, `settings`, `targets`, and `team`.
+- `apps/web/src/components/no-workspace-state.tsx` provides a consistent empty-state placeholder when a user has not yet created a workspace. The `scans`, `settings`, `targets`, `projects`, `team`, `approvals`, `fixes`, `launch-readiness`, `notifications`, and `scans/[id]` pages now surface it instead of hand-rolled copy.
+- `page-header.tsx` was run through Prettier after the component was added.

@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "crypto"
+import { createHmac, randomBytes, timingSafeEqual } from "crypto"
 import { env } from "@lyrashield/config"
 
 /**
@@ -25,12 +25,7 @@ function sign(payload: string): string {
 }
 
 export function createInstallState(workspaceId: string, now: number = Date.now()): string {
-  const nonce = b64url(
-    createHmac("sha256", env.BETTER_AUTH_SECRET)
-      .update(`${workspaceId}:${now}:${Math.random()}`)
-      .digest()
-      .subarray(0, 12)
-  )
+  const nonce = b64url(randomBytes(12))
   const payload = `${b64url(workspaceId)}.${nonce}.${now + TTL_MS}`
   return `${payload}.${sign(payload)}`
 }

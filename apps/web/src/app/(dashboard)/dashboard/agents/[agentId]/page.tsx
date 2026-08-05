@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { env } from "@lyrashield/config"
@@ -9,6 +10,17 @@ import { buildAgentWizard } from "@/lib/agent-wizard"
 import { AgentWizard } from "./agent-wizard"
 
 export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "Agent integration | LyraShield AI",
+  description: "Set up and verify an agent integration for your workspace.",
+  openGraph: {
+    title: "Agent integration | LyraShield AI",
+    description: "Set up and verify an agent integration for your workspace.",
+    type: "website",
+    siteName: "LyraShield AI",
+  },
+}
 
 export default async function AgentWizardPage({
   params,
@@ -37,7 +49,7 @@ export default async function AgentWizardPage({
     return (
       <div className="space-y-6">
         <BackLink />
-        <h1 className="text-2xl font-bold tracking-tight">Set up {data.displayName}</h1>
+        <h2 className="text-2xl font-bold tracking-tight">Set up {data.displayName}</h2>
         <NoWorkspaceState
           icon={Puzzle}
           description="Create a workspace during onboarding to set up agent integrations."

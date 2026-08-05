@@ -111,6 +111,16 @@ const envSchema = z
     STRIX_SANDBOX_CPUS: z.string().optional().default("2"),
     STRIX_SANDBOX_PIDS_LIMIT: z.string().optional().default("512"),
 
+    // Web Search (Parallel Search). Disabled by default; enable only when an API key is configured.
+    LYRASHIELD_WEB_SEARCH_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    LYRASHIELD_WEB_SEARCH_API_KEY: z.string().optional().or(z.literal("")),
+    LYRASHIELD_WEB_SEARCH_PROVIDER: z.string().optional().or(z.literal("")),
+    LYRASHIELD_WEB_SEARCH_MODE: z.enum(["turbo", "basic", "advanced"]).optional().or(z.literal("")),
+    LYRASHIELD_WEB_SEARCH_MAX_RESULTS: z.coerce.number().int().min(1).max(20).optional(),
+    LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL: z.coerce.number().int().min(1000).max(20000).optional(),
+    LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN: z.coerce.number().int().min(0).optional(),
+    LYRASHIELD_WEB_SEARCH_BUDGET_USD: z.coerce.number().min(0).optional(),
+
     // Azure OpenAI (optional — use these OR the generic LLM_API_KEY/LLM_API_BASE)
     AZURE_OPENAI_API_KEY: z.string().optional().or(z.literal("")),
     AZURE_OPENAI_ENDPOINT: z.string().optional().or(z.literal("")),
@@ -165,6 +175,19 @@ const envSchema = z
     {
       path: ["UPSTASH_REDIS_REST_TOKEN"],
       message: "UPSTASH_REDIS_REST_TOKEN is required when UPSTASH_REDIS_REST_URL is set",
+    }
+  )
+  .refine(
+    // Web search is fail-closed: enabling it without an API key would fail at
+    // engine runtime and produce a confusing scan error. Build-time builds may
+    // not have the key, so the check is skipped during the Next.js build phase.
+    (val) =>
+      process.env.NEXT_PHASE === "phase-production-build" ||
+      val.LYRASHIELD_WEB_SEARCH_ENABLED !== "1" ||
+      Boolean(val.LYRASHIELD_WEB_SEARCH_API_KEY),
+    {
+      path: ["LYRASHIELD_WEB_SEARCH_API_KEY"],
+      message: "LYRASHIELD_WEB_SEARCH_API_KEY is required when LYRASHIELD_WEB_SEARCH_ENABLED=1",
     }
   )
   .refine((val) => val.NODE_ENV !== "production" || Boolean(val.TRUSTED_PROXY_IP_HEADER), {

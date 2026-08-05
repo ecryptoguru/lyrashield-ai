@@ -82,6 +82,7 @@ describe("verifyApiKey under restricted-role RLS", () => {
         await prisma.apiKey.deleteMany({ where: { workspaceId } })
         await prisma.$executeRaw`DELETE FROM "Workspace" WHERE id = ${workspaceId}`
         await prisma.user.deleteMany({ where: { id: userId } })
+        await prisma.$executeRawUnsafe(`DROP OWNED BY "${role}"`)
         await prisma.$executeRawUnsafe(`DROP ROLE IF EXISTS "${role}"`)
       } catch {
         /* best-effort cleanup */

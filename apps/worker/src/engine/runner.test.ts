@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { mkdtemp, mkdir, realpath, rm, utimes, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join } from "path"
@@ -8,6 +8,9 @@ vi.mock("@lyrashield/config", () => ({
     LYRASHIELD_ENGINE_PATH: "",
     LYRASHIELD_IMAGE: "",
     REDIS_URL: "redis://localhost:6379",
+    STRIX_SANDBOX_MEM_LIMIT: "4g",
+    STRIX_SANDBOX_CPUS: "2",
+    STRIX_SANDBOX_PIDS_LIMIT: "512",
   },
 }))
 vi.mock("@lyrashield/db", () => ({
@@ -30,6 +33,7 @@ import {
   findRunOutputDir,
   interpretExitCode,
   assertRepositoryScanRuntimeConfigured,
+  buildEngineEnv,
   resolveEngineSourceCheckout,
   resolveEngineProfile,
   resolveEngineSandboxNetwork,
@@ -194,12 +198,12 @@ describe("resolveEngineProfile", () => {
     })
   })
 
-  it.each(["DEEP", "CUSTOM"])("routes %s to Terra at medium reasoning", (mode) => {
+  it.each(["DEEP", "CUSTOM"])("routes %s to Terra/medium root with Luna/high delegate", (mode) => {
     expect(resolveEngineProfile(mode, routingEnv)).toEqual({
       model: "azure/gpt-5.6-terra",
       reasoningEffort: "medium",
       delegateModel: "azure/gpt-5.6-luna",
-      delegateReasoningEffort: "medium",
+      delegateReasoningEffort: "high",
     })
   })
 
@@ -249,6 +253,83 @@ describe("repository scan runtime configuration", () => {
       ).toThrow("LYRASHIELD_ENGINE_SANDBOX_NETWORK")
     }
   )
+})
+
+describe("buildEngineEnv", () => {
+  const original: Record<string, string | undefined> = {}
+
+  beforeEach(() => {
+    original.LYRASHIELD_LLM = process.env.LYRASHIELD_LLM
+    original.LYRASHIELD_ENGINE_SANDBOX_NETWORK = process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK
+    original.LYRASHIELD_WEB_SEARCH_ENABLED = process.env.LYRASHIELD_WEB_SEARCH_ENABLED
+    original.LYRASHIELD_WEB_SEARCH_API_KEY = process.env.LYRASHIELD_WEB_SEARCH_API_KEY
+    original.LYRASHIELD_WEB_SEARCH_PROVIDER = process.env.LYRASHIELD_WEB_SEARCH_PROVIDER
+    original.LYRASHIELD_WEB_SEARCH_MODE = process.env.LYRASHIELD_WEB_SEARCH_MODE
+    original.LYRASHIELD_WEB_SEARCH_MAX_RESULTS = process.env.LYRASHIELD_WEB_SEARCH_MAX_RESULTS
+    original.LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL =
+      process.env.LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL
+    original.LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN =
+      process.env.LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN
+    original.LYRASHIELD_WEB_SEARCH_BUDGET_USD = process.env.LYRASHIELD_WEB_SEARCH_BUDGET_USD
+    process.env.LYRASHIELD_LLM = "azure/gpt-5.6-luna"
+    process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK = "lyrashield-sandbox"
+    // Remove all web-search variables from the live environment so these tests
+    // prove buildEngineEnv's own defaults/filtration, not the local .env.
+    delete process.env.LYRASHIELD_WEB_SEARCH_ENABLED
+    delete process.env.LYRASHIELD_WEB_SEARCH_API_KEY
+    delete process.env.LYRASHIELD_WEB_SEARCH_PROVIDER
+    delete process.env.LYRASHIELD_WEB_SEARCH_MODE
+    delete process.env.LYRASHIELD_WEB_SEARCH_MAX_RESULTS
+    delete process.env.LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL
+    delete process.env.LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN
+    delete process.env.LYRASHIELD_WEB_SEARCH_BUDGET_USD
+  })
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
+  })
+
+  it("applies web-search tuning defaults when the feature is enabled", () => {
+    process.env.LYRASHIELD_WEB_SEARCH_ENABLED = "1"
+    process.env.LYRASHIELD_WEB_SEARCH_API_KEY = "test-key"
+
+    const engineEnv = buildEngineEnv({
+      model: "azure/gpt-5.6-luna",
+      reasoningEffort: "medium",
+      delegateModel: "azure/gpt-5.6-luna",
+      delegateReasoningEffort: "medium",
+    })
+
+    expect(engineEnv.LYRASHIELD_WEB_SEARCH_PROVIDER).toBe("parallel")
+    expect(engineEnv.LYRASHIELD_WEB_SEARCH_MODE).toBe("turbo")
+    expect(engineEnv.LYRASHIELD_WEB_SEARCH_MAX_RESULTS).toBe("5")
+    expect(engineEnv.LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL).toBe("4000")
+    expect(engineEnv.LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN).toBe("50")
+    expect(engineEnv.LYRASHIELD_WEB_SEARCH_BUDGET_USD).toBe("1.0")
+  })
+
+  it("does not inject web-search defaults when the feature is disabled", () => {
+    process.env.LYRASHIELD_WEB_SEARCH_ENABLED = "0"
+
+    expect(process.env.LYRASHIELD_WEB_SEARCH_ENABLED).toBe("0")
+
+    const engineEnv = buildEngineEnv({
+      model: "azure/gpt-5.6-luna",
+      reasoningEffort: "medium",
+      delegateModel: "azure/gpt-5.6-luna",
+      delegateReasoningEffort: "medium",
+    })
+
+    expect(engineEnv.LYRASHIELD_WEB_SEARCH_ENABLED).toBe("0")
+    expect(engineEnv.LYRASHIELD_WEB_SEARCH_PROVIDER).toBeUndefined()
+    expect(engineEnv.LYRASHIELD_WEB_SEARCH_MODE).toBeUndefined()
+  })
 })
 
 describe("resolveEngineTimeoutMs", () => {

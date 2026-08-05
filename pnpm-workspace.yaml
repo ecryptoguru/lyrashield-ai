@@ -5,13 +5,21 @@ packages:
 overrides:
   "@hono/node-server": ">=2.0.5"
   esbuild: ">=0.28.1"
-  fast-uri: ">=3.1.4"
+  fast-uri: ">=4.1.2"
+  hono: ">=4.12.34"
+  brace-expansion: ">=5.0.9"
   minimatch: ">=10.0.1"
   next: ">=16.2.11"
   postcss: ">=8.5.18"
   sharp: ">=0.35.3"
+  undici: ">=7.29.0"
   valibot: ">=1.4.2"
   find-my-way: ">=9.6.1"
+
+peerDependencyRules:
+  allowedVersions:
+    "@cloudflare/workers-types": ">=5.20260724.1"
+    tailwindcss: ">=4.0.0"
 
 onlyBuiltDependencies:
   - "@prisma/engines"

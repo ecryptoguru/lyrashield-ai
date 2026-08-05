@@ -856,12 +856,27 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           runRecord.status !== "completed")
       ) {
         const stoppedForBudget = runRecord?.terminal_reason === "budget_exceeded"
-        const errorCategory = stoppedForBudget ? "BUDGET_EXCEEDED" : "ENGINE_INCOMPLETE"
+        const stoppedForContentFilter = runRecord?.terminal_reason === "content_filter_stopped"
+        const hasEngineFindings = (engineResult.output.vulnerabilities?.length ?? 0) > 0
+        const errorCategory = stoppedForBudget
+          ? "BUDGET_EXCEEDED"
+          : stoppedForContentFilter
+            ? "CONTENT_FILTER_STOPPED"
+            : "ENGINE_INCOMPLETE"
         const errorMessage = stoppedForBudget
           ? "Protected run limit reached"
-          : "Engine did not produce a completed, valid result receipt"
+          : stoppedForContentFilter
+            ? "Engine stopped after content filter blocked the model; partial findings preserved"
+            : "Engine did not produce a completed, valid result receipt"
+        // Content filter stops with findings are treated as completed with
+        // partial results (like budget exceeded). Without findings, they fail.
+        const terminalStatus: ScanStatus = stoppedForBudget
+          ? "STOPPED_BUDGET"
+          : stoppedForContentFilter && hasEngineFindings
+            ? "COMPLETED"
+            : "FAILED"
         engineTerminalError = {
-          status: (stoppedForBudget ? "STOPPED_BUDGET" : "FAILED") as ScanStatus,
+          status: terminalStatus,
           errorCategory,
           errorMessage,
         }

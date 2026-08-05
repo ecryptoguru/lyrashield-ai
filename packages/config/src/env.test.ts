@@ -29,6 +29,15 @@ const envSchema = z
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
+    // Web Search (Parallel Search)
+    LYRASHIELD_WEB_SEARCH_ENABLED: z.enum(["0", "1"]).optional().default("0"),
+    LYRASHIELD_WEB_SEARCH_API_KEY: z.string().optional().or(z.literal("")),
+    LYRASHIELD_WEB_SEARCH_PROVIDER: z.string().optional().or(z.literal("")),
+    LYRASHIELD_WEB_SEARCH_MODE: z.enum(["turbo", "basic", "advanced"]).optional().or(z.literal("")),
+    LYRASHIELD_WEB_SEARCH_MAX_RESULTS: z.coerce.number().int().min(1).max(20).optional(),
+    LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL: z.coerce.number().int().min(1000).max(20000).optional(),
+    LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN: z.coerce.number().int().min(0).optional(),
+    LYRASHIELD_WEB_SEARCH_BUDGET_USD: z.coerce.number().min(0).optional(),
     S3_ENDPOINT: z.string().optional().or(z.literal("")),
     S3_ACCESS_KEY: z.string().optional().or(z.literal("")),
     S3_SECRET_KEY: z.string().optional().or(z.literal("")),
@@ -52,6 +61,14 @@ const envSchema = z
     message:
       "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
   })
+  .refine(
+    (val) =>
+      val.LYRASHIELD_WEB_SEARCH_ENABLED !== "1" || Boolean(val.LYRASHIELD_WEB_SEARCH_API_KEY),
+    {
+      path: ["LYRASHIELD_WEB_SEARCH_API_KEY"],
+      message: "LYRASHIELD_WEB_SEARCH_API_KEY is required when LYRASHIELD_WEB_SEARCH_ENABLED=1",
+    }
+  )
 
 const validEnv = {
   DATABASE_URL: "postgresql://user:pass@localhost:5432/db",
@@ -204,6 +221,42 @@ describe("Env Validation Schema", () => {
         DATABASE_DIRECT_URL: "postgresql://user:pass@localhost:5432/db",
       })
       expect(result.success).toBe(true)
+    })
+
+    it("defaults web search to disabled and validates mode/ranges", () => {
+      const parsed = envSchema.parse(validEnv)
+      expect(parsed.LYRASHIELD_WEB_SEARCH_ENABLED).toBe("0")
+      expect(parsed.LYRASHIELD_WEB_SEARCH_MODE).toBeUndefined()
+      expect(
+        envSchema.safeParse({ ...validEnv, LYRASHIELD_WEB_SEARCH_MODE: "turbo" }).success
+      ).toBe(true)
+      expect(
+        envSchema.safeParse({ ...validEnv, LYRASHIELD_WEB_SEARCH_MAX_RESULTS: "25" }).success
+      ).toBe(false)
+      expect(
+        envSchema.safeParse({ ...validEnv, LYRASHIELD_WEB_SEARCH_BUDGET_USD: "-1" }).success
+      ).toBe(false)
+    })
+
+    it("rejects web search enabled without an API key", () => {
+      const enabledNoKey = envSchema.safeParse({
+        ...validEnv,
+        LYRASHIELD_WEB_SEARCH_ENABLED: "1",
+        LYRASHIELD_WEB_SEARCH_API_KEY: "",
+      })
+      expect(enabledNoKey.success).toBe(false)
+      if (!enabledNoKey.success) {
+        expect(
+          enabledNoKey.error.issues.some((i) => i.path.includes("LYRASHIELD_WEB_SEARCH_API_KEY"))
+        ).toBe(true)
+      }
+
+      const enabledWithKey = envSchema.safeParse({
+        ...validEnv,
+        LYRASHIELD_WEB_SEARCH_ENABLED: "1",
+        LYRASHIELD_WEB_SEARCH_API_KEY: "parallel-key",
+      })
+      expect(enabledWithKey.success).toBe(true)
     })
 
     it("should accept a privileged system URL when explicitly configured", () => {

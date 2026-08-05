@@ -1,8 +1,22 @@
+import type { Metadata } from "next"
 import { SCORE_MODEL_VERSION } from "@lyrashield/score"
 import Link from "next/link"
 import { ArrowLeft, ShieldCheck } from "lucide-react"
 import { Card } from "@lyrashield/ui"
 import { ThemeToggle } from "@/components/theme-toggle"
+
+export const metadata: Metadata = {
+  title: "LyraShield Score methodology | LyraShield AI",
+  description:
+    "How the LyraShield Score is computed from verified findings, retest-confirmed fixes, and accepted risk. Not a security guarantee.",
+  openGraph: {
+    title: "LyraShield Score methodology",
+    description:
+      "How the LyraShield Score is computed from verified findings, retest-confirmed fixes, and accepted risk.",
+    type: "website",
+    siteName: "LyraShield AI",
+  },
+}
 
 export default function ScoreMethodologyPage() {
   return (

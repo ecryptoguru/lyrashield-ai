@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import {
   Activity,
@@ -31,6 +32,17 @@ import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readine
 import { getScanPresentation } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 
+export const metadata: Metadata = {
+  title: "Dashboard | LyraShield AI",
+  description: "Workspace overview, recent scans, findings, and launch readiness.",
+  openGraph: {
+    title: "Dashboard | LyraShield AI",
+    description: "Workspace overview, recent scans, findings, and launch readiness.",
+    type: "website",
+    siteName: "LyraShield AI",
+  },
+}
+
 export default async function DashboardPage() {
   const session = await getCachedSession()
   if (!session) return null
@@ -43,7 +55,7 @@ export default async function DashboardPage() {
   if (!workspaceId || workspaces.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">{HOME_LABEL}</h1>
+        <h2 className="text-2xl font-bold tracking-tight">{HOME_LABEL}</h2>
         <NoWorkspaceState
           icon={ShieldCheck}
           description="Create your first workspace to start scanning your apps."

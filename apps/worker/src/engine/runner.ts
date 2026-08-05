@@ -168,11 +168,13 @@ export function createKillEscalation(
   }
 }
 
+export type ReasoningEffort = "medium" | "high"
+
 export interface EngineProfile {
   model?: string
-  reasoningEffort: "medium"
+  reasoningEffort: ReasoningEffort
   delegateModel?: string
-  delegateReasoningEffort: "medium"
+  delegateReasoningEffort: ReasoningEffort
 }
 
 function assertSupportedRepositoryModel(model: string | undefined): void {
@@ -193,11 +195,18 @@ export function resolveEngineProfile(
   assertSupportedRepositoryModel(model)
   assertSupportedRepositoryModel(delegateModel)
 
+  // DEEP/CUSTOM: Terra/medium coordinator + Luna/high specialists.
+  // SAFE/QUICK/STANDARD: Luna/medium throughout.
+  // Rationale: Azure's content filter blocks Terra on security-sensitive output;
+  // Luna/high gives specialists more reasoning budget for deep code analysis
+  // while keeping Terra only for lightweight root coordination. On a root
+  // content-filter block, the engine falls back directly to Luna/high without
+  // retrying Terra (see strix/core/runner.py).
   return {
     model,
     reasoningEffort: "medium",
     delegateModel,
-    delegateReasoningEffort: "medium",
+    delegateReasoningEffort: deep ? "high" : "medium",
   }
 }
 
@@ -234,7 +243,16 @@ function requireRepositoryModel(model: string | undefined): string {
   return model
 }
 
-function buildEngineEnv(profile: EngineProfile): Record<string, string> {
+const WEB_SEARCH_DEFAULTS: Record<string, string> = {
+  LYRASHIELD_WEB_SEARCH_PROVIDER: "parallel",
+  LYRASHIELD_WEB_SEARCH_MODE: "turbo",
+  LYRASHIELD_WEB_SEARCH_MAX_RESULTS: "5",
+  LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL: "4000",
+  LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN: "50",
+  LYRASHIELD_WEB_SEARCH_BUDGET_USD: "1.0",
+}
+
+export function buildEngineEnv(profile: EngineProfile): Record<string, string> {
   const allow = new Set([
     "PATH",
     "HOME",
@@ -259,6 +277,14 @@ function buildEngineEnv(profile: EngineProfile): Record<string, string> {
     "LYRASHIELD_MAX_LOCAL_COPY_MB",
     "LYRASHIELD_REASONING_EFFORT",
     "LYRASHIELD_TELEMETRY",
+    "LYRASHIELD_WEB_SEARCH_ENABLED",
+    "LYRASHIELD_WEB_SEARCH_API_KEY",
+    "LYRASHIELD_WEB_SEARCH_PROVIDER",
+    "LYRASHIELD_WEB_SEARCH_MODE",
+    "LYRASHIELD_WEB_SEARCH_MAX_RESULTS",
+    "LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL",
+    "LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN",
+    "LYRASHIELD_WEB_SEARCH_BUDGET_USD",
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
     "AZURE_OPENAI_API_KEY",
@@ -284,6 +310,16 @@ function buildEngineEnv(profile: EngineProfile): Record<string, string> {
   filtered.STRIX_SANDBOX_MEM_LIMIT = env.STRIX_SANDBOX_MEM_LIMIT.trim() || "4g"
   filtered.STRIX_SANDBOX_CPUS = env.STRIX_SANDBOX_CPUS.trim() || "2"
   filtered.STRIX_SANDBOX_PIDS_LIMIT = env.STRIX_SANDBOX_PIDS_LIMIT.trim() || "512"
+
+  // Only forward web-search tuning defaults when the feature is enabled; this
+  // keeps disabled runs from silently carrying a provider/budget and gives the
+  // engine a predictable, complete environment when enabled.
+  if (filtered.LYRASHIELD_WEB_SEARCH_ENABLED === "1") {
+    for (const [key, defaultValue] of Object.entries(WEB_SEARCH_DEFAULTS)) {
+      if (!filtered[key]) filtered[key] = defaultValue
+    }
+  }
+
   return filtered
 }
 

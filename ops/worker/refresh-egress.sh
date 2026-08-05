@@ -153,6 +153,7 @@ append_endpoint_rules "https://api.osv.dev" 443
 append_endpoint_rules "https://www.cisa.gov" 443
 append_endpoint_rules "https://api.first.org" 443
 append_endpoint_rules "$LYRASHIELD_EGRESS_PROXY_URL" 443
+append_endpoint_rules "https://api.parallel.ai" 443
 
 cat >>"$temporary_rules" <<EOF
 -A ${chain_name} -j REJECT --reject-with icmp-admin-prohibited
