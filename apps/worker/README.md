@@ -7,6 +7,7 @@ BullMQ scan worker that runs repository and URL scans by orchestrating the LyraS
 - Consumes scan jobs from the Redis-backed `scans` BullMQ queue.
 - Performs preflight checks, builds the engine command, runs the sibling `lyrashield-engine` in a Docker sandbox, and parses the engine output.
 - Persists findings, evidence, coverage receipts, manifests, and usage telemetry to the database and S3-compatible evidence storage.
+- Classifies salvaged scans (`engine_stopped`, `content_filter_stopped`, `budget_exceeded` terminal reasons) with findings as `COMPLETED` rather than `FAILED`, preserving partial results for the user.
 - Registers Redis heartbeats so `apps/web` can fail closed when no worker is live.
 - Reconciles queue/database drift at startup and every minute.
 

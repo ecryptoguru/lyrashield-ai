@@ -238,7 +238,7 @@ After an authorized scan, inspect its timeline and confirm:
 
 Deep/Custom use deterministic tiering rather than model-selected promotion: Terra coordinates and judges cross-file evidence, while Luna/high executes focused specialist tasks. Only the root can create or stop specialists, preventing recursive child fan-out. Safe/Quick/Standard remain Luna-only at medium reasoning.
 
-Engine PRs #6, #7, and #20 are merged. Current engine behavior compacts estimated input at 240,000 tokens toward about 180,000 tokens, bounds direct dedupe input to 200 kB, limits output/agent concurrency, reserves projected spend before each request, and correctly extracts usage tokens from dict or object entries with provider-reported cache-read accounting. These are code/build guarantees; they do not prove result quality or replace provider-meter reconciliation.
+Engine PRs #6, #7, and #20 are merged. Current engine behavior compacts estimated input at 240,000 tokens toward about 180,000 tokens, bounds direct dedupe input to 200 kB, limits output/agent concurrency, reserves projected spend before each request, and correctly extracts usage tokens from dict or object entries with provider-reported cache-read accounting. The engine also falls back from Terra to Luna on any `ModelBehaviorError` (not just content filter), treats Azure's `response.failed` without filter context as transient (retried with backoff), and salvages partial findings with `engine_stopped` terminal reason when the delegate also fails. These are code/build guarantees; they do not prove result quality or replace provider-meter reconciliation.
 
 For engine work on the host:
 
@@ -248,7 +248,11 @@ uv sync --frozen
 uv run pytest
 uv run ruff check .
 uv run ruff format --check .
+uv run mypy strix lyrashield_adapter
+uv run bandit -c pyproject.toml -r strix lyrashield_adapter
 ```
+
+The engine CI workflow now runs all of the above (ruff, mypy, bandit, pytest) on every PR and push to `main`. Pre-commit hooks remain for local feedback, but CI enforces the same gates — `--no-verify` is no longer a way to bypass quality checks.
 
 Do not merge Strix upstream or run mechanical rebranding commands locally. Use the engine repository's review-only upstream-sync workflow, inspect the generated PR, and merge it normally after its checks pass.
 

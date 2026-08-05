@@ -944,7 +944,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
   7. Reads `vulnerabilities.json` + `run.json` from output dir
   8. Returns `{ exitCode, output: ParsedScanOutput }`
 - **`resolveEngineProfile(mode)`** — routes Safe/Quick/Standard to Luna/medium throughout and Deep/Custom to a Terra/medium coordinator with Luna/medium specialists; missing routed deployments fall back to `LYRASHIELD_LLM`.
-- **`interpretExitCode(code)`** — maps engine exit codes: 0 → COMPLETED (SUCCESS), 2 → COMPLETED (VULNERABILITIES_FOUND), all other codes → FAILED.
+- **`interpretExitCode(code)`** — maps engine exit codes: 0 → COMPLETED (SUCCESS), 2 → COMPLETED (VULNERABILITIES_FOUND), 3 → STOPPED_BUDGET, 4 → RATE_LIMITED, 5 → FAILED, 137 → FAILED (SIGKILL/OOM). Salvaged scans with `engine_stopped` or `content_filter_stopped` terminal reason return 2 (findings present) or 5 (no findings); `run-scan.job.ts` classifies those with findings as `COMPLETED` rather than `FAILED`.
 - **`cleanupEngineWorkspace(dir)`** — removes temp workspace (best-effort, non-fatal).
 - Focused runner tests cover exit mapping, termination escalation, output discovery, every routing mode, and fallback selection.
 
@@ -977,7 +977,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 - **`processScanJob(job)`** — main entry point for BullMQ worker:
   1. Wraps entire job in `runWithWorkspaceContext(workspaceId, ...)` — ensures all DB queries are workspace-scoped via AsyncLocalStorage (defense-in-depth against cross-tenant leaks).
   2. Updates scan status → PREFLIGHT → runs preflight → RUNNING → runs engine → VERIFYING → persists findings → COMPLETED/FAILED.
-  3. Error handling: catches all errors, updates scan to FAILED with errorCategory/errorMessage.
+  3. Error handling: catches all errors, updates scan to FAILED with errorCategory/errorMessage. Salvaged scans (`engine_stopped` or `content_filter_stopped` terminal reason with findings) are classified as `COMPLETED` with `ENGINE_STOPPED` or `CONTENT_FILTER_STOPPED` error category; without findings they remain `FAILED`.
   4. Cleanup: always runs `cleanupEngineWorkspace()` in `finally` block.
 - **7 tests** in `run-scan.job.test.ts` (success, preflight failure, target disappearance, engine error, unexpected error, cleanup, finding persistence).
 
@@ -2319,3 +2319,37 @@ The dashboard pages received a final UX pass focused on consistent headers and n
 - `apps/web/src/components/page-header.tsx` introduces a shared `PageHeader` component that renders a title, optional `Lucide` icon, description, and action slot. It is used in place of page-specific header markup across `approvals`, `fixes`, `launch-readiness`, `notifications`, `projects`, `scans`, `scans/[id]`, `settings`, `targets`, and `team`.
 - `apps/web/src/components/no-workspace-state.tsx` provides a consistent empty-state placeholder when a user has not yet created a workspace. The `scans`, `settings`, `targets`, `projects`, `team`, `approvals`, `fixes`, `launch-readiness`, `notifications`, and `scans/[id]` pages now surface it instead of hand-rolled copy.
 - `page-header.tsx` was run through Prettier after the component was added.
+
+## §63 — Engine fallback broadening, scan labeling, and CI quality gates (2026-08-04, engine `fix/broaden-delegate-fallback` + app `main`)
+
+### Engine changes (`strix/core/runner.py`, `strix/core/execution.py`, `strix/interface/main.py`)
+
+- **Broadened delegate fallback:** the root Terra agent now falls back to the Luna delegate on ANY `ModelBehaviorError`, not just `content_filter` errors. Previously, non-content-filter `ModelBehaviorError` from Terra would propagate as an unhandled exception and fail the scan with no salvage. If no separate delegate model is configured, partial findings are salvaged with `engine_stopped` terminal reason.
+- **Transient `response.failed` handling:** Azure's `response.failed` status (without content-filter context) is now treated as a transient error in `_is_transient_model_error()` and retried with backoff. Previously it was treated as a permanent failure, causing scans to fail on transient Azure-side issues.
+- **`engine_stopped` terminal reason:** new terminal reason for scans that stop due to non-content-filter model errors. Distinguished from `content_filter_stopped` for proper error categorization. Exit code mapping in `_non_interactive_exit_code`: 2 (findings present) or 5 (no findings).
+- **Salvage on any delegate error:** when the delegate model also fails with any `ModelBehaviorError`, partial findings are salvaged with `engine_stopped` or `content_filter_stopped` terminal reason depending on the error type. Previously only `content_filter` errors triggered salvage.
+- **Tests:** `tests/test_content_filter_recovery.py` updated with 23 tests covering the broadened fallback, transient `response.failed`, and salvage paths. All 939 engine tests pass.
+
+### Worker labeling (`apps/worker/src/jobs/run-scan.job.ts`)
+
+- **`engine_stopped` classification:** scans with `terminal_reason: "engine_stopped"` and findings are now classified as `COMPLETED` with `ENGINE_STOPPED` error category, rather than `FAILED` with `ENGINE_INCOMPLETE`. Without findings, they remain `FAILED`. This preserves partial results for the user when the engine stops after a model error but has already produced findings.
+- The labeling logic mirrors the existing `content_filter_stopped` and `budget_exceeded` handling.
+
+### Engine CI quality gates (`.github/workflows/ci.yml`, `.github/dependabot.yml`)
+
+- **Full CI quality gates:** the engine CI workflow now runs ruff lint/format check, mypy type check, bandit security scan, and the full pytest suite. Previously CI only ran thin-fork verification, CLI build, and worker contract checks — pre-commit hooks only caught issues locally, and `--no-verify` could bypass all quality gates.
+- **Dependabot Python:** Dependabot now tracks Python pip dependencies (was GitHub Actions only) with weekly schedule and 5 open PRs limit.
+- **Example credentials redacted:** `admin:password123` in `--instruction` help text replaced with `testuser:REDACTED`.
+
+### Dockerfile and compose hardening (`Dockerfile`, `docker-compose.yml`)
+
+- **HEALTHCHECK instructions:** the runner (web) and worker Dockerfile stages now include `HEALTHCHECK` instructions. The web stage checks `http://127.0.0.1:3000/api/health`; the worker stage checks the `/tmp/lyrashield-worker-ready` heartbeat marker (2-minute freshness). Azure Container Apps uses external probes, but image-level health checks are good practice for any orchestrator that supports them.
+- **Web resource limits:** the web service in `docker-compose.yml` now has CPU (`${WEB_CPU_LIMIT:-1.0}`) and memory (`${WEB_MEMORY_LIMIT:-512M}`) resource limits. The worker service already had limits; postgres and redis also had limits.
+
+### E2E verification
+
+A DEEP scan against an approved repository completed successfully after all fixes:
+- 167 LLM requests, 14 engine findings (53 total findings), 9.8 minutes duration
+- Exit code 2 (success with findings)
+- Correct `COMPLETED` status with `ENGINE_STOPPED` error category
+- Terra/medium → Luna/high routing worked as designed; the broadened fallback handled a non-content-filter `ModelBehaviorError` from Terra by switching to Luna/high, which completed successfully
