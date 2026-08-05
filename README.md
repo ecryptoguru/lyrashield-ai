@@ -110,6 +110,10 @@ Repository scans accept only GPT-5.6 Terra or Luna deployments. Configure `LYRAS
 
 The configured Azure Foundry endpoint supports baseline Responses requests and `previous_response_id`, but it rejects the `programmatic_tool_calling` tool type. Production therefore uses direct JSON function tools. Leave `LYRASHIELD_PROGRAMMATIC_TOOL_CALLING` unset unless the engine's bounded `lyrashield provider-contract --require-programmatic-tool-calling` gate succeeds for the exact deployment. `previous_response_id` alone does not enable persistent scan reasoning: the engine currently uses SQLite session persistence, which the Agents SDK does not permit alongside `previous_response_id`.
 
+### Web Search (Parallel Search)
+
+Repository scans can optionally call Parallel Search for real-time OSINT. Set `LYRASHIELD_WEB_SEARCH_ENABLED=1` and `LYRASHIELD_WEB_SEARCH_API_KEY` in the worker environment. The engine redacts target hosts, secrets, and PII from the query, limits results and calls by `LYRASHIELD_WEB_SEARCH_MAX_RESULTS` and `LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN`, and tracks cost against `LYRASHIELD_WEB_SEARCH_BUDGET_USD`. Production workers must also allow egress to `api.parallel.ai:443` in `ops/worker/refresh-egress.sh`. No scan mode is gated today; the tool is available whenever it is enabled.
+
 ## Engine derivative and upstream maintenance
 
 Repository reviews run through [LyraShield Engine](https://github.com/ecryptoguru/lyrashield-engine), the separately versioned sandboxed analysis process used by the worker. It is a controlled derivative of [Strix](https://github.com/usestrix/strix), not a claim that upstream results or benchmarks apply to LyraShield.

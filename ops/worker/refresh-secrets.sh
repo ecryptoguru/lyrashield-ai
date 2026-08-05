@@ -49,6 +49,27 @@ write_secret() {
   printf '%s=%s\n' "$environment_name" "$secret_value" >>"$temporary_file"
 }
 
+write_secret_optional() {
+  environment_name="$1"
+  secret_name="$2"
+  secret_value=$(az keyvault secret show \
+    --vault-name "$vault_name" \
+    --name "$secret_name" \
+    --query value \
+    --output tsv 2>/dev/null) || true
+
+  if [ -z "$secret_value" ]; then
+    return 0
+  fi
+  newline_count=$(printf '%s' "$secret_value" | tr -cd '\r\n' | wc -c | tr -d ' ')
+  if [ "$newline_count" -ne 0 ]; then
+    echo "Key Vault secret contains a newline: $secret_name" >&2
+    exit 1
+  fi
+
+  printf '%s=%s\n' "$environment_name" "$secret_value" >>"$temporary_file"
+}
+
 write_secret DATABASE_URL worker-database-url
 write_secret DATABASE_SYSTEM_URL worker-database-system-url
 write_secret REDIS_URL worker-redis-url
@@ -68,6 +89,8 @@ write_secret S3_ACCESS_KEY worker-r2-access-key
 write_secret S3_SECRET_KEY worker-r2-secret-key
 write_secret LYRASHIELD_EGRESS_PROXY_URL worker-egress-proxy-url
 write_secret LYRASHIELD_EGRESS_PROXY_SECRET worker-egress-proxy-secret
+# Optional. When present and LYRASHIELD_WEB_SEARCH_ENABLED=1, enables Parallel Search.
+write_secret_optional LYRASHIELD_WEB_SEARCH_API_KEY worker-web-search-api-key
 
 uses_ghcr=false
 for image in "${LYRASHIELD_WORKER_IMAGE:-}" "${LYRASHIELD_SANDBOX_IMAGE:-}"; do

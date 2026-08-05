@@ -103,6 +103,16 @@ if [ ! -s "$pin_file" ]; then
   exit 1
 fi
 
+# Enable web search by default only when an API key is present in the worker env.
+if [ -z "${LYRASHIELD_WEB_SEARCH_ENABLED:-}" ]; then
+  web_search_api_key=$(extract_env_value LYRASHIELD_WEB_SEARCH_API_KEY "$environment_file")
+  if [ -n "$web_search_api_key" ]; then
+    LYRASHIELD_WEB_SEARCH_ENABLED=1
+  else
+    LYRASHIELD_WEB_SEARCH_ENABLED=0
+  fi
+fi
+
 set --
 while read -r pinned_host pinned_address pinned_port extra; do
   case "$pinned_host" in
@@ -149,6 +159,13 @@ docker create \
   --env LYRASHIELD_IMAGE="$LYRASHIELD_SANDBOX_IMAGE" \
   --env LYRASHIELD_TELEMETRY=0 \
   --env LYRASHIELD_LOCAL_EVIDENCE_STORAGE=0 \
+  --env LYRASHIELD_WEB_SEARCH_ENABLED="${LYRASHIELD_WEB_SEARCH_ENABLED}" \
+  --env LYRASHIELD_WEB_SEARCH_PROVIDER="${LYRASHIELD_WEB_SEARCH_PROVIDER:-parallel}" \
+  --env LYRASHIELD_WEB_SEARCH_MODE="${LYRASHIELD_WEB_SEARCH_MODE:-turbo}" \
+  --env LYRASHIELD_WEB_SEARCH_MAX_RESULTS="${LYRASHIELD_WEB_SEARCH_MAX_RESULTS:-5}" \
+  --env LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL="${LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL:-4000}" \
+  --env LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN="${LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN:-50}" \
+  --env LYRASHIELD_WEB_SEARCH_BUDGET_USD="${LYRASHIELD_WEB_SEARCH_BUDGET_USD:-1.0}" \
   --group-add "$socket_group" \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
   --mount type=volume,src=lyrashield-worker-runs,dst=/app/apps/worker/lyrashield_runs \

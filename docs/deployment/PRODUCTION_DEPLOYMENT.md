@@ -290,6 +290,18 @@ LYRASHIELD_ENGINE_SANDBOX_NETWORK="lyrashield-sandbox"
 PLATFORM_MAX_SCAN_BUDGET_USD="50"
 LYRASHIELD_TELEMETRY="0"
 LYRASHIELD_WORKER_CONCURRENCY="1"
+
+# Web Search (Parallel Search). The Key Vault secret name is `worker-web-search-api-key`.
+# run-worker.sh auto-enables to 1 when the API key is present; override with 0 to disable.
+LYRASHIELD_WEB_SEARCH_ENABLED="1"
+LYRASHIELD_WEB_SEARCH_API_KEY="..."
+# Optional:
+# LYRASHIELD_WEB_SEARCH_MODE="turbo"           # turbo | basic | advanced
+# LYRASHIELD_WEB_SEARCH_MAX_RESULTS="5"        # 1-20
+# LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL="4000" # 1000-20000
+# LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN="50"
+# LYRASHIELD_WEB_SEARCH_BUDGET_USD="1.0"       # separate web-search cap
+
 # Optional per-request engine limits; leave unset for engine defaults.
 # MAX_OUTPUT_TOKENS caps tokens generated per request (replaces the engine's
 # per-scan-mode default; also tightens the budget reservation). MAX_INPUT_TOKENS
@@ -352,9 +364,15 @@ These amounts are internal hard ceilings, not expected per-scan charges or user-
 
 A durable scan event is recorded immediately before a repository scan enters the provider-billable engine phase. Preflight work remains retryable, while recovery after that boundary fails closed instead of replaying provider work; a failed billable invocation requires an explicit new scan or retest so the queue cannot silently duplicate model spend. Deterministic SCA, secret, URL, and agent-configuration findings use the Safe profile for targeted retests; engine-only findings retain their originating review depth.
 
-Safe/Quick/Standard are Luna-only. Deep/Custom use a deterministic two-tier invocation: Terra/medium is the root coordinator and Luna/medium handles child specialist work. The model cannot self-promote a child to Terra, and only the root can create or stop specialists.
+Safe/Quick/Standard are Luna-only at medium reasoning. Deep/Custom use a deterministic two-tier invocation: Terra/medium is the root coordinator and Luna/high handles child specialist work. The model cannot self-promote a child to Terra, and only the root can create or stop specialists. On a root content-filter block, the engine switches directly to the delegate model (Luna/high) without retrying Terra; if the delegate also blocks, the scan salvages partial findings and terminates with `content_filter_stopped`.
 
 Engine PRs #6, #7, and #20 are merged. The promoted engine compacts estimated input at 240k toward 180k, bounds direct dedupe input to 200 kB, limits output and agent concurrency, reserves projected spend before each request, and accounts for provider-reported cache-read tokens with dict/object usage extraction. These controls do not replace provider-meter reconciliation or prove finding quality.
+
+### Web Search (Parallel Search)
+
+`ops/worker/refresh-secrets.sh` pulls the optional secret `worker-web-search-api-key` into `LYRASHIELD_WEB_SEARCH_API_KEY` at every worker start. `ops/worker/refresh-egress.sh` resolves and pins `api.parallel.ai:443` in the worker egress policy so the engine can reach Parallel Search from the deny-by-default `bridge` network.
+
+`LYRASHIELD_WEB_SEARCH_ENABLED` defaults to `1` in `ops/worker/run-worker.sh` but requires the API key to be present in `worker.env` to do useful work. Other settings (`MODE`, `MAX_RESULTS`, `MAX_CHARS_TOTAL`, `MAX_CALLS_PER_SCAN`, `BUDGET_USD`) may be overridden in `worker-runtime.conf` or the deployment shell; see `.env.example` for the full set. The engine redacts target hostnames, secrets, and PII from the query and tracks web-search cost separately from the LLM budget.
 
 Add GitHub OAuth/App, email, notification, billing, and analytics variables only when those integrations are enabled. R2/S3 is mandatory before controlled full scans, and monitoring is mandatory before general availability. Use `.env.example` as the complete variable index, not as a production secret file.
 
@@ -377,7 +395,7 @@ Then, in the target environment:
 2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. The scan-specific endpoint must become `503` within 30 seconds of stopping every worker and recover only after a BullMQ-ready worker registers its lease.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.
-5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with medium reasoning and its cap is $15 or the selected positive policy override.
+5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with medium reasoning, that delegate/child calls use Luna at high reasoning, and its cap is $15 or the selected positive policy override.
 6. Capture audit evidence, confirm the sandbox image digest used, reconcile provider billing with the retained usage/rate-card ledger without treating it as an invoice, and verify evidence artifacts are retrievable from the configured S3-compatible endpoint. Any placeholder or failed upload blocks the gate.
 7. Exercise backup and restore on non-production data before claiming an RPO/RTO.
 8. Confirm URL targets use only the pinned deterministic URL scanner. Do not re-enable the external engine for URL targets until its transport is DNS-pinned and redirect-safe.
