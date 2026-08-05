@@ -89,6 +89,8 @@ EXPOSE 3000
 WORKDIR /app/apps/web
 
 USER lyrashield
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --spider -q http://127.0.0.1:3000/api/health || exit 1
 CMD ["node", "server.js"]
 
 # ─── Stage 4: Worker engine environment ──────────────────────────────────────
@@ -142,4 +144,6 @@ RUN mkdir -p /app/lyrashield_runs /app/.lyrashield/evidence && \
     chown -R lyrashield:lyrashield /app /opt/lyrashield-engine /opt/lyrashield-venv
 
 USER lyrashield
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD test -f /tmp/lyrashield-worker-ready && find /tmp/lyrashield-worker-ready -mmin -2 || exit 1
 CMD ["./apps/worker/node_modules/.bin/tsx", "apps/worker/src/index.ts"]

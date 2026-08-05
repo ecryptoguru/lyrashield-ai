@@ -144,6 +144,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: ${WEB_CPU_LIMIT:-1.0}
+          memory: ${WEB_MEMORY_LIMIT:-512M}
 
   worker:
     build:
