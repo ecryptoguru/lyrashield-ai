@@ -151,11 +151,7 @@ export default defineConfig({
   site: siteUrl,
   output: "static",
   trailingSlash: "never",
-  redirects: {
-    "/resources": "/blog",
-    "/docs": "/docs/integrations",
-    "/how-it-works": "/#how-it-works",
-  },
+
   build: {
     inlineStylesheets: "always",
   },
