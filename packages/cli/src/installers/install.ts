@@ -179,6 +179,17 @@ async function runVendorCli(
 export async function installAgent(opts: InstallAgentOptions): Promise<InstallAgentResult> {
   const { agent, all, cwd } = opts
 
+  if (agent.installStrategy === "agent-plugin") {
+    const { installAgentPlugin } = await import("./agent-plugin.js")
+    return installAgentPlugin({
+      agent,
+      scope: opts.scope,
+      cwd: opts.cwd,
+      dryRun: opts.dryRun,
+      yes: opts.yes,
+    })
+  }
+
   if (agent.installStrategy === "guided-manual") {
     return {
       agent: agent.id,
@@ -233,6 +244,12 @@ export async function uninstallAgent(
   opts: { scope?: "project" | "global"; serverName?: string; cwd?: string }
 ): Promise<InstallAgentResult> {
   const serverName = opts.serverName ?? "lyrashield"
+
+  if (agent.installStrategy === "agent-plugin") {
+    const { uninstallAgentPlugin } = await import("./agent-plugin.js")
+    return uninstallAgentPlugin({ agent, scope: opts.scope, cwd: opts.cwd })
+  }
+
   const { removeFile } = await import("./merge.js")
 
   if (agent.installStrategy !== "config-file" || !agent.format || !agent.rootKey) {

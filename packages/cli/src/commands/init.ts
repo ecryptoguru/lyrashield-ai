@@ -68,7 +68,13 @@ export async function handleInit(args: string[], output: Output): Promise<number
   }
 
   const results: InstallAgentResult[] = []
-  for (const agent of agents) {
+  // Install Agent Plugin entries first so the portable plugin is in place
+  // before any legacy per-client config installers run.
+  const pluginAgents = agents.filter((a) => a.installStrategy === "agent-plugin")
+  const legacyAgents = agents.filter((a) => a.installStrategy !== "agent-plugin")
+  const orderedAgents = [...pluginAgents, ...legacyAgents]
+
+  for (const agent of orderedAgents) {
     const result = await installAgent({
       agent,
       transport,
