@@ -28,9 +28,9 @@ lyrashield <command> [args] [--json]
 
 ### Agent installation
 
-- `init` — detect and configure all installed agents
-- `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent's config
-- `uninstall <agent>` — remove the LyraShield entry from a single agent's config
+- `init` — detect and configure all installed agents. For agents that support the Agent Plugins v1.0.0 standard (Claude Code, Cursor, Windsurf, VS Code, Codex, Kiro), `init` prefers an **Agent Plugin** install; for all others it falls back to config-file edits.
+- `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. For agents supporting the `agent-plugin` strategy, this installs the portable plugin (from `@lyrashield/agent-plugin`) to the agent's plugin directory; `--dry-run` still works and previews the install without writing.
+- `uninstall <agent>` — remove the LyraShield entry from a single agent's config. For `agent-plugin`-strategy agents, this removes the plugin from the agent's plugin directory.
 - `rules add <agent>|remove <agent>|check` — add, remove, or validate an agent rules file (`AGENTS.md`, `CLAUDE.md`, etc.)
 
 `install` refuses to write raw secrets into shared-by-convention files unless you pass `--inline-secret` and the file is gitignored. Use `--dry-run` to preview the config change without writing it.

@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/cursor", origin).toString()
 const title = "LyraShield MCP for Cursor — Setup Guide"
 const description =
   "Add the LyraShield MCP server to Cursor. Configure .cursor/mcp.json with the npx stdio transport to run security checks inline in the Cursor AI editor."
-const updatedDate = "2026-07-31"
+const updatedDate = "2026-08-07"
 
 const jsonLd: unknown[] = [
   {
@@ -110,6 +110,26 @@ const jsonLd: unknown[] = [
     </a>{" "}
     for the current deeplink format.
   </p>
+
+  <h2>Agent Plugin (recommended)</h2>
+  <p>
+    Cursor supports the open Agent Plugins v1.0.0 standard (agent-plugins.org), and LyraShield ships
+    a portable plugin that bundles the MCP server and a security skill into a single installable
+    package. The skill teaches Cursor's AI when to run LyraShield checks, so you get both the tools
+    and the guidance in one step.
+  </p>
+  <p>
+    <code>npx lyrashield install cursor</code> now installs the portable plugin by default — the
+    preferred path over the manual config and deeplink options above. Add <code>--dry-run</code>{" "}
+    first to preview the install with no write.
+  </p>
+  <pre><code>npx lyrashield install cursor</code></pre>
+  <div class="callout">
+    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
+    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
+    <code>LYRASHIELD_API_KEY</code> environment variable). No key needs to be inlined in{" "}
+    <code>.cursor/mcp.json</code> or any other file you might commit.
+  </div>
 
   <h2>Verify the connection</h2>
   <p>

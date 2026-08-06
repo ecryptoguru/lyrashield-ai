@@ -2,7 +2,7 @@
 
 The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an AI coding tool run verified security scans, read findings, and drive the fix → verify loop against your LyraShield workspace — without leaving the editor.
 
-Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0).
+Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0). The server is also distributed as a portable Agent Plugin via [`@lyrashield/agent-plugin`](../agent-plugin/README.md) (Agent Plugins v1.0.0).
 
 ## What it can do
 
@@ -88,6 +88,10 @@ LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
 ```
 
 Per-client config for OpenCode, Kilo Code, Cline, Zed, and the cloud platforms lives in the LyraShield docs.
+
+### Credentials resolution
+
+The server reads `LYRASHIELD_API_KEY` and `LYRASHIELD_API_URL` from the environment first. If those are absent, it falls back to `~/.lyrashield/credentials.json` — the credentials file written by `lyrashield login` (with `0o600` permissions). This means `npx -y @lyrashield/mcp` works without any env vars after a single `lyrashield login`.
 
 ### Remote (Streamable HTTP) — for cloud editors
 
