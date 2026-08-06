@@ -5,6 +5,7 @@ import { TargetsClient } from "./targets-client"
 import { TARGET_PLURAL } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 
 export default async function TargetsPage({
   searchParams,
@@ -20,8 +21,11 @@ export default async function TargetsPage({
 
   if (!workspaceId) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">{TARGET_PLURAL}</h1>
+      <div>
+        <PageHeader
+          title={TARGET_PLURAL}
+          description="Manage the apps, APIs, repositories, and infrastructure to scan."
+        />
         <NoWorkspaceState
           icon={Crosshair}
           description={`Create a workspace first to start managing ${TARGET_PLURAL.toLowerCase()}.`}

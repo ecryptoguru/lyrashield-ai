@@ -218,7 +218,7 @@ LYRASHIELD_WEB_SEARCH_BUDGET_USD="1.0"       # separate web-search cap
 
 Keep `LYRASHIELD_WEB_SEARCH_ENABLED="0"` unless the key is configured. When enabled, the engine redacts target hostnames, secrets, and PII from the search query before it leaves the worker and tracks each call against the scan's web-search budget. No mode is gated today; the tool is available to all scan modes while you evaluate which ones benefit.
 
-Default spend limits are $1.20 for Safe/Quick, $3.20 for Standard, and $15 for Deep/Custom. A finite positive workspace `Policy.maxBudgetUsd` overrides the mode amount. The worker passes the resolved amount through `--max-budget-usd`; invalid or missing policy values fall back to the mode limit.
+Default spend limits are $3.20 for Safe, $1.20 for Quick, $3.20 for Standard, and $15 for Deep/Custom. A finite positive workspace `Policy.maxBudgetUsd` overrides the mode amount. The worker passes the resolved amount through `--max-budget-usd`; invalid or missing policy values fall back to the mode limit.
 
 The dashboard names these modes Release Check (Safe), Code Review (Standard), and Deep Security Review (Deep); Weekly Monitor schedules use Safe. URL/API targets skip the external engine. Model cost, spend, cap, and accounting events remain private and are not rendered in the dashboard. See `userguide.md` for the user-facing option matrix and `PRODUCTION_DEPLOYMENT.md` for the operator rate card.
 
@@ -231,7 +231,7 @@ docker compose exec worker sh -lc \
 
 After an authorized scan, inspect its timeline and confirm:
 
-- Safe/Quick/Standard: `engine_start` reports Luna and `medium`; `budget_cap` reports $1.20/$3.20 unless policy-overridden.
+- Safe/Quick/Standard: `engine_start` reports Luna and `medium`; `budget_cap` reports $3.20/$1.20/$3.20 respectively unless policy-overridden.
 - Deep/Custom: `engine_start` reports the Terra/medium coordinator; the run artifact records Luna/high delegates and the versioned routing policy; `budget_cap` reports $15 unless policy-overridden. On a root content-filter block, the engine switches directly to Luna/high without retrying Terra.
 - `llm_usage` is present when the provider returned usage data.
 - When request entries are complete, `llm_usage` records `pricingMethod: per_request_buckets` and separates standard/long-context input, cached reads, cache writes, and output. Aggregate-only input above 272,000 tokens remains unavailable instead of being guessed.

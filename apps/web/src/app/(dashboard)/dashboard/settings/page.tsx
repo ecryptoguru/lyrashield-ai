@@ -18,7 +18,10 @@ export default async function SettingsPage() {
   if (!workspaceId) {
     return (
       <div>
-        <h1 className="mb-6 text-2xl font-bold tracking-tight">Settings</h1>
+        <PageHeader
+          title="Settings"
+          description="Workspace access, automation, and connected services."
+        />
         <NoWorkspaceState
           icon={Settings}
           description="Create a workspace during onboarding to manage settings."

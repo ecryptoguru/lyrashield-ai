@@ -4,6 +4,7 @@ import { prisma } from "@lyrashield/db"
 import { ShieldAlert } from "lucide-react"
 import { FindingsClient, type FindingListItem } from "./findings-client"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
 import { EvidenceList } from "./evidence-list"
 import { ReportsClient } from "../reports/reports-client"
@@ -32,8 +33,11 @@ export default async function FindingsPage({
   const workspaceId = await getCachedWorkspaceId(session.userId)
   if (!workspaceId) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">{ISSUE_PLURAL}</h1>
+      <div>
+        <PageHeader
+          title={ISSUE_PLURAL}
+          description={`Potential and verified security ${ISSUE_PLURAL.toLowerCase()} reported by your ${RUN_PLURAL.toLowerCase()}`}
+        />
         <NoWorkspaceState
           icon={ShieldAlert}
           description={`Create a workspace during onboarding to view ${ISSUE_PLURAL.toLowerCase()}.`}

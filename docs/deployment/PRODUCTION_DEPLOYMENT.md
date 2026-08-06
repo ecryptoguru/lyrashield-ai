@@ -341,20 +341,20 @@ The worker selects one profile before each engine subprocess:
 
 | Product mode | Engine mode | Model variable         | Reasoning | Default cap |
 | ------------ | ----------- | ---------------------- | --------- | ----------: |
-| Safe         | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $1.20 |
+| Safe         | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $3.20 |
 | Quick        | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $1.20 |
 | Standard     | standard    | `LYRASHIELD_LUNA_LLM`  | medium    |       $3.20 |
 | Deep         | deep        | `LYRASHIELD_TERRA_LLM` | medium    |      $15.00 |
 | Custom       | deep        | `LYRASHIELD_TERRA_LLM` | medium    |      $15.00 |
 
-The worker permanently versions the official OpenAI GPT-5.6 rate card in `apps/worker/src/engine/gpt56-pricing.ts` (effective 2026-07-09; USD per 1 million tokens):
+The worker permanently versions the official Azure GPT-5.6 rate card in `apps/worker/src/engine/gpt56-pricing.ts` (effective 2026-08-06; USD per 1 million tokens):
 
 | Model         | Input | Cached input read | Cache write | Output |
 | ------------- | ----: | ----------------: | ----------: | -----: |
-| GPT-5.6 Terra | $2.50 |             $0.25 |      $3.125 | $15.00 |
-| GPT-5.6 Luna  | $1.00 |             $0.10 |       $1.25 |  $6.00 |
+| GPT-5.6 Terra | $2.00 |             $0.20 |       $2.50 | $12.00 |
+| GPT-5.6 Luna  | $0.20 |             $0.02 |       $0.25 |  $1.20 |
 
-Source: OpenAI's official GPT-5.6 announcement and pricing, captured with its effective date. Cache writes are 1.25 times the uncached input rate. Requests whose prompts exceed 272,000 tokens use the official long-context multipliers of 2 times input and 1.5 times output. The parser assigns complete request entries to standard or long-context input/cache-write/cache-read/output buckets; aggregate counters that cannot identify which request crossed the boundary are not estimated locally.
+Source: Azure GPT-5.6 pricing in Microsoft Foundry, captured with its effective date. Cache writes are 1.25 times the uncached input rate. Requests whose prompts exceed 272,000 tokens use the official long-context multipliers of 2 times input and 1.5 times output. The parser assigns complete request entries to standard or long-context input/cache-write/cache-read/output buckets; aggregate counters that cannot identify which request crossed the boundary are not estimated locally.
 
 `LYRASHIELD_LLM` is mandatory as the backward-compatible fallback when a routed variable is absent or empty. Azure deployment names are operator-defined: if the Azure deployment is not literally named `gpt-5.6-luna` or `gpt-5.6-terra`, put the real deployment name after `azure/` or `azure_ai/`.
 

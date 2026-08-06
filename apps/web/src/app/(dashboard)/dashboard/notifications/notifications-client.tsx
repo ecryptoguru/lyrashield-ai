@@ -127,19 +127,19 @@ export function NotificationsClient({ workspaceId }: { workspaceId: string }) {
     }
   }
 
+  const markAllReadAction = notifications.some((n) => n.status !== "read") ? (
+    <Button size="sm" variant="ghost" onClick={() => void handleMarkAllRead()}>
+      <CheckCircle2 className="mr-1 h-4 w-4" aria-hidden="true" />
+      Mark all as read
+    </Button>
+  ) : null
+
   return (
     <div>
       <PageHeader
         title="Notifications"
         description="Scan alerts, finding warnings, and fix PR updates"
-        action={
-          notifications.some((n) => n.status !== "read") ? (
-            <Button size="sm" variant="ghost" onClick={() => void handleMarkAllRead()}>
-              <CheckCircle2 className="mr-1 h-4 w-4" aria-hidden="true" />
-              Mark all as read
-            </Button>
-          ) : null
-        }
+        action={markAllReadAction}
       />
 
       {error && (

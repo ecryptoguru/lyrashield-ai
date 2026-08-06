@@ -3,6 +3,8 @@ import { redirect } from "next/navigation"
 import { Radar } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
+import { RUN_SINGULAR } from "@/lib/terminology"
 import { ScanDetailClient } from "./scan-detail-client"
 
 export default async function ScanDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -14,11 +16,11 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
 
   if (!workspaceId) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Trust Run</h1>
+      <div>
+        <PageHeader title={RUN_SINGULAR} />
         <NoWorkspaceState
           icon={Radar}
-          description="Create a workspace before viewing trust runs."
+          description={`Create a workspace before viewing ${RUN_SINGULAR.toLowerCase()}.`}
         />
       </div>
     )

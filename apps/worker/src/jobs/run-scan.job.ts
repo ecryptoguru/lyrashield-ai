@@ -282,7 +282,7 @@ export async function persistEngineUsageCheckpoint(params: {
     rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
       ? "rate_card_and_engine_reported"
       : rateCardCostUsd !== null
-        ? "openai_rate_card"
+        ? "azure_rate_card"
         : usage.engineReportedCostUsd !== null
           ? "engine_reported_unreconciled"
           : "unavailable"

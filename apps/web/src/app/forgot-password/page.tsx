@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
       <ThemeToggle className="fixed top-4 right-4 z-10" />
       <div className="relative w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
-          <div className="gradient-primary mb-3 flex h-12 w-12 items-center justify-center border p-1">
+          <div className="gradient-primary mb-3 flex h-12 w-12 items-center justify-center rounded-xl border p-1">
             <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Reset your password</h1>

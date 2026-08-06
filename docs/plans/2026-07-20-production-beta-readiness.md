@@ -94,23 +94,23 @@ Official sources:
 
 The most recent controlled local measurements are planning inputs, not provider invoices:
 
-- Safe/Luna run: approximately `$1.00`, about 654 seconds.
-- Deep Terra-coordinator plus Luna-specialist run: approximately `$4.65`, about 1,245 seconds.
+- Safe/Luna run: approximately `$0.20`, about 654 seconds.
+- Deep Terra-coordinator plus Luna-specialist run: approximately `$1.30`, about 1,245 seconds.
 
-Example first-month model envelope:
+Example first-month model envelope (after the 2026-08-06 Azure rate refresh):
 
 | Usage                        | Estimated model cost |
 | ---------------------------- | -------------------: |
-| 10 Safe scans + 2 Deep scans | Approximately $19.30 |
-| 20 Safe scans + 4 Deep scans | Approximately $38.60 |
-| 40 Safe scans + 8 Deep scans | Approximately $77.20 |
+| 10 Safe scans + 2 Deep scans |  Approximately $4.60 |
+| 20 Safe scans + 4 Deep scans |  Approximately $9.20 |
+| 40 Safe scans + 8 Deep scans | Approximately $18.40 |
 
 Every production run must be reconciled against the Azure provider meter. Internal token accounting is diagnostic evidence, not the invoice.
 
 ### Expected first-month total
 
 - Continuous scan availability: approximately `$46–55` infrastructure plus model usage.
-- Ten-user controlled beta example: approximately `$65–75` including the model example above.
+- Ten-user controlled beta example: approximately `$50–60` including the model example above.
 - Scheduled worker windows: potentially `$15–35` infrastructure plus model usage, depending on VM uptime, but with explicitly reduced scan availability.
 
 ## 5. Upstash Free command plan

@@ -4,6 +4,7 @@ import { LaunchReadinessClient } from "./launch-readiness-client"
 import { prisma } from "@lyrashield/db"
 import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 
 export default async function LaunchReadinessPage() {
   const session = await getCachedSession()
@@ -12,8 +13,8 @@ export default async function LaunchReadinessPage() {
   const workspaceId = await getCachedWorkspaceId(session.userId)
   if (!workspaceId) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Launch Readiness</h1>
+      <div>
+        <PageHeader title="Launch Readiness" icon={Rocket} />
         <NoWorkspaceState
           icon={Rocket}
           description="Create a workspace during onboarding to view launch readiness."

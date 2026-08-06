@@ -129,6 +129,8 @@ export default async function LiteCheckPage({ params }: { params: Promise<{ toke
           </div>
           <a
             href={scanUrl}
+            target="_blank"
+            rel="noopener noreferrer"
             className="bg-primary text-primary-foreground inline-flex min-h-12 items-center justify-center rounded-lg px-5 font-semibold"
           >
             Open the free scanner
