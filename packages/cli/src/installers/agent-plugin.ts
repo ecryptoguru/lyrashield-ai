@@ -22,8 +22,7 @@ function resolvePluginLocation(
 ): string {
   let platformPath = loc.path
   if (loc.platform && process.platform in loc.platform) {
-    platformPath =
-      loc.platform[process.platform as "darwin" | "linux" | "win32"] ?? loc.path
+    platformPath = loc.platform[process.platform as "darwin" | "linux" | "win32"] ?? loc.path
   }
   const expanded = platformPath.startsWith("~")
     ? path.join(homedir(), platformPath.slice(1))
@@ -58,8 +57,7 @@ export async function installAgentPlugin(
   }
 
   const loc =
-    pluginLocations.find((l) => !opts.scope || l.scope === opts.scope) ??
-    pluginLocations[0]
+    pluginLocations.find((l) => !opts.scope || l.scope === opts.scope) ?? pluginLocations[0]
   if (!loc) {
     return {
       agent: agent.id,
@@ -110,8 +108,7 @@ export async function uninstallAgentPlugin(
   const { agent } = opts
   const pluginLocations = agent.pluginLocations ?? []
   const loc =
-    pluginLocations.find((l) => !opts.scope || l.scope === opts.scope) ??
-    pluginLocations[0]
+    pluginLocations.find((l) => !opts.scope || l.scope === opts.scope) ?? pluginLocations[0]
 
   if (!loc) {
     return {

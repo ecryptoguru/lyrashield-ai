@@ -101,7 +101,8 @@ export const agentEntrySchema = z
         if (!entry.pluginLocations || entry.pluginLocations.length === 0) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: "pluginLocations is required and must have at least one entry when installStrategy is agent-plugin",
+            message:
+              "pluginLocations is required and must have at least one entry when installStrategy is agent-plugin",
             path: ["pluginLocations"],
           })
         }

@@ -105,9 +105,7 @@ export async function validatePlugin(
     const valid = isPlugin ? validatePluginJson(parsed) : validateMcpJson(parsed)
 
     if (!valid) {
-      const validationErrors = isPlugin
-        ? validatePluginJson.errors
-        : validateMcpJson.errors
+      const validationErrors = isPlugin ? validatePluginJson.errors : validateMcpJson.errors
       for (const err of validationErrors ?? []) {
         const path = err.instancePath ? `${err.instancePath}: ` : ""
         errors.push(`${label}: ${path}${err.message ?? "validation error"}`)

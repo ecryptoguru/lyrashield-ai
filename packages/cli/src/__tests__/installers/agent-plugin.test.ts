@@ -52,15 +52,15 @@ describe("installAgentPlugin", () => {
     expect(result.path).toBe(dest)
 
     // Verify plugin.json was copied
-    const pluginJson = JSON.parse(
-      await readFile(path.join(dest, "plugin.json"), "utf-8")
-    ) as { name: string }
+    const pluginJson = JSON.parse(await readFile(path.join(dest, "plugin.json"), "utf-8")) as {
+      name: string
+    }
     expect(pluginJson.name).toBe("lyrashield")
 
     // Verify mcp.json was copied
-    const mcpJson = JSON.parse(
-      await readFile(path.join(dest, "mcp.json"), "utf-8")
-    ) as { mcpServers: Record<string, unknown> }
+    const mcpJson = JSON.parse(await readFile(path.join(dest, "mcp.json"), "utf-8")) as {
+      mcpServers: Record<string, unknown>
+    }
     expect(mcpJson.mcpServers).toBeDefined()
 
     await rm(tempDir, { recursive: true, force: true })

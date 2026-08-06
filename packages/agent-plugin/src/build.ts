@@ -26,10 +26,6 @@ ${renderMarkdownBody(LYRASHIELD_POLICY, 2)}
   for (const client of CLIENTS) {
     const shimDir = path.join(pluginRoot, `.${client}-plugin`)
     await mkdir(shimDir, { recursive: true })
-    await writeFile(
-      path.join(shimDir, "plugin.json"),
-      JSON.stringify(manifest, null, 2),
-      "utf-8"
-    )
+    await writeFile(path.join(shimDir, "plugin.json"), JSON.stringify(manifest, null, 2), "utf-8")
   }
 }

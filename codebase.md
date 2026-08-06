@@ -2349,6 +2349,7 @@ The dashboard pages received a final UX pass focused on consistent headers and n
 ### E2E verification
 
 A DEEP scan against an approved repository completed successfully after all fixes:
+
 - 167 LLM requests, 14 engine findings (53 total findings), 9.8 minutes duration
 - Exit code 2 (success with findings)
 - Correct `COMPLETED` status with `ENGINE_STOPPED` error category
