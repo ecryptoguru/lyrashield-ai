@@ -10,5 +10,11 @@
   "homepage": "https://lyrashieldai.com",
   "repository": "https://github.com/ecryptoguru/lyrashieldai",
   "license": "UNLICENSED",
-  "keywords": ["security", "appsec", "lyrashield", "mcp", "ai-coding"]
+  "keywords": [
+    "security",
+    "appsec",
+    "lyrashield",
+    "mcp",
+    "ai-coding"
+  ]
 }
