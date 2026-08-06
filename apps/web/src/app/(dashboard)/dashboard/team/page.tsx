@@ -4,6 +4,7 @@ import { Users } from "lucide-react"
 import { TeamClient } from "./team-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 
 export default async function TeamPage() {
   const session = await getCachedSession()
@@ -13,8 +14,11 @@ export default async function TeamPage() {
 
   if (!workspaceId) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Team</h1>
+      <div>
+        <PageHeader
+          title="Team"
+          description="Manage who has access to this workspace."
+        />
         <NoWorkspaceState
           icon={Users}
           description="Create a workspace first to manage team members."

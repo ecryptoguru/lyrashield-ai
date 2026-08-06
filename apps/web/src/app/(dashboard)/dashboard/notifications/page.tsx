@@ -3,6 +3,7 @@ import { Bell } from "lucide-react"
 import { NotificationsClient } from "./notifications-client"
 import { NotificationPreferences } from "@/components/notification-preferences"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 
 export default async function NotificationsPage() {
   const session = await getCachedSession()
@@ -11,8 +12,11 @@ export default async function NotificationsPage() {
   const workspaceId = await getCachedWorkspaceId(session.userId)
   if (!workspaceId) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
+      <div>
+        <PageHeader
+          title="Notifications"
+          description="Scan alerts, finding warnings, and fix PR updates"
+        />
         <NoWorkspaceState
           icon={Bell}
           description="Create a workspace during onboarding to view notifications."

@@ -34,7 +34,7 @@ export function AuthSplitLayout({
         <div className="gradient-hero pointer-events-none absolute inset-0" />
         <div className="relative flex flex-col gap-8 p-10 lg:p-14">
           <div className="gradient-primary shadow-primary-glow flex h-12 w-12 items-center justify-center rounded-xl">
-            <ShieldCheck className="text-primary-foreground h-7 w-7" />
+            <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
           </div>
           <div>
             <p className="text-primary text-xs font-semibold tracking-[0.15em] uppercase">
@@ -52,7 +52,7 @@ export function AuthSplitLayout({
           <ul className="flex flex-col gap-3">
             {PROOF_POINTS.map((point) => (
               <li key={point} className="flex items-start gap-2.5 text-sm">
-                <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />
+                <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" aria-hidden="true" />
                 <span>{point}</span>
               </li>
             ))}

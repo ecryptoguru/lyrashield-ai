@@ -303,7 +303,7 @@ export function ScorecardShareComposer({
             <a
               href={url}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="hover:bg-accent inline-flex h-11 items-center rounded-lg px-3 text-xs font-medium"
             >
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Open

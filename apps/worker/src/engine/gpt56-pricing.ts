@@ -1,10 +1,11 @@
-export const GPT_56_PRICING_EFFECTIVE_DATE = "2026-07-09"
-export const GPT_56_PRICING_SOURCE = "https://openai.com/index/gpt-5-6/"
+export const GPT_56_PRICING_EFFECTIVE_DATE = "2026-08-06"
+export const GPT_56_PRICING_SOURCE =
+  "https://azure.microsoft.com/en-us/blog/gpt-5-6-now-available-in-microsoft-foundry/#gpt-5-6-pricing-for-sol-terra-and-luna"
 export const GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
 
 export const GPT_56_PRICING_USD_PER_MILLION = {
-  "gpt-5.6-terra": { input: 2.5, cachedInput: 0.25, cacheWriteInput: 3.125, output: 15 },
-  "gpt-5.6-luna": { input: 1, cachedInput: 0.1, cacheWriteInput: 1.25, output: 6 },
+  "gpt-5.6-terra": { input: 2, cachedInput: 0.2, cacheWriteInput: 2.5, output: 12 },
+  "gpt-5.6-luna": { input: 0.2, cachedInput: 0.02, cacheWriteInput: 0.25, output: 1.2 },
 } as const
 
 export type Gpt56UsageBuckets = {

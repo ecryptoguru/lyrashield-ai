@@ -440,11 +440,11 @@ describe("processScanJob", () => {
           llm_usage: {
             model: "azure_ai/gpt-5.6-luna",
             request_count: 1,
-            input_tokens: 3_500_000,
+            input_tokens: 17_500_000,
             cached_input_tokens: 0,
             cache_write_input_tokens: 0,
             output_tokens: 0,
-            standard_input_tokens: 3_500_000,
+            standard_input_tokens: 17_500_000,
             standard_cached_input_tokens: 0,
             standard_cache_write_input_tokens: 0,
             standard_output_tokens: 0,
@@ -473,7 +473,7 @@ describe("processScanJob", () => {
         billedCostUsd: "3.200000",
         actualCostCents: 320,
         llmRequestCount: 1,
-        llmInputTokens: 3_500_000,
+        llmInputTokens: 17_500_000,
         llmCachedInputTokens: 0,
         llmOutputTokens: 0,
       },
@@ -534,8 +534,8 @@ describe("processScanJob", () => {
       where: { id: "scan-1" },
       data: {
         providerCostUsd: null,
-        billedCostUsd: "0.026790",
-        actualCostCents: 3,
+        billedCostUsd: "0.005358",
+        actualCostCents: 1,
         llmRequestCount: 7,
         llmInputTokens: 18_420,
         llmCachedInputTokens: 6_100,
@@ -548,9 +548,9 @@ describe("processScanJob", () => {
       "info",
       "AI usage counters recorded",
       expect.objectContaining({
-        calculatedCostUsd: 0.02679,
-        costSource: "openai_rate_card",
-        pricingEffectiveDate: "2026-07-09",
+        calculatedCostUsd: 0.005358,
+        costSource: "azure_rate_card",
+        pricingEffectiveDate: "2026-08-06",
         reconciliationStatus: "rate_card_only",
       })
     )
@@ -605,7 +605,7 @@ describe("processScanJob", () => {
       "info",
       "AI usage counters recorded",
       expect.objectContaining({
-        calculatedCostUsd: 0.02679,
+        calculatedCostUsd: 0.005358,
         engineReportedCostUsd: 0.02,
         costSource: "rate_card_and_engine_reported",
         reconciliationStatus: "mismatch",
@@ -664,7 +664,7 @@ describe("processScanJob", () => {
             long_cached_input_tokens: 0,
             long_cache_write_input_tokens: 0,
             long_output_tokens: 0,
-            total_cost_usd: 0.0016,
+            total_cost_usd: 0.00032,
           },
         },
         summary: "Engine completed",
@@ -681,8 +681,8 @@ describe("processScanJob", () => {
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: expect.objectContaining({
-        providerCostUsd: "0.001600",
-        billedCostUsd: "0.001600",
+        providerCostUsd: "0.000320",
+        billedCostUsd: "0.000320",
         llmRequestCount: 1,
       }),
     })

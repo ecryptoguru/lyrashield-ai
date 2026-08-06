@@ -4,6 +4,7 @@ import { Wrench } from "lucide-react"
 import { FixesClient } from "./fixes-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 
 export default async function FixesPage() {
   const session = await getCachedSession()
@@ -13,8 +14,11 @@ export default async function FixesPage() {
 
   if (!workspaceId) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Fix proposals</h1>
+      <div>
+        <PageHeader
+          title="Proposed fixes"
+          description="Review proposed fixes and track pull requests for your issues."
+        />
         <NoWorkspaceState
           icon={Wrench}
           description="Create a workspace first to manage fix proposals."

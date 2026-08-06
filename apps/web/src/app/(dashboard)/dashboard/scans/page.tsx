@@ -5,8 +5,9 @@ import { ScansClient } from "./scans-client"
 import { SchedulesClient } from "../schedules/schedules-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { RUN_PLURAL, TARGET_PLURAL } from "@/lib/terminology"
-import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
+import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
 
 const SCANS_TABS: SectionTab[] = [
   { value: "runs", label: "Runs", href: "/dashboard/scans?tab=runs" },
@@ -29,8 +30,11 @@ export default async function ScansPage({
 
   if (!workspaceId) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">{RUN_PLURAL}</h1>
+      <div>
+        <PageHeader
+          title={RUN_PLURAL}
+          description={`Run and monitor ${RUN_PLURAL.toLowerCase()} against your ${TARGET_PLURAL.toLowerCase()}`}
+        />
         <NoWorkspaceState
           icon={Radar}
           description={`Create a workspace first to start running ${RUN_PLURAL.toLowerCase()}.`}

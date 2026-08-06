@@ -4,6 +4,7 @@ import { env } from "@lyrashield/config"
 import { Plug } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 import { DashboardSectionTabs, type SectionTab } from "@/components/dashboard-section-tabs"
 import { AgentsGrid, type AgentCardData } from "../agents/agents-grid"
 import { GithubIntegration } from "./github-integration"
@@ -48,8 +49,11 @@ export default async function IntegrationsPage({
   const workspaceId = await getCachedWorkspaceId(session.userId)
   if (!workspaceId) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
+      <div>
+        <PageHeader
+          title="Integrations"
+          description="Connect external services to your workspace."
+        />
         <NoWorkspaceState
           icon={Plug}
           description="Create a workspace during onboarding to manage integrations."

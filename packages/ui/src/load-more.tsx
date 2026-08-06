@@ -58,7 +58,7 @@ export function LoadMore<T>({
         aria-label={label}
       >
         {loading ? <Spinner className="mr-2 h-4 w-4" aria-hidden="true" /> : null}
-        {loading ? "Loading..." : label}
+        {loading ? "Loading…" : label}
       </Button>
     </div>
   )

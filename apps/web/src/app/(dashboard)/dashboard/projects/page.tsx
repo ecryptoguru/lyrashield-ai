@@ -4,6 +4,7 @@ import { FolderKanban } from "lucide-react"
 import { ProjectsClient } from "./projects-client"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 
 export default async function ProjectsPage() {
   const session = await getCachedSession()
@@ -13,8 +14,8 @@ export default async function ProjectsPage() {
 
   if (!workspaceId) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
+      <div>
+        <PageHeader title="Projects" description="Organize your scan targets and findings" />
         <NoWorkspaceState
           icon={FolderKanban}
           description="Create a workspace first to start managing projects."

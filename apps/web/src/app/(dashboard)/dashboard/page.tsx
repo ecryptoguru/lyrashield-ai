@@ -31,6 +31,7 @@ import { GetStartedChecklist } from "@/components/get-started-checklist"
 import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readiness"
 import { getScanPresentation } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
+import { PageHeader } from "@/components/page-header"
 
 export const metadata: Metadata = {
   title: "Dashboard | LyraShield AI",
@@ -54,8 +55,8 @@ export default async function DashboardPage() {
 
   if (!workspaceId || workspaces.length === 0) {
     return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold tracking-tight">{HOME_LABEL}</h2>
+      <div>
+        <PageHeader title={HOME_LABEL} />
         <NoWorkspaceState
           icon={ShieldCheck}
           description="Create your first workspace to start scanning your apps."
