@@ -695,6 +695,174 @@ const ohMyPi: AgentEntry = {
   ],
 }
 
+const claudeCodePlugin: AgentEntry = {
+  id: "claude-code-agent-plugin",
+  displayName: "Claude Code (Agent Plugin)",
+  docsSlug: "claude-code",
+  installStrategy: "agent-plugin",
+  format: null,
+  rootKey: null,
+  locations: [],
+  pluginLocations: [
+    {
+      scope: "global",
+      path: "~/.claude/plugins/lyrashield",
+      sharedByConvention: false,
+    },
+  ],
+  transports: ["stdio"],
+  credential: { kind: "shell-env" },
+  rulesFiles: ["CLAUDE.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://code.claude.com/docs/en/plugins",
+  },
+  gotchas: [
+    "Claude Code may also discover `.claude-plugin/plugin.json`; the package includes a manifest shim in that directory.",
+    "The MCP stdio server reads credentials from `~/.lyrashield/credentials.json` — run `lyrashield login` before installing.",
+  ],
+}
+
+const cursorPlugin: AgentEntry = {
+  id: "cursor-agent-plugin",
+  displayName: "Cursor (Agent Plugin)",
+  docsSlug: "cursor",
+  installStrategy: "agent-plugin",
+  format: null,
+  rootKey: null,
+  locations: [],
+  pluginLocations: [
+    {
+      scope: "global",
+      path: "~/.cursor/plugins/local/lyrashield",
+      sharedByConvention: false,
+    },
+  ],
+  transports: ["stdio"],
+  credential: { kind: "shell-env" },
+  rulesFiles: [".cursor/rules/lyrashield.mdc"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://cursor.com/docs/plugins",
+  },
+  gotchas: [
+    "Cursor discovers Agent Plugins from `~/.cursor/plugins/local/`; the portable `plugin.json` at the plugin root is the manifest.",
+    "Run `lyrashield login` before installing so the MCP stdio server can read credentials.",
+  ],
+}
+
+const vscodePlugin: AgentEntry = {
+  id: "vscode-agent-plugin",
+  displayName: "VS Code (Agent Plugin)",
+  docsSlug: "vscode",
+  installStrategy: "agent-plugin",
+  format: null,
+  rootKey: null,
+  locations: [],
+  pluginLocations: [
+    {
+      scope: "global",
+      path: "~/.vscode/extensions/lyrashield",
+      sharedByConvention: false,
+    },
+  ],
+  transports: ["stdio"],
+  credential: { kind: "shell-env" },
+  rulesFiles: [".github/copilot-instructions.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://code.visualstudio.com/docs/copilot/customization/agent-plugins",
+  },
+  gotchas: [
+    "VS Code auto-detects the plugin format by checking for format-specific manifest paths.",
+    "Run `lyrashield login` before installing so the MCP stdio server can read credentials.",
+  ],
+}
+
+const openaiCodexPlugin: AgentEntry = {
+  id: "openai-codex-agent-plugin",
+  displayName: "OpenAI Codex (Agent Plugin)",
+  docsSlug: "openai-codex",
+  installStrategy: "agent-plugin",
+  format: null,
+  rootKey: null,
+  locations: [],
+  pluginLocations: [
+    {
+      scope: "global",
+      path: "~/.codex/plugins/lyrashield",
+      sharedByConvention: false,
+    },
+  ],
+  transports: ["stdio"],
+  credential: { kind: "shell-env" },
+  rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://developers.openai.com/codex/plugins/build",
+  },
+  gotchas: [
+    "Codex recognizes root `plugin.json` files using the Agent Plugins 1.0 schema and maps them to Codex plugin manifests.",
+    "Run `lyrashield login` before installing so the MCP stdio server can read credentials.",
+  ],
+}
+
+const githubCopilotPlugin: AgentEntry = {
+  id: "github-copilot-agent-plugin",
+  displayName: "GitHub Copilot (Agent Plugin)",
+  docsSlug: "github-copilot",
+  installStrategy: "agent-plugin",
+  format: null,
+  rootKey: null,
+  locations: [],
+  pluginLocations: [
+    {
+      scope: "global",
+      path: "~/.copilot/plugins/lyrashield",
+      sharedByConvention: false,
+    },
+  ],
+  transports: ["stdio"],
+  credential: { kind: "shell-env" },
+  rulesFiles: [".github/copilot-instructions.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://docs.github.com/en/copilot/concepts/agents/about-plugins",
+  },
+  gotchas: [
+    "GitHub Copilot CLI scans each plugin directory for a `plugin.json` manifest at the root.",
+    "Run `lyrashield login` before installing so the MCP stdio server can read credentials.",
+  ],
+}
+
+const kiroPlugin: AgentEntry = {
+  id: "kiro-agent-plugin",
+  displayName: "Kiro (Agent Plugin)",
+  docsSlug: "kiro",
+  installStrategy: "agent-plugin",
+  format: null,
+  rootKey: null,
+  locations: [],
+  pluginLocations: [
+    {
+      scope: "global",
+      path: "~/.kiro/plugins/lyrashield",
+      sharedByConvention: false,
+    },
+  ],
+  transports: ["stdio"],
+  credential: { kind: "shell-env" },
+  rulesFiles: ["AGENTS.md"],
+  source: {
+    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
+    url: "https://kiro.dev/docs/cli/chat/configuration/",
+  },
+  gotchas: [
+    "Kiro discovers plugins from `~/.kiro/plugins/`; the portable `plugin.json` at the plugin root is the manifest.",
+    "Run `lyrashield login` before installing so the MCP stdio server can read credentials.",
+  ],
+}
+
 export const AGENTS: readonly AgentEntry[] = [
   claudeCode,
   cursor,
@@ -720,4 +888,10 @@ export const AGENTS: readonly AgentEntry[] = [
   mimoCode,
   codebuff,
   ohMyPi,
+  claudeCodePlugin,
+  cursorPlugin,
+  vscodePlugin,
+  openaiCodexPlugin,
+  githubCopilotPlugin,
+  kiroPlugin,
 ] as const

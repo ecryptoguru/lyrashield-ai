@@ -12,6 +12,11 @@ function assertConfigFileAgent(
   agent: AgentEntry
 ): asserts agent is AgentEntry & { format: ConfigFormat; rootKey: string } {
   if (agent.installStrategy !== "config-file") {
+    if (agent.installStrategy === "agent-plugin") {
+      throw new Error(
+        `Agent "${agent.id}" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.`
+      )
+    }
     throw new Error(
       `Agent "${agent.id}" uses installStrategy "${agent.installStrategy}"; renderConfig/renderEntry only support "config-file" agents.`
     )

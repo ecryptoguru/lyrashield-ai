@@ -1,5 +1,5 @@
 export type ConfigFormat = "json" | "jsonc" | "toml" | "yaml"
-export type InstallStrategy = "config-file" | "vendor-cli" | "guided-manual"
+export type InstallStrategy = "config-file" | "vendor-cli" | "guided-manual" | "agent-plugin"
 export type Transport = "stdio" | "remote-http"
 
 export type CredentialStyle =
@@ -41,6 +41,11 @@ export interface AgentEntry {
   rulesFiles: string[]
   forceInlineEnv?: boolean
   serverNamePattern?: string
+  /**
+   * Client-specific directories where the Agent Plugin package should be
+   * installed. Only used when installStrategy is "agent-plugin".
+   */
+  pluginLocations?: ConfigLocation[]
   source?: { url?: string | null; checkedOn?: string }
   gotchas: string[]
 }

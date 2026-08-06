@@ -255,13 +255,63 @@ describe("registry helpers", () => {
     const configFile = agentsByStrategy("config-file")
     const vendorCli = agentsByStrategy("vendor-cli")
     const guided = agentsByStrategy("guided-manual")
+    const pluginAgents = agentsByStrategy("agent-plugin")
 
     expect(configFile.length).toBeGreaterThan(0)
     expect(vendorCli.length).toBeGreaterThanOrEqual(1)
     expect(guided.length).toBeGreaterThan(0)
+    expect(pluginAgents.length).toBe(6)
 
     expect(configFile.every((a) => a.installStrategy === "config-file")).toBe(true)
     expect(vendorCli.every((a) => a.installStrategy === "vendor-cli")).toBe(true)
     expect(guided.every((a) => a.installStrategy === "guided-manual")).toBe(true)
+    expect(pluginAgents.every((a) => a.installStrategy === "agent-plugin")).toBe(true)
+  })
+})
+
+describe("agent-plugin entries", () => {
+  const pluginAgentIds = [
+    "claude-code-agent-plugin",
+    "cursor-agent-plugin",
+    "vscode-agent-plugin",
+    "openai-codex-agent-plugin",
+    "github-copilot-agent-plugin",
+    "kiro-agent-plugin",
+  ]
+
+  for (const id of pluginAgentIds) {
+    it(`${id} exists and has pluginLocations`, () => {
+      const agent = getAgent(id)
+      expect(agent).toBeDefined()
+      expect(agent!.installStrategy).toBe("agent-plugin")
+      expect(agent!.format).toBeNull()
+      expect(agent!.rootKey).toBeNull()
+      expect(agent!.locations).toEqual([])
+      expect(agent!.pluginLocations).toBeDefined()
+      expect(agent!.pluginLocations!.length).toBeGreaterThan(0)
+    })
+  }
+
+  it("existing non-plugin entries are unchanged", () => {
+    const claude = getAgent("claude-code")
+    expect(claude?.installStrategy).toBe("config-file")
+    expect(claude?.format).toBe("json")
+
+    const codex = getAgent("openai-codex")
+    expect(codex?.installStrategy).toBe("config-file")
+    expect(codex?.format).toBe("toml")
+  })
+
+  it("renderConfig throws a clear error for agent-plugin entries", () => {
+    const agent = getAgent("claude-code-agent-plugin")!
+    expect(() =>
+      renderConfig(agent, {
+        transport: "stdio",
+        apiUrl: TEST_BASE_URL,
+        apiKey: TEST_API_KEY,
+        secretMode: "inline",
+        serverName: "lyrashield",
+      })
+    ).toThrow(/agent-plugin/)
   })
 })
