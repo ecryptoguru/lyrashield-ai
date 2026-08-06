@@ -1,2 +1,12 @@
+# Local overrides for `wrangler dev` / `astro dev`.
+# Copy this file to `.dev.vars` and adjust for your local setup.
+# These values override `wrangler.jsonc` vars in local development.
+
+PUBLIC_SITE_URL="http://localhost:4321"
+PUBLIC_APP_URL="http://localhost:3000"
+PUBLIC_SCANNER_URL=""
+PUBLIC_TURNSTILE_SITE_KEY=""
+PUBLIC_INDEXABLE="false"
+
 # Secret: random 32+ character salt for ip_hash. Replace before any real use.
 WAITLIST_IP_SALT="local-dev-salt-replace-me"

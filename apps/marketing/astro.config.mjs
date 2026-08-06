@@ -151,6 +151,7 @@ export default defineConfig({
   site: siteUrl,
   output: "static",
   trailingSlash: "never",
+
   build: {
     inlineStylesheets: "always",
   },
@@ -182,7 +183,7 @@ export default defineConfig({
       PUBLIC_APP_URL: envField.string({
         context: "client",
         access: "public",
-        default: "http://localhost:3001",
+        default: "http://localhost:3000",
       }),
       PUBLIC_SCANNER_URL: envField.string({
         context: "client",

@@ -18,6 +18,8 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthSplitLayout } from "@/components/auth-split-layout"
 import { PasswordInput } from "@/components/password-input"
 
+const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(/\/$/, "")
+
 export default function SignUpPage() {
   const router = useRouter()
   const [name, setName] = useState("")
@@ -312,14 +314,14 @@ export default function SignUpPage() {
             <p className="text-muted-foreground text-center text-xs leading-relaxed">
               By creating an account you agree to the{" "}
               <Link
-                href="https://lyrashieldai.com/terms"
+                href={`${marketingUrl}/terms`}
                 className="text-foreground hover:text-primary font-medium underline underline-offset-4"
               >
                 Terms of Service
               </Link>{" "}
               and{" "}
               <Link
-                href="https://lyrashieldai.com/privacy"
+                href={`${marketingUrl}/privacy`}
                 className="text-foreground hover:text-primary font-medium underline underline-offset-4"
               >
                 Privacy Policy

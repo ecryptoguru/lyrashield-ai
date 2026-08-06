@@ -91,7 +91,7 @@ export default async function ScansPage({
     createdAt: s.createdAt.toISOString(),
   }))
 
-  const autoOpen = params.new === "1" || (initialData.length === 0 && targets.length > 0)
+  const autoOpen = params.new === "1"
 
   return (
     <div>
