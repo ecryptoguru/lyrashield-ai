@@ -9,8 +9,9 @@ interface Props {
   apiKey?: string
 }
 
-const API_URL = "https://app.lyrashieldai.com"
-const MCP_REMOTE_URL = "https://app.lyrashieldai.com/api/mcp"
+const appOrigin = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "")
+const API_URL = appOrigin || "https://app.lyrashieldai.com"
+const MCP_REMOTE_URL = `${API_URL}/api/mcp`
 const SERVER_NAME = "lyrashield"
 const DEFAULT_API_KEY = "<LYRASHIELD_API_KEY>"
 

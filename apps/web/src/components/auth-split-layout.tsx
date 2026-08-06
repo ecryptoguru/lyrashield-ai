@@ -9,6 +9,8 @@ import { ShieldCheck, CheckCircle2 } from "lucide-react"
  * the landing methodology, kept honest — no "only we" claims.
  */
 
+const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(/\/$/, "")
+
 const PROOF_POINTS = [
   "Verified findings, not scanner noise",
   "Approval-bound fixes — nothing merges without your sign-off",
@@ -59,19 +61,19 @@ export function AuthSplitLayout({
           </ul>
         </div>
         <div className="text-muted-foreground relative flex items-center gap-4 p-10 text-xs lg:p-14">
-          <Link href="https://lyrashieldai.com" className="hover:text-foreground transition-colors">
-            lyrashieldai.com
+          <Link href={marketingUrl} className="hover:text-foreground transition-colors">
+            {new URL(marketingUrl).host}
           </Link>
           <span aria-hidden="true">·</span>
           <Link
-            href="https://lyrashieldai.com/methodology"
+            href={`${marketingUrl}/methodology`}
             className="hover:text-foreground transition-colors"
           >
             Methodology
           </Link>
           <span aria-hidden="true">·</span>
           <Link
-            href="https://lyrashieldai.com/docs/integrations"
+            href={`${marketingUrl}/docs/integrations`}
             className="hover:text-foreground transition-colors"
           >
             Docs

@@ -89,6 +89,7 @@ services:
       args:
         BUILD_APP_URL: "http://localhost:3000"
         BUILD_PUBLIC_APP_URL: "http://localhost:3000"
+        BUILD_PUBLIC_MARKETING_URL: "http://localhost:4321"
       additional_contexts:
         engine: "${LYRASHIELD_ENGINE_SOURCE:-../lyrashield-engine}"
     container_name: lyrashield-web
@@ -108,6 +109,7 @@ services:
       # values aligned with the container port mapping below.
       BETTER_AUTH_URL: "http://localhost:3000"
       NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      NEXT_PUBLIC_MARKETING_URL: "http://localhost:4321"
       PORT: "3000"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-lyrashield-dev-redis}@redis:6379"
       NODE_ENV: "production"

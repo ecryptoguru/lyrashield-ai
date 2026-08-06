@@ -70,8 +70,8 @@ export default async function IntegrationsPage({
   const appOrigin = appOriginRaw.replace(/\/+$/, "")
   const mcpEndpointUrl = appOrigin ? `${appOrigin}/api/mcp` : "/api/mcp"
   const marketingUrl =
-    (env.NEXT_PUBLIC_MARKETING_URL as string | undefined)?.replace(/\/+$/, "") ??
-    "https://lyrashield.ai"
+    (env.NEXT_PUBLIC_MARKETING_URL as string | undefined)?.replace(/\/+$/, "") ||
+    "https://lyrashieldai.com"
   const docsUrl = `${marketingUrl}/docs/integrations`
 
   const integrations = await prisma.integration.findMany({

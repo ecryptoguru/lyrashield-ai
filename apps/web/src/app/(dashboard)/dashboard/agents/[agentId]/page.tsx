@@ -38,8 +38,8 @@ export default async function AgentWizardPage({
   const appOrigin = ((env.NEXT_PUBLIC_APP_URL as string | undefined) ?? "").replace(/\/+$/, "")
   const mcpEndpointUrl = appOrigin ? `${appOrigin}/api/mcp` : "/api/mcp"
   const marketingUrl =
-    (env.NEXT_PUBLIC_MARKETING_URL as string | undefined)?.replace(/\/+$/, "") ??
-    "https://lyrashield.ai"
+    (env.NEXT_PUBLIC_MARKETING_URL as string | undefined)?.replace(/\/+$/, "") ||
+    "https://lyrashieldai.com"
   const docsUrl = `${marketingUrl}/docs/integrations/${agent.docsSlug}`
 
   const data = buildAgentWizard(agent.id, mcpEndpointUrl)
