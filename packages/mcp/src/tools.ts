@@ -24,13 +24,13 @@ export interface McpTool {
 
 export interface ToolHandlerContext {
   apiBaseUrl: string
-  apiKey?: string
+  apiKey: string
   fetchFn?: typeof fetch
 }
 
 function getClient(context: ToolHandlerContext): LyraShieldClient {
   return new LyraShieldClient({
-    apiKey: context.apiKey ?? "",
+    apiKey: context.apiKey,
     apiUrl: context.apiBaseUrl,
     fetchFn: context.fetchFn,
   })

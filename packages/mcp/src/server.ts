@@ -52,7 +52,7 @@ export class McpServer {
   constructor(options?: McpServerOptions) {
     const context: ToolHandlerContext = options?.toolContext ?? {
       apiBaseUrl: process.env.LYRASHIELD_API_URL ?? "http://localhost:3000",
-      apiKey: process.env.LYRASHIELD_API_KEY,
+      apiKey: process.env.LYRASHIELD_API_KEY ?? "",
     }
     this.tools = new Map(createAllTools(context).map((t) => [t.name, t]))
     this.guard = new PromptInjectionGuard({
