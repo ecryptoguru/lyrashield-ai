@@ -7,20 +7,25 @@ import { Check, Copy, ExternalLink, Terminal } from "lucide-react"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 
 type StrategyLabel =
-  "Auto-installs a config file" | "Uses your agent's own installer" | "Shows values to paste"
+  | "Auto-installs a config file"
+  | "Uses your agent's own installer"
+  | "Shows values to paste"
+  | "Installs a portable Agent Plugin"
 
 export interface AgentCardData {
   id: string
   displayName: string
   docsSlug: string
-  installStrategy: "config-file" | "vendor-cli" | "guided-manual"
+  installStrategy: "config-file" | "vendor-cli" | "guided-manual" | "agent-plugin"
   locations: { scope: "project" | "global"; path: string; sharedByConvention: boolean }[]
+  pluginLocations?: { scope: "project" | "global"; path: string; sharedByConvention: boolean }[]
   rulesFiles: string[]
 }
 
 function strategyLabel(s: AgentCardData["installStrategy"]): StrategyLabel {
   if (s === "config-file") return "Auto-installs a config file"
   if (s === "vendor-cli") return "Uses your agent's own installer"
+  if (s === "agent-plugin") return "Installs a portable Agent Plugin"
   return "Shows values to paste"
 }
 
@@ -31,7 +36,9 @@ function StrategyBadge({ strategy }: { strategy: AgentCardData["installStrategy"
       ? ("success" as const)
       : strategy === "vendor-cli"
         ? ("info" as const)
-        : ("muted" as const)
+        : strategy === "agent-plugin"
+          ? ("info" as const)
+          : ("muted" as const)
   return (
     <Badge variant={variant} className="shrink-0 text-[11px]">
       {label}

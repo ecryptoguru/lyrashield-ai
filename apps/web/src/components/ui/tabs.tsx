@@ -72,7 +72,10 @@ function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPr
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn("flex-1 focus-visible:ring-ring/50 focus-visible:outline-ring focus-visible:outline-none focus-visible:ring-2", className)}
+      className={cn(
+        "focus-visible:ring-ring/50 focus-visible:outline-ring flex-1 focus-visible:ring-2 focus-visible:outline-none",
+        className
+      )}
       {...props}
     />
   )

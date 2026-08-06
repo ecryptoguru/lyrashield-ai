@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/claude-code", origin).toString()
 const title = "LyraShield MCP for Claude Code — Setup Guide"
 const description =
   "Add the LyraShield MCP server to Claude Code in under two minutes. Configure .mcp.json or use the claude mcp add command to run security checks inline while you build."
-const updatedDate = "2026-07-31"
+const updatedDate = "2026-08-07"
 
 const jsonLd: unknown[] = [
   {
@@ -124,6 +124,26 @@ const jsonLd: unknown[] = [
   --args "-y,@lyrashield/mcp" \\
   --env LYRASHIELD_API_KEY=lsk_your_key_here \\
   --env LYRASHIELD_API_URL=https://app.lyrashieldai.com`}</code></pre>
+
+  <h2>Option C — Agent Plugin (recommended)</h2>
+  <p>
+    Claude Code supports the open Agent Plugins v1.0.0 standard (agent-plugins.org), and LyraShield
+    ships a portable plugin that bundles the MCP server and a security skill into a single
+    installable package. The skill teaches Claude when to run LyraShield checks, so you get both the
+    tools and the guidance in one step.
+  </p>
+  <p>
+    <code>npx lyrashield install claude-code</code> now installs the plugin by default — this is the
+    preferred path over Option A and Option B above. Add <code>--dry-run</code> first to preview the
+    install with no write.
+  </p>
+  <pre><code>npx lyrashield install claude-code</code></pre>
+  <div class="callout">
+    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
+    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
+    <code>LYRASHIELD_API_KEY</code> environment variable). No key needs to be inlined in{" "}
+    <code>.mcp.json</code> or any other file you might commit.
+  </div>
 
   <h2>Verify the connection</h2>
   <p>

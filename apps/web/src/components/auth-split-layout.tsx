@@ -9,7 +9,10 @@ import { ShieldCheck, CheckCircle2 } from "lucide-react"
  * the landing methodology, kept honest — no "only we" claims.
  */
 
-const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(/\/$/, "")
+const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(
+  /\/$/,
+  ""
+)
 
 const PROOF_POINTS = [
   "Verified findings, not scanner noise",

@@ -76,6 +76,15 @@ export async function detectAgent(
     // No file path to probe; rely on IDE presence if we can guess a binary.
     return false
   }
+  if (agent.installStrategy === "agent-plugin") {
+    for (const loc of agent.pluginLocations ?? []) {
+      const resolved = resolveLocation(loc, opts)
+      if (await pathExists(resolved)) return true
+      const parent = path.dirname(resolved)
+      if (await isDirectory(parent)) return true
+    }
+    return false
+  }
   for (const loc of agent.locations) {
     const resolved = resolveLocation(loc, opts)
     if (await pathExists(resolved)) return true

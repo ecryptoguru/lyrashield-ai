@@ -18,7 +18,10 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthSplitLayout } from "@/components/auth-split-layout"
 import { PasswordInput } from "@/components/password-input"
 
-const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(/\/$/, "")
+const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(
+  /\/$/,
+  ""
+)
 
 export default function SignUpPage() {
   const router = useRouter()

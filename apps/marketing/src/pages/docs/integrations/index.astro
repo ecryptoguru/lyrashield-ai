@@ -9,7 +9,7 @@ const title = "Connect LyraShield to AI Coding Tools | Integrations"
 const description =
   "Connect LyraShield AI to Claude Code, Cursor, Windsurf, VS Code, GitHub Actions, and more. Step-by-step MCP server setup, REST API keys, and agent rules for every AI coding environment."
 
-const updatedDate = "2026-07-31"
+const updatedDate = "2026-08-07"
 
 const agents = listAgents()
 
@@ -50,6 +50,10 @@ const faqItems = [
   {
     q: "Is there a CLI, or do I have to hand-edit config files?",
     a: "There's a CLI. lyrashield (also published as the scoped alias @lyrashield/cli) is on npm — run npx lyrashield init to detect installed agents and configure them in one command, or npx lyrashield doctor to check what's already set up. It writes the same config shown in each agent's guide below, so the guides double as a reference for what the CLI does under the hood.",
+  },
+  {
+    q: "What is the Agent Plugin?",
+    a: "The Agent Plugin is a portable plugin following the open Agent Plugins v1.0.0 standard (agent-plugins.org). It bundles LyraShield's MCP server and a security skill into a single installable package, so a supported agent can load both the tools and the guidance for when to run them in one step. npx lyrashield init now prefers the plugin install for the launch clients (Claude Code, Cursor, Windsurf, VS Code, Codex, Kiro) and falls back to config-file edits for agents that do not support the standard yet.",
   },
 ]
 
@@ -119,6 +123,43 @@ const jsonLd: unknown[] = [
     Amp, and prints exact copy-paste values for the remaining 5 whose tooling has no config file to
     safely write. Every per-agent guide below still documents the manual path — useful to see exactly
     what gets written, or if you'd rather not use Node.js.
+  </p>
+
+  <h2>Agent Plugin (Agent Plugins v1.0.0)</h2>
+  <p>
+    LyraShield ships a portable plugin that follows the open Agent Plugins v1.0.0 standard
+    (agent-plugins.org). The plugin bundles the LyraShield MCP server and a security skill that
+    teaches the agent when to run LyraShield checks, so a supported client gets both the tools and
+    the guidance in a single install — no hand-edited config required.
+  </p>
+  <p>
+    <code>npx lyrashield init</code> now prefers the plugin install for the six launch clients:
+    Claude Code, Cursor, Windsurf, VS Code, Codex, and Kiro. For agents that do not support the
+    standard yet, the CLI falls back to writing the config-file edits documented in each guide below.
+  </p>
+  <div class="callout">
+    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
+    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
+    <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
+  </div>
+  <div class="nav-cards">
+    <a href="/docs/integrations/claude-code" class="nav-card">
+      <span class="nav-card__label">Claude Code</span>
+      <span class="nav-card__sub">Agent Plugin install</span>
+    </a>
+    <a href="/docs/integrations/cursor" class="nav-card">
+      <span class="nav-card__label">Cursor</span>
+      <span class="nav-card__sub">Agent Plugin install</span>
+    </a>
+    <a href="/docs/integrations/vscode" class="nav-card">
+      <span class="nav-card__label">VS Code</span>
+      <span class="nav-card__sub">Agent Plugin install</span>
+    </a>
+  </div>
+  <p>
+    Dedicated guides for Windsurf, Codex, and Kiro are coming. Until then, <code
+      >npx lyrashield install &lt;agent&gt;</code
+    > handles the plugin install for those clients automatically.
   </p>
 
   <h2>Local MCP server (stdio)</h2>

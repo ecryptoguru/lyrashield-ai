@@ -69,6 +69,8 @@ exports[`renderConfig snapshot — every agent × every transport > claude-code 
 }"
 `;
 
+exports[`renderConfig snapshot — every agent × every transport > claude-code-agent-plugin × stdio 1`] = `[Error: Agent "claude-code-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > cline × remote-http 1`] = `[Error: Agent "cline" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > cline × stdio 1`] = `[Error: Agent "cline" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
@@ -156,6 +158,8 @@ exports[`renderConfig snapshot — every agent × every transport > cursor × st
 }"
 `;
 
+exports[`renderConfig snapshot — every agent × every transport > cursor-agent-plugin × stdio 1`] = `[Error: Agent "cursor-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > devin-cli × stdio 1`] = `
 "{
   "mcpServers": {
@@ -192,6 +196,8 @@ exports[`renderConfig snapshot — every agent × every transport > gemini-cli �
 }"
 `;
 
+exports[`renderConfig snapshot — every agent × every transport > github-copilot-agent-plugin × stdio 1`] = `[Error: Agent "github-copilot-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > goose × remote-http 1`] = `[Error: Agent "goose" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > goose × stdio 1`] = `[Error: Agent "goose" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
@@ -203,6 +209,8 @@ exports[`renderConfig snapshot — every agent × every transport > jetbrains ×
 exports[`renderConfig snapshot — every agent × every transport > kilo-code × remote-http 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > kilo-code × stdio 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > kiro-agent-plugin × stdio 1`] = `[Error: Agent "kiro-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > mimo-code × remote-http 1`] = `
 "{
@@ -279,6 +287,8 @@ args = ["-y", "@lyrashield/mcp"]
 LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
 LYRASHIELD_API_KEY = "lsk_test_lyrashield_api_key""
 `;
+
+exports[`renderConfig snapshot — every agent × every transport > openai-codex-agent-plugin × stdio 1`] = `[Error: Agent "openai-codex-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > openclaw × stdio 1`] = `[Error: Agent "openclaw" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
@@ -381,6 +391,8 @@ exports[`renderConfig snapshot — every agent × every transport > vscode × st
   }
 }"
 `;
+
+exports[`renderConfig snapshot — every agent × every transport > vscode-agent-plugin × stdio 1`] = `[Error: Agent "vscode-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > windsurf × remote-http 1`] = `
 "{

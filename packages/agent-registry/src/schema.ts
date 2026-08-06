@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 const configFormatSchema = z.enum(["json", "jsonc", "toml", "yaml"])
-const installStrategySchema = z.enum(["config-file", "vendor-cli", "guided-manual"])
+const installStrategySchema = z.enum(["config-file", "vendor-cli", "guided-manual", "agent-plugin"])
 const transportSchema = z.enum(["stdio", "remote-http"])
 
 const credentialStyleSchema = z.union([
@@ -43,6 +43,7 @@ export const agentEntrySchema = z
     rulesFiles: z.array(z.string().min(1)),
     forceInlineEnv: z.boolean().optional(),
     serverNamePattern: z.string().optional(),
+    pluginLocations: z.array(configLocationSchema).optional(),
     source: z
       .object({
         url: z.string().nullable().optional(),
@@ -95,6 +96,16 @@ export const agentEntrySchema = z
           message: `locations must be empty when installStrategy is ${entry.installStrategy}`,
           path: ["locations"],
         })
+      }
+      if (entry.installStrategy === "agent-plugin") {
+        if (!entry.pluginLocations || entry.pluginLocations.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              "pluginLocations is required and must have at least one entry when installStrategy is agent-plugin",
+            path: ["pluginLocations"],
+          })
+        }
       }
     }
   })

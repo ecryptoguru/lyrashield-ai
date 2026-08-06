@@ -1,0 +1,43 @@
+{
+  "name": "@lyrashield/agent-plugin",
+  "version": "0.1.0",
+  "description": "LyraShield Agent Plugin package",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "plugin",
+    "README.md"
+  ],
+  "scripts": {
+    "lint": "eslint src --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "build": "tsup",
+    "build:plugin": "tsx src/build.ts",
+    "prepublishOnly": "tsup",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lyrashield/agent-rules": "workspace:*",
+    "ajv": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.1",
+    "typescript": "^6.0.0",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

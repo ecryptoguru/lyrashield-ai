@@ -150,6 +150,7 @@ lyrashield/
 │   ├── integrations/          # GitHub, notification delivery, Redis, and shared queue helpers
 │   ├── logger/                # Structured redacting logger
 │   ├── mcp/                   # Tools, server, stdio transport, injection guard
+│   ├── agent-plugin/          # Agent Plugins v1.0.0 package (plugin.json, mcp.json, skills, client shims) — on `feat/agent-plugin-integration`
 │   ├── security/              # Shared SSRF validation and safeFetch
 │   ├── types/                 # Shared Zod schemas, DTOs, action/scan types
 │   └── ui/                    # Shared accessible components and variants
@@ -351,7 +352,7 @@ Next.js page-data collection does not reliably load the root `.env`; export requ
 
 ### MCP
 
-`LYRASHIELD_API_URL` selects the product API (default `http://localhost:3000`); `LYRASHIELD_API_KEY` supplies MCP authentication when configured. A complete user-facing API-key issuance lifecycle is still pending. The current tool catalog, supported scan enums, and approval behavior are documented in `userguide.md` §22.
+`LYRASHIELD_API_URL` selects the product API (default `http://localhost:3000`); `LYRASHIELD_API_KEY` supplies MCP authentication when configured. On `feat/agent-plugin-integration`, the MCP server also resolves these from env vars or falls back to reading `~/.lyrashield/credentials.json` (the CLI credentials file, 0o600 perms) so no inline secrets are required. The MCP server is additionally distributed as a portable Agent Plugin via `@lyrashield/agent-plugin` (Agent Plugins v1.0.0), which packages the server plus skills with a `plugin.json` manifest, `mcp.json`, and `skills/lyrashield/SKILL.md`, and generates client-specific manifest shims for Claude, Cursor, Codex, and Kiro. A complete user-facing API-key issuance lifecycle is still pending. The current tool catalog, supported scan enums, and approval behavior are documented in `userguide.md` §22.
 
 ### Marketing Worker
 
@@ -772,6 +773,9 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 | `packages/mcp/src/server.ts`                         | API-backed MCP server                                                          |
 | `packages/mcp/src/stdio-transport.ts`                | JSON-RPC stdio transport                                                       |
 | `packages/mcp/src/prompt-injection-guard.ts`         | Injection detection/sanitization with normalization and critical-pattern logic |
+| `packages/agent-plugin/plugin.json`                  | Agent Plugins v1.0.0 manifest (on `feat/agent-plugin-integration`)             |
+| `packages/agent-plugin/mcp.json`                     | MCP server descriptor for the agent plugin                                     |
+| `packages/agent-plugin/skills/lyrashield/SKILL.md`   | Packaged LyraShield skill definition                                           |
 | `packages/logger/src/index.ts`                       | Circular-safe, truncating, redacting logger                                    |
 | `packages/ui/src/index.ts`                           | Shared accessible UI exports                                                   |
 | `apps/marketing/astro.config.mjs`                    | Site origin/indexability contract                                              |
@@ -2349,6 +2353,7 @@ The dashboard pages received a final UX pass focused on consistent headers and n
 ### E2E verification
 
 A DEEP scan against an approved repository completed successfully after all fixes:
+
 - 167 LLM requests, 14 engine findings (53 total findings), 9.8 minutes duration
 - Exit code 2 (success with findings)
 - Correct `COMPLETED` status with `ENGINE_STOPPED` error category

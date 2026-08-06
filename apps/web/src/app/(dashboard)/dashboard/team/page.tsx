@@ -15,10 +15,7 @@ export default async function TeamPage() {
   if (!workspaceId) {
     return (
       <div>
-        <PageHeader
-          title="Team"
-          description="Manage who has access to this workspace."
-        />
+        <PageHeader title="Team" description="Manage who has access to this workspace." />
         <NoWorkspaceState
           icon={Users}
           description="Create a workspace first to manage team members."
