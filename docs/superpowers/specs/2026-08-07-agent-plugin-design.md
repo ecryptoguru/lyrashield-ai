@@ -31,7 +31,15 @@ packages/agent-plugin/
 ├── tsconfig.build.json
 ├── tsup.config.ts
 ├── plugin/                 # canonical portable plugin root
-│   ├── plugin.json         # portable manifest
+│   ├── plugin.json         # portable Agent Plugins manifest
+│   ├── .claude-plugin/     # optional client manifest shim
+│   │   └── plugin.json
+│   ├── .cursor-plugin/     # optional client manifest shim
+│   │   └── plugin.json
+│   ├── .codex-plugin/      # optional client manifest shim
+│   │   └── plugin.json
+│   ├── .kiro-plugin/       # optional client manifest shim
+│   │   └── plugin.json
 │   ├── mcp.json            # MCP server config
 │   └── skills/
 │       └── lyrashield/
@@ -47,6 +55,7 @@ packages/agent-plugin/
 - `plugin/` is the directory the CLI copies into the user’s client-specific plugin path.
 - `plugin/plugin.json` targets `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`.
 - `plugin/mcp.json` targets `https://agent-plugins.org/schemas/1.0.0/mcp.schema.json`.
+- Client manifest shims may be generated into `plugin/.<client>-plugin/plugin.json` (e.g. `.claude-plugin`, `.cursor-plugin`, `.codex-plugin`, `.kiro-plugin`) for clients that still discover their native manifest path. These shims are not part of the Agent Plugins portable contract; they are an implementation detail to maximize launch-client compatibility.
 - `plugin/mcp.json` contains two server entries:
   - `lyrashield-stdio`: `type: "stdio"`, `command: "npx"`, `args: ["-y", "@lyrashield/mcp"]`, no `env`.
   - `lyrashield-remote`: `type: "streamable-http"`, `url: "https://app.lyrashieldai.com/api/mcp"`, no `headers`.
