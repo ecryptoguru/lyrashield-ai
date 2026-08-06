@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename */
 import { writeFile, mkdir, readFile } from "node:fs/promises"
 import path from "node:path"
 import { renderMarkdownBody } from "@lyrashield/agent-rules/renderers/shared.js"

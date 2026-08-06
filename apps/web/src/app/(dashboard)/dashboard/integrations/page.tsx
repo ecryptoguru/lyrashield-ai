@@ -34,6 +34,11 @@ function mapAgentsToCardData(): AgentCardData[] {
       path: l.path,
       sharedByConvention: l.sharedByConvention,
     })),
+    pluginLocations: a.pluginLocations?.map((l) => ({
+      scope: l.scope,
+      path: l.path,
+      sharedByConvention: l.sharedByConvention,
+    })),
     rulesFiles: [...a.rulesFiles],
   }))
 }

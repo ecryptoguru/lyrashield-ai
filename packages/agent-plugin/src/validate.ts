@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename */
 import Ajv from "ajv"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
