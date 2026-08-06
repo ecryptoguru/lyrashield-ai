@@ -13,12 +13,12 @@ Ship a single portable Agent Plugins 1.0.0 package for LyraShield that installs 
 
 ## Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Credential model | `@lyrashield/mcp` falls back to `~/.lyrashield/credentials.json` when `LYRASHIELD_API_KEY` is not set | Best UX: user runs `lyrashield login` once, the plugin works in any editor, and no secret appears in the portable config. |
-| Package strategy | New `packages/agent-plugin` is the canonical plugin directory; CLI copies it into client-specific plugin paths | Keeps the package versioned, testable, and independent of per-client filesystem conventions. |
-| Rollout scope | Add Agent Plugin install paths for the six launch clients in one branch | Aligns with the request to “do all,” with conformance tests validating the package before the CLI/registry changes. |
-| Backward compatibility | Keep existing per-client configs and `lyrashield install <agent>` behavior | Clients not yet supporting Agent Plugins continue to work; users can opt into the new path when it is available. |
+| Decision               | Choice                                                                                                         | Rationale                                                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Credential model       | `@lyrashield/mcp` falls back to `~/.lyrashield/credentials.json` when `LYRASHIELD_API_KEY` is not set          | Best UX: user runs `lyrashield login` once, the plugin works in any editor, and no secret appears in the portable config. |
+| Package strategy       | New `packages/agent-plugin` is the canonical plugin directory; CLI copies it into client-specific plugin paths | Keeps the package versioned, testable, and independent of per-client filesystem conventions.                              |
+| Rollout scope          | Add Agent Plugin install paths for the six launch clients in one branch                                        | Aligns with the request to “do all,” with conformance tests validating the package before the CLI/registry changes.       |
+| Backward compatibility | Keep existing per-client configs and `lyrashield install <agent>` behavior                                     | Clients not yet supporting Agent Plugins continue to work; users can opt into the new path when it is available.          |
 
 ## Components
 
