@@ -104,7 +104,7 @@ const RELATED_CLUSTER_COMPATIBILITY = Object.freeze({
   Audience: new Set(["Audience", "Decision", "Verification", "Operations"]),
 })
 
-const PLACEHOLDERS = [
+export const PLACEHOLDERS = [
   ["TBD", /\bTBD\b/i],
   ["TODO", /\bTODO\b/i],
   ["TK", /\bTK\b/i],
@@ -114,7 +114,7 @@ const PLACEHOLDERS = [
   ["empty Markdown link", /\[[^\]]*\]\(\s*\)/],
 ]
 
-const PROHIBITED_CLAIMS = [
+export const PROHIBITED_CLAIMS = [
   ["guarantee security", /\bguarantee(?:s|d|ing)?\s+security\b/i],
   ["fully secure", /\bfully\s+secure\b/i],
   ["automatic fixes", /\bautomatic(?:ally)?\s+fix(?:es|ed|ing)?\b/i],
