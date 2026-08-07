@@ -261,6 +261,129 @@ jobs:
         if: needs.changes.outputs.docs-only == 'true'
         run: echo "No code changes detected — skipping lint, typecheck, test, and build."
 
+  rls-child-write-repro:
+    # Deep Review v12 P0-1: reproduce the production 42501 that took down the
+    # scan pipeline when child-table RLS was enabled (20260803000002).
+    #
+    # This job runs the full migration chain (which leaves child-table RLS
+    # DISABLED per 20260803000003), then MANUALLY re-enables RLS on the nine
+    # child tables — simulating what a re-enable migration would do — and runs
+    # the write-path test in rls-fail-closed.test.ts.
+    #
+    # If the write-path test PASSES: the root cause has been fixed and re-enable
+    # is safe. If it FAILS with 42501: we've reproduced the production issue and
+    # re-enable is NOT safe yet.
+    #
+    # This job is ALLOWED TO FAIL (continue-on-error: true) while the root cause
+    # is being diagnosed. Once the fix is found and this job passes, flip
+    # continue-on-error to false and proceed with the re-enable migration.
+    name: RLS Child-Table Write Reproduction
+    needs: changes
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: lyrashield
+          POSTGRES_PASSWORD: lyrashield
+          POSTGRES_DB: lyrashield
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
+      SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
+
+    steps:
+      - name: Checkout
+        if: needs.changes.outputs.docs-only != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        if: needs.changes.outputs.docs-only != 'true'
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Setup Node.js
+        if: needs.changes.outputs.docs-only != 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        if: needs.changes.outputs.docs-only != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        if: needs.changes.outputs.docs-only != 'true'
+        run: pnpm db:generate
+
+      - name: Create shadow database
+        if: needs.changes.outputs.docs-only != 'true'
+        run: docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -c 'CREATE DATABASE lyrashield_shadow;'
+
+      - name: Run database migrations
+        if: needs.changes.outputs.docs-only != 'true'
+        run: pnpm --filter @lyrashield/db migrate:deploy
+
+      - name: Re-enable child-table RLS (simulating re-enable migration)
+        if: needs.changes.outputs.docs-only != 'true'
+        shell: bash
+        run: |
+          docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
+            -c "ALTER TABLE \"ScanEvent\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"ScanEvent\" FORCE ROW LEVEL SECURITY;" \
+            -c "ALTER TABLE \"Evidence\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"Evidence\" FORCE ROW LEVEL SECURITY;" \
+            -c "ALTER TABLE \"ScanResultManifest\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"ScanResultManifest\" FORCE ROW LEVEL SECURITY;" \
+            -c "ALTER TABLE \"ScanCoverageReceipt\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"ScanCoverageReceipt\" FORCE ROW LEVEL SECURITY;" \
+            -c "ALTER TABLE \"FixProposal\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"FixProposal\" FORCE ROW LEVEL SECURITY;" \
+            -c "ALTER TABLE \"PullRequest\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"PullRequest\" FORCE ROW LEVEL SECURITY;" \
+            -c "ALTER TABLE \"Ticket\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"Ticket\" FORCE ROW LEVEL SECURITY;" \
+            -c "ALTER TABLE \"ScorecardShare\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"ScorecardShare\" FORCE ROW LEVEL SECURITY;" \
+            -c "ALTER TABLE \"ScorecardEvent\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"ScorecardEvent\" FORCE ROW LEVEL SECURITY;"
+
+      - name: Create restricted RLS runtime role
+        if: needs.changes.outputs.docs-only != 'true'
+        shell: bash
+        run: |
+          docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE app_runtime_ci LOGIN PASSWORD 'runtime-ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS" \
+            -c "GRANT CONNECT ON DATABASE lyrashield TO app_runtime_ci" \
+            -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
+            -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_runtime_ci" \
+            -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci"
+          echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
+
+      - name: Run child-table write-path test
+        if: needs.changes.outputs.docs-only != 'true'
+        shell: bash
+        run: |
+          # Run only the child-table write-path test with RLS enabled.
+          # The test is normally describe.skip'd; we un-skip it by running
+          # with a filter that matches the test name. Vitest's --testNamePattern
+          # works even inside describe.skip when run with --run --no-only.
+          #
+          # NOTE: describe.skip prevents the test from running even with a name
+          # filter. To work around this, we use a temporary sed to flip the skip
+          # to a non-skip for this job only. The sed is reverted after the test.
+          cd packages/db
+          sed -i.bak 's/describe\.skip("child tables/describe("child tables/' src/rls-fail-closed.test.ts
+          npx vitest run src/rls-fail-closed.test.ts --testNamePattern "succeeds writing a ScanEvent as the owning workspace" 2>&1 || true
+          EXIT_CODE=$?
+          mv src/rls-fail-closed.test.ts.bak src/rls-fail-closed.test.ts
+          echo "Write-path test exit code: $EXIT_CODE"
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "::warning::Child-table RLS write-path test FAILED — the 42501 has been reproduced. Re-enable is NOT safe until this passes."
+            exit 1
+          fi
+          echo "::notice::Child-table RLS write-path test PASSED — re-enable may be safe. Proceed with the re-enable migration."
+
   deploy-marketing:
     name: Deploy Marketing to Cloudflare
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true')
