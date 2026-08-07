@@ -218,6 +218,23 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm typecheck
 
+      # Deterministic, offline blog gates. These ran only by hand before, which is
+      # how an unterminated code span reached the build stage: MDX compiled the
+      # leaked expression fine and only failed while prerendering, with no file
+      # name in the error. blog:check-links is deliberately NOT gated here — it
+      # calls ~50 third-party URLs and would make merges depend on their uptime.
+      - name: Validate blog content
+        if: needs.changes.outputs.docs-only != 'true'
+        run: pnpm --filter @lyrashield/marketing blog:validate
+
+      - name: Validate blog images
+        if: needs.changes.outputs.docs-only != 'true'
+        run: pnpm --filter @lyrashield/marketing blog:validate:images
+
+      - name: Validate blog MDX
+        if: needs.changes.outputs.docs-only != 'true'
+        run: pnpm --filter @lyrashield/marketing blog:validate:mdx
+
       - name: Test
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm test
