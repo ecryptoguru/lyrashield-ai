@@ -53,11 +53,11 @@ export const DEAD_URLS = Object.freeze({
   // visit can look fine.
   "https://docs.cline.bot/mcp": "https://docs.cline.bot/mcp/mcp-overview",
 
-  // DELIBERATELY NOT LISTED: https://aider.chat/docs/mcp/mcp.html
-  // Aider ships no native MCP support, so there is no equivalent page to point
-  // at. That makes aider-mcp-security-workflow an editorial question rather than
-  // a URL swap, and it is with the founder. Listing the URL here before the post
-  // is resolved would fail this gate on main. Add it once the post is settled.
+  // Aider ships no native MCP support, so there is no equivalent page. The post
+  // that linked here was reframed around the CLI and GitHub Action instead, with
+  // native MCP called out as roadmap, so the link is simply gone rather than
+  // repointed. Mapping it to the docs index would imply an MCP page exists.
+  "https://aider.chat/docs/mcp/mcp.html": "https://aider.chat/docs/",
 })
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")

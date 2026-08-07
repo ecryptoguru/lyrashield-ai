@@ -46,11 +46,11 @@ describe("known-dead URL denylist", () => {
     expect(DEAD_URLS[dead]).toContain("0xa1-broken-object-level-authorization")
   })
 
-  it("does not list the Aider MCP URL, which has no equivalent page", () => {
-    // Aider ships no native MCP support, so aider-mcp-security-workflow is an
-    // editorial question. Listing the URL before that post is resolved would
-    // fail the gate on main.
-    expect(Object.keys(DEAD_URLS)).not.toContain("https://aider.chat/docs/mcp/mcp.html")
+  it("lists the Aider MCP URL now that the post no longer links to it", () => {
+    // Aider ships no native MCP support. The post was reframed around the CLI
+    // and GitHub Action, so this guard flipped from "must be absent" to "must be
+    // blocked" once the content was settled.
+    expect(Object.keys(DEAD_URLS)).toContain("https://aider.chat/docs/mcp/mcp.html")
   })
 
   it("keeps every replacement out of the dead set", () => {
