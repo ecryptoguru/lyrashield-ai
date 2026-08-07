@@ -1,0 +1,51 @@
+---
+title: Kiro App Security Checklist for AI Built Code
+description: A security checklist for reviewing Kiro generated applications covering configuration, secrets, dependencies, and immutable evidence with LyraShield AI.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification]
+draft: false
+heroImage: agent-security-22
+faq:
+  - q: Does this checklist replace manual code review for Kiro projects?
+    a: No. It structures review around the highest risk areas but human judgment still matters for logic and business rules. Pair it with automated detection for coverage.
+  - q: Where do Kiro plugins live on disk?
+    a: Plugins install to a per user plugins directory with a manifest file. Treat that directory as sensitive because it can load MCP servers and skills.
+  - q: How does LyraShield AI fit into a Kiro review?
+    a: LyraShield runs agentic pentest, software composition analysis, and secrets scanning, then stores results in an immutable assurance record separate from detection.
+  - q: Can I automate this checklist in CI?
+    a: Yes. Run the checks in a GitHub Action on pull requests so every Kiro generated change is reviewed before merge.
+---
+
+Kiro generates full features from prompts, so a security checklist must review configuration and permissions, secrets handling, dependency safety, and verifiable evidence. This checklist walks each area with concrete Kiro specific steps and pairs the review with [LyraShield AI](https://lyrashieldai.com) for detection plus immutable proof. See the broader [vibe coding security guide](/blog/vibe-coding-security-guide) for cross tool context.
+
+## 1. Review Kiro configuration and permissions
+
+Kiro plugins and agent configuration can load external MCP servers and skills, so lock down what the agent can reach before it generates anything. Start by inspecting the installed plugin set and the plugin manifest, then prune anything you did not intentionally add. A plugin you do not recognize is the highest risk item on this list, because a malicious plugin can run arbitrary MCP tools on your behalf the moment Kiro loads it. Limit file system and network access to the directories the project actually needs, and disable broad workspace access when a narrower scope works. Confirm that AGENTS.md and any security skill shipped by a plugin match your policy rather than silently overriding it, because a bundled skill can instruct the agent to skip checks you expect to run. The [OWASP guide to agentic AI](https://owasp.org/www-project-top-10-for-llm-applications/) is a useful baseline for agent permission boundaries. Review the plugin set after every update, because a version bump can change what a plugin does without an obvious signal. Kiro plugins install to a per user plugins directory, and each plugin carries a manifest file that declares its MCP server and skills, so read that manifest when a plugin behaves unexpectedly. If you used the LyraShield CLI to set up Kiro, run `npx lyrashield doctor` periodically to confirm the manifest still resolves and that no second plugin was added beside it.
+
+## 2. Audit secrets handling in generated code
+
+AI agents frequently inline example keys, tokens, and connection strings when scaffolding integrations, so scan for hardcoded secrets before commit. Search the generated diff for patterns like API keys, private keys, and cloud credentials, then move any real value into environment variables or a secrets manager. Pay special attention to scaffolded config files, because Kiro tends to drop working examples that look harmless but contain live looking values. Verify that no secret lands in the Kiro plugin directory or in agent instruction files that get committed, since those files are easy to overlook in review. Run a dedicated secrets scanner rather than relying on grep alone, because secrets take many formats and a regex you hand write will miss edge cases. The [CWE entry on cleartext storage](https://cwe.mitre.org/data/definitions/312.html) explains why this class of flaw persists. Rotate any credential that touched a file before you caught it, because once written to disk it should be considered exposed to anyone with repo access.
+
+## 3. Validate dependencies and supply chain
+
+Kiro pulls packages as it scaffolds, so review the dependency manifest for unexpected or risky additions on every pull request. Pin versions instead of floating ranges, because a floating range lets a new, unreviewed version enter your build without a code change. Check each new package against a vulnerability database before merge, and treat transitive dependencies with the same scrutiny as direct ones, since a safe looking direct package can pull in a vulnerable transitive one. Remove packages the generated code imports but never uses, because dead dependencies still expand your attack surface and slow installs. Prefer packages with active maintainers and clear license terms, and note any package that appears in only one of your projects, because unusual choices deserve a second look. The [OSV database](https://osv.dev/) gives you a free, queryable source for known vulnerabilities across ecosystems. Re-scan after every dependency update, since transitive packages can introduce advisories even when your direct list is unchanged. Keep a deny list of packages your team has reviewed and rejected, so a future Kiro scaffold does not reintroduce them under a slightly different name. When a Kiro generated feature needs a package you have never used, spend a minute on the package registry checking its publish history and maintainer count before accepting it.
+
+## 4. Capture verifiable evidence per change
+
+A checklist run is only useful if you can prove it happened and what it found, so treat evidence capture as a first class step rather than an afterthought. Record the scanner output, the dependency review result, and the secret scan verdict for each pull request, and link that evidence to the commit it covers. Keep detection results separate from the proof that review occurred, because conflating them lets a failed scan be silently edited to look clean later. Use the free [AI app security checklist tool](/tools/ai-app-security-checklist) to standardize what each review records, so a teammate can reconstruct what was checked without reading your mind. Store evidence where it cannot be retroactively modified, because the value is auditability across many AI assisted changes over time. Link the evidence record in the pull request description so a reviewer can find it in one click. If you work across multiple repositories, standardize the evidence location so an auditor does not have to learn a new layout per repo, because consistency is what makes evidence usable at scale. Note who reviewed each finding and what they decided, so a later reader can trace a dismissed alert back to its reasoning rather than guessing.
+
+## 5. Gate merges on the checklist
+
+Wire the checklist into your pull request flow so review cannot be skipped under deadline pressure. Block merge when secrets are found, when a dependency has an unpatched high severity advisory, or when the evidence record is missing. Run the LyraShield GitHub Action on the changed diff so only new risks block the build, not preexisting ones that would otherwise stall every pull request. Surface the results in the pull request comment for reviewers, and require an explicit human acknowledgement before a blocked finding is dismissed. This mirrors how teams apply CI gates generally, as described in the [GitHub Actions security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions). Treat the gate as the last automated checkpoint before a human merges, not as a substitute for reading the diff. When a finding is dismissed, require the reviewer to record why in the evidence record, so the dismissal is auditable later rather than a silent override.
+
+| Checklist area | What to review | Gate action |
+| --- | --- | --- |
+| Config and permissions | Plugin manifest, MCP servers, AGENTS.md | Remove unknown plugins |
+| Secrets handling | Hardcoded keys, tokens, connection strings | Block merge, rotate |
+| Dependencies | New packages, pinned versions, advisories | Block on high severity |
+| Evidence | Scan output linked to commit | Require before merge |
+
+## Why pair Kiro with LyraShield AI
+
+LyraShield AI gives you release assurance for AI built apps through a target, review, evidence, fix, retest, report loop. For Kiro projects it contributes agentic pentest, software composition analysis, and secrets scanning, then writes each finding to an immutable assurance record that separates detection from proof. Approval gated fix proposals are proposals requiring review, so a human stays in the loop before anything ships. The platform is live with open registration, so you can [create an account](https://lyrashieldai.com) and pair it with the [AI app security checklist tool](/tools/ai-app-security-checklist). For a workflow focused on setup and the Kiro plugin path, see the [Kilo Code app security checklist](/blog/kilo-code-app-security-checklist) companion post. Running this checklist on every Kiro generated pull request keeps a security step ahead of the merge button instead of after a finding reaches production.

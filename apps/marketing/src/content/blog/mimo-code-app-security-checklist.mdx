@@ -1,0 +1,62 @@
+---
+title: MiMo Code app security checklist
+description: Secure a Xiaomi MiMo Code built app before launch with this evidence based checklist covering MCP config, permissions, secrets, dependencies, and verification.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification]
+draft: false
+heroImage: agent-security-30
+faq:
+  - q: Does MiMo Code store API keys safely?
+    a: No. MiMoCode stores apiKey values as plaintext in mimocode.jsonc. Keep the file readable only by your user and never commit it to version control.
+  - q: Why does my MCP server not load in MiMo Code?
+    a: The most common cause is using mcpServers as the root key. MiMoCode uses mcp as the root key for server definitions and silently ignores the wrong one.
+  - q: What MCP transport types does MiMo Code support?
+    a: MiMoCode supports local servers started with a command array and remote servers reached by url plus headers. Remote servers use Streamable HTTP with automatic OAuth.
+  - q: Should I commit .mimocode/mimocode.jsonc to my repo?
+    a: Commit the structure without secrets, but keep any apiKey or token in a user level file outside the repo. Plaintext secrets in a committed project file are a real risk.
+---
+Secure a Xiaomi MiMo Code built app before launch by fixing the MCP root key, bounding agent permissions, keeping plaintext secrets out of committed config, verifying AI suggested dependencies, and separating detected signals from verified proof. MiMoCode uses the mcp root key and a flexible MCP model, so a silent misconfiguration or an over broad tool grant becomes a real release risk. This checklist follows the [vibe coding security guide](/blog/vibe-coding-security-guide) method: run an evidence loop and retain the receipts.
+
+## 1. Lock down MiMo Code MCP configuration
+
+MiMo Code (Xiaomi) reads its configuration from `.mimocode/mimocode.jsonc` at the project level or `~/.config/mimocode/mimocode.jsonc` globally, and it publishes a [JSON Schema](https://mimo.xiaomi.com/mimocode/config.json) for editor validation. The single most common breakage is using `mcpServers` as the root key. MiMoCode expects `mcp` as the root key and silently ignores the wrong one, so your server never loads. Confirm every MCP entry sits under `mcp`, declares `type` as `local` or `remote`, and sets `enabled` explicitly. The [MiMo Code repository](https://github.com/XiaomiMiMo/mimo-code) documents the schema and the auto injected `$schema` field that gives you completion in your editor.
+
+Local servers take a `command` array plus an `environment` map. Remote servers take a `url` and optional `headers`, and MiMoCode connects over Streamable HTTP with automatic OAuth through its `McpOAuthProvider`. Run `npx lyrashield init` to auto detect and write the correct LyraShield MCP entry, then `npx lyrashield doctor` to verify the connection before you scan. A known MiMoCode quirk is that local server `environment` values reach the spawned process through the stdio transport, so a missing token in a tool argument is often a config shape problem, not a missing variable. Confirm the entry lives under `mcp` at the top level, that the key is `environment` in native config (the `env` alias is a Claude compatibility conversion), and that no `{env:VAR}` template references a variable the parent process does not export. A quick way to catch the root key mistake early is to load the config in an editor with the `$schema` field active, because the JSON Schema validator flags `mcpServers` as an unknown property. If your server list appears empty after a config edit, check the root key first, since MiMoCode fails silently on the wrong key rather than reporting an error.
+
+## 2. Bound agent permissions and tool exposure
+
+MiMoCode exposes MCP tools to the agent session after the server starts, and every tool you grant becomes an action the model can choose autonomously. Treat each MCP server as a new privilege boundary. Prefer the principle of least privilege described in the [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0xa2-broken-object-level-authorization/): grant only the tools the task needs, disable servers you are not actively using with `enabled: false`, and review the tool list after any config change. Never grant a production database or billing tool to a coding agent that only needs read access to fix a bug.
+
+Keep a written record of which servers are enabled and who approved them. If an MCP server can write or delete data, that authority belongs in the release target scope alongside the [vibe coding security guide](/blog/vibe-coding-security-guide), not as an implicit default. A useful test is to ask what the agent could do if every enabled tool ran against production right now; if that list includes destructive or spend actions, narrow it before you ship. Pair that review with the [OWASP prompt injection guidance](https://owasp.org/www-project-top-10-for-large-language-model-applications/) so a hostile instruction from an issue or a document cannot turn a granted tool against you. Document the approval scope for each enabled server in a short access log, noting who authorized it and when the tool set last changed. Re run this log after every config edit, because a new server entry can inherit a broader tool set if copied from a template. Keep the log alongside your release evidence so a reviewer can trace any enabled tool to a named approval.
+
+## 3. Keep secrets out of committed config
+
+MiMoCode stores `apiKey` values as plaintext inside the config file, so a committed project config with a real key is a live secret exposure. The repository guidance is explicit: keep the file readable only by your user and never commit it. Put shared, non secret structure in the project file and any secret in the user level file outside the repo, or load values from your environment so the literal never lands in version control.
+
+Run a secrets scan over the whole repository, not just the MiMoCode config. The [CWE-798](https://cwe.mitre.org/data/definitions/798.html) entry on hard coded credentials covers the exact failure mode, and LyraShield's secrets scanning layer surfaces candidates across config, source, and history. Treat each candidate as a signal, then verify it against the live boundary before you act. Check your git history as well as the working tree, because a key removed in the latest commit still exists in prior commits and remains recoverable. Add `.mimocode/mimocode.jsonc` to your `.gitignore` at project init, then run a pre commit hook that blocks that path before it reaches version control.
+
+## 4. Verify AI suggested dependencies
+
+Coding agents routinely add packages, and each one extends your supply chain. A clean install log is not proof that a dependency is safe. Begin with the resolved artifact, not the name in a source file, and inspect the dependency graph for unexpected transitive changes. The [OSV.dev](https://osv.dev/) database and NIST guidance on [software supply chain security](https://www.nist.gov/itl/ssdm/software-supply-chain-security) frame the risks: a single mutable or typosquatted package can compromise a protected repository.
+
+| Check | What to verify | Evidence to retain |
+|---|---|---|
+| MCP root key | `mcp` not `mcpServers` | Config excerpt with server loaded |
+| Permissions | Only needed tools enabled | Tool list after config change |
+| Secrets | No plaintext keys committed | Secrets scan plus git history check |
+| Dependencies | Resolved versions reviewed | Lockfile diff and advisory match |
+
+LyraShield's SCA layer matches resolved packages against advisory data and keeps the receipt, so a later reviewer can see what was checked and what was not. Pin transitive dependencies in your lockfile rather than accepting floating ranges, and run the resolution check after every agent generated commit to catch a swap that adds a new advisory. Compare the resolved hash against the registry hash to catch a substituted package before it reaches your build.
+
+## 5. Separate detection from proof
+
+A scanner that flags a missing header or a vulnerable package has produced a signal, not a verdict. LyraShield runs an evidence loop of target, review, evidence, fix, retest, and report, and it keeps detected, independently verified, retest confirmed, and inconclusive outcomes distinct. That separation matters because a static result about one path should never become a blanket release claim about paths the tool never observed, a point the [NIST SP 800-115](https://nist.gov) assessment guidance reinforces.
+
+Run a fresh, server owned check against the changed system after any fix. A manual status change or a client supplied result is not proof. Retest the abuse case, not only the happy path, and keep the immutable assurance record so the next reviewer has something concrete to inspect. An authorization fix that blocks every user is not a successful security outcome, so look for regression in neighboring controls as well. The report combines target, coverage, evidence provenance, unresolved findings, retest receipts, operational evidence, and known limitations, which supports a release decision without pretending to eliminate uncertainty. Bind each piece of evidence to the exact target and commit it produced, so a reviewer can reproduce the check from the stored artifact. Store the retest receipt as an immutable record, because a mutable proof file undermines the detection versus proof boundary the loop protects. Gate the merge on a clean retest, not on a static scan pass alone, so a finding marked fixed must clear a server generated check before the branch lands.
+
+## Why pair MiMo Code with LyraShield
+
+MiMoCode gives you a fast coding loop with a flexible MCP model, and that flexibility is exactly where release risk hides: a silently ignored root key, a plaintext key in a committed file, or a tool grant that quietly widened what the agent can touch. LyraShield pairs with that loop by targeting the release, reviewing the real config, collecting independent evidence, proposing fixes that require review, retesting, and reporting. It does not auto fix. Approval gated fix proposals stay proposals until a server generated patch is bound to an exact approval, so the boundary between detection and proof stays honest.
+
+LyraShield is live with open registration. [Create an account](https://lyrashieldai.com) to run a scan, and use the [AI app security checklist](/tools/ai-app-security-checklist) to structure your pre launch review. For the MCP wiring details, see the [integrations documentation](/docs/integrations) and the [Claude Code security workflow](/blog/claude-code-security-workflow) for a parallel setup pattern.
