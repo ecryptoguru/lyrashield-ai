@@ -243,17 +243,17 @@ Fresh-run decision: no topic replacement is required. The July 14 refresh reinfo
 |  98 | How to Prioritize Security Findings / `prioritize-security-findings`                                | vulnerability prioritization - guide            | Decision     | 1,400 | Pillar + findings workflow            |
 |  99 | Share a Security Report Without Leaking Details / `share-security-report-safely`                    | share security report safely - guide            | Decision     | 1,350 | Pillar + scorecards/reports           |
 | 100 | Rotate and Recover From an Exposed API Key / `exposed-api-key-incident-response`                    | exposed api key what to do - urgent how-to      | Operations   | 1,350 | Pillar + Secret Scanner               |
-| 101 | VS Code AI app security checklist for MCP hardened builds / `vscode-ai-app-security-checklist` | vscode app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
-| 102 | JetBrains AI App Security Checklist for Vibe Coding / `jetbrains-ai-app-security-checklist` | jetbrains ai app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
-| 103 | Zed AI App Security Checklist for Vibe Teams / `zed-ai-app-security-checklist` | zed app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
-| 104 | OpenCode App Security Checklist for AI Built Apps / `opencode-app-security-checklist` | opencode app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
-| 105 | Gemini CLI App Security Checklist for Vibe Coding / `gemini-cli-app-security-checklist` | gemini cli app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
-| 106 | Cline App Security Checklist for AI Built Software / `cline-app-security-checklist` | cline app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
-| 107 | Kilo Code App Security Checklist - LyraShield AI / `kilo-code-app-security-checklist` | kilo code app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
-| 108 | Amp App Security Checklist - LyraShield AI / `amp-app-security-checklist` | amp app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
-| 109 | Hermes Agent App Security Checklist - LyraShield AI / `hermes-app-security-checklist` | hermes app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
-| 110 | Pi Coding Agent App Security Checklist - LyraShield / `pi-coding-agent-app-security-checklist` | pi coding agent app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
-| 111 | OpenClaw App Security Checklist - LyraShield AI / `openclaw-app-security-checklist` | openclaw app security - checklist | Workflow | 1,400 | Pillar + Launch Checklist |
+| 101 | VS Code AI app security checklist for MCP hardened builds / `vscode-ai-app-security-checklist`      | vscode app security - checklist                 | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 102 | JetBrains AI App Security Checklist for Vibe Coding / `jetbrains-ai-app-security-checklist`         | jetbrains ai app security - checklist           | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 103 | Zed AI App Security Checklist for Vibe Teams / `zed-ai-app-security-checklist`                      | zed app security - checklist                    | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 104 | OpenCode App Security Checklist for AI Built Apps / `opencode-app-security-checklist`               | opencode app security - checklist               | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 105 | Gemini CLI App Security Checklist for Vibe Coding / `gemini-cli-app-security-checklist`             | gemini cli app security - checklist             | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 106 | Cline App Security Checklist for AI Built Software / `cline-app-security-checklist`                 | cline app security - checklist                  | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 107 | Kilo Code App Security Checklist - LyraShield AI / `kilo-code-app-security-checklist`               | kilo code app security - checklist              | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 108 | Amp App Security Checklist - LyraShield AI / `amp-app-security-checklist`                           | amp app security - checklist                    | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 109 | Hermes Agent App Security Checklist - LyraShield AI / `hermes-app-security-checklist`               | hermes app security - checklist                 | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 110 | Pi Coding Agent App Security Checklist - LyraShield / `pi-coding-agent-app-security-checklist`      | pi coding agent app security - checklist        | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 111 | OpenClaw App Security Checklist - LyraShield AI / `openclaw-app-security-checklist`                 | openclaw app security - checklist               | Workflow     | 1,400 | Pillar + Launch Checklist             |
 
 ## 6. `/tools` product-led SEO surface
 

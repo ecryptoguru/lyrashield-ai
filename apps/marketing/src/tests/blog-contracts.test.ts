@@ -3,10 +3,7 @@ import { describe, expect, it } from "vitest"
 import program from "../content/blog-program.json"
 import images from "../content/blog-images/images.json"
 import authors from "../content/authors/authors.json"
-import {
-  IMAGE_CORPUS,
-  PROGRAM_ARTICLE_COUNT,
-} from "../../scripts/blog-validation-lib.mjs"
+import { IMAGE_CORPUS, PROGRAM_ARTICLE_COUNT } from "../../scripts/blog-validation-lib.mjs"
 
 type BlogProgramEntry = {
   index: number

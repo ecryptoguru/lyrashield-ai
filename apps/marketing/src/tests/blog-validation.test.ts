@@ -622,9 +622,7 @@ ${filler}
       writeImageSet(root, imageId)
     }
     const counts = new Map(sharedIds.map((imageId, index) => [imageId, distribution[index]]))
-    const assignments = sharedIds.flatMap((imageId) =>
-      Array(counts.get(imageId)!).fill(imageId)
-    )
+    const assignments = sharedIds.flatMap((imageId) => Array(counts.get(imageId)!).fill(imageId))
     const manifests = [
       {
         release: "authority",
