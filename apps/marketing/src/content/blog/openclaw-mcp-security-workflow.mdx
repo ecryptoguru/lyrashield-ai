@@ -1,0 +1,208 @@
+---
+title: OpenClaw MCP security workflow for agent verification
+description: Integrate LyraShield AI with OpenClaw via MCP and GitHub Action to verify builds, upload SARIF, and enforce diff aware checks.
+pubDate: '2026-07-30'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification, supply-chain]
+draft: false
+heroImage: agent-security-21
+faq:
+  - q: 'Where does OpenClaw store MCP config?'
+    a: 'Global ~/.openclaw/openclaw.json under mcp.servers. Use transport stdio for local npx -y @lyrashield/mcp and streamable-http for remote https://app.lyrashieldai.com/api/mcp with bearer header. openclaw mcp add can also create entries.'
+  - q: 'How do I filter exposed tools?'
+    a: 'Use toolFilter allow list with scan_target, get_finding, list_targets, get_report, create_fix_pr_draft. Keeps the agent surface minimal and focused on verification.'
+  - q: 'Does OpenClaw support bearer auth for remote MCP?'
+    a: 'Yes. Set transport streamable-http, url https://app.lyrashieldai.com/api/mcp, and headers.Authorization to Bearer ${env:LYRASHIELD_API_KEY}.'
+  - q: 'How do I verify the LyraShield connection works in OpenClaw?'
+    a: 'Restart OpenClaw, then use the MCP panel to list servers and tools. Expect the lyrashield entry with scan_target, get_finding, and list_targets exposed. Run npx lyrashield doctor to confirm the config is valid, the server entry is present, and your credentials resolve before you run a scan.'
+---
+
+You can connect OpenClaw to LyraShield AI over MCP to get target aware scans, verified findings with evidence, and fix PR drafts inside your normal agent loop. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp plus remote at https://app.lyrashieldai.com/api/mcp inside ~/.openclaw/openclaw.json, verify tool discovery, run a scoped inline check, and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
+
+OpenClaw is built to run many tools in parallel and to coordinate long lived sessions. That parallelism accelerates vibe coding and also expands attack surface quickly, which is why verification close to generation helps. Keep the [vibe coding security guide](/blog/vibe-coding-security-guide) open as your policy reference, then map findings to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/archive/cwe/top25.html) so triage has a shared vocabulary. Teams that generate large microservice surfaces in one session benefit most from this pairing, because otherwise review struggles to keep up with generation speed.
+
+LyraShield follows a loop of Target to Scan to Verified Finding to Fix PR to Retest to Report. It is designed to keep human approval in place while engine automation matures.
+
+## 1. Prerequisites and workspace baseline
+
+You need Node.js 20 or newer which you can verify via [Node.js docs](https://nodejs.org/en/docs), OpenClaw CLI installed, Git with PR workflow, and a LyraShield key in form lsk_... Export LYRASHIELD_API_KEY in your shell. OpenClaw reads `${env:LYRASHIELD_API_KEY}` at runtime, so secrets stay out of checked in json.
+
+LyraShield v1 is designed to cover agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF. Scan engine MVP and fix PR automation are on the roadmap and not yet live, so treat steps as designed to require review before merge. For protocol context, see [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro).
+
+Quick sanity steps:
+
+```bash
+node -v
+npm view @lyrashield/mcp version
+ls ~/.openclaw/openclaw.json
+echo $LYRASHIELD_API_KEY | head -c 8
+```
+
+Keep a sibling checklist handy like [OpenClaw app security checklist](/blog/openclaw-app-security-checklist) for fix patterns that match your generated framework stack. That checklist turns a verified finding into a concrete remediation suggestion, such as adding auth middleware or upgrading a dependency with a known advisory.
+
+Define your target naming early. LyraShield treats target as the unit of verification, so staging OpenClaw app, production api, or preview deployment id are all valid. Clear naming prevents confusion when you later share reports and when the CI job uses target auto.
+
+## 2. Configure LyraShield MCP server in OpenClaw
+
+OpenClaw stores MCP servers under mcp.servers inside ~/.openclaw/openclaw.json. It supports stdio for local and streamable-http for remote, plus toolFilter for least privilege. You can configure via CLI or by editing the json directly.
+
+CLI options:
+
+```bash
+openclaw mcp add lyrashield --transport stdio --command "npx -y @lyrashield/mcp" --env LYRASHIELD_API_KEY=$LYRASHIELD_API_KEY
+openclaw mcp add lyrashield-remote --transport streamable-http --url https://app.lyrashieldai.com/api/mcp --header "Authorization: Bearer $LYRASHIELD_API_KEY"
+```
+
+JSON option with tool filtering:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "lyrashield": {
+        "transport": "stdio",
+        "command": "npx -y @lyrashield/mcp",
+        "args": [],
+        "env": {
+          "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
+        },
+        "toolFilter": {
+          "allow": ["scan_target", "get_finding", "list_targets", "get_report", "create_fix_pr_draft"]
+        }
+      },
+      "lyrashield-remote": {
+        "transport": "streamable-http",
+        "url": "https://app.lyrashieldai.com/api/mcp",
+        "headers": {
+          "Authorization": "Bearer ${env:LYRASHIELD_API_KEY}"
+        },
+        "toolFilter": {
+          "allow": ["scan_target", "get_finding", "list_targets"]
+        }
+      }
+    }
+  }
+}
+```
+
+This satisfies the product requirement to pin local to npx -y @lyrashield/mcp and remote to https://app.lyrashieldai.com/api/mcp with bearer header. The canonical reference lives in [OpenClaw integration guide](/docs/integrations/openclaw). Keep toolFilter tight so the agent only sees verification tools. Avoid storing raw keys in committed files. Tight filtering also reduces tool confusion when OpenClaw runs many servers in parallel, since the model only sees security tools it actually needs for this workflow.
+
+If you share a single OpenClaw host across projects, keep the global config and let each repo reference LYRASHIELD_API_KEY from its own secret store via env. That keeps rotation simple and prevents cross project leakage.
+
+## 3. Verify connection and list security tools
+
+Restart OpenClaw or reload MCP servers after editing ~/.openclaw/openclaw.json. Open the MCP view and expect lyrashield and lyrashield-remote to show connected. If local fails, confirm Node can resolve npx and that ~/.openclaw/openclaw.json parses as valid json. If remote shows unauthorized, confirm the header uses Bearer `${env:LYRASHIELD_API_KEY}` and that the launch shell exported the key. OpenClaw can be launched from a desktop shortcut that inherits a different env than your terminal, which often causes bearer failures that look like server issues but are actually env issues.
+
+Ask OpenClaw to enumerate tools:
+
+```text
+Prompt: List MCP servers from mcp.servers and tools from lyrashield and lyrashield-remote.
+Show transport type, command or url, and filtered tool list.
+```
+
+Expected:
+
+```text
+lyrashield (stdio via npx -y @lyrashield/mcp):
+- scan_target(target, scope)
+- get_finding(id)
+- list_targets()
+- get_report(target_id)
+- create_fix_pr_draft(finding_id)
+
+lyrashield-remote (streamable-http at https://app.lyrashieldai.com/api/mcp):
+- scan_target, get_finding, list_targets
+```
+
+For supply chain context, skim [OSV database](https://osv.dev/) and for workflow gating see [GitHub Actions docs](https://docs.github.com/en/actions). These help you interpret combined appsec plus dependency results. Seeing matching tool lists across transports confirms auth flows for both local and remote paths.
+
+## 4. Run an inline security check from OpenClaw
+
+With tools listed, run a scoped scan without leaving OpenClaw. Keep scope tight so feedback arrives fast and evidence stays relevant. Narrow scope also prevents the agent from scanning large monorepos that include unrelated services you did not intend to verify in this run.
+
+```text
+Prompt for OpenClaw agent:
+Use lyrashield scan_target for target staging-openclaw-app.
+Scope: src/app/api, src/lib.
+Exclude: .next, node_modules, generated.
+Return only verified findings with CWE, evidence, file and line, severity.
+Include OWASP mapping when present.
+Save report id for PR gate.
+```
+
+A verified answer should contain finding id, severity, CWE, file plus line, evidence snippet, and suggested patch location. LyraShield is designed to surface verified findings with evidence rather than speculative lints, so prioritize those. Refer to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/archive/cwe/top25.html) for category background during triage. When evidence shows a route missing auth, the fix is typically a middleware addition rather than rewriting the handler, which keeps patches small and reviewable.
+
+Since v1 includes secrets scanning alongside SCA, a single call can surface both hardcoded secrets and vulnerable packages. Treat inline scanning as early signal and keep PR gating as mandatory, because local checks can be skipped when developers are rushing to meet a demo.
+
+Fix PR drafts are designed to open a branch for review, not merge without approval. That keeps the workflow honest while more automation matures.
+
+## 5. Wire a diff aware GitHub Action gate
+
+Local OpenClaw verification is fast, but PR enforcement is required for teams. Wire the official LyraShield GitHub Action in diff aware mode and upload SARIF.
+
+```yaml
+name: lyrashield security gate
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'app/**'
+      - 'packages/**'
+  push:
+    branches: [main]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: LyraShield diff scan
+        uses: lyrashieldai/action@v1
+        with:
+          api-key: ${{ secrets.LYRASHIELD_API_KEY }}
+          diff-mode: true
+          target: auto
+          sarif-output: results.sarif
+          fail-on: high
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+```
+
+Require the security job in branch protection. The pairing of MCP for local dev plus Action for CI mirrors ideas from [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) about keeping context close to the agent while enforcing centrally. For reusable workflow patterns, see [GitHub Actions docs](https://docs.github.com/en/actions). SARIF annotations keep verified findings visible where developers review code, which reduces triage friction and keeps evidence linked to diffs rather than hidden in a separate portal that reviewers forget to open.
+
+## 6. Add agent rules for consistent secure coding
+
+Add a local rules file that OpenClaw loads at session start, such as openclaw.md or .openclaw/rules.md. This file makes secure behavior the default.
+
+```markdown
+# OpenClaw security rules
+- Before marking a task done, call lyrashield scan_target on changed scope.
+- Surface only verified findings with CWE and file evidence.
+- For high severity verified findings, draft a fix branch via create_fix_pr_draft but require review before merge.
+- On PRs, ensure lyrashield security gate passed and SARIF uploaded.
+- Reference OWASP Top 10 and internal vibe coding security guide in PR body when relevant.
+- Never log raw secrets. Use ${env:LYRASHIELD_API_KEY}.
+```
+
+This encodes the loop Target to Scan to Verified Finding to Fix PR to Retest to Report as daily behavior. Store it in version control so new OpenClaw sessions inherit the same guardrails. Consistent rules across clones also mean that when OpenClaw runs in autonomous mode, it still follows the same verification steps a human developer would have taken.
+
+| Stage | OpenClaw behavior | LyraShield verification | Review signal |
+| --- | --- | --- | --- |
+| Generation | Generates APIs, workers, and UI in parallel | N/A | Session log |
+| Inline check | Calls scan_target with toolFilter allowed set | Verified findings plus SCA plus secrets with evidence | Finding id with CWE and file path |
+| PR gate | Pushes diff to GitHub | Diff aware scan plus SARIF plus fail on high | GitHub required check green |
+| Fix flow | Opens draft branch on request | Draft patch designed to include tests and retest | Retest marks finding closed in report |
+
+## Why pair OpenClaw with LyraShield
+
+OpenClaw gives you parallel tool use and strong session control, but parallelism without policy can ship risks faster than reviews catch them. LyraShield contributes verified findings with evidence instead of noisy warnings, maps each to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/archive/cwe/top25.html), adds dependency context from [OSV database](https://osv.dev/) patterns, and keeps the workflow inside MCP so you avoid context switching. The v1 scope stays honest: agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, with broader automation on the roadmap but not billed as live today. For OpenClaw teams that generate large surfaces quickly, this combination provides fast local signal plus mandatory PR protection, which is the minimum bar for keeping agent generated apps trustworthy.
+
+Finish by running [AI app security checklist](/tools/ai-app-security-checklist) on the release candidate and confirming your json matches [OpenClaw integration guide](/docs/integrations/openclaw). When ready to evaluate managed verification, [join the waitlist](https://lyrashieldai.com) and keep the required security check as your source of truth for verification.

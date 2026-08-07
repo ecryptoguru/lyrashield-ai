@@ -1,0 +1,160 @@
+---
+title: Cline MCP security workflow for AI built apps
+description: Install LyraShield AI in Cline via cline mcp settings json for verified findings, Fix PRs designed to be reviewed, and a diff aware GitHub Action SARIF gate.
+pubDate: '2026-07-30'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification, supply-chain]
+draft: false
+heroImage: agent-security-16
+faq:
+  - q: 'Where does Cline store MCP config?'
+    a: 'Cline stores MCP servers in cline_mcp_settings.json under mcpServers with command, args, env, autoApprove, disabled, and type for streamable HTTP remote mode.'
+  - q: 'How do I use LyraShield remote with Cline?'
+    a: 'Use type streamableHttp with URL https://app.lyrashieldai.com/api/mcp and Authorization Bearer LYRASHIELD_API_KEY. Local uses npx -y @lyrashield/mcp via stdio.'
+  - q: 'What is LyraShield build status?'
+    a: 'Sprints 0 to 2 are shipped. Scan engine MVP, Fix PR generation, and billing are on the roadmap. The integration is usable now for configuration and policy wiring.'
+  - q: 'Should I use autoApprove for LyraShield tools?'
+    a: 'Use autoApprove sparingly. Keep read only tools like list_targets and get_finding allowed, but gate fix and retest tools behind a prompt so the agent cannot run them without your confirmation. Every auto approved tool is an action the agent takes autonomously.'
+---
+You can run secure AI app development in Cline by adding LyraShield AI as an MCP server, getting verified findings with evidence inside Cline, and enforcing the same checks in CI with a diff aware GitHub Action that uploads SARIF.
+
+Cline automates file edits and terminal actions, which speeds up feature work but can introduce secrets, injection, and vulnerable dependencies when scaffolding is agent driven. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification must be part of the agent loop. LyraShield AI is agent native AppSec for AI built software with a loop from Target to Scan to Verified Finding to Fix PR to Retest to Report. This guide gives exact Cline config using `npx -y @lyrashield/mcp` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification, inline checks, and the GitHub gate.
+
+## 1. Prerequisites and setup
+
+You need Cline extension 3.12 or newer in VS Code or compatible editor, Node 18 or newer, a LyraShield key `lsk_` for remote mode, and permission to add workflows. Cline reads MCP from `cline_mcp_settings.json` under `mcpServers` with keys such as `command`, `args`, `env`, `autoApprove`, `disabled`, and `type`. The `command` and `args` keys launch a local stdio server, `env` injects variables that Cline expands at runtime, and `type` selects the transport. Use `type: "streamableHttp"` for remote servers that expose a URL endpoint. The `disabled` key lets you toggle a server without deleting its entry. The editor docs and the [Cline documentation](https://docs.cline.bot/mcp) describe this file, and the canonical steps are in the [Cline integration guide](/docs/integrations/cline). Warm the cache with `npx -y @lyrashield/mcp --help` so the first scan does not stall on package download. Review baseline risks via [OWASP Top 10](https://owasp.org/www-project-top-ten/) and dependency advisories via [OSV](https://osv.dev/). For protocol basics, see [Model Context Protocol intro](https://modelcontextprotocol.io/docs/getting-started/intro).
+
+## 2. Configure Cline MCP servers
+
+Create or edit `cline_mcp_settings.json` to add both local stdio and remote HTTP modes. Use `autoApprove` carefully, `disabled` to toggle, and `type` for remote.
+
+Local stdio:
+
+```json
+{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
+```
+
+Remote HTTP streamable:
+
+```json
+{
+  "mcpServers": {
+    "lyrashield-remote": {
+      "type": "streamableHttp",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LYRASHIELD_API_KEY}"
+      },
+      "disabled": false,
+      "autoApprove": ["scan_status", "list_targets"]
+    }
+  }
+}
+```
+
+Remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer `lsk_`. Both configs use the pinned command `npx -y @lyrashield/mcp` for stdio. Cline expands `${VAR}` from your env, so keep secrets out of the file itself. Link config as [Cline integration guide](/docs/integrations/cline) to avoid bare internal paths. For related editor checklists, the [Cline AI app security checklist](/blog/cline-app-security-checklist) provides a compatible rollout pattern and the [Replit app security checklist](/blog/replit-app-security-checklist) shows a similar diff gate adapted for web IDEs.
+
+The `autoApprove` array controls which tool names run without your confirmation. Every entry you list there executes immediately, so treat it as a privilege grant. For a security scanner, keep `autoApprove` empty or limited to read only tools like `scan_status` and `list_targets`, and leave fix and retest tools gated behind your click.
+
+## 3. Verify the connection in Cline
+
+Reload VS Code after editing `cline_mcp_settings.json`, then open Cline and open MCP servers panel. You should see `lyrashield` and `lyrashield-remote` listed as active. Call "scan status" from the tool list. If auth fails, verify that `LYRASHIELD_API_KEY` is exported in the terminal that launched VS Code, because Cline inherits env from the host. If the server stays `disabled`, set `disabled: false` and reload. The [Cline MCP docs](https://docs.cline.bot/mcp) note that `autoApprove` can hide confirmations, so keep it minimal for security tools. For general MCP troubleshooting, the [MCP spec](https://modelcontextprotocol.io/specification/2025-03-26) describes tool discovery and error shapes.
+
+A common failure is a silent key mismatch. If you launched VS Code from a desktop shortcut instead of a terminal where `LYRASHIELD_API_KEY` is exported, Cline sees an empty string and returns auth errors. Confirm the variable with `printenv LYRASHIELD_API_KEY` before relaunching. If remote mode connects but tool calls time out, verify that your network allows outbound HTTPS to `https://app.lyrashieldai.com`.
+
+## 4. Run an inline security check from Cline
+
+Prompt Cline: "using lyrashield MCP, scan the diff against main for verified findings, group by auth, injection, secrets, supply chain, and propose Fix PRs". LyraShield is designed to return verified findings with evidence and is designed to support retest after a Fix PR, both are on the roadmap rather than live automatic execution today. Map code flaws to [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) and dependency flaws to [OSV](https://osv.dev/) entries. Check secrets handling against [GitHub secret scanning docs](https://docs.github.com/en/code-security/secret-scanning/about-secret-scanning) to avoid over blocking on low risk tokens.
+
+Example rules you can store in `.clinerules/security.md`:
+
+```md
+# Security loop for Cline
+
+- Define Target: app root, entry points, sensitive stores
+- Scan via LyraShield MCP before finalizing large edits
+- Treat verified findings with evidence as blocking
+- Create Fix PR as proposal, include tests, request retest
+- Append Report with scan ID and SARIF link
+```
+
+The Fix PR step is designed to be a proposed patch that is reviewed, not an automatic merge. This preserves the loop Target to Scan to Verified Finding to Fix PR to Retest to Report.
+
+## 5. Wire the GitHub Action diff aware gate
+
+Add `.github/workflows/lyrashield.yml` with SARIF upload, as per [GitHub docs for SARIF upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github).
+
+```yaml
+name: lyrashield diff gate
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run LyraShield MCP scan
+        env:
+          LYRASHIELD_API_KEY: ${{ secrets.LYRASHIELD_API_KEY }}
+          LYRASHIELD_MCP_URL: https://app.lyrashieldai.com/api/mcp
+        run: |
+          npx -y @lyrashield/mcp scan --diff origin/main --format sarif --out results.sarif
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+```
+
+This workflow mirrors Cline remote config using [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and `lsk_` Bearer. Diff mode restricts analysis to changed files, which keeps PRs fast when Cline edits many files. Uploading SARIF lets GitHub enforce policy on verified findings while keeping informational results visible.
+
+The diff aware design matters because Cline sessions often touch dozens of files in a single prompt. A full repository scan on every PR would reanalyze untouched code. By passing `--diff origin/main`, the scan only inspects lines that changed in the branch, so a 2 file PR gets a 2 file scan. The SARIF output uploads to GitHub code scanning, where verified findings appear inline on the PR diff view and branch protection can gate merge on severity thresholds. Set `security-events: write` so the upload action can write results, and store the key in repository secrets as `LYRASHIELD_API_KEY`.
+
+## 6. Add agent rules snippet for team use
+
+Commit a shared rule file so all contributors get the same behavior. This also helps new engineers link the pillar doc correctly as [vibe coding security guide](/blog/vibe-coding-security-guide) rather than a bare URL.
+
+```md
+# Team security rules
+
+- Always include Target description in PRs that touch auth or data.
+- Run LyraShield scan via MCP before requesting review.
+- Include evidence for each verified finding in PR body.
+- Propose Fix PR with minimal diff, add regression test.
+- Link SARIF artifact and scan ID in Report footer.
+```
+
+This codifies consistent security behavior between Cline, GitHub, and other editors. For deeper supply chain context, see [NIST SSDF](https://csrc.nist.gov/Projects/ssdf) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) as primary sources.
+
+Agent rules work because Cline reads `.clinerules` files at the start of every session and treats them as standing instructions. When you commit `.clinerules/security.md` to the repository, every contributor gets the same scan requirement without reading a wiki page. Keep rules short and imperative, five to seven lines maximum, because long rule files dilute attention. Pair the rules with a PR template that asks for the scan ID and SARIF link.
+
+| Mode | Config file | Launch style | Auth |
+| --- | --- | --- | --- |
+| Local | cline_mcp_settings.json | npx -y @lyrashield/mcp stdio | env LYRASHIELD_API_KEY |
+| Remote | cline_mcp_settings.json | streamableHttp | Bearer https://app.lyrashieldai.com/api/mcp |
+| CI gate | .github/workflows/lyrashield.yml | npx -y @lyrashield/mcp scan | secrets.LYRASHIELD_API_KEY |
+
+## 7. Why pair Cline with LyraShield
+
+Cline gives you autonomous edit loops, LyraShield adds verification that is designed to be proof based and reportable. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains how fast agent loops without verification raise systemic risk across auth, injection, and secrets. The core problem is speed without proof: Cline can scaffold a full feature in minutes, but every generated file is unverified until someone reviews it. Pairing keeps your flow in Cline but your policy in one place: verified findings, proposed Fix PRs, retest, and SARIF reports that GitHub understands per [docs.github.com on code scanning](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning). LyraShield v1 includes agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF. Sprints 0 to 2 are shipped, scan engine MVP, Fix PR execution, and billing are on the roadmap.
+
+To start, add Cline MCP servers, verify tool list, run a diff scan on your next AI generated branch, triage one verified finding with evidence, propose a Fix PR with tests, and confirm SARIF in GitHub code scanning. Expand coverage using the [AI app security checklist](/tools/ai-app-security-checklist) and [join the waitlist](https://lyrashieldai.com) to follow when execution becomes live.

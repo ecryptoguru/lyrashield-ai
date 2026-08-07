@@ -1328,5 +1328,155 @@
     "targetWords": 1400,
     "batch": "batch-8",
     "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 134,
+    "title": "Amp MCP security workflow for verified agent scans",
+    "slug": "amp-mcp-security-workflow",
+    "query": "amp mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 135,
+    "title": "Claude Code MCP Agent Rules Security Setup",
+    "slug": "claude-code-mcp-agent-rules-security",
+    "query": "claude code mcp agent rules - security",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 136,
+    "title": "Cline MCP security workflow for AI built apps",
+    "slug": "cline-mcp-security-workflow",
+    "query": "cline mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 137,
+    "title": "OpenAI Codex MCP security workflow for PR reviews",
+    "slug": "codex-mcp-security-workflow",
+    "query": "codex mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 138,
+    "title": "Cursor MCP Security Workflow for AI Built Apps",
+    "slug": "cursor-mcp-security-workflow",
+    "query": "cursor mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 139,
+    "title": "Gemini CLI MCP security workflow for AI apps",
+    "slug": "gemini-cli-mcp-security-workflow",
+    "query": "gemini cli mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 140,
+    "title": "Hermes MCP workflow for verified security scans",
+    "slug": "hermes-mcp-security-workflow",
+    "query": "hermes mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 141,
+    "title": "JetBrains MCP Security Workflow for AI IDEs",
+    "slug": "jetbrains-mcp-security-workflow",
+    "query": "jetbrains mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 142,
+    "title": "Kilo Code MCP security workflow that verifies before you ship",
+    "slug": "kilo-code-mcp-security-workflow",
+    "query": "kilo code mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 143,
+    "title": "OpenClaw MCP security workflow for agent verification",
+    "slug": "openclaw-mcp-security-workflow",
+    "query": "openclaw mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 144,
+    "title": "OpenCode MCP security workflow for AI built projects",
+    "slug": "opencode-mcp-security-workflow",
+    "query": "opencode mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 145,
+    "title": "Pi Coding Agent MCP security workflow for fast scans",
+    "slug": "pi-coding-agent-mcp-security-workflow",
+    "query": "pi coding agent mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 146,
+    "title": "VS Code MCP Security Workflow with Copilot",
+    "slug": "vscode-mcp-security-copilot",
+    "query": "vscode mcp security - copilot",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 147,
+    "title": "Windsurf MCP Security Workflow for AI Editors",
+    "slug": "windsurf-mcp-security-workflow",
+    "query": "windsurf mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 148,
+    "title": "Zed MCP security workflow for AI built apps",
+    "slug": "zed-mcp-security-workflow",
+    "query": "zed mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-9",
+    "cta": "Pillar + Launch Checklist"
   }
 ]
