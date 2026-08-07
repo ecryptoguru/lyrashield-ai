@@ -31,13 +31,38 @@ export async function loadCredentials(): Promise<Credentials | undefined> {
     const raw = await readFile(CREDENTIALS_FILE, "utf-8")
     const parsed = JSON.parse(raw) as Credentials
     if (!parsed.installId) parsed.installId = randomUUID()
-    return parsed
+    // Dedup safeguard: normalize to the known credential fields only.
+    // JSON.parse already collapses duplicate object keys, but a manually
+    // edited or corrupted file could carry stale/extra fields. This keeps
+    // the in-memory shape stable and prevents duplicate-value drift.
+    return normalizeCredentials(parsed)
   } catch (err) {
     if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") {
       return undefined
     }
     throw new Error(`Could not read credentials: ${err}`)
   }
+}
+
+/**
+ * Normalize a parsed credentials object to the known field set, trimming
+ * string values and dropping unknown keys. This prevents duplicate or stale
+ * credential fields from persisting across save/load cycles.
+ */
+function normalizeCredentials(parsed: Partial<Credentials>): Credentials {
+  const normalized: Credentials = {
+    installId: parsed.installId || randomUUID(),
+  }
+  if (typeof parsed.apiKey === "string" && parsed.apiKey.trim()) {
+    normalized.apiKey = parsed.apiKey.trim()
+  }
+  if (typeof parsed.apiUrl === "string" && parsed.apiUrl.trim()) {
+    normalized.apiUrl = parsed.apiUrl.trim()
+  }
+  if (typeof parsed.workspaceId === "string" && parsed.workspaceId.trim()) {
+    normalized.workspaceId = parsed.workspaceId.trim()
+  }
+  return normalized
 }
 
 export async function saveCredentials(credentials: Credentials): Promise<void> {

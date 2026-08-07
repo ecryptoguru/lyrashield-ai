@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui"
-import { Check, Copy, ExternalLink, Terminal } from "lucide-react"
+import { Check, Copy, ExternalLink, Terminal, CircleDashed } from "lucide-react"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 
 type StrategyLabel =
@@ -71,6 +71,12 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
             {agent.displayName}
           </CardTitle>
           <StrategyBadge strategy={agent.installStrategy} />
+        </div>
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <CircleDashed className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
+          <span className="text-muted-foreground text-[11px] leading-5 font-medium">
+            Not connected — set up to connect
+          </span>
         </div>
         {primaryLocation ? (
           <p className="text-muted-foreground mt-2 line-clamp-2 font-mono text-[11px] leading-5 break-all">

@@ -36,6 +36,23 @@ describe("agent registry", () => {
     expect(AGENTS.length).toBeGreaterThanOrEqual(15)
   })
 
+  // Exact-count guard: when an agent is added or removed, this test fails,
+  // forcing the author to update the docs prose on /docs/integrations
+  // (which hardcodes counts like "15 agents" and "9 of the 15").
+  it("exact total and per-strategy counts match the documented registry", () => {
+    const configFile = AGENTS.filter((a) => a.installStrategy === "config-file")
+    const vendorCli = AGENTS.filter((a) => a.installStrategy === "vendor-cli")
+    const guided = AGENTS.filter((a) => a.installStrategy === "guided-manual")
+    const plugin = AGENTS.filter((a) => a.installStrategy === "agent-plugin")
+
+    // Total registered agents (non-plugin + plugin).
+    expect(AGENTS.length).toBe(30)
+    // Plugin agents (launch clients).
+    expect(plugin.length).toBe(6)
+    // Non-plugin agents — the docs index references this set.
+    expect(configFile.length + vendorCli.length + guided.length).toBe(24)
+  })
+
   it("has unique ids and display names", () => {
     const ids = AGENTS.map((a) => a.id)
     const names = AGENTS.map((a) => a.displayName)
