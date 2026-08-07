@@ -17,6 +17,7 @@
     "deploy:preview": "astro build && wrangler versions upload --config dist/server/wrangler.json",
     "blog:validate": "node scripts/validate-blog-content.mjs",
     "blog:validate:images": "node scripts/validate-blog-images.mjs",
+    "blog:validate:mdx": "node scripts/validate-blog-mdx.mjs",
     "blog:check-links": "node scripts/check-external-blog-links.mjs"
   },
   "dependencies": {
