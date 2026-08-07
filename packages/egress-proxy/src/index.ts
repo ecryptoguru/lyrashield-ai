@@ -154,6 +154,25 @@ async function handleFetch(
   sendJson(response, 200, outcome)
 }
 
+/**
+ * Socket-lifetime limits.
+ *
+ * Without these, Node's HTTP server has NO timeout on receiving headers or a
+ * request body, so a client that opens a connection and then stalls (slow
+ * loris, or simply a wedged worker) holds a socket open indefinitely. The
+ * proxy runs alongside scan sandboxes with a bounded process/FD budget, so
+ * leaked sockets are a real availability risk, not a theoretical one.
+ *
+ * Ordering constraint from Node: keepAliveTimeout < headersTimeout, and
+ * headersTimeout <= requestTimeout. These govern reading the *request* only —
+ * the outbound fetch this proxy performs is bounded separately by the
+ * caller-supplied `timeoutMs` handed to safeFetchOnce.
+ */
+const KEEP_ALIVE_TIMEOUT_MS = 5_000
+const HEADERS_TIMEOUT_MS = 10_000
+const REQUEST_TIMEOUT_MS = 30_000
+const MAX_CONNECTIONS = 256
+
 export function startProxy(options: ProxyOptions): ProxyServer {
   const { token, port = 4000 } = options
 
@@ -180,6 +199,20 @@ export function startProxy(options: ProxyOptions): ProxyServer {
       reason: "request_failed",
       detail: "Not found",
     })
+  })
+
+  server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS
+  server.headersTimeout = HEADERS_TIMEOUT_MS
+  server.requestTimeout = REQUEST_TIMEOUT_MS
+  server.maxConnections = MAX_CONNECTIONS
+
+  // Node destroys the socket on timeout without emitting anything useful;
+  // log it so an operator can distinguish "client stalled" from "proxy hung".
+  server.on("clientError", (err: NodeJS.ErrnoException, socket) => {
+    logger.warn("Egress proxy client error", { code: err.code, message: err.message })
+    if (!socket.writableEnded) {
+      socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
+    }
   })
 
   let resolveReady: () => void

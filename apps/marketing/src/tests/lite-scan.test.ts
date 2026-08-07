@@ -95,6 +95,21 @@ describe("Lite Check marketing surface", () => {
     expect(page).not.toMatch(/scan-progress|\d+% complete/i)
   })
 
+  it("announces scan stages to assistive tech via an indeterminate progressbar", () => {
+    // Screen-reader users otherwise get only the one-shot "in progress" status
+    // and never hear the stage changes sighted users see in the stepper.
+    expect(page).toContain('role="progressbar"')
+    expect(page).toContain('id="scan-stage-announcer"')
+    expect(page).toContain("aria-valuetext")
+
+    // Indeterminate by construction. aria-valuenow is what would turn this into
+    // a determinate bar claiming a completion percentage — the exact thing the
+    // test above forbids. Matched with the `=` so a prose mention of the
+    // attribute in a source comment does not trip the assertion.
+    expect(page).not.toContain("aria-valuenow=")
+    expect(page).not.toContain("<progress")
+  })
+
   it("accepts bare domains and normalizes them to HTTPS before scanning", () => {
     expect(page).toContain('id="scan-url" name="url" type="text" inputmode="url"')
     expect(page).toContain("normalizePublicHttpUrl(input.value)")

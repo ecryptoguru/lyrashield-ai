@@ -4,7 +4,8 @@ The single source of truth for LyraShield AI coding-agent integrations, installe
 
 ## Purpose
 
-- Defines the supported agent catalog in `src/agents.ts` — 24 agents across config-file, guided-manual, vendor-cli, and `agent-plugin` install strategies (e.g., Claude Code, Cursor, Windsurf, VS Code, Zed, OpenAI Codex, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains, Amp, Roo Code, MiMo Code, Codebuff, Oh-My-Pi, Copilot CLI, Goose, Aider, Devin CLI, Antigravity, PiCode, OpenClaw, Hermes).
+- Defines the supported agent catalog in `src/agents.ts` — **30 entries covering 24 distinct agents** across config-file, guided-manual, vendor-cli, and `agent-plugin` install strategies (Claude Code, Cursor, Windsurf, VS Code, Zed, OpenAI Codex, Gemini CLI, OpenCode, Kilo Code, Cline, JetBrains, Amp, Roo Code, MiMo Code, Codebuff, Oh-My-Pi, Copilot CLI, Goose, Aider, Devin CLI, Antigravity, PiCode, OpenClaw, Hermes).
+- **Counting convention:** the 6 clients that support Agent Plugins v1.0.0 each contribute a second `*-agent-plugin` entry (e.g. `claude-code` and `claude-code-agent-plugin`) so a caller can select the install strategy explicitly. That is why `AGENTS.length` is 30 while the agent list above names 24. `registry.test.ts` pins the exact count, so adding an agent or a plugin variant must update that assertion deliberately.
 - Describes each agent's config file locations, credential style, transport type, install strategy, source URL, and platform-specific gotchas.
 - The catalog now includes an `agent-plugin` install strategy for the 6 launch clients supporting Agent Plugins v1.0.0 (Claude Code, Cursor, Windsurf, VS Code, Codex, Kiro). Each `AgentEntry` for these clients carries a `pluginLocations` field describing where the client loads plugins from.
 - Renders agent configuration entries into JSON, JSONC, TOML, or YAML in `src/render.ts`.

@@ -105,6 +105,11 @@ const sha256Hash = z
 
 export const engineRunRecordSchema = z
   .object({
+    // Producer's run.json contract version (engine RUN_RECORD_SCHEMA_VERSION).
+    // Optional because runs produced before the field existed are still valid.
+    // The object is `.strip()`ed, so declaring it here makes it readable rather
+    // than silently dropped.
+    schema_version: boundedString,
     run_id: nonEmptyString,
     run_name: nullableBoundedString,
     start_time: boundedString,

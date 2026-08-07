@@ -17,6 +17,7 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthSplitLayout } from "@/components/auth-split-layout"
 import { PasswordInput } from "@/components/password-input"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -32,6 +33,11 @@ export default function SignInPage() {
     microsoft: false,
     passwordReset: false,
   })
+  // The provider list is fetched client-side, so until it resolves we cannot
+  // tell "no OAuth configured" from "probe still in flight". Without this the
+  // page renders as a bare credentials form and reads as broken rather than
+  // loading. Show a skeleton for the OAuth row while the probe is pending.
+  const [providersLoading, setProvidersLoading] = useState(true)
 
   useEffect(() => {
     let active = true
@@ -70,6 +76,7 @@ export default function SignInPage() {
             passwordReset?: boolean
           } | null
         ) => {
+          if (!active) return
           if (data) {
             setProviders({
               github: Boolean(data.github),
@@ -81,6 +88,9 @@ export default function SignInPage() {
         }
       )
       .catch(() => {})
+      .finally(() => {
+        if (active) setProvidersLoading(false)
+      })
 
     return () => {
       active = false
@@ -290,7 +300,24 @@ export default function SignInPage() {
             </Button>
           </form>
 
-          {(providers.github || providers.google || providers.microsoft) && (
+          {providersLoading && (
+            <div aria-hidden="true" data-testid="oauth-skeleton">
+              <div className="my-6 flex items-center gap-3">
+                <div className="bg-border h-px flex-1" />
+                <span className="text-muted-foreground text-xs font-medium">OR</span>
+                <div className="bg-border h-px flex-1" />
+              </div>
+              <div className="space-y-3">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <span className="sr-only" role="status">
+                Loading sign-in options
+              </span>
+            </div>
+          )}
+
+          {!providersLoading && (providers.github || providers.google || providers.microsoft) && (
             <>
               <div className="my-6 flex items-center gap-3">
                 <div className="bg-border h-px flex-1" />
