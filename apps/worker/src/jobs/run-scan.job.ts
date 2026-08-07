@@ -873,12 +873,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
             : stoppedForEngineError
               ? "Engine stopped after a model error; partial findings preserved"
               : "Engine did not produce a completed, valid result receipt"
-        // Content filter stops, engine errors, and budget stops with findings
-        // are treated as completed with partial results. Without findings, they fail.
+        // Content filter stops and engine errors with findings are PARTIAL:
+        // the engine produced results but did not complete its full scope.
+        // Reporting these as COMPLETED would promise "we looked, and this is
+        // what we found" when the run was actually truncated — false confidence
+        // in a security tool. Without findings, they fail.
         const terminalStatus: ScanStatus = stoppedForBudget
           ? "STOPPED_BUDGET"
           : (stoppedForContentFilter || stoppedForEngineError) && hasEngineFindings
-            ? "COMPLETED"
+            ? "PARTIAL"
             : "FAILED"
         engineTerminalError = {
           status: terminalStatus,

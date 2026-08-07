@@ -46,6 +46,16 @@ export function getScanPresentation(status: ScanStatus): ScanPresentation {
         assuranceAvailable: true,
         showFailureDetails: false,
       }
+    case "PARTIAL":
+      return {
+        label: "Partial",
+        headline: "Scan completed with gaps",
+        description:
+          "The engine stopped before finishing its full scope. Partial findings are available below, but coverage may be incomplete — do not treat this as a complete result.",
+        badgeVariant: "warning",
+        assuranceAvailable: false,
+        showFailureDetails: true,
+      }
     case "FAILED":
       return {
         label: "Failed",

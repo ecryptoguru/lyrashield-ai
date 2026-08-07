@@ -14,4 +14,19 @@ describe("scan presentation", () => {
     expect(isActiveScan("RUNNING")).toBe(true)
     expect(isActiveScan("FAILED")).toBe(false)
   })
+
+  it("describes a partial scan as incomplete, not completed", () => {
+    const presentation = getScanPresentation("PARTIAL")
+
+    expect(presentation.assuranceAvailable).toBe(false)
+    expect(presentation.badgeVariant).toBe("warning")
+    expect(presentation.label).toBe("Partial")
+    expect(presentation.headline).toContain("gaps")
+    expect(presentation.description).toContain("incomplete")
+    expect(presentation.showFailureDetails).toBe(true)
+  })
+
+  it("does not treat PARTIAL as an active scan", () => {
+    expect(isActiveScan("PARTIAL")).toBe(false)
+  })
 })

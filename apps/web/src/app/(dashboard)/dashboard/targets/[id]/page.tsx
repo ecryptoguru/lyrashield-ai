@@ -255,11 +255,13 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
                       variant={
                         scan.status === "COMPLETED"
                           ? "success"
-                          : scan.status === "FAILED"
-                            ? "danger"
-                            : scan.status === "RUNNING"
-                              ? "info"
-                              : "muted"
+                          : scan.status === "PARTIAL"
+                            ? "warning"
+                            : scan.status === "FAILED"
+                              ? "danger"
+                              : scan.status === "RUNNING"
+                                ? "info"
+                                : "muted"
                       }
                     >
                       {scan.status}

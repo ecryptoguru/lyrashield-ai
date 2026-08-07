@@ -149,6 +149,7 @@ enum ScanStatus {
   RUNNING
   VERIFYING
   COMPLETED
+  PARTIAL
   FAILED
   CANCELLED
   REQUIRES_APPROVAL
@@ -202,6 +203,7 @@ enum FindingVerificationMethod {
 
 enum ScanCoverageStatus {
   COMPLETED
+  PARTIAL
   NOT_APPLICABLE
   BLOCKED
   TIMED_OUT

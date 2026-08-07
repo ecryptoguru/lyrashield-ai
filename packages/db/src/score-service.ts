@@ -198,7 +198,7 @@ export async function completeScanWithScore(
     const coverageComplete =
       scan.coverageReceipts.length > 0 &&
       scan.coverageReceipts.every(
-        (receipt) => receipt.status === "COMPLETED" || receipt.status === "NOT_APPLICABLE"
+        (receipt) => receipt.status === "PARTIAL" || receipt.status === "NOT_APPLICABLE"
       )
     const shareEligible =
       result.shareEligible &&

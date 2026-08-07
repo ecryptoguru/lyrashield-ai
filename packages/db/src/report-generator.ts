@@ -94,7 +94,7 @@ export async function gatherReportData(
         manifestChecksum: scan.resultManifest?.checksum ?? null,
         coverage: (scan.coverageReceipts ?? []).reduce(
           (acc, receipt) => {
-            if (receipt.status === "COMPLETED") acc.completed++
+            if (receipt.status === "PARTIAL") acc.completed++
             else if (receipt.status === "NOT_APPLICABLE") acc.notApplicable++
             else acc.limited++
             return acc

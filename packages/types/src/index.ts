@@ -45,6 +45,7 @@ export const ScanStatusSchema = z.enum([
   "RUNNING",
   "VERIFYING",
   "COMPLETED",
+  "PARTIAL",
   "FAILED",
   "CANCELLED",
   "REQUIRES_APPROVAL",
