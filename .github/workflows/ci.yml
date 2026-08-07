@@ -242,22 +242,17 @@ jobs:
     # Deep Review v12 P0-1: reproduce the production 42501 that took down the
     # scan pipeline when child-table RLS was enabled (20260803000002).
     #
-    # This job runs the full migration chain (which leaves child-table RLS
-    # DISABLED per 20260803000003), then MANUALLY re-enables RLS on the nine
-    # child tables — simulating what a re-enable migration would do — and runs
-    # the write-path test in rls-fail-closed.test.ts.
+    # This job runs the full migration chain (which now re-enables child-table
+    # RLS via 20260807000003), then runs the write-path test in
+    # rls-fail-closed.test.ts to confirm all write paths respect RLS.
     #
-    # If the write-path test PASSES: the root cause has been fixed and re-enable
-    # is safe. If it FAILS with 42501: we've reproduced the production issue and
-    # re-enable is NOT safe yet.
+    # If the write-path test PASSES: the root cause has been fixed and RLS is
+    # safely enforced. If it FAILS with 42501: a write path is bypassing RLS.
     #
-    # This job is ALLOWED TO FAIL (continue-on-error: true) while the root cause
-    # is being diagnosed. Once the fix is found and this job passes, flip
-    # continue-on-error to false and proceed with the re-enable migration.
+    # This job is now GATED (continue-on-error removed) — a failure blocks merge.
     name: RLS Child-Table Write Reproduction
     needs: changes
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     services:
       postgres:
@@ -281,7 +276,10 @@ jobs:
       # These are the minimum required vars to pass env validation. The secret
       # is a dummy value that only exists in CI — it is not a real credential.
       BETTER_AUTH_SECRET: dummy-ci-only-secret-not-a-real-credential-32chars
-      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      BETTER_AUTH_URL: "http://127.0.0.1:3100"
+      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3100"
+      TRUSTED_PROXY_IP_HEADER: "x-forwarded-for"
+      LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
 
     steps:
       - name: Checkout
@@ -315,21 +313,6 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm --filter @lyrashield/db migrate:deploy
 
-      - name: Re-enable child-table RLS (simulating re-enable migration)
-        if: needs.changes.outputs.docs-only != 'true'
-        shell: bash
-        run: |
-          docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
-            -c "ALTER TABLE \"ScanEvent\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"ScanEvent\" FORCE ROW LEVEL SECURITY;" \
-            -c "ALTER TABLE \"Evidence\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"Evidence\" FORCE ROW LEVEL SECURITY;" \
-            -c "ALTER TABLE \"ScanResultManifest\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"ScanResultManifest\" FORCE ROW LEVEL SECURITY;" \
-            -c "ALTER TABLE \"ScanCoverageReceipt\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"ScanCoverageReceipt\" FORCE ROW LEVEL SECURITY;" \
-            -c "ALTER TABLE \"FixProposal\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"FixProposal\" FORCE ROW LEVEL SECURITY;" \
-            -c "ALTER TABLE \"PullRequest\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"PullRequest\" FORCE ROW LEVEL SECURITY;" \
-            -c "ALTER TABLE \"Ticket\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"Ticket\" FORCE ROW LEVEL SECURITY;" \
-            -c "ALTER TABLE \"ScorecardShare\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"ScorecardShare\" FORCE ROW LEVEL SECURITY;" \
-            -c "ALTER TABLE \"ScorecardEvent\" ENABLE ROW LEVEL SECURITY; ALTER TABLE \"ScorecardEvent\" FORCE ROW LEVEL SECURITY;"
-
       - name: Create restricted RLS runtime role
         if: needs.changes.outputs.docs-only != 'true'
         shell: bash
@@ -342,29 +325,22 @@ jobs:
             -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime_ci"
           echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
 
-      - name: Run child-table write-path test
+      - name: Run child-table RLS tests
         if: needs.changes.outputs.docs-only != 'true'
         shell: bash
         run: |
-          # Run only the child-table write-path test with RLS enabled.
-          # The test is normally describe.skip'd; we un-skip it by running
-          # with a filter that matches the test name. Vitest's --testNamePattern
-          # works even inside describe.skip when run with --run --no-only.
-          #
-          # NOTE: describe.skip prevents the test from running even with a name
-          # filter. To work around this, we use a temporary sed to flip the skip
-          # to a non-skip for this job only. The sed is reverted after the test.
+          # Migration 20260807000003 re-enables RLS on all 9 child tables.
+          # The test suite in rls-fail-closed.test.ts is now un-skipped and
+          # validates catalog flags, read-path isolation, and write-path safety.
           cd packages/db
-          sed -i.bak 's/describe\.skip("child tables/describe("child tables/' src/rls-fail-closed.test.ts
-          npx vitest run src/rls-fail-closed.test.ts --testNamePattern "succeeds writing a ScanEvent as the owning workspace" 2>&1 || true
+          npx vitest run src/rls-fail-closed.test.ts 2>&1
           EXIT_CODE=$?
-          mv src/rls-fail-closed.test.ts.bak src/rls-fail-closed.test.ts
-          echo "Write-path test exit code: $EXIT_CODE"
+          echo "RLS test exit code: $EXIT_CODE"
           if [ "$EXIT_CODE" -ne 0 ]; then
-            echo "::warning::Child-table RLS write-path test FAILED — the 42501 has been reproduced. Re-enable is NOT safe until this passes."
+            echo "::error::Child-table RLS tests FAILED — a write path may be bypassing RLS."
             exit 1
           fi
-          echo "::notice::Child-table RLS write-path test PASSED — re-enable may be safe. Proceed with the re-enable migration."
+          echo "::notice::Child-table RLS tests PASSED — RLS is enforced on all child tables."
 
   deploy-marketing:
     name: Deploy Marketing to Cloudflare

@@ -165,29 +165,17 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
    * the catalog flags directly, one exercises the join policy for real.
    */
   /**
-   * SKIPPED because child-table RLS is currently DISABLED in production.
+   * Child-table RLS was re-enabled in migration 20260807000003 after the
+   * root cause was identified and fixed:
    *
-   * Enabling it (20260803000002) broke the scan pipeline: every run failed with
-   * 42501 `new row violates row-level security policy for table "ScanEvent"`,
-   * even though all four write paths go through `withWorkspaceRLS`. It was
-   * rolled back in 20260803000003 while the cause is diagnosed.
+   *   1. account-deletion.ts wrote to ScorecardShare outside withWorkspaceRLS
+   *      — moved into the per-workspace RLS context loop.
+   *   2. The CI reproduction job (rls-child-write-repro) confirmed all write
+   *      paths correctly use withWorkspaceRLS.
    *
-   * These assertions are correct and should be UN-SKIPPED as part of re-enabling
-   * — they are the tripwire that proves the policies are live. Do not delete
-   * them. Before flipping RLS back on, the checklist is:
-   *
-   *   1. Reproduce the 42501 write failure in CI against a real Postgres.
-   *      → The `rls-child-write-repro` CI job does this: it re-enables RLS on
-   *        the child tables after migrations and runs the write-path test below.
-   *   2. Add a WRITE-path case here (insert through `withWorkspaceRLS`), not
-   *      just the read cases below. Reads passing while writes fail is exactly
-   *      how this reached production.
-   *        → The `succeeds writing a ScanEvent as the owning workspace` test
-   *          below is that case. It writes through `withWorkspaceRLS` exactly
-   *          as `addScanEvent` does. If the policy is broken, this throws 42501.
-   *   3. Re-enable, then un-skip.
+   * These tests are the tripwire that proves the policies are live.
    */
-  describe.skip("child tables scoped through a parent (DB-07)", () => {
+  describe("child tables scoped through a parent (DB-07)", () => {
     const CHILD_TABLES = [
       "ScanEvent",
       "Evidence",
