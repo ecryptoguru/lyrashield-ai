@@ -13,6 +13,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLASSIFY="$SCRIPT_DIR/../classify-paths.sh"
 
+# In GitHub Actions, GITHUB_OUTPUT is always set. The classifier writes to
+# $GITHUB_OUTPUT when present and to stdout otherwise. The test harness
+# captures stdout, so unset it to force stdout output.
+unset GITHUB_OUTPUT
+
 pass=0
 fail=0
 
