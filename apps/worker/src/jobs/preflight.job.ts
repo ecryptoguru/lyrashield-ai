@@ -23,6 +23,7 @@ export interface PreflightCheck {
  * into bytes. Returns null for unparseable input.
  */
 function parseMemoryLimit(limit: string): number | null {
+  // eslint-disable-next-line security/detect-unsafe-regex -- bounded input, no catastrophic backtracking
   const match = /^(\d+(?:\.\d+)?)\s*([kmgt]?b?)$/i.exec(limit.trim())
   if (!match || match[1] === undefined || match[2] === undefined) return null
   const value = parseFloat(match[1])
