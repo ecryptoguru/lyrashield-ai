@@ -1,0 +1,87 @@
+---
+title: RunSybil vs LyraShield for AI Built App Security
+description: RunSybil is a black box AI agent chaining flaws across apps and cloud; LyraShield wraps AI app tests in a release assurance loop with approval gated fixes.
+draft: false
+heroImage: agent-security-37
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+pubDate: 2026-08-07
+author: lyrashield-team
+faq:
+  - q: Is RunSybil better than LyraShield?
+    a: They overlap on continuous offensive testing but differ in scope and governance. RunSybil is a black box AI agent that chains vulnerabilities across apps, APIs, cloud, and infrastructure without source code. LyraShield is a release assurance loop that gates fixes on approval and records immutable evidence. Choose by workflow.
+  - q: Does LyraShield replace RunSybil?
+    a: No. RunSybil runs continuous attacker style validation across a whole stack on every deployment. LyraShield focuses on the release decision for an AI built app with an approval gated fix loop. Some teams use RunSybil for continuous validation and LyraShield for per release assurance.
+  - q: Does RunSybil need source code access?
+    a: No. RunSybil markets itself as the first black box AI offensive testing solution whose agents test without source code, using only external interfaces. LyraShield can work with the authorized target context an AI built app provides and pairs agentic pentest with SCA and secrets.
+  - q: Which fits a team shipping AI built apps with a release gate?
+    a: A team that wants continuous black box validation across a full stack may prefer RunSybil. A team that wants a structured release assurance loop with immutable evidence and approval gated fixes for each AI built app may prefer LyraShield. Try the free checklist to decide.
+---
+
+RunSybil is an AI native offensive security platform that runs a black box AI agent to chain vulnerabilities across applications, APIs, cloud, and infrastructure without source code access. LyraShield is a release assurance loop for AI built apps that separates detection from proof, records evidence in defined states, and gates fixes on approval. RunSybil excels at continuous attacker style validation across a whole stack; LyraShield targets the release decision for apps generated or heavily modified by AI coding tools.
+
+This comparison helps when your team ships AI built applications and needs to choose between continuous black box offensive testing and a structured release assurance workflow. Both prove exploitability through live testing rather than static scanning. The difference is the governance around the fix and what the output supports.
+
+For the broader framing of why AI built apps need a release check, read the [vibe coding security guide](/blog/vibe-coding-security-guide), which defines the trust boundaries and evidence states that this comparison builds on.
+
+## What RunSybil is and where this comparison matters
+
+RunSybil, founded by OpenAI's first security hire and backed by Khosla Ventures, describes its platform as an autonomous agent called Sybil that reasons like an attacker. Per its [home page](https://www.runsybil.com/), it maps your entire stack, chains vulnerabilities across layers, and surfaces only the findings that matter, re evaluating on every deployment.
+
+This comparison matters when your engineering team uses AI coding tools like Cursor, Claude Code, or Lovable to generate or heavily modify applications, and you need to decide whether continuous black box offensive testing or a per release assurance loop is the right control for your release process.
+
+## Where RunSybil is genuinely strong
+
+RunSybil has clear strengths that any fair comparison should acknowledge. Its core value is black box, no source code offensive testing that reasons like an attacker. Its [blog on automating hacker intuition](https://www.runsybil.com/post/what-does-it-take-to-automate-hacker-intuition) explains that Sybil operates outside in, crawling the application to map the attack surface, developing hypotheses about function and purpose, and testing them continuously.
+
+RunSybil is multi agent and deployment aware. An independent [review](https://appsecsanta.com/runsybil) describes a Discovery Agent that maps the surface, an Attack Agent that validates findings, and login agents for authenticated exploration, with the agents learning about the target as they go. It runs on every deployment, re evaluating only what changed and surfacing newly exploitable risks, which the company frames as replacing point in time pentests and bug bounties with continuous coverage.
+
+RunSybil positions itself apart from code review assistants like Claude Code or OpenAI Codex because it interacts with the running system and validates exploitability rather than reading source. It chains an application flaw into an infrastructure entry point, covering ground a single layer scanner misses, and maps its work to CTEM Phase 4 validation. For a team that wants continuous black box offensive testing across a full stack, RunSybil is a credible and well funded choice.
+
+## Where LyraShield's release assurance approach differs
+
+LyraShield is built for a specific decision: the release of an application that an AI coding tool generated or heavily modified. Its loop is target, review, evidence, fix, retest, report. You authorize a specific application target, run a review that combines agentic pentest with software composition analysis and secrets scanning, and record evidence in defined states rather than a single pass or fail.
+
+The structural difference is that LyraShield separates detection from proof and gates the fix on approval. A finding moves through evidence states, and a fix proposal is prepared for human approval before it is applied and retested. The final output is an immutable assurance record that supports a release decision. Where RunSybil emphasizes continuous validation and reducing false positives through live exploitation, LyraShield centers the approval gate and the per build evidence record that a release decision needs.
+
+AI built apps add a wrinkle that continuous black box validation does not fully address. The generated code, the agent permissions, the resolved dependencies, and the deployment configuration can all change between builds, and a clean run against one version does not carry to the next. LyraShield is designed to be re run per build, so the evidence record matches the build that is about to ship rather than a prior snapshot of the running system.
+
+LyraShield runs as a [Model Context Protocol](https://modelcontextprotocol.io) server inside AI coding agents, so checks happen where the code is generated. Its v1 coverage pairs agentic pentest with SCA, secrets scanning, a GitHub Action with a diff aware gate, and SARIF output, so the deterministic layers run alongside the agentic layer. The diff aware gate means the check focuses on what changed in a given pull request, which keeps the loop fast enough to run on every build.
+
+## How the two workflows compare
+
+| Use case | Better fit |
+| --- | --- |
+| Continuous black box validation across a full stack | RunSybil |
+| Pre release assurance loop for a specific AI built app | LyraShield |
+| No source code access attacker style testing | RunSybil |
+| Approval gated fixes with immutable evidence states | LyraShield |
+| CTEM Phase 4 continuous validation on every deployment | RunSybil |
+
+For the full side by side breakdown, see the [RunSybil comparison page](/compare/runsybil).
+
+## Who each tool fits
+
+Use RunSybil when your primary need is continuous, black box, attacker style validation across a full stack of applications, APIs, cloud, and infrastructure, with no source code access and validation on every deployment. It suits teams that want to replace point in time pentests and bug bounties with continuous offensive coverage.
+
+Use LyraShield when your primary need is a structured release assurance loop for an AI built app, where a human approves fixes and an immutable evidence record supports the release decision. It suits teams that ship AI built or AI modified apps and want the check inside the coding agent. The [Lovable app security checklist](/blog/lovable-app-security-checklist) shows how that release review fits a real AI coding setup.
+
+## Why teams choose LyraShield for AI built apps
+
+Teams pick LyraShield when the release decision is the hard part and the app was built or heavily modified by an AI coding tool. The approval gated fix loop means a human still owns the change that ships. Evidence states mean you can show what was checked, what was proven, what is limited, and what was retested, which is what an auditor or a careful reviewer asks for. Combining continuous black box validation with a governed application release loop is stronger than either alone.
+
+The decision often comes down to governance and who signs off. A continuous black box platform answers which vulnerabilities are exploitable across a full stack and validates them on every deployment. A release assurance loop answers whether this build, with these dependencies and this agent configuration, is ready to ship, and it hands a reviewer a record that captures that decision with an approval gate on the fix. For a team that owns a release gate for an AI built app and needs to defend the call, the second answer is the one that closes the loop.
+
+As of August 2026, LyraShield is live with open registration in open beta. Some platform features remain on the near term roadmap and are not yet live; check the current status on the site before relying on a specific capability.
+
+If you want a structured release assurance loop for your next AI built app, run the free [AI app security checklist](/tools/ai-app-security-checklist) and then [register at lyrashieldai.com](https://lyrashieldai.com) to try the full loop.
+
+## Sources
+
+- [RunSybil platform overview](https://www.runsybil.com/)
+- [RunSybil automating hacker intuition](https://www.runsybil.com/post/what-does-it-take-to-automate-hacker-intuition)
+- [RunSybil independent review](https://appsecsanta.com/runsybil)
+- [OWASP automated security testing](https://owasp.org)
+- [GitHub security hardening for GitHub Actions](https://docs.github.com)

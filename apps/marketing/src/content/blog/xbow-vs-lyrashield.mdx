@@ -1,0 +1,87 @@
+---
+title: XBOW vs LyraShield for AI Built App Security
+description: XBOW proves exploitability across a broad attack surface; LyraShield turns AI app testing into a release assurance loop with approval gated fixes.
+draft: false
+heroImage: agent-security-33
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+pubDate: 2026-08-07
+author: lyrashield-team
+faq:
+  - q: Is XBOW better than LyraShield?
+    a: Neither is universally better. XBOW is an autonomous offensive platform that proves exploitability across a broad attack surface. LyraShield is a release assurance loop for AI built apps that separates detection from proof and gates fixes on approval. Use the one that matches your team and release model.
+  - q: Does LyraShield replace XBOW?
+    a: No. They serve different workflows. XBOW runs continuous autonomous pentests against live attack surfaces. LyraShield runs target, review, evidence, fix, retest, report against an AI built app before release. Some teams run XBOW for continuous attack surface testing and LyraShield for per release assurance.
+  - q: Does XBOW produce immutable reports?
+    a: XBOW produces reproducible exploit traces with full decision logs and remediation guidance. It does not market its reports as immutable assurance records in the release gate sense. LyraShield builds an immutable assurance record intended to support a release decision.
+  - q: Which tool fits a small team shipping AI built apps fast?
+    a: Both can help. A small team that wants continuous attacker style coverage of a broad estate may prefer XBOW. A team that wants a structured release assurance loop with approval gated fixes and evidence states for each AI built app may prefer LyraShield. Try the free checklist to see where LyraShield fits.
+---
+
+XBOW is an autonomous offensive security platform that proves exploitability across a broad attack surface by chaining vulnerabilities into working exploits. LyraShield is a release assurance loop for AI built apps that separates detection from proof, records evidence in defined states, and gates fixes on approval. XBOW excels at continuous autonomous exploitation at portfolio scale; LyraShield targets the release decision for apps generated or heavily modified by AI coding tools.
+
+This comparison helps when your team ships AI built applications and needs to decide between continuous autonomous pentesting and a structured release assurance workflow. Both approaches prove real risk rather than listing theoretical findings. The difference is what they wrap that proof around and who owns the decision at the end of the loop.
+
+For a broader framing of why AI built apps need a different release check, read the [vibe coding security guide](/blog/vibe-coding-security-guide), which sets out the trust boundaries and evidence states that this comparison builds on.
+
+## What XBOW is and where this comparison matters
+
+XBOW, founded in 2024 and used by over 150 security teams, describes its platform as an autonomous hacker that runs the entire pentest from context to a confirmed working exploit. You point it at a target, hand it context such as docs and API specs, and it builds a live attack surface map and runs thousands of agents in parallel. A coordinator decides what to test and in what order, and independent validators confirm that exploits are reproducible, which is what distinguishes an autonomous pentest platform from a frontier language model pointed at a target.
+
+This comparison matters when your engineering team uses AI coding tools like Cursor, Claude Code, or Codex to generate or heavily modify applications, and you need to decide whether continuous autonomous pentesting or a per release assurance loop is the right control for your release process.
+
+## Where XBOW is genuinely strong
+
+XBOW has clear strengths that any fair comparison should acknowledge. Its core value is proving exploitability, not merely detecting flaws. The [XBOW platform](https://xbow.com/platform) runs the entire pentest autonomously and continuously, from the context you give it to a confirmed working exploit, every time your applications change. Independent validators confirm exploitability, reducing false positives that can result from AI hallucinations.
+
+XBOW also runs continuously and at portfolio scale. The [XBOW API](https://xbow.com/api) lets teams trigger a pentest on merge or pre deploy as a pre release security gate, pull proven findings into a SIEM or ticketing system, and run per asset tests across a large estate without adding headcount. Every finding is a complete case file with the chained attack path, the working exploit, and a full log of every decision and tactic the agents took. Deployment aligns with SOC 2, ISO 27001, PCI DSS, and NIS 2 requirements, and every action is logged and auditable.
+
+For a security team that wants continuous, attacker style coverage of a broad and changing attack surface, XBOW is a credible choice. Its [autonomous pentesting brief](https://xbow.com/brief/what-is-autonomous-pentesting) is explicit that the platform, not the model alone, is the hard part to build.
+
+## Where LyraShield's release assurance approach differs
+
+LyraShield is built for a narrower but specific problem: the release decision for an application that an AI coding tool generated or heavily modified. Its loop is target, review, evidence, fix, retest, report. You authorize a specific target, run a review that combines agentic pentest with software composition analysis and secrets scanning, and record evidence in defined states rather than a single pass or fail.
+
+The key structural difference is that LyraShield separates detection from proof and wraps the fix step in approval. A finding moves through evidence states, and a fix proposal is prepared for human approval before it is applied and retested. The final output is an immutable assurance record that supports a release decision, not just a finding list. This matters when the question is not only what is exploitable, but whether a specific build is ready to ship.
+
+AI built apps add a specific wrinkle that a portfolio pentest does not fully address. The generated code, the agent permissions, the resolved dependencies, and the deployment configuration can all change between builds, and a clean run against one version does not carry to the next. LyraShield is designed to be re run per build, so the evidence record matches the build that is about to ship rather than a prior snapshot of the attack surface.
+
+LyraShield also runs as a [Model Context Protocol](https://modelcontextprotocol.io) server inside AI coding agents, so checks happen where the code is generated rather than only in a separate dashboard after the fact. Its v1 coverage pairs agentic pentest with SCA, secrets scanning, a GitHub Action with a diff aware gate, and SARIF output, so the deterministic layers run alongside the agentic layer. The diff aware gate means the check focuses on what changed in a given pull request, which keeps the loop fast enough to run on every build.
+
+## How the two workflows compare
+
+| Use case | Better fit |
+| --- | --- |
+| Continuous autonomous exploitation across a broad portfolio | XBOW |
+| Pre release assurance loop for a specific AI built app | LyraShield |
+| Approval gated fix proposals with immutable evidence | LyraShield |
+| API driven pentest on every merge across a large estate | XBOW |
+| MCP checks inside the AI coding agent | LyraShield |
+
+For the full side by side breakdown, see the [XBOW comparison page](/compare/xbow).
+
+## Who each tool fits
+
+Use XBOW when your primary need is continuous, autonomous, attacker style testing across a broad and changing attack surface, and you want proof of exploitability delivered as reproducible case files at portfolio scale. It suits security teams that already run SAST and DAST and want to add a continuous offensive layer that proves what is actually exploitable.
+
+Use LyraShield when your primary need is a structured release assurance loop for an AI built app, where a human approves fixes and an immutable evidence record supports the release decision. It suits teams that ship AI built or AI modified apps and want the check to happen inside the coding agent and the fix to be governed by approval rather than auto applied. The [Claude Code security workflow](/blog/claude-code-security-workflow) shows how that release review fits a real coding agent setup.
+
+## Why teams choose LyraShield for AI built apps
+
+Teams pick LyraShield when the release decision is the hard part and the app was built or heavily modified by an AI coding tool. The approval gated fix loop means a human still owns the change that ships. Evidence states mean you can show what was checked, what was proven, what is limited, and what was retested, which is what an auditor or a careful reviewer actually asks for. Combining continuous offensive testing with a governed release loop is stronger than either alone.
+
+The decision often comes down to who signs off and what record they need. A platform that proves exploitability at portfolio scale answers what is exploitable across the estate. A release assurance loop answers whether this build, with these dependencies and this agent configuration, is ready to ship, and it hands a reviewer a record that captures that decision. For a team that owns a release gate and needs to defend the call, the second answer is the one that closes the loop.
+
+As of August 2026, LyraShield is live with open registration in open beta. Some platform features remain on the near term roadmap and are not yet live; check the current status on the site before relying on a specific capability.
+
+If you want a structured release assurance loop for your next AI built app, run the free [AI app security checklist](/tools/ai-app-security-checklist) and then [register at lyrashieldai.com](https://lyrashieldai.com) to try the full loop.
+
+## Sources
+
+- [XBOW platform overview](https://xbow.com/platform)
+- [XBOW autonomous pentesting brief](https://xbow.com/brief/what-is-autonomous-pentesting)
+- [XBOW API documentation](https://xbow.com/api)
+- [OWASP automated security testing guidance](https://owasp.org)
+- [Model Context Protocol specification](https://modelcontextprotocol.io)

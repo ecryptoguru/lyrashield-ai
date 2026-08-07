@@ -29,7 +29,8 @@ function batchFor(index: number) {
   if (index <= 100) return "batch-6"
   if (index <= 111) return "batch-7"
   if (index <= 133) return "batch-8"
-  return "batch-9"
+  if (index <= 148) return "batch-9"
+  return "batch-10"
 }
 
 function readApprovedBlogProgram(): BlogProgramEntry[] {

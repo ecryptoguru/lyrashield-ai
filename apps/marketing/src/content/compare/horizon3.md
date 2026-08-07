@@ -76,3 +76,5 @@ NodeZero proves production resilience across the environment; LyraShield AI gate
 ## Methodology and scope
 
 Every claim on this page is drawn from publicly documented capabilities at the date above. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for the assurance model behind the comparison, and treat anything not stated there as out of scope.
+
+For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Horizon3.ai](/blog/horizon3-vs-lyrashield).

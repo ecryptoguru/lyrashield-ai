@@ -1,0 +1,75 @@
+---
+title: "GitHub Advanced Security vs LyraShield"
+description: "How LyraShield AI release assurance compares to GitHub Advanced Security code scanning, secret scanning, and Dependabot for AI-built apps."
+pubDate: 2026-08-07
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+draft: false
+heroImage: agent-security-42
+faq:
+  - q: "Does GitHub Advanced Security cover AI-generated code?"
+    a: "Yes. GHAS code scanning, including its AI-powered detections, runs on AI-generated code the same way it runs on human-written code. It flags known vulnerability patterns and leaked secrets. It does not, however, produce an independent proof of exploitability or an immutable release-assurance record for the app as a whole."
+  - q: "Can LyraShield replace GitHub Advanced Security?"
+    a: "Not as a general-purpose SAST engine. LyraShield runs an agentic pentest alongside SCA and secrets and focuses on evidence, retesting, and a release decision. Many teams use GHAS for continuous deterministic scanning inside GitHub and add LyraShield for the proof and release-assurance layer that GHAS does not provide."
+  - q: "Is LyraShield available as a GitHub Action?"
+    a: "Yes. LyraShield ships a reusable GitHub Action with a diff-aware gate and SARIF output, so findings flow into the same GitHub code scanning view that GHAS populates. The two can coexist in one workflow without overwriting each other."
+  - q: "Do I need GitHub Enterprise to use LyraShield?"
+    a: "No. LyraShield works with public and private repositories on any GitHub plan. GHAS features like code scanning and secret scanning for private repositories require a paid GitHub Code Security or Secret Protection product. LyraShield open registration is live at lyrashieldai.com."
+---
+
+GitHub Advanced Security brings code scanning, secret scanning, and dependency review directly into GitHub, where developers already work. LyraShield AI is release assurance for AI-built apps: it separates detection from proof, runs an agentic pentest alongside SCA and secrets, produces an immutable evidence record, and proposes approval-gated fixes. GHAS excels at integrated, deterministic scanning; LyraShield closes the proof and release-decision gap for apps built by coding agents.
+
+This comparison is part of our broader [vibe coding security guide](/blog/vibe-coding-security-guide), which covers the full release-assurance methodology for AI-built applications.
+
+## What GitHub Advanced Security does well
+
+GitHub Advanced Security, or GHAS, is the application security suite built into GitHub itself. Since April 2025 it ships as two standalone products: [GitHub Code Security](https://docs.github.com/en/get-started/learning-about-github/about-github-advanced-security), which includes code scanning powered by CodeQL and an AI detection engine, plus Dependabot and dependency review, and [GitHub Secret Protection](https://github.com/security/advanced-security/what-is-github-advanced-security), which covers secret scanning and push protection across more than 200 token types from over 180 service providers.
+
+The genuine strength of GHAS is integration. Developers do not leave GitHub to see findings, and pull request review shows code scanning alerts inline. Copilot Autofix suggests fixes for code scanning alerts directly in the pull request, which shortens the path from finding to fix. For public repositories, code scanning and secret scanning are available at no cost, which makes GHAS the lowest-friction entry point for many open source projects and small teams. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) and common [CWE](https://cwe.mitre.org/) categories are well covered by the default CodeQL query packs, and the AI-powered detection engine extends coverage to languages and frameworks that CodeQL does not yet support natively.
+
+Pricing is per active committer. As of the April 2025 split, GitHub Code Security is 30 dollars per month per active committer and GitHub Secret Protection is 19 dollars per month per active committer, with both now available to GitHub Team plan customers, not only Enterprise. Security campaigns help address accumulated security debt at scale, and the security overview gives organizations a picture of risk distribution across repositories. GHAS also includes delegated bypass for push protection and delegated alert dismissal, which are governance controls for enterprises that need to constrain who can perform sensitive actions.
+
+GHAS is mature, broad, and operationally proven at enterprise scale. It is the right default for teams whose primary need is deterministic scanning that lives inside their existing GitHub workflow and who have the engineering capacity to triage and fix findings themselves.
+
+GHAS also benefits from the breadth of the GitHub ecosystem. Dependabot can open automated pull requests to update vulnerable dependencies, and dependency review enforces checks on pull requests that change a manifest file. Security campaigns let organizations target accumulated debt across many repositories at once, and the security overview aggregates risk across the organization. Because GHAS is first-party to GitHub, there is no separate account, dashboard, or identity provider to manage, which is a real operational advantage for teams already invested in the platform.
+
+## Where LyraShield's release assurance approach differs
+
+LyraShield AI starts from a different question. Instead of asking what patterns does this code match, it asks can we prove this app is safe to release. The LyraShield loop is target, review, evidence, fix, retest, report. Detection is only the first step, and the proof and release decision are the deliverable.
+
+The core difference is separating detection from proof. A SAST rule can tell you a pattern looks risky, but it cannot prove the running app is exploitable or that a fix actually closed the gap. LyraShield runs an agentic pentest that attempts to exercise the findings against the live target, then records the result as an evidence state. Each finding moves through states that distinguish detected from proven from fixed and retested, and the whole record is immutable. That matters for compliance, audit, and handoff scenarios where a reviewer needs to see not just what was found but what was proven and what was done about it.
+
+That distinction matters especially for AI-built apps because coding agents generate code at a volume and pace that overwhelms manual triage. A finding that a human would dismiss as a false positive still generates a ticket, and a real flaw that compiles cleanly can ship unnoticed because no deterministic rule catches it. LyraShield's approval-gated fix proposals mean a developer reviews the proposed change before it merges, rather than an agent silently rewriting code. This is a deliberate constraint: for apps where the code was generated by an agent, unattended auto-fixing can introduce as much risk as it removes.
+
+LyraShield also runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/). This means security checks happen where the agent writes the code, not only in a separate CI step that runs after the fact. v1 coverage pairs the agentic pentest with SCA, secrets scanning, a reusable GitHub Action, and SARIF output so results are portable and can flow into the same GitHub code scanning view that GHAS populates.
+
+The evidence-state model is designed for the moment a team must decide whether to ship. A finding that a scanner reports as critical may be unreachable in the deployed app, and a low-severity pattern may be trivially exploitable given the runtime configuration. LyraShield's agentic pentest tests those predictions and records what it found, so the release decision is based on proof rather than severity scores. That record is immutable, which means it can be exported, archived, and presented to a reviewer or auditor weeks or months later without risk of silent edits.
+
+## Who each tool fits
+
+Use GitHub Advanced Security when you want deterministic, continuously running scanning and secret detection embedded in GitHub, and you have the engineering capacity to triage and fix findings yourself. GHAS is the established choice for organizations already standardized on GitHub that want scanning, Dependabot, and secret scanning in one platform, with governance features like delegated bypass and security campaigns for enterprise scale. The per-active-committer pricing model aligns cost with usage, and public repository coverage is free.
+
+Use LyraShield AI when the bottleneck is not detection but proof: you need to decide whether an AI-built app is safe to release, you want evidence that fixes actually worked, and you want an immutable record for compliance or handoff. The two are complementary rather than exclusive. A common setup is GHAS for continuous scanning inside GitHub and LyraShield for the assurance run before a release, with both feeding SARIF into the same view.
+
+There is genuine overlap in detection, and neither tool should be framed as a strict replacement for the other. A team that has invested in CodeQL query packs and Dependabot automation gets continuous value from GHAS every day. LyraShield earns its place at the release gate, where the question shifts from what patterns exist to whether the app is safe to ship. For organizations with compliance obligations that require evidence of verification, that separation of concerns is the practical reason to run both.
+
+| Dimension | GitHub Advanced Security | LyraShield AI |
+|---|---|---|
+| Primary goal | Continuous detection inside GitHub | Release assurance with proof for AI-built apps |
+| Detection model | CodeQL SAST plus AI detections, secret scanning, Dependabot SCA | Agentic pentest plus SCA plus secrets, evidence states |
+| Fix model | Copilot Autofix suggestions | Approval-gated fix proposals, retest before close |
+| Agent integration | Runs in GitHub workflows | MCP inside AI coding agents plus GitHub Action |
+| Output | GitHub security alerts, SARIF | Immutable assurance record, SARIF |
+
+For the full side-by-side see the [GitHub Advanced Security comparison page](/compare/github-advanced-security). If you are securing a Cursor-built app, the [Cursor app security checklist](/blog/cursor-app-security-checklist) pairs well with either tool.
+
+## Why teams choose LyraShield for AI-built apps
+
+Teams choose LyraShield when their release decision depends on proof, not just a list of findings. The agentic pentest validates whether a detected issue is real against the running app, the immutable evidence record survives personnel changes and audits, and approval-gated fixes keep a human in the loop on every change an agent proposes. For regulated industries or any context where a reviewer must sign off before production, that record is the difference between a scan report and a defensible release decision.
+
+This is not a claim that LyraShield detects more patterns than CodeQL. GHAS has years of query development, a deep rule ecosystem, and the weight of GitHub's infrastructure behind it. The value LyraShield adds is closing the loop: target, review, evidence, fix, retest, report. For apps where the code was generated by an agent and the team needs to sign off before production, that loop is the missing piece between detection and decision.
+
+LyraShield is live with open registration. Some platform features remain on the near-term roadmap and are not yet live, so check the current status on the site before relying on a specific capability. Run the [AI app security checklist](/tools/ai-app-security-checklist) on your project, then sign up at [https://lyrashieldai.com](https://lyrashieldai.com) to start a release-assurance run.

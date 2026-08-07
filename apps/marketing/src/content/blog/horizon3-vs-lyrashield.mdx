@@ -1,0 +1,87 @@
+---
+title: Horizon3 NodeZero vs LyraShield AI App Security
+description: Horizon3 NodeZero runs autonomous network pentests on prem and cloud; LyraShield wraps AI app testing in a release assurance loop with approval gated fixes.
+draft: false
+heroImage: agent-security-35
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+pubDate: 2026-08-07
+author: lyrashield-team
+faq:
+  - q: Is Horizon3 NodeZero better than LyraShield?
+    a: They target different surfaces. NodeZero runs autonomous network pentests across on prem, cloud, and hybrid infrastructure. LyraShield is a release assurance loop for AI built apps that separates detection from proof and gates fixes on approval. Choose by what you need to test.
+  - q: Does LyraShield replace NodeZero?
+    a: No. NodeZero maps and exploits network weaknesses, credentials, and misconfigurations across an estate. LyraShield focuses on the release decision for an AI built app. Some teams use NodeZero for network posture and LyraShield for per release application assurance.
+  - q: Does NodeZero test web applications?
+    a: NodeZero covers infrastructure attack surfaces including cloud and Kubernetes and can test web facing assets from an external perspective. It is network and infrastructure first, not application release workflow first. LyraShield centers on the AI built app release loop.
+  - q: Which fits a team shipping AI built web apps?
+    a: A team that needs continuous network and infrastructure pentesting may prefer NodeZero. A team that wants a structured release assurance loop with immutable evidence and approval gated fixes for each AI built app may prefer LyraShield. Try the free checklist to decide.
+---
+
+Horizon3 NodeZero is an autonomous pentesting platform that runs continuous network pentests across on prem, cloud, and hybrid infrastructure without agents. LyraShield is a release assurance loop for AI built apps that separates detection from proof, records evidence in defined states, and gates fixes on approval. NodeZero excels at network level attacker emulation at estate scale; LyraShield targets the release decision for apps generated or heavily modified by AI coding tools.
+
+This comparison helps when your team ships AI built applications and needs to decide between continuous network pentesting and a structured application release assurance workflow. Both prove real exploitable risk rather than listing theoretical findings. The difference is the surface they test and what they wrap around the fix step.
+
+For the broader framing of why AI built apps need a release check, read the [vibe coding security guide](/blog/vibe-coding-security-guide), which defines the trust boundaries and evidence states that this comparison builds on.
+
+## What Horizon3 NodeZero is and where this comparison matters
+
+NodeZero navigates your network without scripts, chains weaknesses the way an attacker would, and safely exploits them. Per its [platform page](https://horizon3.ai/nodezero/), it runs from a free Docker host or OVA for internal tests and from the Horizon3 cloud for external tests, can be scheduled daily, and delivers prioritized impacts with diagrammed attack paths and proof of exploitation.
+
+This comparison matters when your engineering team uses AI coding tools like Cursor, Claude Code, or Windsurf to generate or heavily modify web applications, and you need to decide whether continuous network pentesting or a per release application assurance loop is the right control for your release process.
+
+## Where Horizon3 NodeZero is genuinely strong
+
+NodeZero has clear strengths that any fair comparison should acknowledge. Its core value is autonomous, continuous network pentesting at scale. Its [internal pentesting page](https://horizon3.ai/nodezero/internal-pentesting/) describes how it discovers assets, fingerprints services, compromises credentials, moves laterally, bypasses controls, and pivots into cloud environments like S3, EC2, Microsoft 365, and Azure VMs. Many attack paths it executes do not involve any CVE.
+
+NodeZero goes far beyond vulnerability scanning. It chains weaknesses together without a predefined script, conducts post exploitation with remote access tools, and uses [MITRE](https://mitre.org) ATT and CK techniques such as credential dumping. It scales to large networks, can test the whole RFC 1918 private IP space, and runs concurrent tests in different segments. It also offers [external pentesting](https://horizon3.ai/nodezero/external-pentesting/) with passive asset discovery using DNS and OSINT, plus cloud and Kubernetes pentesting from dedicated ephemeral resources in an isolated VPC.
+
+For a security team that wants continuous, attacker style coverage of a network and infrastructure estate, NodeZero is a credible and well documented choice.
+
+## Where LyraShield's release assurance approach differs
+
+LyraShield is built for a different surface and decision: the release of an application that an AI coding tool generated or heavily modified. Its loop is target, review, evidence, fix, retest, report. You authorize a specific application target, run a review that combines agentic pentest with software composition analysis and secrets scanning, and record evidence in defined states rather than a single pass or fail.
+
+The structural difference is that LyraShield separates detection from proof and gates the fix on approval. A finding moves through evidence states, and a fix proposal is prepared for human approval before it is applied and retested. The final output is an immutable assurance record that supports a release decision. This matters when the question is whether a specific build is ready to ship, not just which network paths are exploitable.
+
+AI built apps add a wrinkle that network pentesting does not fully address. The generated code, the agent permissions, the resolved dependencies, and the deployment configuration can all change between builds, and a clean network run against one environment does not carry to the next application version. LyraShield is designed to be re run per build, so the evidence record matches the build that is about to ship rather than a prior snapshot of the infrastructure.
+
+LyraShield runs as a [Model Context Protocol](https://modelcontextprotocol.io) server inside AI coding agents, so checks happen where the code is generated. Its v1 coverage pairs agentic pentest with SCA, secrets scanning, a GitHub Action with a diff aware gate, and SARIF output, so the deterministic layers run alongside the agentic layer. The diff aware gate means the check focuses on what changed in a given pull request, which keeps the loop fast enough to run on every build.
+
+## How the two workflows compare
+
+| Use case | Better fit |
+| --- | --- |
+| Continuous network pentesting across on prem and cloud | Horizon3 NodeZero |
+| Pre release assurance loop for a specific AI built app | LyraShield |
+| Credential, lateral movement, and AD attack path testing | Horizon3 NodeZero |
+| Approval gated fixes with immutable evidence states | LyraShield |
+| Cloud and Kubernetes infrastructure pentesting | Horizon3 NodeZero |
+
+For the full side by side breakdown, see the [Horizon3 comparison page](/compare/horizon3). The table above is a quick orientation; the comparison page carries the full capability and workflow detail, including where the two tools can run side by side on the same estate without overlap.
+
+## Who each tool fits
+
+Use Horizon3 NodeZero when your primary need is continuous, autonomous network and infrastructure pentesting across on prem, cloud, and hybrid environments, with credential and lateral movement testing at estate scale. It suits security teams that want to validate network posture and cloud attack paths on a recurring schedule.
+
+Use LyraShield when your primary need is a structured release assurance loop for an AI built app, where a human approves fixes and an immutable evidence record supports the release decision. It suits teams that ship AI built or AI modified apps and want the check inside the coding agent, with the deterministic SCA and secrets layers running alongside the agentic pentest in a single per build record rather than a network sweep. The [Windsurf security workflow](/blog/windsurf-security-workflow) shows how that release review fits a real AI coding setup.
+
+## Why teams choose LyraShield for AI built apps
+
+Teams pick LyraShield when the release decision is the hard part and the app was built or heavily modified by an AI coding tool. The approval gated fix loop means a human still owns the change that ships. Evidence states mean you can show what was checked, what was proven, what is limited, and what was retested, which is what an auditor or a careful reviewer asks for. Combining continuous network pentesting with a governed application release loop is stronger than either alone.
+
+The decision often comes down to the surface and who signs off. A network pentest answers which infrastructure paths are exploitable across the estate. A release assurance loop answers whether this build, with these dependencies and this agent configuration, is ready to ship, and it hands a reviewer a record that captures that decision with an approval gate on the fix. For a team that owns a release gate for an AI built app and needs to defend the call, the second answer is the one that closes the loop.
+
+As of August 2026, LyraShield is live with open registration in open beta. Some platform features remain on the near term roadmap and are not yet live; check the current status on the site before relying on a specific capability.
+
+If you want a structured release assurance loop for your next AI built app, run the free [AI app security checklist](/tools/ai-app-security-checklist) and then [register at lyrashieldai.com](https://lyrashieldai.com) to try the full loop.
+
+## Sources
+
+- [NodeZero platform overview](https://horizon3.ai/nodezero/)
+- [NodeZero internal pentesting](https://horizon3.ai/nodezero/internal-pentesting/)
+- [NodeZero external pentesting](https://horizon3.ai/nodezero/external-pentesting/)
+- [MITRE ATT and CK framework](https://mitre.org)
+- [NIST cybersecurity framework](https://nist.gov)

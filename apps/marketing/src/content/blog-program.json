@@ -1478,5 +1478,135 @@
     "targetWords": 1400,
     "batch": "batch-9",
     "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 149,
+    "title": "Aikido vs LyraShield for AI Built App Security",
+    "slug": "aikido-vs-lyrashield",
+    "query": "aikido vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 150,
+    "title": "Corgea vs LyraShield",
+    "slug": "corgea-vs-lyrashield",
+    "query": "corgea vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 151,
+    "title": "GitHub Advanced Security vs LyraShield",
+    "slug": "github-advanced-security-vs-lyrashield",
+    "query": "github advanced security vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 152,
+    "title": "Horizon3 NodeZero vs LyraShield AI App Security",
+    "slug": "horizon3-vs-lyrashield",
+    "query": "horizon3 vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 153,
+    "title": "Mobb vs LyraShield",
+    "slug": "mobb-vs-lyrashield",
+    "query": "mobb vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 154,
+    "title": "Pentera vs LyraShield for AI Built App Security",
+    "slug": "pentera-vs-lyrashield",
+    "query": "pentera vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 155,
+    "title": "Pixee vs LyraShield",
+    "slug": "pixee-vs-lyrashield",
+    "query": "pixee vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 156,
+    "title": "RunSybil vs LyraShield for AI Built App Security",
+    "slug": "runsybil-vs-lyrashield",
+    "query": "runsybil vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 157,
+    "title": "Semgrep vs LyraShield",
+    "slug": "semgrep-vs-lyrashield",
+    "query": "semgrep vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 158,
+    "title": "Snyk vs LyraShield",
+    "slug": "snyk-vs-lyrashield",
+    "query": "snyk vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 159,
+    "title": "SonarQube vs LyraShield",
+    "slug": "sonarqube-vs-lyrashield",
+    "query": "sonarqube vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 160,
+    "title": "XBOW vs LyraShield for AI Built App Security",
+    "slug": "xbow-vs-lyrashield",
+    "query": "xbow vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 161,
+    "title": "ZeroPath vs LyraShield",
+    "slug": "zeropath-vs-lyrashield",
+    "query": "zeropath vs lyrashield - comparison",
+    "cluster": "Verification",
+    "targetWords": 1400,
+    "batch": "batch-10",
+    "cta": "Pillar + Launch Checklist"
   }
 ]
