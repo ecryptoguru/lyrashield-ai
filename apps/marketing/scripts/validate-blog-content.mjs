@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import {
+  PROGRAM_ARTICLE_COUNT,
   PROGRAM_RELEASES,
   parseArticle,
   validateArticle,
@@ -167,8 +168,10 @@ function main() {
       errors.push(`unmapped article in collection: ${slug}`)
   }
   if (release === "all") {
-    if (selectedEntries.length !== 100)
-      errors.push(`blog program must contain 100 entries; found ${selectedEntries.length}`)
+    if (selectedEntries.length !== PROGRAM_ARTICLE_COUNT)
+      errors.push(
+        `blog program must contain ${PROGRAM_ARTICLE_COUNT} entries; found ${selectedEntries.length}`
+      )
   }
 
   const availableSlugs = new Set(

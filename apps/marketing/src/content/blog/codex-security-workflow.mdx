@@ -1,129 +1,124 @@
 ---
-title: "Secure an OpenAI Codex Project"
-description: "Set Codex sandbox, approval, network, environment, and MCP boundaries, then verify code changes before any release action."
-pubDate: 2026-07-17
+title: Codex app security workflow for trusted releases
+description: Lock down Codex config and MCP servers, gate dependencies and secrets, and capture SARIF evidence for every AI assisted release.
+pubDate: 2026-07-30
 updatedDate: 2026-08-07
 author: lyrashield-team
-tags:
-  - vibe-coding-security
-  - agent-security
-  - verification
+tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-03
 faq:
-  - q: "What is the difference between Codex sandbox mode and approval policy?"
-    a: "Sandbox mode limits what a command can do technically. Approval policy decides when Codex pauses for review. A permissive sandbox stays permissive even if prompts require approval, so configure both."
-  - q: "When should Codex have network access?"
-    a: "Enable it only when the task needs a named external service, such as fetching a documented dependency. Keep it off for local refactors and tests, and avoid exposing unrelated credentials to the same session."
-  - q: "Is the never approval policy safer than interactive review?"
-    a: "Not by itself. Never is useful for a tightly constrained non-interactive job, but it removes a human pause. Its safety depends on a narrow sandbox, restricted tools, limited credentials, and deterministic checks."
+  - q: Where is Codex MCP configured?
+    a: In ~/.codex/config.toml under mcp_servers tables. Use bearer_token_env_var to reference tokens from env rather than inline secrets for safer handling.
+  - q: How should I treat Codex suggested dependencies?
+    a: Run OSV and package manager audit on each PR. Block high severity issues and track any exception with owner and expiry. Never auto accept new packages.
+  - q: Is Codex CLI safe with production secrets?
+    a: No. Keep production secrets in a secret manager and outside agent context. Use scoped staging credentials and require human approval for prod access.
 ---
+OpenAI Codex CLI can read, edit and run across your repo quickly, so secure its config, MCP servers and dependency changes before shipping. This workflow shows how to lock down ~/.codex/config.toml using bearer_token_env_var, require approval for risky edits and collect SARIF for release evidence. Baseline context is in our [vibe coding security guide](/blog/vibe-coding-security-guide), then apply Codex specific controls below for team use.
 
-**Direct answer:** Run Codex with read-only or workspace-scoped filesystem access, network disabled unless the task needs a named origin, and an interactive approval policy for sensitive work. Restrict inherited environment variables and MCP tools. Review the complete diff, run focused negative tests, and keep merge or deployment authority outside the coding session.
+## Map Codex to your threat model
 
-_Configuration names and documented behavior were reviewed against OpenAI documentation on July 17, 2026. Codex surfaces evolve, so verify the active profile before relying on this example._
+Codex CLI operates with your terminal permissions. Any prompt can start reading docs, listing files, editing code and adding packages. That breadth is powerful but also risky if you grant production network or secret access to the same shell where the agent runs.
 
-Codex has two separate security controls that are easy to collapse into one mental model. The sandbox limits what generated commands can reach. The approval policy decides when execution pauses and who reviews the request. A prompt is not either control.
+Typical AI assisted risk patterns include prompt driven addition of vulnerable packages, leftover debug endpoints that bypass auth and secrets passed as env vars that get echoed to CI logs. Treat each as a trackable finding with owner and mitigation date rather than an invisible change.
 
-The [vibe coding security guide](/blog/vibe-coding-security-guide) recommends verifying the boundary that enforces a claim. For a Codex task, that means recording the sandbox, approval policy, network state, environment exposure, connected tools, and Git boundary. "Codex asked before running it" is useful evidence. It does not show that the approved command had a narrow capability.
+Use consistent references when triaging. OWASP Top Ten at [OWASP Top Ten](https://owasp.org/www-project-top-ten/) covers misconfiguration and vulnerable components that show up in AI generated back ends. Credential issues map to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html) and command injection to [CWE 78 for OS command injection](https://cwe.mitre.org/data/definitions/78.html). OpenAI platform updates and system guidance appear at [OpenAI blog](https://openai.com/blog). For release SARIF handling, see GitHub docs at [GitHub SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning).
 
-## The risky pattern: prompts around an unrestricted process
+If you also ship with Lovable or Bolt, review our [Lovable app security checklist](/blog/lovable-app-security-checklist) to keep your verification language consistent across builders while adapting config paths for Codex. That shared language helps reviewers track findings across different AI tools.
 
-**Vulnerable pattern. Do not use this for a routine repository task.**
+## Harden config.toml and MCP servers
 
-```toml
-sandbox_mode = "danger-full-access"
-approval_policy = "never"
+Codex CLI reads .codex/ config.toml from your home directory. MCP servers are defined under mcp_servers tables. This file is the control plane for external tools, so harden it like production config.
 
-[sandbox_workspace_write]
-network_access = true
-
-[shell_environment_policy]
-inherit = "all"
-```
-
-This combines unrestricted command execution, no approval pauses, broad network reach, and the developer's inherited shell environment. A generated install command, package script, or repository instruction can now interact with resources that the feature change never needed.
-
-The configuration is especially misleading because `approval_policy = "never"` sounds strict. It means prompts do not surface. It does not narrow filesystem, network, app, or MCP access. Likewise, `workspace-write` limits writes but does not make everything inside the workspace trustworthy.
-
-## Start with a production-shaped narrow profile
-
-For a normal code-editing task, use workspace-only writes, keep outbound network disabled, and retain an interactive review path. Reduce environment inheritance so common credential names do not automatically enter subprocesses.
+Secure example without inline secrets:
 
 ```toml
-sandbox_mode = "workspace-write"
-approval_policy = "on-request"
+[mcp_servers.lyrashield]
+command = "npx"
+args = ["-y", "@lyrashield/mcp"]
+startup_timeout_sec = 20
+tool_timeout_sec = 60
 
-[sandbox_workspace_write]
-network_access = false
-
-[shell_environment_policy]
-inherit = "none"
-include_only = ["PATH", "HOME", "TMPDIR", "LANG"]
+[mcp_servers.lyrashield_remote]
+url = "https://app.lyrashieldai.com/api/mcp"
+bearer_token_env_var = "LYRASHIELD_API_KEY"
+startup_timeout_sec = 15
 ```
 
-The current Codex reference documents `read-only`, `workspace-write`, and `danger-full-access` sandbox modes. It also documents `untrusted`, `on-request`, `never`, and granular approval behavior. Use the values supported by the surface and version you are running. Desktop, CLI, IDE, and cloud sessions may apply different environment boundaries.
+Key hardening for teams:
 
-If the task is inspection only, prefer read-only. If a build needs a package registry, add the smallest network path that supports the build rather than leaving general internet access available. Codex cloud separates setup from the agent phase and keeps agent internet access off by default unless enabled for the environment. Local workflows should apply the same principle even though the mechanism differs.
+Use bearer_token_env_var for remote MCP, not inline bearer_token. That keeps secrets in the shell env and out of git, shell history and logs. Keep startup_timeout_sec and tool_timeout_sec conservative so hung tools do not block verification or CI.
 
-## Treat project trust as a configuration decision
+For local stdio, use npx -y @lyrashield/mcp with env vars from shell loaded from your secret manager. The MCP protocol and auth expectations are defined at [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18) and [MCP authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
 
-An untrusted project can contain local Codex configuration, hooks, skills, and instructions. OpenAI documents that untrusted projects skip project-scoped `.codex` layers. Inspect those files before changing the project to trusted.
+Review Codex CLI config guidance at [Codex CLI repo](https://github.com/openai/codex) and security notes at [OpenAI Codex announcement](https://openai.com/index/openai-codex-system-card/). Require pull request review for any change to config.toml in team dotfiles repos and log which MCP servers were active for a given feature branch in your pull request description. That small log line helps reproduce permission issues later.
 
-Review `AGENTS.md` too. It is guidance for the agent, not an OS boundary, but a malicious edit can redirect the task or ask for a broader action. Protect changes to agent policy with ordinary review, ownership, and branch rules. Do not accept a generated policy change as housekeeping without reading the exact effect.
+## Scope permissions and project docs
 
-Use a clean branch or worktree. A small diff is easier to audit, and a worktree prevents accidental overlap with the developer's unfinished changes. The sandbox still needs to restrict paths outside that worktree.
+Codex respects AGENTS.md or similar project docs at repo root. Use that file as explicit permission policy that is versioned in git.
 
-## Restrict apps and MCP tools separately
+Include three policy blocks:
 
-Apps and MCP servers can cross the local repository boundary. A file-search tool, issue tracker, cloud console, and messaging tool have different data and mutation risks. Enable only the server and tools needed for the current task.
+Edit scope: allow src, tests and docs. Protect env files, secrets, infra and auth configs unless security owner approves. Deny direct edits to production workflow files and migration files that run automatically.
 
-Codex configuration supports per-server MCP tool allowlists and denylists, timeouts, approval settings, and environment-backed bearer tokens. Use a read-only tool where possible. Give it a credential scoped to the intended repository or workspace. A tool named `search` may still send query text to a remote service, so review the destination as well as the verb.
+Command policy: allow npm run test and build and lint, require confirm for package installs and database migrations, deny curl with secrets, deny git push to main from agent context and deny unscoped docker commands.
 
-Keep production apps disconnected from routine coding. If production access is unavoidable for diagnosis, use read-only credentials, record the request, and run it in a separate task with a narrow objective. The guide to [least privilege for MCP tools](/blog/least-privilege-mcp-tools) explains how to split capabilities by resource, action, environment, and approval.
+Network policy: state which external registries or APIs the agent may call during generation, and forbid arbitrary network egress or uploads of code snippets to unknown endpoints.
 
-## Broaden access for one task, not for the whole profile
+Pair policy with shell controls. Run Codex in a project scoped shell session that does not have production credentials loaded. Use temporary staging credentials with short expiry and rotate after heavy agent work. Ask Codex to write a short plan markdown before large edits and review that plan before execution. That mirrors plan mode ideas from other agentic tools and reduces blast radius when prompts are vague.
 
-Some work genuinely needs a sibling directory, package registry, or remote test service. Make that exception visible and temporary. Start a separate task with the added writable root or network destination, use a token limited to the test environment, and remove the exception when the task ends.
+If the agent proposes broad regex replacements across many files, split them into smaller reviewed commits with tests. Broad replacements are where credential patterns or auth bypasses are most likely to be missed during review.
 
-Do not turn a one-off need into the default profile. A broad default becomes invisible after a few successful sessions. The next repository may contain different scripts, hooks, or untrusted fixtures while inheriting the same authority.
+## Gate supply chain and secrets
 
-When the task uses generated files, keep their mechanical diff separate from policy and application changes. Confirm the generator version, review the command that ran it, and inspect unexpected files. If the generator needs network access, pin the input or dependency where possible so another reviewer can repeat the result.
+AI agents solve tasks by adding dependencies, which introduces supply chain risk if you do not gate it.
 
-## Keep network and credentials aligned
+Run OSV checks via [OSV database](https://osv.dev) and your package manager audit on every pull request. Block high severity findings outright. Check lockfile diffs each PR: if a new transitive dependency appears with low download count or recent maintainer change, flag for manual review. Keep a documented exception process with owner, risk note and expiry date so exceptions do not live forever.
 
-Network access and credential inheritance should be reviewed together. Network without credentials can still leak source or prompts. Credentials without a route can still appear in logs, test snapshots, or generated output. The safest ordinary setup has neither unless the task requires them.
+For secrets, scan with gitleaks or trufflehog and fail on new findings. Verify that bearer_token_env_var references point to env that is not logged. Check CI logs for accidental secret echo and redact if needed. The GitHub SARIF shape for upload is at [GitHub SARIF upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github).
 
-When network access is needed, name the expected domains and data. Prefer package-manager lockfile installs over arbitrary download-and-run commands. Review redirects and post-install scripts. Do not add a cloud token to the environment merely because the deployment CLI is installed.
+Require that .env.example contains only placeholders. Production secrets belong in your secret manager, not in agent context or in committed config. Check that editor chat history is not pasted into issues with tokens.
 
-Environment filtering reduces accidental exposure, but it cannot make a credential safe after you deliberately pass it to a command. Use a task-specific token with narrow permissions and short lifetime where the provider supports that model.
+## Verify release with evidence
 
-## Verify code completion separately from release approval
+Make verification routine, not heroic, by automating evidence capture.
 
-Codex can implement and test a change without receiving merge or deployment authority. A practical review sequence is:
+Steps per release:
 
-1. Ask for a read-only analysis and list of files likely to change.
-2. Switch to workspace writes only after the scope makes sense.
-3. Inspect `git status`, the diff, new files, and deleted files.
-4. Run focused tests and at least one denied or malformed-input case.
-5. Scan the diff for secrets, weakened authorization, disabled checks, broad CORS, and added external destinations.
-6. Commit to a branch. Let a protected pull request and CI own the release boundary.
+1. Run lint, typecheck, secret scan and dependency audit locally and in CI.
+2. Convert each tool output to SARIF where supported.
+3. Upload SARIF to GitHub code scanning so findings appear in the pull request checks.
+4. Write a short docs slash security evidence file listing active MCP servers, commit, scan tools run and reviewers.
+5. Store build and SARIF artifacts with release tag for later audit.
 
-Use the browser-local [AI app security checklist](/tools/ai-app-security-checklist) to record the controls you can demonstrate. It cannot inspect your Codex profile, validate an MCP server, or decide whether a generated authorization rule matches the product requirement.
+That file plus SARIF provides a repeatable proof point for internal review and for later external assessment. Keep evidence for at least a few releases so you can show trend and closure of exceptions. See additional scan guidance at [GitHub code scanning](https://docs.github.com/en/code-security/code-scanning) and [MDN fetch security](https://developer.mozilla.org/en-US/docs/Web/Security).
 
-Do not treat Codex Security scan output as independent verification of the application's runtime behavior. A result can identify a candidate or support review. Exploitability, coverage, and successful remediation require their own evidence. After a fix, run a fresh test against the corrected behavior and retain the limitation when the test cannot cover production configuration.
+| Area | Config location | Secure default |
+| --- | --- | --- |
+| MCP auth | .codex/ config.toml mcp_servers with bearer_token_env_var | No raw tokens in file, env from secret manager, short timeouts |
+| Tool scope | AGENTS.md policy and shell session | Edits limited to src and tests, protected paths need approval |
+| Dependencies | CI with OSV and package audit | High severity blocks merge, lockfile diff reviewed, exceptions tracked |
+| Secrets | gitleaks plus SARIF upload | No secrets in repo or logs, env files placeholder only |
+| Plans | Plan markdown in pull request | Plan reviewed before broad edits, auth changes flagged with tests |
+| Evidence | GitHub SARIF and docs slash security evidence | SARIF on PR and main, MCP list logged, release tag linked |
 
-## What automation cannot prove
+## Why pair Codex with LyraShield
 
-Sandboxing can limit command execution. It does not prove that generated business logic enforces tenant boundaries. An approval shows that someone permitted an action. It does not show that the action was safe. Passing CI covers the cases in CI, under CI's configuration.
+LyraShield AI at https://lyrashieldai.com is designed as agent native application security for AI built software. The intended loop is Target to Scan to Verified Finding to Fix PR to Retest to Report, so findings stay tied to code changes and verifiable evidence.
 
-Record enough context to repeat the review: Codex surface and version, sandbox or permission profile, approval behavior, network state, enabled apps and MCP tools, tests, and excluded paths. That record turns "the agent checked it" into a claim another reviewer can examine.
+MCP integration fits Codex config.toml design. Stdio via npx -y @lyrashield/mcp runs locally with env var secrets, remote at https://app.lyrashieldai.com/api/mcp is designed to accept bearer_token_env_var for team use. The GitHub Action is designed to be diff aware, so it scans what changed and posts verified findings with a proposed automated fix PR path. SARIF output is designed for GitHub code scanning so results appear in your pull request.
 
-## Sources
+Build honesty: Sprints 0 to 2 shipped. Scan engine MVP, automated fix PR generation and billing are on the roadmap and not live today. LyraShield today defines the config pattern and SARIF shape so teams can prepare for upcoming automated verification. V1 is designed to include agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, which complements Codex for Node and Python stacks where dependency risk is high.
 
-- [OpenAI: Agent approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security)
-- [OpenAI: Configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
-- [OpenAI: Model Context Protocol](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
-- [OpenAI: Agent internet access for Codex cloud](https://learn.chatgpt.com/docs/cloud/internet-access)
-- [OWASP: LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)
-- [GitHub: About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
+## Final checks before you ship
+
+Before merge and release, confirm these controls.
+
+* Confirm config.toml uses bearer_token_env_var for all remote MCP and no raw bearer tokens are in file or dotfiles repo.
+* Confirm AGENTS.md lists protected paths, command allow list and network policy.
+* Run and upload dependency and secret SARIF to code scanning.
+* Require tests and reviewer for auth, payment or file upload changes.
+* Update security evidence file per release with MCP list, commit and reviewers.
+
+Apply the same evidence flow with our [AI app security checklist tool](/tools/ai-app-security-checklist) and join the waitlist at https://lyrashieldai.com for upcoming scan milestones. For cross builder consistency, also review [Bolt app security checklist](/blog/bolt-app-security-checklist) and [Replit app security checklist](/blog/replit-app-security-checklist).

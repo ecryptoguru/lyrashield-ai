@@ -1,0 +1,183 @@
+---
+title: OpenClaw App Security Checklist
+description: 'Secure OpenClaw gateway: MCP registry, toolFilter, channel inputs, TLS, and CI evidence for AI-built app releases.'
+pubDate: '2026-07-30'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification, supply-chain]
+draft: false
+heroImage: agent-security-21
+faq:
+  - q: 'Where is OpenClaw MCP config?'
+    a: '~/.openclaw/openclaw.json JSON5 under mcp.servers. Manage via openclaw mcp list/show/set/unset and verify with openclaw mcp doctor.'
+  - q: 'How do I filter MCP tools in OpenClaw?'
+    a: 'Use mcp.servers.<name>.toolFilter with include/exclude globs. Applies to discovered tools and utility wrappers like resources_list.'
+  - q: 'How do I add LyraShield to OpenClaw?'
+    a: 'openclaw mcp add --command npx --arg -y --arg @lyrashield/mcp or transport streamable-http with url https://app.lyrashieldai.com/api/mcp and Bearer header.'
+  - q: 'Does OpenClaw require OAuth for remote MCP?'
+    a: 'Supports OAuth with auth:oauth and openclaw mcp login. Tokens stored under OpenClaw state, not in config literals.'
+---
+
+OpenClaw is a local-first personal AI gateway with 29 chat channels, client and server MCP, and a managed registry via openclaw mcp CLI and Control UI. To ship apps securely with OpenClaw, pin ~/.openclaw/openclaw.json as security policy, set toolFilter allowlists and timeouts per server, validate channel inputs that can trigger repo writes, use TLS or mTLS for remote transports, and enforce diff-aware SARIF gates with human review on auth and payment paths.
+
+If you are new to AI-generated code risks, start with the [vibe coding security guide](/blog/vibe-coding-security-guide) for the shared baseline before applying this checklist.
+
+## 1. Pin gateway config and treat `~/.openclaw/openclaw.json` as security policy
+
+OpenClaw reads optional JSON5 from `~/.openclaw/openclaw.json`. Strict validation rejects unknown keys, only `$schema` is allowed at root, and the gateway watches and hot-applies changes by disposing cached session MCP runtimes. Saved definitions live under `mcp.servers` and are consumed by embedded OpenClaw and runtime adapters. CLI does not connect to target servers during `list/show/set/unset`; `doctor` checks static issues, `doctor --probe` and `probe` perform live connection proof.
+
+Baseline:
+- Commit a template, not the live file. Live file contains tokens and TLS paths. Track a `openclaw.json.example` with `enabled: false` and `toolFilter` defaults.
+- Avoid symlinked layouts, OpenClaw-owned writes replace atomically via rename and will replace the symlink target.
+- Use `OPENCLAW_CONFIG_PATH` only pointing at a real file. Atomic replace semantics matter for audit trails.
+
+## 2. Filter MCP tool surface with `toolFilter`, timeouts, and parallel hints
+
+The reference you verified live shows canonical shape:
+
+```json5
+{
+  mcp: {
+    servers: {
+      docs: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-fetch"],
+      },
+      remote: {
+        url: "https://app.lyrashieldai.com/api/mcp",
+        transport: "streamable-http", // streamable-http | sse
+        requestTimeoutMs: 20000,
+        connectionTimeoutMs: 5000,
+        supportsParallelToolCalls: true,
+        headers: {
+          Authorization: "Bearer ${MCP_REMOTE_TOKEN}",
+        },
+        auth: "oauth",
+        toolFilter: {
+          include: ["search_*"],
+          exclude: ["admin_*"],
+        }
+      }
+    }
+  }
+}
+```
+
+LyraShield integration using the same primitives, docs at [openclaw integration guide](/docs/integrations/openclaw):
+
+Local stdio:
+```bash
+openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp
+```
+
+Remote Streamable HTTP:
+```bash
+openclaw mcp add lyrashield --url https://app.lyrashieldai.com/api/mcp --transport streamable-http --header "Authorization=Bearer ${LYRASHIELD_API_KEY}"
+```
+
+Or JSON5:
+```json5
+{
+  mcp: {
+    servers: {
+      lyrashield: {
+        command: "npx",
+        args: ["-y", "@lyrashield/mcp"],
+        toolFilter: {
+          include: ["scan_target", "get_findings"],
+          exclude: []
+        },
+        requestTimeoutMs: 20000
+      },
+      lyrashield_remote: {
+        url: "https://app.lyrashieldai.com/api/mcp",
+        transport: "streamable-http",
+        headers: {
+          Authorization: "Bearer ${LYRASHIELD_API_KEY}"
+        },
+        requestTimeoutMs: 20000,
+        toolFilter: {
+          include: ["*"],
+          exclude: ["delete_*"]
+        }
+      }
+    }
+  }
+}
+```
+
+Checklist:
+- Always set `toolFilter`. Include globs like `search_*` for broad servers, exact names for sensitive verifiers. Exclude `admin_*` and `delete_*`. Filter also applies to utility wrappers `resources_list`, `resources_read`, `prompts_list`, `prompts_get`.
+- Set per-server `requestTimeoutMs` and `connectionTimeoutMs`. Use `supportsParallelToolCalls: false` unless concurrency is intentional.
+- Use `enabled: false` to retain definition but exclude from discovery rather than deleting, preserves audit trail.
+- Run `openclaw mcp status --verbose` to view resolved transport/auth/filter without connecting, and `openclaw mcp doctor` to catch literal secrets, missing TLS files, and disabled servers.
+
+Comparable pattern in [hermes-app-security-checklist](/blog/hermes-app-security-checklist) `tools.include` and [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checklist) permission globs.
+
+## 3. Harden channels: 29 inputs, one gateway authority
+
+OpenClaw converges 29 chat channels into one gateway. Each channel message is untrusted input that can become a tool call if your agents are trigger-happy. That is direct LLM02 Insecure Output Handling → LLM08 Excessive Agency.
+
+Actions:
+- Require explicit intent for any channel message that writes code or pushes to git. Do not allow auto-execution from channel payloads.
+- Sanitize channel-provided URLs and filenames. OWASP A03 Injection includes SSRF via URL fetched by an MCP server.
+- Log gateway sessions with 10-minute idle TTL in mind, session-scoped bundled MCP runtimes clean up on TTL. Do not rely on idle cleanup for secret rotation; script teardown.
+- Use OAuth where possible. `openclaw mcp login <name>` performs the MCP OAuth flow and stores credentials under OpenClaw state. Prefer `auth: "oauth"` over literal `headers.Authorization` for third-party remotes; for LyraShield's own remote, Bearer `lsk_` via env var is the designed pattern per [integrations hub](/docs/integrations).
+
+## 4. Lock TLS, mTLS, and transport choice
+
+OpenClaw supports `transport: streamable-http | sse | stdio`, `sslVerify`, `clientCert`/`clientKey` for mTLS, and optional `codex` projection controls that scope a server to listed agent IDs.
+
+Hardening:
+- For private MCP endpoints, set `sslVerify` to a CA bundle path, not `false`. `sslVerify: false` is only for explicitly trusted private HTTPS.
+- For mTLS, set `clientCert` and `clientKey` paths. Paths are validated by `doctor`.
+- Prefer `streamable-http` for bidirectional streaming with remote verifiers. `sse` is legacy compat. Use `stdio` for local-first verifiers like `npx -y @lyrashield/mcp` to keep secrets on host.
+
+## 5. Build release evidence that survives gateway sessions
+
+OpenClaw's strength is personal automation. For app delivery, that automation needs deterministic gates that outlive the gateway session.
+
+Target PR gate:
+- GitHub Action designed to be diff-aware: only routes/files changed by OpenClaw-driven commits are mandatory for retest.
+- SARIF emission from all scanners so GitHub Advanced Security has a single pane for CWE/CVSS. Agent-generated fixes often fix one CWE-79 XSS and introduce another, retest closes that loop.
+- CODEOWNERS for auth/payment/crypto paths. OpenClaw can generate those files, but ownership must be human-declared.
+- Retain `openclaw mcp list` output and embedded tool lists as build artifacts. If a finding is disputed, you can prove which verifier version and toolFilter were active, comparable to the artifact retention recommended in [amp-app-security-checklist](/blog/amp-app-security-checklist) and [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist).
+
+| # | Control | Where | Risk |
+|---|---------|-------|------|
+| 1 | Pin `openclaw.json` template, live file gitignored | `~/.openclaw/openclaw.json`, `OPENCLAW_CONFIG_PATH` | Secrets in git, symlink overwrite |
+| 2 | `toolFilter` include/exclude + disable wrappers | `mcp.servers.*.toolFilter`, `enabled: false` | Overbroad MCP tool can delete or exfil |
+| 3 | Timeouts + parallel hint | `requestTimeoutMs`, `connectionTimeoutMs`, `supportsParallelToolCalls` | Hung server holds creds, race in parallel calls |
+| 4 | TLS/mTLS pinning | `sslVerify`, `clientCert`, `clientKey`, `doctor` | MITM on private MCP, missing cert not caught |
+| 5 | Channel input validation | Gateway, 29 channels | Chat message triggers repo write/push |
+| 6 | Diff-aware SARIF gate + CODEOWNERS | `.github/workflows/*`, `CODEOWNERS` | AI auth bypass ships, no owner on auth file |
+
+## FAQ
+
+### Q: Where is OpenClaw MCP config and how do I manage it safely?
+`~/.openclaw/openclaw.json` JSON5 under `mcp.servers`. Manage via `openclaw mcp list`, `show <name>`, `set <json>`, `configure`, `tools --include/--exclude`, `login <name>`, `logout <name>`, `reload`, `unset <name>`. `status --verbose` shows resolved auth without connecting. Browser Control UI at `/settings/mcp` (`/mcp` alias) shows inventory and filter summary.
+
+### Q: How do I filter MCP tools least-privilege?
+Use `toolFilter.include` whitelist and `toolFilter.exclude` blacklist with exact names or `*` globs. Includes apply to `resources_list`, `resources_read`, `prompts_list`, `prompts_get` wrappers too. Set `enabled: false` to keep definition but exclude from discovery.
+
+### Q: How do I add LyraShield MCP to OpenClaw?
+Stdio: `openclaw mcp add lyrashield --command npx --arg -y --arg @lyrashield/mcp`. Remote: `--url https://app.lyrashieldai.com/api/mcp --transport streamable-http --header "Authorization=Bearer ${LYRASHIELD_API_KEY}"`. Manage OAuth via `openclaw mcp login lyrashield_remote` if proxying. Docs at [openclaw integration guide](/docs/integrations/openclaw).
+
+### Q: Does OpenClaw support OAuth for remote MCP?
+Yes. Set `auth: "oauth"` and run `openclaw mcp login <server>`. Tokens are stored under OpenClaw state and hot-applied on config change. OAuth scope/redirect/client metadata overridable via `oauth` object.
+
+### Q: What about OpenClaw's `codex` projection controls?
+`mcp.servers.<name>.codex` with `agents: ["main"]` and `defaultToolsApprovalMode: approve|auto|prompt` scopes that MCP server to listed OpenClaw agent ids for Codex app-server threads only. OpenClaw strips `codex` block before passing native `mcp_servers` to Codex. Does not affect ACP or other adapters.
+
+Primary references for this gateway setup: [OWASP Top 10](https://owasp.org/www-project-top-ten/) for A03 injection via channel inputs, [CWE-20](https://cwe.mitre.org/data/definitions/20.html) and [MITRE ATT&CK](https://attack.mitre.org/) for input handling and initial access patterns, [Model Context Protocol docs](https://modelcontextprotocol.io/docs) for toolFilter and transport choice, [GitHub code scanning docs](https://docs.github.com/en/code-security/code-scanning) for SARIF retention, and the [OpenClaw repo](https://github.com/openclaw/openclaw) for verified config shape.
+
+## Why pair OpenClaw with LyraShield
+
+OpenClaw gives you local-first gateway power: one control plane for 29 channels, client-and-server MCP, and a verified registry with `doctor`/`probe`. LyraShield is designed to be the narrow verifier on that gateway: `Target → Scan → Verified Finding → Fix PR → Retest → Report` with SCA and secrets feeding SARIF, not another general-purpose agent.
+
+The integration surface matches OpenClaw primitives exactly: local `npx -y @lyrashield/mcp` for developer machines and remote `https://app.lyrashieldai.com/api/mcp` with `lsk_` Bearer for centralized revocation, both behind `toolFilter` and `requestTimeoutMs`. The combination is about channel-to-release integrity, inputs from 29 channels go through least-privilege MCP, out through diff-aware CI, with Fix PR → Retest intended to prevent drift. Scan engine MVP, Fix-PR, and billing are not live; current value is waitlist access, integration YAML validated by `openclaw mcp doctor --probe`, and participation in hardening the gateway-to-CI path.
+
+Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
+
+## CTA
+
+Join the waitlist for OpenClaw config templates, `toolFilter` presets, and early access to the verification loop: https://lyrashieldai.com

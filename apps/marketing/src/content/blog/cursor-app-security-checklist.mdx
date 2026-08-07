@@ -1,117 +1,144 @@
 ---
-title: "Secure a Cursor-Built App Before Launch"
-description: "Review Cursor data handling, project rules, dependencies, app controls, agent permissions, and independent evidence before launch."
-pubDate: 2026-07-17
+title: Cursor app security checklist for AI built code
+description: Harden Cursor built apps before release with MCP config checks, rules hardening, secret scanning, dependency review and verified evidence.
+pubDate: 2026-07-30
 updatedDate: 2026-08-07
 author: lyrashield-team
-tags:
-  - vibe-coding-security
-  - agent-security
-  - supply-chain
-  - verification
+tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-04
 faq:
-  - q: "Does Cursor Privacy Mode make an app secure?"
-    a: "No. Privacy Mode changes how Cursor and its model providers may handle data. It does not test the app's authorization, dependency integrity, server configuration, tenant isolation, or deployed behavior. Review those controls separately."
-  - q: "Is .cursorignore enough to keep secrets out of Cursor?"
-    a: "No. Treat ignore configuration as one input control, not a secret-management boundary. Remove secrets from the workspace, review what indexing and prompts can include, use synthetic fixtures, and rotate any credential that may have been exposed."
-  - q: "Should project rules be reviewed before launch?"
-    a: "Yes. Files under .cursor/rules and root instruction files can influence agent behavior. Keep them versioned, assign owners, require protected review, and test which rules are active in the exact Cursor workflow used by the team."
-  - q: "Are green tests enough to launch a Cursor-built app?"
-    a: "No. Tests may omit abuse cases or repeat assumptions from the generated implementation. Add human-defined security invariants, negative authorization and tenant tests, dependency review, and evidence from the deployed surface."
+  - q: How do I store MCP tokens securely in Cursor?
+    a: Use .cursor/mcp.json with env var interpolation and never commit raw tokens. Reference secrets with env var interpolation and load them from your shell or secret manager at runtime.
+  - q: When should I run SARIF upload for Cursor built code?
+    a: Upload SARIF on every pull request and on main branch builds. Keep the SARIF artifact for release evidence and review verified findings before merging.
+  - q: Do Cursor rules replace code review?
+    a: No. Rules guide behavior but do not enforce security. Pair rules with dependency scanning, secret scanning and an external verification step.
 ---
+Cursor lets you ship fast but AI generated code can hide secrets, vulnerable packages and overly broad tool access. This checklist shows how to review Cursor rules, lock down .cursor/mcp.json with env var references, gate dependencies and secrets, and capture SARIF for release evidence. Start with our broader [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls then apply the Cursor specific steps below.
 
-**Direct answer:** Before launching a Cursor-built app, review what data entered Cursor, protect its project rules, verify dependencies, test authorization and tenant boundaries, remove production credentials from agent reach, and run independent negative tests against the deployed surface. Cursor privacy and agent settings affect the development tool; they do not verify the security of the application it helped create.
+## Why cursor builds need a review
 
-Cursor can speed up implementation, but the editor is only one part of the release path. The app still has a runtime, database, identity model, dependencies, deployment workflow, and production permissions. A setting in the editor cannot establish that those pieces enforce the intended policy.
+Cursor composes code from prompts, editor context and connected MCP servers. That speeds delivery but also widens the surface for prompt injected code, leftover credentials and transitive dependency risk. Unlike traditional code, AI assisted edits can appear in many files in one session, so manual spot checks miss patterns.
 
-Use the six-part sequence below as a release review. It applies the [full security guide for AI-built apps](/blog/vibe-coding-security-guide) to a Cursor workflow without assuming Cursor caused every defect.
+A lightweight pre release review helps. If you also ship with other builders, compare patterns in our [Lovable app security checklist](/blog/lovable-app-security-checklist) to see how rules hardening and MCP lockdown translate across tools. For Cursor specifically, focus on three risk areas: rules that over grant trust, MCP servers with broad tool scopes and secrets that leak into the repo.
 
-| Review area          | Evidence to collect before launch                                                                     |
-| -------------------- | ----------------------------------------------------------------------------------------------------- |
-| Data handling        | Approved data classes, current Cursor settings, and a record of any sensitive prompt or file exposure |
-| Project instructions | Reviewed active rules, protected owners, and a harmless scope test                                    |
-| Dependencies         | Resolved lockfile, package identity review, advisory result, and install-script decision              |
-| Application controls | Negative authorization, tenant, validation, and business-state tests                                  |
-| Agent authority      | Named tools, commands, credentials, network paths, and approval rules                                 |
-| Release evidence     | Deployed-surface checks, known limitations, owner, and a fresh retest after fixes                     |
+Map your review to trusted references. OWASP Top Ten covers injection and misconfiguration patterns you will see in AI built projects, see [OWASP Top Ten](https://owasp.org/www-project-top-ten/). CWE entries like [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html) give precise weakness language for tickets. The MCP spec defines auth and tool discovery norms at [MCP authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
 
-## 1. Review what data entered Cursor
+## Harden rules and project context
 
-Start with the data, not the privacy-setting label. List the repositories, files, prompts, screenshots, terminal output, database samples, support tickets, and logs that developers exposed to Cursor. Classify each item using the same rules that govern other development services.
+Cursor rules live in .cursor/rules and in Cursor settings. Treat them as security policy, not just style hints. Version them in git and review changes like code.
 
-Cursor's [Data Use and Privacy Overview](https://cursor.com/data-use), last updated July 15, 2026 and rechecked for this article on July 17, says Privacy Mode prevents customer data from being used for training by Cursor. It also describes exceptions for abuse investigation, provider handling, codebase indexing, and temporary file caching. The page says codebase indexing uploads small chunks to compute embeddings and may store embeddings plus metadata such as hashes and file names.
+Check that rules forbid risky behaviors: no direct production database writes, no copying secrets into code, no disabling auth checks for debugging and leaving it disabled. Require that generated API routes include input validation and auth middleware. Document the sources the agent may read, for example only src and docs, not .env or secrets folders.
 
-That is a data-handling contract, not an application-security result. Confirm the current workspace and team setting. Review the provider and model choices allowed by organization policy. Do not paste production secrets, customer records, private keys, or unrestricted database exports into a prompt merely because Privacy Mode is on.
+Pin your stack guidance in rules: specify allowed package registries, minimum Node version, and how to handle lockfile updates. Cursor docs describe rules loading at [Cursor rules](https://cursor.com/docs/context/rules). Make rules explicit about shell usage: deny destructive shell patterns like rm recursive and require confirmation for database migrations.
 
-Keep live secrets outside the working tree. Use placeholders and synthetic fixtures for examples. Review `.gitignore`, `.cursorignore`, indexing settings, manually attached files, terminal output, and pasted context as separate paths. An ignore file does not recall content already pasted into chat or exposed through another tool.
+Add a final rule: any change that touches auth, payments or file upload must add a test and be flagged in the pull request description. That creates an audit trail for later verification.
 
-If a credential may have entered any unapproved path, rotate it and check use logs. Deleting a conversation is not a substitute for revocation.
+## Lock down MCP config in .cursor/mcp.json
 
-The related guide to [secrets in AI coding prompts](/blog/secrets-ai-coding-prompts) covers the inventory, synthetic-fixture, and rotation workflow in more depth.
+Cursor loads MCP servers from .cursor/mcp.json using a mcpServers object. This file is where credential leakage often happens.
 
-## 2. Protect the instructions Cursor loads
+Secure pattern:
 
-Cursor's current [rules documentation](https://docs.cursor.com/context/rules-for-ai) describes project rules under `.cursor/rules` as version-controlled and scopeable. It also describes a root `AGENTS.md` file as a simpler instruction source. Those files can shape generated code, selected commands, and review behavior, so treat them as policy-bearing code.
+```json
+{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
+      }
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "DATABASE_URL": "${env:DATABASE_URL}"
+      }
+    }
+  }
+}
+```
 
-Inventory every active project, user, and organization instruction source in the actual launch workflow. Record the Cursor version, working directory, rule type, scope, owner, and whether an agent can edit the file. Product behavior changes. Do not assume a nested rule, IDE session, CLI invocation, and hosted agent load identical context.
+Key hardening points:
 
-Put rule paths and `.github/workflows` under responsible ownership. GitHub's [CODEOWNERS documentation](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners) explains how to request reviews for matching paths. Pair that with branch protection that requires the review, because a CODEOWNERS entry alone does not block a merge.
+* Use `${env:VAR}` interpolation, not raw tokens. Env vars stay outside git.
+* Keep .cursor/mcp.json in git but validate it in CI that no literal sk keys appear. Use a secret scanner before merge.
+* Limit tool scope per server. Prefer servers that expose only needed methods, like read only database tools for code generation context.
+* Separate local and shared config. Local overrides should not be committed with personal paths.
+* For remote MCP, Cursor can call [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) with Bearer lsk key via env var. See [MCP spec overview](https://modelcontextprotocol.io/specification/2025-06-18) for transport and auth expectations.
 
-Test rule scope with a harmless fixture. One rule can ask the agent to report `root-policy`; a narrower rule can request `payments-policy` for a synthetic file. Give the test no network, secrets, or production tools. Record which instruction applies. The result covers that version and launch mode, not every future Cursor release.
+Review the MCP config on every pull request that changes tooling. Treat new MCP servers like new dependencies, with an owner and expiry review date.
 
-Review generated rule changes like deployment configuration. A plausible sentence such as "treat urgent issues as approved" can weaken an authorization boundary even though it is plain Markdown.
+## Restrict agent permissions and approval mode
 
-## 3. Verify the resolved dependencies
+Cursor agent mode can read files, run commands and edit code. Scope that power.
 
-Generated imports can point to a legitimate package, the wrong package, an outdated version, or a name that does not exist. Read the final manifest and lockfile rather than the chat that produced them.
+Set approval mode to require confirmation for shell commands, network calls and file writes outside src. Disable auto run for migrations and package installs in early development of a feature branch. Enable it only after tests pass in CI.
 
-For every new direct dependency, confirm the exact registry, owner or publisher, resolved version, lockfile integrity, maintenance state, license decision, and known-advisory result. Review transitive graph changes and package scripts before installation in an environment with credentials or network access. Pin CI actions to reviewed immutable references where the platform supports it.
+Create an allow list for commands the agent may run: npm run lint, npm run test, npm run build. Deny curl with secrets, direct git push to main, or unscoped docker commands. Document these checks in your pull request template so reviewers know what to expect.
 
-A clean advisory scan has a narrow meaning: the resolved graph did not match a covered advisory under that tool and database state. It does not prove the package has the intended identity, lacks malicious behavior, or is reachable at runtime. Preserve both the scanner result and its coverage limits.
+The Cursor docs cover terminal and tool approval at [Cursor tools](https://cursor.com/docs/agent/tools). Pair that with least privilege on your cloud provider: the developer token used for AI assisted work should not have production deploy rights. Use short lived credentials for staging and require human approval for production.
 
-## 4. Test the application policy, not the generated shape
+Log agent actions when possible. If Cursor generates a summary, paste it into the pull request so security review has context on what was automated versus hand written.
 
-Read the code path that decides who may perform each sensitive action. Authentication proves an identity. Authorization must still check the tenant, resource, verb, ownership, and business state on the server.
+## Gate dependencies and secrets before merge
 
-Create two synthetic users in separate tenants. Attempt reads and mutations across the boundary. Try an expired session, a changed resource ID, an extra writable field, a replayed request, and an action in the wrong state. Assert the durable database result and audit event, not just the HTTP status or success message.
+AI coding assistants often add packages to solve a task. That accelerates delivery but can introduce vulnerable or malicious dependencies.
 
-Repeat this for password reset, invitations, billing entitlements, file access, administrative routes, and any public share link the app exposes. Browser controls and hidden buttons do not replace server checks. Database row policies can add defense in depth, but test them using the same roles and connection path production uses.
+Run SCA on every pull request. OSV provides a broad vulnerability database at [OSV database](https://osv.dev). For Node projects, also run npm audit or pnpm audit and require that high severity advisories block merge. Record the baseline: if you must ship with a known advisory, document the exception, owner and mitigation date.
 
-Generated tests are useful regression coverage. They are not independent evidence when the same context produced both implementation and expectations. The guide to [AI-generated tests and security proof](/blog/ai-generated-tests-security) shows how to add human-defined invariants and fresh review.
+For secrets, run gitleaks or similar and fail on new findings. Check .env.example for placeholder patterns only, never real values. Validate that no bearer tokens, private keys or lsk keys are committed. The docs on SARIF upload for secret scanning results are at [SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning).
 
-## 5. Bound agent commands and credentials
+Add a pre commit hook that runs secret scanning locally, and enforce the same scan in CI. Require that any environment file changes include reviewer approval from security owner.
 
-Cursor's [security page](https://cursor.com/security), last updated April 24, 2026 and rechecked July 17, separates client and agent security from Privacy Mode and links to current agent hardening material. Review both. Data retention and command authority answer different questions.
+## Capture release evidence with SARIF
 
-The [Cursor CLI guide](https://docs.cursor.com/en/cli/using) says interactive terminal commands request approval. That prompt is not a CI control. Cursor's [parameter reference](https://docs.cursor.com/en/cli/reference/parameters) lists `--print` with write and Bash tools, while its [headless guidance](https://docs.cursor.com/en/cli/headless) documents `--force` for unattended changes. Recheck the installed version because this contract can change.
+Collect evidence that your checklist ran. SARIF gives you a standard format for security findings that GitHub code scanning can render.
 
-Do not use `--force` for a launch review. With Cursor's [CLI permissions](https://docs.cursor.com/cli/reference/permissions), allow only required source reads, one disposable report path, and reviewed command wrappers. Deny secrets, credential stores, deployment tools, other writes, and production network access. Shell rules match command bases, so `Shell(git)` is not read-only.
+Steps:
 
-Test the policy in an isolated synthetic repository under a dedicated low-privilege identity. Confirm that fixture reads and report writes work while sensitive reads, out-of-scope writes, and deployment commands are denied. Keep production credentials and network access absent.
+1. Run lint, typecheck, dependency audit and secret scan.
+2. Convert each tool output to SARIF.
+3. Upload SARIF to GitHub with the upload-sarif action.
+4. Store the SARIF artifact with the release tag.
 
-Run development agents with a dedicated low-privilege identity. Keep production cloud credentials, database owner strings, deployment tokens, personal SSH keys, and unrestricted package credentials out of the environment. Allow only the repositories, commands, network destinations, and MCP tools needed for the task.
+See GitHub guidance at [GitHub SARIF upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github). Keep a changelog entry per release listing new MCP servers, new dependencies and any risk exceptions.
 
-For sensitive mutations, show the exact command or structured action, target resource, diff, credential identity, and expiry. Bind the approval to those values on the server or workflow controller. If the proposed action changes, require another decision. A broad "continue" click is weak evidence.
+Capture screenshots or logs for manual checks that cannot be automated. Even a simple markdown file in docs slash security evidence with dates, tools run and reviewers adds verification value.
 
-## 6. Collect independent launch evidence
+| Check | Where to configure | What good looks like |
+| --- | --- | --- |
+| Rules hardening | .cursor/rules, settings | No destructive commands, auth required on routes, allowed registries pinned |
+| MCP lockdown | .cursor/mcp.json mcpServers with env interpolation | No raw keys in git, least privilege servers, reviewed on PR |
+| Agent permissions | Cursor approval mode, command allow list | Shell requires confirm, no prod deploy from agent token |
+| Dependency gate | CI with OSV and npm audit | High severity blocks merge, exceptions documented |
+| Secret gate | gitleaks, env file policy | No secrets in repo, env vars from manager, SARIF uploaded |
+| Release evidence | GitHub Actions SARIF | SARIF on PR and main, evidence file per release |
 
-Build a clean production artifact from reviewed source and lockfiles. Test the deployed surface with an identity and data set separate from the generation session. Verify security headers, transport, authentication, negative authorization paths, tenant isolation, input boundaries, error behavior, rate limits, dependency state, and observability for material failures.
+## Why pair cursor with LyraShield
 
-Record what each check covered and what it did not. A detected issue remains detected until independent evidence supports another state. A clean deterministic retest can be called retest-confirmed within its documented coverage. A skipped path, ambiguous response, or tool failure is inconclusive, not a pass.
+LyraShield AI is an agent native application security platform for AI built software, see https://lyrashieldai.com. Its design follows Target to Scan to Verified Finding to Fix PR to Retest to Report, so findings stay tied to code changes and evidence.
 
-When a fix lands, run a fresh server-owned or reviewer-owned retest against the changed build. Do not reuse the original model's statement that the problem is fixed. Preserve the artifact hash, environment, test identity, result, limitations, and reviewer.
+MCP integration is designed to fit Cursor. Local stdio via npx -y @lyrashield/mcp keeps tokens in env vars, and remote at https://app.lyrashieldai.com/api/mcp is designed to accept Bearer lsk key for team use. The GitHub Action is designed to be diff aware, so it scans what changed and posts verified findings with a proposed automated fix PR path. SARIF output is designed for GitHub code scanning so results appear in your pull request.
 
-The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help record owners and missing evidence for these six areas. It does not connect to Cursor, inspect a repository, run a scan, or approve a launch. The [secret exposure scanner](/tools/secret-exposure-scanner) can inspect selected pasted text locally for credential-like strings, but it cannot prove that Cursor never received a secret or that a detected value is live.
+Status note for honesty: Sprints 0 to 2 are shipped. Scan engine MVP, automated fix PR generation and billing are on the roadmap and not live in production today. LyraShield currently provides the checklist framework, MCP design and SARIF shape, with scans planned to be enabled in upcoming milestones. For supply chain coverage, v1 is designed to include agentic pentest plus SCA plus secrets scanning plus GitHub Action plus SARIF.
 
-## Sources
+Pairing gives you a consistent loop across editors while Cursor handles fast iteration locally.
 
-- [Cursor Data Use and Privacy Overview](https://cursor.com/data-use)
-- [Cursor Security](https://cursor.com/security)
-- [Cursor Docs: Rules](https://docs.cursor.com/context/rules-for-ai)
-- [Cursor Docs: Using Agent in CLI](https://docs.cursor.com/en/cli/using)
-- [Cursor Docs: CLI parameters](https://docs.cursor.com/en/cli/reference/parameters)
-- [Cursor Docs: CLI permissions](https://docs.cursor.com/cli/reference/permissions)
-- [Cursor Docs: Headless mode](https://docs.cursor.com/en/cli/headless)
-- [GitHub Docs: About code owners](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)
+## Launch checklist and next steps
+
+Run through this before each release and keep the evidence.
+
+1. Verify .cursor/mcp.json has no raw secrets and all servers use `${env:}`.
+2. Confirm rules file includes auth and input validation requirements.
+3. Check agent approval mode is on for shell and network.
+4. Run dependency and secret scans and upload SARIF.
+5. Document any risk exceptions with owner and date.
+6. Build and run basic auth tests.
+
+When ready, apply the same evidence pattern using our [AI app security checklist tool](/tools/ai-app-security-checklist) and join the waitlist at https://lyrashieldai.com for the upcoming scan and automated fix PR milestones.
+
+For related tool patterns, also review [Bolt app security checklist](/blog/bolt-app-security-checklist) and [V0 app security checklist](/blog/v0-app-security-checklist) to keep controls consistent across your AI builder fleet.

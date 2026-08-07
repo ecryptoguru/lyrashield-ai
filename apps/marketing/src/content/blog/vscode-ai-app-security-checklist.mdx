@@ -1,0 +1,142 @@
+---
+title: VS Code AI app security checklist for MCP hardened builds
+description: Secure VS Code with GitHub Copilot and MCP, covering mcp dot json hardening, agent permissions, secret gating and SARIF evidence.
+pubDate: 2026-07-30
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification, supply-chain]
+draft: false
+heroImage: agent-security-10
+faq:
+  - q: Where does VS Code store MCP servers?
+    a: In workspace .vscode/mcp.json using a servers key and optional inputs for secrets. User settings can also host global servers. Always reference secrets via inputs or env, never inline.
+  - q: How do I keep Copilot Chat from leaking secrets?
+    a: Never paste secrets into chat, keep .env out of chat context via settings, scan repos for tokens before push and run secret scanning in CI with SARIF upload on every pull request.
+  - q: Do VS Code prompt files need security review?
+    a: Yes. Treat .github/prompts as code. Review for overbroad file patterns, disallowed commands and missing auth requirements before merging to main.
+---
+VS Code with GitHub Copilot Chat and MCP can edit across your workspace and call external tools quickly, so you must harden .vscode/mcp.json with servers and inputs, scope Copilot permissions and capture SARIF before release. This checklist covers secure inputs for tokens, least privilege agent settings and repeatable release evidence. Baseline controls are in our [vibe coding security guide](/blog/vibe-coding-security-guide) plus VS Code specific steps below.
+
+## How VS Code AI expands risk
+
+Copilot Chat agent mode can read, edit and run commands across your workspace while MCP servers expose additional tools. A single prompt can search files, add dependencies and call an external API. Without guardrails, broad edits can miss auth checks, leave secrets in workspace settings and add vulnerable packages.
+
+Common review misses include debug endpoints that bypass auth, error handlers that log secrets and package additions with install scripts that run code. Explicit policy and verifiable evidence reduce that risk.
+
+Frame findings with standard references. OWASP Top Ten at [OWASP Top Ten](https://owasp.org/www-project-top-ten/) covers injection and misconfiguration seen in AI generated back ends. Hardcoded credential weakness maps to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html) and traversal to [CWE 22 for path traversal](https://cwe.mitre.org/data/definitions/22.html). MCP transport and auth are defined at [MCP spec](https://modelcontextprotocol.io/specification/2025-06-18) and [MCP authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). VS Code specifics are documented at [VS Code MCP docs](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) and variable handling at [VS Code inputs](https://code.visualstudio.com/docs/reference/variables-reference). For consistent language across builders, see our [Lovable app security checklist](/blog/lovable-app-security-checklist).
+
+## Harden MCP in .vscode/mcp.json with inputs
+
+VS Code uses .vscode/mcp.json with top level servers key for workspace servers. Secrets should be referenced via inputs array with password true, not hardcoded in env.
+
+Secure example with no raw secrets committed:
+
+```json
+{
+  "servers": {
+    "lyrashield-local": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "${input:lyrashieldKey}"
+      }
+    },
+    "lyrashield-remote": {
+      "type": "http",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${input:lyrashieldKey}"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "id": "lyrashieldKey",
+      "type": "promptString",
+      "description": "LyraShield API key from env",
+      "password": true
+    }
+  ]
+}
+```
+
+Hardening for review:
+
+* Use inputs with password true for tokens and fill from env or secret manager at runtime. Never commit raw keys in workspace file or user settings.
+* Keep workspace file minimal. Global servers with personal paths belong in user settings, not in git.
+* For remote MCP use https and Bearer from input. Validate that interpolation does not echo into logs. See auth expectations at [MCP auth](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
+* Validate in CI that mcp dot json files contain no raw sk or lsk literals and that input ids match expected env. Run secret scanning on every pull request.
+* Require pull request review for any server addition. Treat new MCP servers like new production dependencies with owner and review date.
+
+Discovery of servers from mcp dot json is covered at [VS Code MCP discovery](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
+
+## Scope agent and Copilot Chat permissions
+
+Copilot Chat agent mode can read and edit files and run terminal commands when approved. Define scope explicitly.
+
+Configure chat to require approval for terminal commands, package installs and edits outside src, tests and docs. Deny edits to .env, secrets and production configs and infra manifests unless security owner approves. Document allowed commands in your guide, for example npm run lint, npm run test and npm run build are allowed, while curl with secrets, git push to main from agent context and unscoped docker commands are denied.
+
+Use .github/copilot-instructions.md to state auth and validation expectations:
+
+All routes handling user data or file access must include auth middleware and input validation with zod or similar and include tests for failure paths.
+
+No direct shell exec with untrusted input. If exec is needed for image handling, list allowed binaries and sanitize args with allow list.
+
+Dependency addition needs lockfile review and audit before merge, not auto acceptance.
+
+Auth, payment or file upload change needs tests and reviewer and must be flagged in pull request description.
+
+Version prompt files as code and review them like source. Docs on prompt files at [GitHub prompt files](https://docs.github.com/en/copilot/tutorials/customization-library/prompt-files/your-first-prompt-file) and custom instructions at [Copilot instructions](https://docs.github.com/en/copilot/customizing-copilot/adding-custom-instructions-for-github-copilot) describe file locations and precedence. Capture chat summary and list of edited files in pull request for context.
+
+## Gate dependencies and secrets with SARIF
+
+AI assisted stacks accumulate packages quickly. Gate that with supply chain checks.
+
+Use OSV at [OSV database](https://osv.dev) and npm audit to block high severity issues on every pull request. Review lockfile diffs for packages with sudden maintainer change or low weekly downloads and flag for manual review. Document exceptions with owner and expiry so they do not become permanent.
+
+For secrets, run scanning that outputs SARIF and upload to GitHub code scanning. See [GitHub secret scanning](https://docs.github.com/en/code-security/secret-scanning) and SARIF support at [GitHub SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning). Validate that .vscode/mcp.json inputs resolve without emitting secrets to logs. Check .env.example for placeholders only and keep production secrets in your manager.
+
+Enforce local pre commit hooks and CI scans. Local feedback is early, CI is the gate. Require second reviewer for env handling or MCP secret input changes.
+
+## Build repeatable release evidence
+
+Make evidence routine so every release has same artifacts.
+
+Per release steps:
+
+1. Run lint, type check, secret scan and dependency audit locally and in CI.
+2. Convert outputs to SARIF where supported.
+3. Upload SARIF to GitHub code scanning.
+4. Write docs slash security evidence entry with date, commit hash, active MCP servers, tools run and reviewers.
+5. Attach logs and SARIF to release tag.
+
+SARIF upload pattern is at [SARIF artifact upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github) and overview at [GitHub code scanning](https://docs.github.com/en/code-security/code-scanning). Web header review guidance at [Next.js security](https://nextjs.org/docs/app/guides/data-security) and [MDN security](https://developer.mozilla.org/en-US/docs/Web/Security) helps frame app checks while your verified findings stay in SARIF.
+
+Keep a short changelog for MCP additions and dependency exceptions to speed future reviews and show when temporary risks closed.
+
+| Check | VS Code location | Good signal |
+| --- | --- | --- |
+| MCP servers | .vscode/mcp.json servers plus inputs with password true | No raw keys in git, inputs used, https only, reviewed in pull request |
+| Agent scope | Copilot custom instructions and approval settings | Edits limited to src and tests, shell needs confirm, protected paths enforced |
+| Dependencies | CI with OSV and audit | High severity blocks merge, lockfile diff reviewed, exceptions tracked |
+| Secrets | Secret scan SARIF upload | No tokens in repo or logs, env via manager, example files placeholder only |
+| Evidence | GitHub code scanning plus evidence file | SARIF on PR and main, MCP list per release, tag linked |
+
+## Why pair VS Code AI with LyraShield
+
+LyraShield AI at https://lyrashieldai.com is designed for AI built software as agent native application security. Flow is Target to Scan to Verified Finding to Fix PR to Retest to Report, keeping checks tied to code and evidence.
+
+MCP fits VS Code design. Local stdio via npx -y @lyrashield/mcp with inputs avoids raw keys, remote https://app.lyrashieldai.com/api/mcp is designed for Bearer lsk key via inputs. GitHub Action diff aware scan and SARIF output are designed for pull request review.
+
+Build transparency: Sprints 0 to 2 shipped. Scan engine MVP, automated fix PR and billing are on the roadmap and not live today. Current contribution is hardened mcp dot json shape using servers and inputs, permission guidance and SARIF pattern. V1 is designed to include agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, matching VS Code AI stacks.
+
+## Final gates before release
+
+Confirm before shipping:
+
+* .vscode/mcp.json uses servers and inputs with no raw secrets in repo.
+* Copilot instructions require auth and validation for sensitive routes.
+* Agent approval is on for terminal and package installs with protected paths.
+* Dependency and secret scans passed and SARIF uploaded on pull request and main.
+* Docs slash security evidence updated per tag.
+
+Reuse the loop with our [AI app security checklist tool](/tools/ai-app-security-checklist) and join the waitlist at https://lyrashieldai.com for upcoming scan milestones. For alignment across builders see [V0 app security checklist](/blog/v0-app-security-checklist) and [Base44 app security checklist](/blog/base44-app-security-checklist).
