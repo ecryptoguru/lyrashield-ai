@@ -2,8 +2,10 @@ import { readFileSync, readdirSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 import program from "../content/blog-program.json"
-import { parseArticle } from "../../scripts/blog-validation-lib.mjs"
-import { PROGRAM_ARTICLE_COUNT } from "../../scripts/blog-validation-lib.mjs"
+import {
+  PROGRAM_ARTICLE_COUNT,
+  parseArticle,
+} from "../../scripts/blog-validation-lib.mjs"
 
 describe("complete blog program", () => {
   it("has exactly the mapped public articles", () => {

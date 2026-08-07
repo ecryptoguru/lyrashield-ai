@@ -8,7 +8,17 @@ import { describe, expect, it, vi } from "vitest"
 import program from "../content/blog-program.json"
 
 import {
-import { IMAGE_CORPUS, PROGRAM_ARTICLE_COUNT } from "../../scripts/blog-validation-lib.mjs"
+  IMAGE_CORPUS,
+  PROGRAM_ARTICLE_COUNT,
+  checkExternalLinks,
+  classifySource,
+  parseArticle,
+  validateArticle,
+  validateArticleText,
+  validateImageLibrary,
+  validateProgramRoot,
+  validateUsageCounts,
+} from "../../scripts/blog-validation-lib.mjs"
 
 // Builds a shared-usage distribution of exactly IMAGE_CORPUS.shared images whose
 // assignments sum to the non-authority half of PROGRAM_ARTICLE_COUNT, with every
@@ -25,15 +35,6 @@ function sharedUsageDistribution() {
   }
   return counts
 }
-  checkExternalLinks,
-  classifySource,
-  parseArticle,
-  validateArticle,
-  validateArticleText,
-  validateImageLibrary,
-  validateProgramRoot,
-  validateUsageCounts,
-} from "../../scripts/blog-validation-lib.mjs"
 
 function createFixtureDirectory(path: string) {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Test paths are descendants of mkdtemp-created fixture roots.
