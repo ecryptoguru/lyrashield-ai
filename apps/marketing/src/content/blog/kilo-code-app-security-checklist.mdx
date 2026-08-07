@@ -2,6 +2,7 @@
 title: Kilo Code App Security Checklist
 description: 'Practical checklist for Kilo Code: lock agent rules, MCP authority, dependencies, and CI evidence before you ship AI-built code.'
 pubDate: '2026-07-30'
+updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -93,7 +94,7 @@ Hardening:
 - Set explicit `timeout` (10s default for local, 15s for remote) and use `enabled: false` to retain but disable unused servers.
 - For community MCP servers, verify publisher, transport, and requested env vars. A filesystem MCP pointing at `/` with `allow` permission is an exfiltration path.
 
-LyraShield's MCP surface is designed around a narrow, typed toolset for target-scoped scanning, `Target → Scan → Verified Finding → Fix PR → Retest → Report`. That scoping is intentional; pair it with tool-level allowlisting as shown in [kilo code integration guide](/docs/integrations/kilo-code).
+LyraShield's MCP surface is built around a narrow, typed toolset for target-scoped scanning, with the loop `target, review, evidence, fix, retest, report` separating detection from proof. That scoping is intentional; pair it with tool-level allowlisting as shown in [kilo code integration guide](/docs/integrations/kilo-code).
 
 ## 4. Lock dependencies and model supply chain
 
@@ -141,12 +142,12 @@ For supply chain context, review the [OWASP Top 10](https://owasp.org/www-projec
 
 ## Why pair Kilo Code with LyraShield
 
-Kilo Code gives you velocity: open-source agent, parallel execution, 500+ models, MCP marketplace. LyraShield is designed to add verification on top of that velocity. The planned loop, Target → Scan → Verified Finding → Fix PR → Retest → Report, is built for AI-built code where issues cluster around CWE-20 (improper input validation), CWE-287 (improper authentication), CWE-798 (hardcoded credentials), and OWASP A03 Injection / A07 Identification & Authentication Failures.
+Kilo Code gives you velocity: open-source agent, parallel execution, 500+ models, MCP marketplace. LyraShield adds release assurance for AI-built apps on top of that velocity. The loop, `target, review, evidence, fix, retest, report`, is built for AI-built code where issues cluster around CWE-20 (improper input validation), CWE-287 (improper authentication), CWE-798 (hardcoded credentials), and OWASP A03 Injection / A07 Identification & Authentication Failures. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, meaning PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-Integration is via MCP (`stdio npx -y @lyrashield/mcp` and remote Streamable-HTTP at `https://app.lyrashieldai.com/api/mcp` with `lsk_` Bearer key per [integrations hub](/docs/integrations)) and a GitHub Action that is designed to be diff-aware and emit SARIF so findings enter your existing code-scanning graph without new infrastructure. Scan engine MVP, Fix-PR generation, and billing are not live yet, the current value is waitlist access, integration guides like [integrations hub](/docs/integrations), and early design feedback for AI-built stacks. If you are evaluating Kilo Code alongside [Pi Coding Agent](/blog/pi-coding-agent-app-security-checklist) or [Hermes](/blog/hermes-app-security-checklist), the pairing model is the same: keep Kilo for generation, keep LyraShield's surface minimal and auditable for verification.
+Integration is via MCP (`stdio npx -y @lyrashield/mcp` and remote Streamable-HTTP at `https://app.lyrashieldai.com/api/mcp` with `lsk_` Bearer key per [integrations hub](/docs/integrations)) and a GitHub Action that is diff-aware and emits SARIF so findings enter your existing code-scanning graph without new infrastructure. The fastest setup path is the LyraShield CLI: run `npx lyrashield init` to auto-detect Kilo Code and write its MCP config, verify with `npx lyrashield doctor`, then `npx lyrashield login` to store credentials in `~/.lyrashield/credentials.json` (nothing committed). The manual config snippets above are what the CLI writes, kept for reference. The platform is live in open beta with open registration, with the scan engine and automated fix execution on the roadmap. If you are evaluating Kilo Code alongside [Pi Coding Agent](/blog/pi-coding-agent-app-security-checklist) or [Hermes](/blog/hermes-app-security-checklist), the pairing model is the same: keep Kilo for generation, keep LyraShield's surface minimal and auditable for verification.
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
 
 ## CTA
 
-Join the waitlist to get the Kilo Code integration snippets, the GitHub Action scaffold, and early access to the agent-native verification flow: https://lyrashieldai.com
+Create an account at [lyrashieldai.com](https://lyrashieldai.com) to get the Kilo Code integration snippets, the GitHub Action scaffold, and access to the agent-native verification flow.
