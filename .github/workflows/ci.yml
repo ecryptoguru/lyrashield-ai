@@ -300,6 +300,10 @@ jobs:
     env:
       DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
       SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
+      # The RLS test imports from ./client which loads the full env config.
+      # These are the minimum required vars to pass env validation.
+      BETTER_AUTH_SECRET: "ci-test-secret-at-least-32-characters-long"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
 
     steps:
       - name: Checkout
