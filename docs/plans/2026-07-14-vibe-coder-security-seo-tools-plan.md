@@ -266,6 +266,16 @@ Fresh-run decision: no topic replacement is required. The July 14 refresh reinfo
 | 121 | Copilot CLI MCP Security Workflow Setup Guide / `copilot-cli-mcp-security-workflow`                 | copilot cli mcp security - workflow             | Workflow     | 1,400 | Pillar + Launch Checklist             |
 | 122 | Connect Devin CLI to LyraShield via MCP / `devin-cli-mcp-security-workflow`                         | devin cli mcp security - workflow               | Workflow     | 1,400 | Pillar + Launch Checklist             |
 | 123 | GitHub Copilot MCP Security Workflow Setup Guide / `github-copilot-mcp-security-workflow`           | github copilot mcp security - workflow          | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 124 | Secure a Goose Built App Before Launch / `goose-app-security-checklist`                             | goose app security - checklist                  | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 125 | Kiro App Security Checklist for AI Built Code / `kiro-app-security-checklist`                       | kiro app security - checklist                   | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 126 | MiMo Code app security checklist / `mimo-code-app-security-checklist`                               | mimo code app security - checklist              | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 127 | Oh My Pi app security checklist / `oh-my-pi-app-security-checklist`                                 | oh my pi app security - checklist               | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 128 | Roo Code app security checklist / `roo-code-app-security-checklist`                                 | roo code app security - checklist               | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 129 | Connect Goose to LyraShield via MCP / `goose-mcp-security-workflow`                                 | goose mcp security - workflow                   | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 130 | Kiro MCP Security Workflow With LyraShield AI / `kiro-mcp-security-workflow`                        | kiro mcp security - workflow                    | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 131 | MiMo Code MCP security workflow / `mimo-code-mcp-security-workflow`                                 | mimo code mcp security - workflow               | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 132 | Oh My Pi MCP security workflow / `oh-my-pi-mcp-security-workflow`                                   | oh my pi mcp security - workflow                | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 133 | Roo Code MCP security workflow / `roo-code-mcp-security-workflow`                                   | roo code mcp security - workflow                | Workflow     | 1,400 | Pillar + Launch Checklist             |
 
 ## 6. `/tools` product-led SEO surface
 

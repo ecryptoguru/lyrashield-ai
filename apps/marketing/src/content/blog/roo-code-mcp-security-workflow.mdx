@@ -1,0 +1,127 @@
+---
+title: Roo Code MCP security workflow
+description: "Set up LyraShield MCP in Roo Code step by step: CLI install, manual config, verification, inline scan, GitHub Action diff gate, and agent rules."
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, supply-chain]
+draft: false
+heroImage: agent-security-32
+faq:
+  - q: How do I add LyraShield MCP to Roo Code?
+    a: Run npx lyrashield install roo-code to write the .roo/mcp.json entry, or npx lyrashield init to auto detect. Both write the streamable-http type that Roo Code requires.
+  - q: What transport type does Roo Code need for remote MCP?
+    a: Roo Code requires streamable-http with a hyphen. Using http or streamableHttp fails to connect. The official Roo docs and the GitHub MCP install guide both confirm this.
+  - q: Where is the Roo Code project MCP file?
+    a: The project MCP file is .roo/mcp.json at the project root. It overrides the global mcp_settings.json and can be committed to share team configuration.
+  - q: Can I gate scans to changed files in CI?
+    a: Yes. The LyraShield GitHub Action supports a diff aware mode that scans only changed files and emits SARIF output. See the integrations documentation for the exact ref.
+---
+Set up LyraShield MCP in Roo Code by authenticating with the CLI, running the roo-code installer to write .roo/mcp.json, verifying the connection, running an inline scan on the changed scope, adding a GitHub Action diff gate that emits SARIF, and adding an agent rules snippet. Roo Code requires the hyphenated streamable-http transport type, so the installer writes the correct value. Per the [vibe coding security guide](/blog/vibe-coding-security-guide), treat scan output as evidence and keep outcomes distinct.
+
+## 1. Install prerequisites and authenticate
+
+Roo Code is a VS Code extension that reads MCP configuration from `.roo/mcp.json` at the project level (overriding the global `mcp_settings.json`) using the `mcpServers` root key. Before wiring LyraShield, install Node so `npx` is available, then authenticate once with `npx lyrashield login`. The CLI writes credentials to `~/.lyrashield/credentials.json` with restrictive permissions and commits nothing. Confirm the official [Roo Code MCP documentation](https://roocodeinc.github.io/Roo-Code/features/mcp/using-mcp-in-roo/) is the version you target, and that VS Code is open to your project workspace.
+
+A clean prerequisite check avoids the most common Roo Code setup failures. The project file overrides the global one, so a stale global entry can shadow your project edit if the names collide; keep server names unique across both. Note now that Roo Code requires the hyphenated `streamable-http` type for remote servers, so a copy pasted `http` value from another tool's docs will silently fail to connect. Keep your auth token in the credentials file only, and never paste it into a committed config or a pull request description.
+
+The `.roo/mcp.json` file is the project level source of truth for MCP servers. Because it overrides the global file, team server definitions should live here so contributors inherit the same security tooling on clone.
+
+## 2. Add the LyraShield MCP server with the CLI
+
+The fastest path is the dedicated installer. Run `npx lyrashield install roo-code` from your project root. It writes the correct `.roo/mcp.json` entry with the `streamable-http` type Roo Code requires, the LyraShield endpoint, and a Bearer token header. You can also run `npx lyrashield init` to auto detect Roo Code among other tools. Then run `npx lyrashield doctor` to verify the connection before you scan. The CLI is the primary path; the manual config below is what the CLI writes, useful when you need to inspect or hand edit.
+
+If you run the installer inside a monorepo, run it from the directory that holds your `.roo/` folder so the entry lands in the right project scope. The installer checks that your Node version supports `npx` streaming fetch, which `streamable-http` depends on.
+
+## 3. Configure the MCP server manually when needed
+
+If you must edit by hand, add an entry under `mcpServers` in `.roo/mcp.json`. The critical detail is the transport type: Roo Code requires `streamable-http` with a hyphen. The bare `http` value and the camelCase `streamableHttp` value both fail to connect, confirmed by the [GitHub MCP server install guide](https://github.com/github/github-mcp-server/blob/main/docs/installation-guides/install-roo-code.md).
+
+```json
+{
+  "mcpServers": {
+    "lyrashield": {
+      "type": "streamable-http",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_REPLACE_WITH_YOUR_TOKEN"
+      },
+      "alwaysAllow": [],
+      "disabled": false
+    }
+  }
+}
+```
+
+Keep `alwaysAllow` minimal. Never commit a real token; keep the literal in the user level file or environment and commit only a redacted structure. The [CWE-798](https://cwe.mitre.org/data/definitions/798.html) hard coded credentials pattern is the exact risk. If you prefer a local stdio server instead of the remote endpoint, swap the entry for a stdio server with `command: "npx"`, `args: ["-y", "@lyrashield/mcp", "stdio"]`, and an `env` map that injects your token, then leave `disabled: false`. The CLI writes the remote form by default because it avoids running a local process and keeps the token out of a command line that process listings could expose, but both shapes are valid. Whichever you choose, confirm with `npx lyrashield doctor` and a window reload that the agent session actually receives the scan tools, since a `streamable-http` typo is the most common failure and produces no error.
+
+The `alwaysAllow` array lists tool names the agent may call without an approval prompt. Leaving it empty means every scan invocation asks for confirmation, which is safer for shared workstations. If you add LyraShield scan tools to `alwaysAllow`, name the exact tool, not a wildcard, so a future server update cannot widen what runs unattended.
+
+## 4. Verify the connection and run an inline check
+
+After config, reload the VS Code window so Roo Code picks up the file, then run `npx lyrashield doctor` to confirm the server reports connected. In the Roo Code pane, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope, reviews the real config and code, and returns evidence with detected, verified, retest confirmed, and inconclusive outcomes kept distinct. This mirrors the [vibe coding security guide](/blog/vibe-coding-security-guide) evidence loop. Scan the changed scope, not the whole repo, to keep feedback fast.
+
+If the server shows as loaded but no scan tools appear, the usual cause is a `streamable-http` typo (a bare `http` or camelCase `streamableHttp`), a mixed stdio and url field set, or a `disabled: true` flag. The doctor command and the Roo Code MCP pane surface each. When you read scan results, do not collapse detected and verified into one bucket: a detected candidate is a signal worth review, and independent verification needs a separate receipt. Keep the output in your release record so a reviewer can trace each finding to its evidence.
+
+A typical evidence example reads "detected: hardcoded API key in src/config.ts line 42, verified: key resolves to production scope, retest confirmed: still present after refactor." Each clause is a separate receipt. An inconclusive outcome, such as a dependency advisory with no fixed version, gets its own line so it is not lost between detected and verified rows.
+
+## 5. Add a GitHub Action diff gate in CI
+
+To block regressions in pull requests, add the LyraShield GitHub Action in diff aware mode. It scans only changed files and emits SARIF output for GitHub code scanning. See the [integrations documentation](/docs/integrations) for the exact action ref and inputs.
+
+```yaml
+name: lyrashield-diff-scan
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: LyraShield diff scan
+        uses: lyrashield-ai/scan-action@v1
+        with:
+          mode: diff
+          sarif: lyrashield-results.sarif
+          token: ${{ secrets.LYRASHIELD_TOKEN }}
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: lyrashield-results.sarif
+```
+
+The [GitHub code scanning SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) docs describe how SARIF feeds alerts into your pull request view. Keep the token in [Actions secrets](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions), never in the workflow file. A diff aware gate keeps CI fast and focuses review on what actually changed, but it is not a substitute for a full pre launch scan; run the complete check before a release, and retain both receipts in the assurance record. If a scan fails on a dependency advisory, treat the match as a signal and verify it against the resolved version before blocking a merge.
+
+Because the diff scan only reads changed files, it stays fast even on large repos. The SARIF output includes rule id, file path, and line range for each result, so the GitHub code scanning view can annotate the exact diff line. Fetch depth zero is required so the action can compute the diff base accurately.
+
+## 6. Add an agent rules snippet
+
+Tell the agent how to use LyraShield so it does not improvise. Add a short rule to your Roo Code custom instructions or project rules file:
+
+```
+Before proposing release, run a LyraShield scan on the changed scope.
+Treat scan output as evidence, not proof.
+Propose fixes only; do not auto apply. Retest after any fix.
+Keep detected, verified, retest-confirmed, and inconclusive outcomes distinct.
+```
+
+A short rule prevents the agent from treating a clean scan as a release verdict or from applying a patch without review. Pair the rule with a repository convention that scan receipts land in your release record, so the evidence loop has a durable home. If your team shares the `.roo/mcp.json` across workspaces, keep the LyraShield lines in a project rules file that travels with the repo rather than only in your global settings.
+
+The rule works because it fixes agent behavior before any scan runs. Without it, an agent may summarize a clean scan as "safe to ship" or apply a patch the moment it appears. With it, the agent produces evidence, waits for review, and retests only after you approve.
+
+| Step | Command or file | Purpose |
+|---|---|---|
+| Authenticate | `npx lyrashield login` | Write credentials to ~/.lyrashield |
+| Add server | `npx lyrashield install roo-code` | Write the .roo/mcp.json entry |
+| Verify | `npx lyrashield doctor` | Confirm the server connects |
+| Diff gate | GitHub Action workflow | Block regressions in pull requests |
+
+## Why pair Roo Code with LyraShield
+
+Roo Code gives you a capable VS Code agent with a flexible MCP model, and that flexibility is where release risk hides: a `streamable-http` typo that silently disconnects a security server, an over broad `alwaysAllow` array, or a committed token in a shared config. LyraShield pairs with that loop by targeting the release, reviewing the real config, collecting independent evidence, proposing fixes that require review, retesting, and reporting. It does not auto fix. Approval gated fix proposals stay proposals until a server generated patch is bound to an exact approval.
+
+LyraShield is live with open registration. [Create an account](https://lyrashieldai.com) to run a scan, and use the [AI app security checklist](/tools/ai-app-security-checklist) to structure your pre launch review. For a parallel setup, see the [Codex security workflow](/blog/codex-security-workflow).

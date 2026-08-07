@@ -1,0 +1,72 @@
+---
+title: Oh My Pi app security checklist
+description: Secure an Oh My Pi built app before launch with this evidence based checklist covering MCP config, permissions, secrets, dependencies, and verification.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification]
+draft: false
+heroImage: agent-security-31
+faq:
+  - q: Where does Oh My Pi store user MCP configuration?
+    a: Oh My Pi stores user MCP configuration at ~/.omp/agent/mcp.json. An older docs path of ~/.omp/mcp.json was corrected by the project. Use the agent subdirectory so servers actually load.
+  - q: Does Oh My Pi auto discover MCP servers from other tools?
+    a: Yes. Oh My Pi discovers MCP servers from Claude Code, Cursor, VS Code, opencode.json, and Gemini CLI in priority order. Use disabledServers to suppress an unwanted discovered server by name.
+  - q: What MCP transport types does Oh My Pi support?
+    a: Oh My Pi supports stdio with a command, http with a url and headers, and sse for legacy compatibility. The stdio type is the default when type is omitted.
+  - q: Can I disable a discovered MCP server without editing its source config?
+    a: Yes. Add the server name to the disabledServers list in your user mcp.json. disabledServers wins over the source entry enabled value and over enabledServers.
+---
+Secure an Oh My Pi built app before launch by using the correct agent subdirectory config path, bounding discovered MCP permissions, keeping tokens out of committed config, verifying AI suggested dependencies, and separating detected signals from verified proof. Oh My Pi auto discovers MCP servers from several tools, so a stale path or an unwanted discovered server widens what the agent can touch. This checklist applies the [vibe coding security guide](/blog/vibe-coding-security-guide) method: run an evidence loop and retain the receipts.
+
+## 1. Use the correct Oh My Pi MCP config location
+
+Oh My Pi (omp.sh) reads OMP native MCP configuration from `.omp/mcp.json` at the project level and `~/.omp/agent/mcp.json` at the user level, with profile aware paths under `~/.omp/profiles/<name>/agent/mcp.json` when a named profile is active. An older documented path of `~/.omp/mcp.json` was corrected by the project because users who followed it saw no servers load. The [Oh My Pi MCP configuration guide](https://github.com/can1357/oh-my-pi/blob/main/docs/mcp-config.md) and the [path correction pull request](https://github.com/can1357/oh-my-pi/pull/685) confirm the `agent` subdirectory as the runtime source of truth. Both files use the `mcpServers` root key. Run `npx lyrashield init` to auto detect and write the correct LyraShield entry, then `npx lyrashield doctor` to verify the connection.
+
+Oh My Pi also auto discovers MCP servers from Claude Code, Cursor, VS Code, opencode.json, and Gemini CLI in a fixed priority order, and it does not merge duplicates: the higher priority definition wins. Prefer `.omp/mcp.json` when you want OMP to own the configuration, and keep server names unique across tools to avoid precedence shadowing. Validation rules are strict: a `stdio` entry requires `command`, an `http` or `sse` entry requires `url`, and a server cannot set both `command` and `url`. Unknown `type` values are rejected, so a typo in the transport field silently excludes that server. Use `/mcp add` inside a session to let OMP write a valid entry atomically with restrictive file permissions, rather than hand editing and risking a malformed file.
+
+The agent subdirectory is load bearing: Oh My Pi only reads `~/.omp/agent/mcp.json` at runtime, so a config at the older flat path is invisible. Gate merges on a `npx lyrashield doctor` check so a path regression fails the build.
+
+## 2. Bound agent permissions and discovery scope
+
+Discovery means an MCP server you configured for another tool can appear in your Oh My Pi agent session without an explicit OMP entry. That is convenient and a real privilege expansion. Treat each discovered server as a new boundary and apply least privilege from the [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0xa2-broken-object-level-authorization/). Use the `disabledServers` denylist in your user `mcp.json` to suppress a server you do not want, and remember that `disabledServers` wins over both the source `enabled` value and the `enabledServers` allowlist.
+
+Record which servers are active and who approved them. If a server can write or delete data, that authority belongs in the release target scope you define in the [vibe coding security guide](/blog/vibe-coding-security-guide), not as an implicit discovery default. The `mcp.enableProjectConfig` setting lets you exclude every project level source before deduplication, which is useful when a team repo keeps reintroducing a server you do not want the agent to reach. Pair the denylist with the [OWASP prompt injection guidance](https://owasp.org/www-project-top-10-for-large-language-model-applications/) so a hostile instruction cannot turn a discovered tool against you.
+
+Because discovery runs every session, the permission set is a moving target unless you pin it. Snapshot the active server list with `npx lyrashield doctor` at each release candidate and diff it against the prior snapshot, so a newly discovered server is a reviewable change. A server disabled locally but never committed to the denylist reappears for the next reviewer.
+
+## 3. Keep secrets out of committed config
+
+Oh My Pi writes MCP config atomically with restrictive file permissions, but any real token in a committed `.omp/mcp.json` is a live secret exposure. Commit the server structure with placeholders, keep real credentials in the user level file outside the repo or in your environment, and never commit a working bearer token. The [CWE-798](https://cwe.mitre.org/data/definitions/798.html) hard coded credentials pattern covers the failure, and LyraShield's secrets scanning layer flags candidates across config, source, and history. Verify each candidate against the live boundary before you act, and treat a detected secret as a signal, not a verdict.
+
+A practical split is to store the server entry with a placeholder in the committed project file, then inject the real value from `~/.omp/agent/mcp.json` or an environment variable at session start. Rotate any committed token, because git history retains it. A detected secret that fails to authenticate is a stale reference, not an active exposure.
+
+## 4. Verify AI suggested dependencies
+
+Oh My Pi agents add packages as they work, and each addition extends your supply chain. A clean install is not proof of safety. Begin with the resolved artifact, inspect the dependency graph for unexpected transitive changes, and match resolved versions against advisory data. The [OSV.dev](https://osv.dev/) database and the NIST [software supply chain security](https://www.nist.gov/itl/ssdm/software-supply-chain-security) guidance frame why a single mutable package can compromise a protected repo. Restrict install scripts, reproduce the build from reviewed inputs, and watch for unexpected transitive jumps that a lockfile diff reveals. A protected repository can still produce an untrusted artifact if its build pipeline accepts mutable inputs or carries broad credentials, so review CI actions and package registries alongside the code.
+
+Treat each AI suggested package as an untrusted input until it clears the SCA layer. Capture the resolved version and integrity hash, not just the requested range, because a mutable registry can serve a different artifact next install. Rerun the advisory match after the lockfile settles, since a fix can pull in a vulnerable transitive.
+
+| Check | What to verify | Evidence to retain |
+|---|---|---|
+| Config path | `~/.omp/agent/mcp.json` not `~/.omp/mcp.json` | Config excerpt with server loaded |
+| Permissions | Unwanted servers in `disabledServers` | Tool list after discovery |
+| Secrets | No real tokens in committed config | Secrets scan plus git history check |
+| Dependencies | Resolved versions reviewed | Lockfile diff and advisory match |
+
+LyraShield's SCA layer keeps the receipt for each matched package. Extend that evidence by capturing the agent session log that introduced each dependency, so a reviewer can trace why a package was added and whether it still holds.
+
+## 5. Separate detection from proof
+
+A flag for a missing header or vulnerable dependency is a detected candidate, not a release verdict. LyraShield runs target, review, evidence, fix, retest, and report, and it keeps detected, independently verified, retest confirmed, and inconclusive outcomes separate. A static result about one path should not become a blanket claim about paths the tool never observed, a limitation the [NIST SP 800-115](https://nist.gov) assessment guidance reinforces. After a fix, run a fresh, server owned check against the changed system. A manual status change is not proof.
+
+Retest the abuse case, not only the happy path, and watch for regression in neighboring controls: an authorization fix that blocks every user is not a successful security outcome. The report combines target, coverage, evidence provenance, unresolved findings, retest receipts, operational evidence, and known limitations, so it supports a release decision without pretending to eliminate uncertainty. Keep the immutable assurance record so the next reviewer can inspect what was actually checked.
+
+Evidence capture should be reproducible. Save the command, tool version, and environment with each retest receipt, because a result that cannot be reproduced is an assertion, not evidence. When a finding moves from detected to verified, record which check confirmed it and on what boundary.
+
+## Why pair Oh My Pi with LyraShield
+
+Oh My Pi gives you a flexible coding agent with broad MCP discovery, and that flexibility is where release risk hides: a stale config path that silently loads nothing, a discovered server that widens what the agent can touch, or a committed token in a shared config. LyraShield pairs with that loop by targeting the release, reviewing the real config, collecting independent evidence, proposing fixes that require review, retesting, and reporting. It does not auto fix. Approval gated fix proposals stay proposals until a server generated patch is bound to an exact approval, so the boundary between detection and proof stays honest.
+
+Tie the merge gate to the assurance record, not a CI badge. A build that passes with an unresolved high severity finding should block until a reviewer accepts the risk. Approval gated fix proposals, not unattended fixes, keep that gate meaningful: a human binds each patch to an approval.
+
+LyraShield is live with open registration. [Create an account](https://lyrashieldai.com) to run a scan, and use the [AI app security checklist](/tools/ai-app-security-checklist) to structure your pre launch review. For the wiring details, see the [integrations documentation](/docs/integrations) and the [Windsurf security workflow](/blog/windsurf-security-workflow) for a parallel setup pattern.

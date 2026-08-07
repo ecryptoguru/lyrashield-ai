@@ -1,0 +1,114 @@
+---
+title: Oh My Pi MCP security workflow
+description: "Set up LyraShield MCP in Oh My Pi step by step: CLI setup, manual config, verification, inline scan, GitHub Action diff gate, and agent rules."
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, supply-chain]
+draft: false
+heroImage: agent-security-31
+faq:
+  - q: How do I add LyraShield MCP to Oh My Pi?
+    a: Run npx lyrashield init to auto detect Oh My Pi and write the mcpServers entry. The CLI writes the correct path and transport, then npx lyrashield doctor verifies the connection.
+  - q: Where does Oh My Pi read user MCP configuration from?
+    a: Oh My Pi reads user MCP configuration from ~/.omp/agent/mcp.json. An older docs path of ~/.omp/mcp.json was corrected by the project, so use the agent subdirectory.
+  - q: What MCP transport types does Oh My Pi support?
+    a: Oh My Pi supports stdio with a command, http with a url and headers, and sse for legacy. The stdio type is the default when type is omitted.
+  - q: Can I gate scans to changed files in CI?
+    a: Yes. The LyraShield GitHub Action supports a diff aware mode that scans only changed files and emits SARIF output. See the integrations documentation for the exact ref.
+---
+Set up LyraShield MCP in Oh My Pi by authenticating with the CLI, running init to write the mcpServers entry to the agent subdirectory, verifying the connection, running an inline scan on the changed scope, adding a GitHub Action diff gate that emits SARIF, and adding an agent rules snippet. Oh My Pi supports stdio, http, and sse transports, so the CLI writes the correct structure. Per the [vibe coding security guide](/blog/vibe-coding-security-guide), treat scan output as evidence, not proof.
+
+## 1. Install prerequisites and authenticate
+
+Oh My Pi (omp.sh) reads OMP native MCP configuration from `.omp/mcp.json` at the project level and `~/.omp/agent/mcp.json` at the user level, with profile aware paths under `~/.omp/profiles/<name>/agent/mcp.json`. Before wiring LyraShield, install Node so `npx` is available, then authenticate once with `npx lyrashield login`. The CLI writes credentials to `~/.lyrashield/credentials.json` with restrictive permissions and commits nothing. Confirm the [Oh My Pi MCP configuration guide](https://github.com/can1357/oh-my-pi/blob/main/docs/mcp-config.md) is the version you target, and that the [path correction pull request](https://github.com/can1357/oh-my-pi/pull/685) is reflected in your install.
+
+A clean prerequisite check avoids the most common OMP setup failures. The user config path is `~/.omp/agent/mcp.json`, not the older `~/.omp/mcp.json`; users who follow the stale path see no servers load. Note now that OMP auto discovers servers from other tools, so a server you configured for Claude Code or Cursor can appear in your OMP session without an explicit entry. Keep your auth token in the credentials file only, and never paste it into a committed config or an issue.
+
+## 2. Add the LyraShield MCP server with the CLI
+
+The fastest path is the CLI. Run `npx lyrashield init` from your project root. It auto detects Oh My Pi, writes the correct `mcpServers` entry to the right file with the right transport and headers, and leaves your existing config intact. Then run `npx lyrashield doctor` to verify the connection before you scan. The CLI is the primary path; the manual config below is what the CLI writes, useful when you need to inspect or hand edit.
+
+## 3. Configure the MCP server manually when needed
+
+If you must edit by hand, add an entry under `mcpServers` in `.omp/mcp.json`. The critical detail is the path: use the `agent` subdirectory for user level config, because the older `~/.omp/mcp.json` path is not read by the runtime. Oh My Pi supports `stdio` (the default when `type` is omitted), `http` for remote servers, and `sse` for legacy. For the remote LyraShield endpoint, use the `http` type:
+
+```json
+{
+  "mcpServers": {
+    "lyrashield": {
+      "type": "http",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_REPLACE_WITH_YOUR_TOKEN"
+      },
+      "enabled": true
+    }
+  }
+}
+```
+
+Never commit a real token. Keep the literal in the user level file or environment, and commit only a redacted structure. The [CWE-798](https://cwe.mitre.org/data/definitions/798.html) hard coded credentials pattern is the exact risk. If you use `/mcp add` inside an Oh My Pi session, it writes this structure atomically with restrictive permissions. If you prefer a local stdio server instead of the remote endpoint, swap the entry for a stdio server with `command: "npx"`, `args: ["-y", "@lyrashield/mcp", "stdio"]`, and an `env` map that injects your token; the `type` field is optional and defaults to stdio. The CLI writes the remote form by default because it avoids running a local process and keeps the token out of a command line that process listings could expose, but both shapes are valid. Whichever you choose, confirm with `npx lyrashield doctor` that the agent session actually receives the scan tools, since a config path mistake is the most common failure and produces no error.
+
+## 4. Verify the connection and run an inline check
+
+After config, run `npx lyrashield doctor` to confirm the server reports connected. Inside an Oh My Pi session, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope, reviews the real config and code, and returns evidence with detected, verified, retest confirmed, and inconclusive outcomes kept distinct. This mirrors the [vibe coding security guide](/blog/vibe-coding-security-guide) evidence loop. Scan the changed scope, not the whole repo, to keep feedback fast.
+
+If the server shows as loaded but no scan tools appear, the usual cause is a config path mistake (the older `~/.omp/mcp.json` instead of the `agent` subdirectory), a server name collision shadowed by a higher priority discovery source, or a `disabledServers` entry that suppresses it. The doctor command surfaces the first; review your discovery sources and denylist for the others. When you read scan results, do not collapse detected and verified into one bucket: a detected candidate is a signal worth review, and independent verification needs a separate receipt. Keep the output in your release record so a reviewer can trace each finding to its evidence.
+
+## 5. Add a GitHub Action diff gate in CI
+
+To block regressions in pull requests, add the LyraShield GitHub Action in diff aware mode. It scans only changed files and emits SARIF output for GitHub code scanning. See the [integrations documentation](/docs/integrations) for the exact action ref and inputs.
+
+```yaml
+name: lyrashield-diff-scan
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: LyraShield diff scan
+        uses: lyrashield-ai/scan-action@v1
+        with:
+          mode: diff
+          sarif: lyrashield-results.sarif
+          token: ${{ secrets.LYRASHIELD_TOKEN }}
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: lyrashield-results.sarif
+```
+
+The [GitHub code scanning SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) docs describe how SARIF feeds alerts into your pull request view. Keep the token in [Actions secrets](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions), never in the workflow file. A diff aware gate keeps CI fast and focuses review on what actually changed, but it is not a substitute for a full pre launch scan; run the complete check before a release, and retain both receipts in the assurance record. The action derives the changed file set from the git diff between the pull request head and its merge base, so on large monorepos it scans only the touched packages rather than the whole tree, and the SARIF output carries file path and rule metadata for each finding. If a scan fails on a dependency advisory, treat the match as a signal and verify it against the resolved version before blocking a merge.
+
+## 6. Add an agent rules snippet
+
+Tell the agent how to use LyraShield so it does not improvise. Add a short rule to your Oh My Pi rules file or agent configuration:
+
+```
+Before proposing release, run a LyraShield scan on the changed scope.
+Treat scan output as evidence, not proof.
+Propose fixes only; do not auto apply. Retest after any fix.
+Keep detected, verified, retest-confirmed, and inconclusive outcomes distinct.
+```
+
+A short rule prevents the agent from treating a clean scan as a release verdict or from applying a patch without review. Pair the rule with a repository convention that scan receipts land in your release record, so the evidence loop has a durable home. If your team uses named OMP profiles, keep the LyraShield rule in a profile independent location like the project `.omp` directory so it applies under every profile rather than only the one where you authored it.
+
+| Step | Command or file | Purpose |
+|---|---|---|
+| Authenticate | `npx lyrashield login` | Write credentials to ~/.lyrashield |
+| Add server | `npx lyrashield init` | Write the mcpServers entry for OMP |
+| Verify | `npx lyrashield doctor` | Confirm the server connects |
+| Diff gate | GitHub Action workflow | Block regressions in pull requests |
+
+## Why pair Oh My Pi with LyraShield
+
+Oh My Pi gives you a flexible coding agent with broad MCP discovery, and that flexibility is where release risk hides: a stale config path that silently loads nothing, a discovered server that widens what the agent can touch, or a committed token in a shared config. LyraShield pairs with that loop by targeting the release, reviewing the real config, collecting independent evidence, proposing fixes that require review, retesting, and reporting. It does not auto fix. Approval gated fix proposals stay proposals until a server generated patch is bound to an exact approval.
+
+LyraShield is live with open registration. [Create an account](https://lyrashieldai.com) to run a scan, and use the [AI app security checklist](/tools/ai-app-security-checklist) to structure your pre launch review. For a parallel setup, see the [Windsurf security workflow](/blog/windsurf-security-workflow).

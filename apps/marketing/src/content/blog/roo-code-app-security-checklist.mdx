@@ -1,0 +1,72 @@
+---
+title: Roo Code app security checklist
+description: Secure a Roo Code built app before launch with this evidence based checklist covering MCP config, permissions, secrets, dependencies, and verification.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification]
+draft: false
+heroImage: agent-security-32
+faq:
+  - q: What MCP transport type does Roo Code require for remote servers?
+    a: Roo Code requires streamable-http with a hyphen for remote servers. Using http or streamableHttp fails to connect. The official docs and the GitHub MCP install guide both confirm this.
+  - q: Where does Roo Code store project MCP configuration?
+    a: Roo Code stores project MCP configuration in .roo/mcp.json at the project root. This file overrides the global mcp_settings.json and can be committed to share team configuration.
+  - q: What does alwaysAllow do in Roo Code MCP config?
+    a: alwaysAllow is an array of tool names that Roo Code auto approves without prompting. Use it sparingly because every listed tool becomes an action the agent can take without your confirmation.
+  - q: Should I commit .roo/mcp.json with headers and tokens?
+    a: Commit the server structure but never real tokens. Put secrets in a user level file or environment, and keep a separate redacted copy for the team to avoid leaking credentials.
+---
+Secure a Roo Code built app before launch by using the streamable-http transport type, bounding alwaysAllow permissions, keeping tokens out of committed `.roo/mcp.json`, verifying AI suggested dependencies, and separating detected signals from verified proof. Roo Code requires the hyphenated streamable-http value for remote servers, so a single typo silently disconnects your security server. This checklist applies the [vibe coding security guide](/blog/vibe-coding-security-guide) method: run an evidence loop and retain the receipts.
+
+## 1. Use the correct Roo Code MCP transport type
+
+Roo Code (a VS Code extension) configures MCP servers in `.roo/mcp.json` at the project level, which overrides the global `mcp_settings.json`, and both files use the `mcpServers` root key. The trap that catches most teams is the remote transport type. Roo Code requires `streamable-http` with a hyphen for Streamable HTTP servers. The bare `http` value and the camelCase `streamableHttp` value both fail to connect. The official [Roo Code MCP documentation](https://roocodeinc.github.io/Roo-Code/features/mcp/using-mcp-in-roo/) and the [GitHub MCP server install guide](https://github.com/github/github-mcp-server/blob/main/docs/installation-guides/install-roo-code.md) both state this explicitly. A config that silently never connects is a release risk, because you believe a security server is protecting you when it is not.
+
+Run `npx lyrashield init` to auto detect Roo Code and write the correct entry, or `npx lyrashield install roo-code` for the dedicated installer, then `npx lyrashield doctor` to confirm the connection before you scan. The manual path writes `type: streamable-http`, a `url`, and a `headers` block to `.roo/mcp.json`, which is exactly what the CLI produces. A second trap is mixing stdio fields like `command` and `args` with url based fields in the same entry; Roo Code rejects mixed configurations outright, so a remote server must carry only `url`, `headers`, and the optional `alwaysAllow`, `disabled`, `timeout`, and `disabledTools` flags. Reload the VS Code window after any edit so Roo Code reloads the file.
+
+Validate the config before every scan. A server entry with a `url` but a placeholder `headers` token will connect yet return empty results, which looks like a clean scan and is not one. Run `npx lyrashield doctor` to exercise the live endpoint and confirm the HTTP status before trusting the output.
+
+## 2. Bound agent permissions with alwaysAllow
+
+Roo Code adds an `alwaysAllow` array and a `disabled` flag to each server entry, plus `disabledTools` and `watchPaths` for finer control. `alwaysAllow` lists tool names the agent can invoke without a confirmation prompt, which is convenient and dangerous: every auto approved tool becomes an autonomous action the model can choose. Apply least privilege from the [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0xa2-broken-object-level-authorization/) by allowing only the tools the current task needs, and leave destructive or production tools outside the array.
+
+Record which tools are auto approved and who authorized them. If a server can write, delete, or spend money, that authority belongs in the release target scope you define in the [vibe coding security guide](/blog/vibe-coding-security-guide), not as an implicit default that persists across sessions. The `disabledTools` array lets you block specific tools a server exposes even when the server itself is enabled, which is useful when a single server bundles both safe and dangerous operations. Pair this with the [OWASP prompt injection guidance](https://owasp.org/www-project-top-10-for-large-language-model-applications/) so a hostile instruction from an issue body or a fetched document cannot invoke an auto approved destructive tool on the agent's behalf.
+
+Review the `alwaysAllow` array at every release boundary, not only at setup time. A tool that was safe during local scaffolding may be dangerous against a production database, so diff the array against the release target scope and revoke entries that no longer apply.
+
+## 3. Keep secrets out of committed MCP config
+
+The project `.roo/mcp.json` is meant to be shared by committing it to version control, which means any real token in a `headers` block becomes a committed secret. Commit the server structure with a placeholder, keep real credentials in a user level file or environment variable, and never commit a working bearer token. The [CWE-798](https://cwe.mitre.org/data/definitions/798.html) hard coded credentials pattern covers the exact failure, and LyraShield's secrets scanning layer flags candidates across config, source, and history.
+
+Run the scan over the whole repository, then verify each candidate against the live boundary. A detected secret is a signal; a retest confirmed absence after rotation is proof.
+
+Treat `.roo/mcp.json` as a template, not a working credential store. Commit a redacted copy with placeholder values like `<YOUR_TOKEN>` and document the real secret location in a README that is itself free of tokens. Rotate any token that was ever committed, even briefly, because git history retains it.
+
+## 4. Verify AI suggested dependencies
+
+Coding agents add packages as they work, and each addition extends your supply chain. A clean install is not evidence of safety. Begin with the resolved artifact, inspect the dependency graph for unexpected transitive changes, and match resolved versions against advisory data. The [OSV.dev](https://osv.dev/) database and the NIST [software supply chain security](https://www.nist.gov/itl/ssdm/software-supply-chain-security) guidance frame why a single mutable package can compromise a protected repo. Restrict install scripts, reproduce the build from reviewed inputs, and watch for unexpected transitive jumps that a lockfile diff reveals. A protected repository can still produce an untrusted artifact if its build pipeline accepts mutable inputs or carries broad credentials, so review CI actions and package registries alongside the code.
+
+Pin every dependency to an exact version or a locked hash, and reject install scripts that run postinstall hooks without review. When a coding agent proposes a new package, read the manifest for unexpected `preinstall` or `postinstall` hooks before approving, because a transitive dependency can execute arbitrary code at install time even when the top level package looks benign.
+
+| Check | What to verify | Evidence to retain |
+|---|---|---|
+| Transport type | `streamable-http` not `http` | Config excerpt with server connected |
+| Permissions | Minimal `alwaysAllow` list | Tool list after config change |
+| Secrets | No real tokens in committed config | Secrets scan plus git history check |
+| Dependencies | Resolved versions reviewed | Lockfile diff and advisory match |
+
+LyraShield's SCA layer keeps the receipt for each matched package, so a reviewer can see what was checked and what gaps remain.
+
+## 5. Separate detection from proof
+
+A flag for a missing header or vulnerable dependency is a detected candidate, not a release verdict. LyraShield runs target, review, evidence, fix, retest, and report, and it keeps detected, independently verified, retest confirmed, and inconclusive outcomes separate. A static result about one path should not become a blanket claim about paths the tool never observed, a limitation the [NIST SP 800-115](https://nist.gov) assessment guidance reinforces. After a fix, run a fresh, server owned check against the changed system. A manual status change is not proof.
+
+Retest the abuse case, not only the happy path, and watch for regression in neighboring controls: an authorization fix that blocks every user is not a successful security outcome. The report combines target, coverage, evidence provenance, unresolved findings, retest receipts, operational evidence, and known limitations, so it supports a release decision without pretending to eliminate uncertainty. Keep the immutable assurance record so the next reviewer can inspect what was actually checked.
+
+Gate the merge on evidence, not on a green checkmark alone. A CI pipeline that passes without retest receipts or coverage artifacts is a signal of completion, not proof of safety, so require the assurance record as a merge prerequisite. When a reviewer requests changes, the new fix must pass through the same target, review, evidence, retest, and report cycle before the branch can merge, preventing a partial fix from closing the finding prematurely.
+
+## Why pair Roo Code with LyraShield
+
+Roo Code gives you a capable VS Code agent with a flexible MCP model, and that flexibility is where release risk hides: a `streamable-http` typo that silently disconnects a security server, an over broad `alwaysAllow` array, or a committed token in a shared config. LyraShield pairs with that loop by targeting the release, reviewing the real config, collecting independent evidence, proposing fixes that require review, retesting, and reporting. It does not auto fix. Approval gated fix proposals stay proposals until a server generated patch is bound to an exact approval, so the boundary between detection and proof stays honest.
+
+LyraShield is live with open registration. [Create an account](https://lyrashieldai.com) to run a scan, and use the [AI app security checklist](/tools/ai-app-security-checklist) to structure your pre launch review. For the wiring details, see the [integrations documentation](/docs/integrations) and the [Cursor app security checklist](/blog/cursor-app-security-checklist) for a parallel pattern.

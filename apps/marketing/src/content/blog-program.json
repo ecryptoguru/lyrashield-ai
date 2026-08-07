@@ -1228,5 +1228,105 @@
     "targetWords": 1400,
     "batch": "batch-8",
     "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 124,
+    "title": "Secure a Goose Built App Before Launch",
+    "slug": "goose-app-security-checklist",
+    "query": "goose app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 125,
+    "title": "Kiro App Security Checklist for AI Built Code",
+    "slug": "kiro-app-security-checklist",
+    "query": "kiro app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 126,
+    "title": "MiMo Code app security checklist",
+    "slug": "mimo-code-app-security-checklist",
+    "query": "mimo code app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 127,
+    "title": "Oh My Pi app security checklist",
+    "slug": "oh-my-pi-app-security-checklist",
+    "query": "oh my pi app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 128,
+    "title": "Roo Code app security checklist",
+    "slug": "roo-code-app-security-checklist",
+    "query": "roo code app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 129,
+    "title": "Connect Goose to LyraShield via MCP",
+    "slug": "goose-mcp-security-workflow",
+    "query": "goose mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 130,
+    "title": "Kiro MCP Security Workflow With LyraShield AI",
+    "slug": "kiro-mcp-security-workflow",
+    "query": "kiro mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 131,
+    "title": "MiMo Code MCP security workflow",
+    "slug": "mimo-code-mcp-security-workflow",
+    "query": "mimo code mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 132,
+    "title": "Oh My Pi MCP security workflow",
+    "slug": "oh-my-pi-mcp-security-workflow",
+    "query": "oh my pi mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 133,
+    "title": "Roo Code MCP security workflow",
+    "slug": "roo-code-mcp-security-workflow",
+    "query": "roo code mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
   }
 ]
