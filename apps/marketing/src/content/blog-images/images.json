@@ -581,5 +581,60 @@
     "alt": "LyraShield MCP integration with Devin Cli",
     "width": 1600,
     "height": 900
+  },
+  "agent-security-22": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-22/hero.avif",
+    "webp": "/images/blog/library/agent-security-22/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-22/hero.jpg",
+    "og": "/images/blog/library/agent-security-22/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-22/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Kiro",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-29": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-29/hero.avif",
+    "webp": "/images/blog/library/agent-security-29/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-29/hero.jpg",
+    "og": "/images/blog/library/agent-security-29/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-29/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Goose",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-30": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-30/hero.avif",
+    "webp": "/images/blog/library/agent-security-30/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-30/hero.jpg",
+    "og": "/images/blog/library/agent-security-30/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-30/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Mimo Code",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-31": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-31/hero.avif",
+    "webp": "/images/blog/library/agent-security-31/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-31/hero.jpg",
+    "og": "/images/blog/library/agent-security-31/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-31/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Oh My Pi",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-32": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-32/hero.avif",
+    "webp": "/images/blog/library/agent-security-32/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-32/hero.jpg",
+    "og": "/images/blog/library/agent-security-32/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-32/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Roo Code",
+    "width": 1600,
+    "height": 900
   }
 }

@@ -1,0 +1,114 @@
+---
+title: MiMo Code MCP security workflow
+description: Set up LyraShield MCP in MiMo Code step by step: CLI setup, manual config, verification, inline scan, GitHub Action diff gate, and agent rules.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, supply-chain]
+draft: false
+heroImage: agent-security-30
+faq:
+  - q: How do I add LyraShield MCP to MiMo Code?
+    a: Run npx lyrashield init to auto detect MiMo Code and write the mcp entry. The CLI writes the correct root key and transport, then npx lyrashield doctor verifies the connection.
+  - q: What is the manual MCP config for MiMo Code?
+    a: Add an entry under the mcp root key in .mimocode/mimocode.jsonc. Use type remote with the url https://app.lyrashieldai.com/api/mcp and a headers block with an Authorization Bearer token.
+  - q: Why does the MCP root key matter in MiMo Code?
+    a: MiMoCode uses mcp as the root key, not mcpServers. The wrong key is silently ignored, so your server never loads and the agent has no scan tools.
+  - q: Can I gate scans to changed files in CI?
+    a: Yes. The LyraShield GitHub Action supports a diff aware mode that scans only changed files and emits SARIF output for code scanning alerts. See the integrations documentation for the exact ref.
+---
+Set up LyraShield MCP in MiMo Code by authenticating with the CLI, running init to write the mcp entry, verifying the connection, running an inline scan on the changed scope, adding a GitHub Action diff gate that emits SARIF, and adding an agent rules snippet. MiMoCode uses the mcp root key with local and remote transports, so the CLI writes the correct structure. Per the [vibe coding security guide](/blog/vibe-coding-security-guide), treat scan output as evidence and keep outcomes distinct.
+
+## 1. Install prerequisites and authenticate
+
+MiMo Code (Xiaomi) runs as a terminal coding agent configured through `.mimocode/mimocode.jsonc` or `~/.config/mimocode/mimocode.jsonc`, with a published [JSON Schema](https://mimo.xiaomi.com/mimocode/config.json) for validation. Before wiring LyraShield, install Node so `npx` is available, then authenticate once with `npx lyrashield login`. The CLI writes credentials to `~/.lyrashield/credentials.json` with restrictive permissions and commits nothing, so your token stays out of version control. Confirm the [MiMo Code repository](https://github.com/XiaomiMiMo/mimo-code) is the version you expect, and that your editor trusts the schema domain for completion.
+
+A clean prerequisite check avoids the most common setup failures. If you run MiMoCode from a release binary rather than the npm package, local MCP servers launched through a shell may need the full path to the executable in the `command` array rather than a bare name resolved from PATH. Note that distinction now so the verification step does not surprise you. Keep your auth token in the credentials file only, and never paste it into a committed config or an issue. To confirm the schema, open `.mimocode/mimocode.jsonc` and check for completion on the `mcp` key. If the editor offers `mcpServers`, the URL is wrong or the file is misplaced. The project level file wins when both exist, so place your entry accordingly.
+
+## 2. Add the LyraShield MCP server with the CLI
+
+The fastest path is the CLI. Run `npx lyrashield init` from your project root. It auto detects MiMo Code, writes the correct `mcp` entry with the right transport and headers, and leaves your existing config intact. Then run `npx lyrashield doctor` to verify the connection before you scan. The CLI is the primary path; the manual config below is what the CLI writes, useful when you need to inspect or hand edit. If `init` reports that MiMo Code was not found, confirm you are running it from the project root that holds your `.mimocode` directory, since the CLI detects the tool by its config location. The CLI also writes the correct transport: remote by default, or local stdio for restricted networks. Both shapes use the `mcp` root key, never `mcpServers`. After `init`, confirm `enabled: true`, since a false or missing value is the other silent failure `doctor` catches.
+
+## 3. Configure the MCP server manually when needed
+
+If you must edit by hand, add an entry under the `mcp` root key in `.mimocode/mimocode.jsonc`. MiMoCode uses `mcp`, not `mcpServers`, and the wrong key is silently ignored. Use the remote transport with the LyraShield endpoint and a Bearer token:
+
+```jsonc
+{
+  "mcp": {
+    "lyrashield": {
+      "type": "remote",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer lsk_REPLACE_WITH_YOUR_TOKEN"
+      },
+      "enabled": true
+    }
+  }
+}
+```
+
+Never commit a real token. Keep the literal in the user level file or your environment, and commit only a redacted structure. The [CWE-798](https://cwe.mitre.org/data/definitions/798.html) hard coded credentials pattern is the exact risk. If you prefer a local stdio server instead of the remote endpoint, swap the entry for a `local` type with a `command` array of `["npx", "-y", "@lyrashield/mcp", "stdio"]` and an `environment` map that injects your token, then set `enabled: true`. The CLI writes the remote form by default because it avoids running a local process and keeps the token out of a command line that process listings could expose, but both shapes are valid. Whichever you choose, confirm with `npx lyrashield doctor` that the agent session actually receives the scan tools, since a silently ignored root key is the most common failure and produces no error. The local versus remote choice has a tradeoff: the remote endpoint needs no local process and updates without a package bump, while local stdio runs fully on your machine with no external traffic. Air gapped teams prefer local; teams wanting the latest scan logic prefer remote.
+
+## 4. Verify the connection and run an inline check
+
+After config, restart MiMo Code and run `npx lyrashield doctor` to confirm the server reports connected. Inside a session, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope, reviews the real config and code, and returns evidence with detected, verified, retest confirmed, and inconclusive outcomes kept distinct. This mirrors the [vibe coding security guide](/blog/vibe-coding-security-guide) evidence loop. Run the scan on the changed scope, not the whole repo, to keep feedback fast and focused.
+
+If the server shows as loaded but no scan tools appear in the agent session, the usual cause is a root key mismatch (`mcpServers` instead of `mcp`) or an `enabled: false` entry. The doctor command surfaces both. When you read scan results, do not collapse detected and verified into one bucket: a detected candidate is a signal worth review, and independent verification needs a separate receipt. Keep the output in your release record so a reviewer can trace each finding to its evidence. A concrete example: a detected outcome might report a possible hard coded secret in a config file, while the verified outcome carries a receipt confirming the string matches a real credential pattern. A retest confirmed outcome means the follow up scan no longer flags it, and an inconclusive means the signal was too weak to verify. These four states are distinct categories, and collapsing them hides the reasoning reviewers need.
+
+## 5. Add a GitHub Action diff gate in CI
+
+To block regressions in pull requests, add the LyraShield GitHub Action in diff aware mode. It scans only changed files and emits SARIF output that GitHub code scanning can ingest. See the [integrations documentation](/docs/integrations) for the exact action ref and inputs.
+
+```yaml
+name: lyrashield-diff-scan
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: LyraShield diff scan
+        uses: lyrashield-ai/scan-action@v1
+        with:
+          mode: diff
+          sarif: lyrashield-results.sarif
+          token: ${{ secrets.LYRASHIELD_TOKEN }}
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: lyrashield-results.sarif
+```
+
+The [GitHub code scanning SARIF support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning) docs describe how SARIF feeds alerts into your pull request view. Keep the token in [Actions secrets](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions), never in the workflow file. A diff aware gate keeps CI fast and focuses review on what actually changed, but it is not a substitute for a full pre launch scan; run the complete check before a release, and retain both receipts in the assurance record. If a scan fails on a dependency advisory, treat the match as a signal and verify it against the resolved version before blocking a merge. The diff aware design matters: on a large monorepo, a full scan per pull request can surface findings in untouched files, training reviewers to ignore alerts. Scanning only the changed scope keeps the gate fast and signal to noise ratio high, so SARIF alerts in the pull request view are ones the author can act on.
+
+## 6. Add an agent rules snippet
+
+Tell the agent how to use LyraShield so it does not improvise. Add a short rule to your MiMo Code agent configuration or project rules file:
+
+```
+Before proposing release, run a LyraShield scan on the changed scope.
+Treat scan output as evidence, not proof.
+Propose fixes only; do not auto apply. Retest after any fix.
+Keep detected, verified, retest-confirmed, and inconclusive outcomes distinct.
+```
+
+A short rule prevents the agent from treating a clean scan as a release verdict or from applying a patch without review. Pair the rule with a repository convention that scan receipts land in your release record, so the evidence loop has a durable home. If your team uses a rules file that other tools also read, keep the LyraShield lines specific so a generic instruction does not dilute them. A good rule is explicit about what the agent must not do: it must not apply a fix without human approval bound to that exact patch, nor report a release as clean on a detected signal. The snippet encodes those limits in four lines, short enough to keep.
+
+| Step | Command or file | Purpose |
+|---|---|---|
+| Authenticate | `npx lyrashield login` | Write credentials to ~/.lyrashield |
+| Add server | `npx lyrashield init` | Write the mcp entry for MiMoCode |
+| Verify | `npx lyrashield doctor` | Confirm the server connects |
+| Diff gate | GitHub Action workflow | Block regressions in pull requests |
+
+## Why pair MiMo Code with LyraShield
+
+MiMoCode gives you a fast coding loop with a flexible MCP model, and that flexibility is where release risk hides: a silently ignored `mcpServers` key, a committed token, or an over broad tool grant. LyraShield pairs with that loop by targeting the release, reviewing the real config, collecting independent evidence, proposing fixes that require review, retesting, and reporting. It does not auto fix. Approval gated fix proposals stay proposals until a server generated patch is bound to an exact approval.
+
+LyraShield is live with open registration. [Create an account](https://lyrashieldai.com) to run a scan, and use the [AI app security checklist](/tools/ai-app-security-checklist) to structure your pre launch review. For a parallel setup, see the [Claude Code security workflow](/blog/claude-code-security-workflow).
