@@ -1,5 +1,6 @@
 export * from "./types.js"
 export * from "./policy.js"
+export { atomicWrite } from "./atomic-write.js"
 export {
   listRuleFormats,
   renderRule,

@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { cp, mkdir, rm, stat } from "node:fs/promises"
+import { cp, mkdir, rename, rm, stat } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import process from "node:process"
@@ -89,9 +89,59 @@ export async function installAgentPlugin(
     }
   }
 
-  // Remove existing plugin directory if present, then copy fresh.
-  await rm(dest, { recursive: true, force: true })
-  await cp(source, dest, { recursive: true, preserveTimestamps: true })
+  // Confirmation gate: the `yes` option is threaded through from the CLI
+  // --yes flag. Without it, a plugin install would silently overwrite an
+  // existing install (including user customizations). Require explicit consent.
+  if (!opts.yes) {
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "MANUAL_REQUIRED",
+      path: dest,
+      message:
+        "Confirmation required to overwrite an existing plugin install. Re-run with --yes to proceed.",
+    }
+  }
+
+  // Backup-and-rollback: rename the existing dest to a backup path before
+  // copying. On success the backup is deleted; on failure it is restored so
+  // the user never loses their existing install (including customizations)
+  // to a partial copy.
+  let backupPath: string | undefined
+  try {
+    await stat(dest)
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+    backupPath = `${dest}.lyrashield-backup-${stamp}`
+    await rename(dest, backupPath)
+  } catch {
+    // dest does not exist — no backup needed
+  }
+
+  try {
+    await cp(source, dest, { recursive: true, preserveTimestamps: true })
+  } catch (error) {
+    // Copy failed — clean up the partial copy, then restore the backup.
+    await rm(dest, { recursive: true, force: true })
+    if (backupPath) {
+      try {
+        await rename(backupPath, dest)
+      } catch {
+        // Best-effort restore; the backup directory remains on disk.
+      }
+    }
+    return {
+      agent: agent.id,
+      displayName: agent.displayName,
+      outcome: "FAILED",
+      path: dest,
+      message: `Plugin copy failed: ${(error as Error).message}`,
+    }
+  }
+
+  // Success — delete the backup.
+  if (backupPath) {
+    await rm(backupPath, { recursive: true, force: true })
+  }
 
   return {
     agent: agent.id,
