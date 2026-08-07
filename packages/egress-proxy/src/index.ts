@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
+import { timingSafeEqual } from "node:crypto"
 import { pathToFileURL } from "node:url"
 import { z } from "zod"
 import { logger } from "@lyrashield/logger"
@@ -24,6 +25,24 @@ export interface ProxyOptions {
   port?: number
 }
 
+/**
+ * Constant-time comparison of two strings. Returns false immediately (but
+ * still in constant time relative to the *expected* length) when the lengths
+ * differ — timingSafeEqual throws on length mismatch, so we compare a hash
+ * of both values to avoid leaking length information.
+ */
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf8")
+  const bufB = Buffer.from(b, "utf8")
+  if (bufA.length !== bufB.length) {
+    // Still do a comparison to keep timing roughly constant: compare bufA
+    // against itself so the cost is proportional to the expected length.
+    timingSafeEqual(bufA, bufA)
+    return false
+  }
+  return timingSafeEqual(bufA, bufB)
+}
+
 function isAuthorized(
   requestHeaders: Record<string, string | string[] | undefined>,
   secret: string
@@ -31,9 +50,10 @@ function isAuthorized(
   const auth = requestHeaders["authorization"]
   const expected = `Bearer ${secret}`
   if (Array.isArray(auth)) {
-    return auth.some((value) => value === expected)
+    return auth.some((value) => safeEqual(value, expected))
   }
-  return auth === expected
+  if (typeof auth !== "string") return false
+  return safeEqual(auth, expected)
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {

@@ -10,6 +10,10 @@ interface ProxyFetchInit extends RequestInit {
 export interface EgressProxyFetchFnOptions {
   url: string
   secret: string
+  /** Connect timeout for the proxy round-trip in ms (default 10s). */
+  connectTimeoutMs?: number
+  /** Read timeout for the proxy round-trip in ms (default 30s). */
+  readTimeoutMs?: number
 }
 
 /**
@@ -24,10 +28,14 @@ export interface EgressProxyFetchFnOptions {
 export function createEgressProxyFetchFn(
   options: EgressProxyFetchFnOptions
 ): typeof fetch | undefined {
-  const { url: baseUrl, secret } = options
+  const { url: baseUrl, secret, connectTimeoutMs = 10_000, readTimeoutMs = 30_000 } = options
   if (!baseUrl || !secret) return undefined
 
   const proxyUrl = new URL("/v1/fetch", baseUrl).toString()
+
+  // The total round-trip timeout is the connect + read budget. A hung upstream
+  // behind the proxy must not stall the scan indefinitely.
+  const totalTimeoutMs = connectTimeoutMs + readTimeoutMs
 
   return async (input: string | URL | Request, init: RequestInit = {}): Promise<Response> => {
     const normalizedUrl =
@@ -38,6 +46,21 @@ export function createEgressProxyFetchFn(
     const maxBytes = proxyInit.maxBytes
     const proxyHeaders = new Headers(init.headers)
     const userAgent = proxyHeaders.get("user-agent") ?? undefined
+
+    // Combine the caller's signal with our own timeout so either can abort.
+    const timeoutController = new AbortController()
+    const timer = setTimeout(() => timeoutController.abort(), totalTimeoutMs)
+
+    // If the caller provides a signal, propagate its abort to our controller.
+    const callerSignal = init.signal
+    const onCallerAbort = () => timeoutController.abort()
+    if (callerSignal) {
+      if (callerSignal.aborted) {
+        clearTimeout(timer)
+        throw new EgressProxyError("aborted", "caller signal already aborted")
+      }
+      callerSignal.addEventListener("abort", onCallerAbort, { once: true })
+    }
 
     let response: Response
     try {
@@ -53,10 +76,20 @@ export function createEgressProxyFetchFn(
           timeoutMs,
           maxBytes,
         }),
-        signal: init.signal,
+        signal: timeoutController.signal,
       })
     } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err)
+      clearTimeout(timer)
+      callerSignal?.removeEventListener("abort", onCallerAbort)
+
+      // Distinguish a timeout abort from a caller abort.
+      const isTimeout =
+        !callerSignal?.aborted && err instanceof DOMException && err.name === "AbortError"
+      const detail = isTimeout
+        ? `egress proxy round-trip timed out after ${totalTimeoutMs}ms`
+        : err instanceof Error
+          ? err.message
+          : String(err)
       logger.warn("egress proxy request failed", {
         url: redactUrlForLogs(normalizedUrl),
         error: detail,
@@ -65,6 +98,8 @@ export function createEgressProxyFetchFn(
     }
 
     if (!response.ok) {
+      clearTimeout(timer)
+      callerSignal?.removeEventListener("abort", onCallerAbort)
       const detail = `Proxy returned HTTP ${response.status}`
       logger.warn("egress proxy returned failure status", {
         url: redactUrlForLogs(normalizedUrl),
@@ -77,9 +112,14 @@ export function createEgressProxyFetchFn(
     try {
       outcome = (await response.json()) as SafeFetchOutcome
     } catch (err) {
+      clearTimeout(timer)
+      callerSignal?.removeEventListener("abort", onCallerAbort)
       const detail = err instanceof Error ? err.message : String(err)
       throw new EgressProxyError("invalid_response", detail)
     }
+
+    clearTimeout(timer)
+    callerSignal?.removeEventListener("abort", onCallerAbort)
 
     if (!outcome.ok) {
       throw new EgressProxyError(outcome.reason, outcome.detail)

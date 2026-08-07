@@ -26,6 +26,20 @@ vi.mock("@lyrashield/security", () => ({
   checkScanUrlSafe: vi.fn().mockResolvedValue({ safe: true }),
 }))
 
+// Mock os and fs/promises so the sandbox resource check always passes in tests.
+vi.mock("os", () => ({
+  freemem: () => 8 * 1024 ** 3, // 8 GB free
+  cpus: () => new Array(8), // 8 cores available
+  tmpdir: () => "/tmp",
+}))
+vi.mock("fs/promises", () => ({
+  statfs: () =>
+    Promise.resolve({
+      bavail: 100_000,
+      bsize: 4096,
+    } satisfies Awaited<ReturnType<(typeof import("fs/promises"))["statfs"]>>),
+}))
+
 import { runPreflight } from "./preflight.job"
 import { prisma } from "@lyrashield/db"
 import { checkScanUrlSafe } from "@lyrashield/security"
@@ -45,6 +59,11 @@ describe("runPreflight", () => {
     vi.clearAllMocks()
     // Restore the default after clearAllMocks wipes mock implementations.
     vi.mocked(checkScanUrlSafe).mockResolvedValue({ safe: true })
+    // Set very low sandbox resource limits so the resource check passes
+    // regardless of the actual host's free memory/CPU/disk.
+    process.env.STRIX_SANDBOX_MEM_LIMIT = "1m"
+    process.env.STRIX_SANDBOX_CPUS = "1"
+    process.env.STRIX_SANDBOX_MIN_DISK_MB = "1"
   })
 
   it("fails preflight when the target URL is not SSRF-safe", async () => {
@@ -90,6 +109,8 @@ describe("runPreflight", () => {
 
     expect(result.passed).toBe(true)
     expect(result.checks.find((c) => c.name === "repo_configured")?.passed).toBe(true)
+    // REPO targets include a sandbox resource pre-flight check.
+    expect(result.checks.find((c) => c.name === "sandbox_resources")?.passed).toBe(true)
   })
 
   it("fails when target not found", async () => {
