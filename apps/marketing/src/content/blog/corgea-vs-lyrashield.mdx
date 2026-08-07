@@ -1,0 +1,73 @@
+---
+title: "Corgea vs LyraShield"
+description: "How LyraShield AI release assurance compares to Corgea AI vulnerability triage, auto-fix pull requests, and AI pentesting for AI-built apps."
+pubDate: 2026-08-07
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+draft: false
+heroImage: agent-security-39
+faq:
+  - q: "Does Corgea run AI pentesting?"
+    a: "Yes. Corgea launched AI Pentesting with a multi-agent architecture that validates exploitability during the test and supports continuous retesting after remediation. LyraShield also runs an agentic pentest, but as part of a release-assurance loop that produces an immutable evidence record and approval-gated fixes."
+  - q: "How do the fix models compare?"
+    a: "Corgea issues pull requests with source code fixes for engineering approval, aiming to reduce development effort by about 80 percent. LyraShield proposes approval-gated fixes and retests them before closing, recording the result as an evidence state. Both require human approval; LyraShield adds a mandatory retest."
+  - q: "Does Corgea adapt to my codebase?"
+    a: "Yes. Corgea's Auto-Discovery studies your codebase before scanning, detects frameworks and existing security controls, and generates project-specific false-positive policies. Its Learning feature turns developer feedback into approved policies over time."
+  - q: "Is Corgea pricing public?"
+    a: "Corgea pricing is not publicly listed on its site as of this writing. LyraShield is in open beta with open registration at lyrashieldai.com. Contact Corgea directly for current pricing and availability."
+---
+
+Corgea is an AI-powered security platform founded in 2023 that automatically finds, triages, and fixes insecure code, with auto-discovery that adapts to your codebase and AI pentesting that validates exploitability. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with approval-gated fixes. Corgea excels at adaptive triage and auto-fix; LyraShield closes the proof and release-decision gap.
+
+This comparison is part of our broader [vibe coding security guide](/blog/vibe-coding-security-guide), which covers the full release-assurance methodology for AI-built applications.
+
+## What Corgea does well
+
+[Corgea](https://corgea.com/) is built around the idea that a scanner should adapt to your codebase, not the other way around. Its Auto-Discovery feature studies your code before scanning: it detects frameworks, languages, and architecture, identifies existing security controls like auth decorators and ORM usage, and generates project-specific false-positive and fix policies. When Corgea sees a potential SQL injection but your codebase uses Django ORM everywhere, it already knows. Its Learning feature turns developer feedback into approved policies over time, grouped by project, CWE, and language, so the scanner gets quieter the more you use it.
+
+Corgea also launched AI Pentesting with a multi-agent architecture. Coordinator agents assign specialized sub-agents based on what they discover, such as an auth discovery agent, an API exploration agent, or a SQL injection expert. These agents collaborate, share findings, and adapt. Agents validate exploitability during the test, confirming a finding can be triggered, capturing evidence, and explaining business impact. The platform supports continuous autonomous pentesting with automatic retesting after remediation, in a closed loop of discover, fix, verify, in hours rather than weeks.
+
+A third capability is Security Design Reviews, which catches design-level threats at the PRD stage before code exists. Corgea parses the architecture, cross-references your actual codebase, and produces prioritized recommendations grounded in specifics from your design doc. This addresses the [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks like broken access control that are architectural decisions, not code bugs. Corgea claims to reduce development effort by about 80 percent and issues pull requests with fixes for engineering approval.
+
+Corgea's combination of adaptive scanning and design-stage review is notably forward-looking. Most security tools only see code after it is written, but Corgea's Security Design Reviews parse a PRD or tech spec, cross-reference the actual codebase, and surface architectural flaws before implementation begins. The company cites an example where a vendor payout API design lacked an authorization check linking the authenticated user to the vendor they were paying, a flaw standard SAST would not catch because the code would be correct. Catching that at the PRD stage costs zero lines of code changed.
+
+## Where LyraShield's release assurance approach differs
+
+Corgea and LyraShield both run agentic pentests and both gate fixes behind human approval. The differences are in the loop, the record, and the integration point.
+
+The LyraShield loop is target, review, evidence, fix, retest, report. The agentic pentest exercises findings against the live target, and each result is recorded as an evidence state: detected, proven, or fixed and retested. The full record is immutable, which is the artifact a reviewer or auditor signs off on. Corgea's loop is discover, fix, verify, which is faster and focused on continuous remediation but does not emphasize an immutable assurance record as the deliverable for a specific release.
+
+LyraShield runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so checks happen where the agent writes code. Fix proposals are approval-gated and retested before closing, which is a stronger constraint than issuing a fix PR. The difference is that LyraShield requires a retest to close a finding, not just a merged fix, and records the result in an immutable record. v1 coverage pairs the agentic pentest with SCA, secrets, a reusable GitHub Action, and SARIF output.
+
+For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/). Both tools target AI-generated code, but LyraShield's framing is release assurance for a specific app, while Corgea's is reducing remediation effort across a codebase with adaptive analysis.
+
+The distinction between Corgea's discover-fix-verify loop and LyraShield's target-review-evidence-fix-retest-report loop is the artifact each produces. Corgea optimizes for continuous remediation velocity, turning findings into fix pull requests and retesting them in hours. LyraShield optimizes for the release decision, producing an immutable evidence record that captures what was proven about the running app and what was done about it. A team burning down a backlog benefits from Corgea's velocity; a team signing off on a release benefits from LyraShield's record.
+
+## Who each tool fits
+
+Use Corgea when you want a scanner that adapts to your codebase, auto-discovers your security controls, and issues fix pull requests to burn down your backlog. It is a strong choice for teams whose pain point is remediation volume and who want continuous pentesting with retesting, plus design-stage threat analysis. The Auto-Discovery and Learning features make it particularly suited to teams tired of repeating the same false positives.
+
+Use LyraShield AI when the specific need is a release decision for an AI-built app, backed by proof, an immutable record, and approval-gated fixes with a mandatory retest. The tools can complement each other depending on whether the priority is backlog reduction or release sign-off.
+
+The two tools fit different points in the workflow. Corgea runs continuously, adapting to the codebase and reducing noise over time, which suits a team whose priority is remediation throughput. LyraShield runs at the release gate, where the question is whether the app is safe to ship and the deliverable is an evidence record a reviewer can trust. Because both target AI-generated code and both validate findings, a team can use Corgea for day-to-day remediation and LyraShield for the focused assurance run before production.
+
+| Dimension | Corgea | LyraShield AI |
+|---|---|---|
+| Primary goal | Adaptive triage and auto-fix | Release assurance with proof for AI-built apps |
+| Detection model | Multi-agent SAST, AI pentesting, design reviews | Agentic pentest plus SCA plus secrets, evidence states |
+| Fix model | Fix pull requests for engineering approval | Approval-gated fix proposals, retest before close |
+| Adaptation | Auto-Discovery and Learning policies | MCP inside AI coding agents plus GitHub Action |
+| Output | Findings, fix PRs, pentest results | Immutable assurance record, SARIF |
+
+For the detailed breakdown see the [Corgea comparison page](/compare/corgea). If you are securing a Bolt-built app, the [Bolt app security checklist](/blog/bolt-app-security-checklist) is a useful companion.
+
+## Why teams choose LyraShield for AI-built apps
+
+Teams choose LyraShield when the deliverable is a release decision, not a fix PR. The agentic pentest proves whether a finding is real against the running app, the immutable evidence record gives reviewers and auditors something concrete, and approval-gated fixes with a mandatory retest keep a human accountable for every change. For apps where the code came from a coding agent and the team needs to make a go or no-go decision, that loop turns a stream of fixes into a defensible release decision.
+
+Corgea is a strong adaptive remediation tool with Auto-Discovery and Learning that reduces noise over time. LyraShield does not try to out-adapt it. The value is the focused loop: target, review, evidence, fix, retest, report. For an app whose code came from a coding agent, that loop is what turns a stream of fixes into a defensible go or no-go backed by proof.
+
+LyraShield is live with open registration. Some platform features remain on the near-term roadmap and are not yet live, so check the current status on the site before relying on a specific capability. Run the [AI app security checklist](/tools/ai-app-security-checklist) on your project, then sign up at [https://lyrashieldai.com](https://lyrashieldai.com) to start a release-assurance run.

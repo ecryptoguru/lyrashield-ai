@@ -1,0 +1,75 @@
+---
+title: "ZeroPath vs LyraShield"
+description: "How LyraShield AI release assurance compares to ZeroPath LLM-powered security analysis, threat modeling, and one-click patches for AI-built apps."
+pubDate: 2026-08-07
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+draft: false
+heroImage: agent-security-38
+faq:
+  - q: "Does ZeroPath detect business logic flaws?"
+    a: "Yes. ZeroPath emphasizes detecting complex security issues including business logic flaws and authorization problems that traditional pattern-based scanners miss, using LLM-powered contextual analysis. LyraShield's agentic pentest also targets logic and authorization issues by exercising them against the live app."
+  - q: "How does LyraShield differ from ZeroPath threat modeling?"
+    a: "ZeroPath generates and continuously updates a threat model per app from the code, feeding SAST triage and prioritization. LyraShield focuses on the release-assurance loop: proving exploitability, recording evidence states, retesting fixes, and producing an immutable record for the release decision."
+  - q: "Do both tools propose fixes?"
+    a: "Yes, with different controls. ZeroPath generates one-click patches to cut remediation time. LyraShield proposes approval-gated fixes, meaning a developer reviews and approves each change before it merges, which keeps a human accountable for agent-written code."
+  - q: "Is ZeroPath pricing public?"
+    a: "ZeroPath pricing is not publicly listed on its site as of this writing. LyraShield is in open beta with open registration at lyrashieldai.com. Contact ZeroPath directly for current pricing and availability."
+---
+
+ZeroPath is an LLM-powered security platform founded in 2024 by engineers from Tesla and Google that detects, verifies, and fixes conventional vulnerabilities and business logic flaws, with automated threat modeling per application. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with approval-gated fixes. ZeroPath excels at contextual, threat-model-driven analysis; LyraShield closes the proof and release-decision gap.
+
+This comparison is part of our broader [vibe coding security guide](/blog/vibe-coding-security-guide), which covers the full release-assurance methodology for AI-built applications.
+
+## What ZeroPath does well
+
+[ZeroPath](https://zeropath.com/) brings an LLM-powered approach to application security that goes beyond pattern matching. Its platform detects conventional technical vulnerabilities and complex issues like business logic flaws and authorization problems that traditional SAST scanners miss. It analyzes endpoint behavior in context, understanding whether an endpoint is internal, whether input comes from admin-authored config, and whether a CLI is operator-run, to reduce false positives. The company reports cutting triage noise significantly through this contextual analysis.
+
+A standout capability is automated application threat modeling. ZeroPath generates a threat model for every app it identifies in your repositories, refreshes it on every commit, and feeds it into SAST triage, SCA reachability, and prioritization. The threat model is editable in a dedicated tab, is monorepo aware, and evaluates every change at the agent, pull request, and full repo level. This is a meaningful advance over scanners that start from zero on every run and have no memory of your application's architecture.
+
+ZeroPath also generates one-click patches to cut remediation time, positioning itself as developer-friendly. Founded by security engineers from Tesla and Google in San Francisco in 2024, it targets DevSecOps teams that need deeper analysis than pattern-based SAST provides. Its coverage aligns with the [OWASP Top 10](https://owasp.org/www-project-top-ten/) and common [CWE](https://cwe.mitre.org/) categories, and it covers SAST, SCA reachability, and software supply chain security. The platform emphasizes reducing triage burden so developers can ship secure code faster.
+
+The threat-modeling capability is where ZeroPath distinguishes itself from pattern-based SAST. By generating and continuously refreshing a per-app threat model from the code, it gives triage a durable context that a stateless scanner lacks. The editable threat model tab and monorepo awareness mean the model reflects how the application is actually structured, not a generic assumption. For teams whose backlog is dominated by false positives from scanners that do not understand the application, that contextual triage can materially reduce the volume of tickets a developer must review.
+
+## Where LyraShield's release assurance approach differs
+
+ZeroPath and LyraShield share a belief that detection is not enough and that context and verification matter. Where they diverge is the output and the loop.
+
+The LyraShield loop is target, review, evidence, fix, retest, report. The agentic pentest attempts to exercise findings against the live target, not just reason about them statically. Results are recorded as evidence states that distinguish a detected pattern from a proven exploitable issue from a fixed and retested one. That immutable record is the deliverable for a release decision. ZeroPath's threat model feeds triage and prioritization, which is valuable for continuous development; LyraShield's evidence record feeds a release sign-off, which is valuable for the go or no-go moment.
+
+LyraShield runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so checks happen where the agent writes code. Fix proposals are approval-gated: a developer reviews and approves each change before it merges. This is a deliberate constraint for AI-built apps, where unattended auto-fixing can introduce risk. v1 coverage pairs the agentic pentest with SCA, secrets, a reusable GitHub Action, and SARIF output.
+
+The difference is emphasis. ZeroPath's strength is continuous, context-aware analysis and threat modeling that reduces triage burden throughout development. LyraShield's strength is the release-assurance loop that produces proof and an immutable record for sign-off. For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/).
+
+The release-assurance loop is designed for a different consumer than continuous analysis. Where ZeroPath's threat model and one-click patches serve developers and AppSec teams working through a backlog day to day, LyraShield's immutable evidence record serves the reviewer or auditor who must sign off on a specific release. That record captures what was detected, what was proven exploitable against the running app, what was fixed, and what was retested, in a form that survives personnel changes. It is the artifact that supports a defensible go or no-go decision, not a stream of triaged findings.
+
+## Who each tool fits
+
+Use ZeroPath when you want LLM-powered analysis that catches business logic flaws and authorization issues traditional scanners miss, with automated threat modeling that continuously updates and feeds prioritization. It is a strong choice for teams whose pain point is triage noise and who want contextual analysis throughout development, with one-click patches to speed remediation.
+
+Use LyraShield AI when the specific need is a release decision for an AI-built app, backed by proof of exploitability, retested fixes, and an immutable record. The tools can complement each other: ZeroPath for continuous contextual analysis and threat modeling, LyraShield for the assurance run before release.
+
+ZeroPath and LyraShield can run in sequence without conflict. ZeroPath provides the continuous, context-aware analysis that reduces triage noise throughout the sprint, and its threat model keeps prioritization grounded in the application's real architecture. LyraShield runs the assurance loop when the team approaches a release, proving exploitability and recording evidence for sign-off. Because both are designed for AI-generated code, the handoff between continuous analysis and release assurance is natural rather than forced.
+
+| Dimension | ZeroPath | LyraShield AI |
+|---|---|---|
+| Primary goal | Contextual LLM analysis and threat modeling | Release assurance with proof for AI-built apps |
+| Detection model | LLM SAST, business logic, threat models per app | Agentic pentest plus SCA plus secrets, evidence states |
+| Fix model | One-click patches | Approval-gated fix proposals, retest before close |
+| Agent integration | Repository and PR analysis | MCP inside AI coding agents plus GitHub Action |
+| Output | Findings, threat models, patches | Immutable assurance record, SARIF |
+
+For the detailed breakdown see the [ZeroPath comparison page](/compare/zeropath). If you are securing a Lovable-built app, the [Lovable app security checklist](/blog/lovable-app-security-checklist) is a useful companion.
+
+## Why teams choose LyraShield for AI-built apps
+
+Teams choose LyraShield when the release decision needs proof, not just analysis. The agentic pentest validates exploitability against the running app, the immutable evidence record gives reviewers and auditors something concrete, and approval-gated fixes keep a human accountable for every change an agent proposes. For apps where the code came from a coding agent and the team needs to make a go or no-go decision, that loop turns contextual findings into a defensible release decision.
+
+ZeroPath is a strong contextual analysis tool with automated threat modeling that reduces triage burden. LyraShield does not try to out-analyze it. The value is the focused loop: target, review, evidence, fix, retest, report. For an app whose code came from a coding agent, that loop is what turns a list of contextual findings into a defensible go or no-go backed by proof.
+
+For teams already using ZeroPath for continuous contextual analysis, LyraShield adds the release-gate artifact that continuous tooling does not produce. The threat model and one-click patches keep development moving and triage quiet, and the immutable evidence record closes the loop when someone must sign off. That separation lets each tool do what it is built for: ZeroPath for ongoing analysis, LyraShield for the proof that supports a ship decision.
+
+LyraShield is live with open registration. Some platform features remain on the near-term roadmap and are not yet live, so check the current status on the site before relying on a specific capability. Run the [AI app security checklist](/tools/ai-app-security-checklist) on your project, then sign up at [https://lyrashieldai.com](https://lyrashieldai.com) to start a release-assurance run.

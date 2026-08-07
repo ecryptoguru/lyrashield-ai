@@ -21,14 +21,15 @@ export const PROGRAM_RELEASES = Object.freeze([
   "batch-7",
   "batch-8",
   "batch-9",
+  "batch-10",
 ])
 
 // Declarative corpus size. Bump these together with a release: drift in either
 // direction still fails, but the expected shape is stated once instead of being
 // spread across hardcoded literals in the distribution assertions below.
-export const PROGRAM_ARTICLE_COUNT = 148
+export const PROGRAM_ARTICLE_COUNT = 161
 
-export const IMAGE_CORPUS = Object.freeze({ authority: 1, shared: 61 })
+export const IMAGE_CORPUS = Object.freeze({ authority: 1, shared: 74 })
 
 export const MAX_SHARED_IMAGE_USAGE = 3
 

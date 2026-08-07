@@ -1,0 +1,73 @@
+---
+title: "Pixee vs LyraShield"
+description: "How LyraShield AI release assurance compares to Pixee agentic security engineering, scanner triage, and automated fixes for AI-built apps."
+pubDate: 2026-08-07
+author: lyrashield-team
+tags:
+  - vibe-coding-security
+  - agent-security
+  - verification
+draft: false
+heroImage: agent-security-40
+faq:
+  - q: "Does Pixee fix vulnerabilities automatically?"
+    a: "Yes. Pixee triages scanner alerts, filters false positives through exploitability analysis, and writes context-aware fixes that match your code conventions. It reports a 76 percent first-time merge rate. LyraShield proposes approval-gated fixes and retests them before closing as part of a release-assurance loop."
+  - q: "How does Pixee Foresight compare to LyraShield?"
+    a: "Pixee Foresight reads design documents before code is written and flags where shipped code drifts from what was designed. LyraShield focuses on the release-assurance loop for already-generated code: proving exploitability, recording evidence, retesting fixes, and producing an immutable record."
+  - q: "Does Pixee replace my scanners?"
+    a: "No. Pixee sits on top of your existing scanners, triages their output, and writes fixes. It integrates with tools like SonarQube and Snyk. LyraShield runs its own agentic pentest alongside SCA and secrets, but also emits SARIF so it can coexist with your scanner stack."
+  - q: "Is Pixee pricing public?"
+    a: "Pixee offers a free trial, but full pricing is not published on its main site as of this writing. LyraShield is in open beta with open registration at lyrashieldai.com. Contact Pixee directly for current pricing and plan details."
+---
+
+Pixee is an agentic security engineering platform founded in 2022 that triages scanner alerts, filters false positives, and writes context-aware fixes developers merge, plus a Foresight product that reads designs before code is written. LyraShield AI is release assurance for AI-built apps: it pairs an agentic pentest with SCA and secrets, separates detection from proof, and produces an immutable evidence record with approval-gated fixes. Pixee excels at automated triage and remediation; LyraShield closes the proof and release-decision gap.
+
+This comparison is part of our broader [vibe coding security guide](/blog/vibe-coding-security-guide), which covers the full release-assurance methodology for AI-built applications.
+
+## What Pixee does well
+
+[Pixee](https://pixee.ai/) takes a different starting point than most security tools. It does not run its own scanner. Instead, it sits on top of the scanners you already use, triages their output, filters false positives through exploitability analysis, and writes context-aware fixes that match your code conventions. The company reports a 76 percent first-time merge rate with no human editing, and up to 95 percent fewer false positives across the scanners it triages.
+
+Pixee calls this agentic security engineering. Its agents learn your codebase, policies, and conventions, then take action: triaging, fixing, and preventing vulnerabilities across the SDLC. The reactive side, VulnOps, runs the scanner backlog with 12 native integrations across tools like SonarQube and Snyk. The proactive side, Foresight, reads design documents before code is written, captures the security promises your design makes, and flags on the pull request where shipped code drifted from what was intended. Pixee notes that about half of all security defects are design flaws decided in a spec before a scanner ever runs.
+
+This is a thoughtful architecture. Pixee acknowledges that there is no CVE for building the wrong thing, and that fixing a design flaw in production costs roughly 30 times what it costs to prevent it. Co-founded by the co-founder and Chief Scientist of Contrast Security, Pixee is used by large regulated enterprises in financial services and technology. Its coverage aligns with the [OWASP Top 10](https://owasp.org/www-project-top-ten/) and common [CWE](https://cwe.mitre.org/) categories, and its agents work across Java, JavaScript, Python, and other languages supported by the underlying scanners.
+
+Pixee's decision not to run its own scanner is a deliberate architectural choice that shapes how it fits into a stack. By sitting on top of SonarQube, Snyk, and other scanners, it turns existing detection investments into remediation outcomes without forcing a rip-and-replace. The exploitability analysis that filters false positives is the key differentiator: a finding that a scanner reports as real may not be exploitable in context, and Pixee's agents are designed to make that call before writing a fix. For enterprises with mature scanner stacks and large backlogs, that triage layer is where the leverage is.
+
+## Where LyraShield's release assurance approach differs
+
+Pixee and LyraShield agree that triage and fix quality matter more than raw detection. The differences are in the loop, the record, and where the tool sits.
+
+The LyraShield loop is target, review, evidence, fix, retest, report. The agentic pentest runs its own checks against the live target, rather than triaging another scanner's output. Results are recorded as evidence states that distinguish a detected pattern from a proven exploitable issue from a fixed and retested one. That immutable record is the deliverable for a release decision, not a count of merged fixes.
+
+LyraShield runs inside AI coding agents through the [Model Context Protocol](https://modelcontextprotocol.io/), so checks happen where the agent writes code. Fix proposals are approval-gated and retested before closing, which is a stronger constraint than writing a fix PR for merge. The difference from Pixee's 76 percent merge rate is philosophical: LyraShield requires a retest to close a finding, not just a merged fix, and records the result in an immutable record that survives personnel changes and audits.
+
+For dependency risk, LyraShield uses SCA backed by sources like the [OSV database](https://osv.dev/). Pixee's strength is reducing backlog across an existing scanner stack; LyraShield's is the release-assurance loop for one AI-built app at a time. The two can coexist, with Pixee triaging and fixing scanner output continuously and LyraShield running the assurance loop before a release.
+
+The philosophical difference between a merged fix and a retested finding is central to how the two tools diverge. Pixee's 76 percent first-time merge rate is a strong result for remediation throughput, and the remaining 24 percent still requires human editing. LyraShield's approval-gated model does not optimize for merge rate; it optimizes for the trustworthiness of the evidence record that results. A finding closes only after a developer approves the fix and the agentic pentest retests the live target, which is slower but produces a record a reviewer can rely on for a release decision.
+
+## Who each tool fits
+
+Use Pixee when you have a mature scanner stack and your pain point is the backlog: you need automated triage, false-positive filtering, and fixes that developers actually merge. It is a strong choice for regulated enterprises with large codebases and existing investments in tools like SonarQube and Snyk. The Foresight product adds value for teams that want to catch design flaws before code is written.
+
+Use LyraShield AI when the specific need is a release decision for an AI-built app, backed by proof, an immutable record, and approval-gated fixes with a mandatory retest. The tools can complement each other: Pixee for backlog reduction, LyraShield for release sign-off.
+
+Pixee and LyraShield serve different buyers and different moments. Pixee serves the AppSec team that has a scanner stack and a backlog and needs fixes that developers will actually merge. LyraShield serves the team that owns a release decision for an AI-built app and needs proof and an immutable record to support it. Because Pixee works on top of existing scanners and LyraShield emits SARIF, the two can coexist in the same pipeline without conflict, each doing the job it is built for.
+
+| Dimension | Pixee | LyraShield AI |
+|---|---|---|
+| Primary goal | Triage and auto-fix across scanner stack | Release assurance with proof for AI-built apps |
+| Detection model | Triage of existing scanner output, exploitability analysis | Agentic pentest plus SCA plus secrets, evidence states |
+| Fix model | Context-aware fix PRs, 76 percent merge rate | Approval-gated fix proposals, retest before close |
+| Proactive side | Foresight reads designs before code | MCP inside AI coding agents plus GitHub Action |
+| Output | Merged fixes, reduced backlog | Immutable assurance record, SARIF |
+
+For the detailed breakdown see the [Pixee comparison page](/compare/pixee). If you are securing a Replit-built app, the [Replit app security checklist](/blog/replit-app-security-checklist) is a useful companion.
+
+## Why teams choose LyraShield for AI-built apps
+
+Teams choose LyraShield when the deliverable is a release decision, not a merged fix. The agentic pentest proves whether a finding is real against the running app, the immutable evidence record gives reviewers and auditors something concrete, and approval-gated fixes with a mandatory retest keep a human accountable for every change. For apps where the code came from a coding agent and the team needs to make a go or no-go decision, that loop turns a shrinking backlog into a defensible release decision.
+
+Pixee is a strong remediation platform with a thoughtful architecture that spans reactive triage and proactive design review. LyraShield does not try to out-triage it. The value is the focused loop: target, review, evidence, fix, retest, report. For an app whose code came from a coding agent, that loop is what turns a shrinking backlog into a defensible go or no-go backed by proof.
+
+LyraShield is live with open registration. Some platform features remain on the near-term roadmap and are not yet live, so check the current status on the site before relying on a specific capability. Run the [AI app security checklist](/tools/ai-app-security-checklist) on your project, then sign up at [https://lyrashieldai.com](https://lyrashieldai.com) to start a release-assurance run.
