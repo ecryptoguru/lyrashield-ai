@@ -77,6 +77,18 @@ const jsonLd = [
       acceptedAnswer: { "@type": "Answer", text: item.a },
     })),
   },
+  {
+    "@context": "https://schema.org",
+    "@type": "DefinedTermSet",
+    name: "LyraShield AI Evidence States",
+    description:
+      "The four evidence states LyraShield AI assigns to security findings, from initial detection to retest-confirmed resolution.",
+    hasDefinedTerm: evidenceStates.map((state) => ({
+      "@type": "DefinedTerm",
+      name: state.name,
+      description: state.meaning,
+    })),
+  },
 ]
 ---
 
@@ -95,6 +107,12 @@ const jsonLd = [
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
         LyraShield AI preserves scope, coverage, evidence provenance, and retest state as separate facts. It does not turn scanner confidence or missing evidence into a universal security verdict.
       </p>
+      <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5 text-sm leading-7 text-text-muted" data-reveal="fade">
+        <p class="font-semibold text-text">TL;DR</p>
+        <p class="mt-2">
+          Every finding carries one of four evidence states: <strong>detected candidate</strong> (a scanner signal that needs review), <strong>independently verified</strong> (a separate receipt supports it), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent), or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A score or clean result never overrides these facts.
+        </p>
+      </div>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-07-29">July 29, 2026</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
