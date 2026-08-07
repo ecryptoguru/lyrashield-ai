@@ -357,6 +357,7 @@ jobs:
               "${OAUTH_ENV[@]}"
 
       - name: Smoke app health
+        id: smoke-app
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
           SMOKE_URL: "${{ env.APP_URL }}/api/ready"
@@ -373,6 +374,7 @@ jobs:
           exit 1
 
       - name: Smoke scanner health
+        id: smoke-scanner
         if: vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
         env:
           SMOKE_URL: "${{ env.SCANNER_URL }}/api/ready"
@@ -387,3 +389,63 @@ jobs:
           done
           echo "Scanner health smoke failed after 60 attempts"
           exit 1
+
+      # ── Auto-rollback on health check failure ────────────────────────────
+      # If either smoke check fails, redeploy the previous image so the service
+      # is not left running a broken build. Azure Container Apps keeps revision
+      # history, so we can reactivate the last-known-good revision. If that
+      # fails, the step posts a clear error with manual rollback instructions.
+      - name: Rollback on health check failure
+        if: failure() && (steps.smoke-app.outcome == 'failure' || steps.smoke-scanner.outcome == 'failure')
+        env:
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          echo "::error::Post-deploy health check failed — attempting automatic rollback."
+
+          ROLLBACK_FAILED=0
+
+          rollback_app() {
+            local name="$1"
+            if [ -z "$name" ]; then return 0; fi
+            echo "Attempting rollback for Container App: $name"
+            # List revisions, skip the latest (index 0), activate the previous one.
+            PREV_REVISION=$(az containerapp revision list \
+              --name "$name" \
+              --resource-group "$RG" \
+              --query "[1].name" \
+              -o tsv 2>/dev/null || echo "")
+            if [ -n "$PREV_REVISION" ] && [ "$PREV_REVISION" != "null" ]; then
+              echo "Reactivating previous revision: $PREV_REVISION"
+              if az containerapp revision activate \
+                --name "$name" \
+                --resource-group "$RG" \
+                --revision "$PREV_REVISION" 2>/dev/null; then
+                echo "Rollback succeeded for $name (revision: $PREV_REVISION)"
+              else
+                echo "::error::Failed to reactivate previous revision for $name"
+                ROLLBACK_FAILED=1
+              fi
+            else
+              echo "::error::No previous revision found for $name — manual rollback required."
+              ROLLBACK_FAILED=1
+            fi
+          }
+
+          if [ "${{ steps.smoke-app.outcome }}" == "failure" ]; then
+            rollback_app "$APP_NAME"
+          fi
+
+          if [ "${{ steps.smoke-scanner.outcome }}" == "failure" ]; then
+            rollback_app "$SCANNER_NAME"
+          fi
+
+          if [ "$ROLLBACK_FAILED" -eq 1 ]; then
+            echo "::error::Automatic rollback could not complete for one or more apps."
+            echo "::error::Manual rollback: az containerapp revision list --name <app> --resource-group <rg>, then az containerapp revision activate --revision <revision>"
+          fi
+
+          # Always exit 0 here so the workflow records the original health-check
+          # failure as the job result, not the rollback step.
+          exit 0

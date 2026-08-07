@@ -149,6 +149,8 @@ async function runUrlScan(
         ? createEgressProxyFetchFn({
             url: env.LYRASHIELD_EGRESS_PROXY_URL,
             secret: env.LYRASHIELD_EGRESS_PROXY_SECRET,
+            connectTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_CONNECT_TIMEOUT_MS,
+            readTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS,
           })
         : undefined
     const findings = await scanUrl({

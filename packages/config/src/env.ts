@@ -105,6 +105,21 @@ const envSchema = z
     // set, the worker routes safeFetchDetailed through this proxy instead of direct egress.
     LYRASHIELD_EGRESS_PROXY_URL: z.string().url().optional().or(z.literal("")),
     LYRASHIELD_EGRESS_PROXY_SECRET: z.string().optional().or(z.literal("")),
+    // Egress proxy connect/read timeouts in milliseconds. If the proxy itself hangs
+    // (hung upstream, network partition), the worker-side fetch to the proxy must not
+    // stall the scan indefinitely. Defaults: connect 10s, read 30s.
+    LYRASHIELD_EGRESS_PROXY_CONNECT_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(120_000)
+      .default(10_000),
+    LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(300_000)
+      .default(30_000),
     PLATFORM_MAX_SCAN_BUDGET_USD: z.coerce.number().positive().max(1000).default(50),
     // Docker sandbox resource limits passed to the Strix engine (e.g. "4g", "2", "512").
     STRIX_SANDBOX_MEM_LIMIT: z.string().optional().default("4g"),
