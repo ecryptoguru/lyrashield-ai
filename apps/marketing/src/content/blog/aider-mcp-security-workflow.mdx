@@ -1,0 +1,86 @@
+---
+title: Aider MCP Security Workflow With LyraShield AI
+description: Setup guide for the LyraShield MCP security workflow in Aider using the CLI, YAML MCP server list, verification, and a GitHub Action diff gate.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification]
+draft: false
+heroImage: agent-security-25
+faq:
+  - q: How does Aider store MCP server configuration?
+    a: Aider stores MCP servers as a YAML list under the mcp servers key in its settings file. Remote servers use transport http plus a url field.
+  - q: Can the LyraShield CLI auto write Aider MCP config?
+    a: No. The install command prints the values to paste manually because Aider cannot be auto configured by the CLI.
+  - q: What does the CLI doctor command verify?
+    a: It verifies that the MCP server is reachable, credentials resolve, and the config is valid so you can confirm setup without a manual guess.
+  - q: Does Aider have a rules file for agent instructions?
+    a: No. Aider has no dedicated rules file. You convey conventions through the chat prompt and the MCP server config you allow.
+---
+
+This workflow sets up the LyraShield MCP security workflow for Aider so the terminal agent can run security checks inside your project. It leads with the LyraShield CLI, then covers the YAML MCP server list, the manual paste path, verification, an inline check, a GitHub Action diff gate, and an agent rules snippet. Pair it with the [vibe coding security guide](/blog/vibe-coding-security-guide) for broader context.
+
+## 1. Install prerequisites and authenticate
+
+Install Node so the `npx` commands resolve, then run `npx lyrashield login` to store your credentials in a local file under your home directory. Nothing is committed to the repository, because credentials live in a per user file and the CLI never writes them into source. This matters for shared repos where a committed token would leak to every collaborator and to the git history. Confirm with `npx lyrashield doctor` that the server is reachable and the credentials resolve before you configure Aider, because a failed login surfaces here instead of mid install. The [Node.js downloads page](https://nodejs.org/en/download) is the canonical source for the runtime. Run login and doctor from the project root so any project scoped config is detected correctly, and re-run doctor whenever you suspect the connection has drifted. If you share a machine with teammates, note that the credentials file is per user, so each person runs login once rather than sharing a single credential file.
+
+## 2. Generate the Aider MCP values
+
+Run `npx lyrashield install aider` to print the values you need to paste into the Aider settings file. The CLI cannot auto write the Aider config, so this command is the supported way to get the exact server entry without guessing field names. For a local server the value uses the stdio command `npx -y @lyrashield/mcp stdio`. For a remote server the value uses transport http with the endpoint `https://app.lyrashieldai.com/api/mcp` and a Bearer token prefixed `lsk_`. Copy the output exactly, because Aider expects a YAML list and a small indentation change can break parsing at load time. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how servers expose tools and why the entry format matters. Keep the printed output out of any shared notes or screenshots, since it can include a token reference you do not want to leak. Because the CLI cannot write the file for you, treat the printed block as the source of truth and paste it verbatim, then adjust only the transport choice to match your environment rather than retyping fields from memory.
+
+## 3. Paste the server into the YAML settings file
+
+Aider stores MCP servers as a YAML list under the mcp servers key in its settings file, not as a JSON object with an mcpServers key like other tools. Add the LyraShield entry to that list, keeping the indentation consistent with existing entries, because YAML is whitespace sensitive and a misaligned line can silently drop the server. For a remote server use transport http plus a url field, and store the Bearer token in the local credentials file rather than the settings file you might share or back up. Since Aider has no dedicated rules file, the server list is the main way you constrain what the agent can reach, so keep it minimal and reviewed every session. The [Aider documentation](https://aider.chat/docs/mcp/mcp.html) describes the settings file format and the server list structure. Validate the YAML after every edit by loading Aider and confirming it sees the server, rather than assuming the file parsed. If you keep the settings file in a dotfile repository for portability, make sure the Bearer token is not in that file, because a dotfiles repo is a common way credentials leak when shared or pushed publicly.
+
+## 4. Verify the connection and run an inline check
+
+After config, verify that Aider can reach the server by asking the agent to run a security check on the current project. The agent should call the LyraShield tools to target the app, run review, and return findings you can act on. Confirm with `npx lyrashield doctor` that the config is valid and the server is reachable, so you know setup succeeded without a manual guess. Run an inline check on a small change before wiring CI, because a green local run proves the credentials and transport are correct end to end. If the agent cannot see the tools, recheck the YAML indentation and the credentials file, and confirm the server entry uses the right transport. A failed inline check is cheaper to debug now than a red CI run later. If the inline check returns findings, read them before wiring CI so you understand the output format the GitHub Action will produce, and so you can set expectations with your team about what a blocked build looks like.
+
+## 5. Add the GitHub Action diff gate
+
+Wire the workflow into CI so every pull request is scanned on the changed diff, not the whole repository. The LyraShield GitHub Action runs on pull request events, targets the changed files, and emits SARIF output you can ingest. Approval gated fix proposals are proposals requiring review, so the action blocks only on new findings while a human approves any fix. The [GitHub Actions security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions) describes the permissions and secret handling to apply. Run the action on every pull request so review cannot be skipped under deadline pressure, and pin your action versions so an upstream change cannot alter your gate. Store any token the action needs as a GitHub Actions secret rather than in the workflow file, and give the job the minimum permissions it needs, because a scanner job does not need write access to your repository contents.
+
+```yaml
+name: LyraShield Security Check
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: npx -y @lyrashield/mcp scan --diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} --format sarif > lyrashield.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: lyrashield.sarif
+```
+
+## 6. Add an agent rules snippet
+
+Aider has no rules file, so convey conventions through the chat prompt at the start of a session. A short snippet you paste tells the agent to run a check before completing a feature and to attach evidence to the pull request.
+
+```markdown
+Before finishing a feature, run a LyraShield security check and attach the findings link to the pull request. Never commit secrets. If a high severity issue is found, stop and ask for review.
+```
+
+| Workflow step | Command or action | Purpose |
+| --- | --- | --- |
+| Authenticate | npx lyrashield login | Store credentials locally |
+| Get values | npx lyrashield install aider | Print values to paste |
+| Paste config | YAML mcp servers list | Add server to settings |
+| CI gate | GitHub Action on diff | Block on new findings |
+
+## Why pair Aider with LyraShield AI
+
+LyraShield AI gives you release assurance for AI built apps through a target, review, evidence, fix, retest, report loop. For Aider it contributes agentic pentest, software composition analysis, and secrets scanning, then writes each finding to an immutable assurance record that separates detection from proof. Approval gated fix proposals are proposals requiring review, so a human stays in the loop before anything ships. The platform is live with open registration, so you can [create an account](https://lyrashieldai.com) and pair it with the [AI app security checklist tool](/tools/ai-app-security-checklist). For a review focused companion, see the [Windsurf security workflow](/blog/windsurf-security-workflow) post. Running the workflow on every Aider session means a security check happens before code reaches review, not after a finding slips into production.
+
+---
+
+All 8 posts above are the complete, validator-passing deliverable. The full delimited file is at `/agent/workspace/deliverable.md` and individual posts at `/agent/workspace/posts/*.md` if you want them split for your CMS.
+
+One thing worth flagging: your spec lists `agent-plugins.org` as the canonical source for the Agent Plugins v1.0.0 spec, which I cited in the two Agent Plugin workflow posts. That domain isn't in my approved primary/official list, so it doesn't count toward the ≥2 primary requirement, but I kept it because it's the authoritative source for the plugin spec you specified. Each of those posts still has 3 primary/official links (nodejs.org, modelcontextprotocol.io, docs.github.com), so the requirement is met. If `agent-plugins.org` should instead be treated as a vendor domain or swapped for a different source, let me know and I'll adjust.

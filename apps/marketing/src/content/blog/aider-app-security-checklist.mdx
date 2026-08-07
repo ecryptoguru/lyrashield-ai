@@ -1,0 +1,51 @@
+---
+title: Aider App Security Checklist for AI Pair Programming
+description: A security checklist for reviewing apps built with Aider covering MCP server config, secrets, dependencies, and verifiable evidence with LyraShield AI.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification]
+draft: false
+heroImage: agent-security-25
+faq:
+  - q: Does Aider support a rules or instructions file like other agents?
+    a: No. Aider has no dedicated rules file. You convey conventions through the chat prompt and the MCP server config in the YAML settings file.
+  - q: How does Aider store MCP server configuration?
+    a: Aider stores MCP servers as a YAML list under the mcp servers key in its settings file. Remote servers use transport http plus a url field.
+  - q: Can the LyraShield CLI auto write Aider MCP config?
+    a: No. The LyraShield install command prints the values to paste manually because Aider cannot be auto configured by the CLI.
+  - q: Does this checklist replace manual review of Aider changes?
+    a: No. It structures review around the highest risk areas but human judgment still matters for logic and business rules. Pair it with automated detection.
+---
+
+Aider edits code directly from the terminal and can call MCP servers, so a security checklist must review MCP server configuration, secrets, dependency safety, and verifiable evidence. This checklist gives concrete Aider specific steps for each area and pairs the review with [LyraShield AI](https://lyrashieldai.com) for detection plus immutable proof. For cross tool context see the [vibe coding security guide](/blog/vibe-coding-security-guide).
+
+## 1. Review MCP server configuration in the YAML file
+
+Aider stores MCP servers as a YAML list under the mcp servers key in its settings file, so inspect that list before each session. Each entry should name the server and, for remote servers, use transport http plus a url field rather than a local command, because remote servers keep the runtime off your machine and reduce the surface for arbitrary command execution. Remove any server you do not recognize, because an unknown entry can let the agent call arbitrary tools on your behalf the moment Aider loads it. Since Aider has no dedicated rules file, the way you convey conventions is through the chat prompt and the config you allow, so keep the server list minimal and reviewed every session. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how servers expose tools and why a minimal list matters. Treat the settings file as sensitive, because it can point the agent at arbitrary local or remote servers, and back it up somewhere private rather than in the repo. Because Aider cannot be auto configured by the LyraShield CLI, you paste server entries by hand, so double check each entry against the values that `npx lyrashield install aider` prints, since a hand edit is where a wrong transport or url slips in. Keep the list to the servers you use this session, and remove any experimental entry before you commit.
+
+## 2. Audit secrets in Aider edited code and config
+
+Aider can introduce example keys, tokens, and connection strings as it edits, so scan for hardcoded secrets before commit. Move real values into environment variables or a managed secrets store, and verify that no credential lands in the YAML settings file you might share or back up, since that file is easy to overlook when you copy your setup to a new machine. Run a dedicated secrets scanner on the pull request diff rather than relying on visual review, because secrets take many formats and Aider edits can be large and span many files in one session. The [CWE entry on cleartext storage of sensitive information](https://cwe.mitre.org/data/definitions/312.html) explains why this class of flaw persists in AI edited code. Rotate any credential that was written to a file before you caught it, because disk exposure should be treated as a leak, and check git history if the secret was already pushed.
+
+## 3. Validate dependencies Aider introduces
+
+Aider pulls packages as it edits, so review the dependency manifest for unexpected or risky additions on every pull request. Pin versions instead of floating ranges, because a floating range lets a new, unreviewed version enter your build without a code change. Check each new package against a vulnerability database before merge, and treat transitive dependencies with the same scrutiny as direct ones, since a safe looking direct package can pull in a vulnerable transitive one. Remove packages the edited code imports but never calls, because dead dependencies still expand your attack surface and slow installs. Prefer packages with active maintainers and clear license terms, and note any package that appears in only one of your projects. The [OSV database](https://osv.dev/) is a free, queryable source for known vulnerabilities across ecosystems. Re-scan after every dependency update, since a transitive package can introduce an advisory even when your direct list is unchanged. Keep a deny list of packages your team has reviewed and rejected, so a future Aider edit does not reintroduce them under a slightly different name. When Aider imports a package you have never used, spend a minute on the package registry checking its publish history and maintainer count before accepting it.
+
+## 4. Capture verifiable evidence per change
+
+A checklist run is only useful if you can prove it happened and what it found, so record the scanner output, the dependency review, and the secret scan verdict for each pull request. Link that evidence to the commit it covers, and keep detection results separate from the proof that review occurred, because conflating them lets a failed scan be silently edited to look clean later. Use the free [AI app security checklist tool](/tools/ai-app-security-checklist) to standardize what each review records, so a teammate can reconstruct what was checked without reading your mind. Store evidence where it cannot be retroactively modified, because the value is auditability across many AI assisted edits over time. Link the evidence record in the pull request description so a reviewer can find it in one click. If you work across multiple repositories, standardize the evidence location so an auditor does not have to learn a new layout per repo, because consistency is what makes evidence usable at scale. Note who reviewed each finding and what they decided, so a later reader can trace a dismissed alert back to its reasoning.
+
+## 5. Gate merges on the checklist
+
+Wire the checklist into your pull request flow so review cannot be skipped under deadline pressure. Block merge when secrets are found, when a dependency has an unpatched high severity advisory, or when the evidence record is missing. Run the LyraShield GitHub Action on the changed diff so only new risks block the build, not preexisting ones that would otherwise stall every pull request. Surface results in the pull request comment so reviewers see the verdict alongside the edit, and require an explicit human acknowledgement before a blocked finding is dismissed. This mirrors how teams apply CI gates generally, as described in the [GitHub Actions security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions). Treat the gate as the last automated checkpoint before a human merges, not as a substitute for reading the diff. When a finding is dismissed, require the reviewer to record why in the evidence record, so the dismissal is auditable later rather than a silent override.
+
+| Checklist area | What to review | Gate action |
+| --- | --- | --- |
+| MCP server config | YAML settings file, server list, transport | Remove unknown servers |
+| Secrets handling | Edited keys, tokens, config credentials | Block merge, rotate |
+| Dependencies | New packages, pinned versions, advisories | Block on high severity |
+| Evidence | Scan output linked to commit | Require before merge |
+
+## Why pair Aider with LyraShield AI
+
+LyraShield AI gives you release assurance for AI built apps through a target, review, evidence, fix, retest, report loop. For Aider projects it contributes agentic pentest, software composition analysis, and secrets scanning, then writes each finding to an immutable assurance record that separates detection from proof. Approval gated fix proposals are proposals requiring review, so a human stays in the loop before anything ships. The platform is live with open registration, so you can [create an account](https://lyrashieldai.com) and pair it with the [AI app security checklist tool](/tools/ai-app-security-checklist). For setup and the Aider MCP config path, see the [Windsurf security workflow](/blog/windsurf-security-workflow) companion post. Because Aider edits files directly from the chat prompt without an intermediate review pane, an evidence backed scan before you commit is the moment a risky edit gets caught rather than discovered in production.

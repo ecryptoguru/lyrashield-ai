@@ -1,0 +1,67 @@
+---
+title: Secure a Devin CLI Built App Before Launch
+description: A release review checklist for Devin CLI apps covering data exposure, MCP config, secrets, dependencies, and independent launch evidence before you ship.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification]
+draft: false
+heroImage: agent-security-28
+faq:
+  - q: Is Devin CLI the same as Devin Desktop or Windsurf
+    a: No. Devin CLI is the Cognition command line agent, separate from Devin Desktop and Windsurf. It uses .devin/config.local.json for MCP config, not the desktop or editor settings.
+  - q: Where does Devin CLI keep its MCP config
+    a: Devin CLI uses .devin/config.local.json with a root mcpServers key, and the file is gitignored by default. Only stdio transport is documented for CLI MCP servers.
+  - q: How do I manage Devin CLI MCP servers
+    a: Use the devin mcp commands to add, login, enable, and disable servers. Connected tools are namespaced as mcp__name so you can see which server a tool call came from.
+  - q: Should I commit the Devin CLI config file
+    a: The config is gitignored by default and often holds local credentials. Keep it local, and store any shared server definitions in a separate committed file that references env vars instead of literal secrets.
+---
+
+Before launching a Devin CLI built app, review what data entered the Cognition agent, protect its gitignored MCP config, verify dependencies the agent added, scan for committed secrets, and collect independent launch evidence. Devin CLI is the command line agent from Cognition and is separate from Devin Desktop and Windsurf. It accelerates implementation but does not verify the runtime security of what it helped create.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. The same split applies here. A prompt such as do not deploy states intent. A missing production credential enforces it. This checklist walks through the app level review for a Devin CLI workflow without assuming the agent caused every defect.
+
+| Review area | Evidence to collect before launch |
+| --- | --- |
+| Data handling | Approved data classes, current Devin CLI settings, and a record of any sensitive prompt or terminal output |
+| Config and tools | Reviewed .devin/config.local.json servers and mcp__name tool namespace |
+| Secrets | Clean tree, scanned credentials, rotated keys, and local config kept out of version control |
+| Dependencies | Resolved lockfile, package identity, advisory result, and install script decision |
+| Application controls | Negative authorization, tenant boundary, and input validation tests |
+| Release evidence | Deployed surface checks, known limitations, owner, and a fresh retest after fixes |
+
+## 1. Review what data entered Devin CLI
+
+Devin CLI runs in the terminal and can read files, run commands, and call connected tools. List the repositories, files, prompts, terminal output, database samples, and logs that developers exposed to it. Classify each item using the same rules that govern other development services. The [Cognition documentation](https://cognition.ai) covers agent capabilities and data flow for the Devin product family. Confirm the current settings before relying on any default.
+
+That is a data handling review, not an application security result. Do not pipe production secrets, customer records, private keys, or unrestricted database exports into a terminal merely because the agent runs locally. Keep live secrets outside the working tree. Use placeholders and synthetic fixtures for examples. If a credential may have entered any unapproved path, rotate it and check use logs. The [OWASP guide to sensitive data exposure](https://owasp.org/www-community/Improper_Error_Handling) applies to any data that crosses a trust boundary, including a local terminal session.
+
+## 2. Protect the gitignored MCP config and tool namespace
+
+Devin CLI stores MCP server configuration in .devin/config.local.json with a root mcpServers key, and the file is gitignored by default. Only stdio transport is documented for CLI MCP servers. You manage servers with the devin mcp commands: add to register a server, login to authenticate, enable to turn a server on, and disable to turn it off. Connected tools are namespaced as mcp__name, so you can see which server a tool call came from. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how these servers expose tools.
+
+Treat the config file as policy bearing, even though it is gitignored. Review which MCP servers are enabled, what tools each exposes, and what credentials back them. The gitignore default protects local credentials but also means the team does not share the same server set automatically. If you need a shared definition, store the server entries in a separate committed file that references environment variables instead of literal secrets. Require a security owner for changes to agent configuration.
+
+## 3. Keep secrets out of the generated tree
+
+Devin CLI can produce code that embeds a real key, token, or connection string into a committed file. Run a secret scan across the whole repository before launch. The [CWE list of credential handling weaknesses](https://cwe.mitre.org/data/definitions/798.html) covers hard coded passwords and the broader [MITRE CWE database](https://cwe.mitre.org/) tracks related credential exposure patterns. Do not rely on the agent noticing its own mistake.
+
+Keep live secrets outside the working tree using environment variables or a secrets manager. The .devin/config.local.json file is gitignored for this reason, but a secret can still land in source code the agent writes. Use placeholders and synthetic fixtures for examples the agent sees. Review the final diff for any new string that resembles a key, token, or connection string. If a credential may have been committed, rotate it immediately and check access logs.
+
+## 4. Verify the resolved dependencies
+
+Devin CLI may add or upgrade packages while implementing a feature. Do not trust the import list at face value. Inspect the final manifest and lockfile, confirm package identity and publisher, and review advisory results before installing in an environment with credentials. The [OSV.dev database](https://osv.dev/) aggregates known vulnerability data across ecosystems and the [npm security best practices](https://nodejs.org/en/docs/guides/) cover lockfile integrity for Node projects.
+
+Review install scripts because a postinstall hook can run arbitrary code at install time. Inspect transitive changes because a new direct dependency can pull in dozens of unseen packages. Pin references to exact versions or hashes where practical. A dependency that passes an advisory check today can drift when a maintainer publishes a new version, so record the resolved versions and recheck before each release. If the agent added a package you do not recognize, read its documentation and source listing before trusting it with network or file access, because a popular name does not guarantee a safe implementation.
+
+## 5. Test the application policy, not the generated shape
+
+The generated app can have routes, forms, and database queries that compile and render but still fail to enforce authorization. Test the policy directly. Verify a second user is denied access to the first user's resources. Confirm tenant boundaries hold when two organizations share the same deployment. Check input validation on every endpoint that accepts user data. The [OWASP Application Security Verification Standard](https://owasp.org/www-project-application-security-verification-standard/) defines structured requirements for authorization and session controls.
+
+Run negative cases, not just the happy path. A test that confirms a feature works is weaker than a test that confirms an unauthorized request is blocked. Exercise error paths, edge cases, and concurrent operations. Generated code often handles the expected flow well and the unexpected flow poorly. Record the negative test results as part of your release evidence so a reviewer can see what was checked, not just what passed. Keep a copy of the test commands, the input data, and the observed response for each negative case so the check can be repeated after a fix without re-deriving the scenario from memory.
+
+## Why pair Devin CLI with LyraShield
+
+Devin CLI accelerates implementation as a Cognition command line agent. LyraShield AI provides release assurance for AI built apps through a loop of target, review, evidence, fix, retest, and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when, and with what result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
+
+As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate, and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request, which keeps the check fast enough to run on every push. [Create an account](https://lyrashieldai.com) to start a release review, or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Codex security workflow](/blog/codex-security-workflow) covers a related command line agent if your team uses multiple tools.

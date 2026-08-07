@@ -1108,5 +1108,125 @@
     "targetWords": 1400,
     "batch": "batch-7",
     "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 112,
+    "title": "Aider App Security Checklist for AI Pair Programming",
+    "slug": "aider-app-security-checklist",
+    "query": "aider app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 113,
+    "title": "Secure an Antigravity Built App Before Launch",
+    "slug": "antigravity-app-security-checklist",
+    "query": "antigravity app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 114,
+    "title": "Secure a Codebuff Built App Before Launch",
+    "slug": "codebuff-app-security-checklist",
+    "query": "codebuff app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 115,
+    "title": "Copilot CLI App Security Checklist for Agents",
+    "slug": "copilot-cli-app-security-checklist",
+    "query": "copilot cli app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 116,
+    "title": "Secure a Devin CLI Built App Before Launch",
+    "slug": "devin-cli-app-security-checklist",
+    "query": "devin cli app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 117,
+    "title": "GitHub Copilot App Security Checklist for Teams",
+    "slug": "github-copilot-app-security-checklist",
+    "query": "github copilot app security - checklist",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 118,
+    "title": "Aider MCP Security Workflow With LyraShield AI",
+    "slug": "aider-mcp-security-workflow",
+    "query": "aider mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 119,
+    "title": "Connect Antigravity to LyraShield via MCP",
+    "slug": "antigravity-mcp-security-workflow",
+    "query": "antigravity mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 120,
+    "title": "Connect Codebuff to LyraShield via MCP",
+    "slug": "codebuff-mcp-security-workflow",
+    "query": "codebuff mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 121,
+    "title": "Copilot CLI MCP Security Workflow Setup Guide",
+    "slug": "copilot-cli-mcp-security-workflow",
+    "query": "copilot cli mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 122,
+    "title": "Connect Devin CLI to LyraShield via MCP",
+    "slug": "devin-cli-mcp-security-workflow",
+    "query": "devin cli mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 123,
+    "title": "GitHub Copilot MCP Security Workflow Setup Guide",
+    "slug": "github-copilot-mcp-security-workflow",
+    "query": "github copilot mcp security - workflow",
+    "cluster": "Workflow",
+    "targetWords": 1400,
+    "batch": "batch-8",
+    "cta": "Pillar + Launch Checklist"
   }
 ]

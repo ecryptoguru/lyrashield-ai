@@ -254,6 +254,18 @@ Fresh-run decision: no topic replacement is required. The July 14 refresh reinfo
 | 109 | Hermes Agent App Security Checklist - LyraShield AI / `hermes-app-security-checklist`               | hermes app security - checklist                 | Workflow     | 1,400 | Pillar + Launch Checklist             |
 | 110 | Pi Coding Agent App Security Checklist - LyraShield / `pi-coding-agent-app-security-checklist`      | pi coding agent app security - checklist        | Workflow     | 1,400 | Pillar + Launch Checklist             |
 | 111 | OpenClaw App Security Checklist - LyraShield AI / `openclaw-app-security-checklist`                 | openclaw app security - checklist               | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 112 | Aider App Security Checklist for AI Pair Programming / `aider-app-security-checklist`               | aider app security - checklist                  | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 113 | Secure an Antigravity Built App Before Launch / `antigravity-app-security-checklist`                | antigravity app security - checklist            | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 114 | Secure a Codebuff Built App Before Launch / `codebuff-app-security-checklist`                       | codebuff app security - checklist               | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 115 | Copilot CLI App Security Checklist for Agents / `copilot-cli-app-security-checklist`                | copilot cli app security - checklist            | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 116 | Secure a Devin CLI Built App Before Launch / `devin-cli-app-security-checklist`                     | devin cli app security - checklist              | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 117 | GitHub Copilot App Security Checklist for Teams / `github-copilot-app-security-checklist`           | github copilot app security - checklist         | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 118 | Aider MCP Security Workflow With LyraShield AI / `aider-mcp-security-workflow`                      | aider mcp security - workflow                   | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 119 | Connect Antigravity to LyraShield via MCP / `antigravity-mcp-security-workflow`                     | antigravity mcp security - workflow             | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 120 | Connect Codebuff to LyraShield via MCP / `codebuff-mcp-security-workflow`                           | codebuff mcp security - workflow                | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 121 | Copilot CLI MCP Security Workflow Setup Guide / `copilot-cli-mcp-security-workflow`                 | copilot cli mcp security - workflow             | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 122 | Connect Devin CLI to LyraShield via MCP / `devin-cli-mcp-security-workflow`                         | devin cli mcp security - workflow               | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 123 | GitHub Copilot MCP Security Workflow Setup Guide / `github-copilot-mcp-security-workflow`           | github copilot mcp security - workflow          | Workflow     | 1,400 | Pillar + Launch Checklist             |
 
 ## 6. `/tools` product-led SEO surface
 
