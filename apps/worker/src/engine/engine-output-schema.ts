@@ -131,7 +131,7 @@ export const engineRunRecordSchema = z
       "budget_exceeded",
       "cancelled",
       "timed_out",
-    ]),
+    ]).optional(),
   })
   .strip()
 
