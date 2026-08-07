@@ -1,18 +1,29 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
+/**
+ * CLI credential storage.
+ *
+ * The read contract — file location, precedence, defaults, normalization — is
+ * owned by `@lyrashield/credentials` and shared with the MCP server so the two
+ * cannot drift. Only the write side (login/logout) is CLI-specific and lives
+ * here.
+ */
 import { randomUUID } from "node:crypto"
-import { mkdir, readFile, writeFile, unlink, chmod, access, rename } from "node:fs/promises"
-import { homedir } from "node:os"
-import path from "node:path"
+import { mkdir, writeFile, unlink, chmod, access, rename } from "node:fs/promises"
+import {
+  CREDENTIALS_DIR,
+  CREDENTIALS_FILE,
+  getEnvApiKey,
+  getEnvApiUrl,
+  readCredentialsFile,
+  resolveCredentials,
+  type ResolvedCredentials,
+  type StoredCredentials,
+} from "@lyrashield/credentials"
 
-export const CREDENTIALS_DIR = path.join(homedir(), ".lyrashield")
-export const CREDENTIALS_FILE = path.join(CREDENTIALS_DIR, "credentials.json")
+export { CREDENTIALS_DIR, CREDENTIALS_FILE, getEnvApiKey, getEnvApiUrl }
 
-export interface Credentials {
-  apiKey?: string
-  apiUrl?: string
-  workspaceId?: string
-  installId: string
-}
+export type Credentials = StoredCredentials
+export type EffectiveCredentials = ResolvedCredentials
 
 async function ensureDir(): Promise<void> {
   await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 })
@@ -26,43 +37,12 @@ async function setFileMode(file: string, mode: number): Promise<void> {
   }
 }
 
-export async function loadCredentials(): Promise<Credentials | undefined> {
-  try {
-    const raw = await readFile(CREDENTIALS_FILE, "utf-8")
-    const parsed = JSON.parse(raw) as Credentials
-    if (!parsed.installId) parsed.installId = randomUUID()
-    // Dedup safeguard: normalize to the known credential fields only.
-    // JSON.parse already collapses duplicate object keys, but a manually
-    // edited or corrupted file could carry stale/extra fields. This keeps
-    // the in-memory shape stable and prevents duplicate-value drift.
-    return normalizeCredentials(parsed)
-  } catch (err) {
-    if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") {
-      return undefined
-    }
-    throw new Error(`Could not read credentials: ${err}`)
-  }
-}
-
 /**
- * Normalize a parsed credentials object to the known field set, trimming
- * string values and dropping unknown keys. This prevents duplicate or stale
- * credential fields from persisting across save/load cycles.
+ * Read the stored credentials. Returns undefined when no file exists; throws an
+ * actionable error when the file exists but is unreadable or malformed.
  */
-function normalizeCredentials(parsed: Partial<Credentials>): Credentials {
-  const normalized: Credentials = {
-    installId: parsed.installId || randomUUID(),
-  }
-  if (typeof parsed.apiKey === "string" && parsed.apiKey.trim()) {
-    normalized.apiKey = parsed.apiKey.trim()
-  }
-  if (typeof parsed.apiUrl === "string" && parsed.apiUrl.trim()) {
-    normalized.apiUrl = parsed.apiUrl.trim()
-  }
-  if (typeof parsed.workspaceId === "string" && parsed.workspaceId.trim()) {
-    normalized.workspaceId = parsed.workspaceId.trim()
-  }
-  return normalized
+export async function loadCredentials(): Promise<Credentials | undefined> {
+  return readCredentialsFile()
 }
 
 export async function saveCredentials(credentials: Credentials): Promise<void> {
@@ -92,36 +72,8 @@ export async function credentialsFileExists(): Promise<boolean> {
   }
 }
 
-export function getEnvApiKey(): string | undefined {
-  return process.env.LYRASHIELD_API_KEY
-}
-
-export function getEnvApiUrl(): string | undefined {
-  return process.env.LYRASHIELD_API_URL
-}
-
-export interface EffectiveCredentials {
-  apiKey: string | undefined
-  apiUrl: string
-  workspaceId: string | undefined
-  installId: string | undefined
-  source: "env" | "file" | "none"
-}
-
 export async function getEffectiveCredentials(): Promise<EffectiveCredentials> {
-  const envKey = getEnvApiKey()
-  const envUrl = getEnvApiUrl()
-  const stored = await loadCredentials()
-  const apiKey = envKey ?? stored?.apiKey
-  const apiUrl = envUrl ?? stored?.apiUrl ?? "https://app.lyrashieldai.com"
-  const source: "env" | "file" | "none" = envKey || envUrl ? "env" : stored ? "file" : "none"
-  return {
-    apiKey,
-    apiUrl,
-    workspaceId: stored?.workspaceId,
-    installId: stored?.installId,
-    source,
-  }
+  return resolveCredentials()
 }
 
 export function requireApiKey(creds: EffectiveCredentials): string {

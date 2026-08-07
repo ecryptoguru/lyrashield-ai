@@ -1,15 +1,24 @@
-/* eslint-disable security/detect-non-literal-fs-filename */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import path from "node:path"
+/**
+ * MCP server credential resolution.
+ *
+ * The read contract — file location, precedence, defaults, normalization — is
+ * owned by `@lyrashield/credentials` and shared with the CLI so the two cannot
+ * drift.
+ *
+ * This path deliberately tolerates an unreadable credentials file: the MCP
+ * server runs inside someone's editor, and a corrupt file must not stop a valid
+ * LYRASHIELD_API_KEY environment variable from working.
+ */
+import {
+  CREDENTIALS_DIR,
+  CREDENTIALS_FILE,
+  resolveCredentials,
+  type StoredCredentials,
+} from "@lyrashield/credentials"
 
-export const CREDENTIALS_DIR = path.join(homedir(), ".lyrashield")
-export const CREDENTIALS_FILE = path.join(CREDENTIALS_DIR, "credentials.json")
+export { CREDENTIALS_DIR, CREDENTIALS_FILE }
 
-export interface Credentials {
-  apiKey?: string
-  apiUrl?: string
-}
+export type Credentials = Pick<StoredCredentials, "apiKey" | "apiUrl">
 
 export class NoApiKeyError extends Error {
   constructor() {
@@ -20,26 +29,8 @@ export class NoApiKeyError extends Error {
   }
 }
 
-async function loadCredentialsFile(): Promise<Credentials | undefined> {
-  try {
-    const raw = await readFile(CREDENTIALS_FILE, "utf-8")
-    const parsed = JSON.parse(raw) as Credentials
-    return {
-      apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : undefined,
-      apiUrl: typeof parsed.apiUrl === "string" ? parsed.apiUrl : undefined,
-    }
-  } catch {
-    return undefined
-  }
-}
-
 export async function resolveMcpCredentials(): Promise<{ apiKey: string; apiUrl: string }> {
-  const envKey = process.env.LYRASHIELD_API_KEY
-  const envUrl = process.env.LYRASHIELD_API_URL
-  const file = await loadCredentialsFile()
-
-  const apiKey = envKey || file?.apiKey
-  const apiUrl = envUrl || file?.apiUrl || "https://app.lyrashieldai.com"
+  const { apiKey, apiUrl } = await resolveCredentials({ tolerateUnreadableFile: true })
 
   if (!apiKey) {
     throw new NoApiKeyError()

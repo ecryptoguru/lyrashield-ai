@@ -17,6 +17,7 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthSplitLayout } from "@/components/auth-split-layout"
 import { PasswordInput } from "@/components/password-input"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(
   /\/$/,
@@ -40,6 +41,10 @@ export default function SignUpPage() {
     microsoft: false,
     emailVerification: false,
   })
+  // Until the client-side provider probe resolves we cannot distinguish
+  // "no OAuth configured" from "still loading" — rendering nothing makes the
+  // page look like a bare credentials form. Show a skeleton instead.
+  const [providersLoading, setProvidersLoading] = useState(true)
 
   useEffect(() => {
     const oauthError = new URLSearchParams(window.location.search).get("error")
@@ -73,6 +78,7 @@ export default function SignUpPage() {
         }
       )
       .catch(() => {})
+      .finally(() => setProvidersLoading(false))
 
     return () => {
       if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
@@ -333,7 +339,24 @@ export default function SignUpPage() {
             </p>
           </form>
 
-          {(providers.github || providers.google || providers.microsoft) && (
+          {providersLoading && (
+            <div aria-hidden="true" data-testid="oauth-skeleton">
+              <div className="my-6 flex items-center gap-3">
+                <div className="bg-border h-px flex-1" />
+                <span className="text-muted-foreground text-xs font-medium">OR</span>
+                <div className="bg-border h-px flex-1" />
+              </div>
+              <div className="space-y-3">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <span className="sr-only" role="status">
+                Loading sign-up options
+              </span>
+            </div>
+          )}
+
+          {!providersLoading && (providers.github || providers.google || providers.microsoft) && (
             <>
               <div className="my-6 flex items-center gap-3">
                 <div className="bg-border h-px flex-1" />

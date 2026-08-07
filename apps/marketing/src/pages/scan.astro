@@ -95,6 +95,10 @@ const jsonLd = [
           <p class="font-mono text-xs tracking-[.18em] text-(--terminal-muted) uppercase">Passive review in progress</p>
           <h2 id="scanning-heading" class="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Reading the public surface</h2>
           <p class="sr-only" role="status" aria-live="polite">Lite Check in progress. Results will appear below when the passive review finishes.</p>
+          {/* Indeterminate on purpose: aria-valuetext without aria-valuenow. The
+              stepper reflects activity, not a completion percentage — claiming a
+              percentage here would contradict what this check can actually prove. */}
+          <div id="scan-progressbar" class="sr-only" role="progressbar" aria-labelledby="scanning-heading" aria-valuetext="Step 1 of 5: Establishing a bounded, read-only connection."></div>
           <p id="scan-activity" class="mt-3 min-h-6 text-sm leading-6 text-(--terminal-dim)">Establishing a bounded, read-only connection.</p>
 
           <ol id="scan-steps" class="mt-6 space-y-2 font-mono text-sm" aria-label="What the Lite Check is reviewing">
@@ -308,6 +312,7 @@ const jsonLd = [
     function animateSteps() {
       const steps = [...document.querySelectorAll<HTMLElement>("#scan-steps li")]
       const activity = document.querySelector<HTMLElement>("#scan-activity")
+      const progressbar = document.querySelector<HTMLElement>("#scan-progressbar")
       const stepDurationMs = 800 // ponytail: fixed UI cadence; make configurable only if product timing diverges.
       let active = 0
       let timer = 0
@@ -328,7 +333,10 @@ const jsonLd = [
           if (isActive) step.setAttribute("aria-current", "step")
           else step.removeAttribute("aria-current")
         })
-        if (activity) activity.textContent = steps[index]?.dataset.status || "Reviewing the public surface."
+        const status = steps[index]?.dataset.status || "Reviewing the public surface."
+        if (activity) activity.textContent = status
+        // Screen readers get the same stage change sighted users see in the stepper.
+        progressbar?.setAttribute("aria-valuetext", `Step ${index + 1} of ${steps.length}: ${status}`)
       }
 
       showStep(active)
@@ -596,13 +604,35 @@ const jsonLd = [
 
     async function handleShareScorecard() {
       const url = document.querySelector<HTMLAnchorElement>("#scorecard-link")!.href
-      const usedNativeShare = typeof navigator.share === "function"
-      if (usedNativeShare) {
-        await navigator.share({ title: "My LyraShield AI Lite Check", url })
-      } else {
-        await navigator.clipboard.writeText(url)
+      const status = document.querySelector<HTMLElement>("#capture-status")
+      const payload = { title: "My LyraShield AI Lite Check", url }
+
+      // canShare tells us the payload is actually shareable on this platform;
+      // share() alone can exist and still reject for this data shape.
+      const canNativeShare =
+        typeof navigator.share === "function" &&
+        (typeof navigator.canShare !== "function" || navigator.canShare(payload))
+
+      if (canNativeShare) {
+        try {
+          await navigator.share(payload)
+          capture("scorecard_shared", { channel: "native" })
+          return
+        } catch (cause) {
+          // Dismissing the share sheet is a normal user choice, not a failure.
+          if ((cause as DOMException | undefined)?.name === "AbortError") return
+          // Anything else: fall through to the clipboard path.
+        }
       }
-      capture("scorecard_shared", { channel: usedNativeShare ? "native" : "copy" })
+
+      try {
+        await navigator.clipboard.writeText(url)
+        if (status) status.textContent = "Link copied to your clipboard."
+        capture("scorecard_shared", { channel: "copy" })
+      } catch {
+        // Clipboard can be blocked by permissions or a non-secure context.
+        if (status) status.textContent = "Could not copy automatically — copy the link above."
+      }
     }
 
     function startHomepageScan() {
