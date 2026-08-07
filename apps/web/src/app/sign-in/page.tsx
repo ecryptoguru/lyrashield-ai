@@ -265,7 +265,11 @@ export default function SignInPage() {
                 >
                   Forgot password?
                 </Link>
-              ) : null}
+              ) : (
+                <p className="text-muted-foreground py-2 text-right text-xs">
+                  Forgot your password? Email reset is coming soon.
+                </p>
+              )}
             </div>
 
             {error && (
