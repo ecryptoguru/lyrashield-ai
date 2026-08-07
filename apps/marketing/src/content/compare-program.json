@@ -1,0 +1,80 @@
+[
+  {
+    "index": 1,
+    "slug": "aikido",
+    "competitor": "Aikido",
+    "faqCount": 4
+  },
+  {
+    "index": 2,
+    "slug": "corgea",
+    "competitor": "Corgea",
+    "faqCount": 3
+  },
+  {
+    "index": 3,
+    "slug": "github-advanced-security",
+    "competitor": "GitHub Advanced Security",
+    "faqCount": 4
+  },
+  {
+    "index": 4,
+    "slug": "horizon3",
+    "competitor": "Horizon3.ai",
+    "faqCount": 3
+  },
+  {
+    "index": 5,
+    "slug": "mobb",
+    "competitor": "Mobb",
+    "faqCount": 3
+  },
+  {
+    "index": 6,
+    "slug": "pentera",
+    "competitor": "Pentera",
+    "faqCount": 3
+  },
+  {
+    "index": 7,
+    "slug": "pixee",
+    "competitor": "Pixee",
+    "faqCount": 3
+  },
+  {
+    "index": 8,
+    "slug": "runsybil",
+    "competitor": "Runsybil",
+    "faqCount": 3
+  },
+  {
+    "index": 9,
+    "slug": "semgrep",
+    "competitor": "Semgrep",
+    "faqCount": 4
+  },
+  {
+    "index": 10,
+    "slug": "snyk",
+    "competitor": "Snyk",
+    "faqCount": 4
+  },
+  {
+    "index": 11,
+    "slug": "sonarqube",
+    "competitor": "SonarQube",
+    "faqCount": 4
+  },
+  {
+    "index": 12,
+    "slug": "xbow",
+    "competitor": "XBOW",
+    "faqCount": 4
+  },
+  {
+    "index": 13,
+    "slug": "zeropath",
+    "competitor": "ZeroPath",
+    "faqCount": 3
+  }
+]
