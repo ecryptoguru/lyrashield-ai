@@ -1,0 +1,135 @@
+---
+import Base from "@layouts/Base.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/research", origin).toString()
+const title = "AI app security research | LyraShield AI"
+const description =
+  "Original research on security patterns in AI-built applications. Statistics on common vulnerabilities, evidence-state distributions, and coverage gaps observed across real scans."
+const updatedDate = "2026-08-07"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "LyraShield AI Research",
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    isPartOf: { "@id": `${origin}/#website` },
+    about: ["AI application security", "vulnerability statistics", "security research"],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Research", item: canonical },
+    ],
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:py-24">
+    <header data-reveal-group>
+      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase" data-reveal="fade">Research</p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>
+        Security patterns in AI-built applications
+      </h1>
+      <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
+        Original research from LyraShield AI scans. All statistics are derived from anonymized,
+        privacy-safe scan metadata — no target names, repository URLs, finding payloads, user
+        identities, or IP addresses are published.
+      </p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last updated: <time datetime={updatedDate}>{updatedDate}</time></p>
+    </header>
+
+    <div class="callout callout--warn mt-10" data-reveal>
+      <strong>Research in progress.</strong> This page will be populated with statistics once a
+      sufficient sample of anonymized scan data is available. The framework below describes what
+      we plan to publish and how the data is collected and privacy-protected.
+    </div>
+
+    <section aria-labelledby="methodology-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="methodology-heading" class="text-2xl font-semibold text-text" data-reveal>Research methodology</h2>
+      <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Data source</dt>
+          <dd class="mt-2 leading-7 text-text-muted">Scan metadata from authorized LyraShield AI scans. Only scans where the target owner authorized analysis are included.</dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Privacy protection</dt>
+          <dd class="mt-2 leading-7 text-text-muted">All data is anonymized before aggregation. No target names, repository URLs, finding payloads, user identities, IP addresses, or raw source code are retained for research purposes.</dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Sample size</dt>
+          <dd class="mt-2 leading-7 text-text-muted">Statistics are only published when the underlying sample is large enough to be statistically meaningful. The minimum sample size is stated with each finding.</dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Reproducibility</dt>
+          <dd class="mt-2 leading-7 text-text-muted">The Vibe Security 50 control registry is versioned and public. The evidence-state definitions are published on the <a href="/methodology" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">methodology page</a>. Research results cite the control version used.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="planned-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="planned-heading" class="text-2xl font-semibold text-text" data-reveal>Planned research areas</h2>
+      <div class="mt-8 divide-y divide-border border-y border-border" data-reveal-group>
+        <article class="grid gap-3 py-7 md:grid-cols-[3rem_1fr] md:gap-6" data-reveal>
+          <span class="font-mono text-xs text-text-muted" aria-hidden="true">01</span>
+          <div>
+            <h3 class="font-semibold text-text">Most common vulnerability classes in AI-built apps</h3>
+            <p class="mt-2 leading-7 text-text-muted">Distribution of finding categories across the Vibe Security 50 controls. Which controls most frequently produce detected candidates, and which most frequently produce verified findings.</p>
+          </div>
+        </article>
+        <article class="grid gap-3 py-7 md:grid-cols-[3rem_1fr] md:gap-6" data-reveal>
+          <span class="font-mono text-xs text-text-muted" aria-hidden="true">02</span>
+          <div>
+            <h3 class="font-semibold text-text">Evidence-state distribution</h3>
+            <p class="mt-2 leading-7 text-text-muted">What fraction of detected candidates are independently verified? What fraction of verified findings are retest-confirmed after a fix? How many remain inconclusive?</p>
+          </div>
+        </article>
+        <article class="grid gap-3 py-7 md:grid-cols-[3rem_1fr] md:gap-6" data-reveal>
+          <span class="font-mono text-xs text-text-muted" aria-hidden="true">03</span>
+          <div>
+            <h3 class="font-semibold text-text">Coverage gaps</h3>
+            <p class="mt-2 leading-7 text-text-muted">Which of the 7 evidence-required controls most frequently lack retained human evidence? Which of the 43 machine-testable controls most frequently return inconclusive?</p>
+          </div>
+        </article>
+        <article class="grid gap-3 py-7 md:grid-cols-[3rem_1fr] md:gap-6" data-reveal>
+          <span class="font-mono text-xs text-text-muted" aria-hidden="true">04</span>
+          <div>
+            <h3 class="font-semibold text-text">Fix proposal outcomes</h3>
+            <p class="mt-2 leading-7 text-text-muted">When a fix proposal is generated and applied, how often does the retest confirm the condition is absent? How often does it remain inconclusive? This measures the effectiveness of the fix-then-retest loop.</p>
+          </div>
+        </article>
+        <article class="grid gap-3 py-7 md:grid-cols-[3rem_1fr] md:gap-6" data-reveal>
+          <span class="font-mono text-xs text-text-muted" aria-hidden="true">05</span>
+          <div>
+            <h3 class="font-semibold text-text">Scan mode comparison</h3>
+            <p class="mt-2 leading-7 text-text-muted">How do finding rates, coverage, and evidence-state distributions differ across scan modes? Are there control categories where deeper analysis consistently produces more verified findings?</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="citation-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="citation-heading" class="text-2xl font-semibold text-text" data-reveal>Citing this research</h2>
+      <p class="mt-5 leading-7 text-text-muted" data-reveal>
+        When published, statistics on this page may be cited as: "LyraShield AI, [report name],
+        lyrashieldai.com/research, [access date]." Each statistic includes its sample size,
+        control version, and collection period. Do not cite a statistic without including its
+        stated limitations.
+      </p>
+    </section>
+
+    <section class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between" data-reveal>
+      <div>
+        <h2 class="text-2xl font-semibold text-text">Get notified when research is published.</h2>
+        <p class="mt-2 text-text-muted">Join the waitlist for early access to scans and research updates.</p>
+      </div>
+      <a href="/#waitlist" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Join the waitlist</a>
+    </section>
+  </section>
+</Base>

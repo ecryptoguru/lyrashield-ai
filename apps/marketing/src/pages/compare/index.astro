@@ -1,0 +1,119 @@
+---
+import Base from "@layouts/Base.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/compare", origin).toString()
+const title = "LyraShield AI vs Security Tools — Evidence-Based Comparisons"
+const description =
+  "How LyraShield AI compares to Snyk, GitHub Advanced Security, SonarQube, and Semgrep. Factual capability, deployment, and pricing comparisons."
+const updatedDate = "2026-08-07"
+
+const comparisons = [
+  {
+    slug: "snyk",
+    name: "Snyk",
+    tagline: "Vulnerability scanning and dependency analysis",
+    focus: "SAST, SCA, container, IaC with DeepCode AI engine",
+  },
+  {
+    slug: "github-advanced-security",
+    name: "GitHub Advanced Security",
+    tagline: "Platform-integrated code scanning and secret detection",
+    focus: "CodeQL, secret scanning, Dependabot within GitHub",
+  },
+  {
+    slug: "sonarqube",
+    name: "SonarQube",
+    tagline: "Static analysis with code quality gates",
+    focus: "Code quality, security hotspots, taint analysis, IaC",
+  },
+  {
+    slug: "semgrep",
+    name: "Semgrep",
+    tagline: "Pattern-based scanning with custom rules",
+    focus: "Fast SAST, custom rules, SCA, secrets, AI triage",
+  },
+]
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    isPartOf: { "@id": `${origin}/#website` },
+    hasPart: comparisons.map((c) => ({
+      "@type": "TechArticle",
+      headline: `LyraShield AI vs ${c.name}`,
+      url: `${origin}/compare/${c.slug}`,
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Compare", item: canonical },
+    ],
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:py-24">
+    <header data-reveal-group>
+      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase" data-reveal="fade">Comparisons</p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>
+        LyraShield AI vs security tools
+      </h1>
+      <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
+        Factual comparisons of LyraShield AI's evidence-backed release assurance approach against
+        established security scanning tools. Each comparison covers capabilities, deployment, and
+        when to use which — none of these tools replace each other.
+      </p>
+    </header>
+
+    <div class="callout mt-10" data-reveal>
+      <strong>How to read these comparisons.</strong> LyraShield AI is a pre-launch
+      evidence-backed release assurance layer, not a replacement for vulnerability scanners,
+      code quality tools, or dependency analyzers. These comparisons help you understand where
+      each tool fits in your security workflow.
+    </div>
+
+    <div class="mt-12 grid gap-6 sm:grid-cols-2" data-reveal-group>
+      {comparisons.map((c) => (
+        <a href={`/compare/${c.slug}`} class="lift rounded-xl border border-border bg-bg-raised p-6 hover:border-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-reveal>
+          <h2 class="text-xl font-semibold text-text">vs {c.name}</h2>
+          <p class="mt-2 text-sm text-text-muted">{c.tagline}</p>
+          <p class="mt-4 text-sm text-accent">Read comparison →</p>
+        </a>
+      ))}
+    </div>
+
+    <section aria-labelledby="position-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="position-heading" class="text-2xl font-semibold text-text" data-reveal>Where LyraShield AI fits</h2>
+      <p class="mt-5 leading-7 text-text-muted" data-reveal>
+        LyraShield AI focuses on a gap that traditional security tools don't address:
+        <strong>evidence-backed release assurance for AI-built apps</strong>. It records what was
+        checked, what was verified, what remains uncertain, and what coverage was achieved — then
+        produces an immutable report you can share with stakeholders.
+      </p>
+      <p class="mt-4 leading-7 text-text-muted" data-reveal>
+        Most teams use LyraShield AI alongside their existing tools: Snyk or Dependabot for
+        dependency scanning, SonarQube for code quality, Semgrep for custom rules, and LyraShield
+        AI for the release assurance layer that ties everything together with evidence states and
+        coverage receipts.
+      </p>
+    </section>
+
+    <section class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between" data-reveal>
+      <div>
+        <h2 class="text-2xl font-semibold text-text">Understand the evidence approach.</h2>
+        <p class="mt-2 text-text-muted">Read the methodology behind LyraShield AI's evidence states.</p>
+      </div>
+      <a href="/methodology" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Read methodology</a>
+    </section>
+  </section>
+</Base>

@@ -71,7 +71,14 @@ export const GET: APIRoute = async (context) => {
 
   const publicPaths = [
     `${origin}/`,
+    `${origin}/about`,
     `${origin}/methodology`,
+    `${origin}/research`,
+    `${origin}/compare`,
+    `${origin}/compare/snyk`,
+    `${origin}/compare/github-advanced-security`,
+    `${origin}/compare/sonarqube`,
+    `${origin}/compare/semgrep`,
     `${origin}/tools`,
     ...toolSlugs,
     `${origin}/vibe-security-50`,

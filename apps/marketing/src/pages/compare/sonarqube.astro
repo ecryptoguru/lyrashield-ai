@@ -1,0 +1,246 @@
+---
+import Base from "@layouts/Base.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/compare/sonarqube", origin).toString()
+const title = "LyraShield AI vs SonarQube — Release Assurance vs Code Quality Analysis"
+const description =
+  "How LyraShield AI compares to SonarQube for AI-built application security. Evidence states, coverage framework, and quality gate differences."
+const updatedDate = "2026-08-07"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Compare", item: `${origin}/compare` },
+      { "@type": "ListItem", position: 3, name: "vs SonarQube", item: canonical },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: [
+      {
+        "@type": "Question",
+        name: "Does LyraShield AI replace SonarQube?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "No. SonarQube provides static analysis with code quality gates and taint analysis. LyraShield AI provides evidence-backed release assurance with coverage receipts and evidence states. They address different parts of the security workflow.",
+        },
+      },
+      {
+        "@type": "Question",
+        name: "What does SonarQube's AI Code Assurance do?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "SonarQube's AI Code Assurance is a verification layer for AI-generated code that runs the Sonar analysis engine to check AI output. It is available in Enterprise and Data Center editions. LyraShield AI takes a different approach: agentic review with evidence states and the Vibe Security 50 control framework.",
+        },
+      },
+    ],
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:py-24">
+    <header data-reveal-group>
+      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase" data-reveal="fade">Comparison</p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>
+        LyraShield AI vs SonarQube
+      </h1>
+      <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
+        Evidence-backed release assurance vs static analysis with code quality gates. They address
+        different parts of the security workflow and can complement each other.
+      </p>
+    </header>
+
+    <div class="callout mt-10" data-reveal>
+      <strong>Factual comparison.</strong> SonarQube by SonarSource provides static analysis, code
+      quality, and security hotspot review. LyraShield AI is a pre-launch evidence-backed release
+      assurance layer. Neither replaces the other.
+    </div>
+
+    <section aria-labelledby="approach-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="approach-heading" class="text-2xl font-semibold text-text" data-reveal>Core approach</h2>
+      <table class="mt-8 w-full border-collapse text-sm">
+        <thead>
+          <tr class="border-b border-border text-left">
+            <th class="py-3 pr-4 font-semibold text-text">Aspect</th>
+            <th class="py-3 pr-4 font-semibold text-text">LyraShield AI</th>
+            <th class="py-3 font-semibold text-text">SonarQube</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Primary focus</td>
+            <td class="py-3 pr-4 text-text">Evidence-backed release assurance for AI-built apps</td>
+            <td class="py-3 text-text-muted">Static analysis, code quality, security hotspots, taint analysis</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Scanning approach</td>
+            <td class="py-3 pr-4 text-text">Agentic engine with GPT-5.6, coverage framework, evidence states</td>
+            <td class="py-3 text-text-muted">Deterministic static analysis with rule-based detection and taint analysis</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Finding lifecycle</td>
+            <td class="py-3 pr-4 text-text">Detected → independently verified → retest-confirmed or inconclusive</td>
+            <td class="py-3 text-text-muted">Security hotspot review → confirmed or false positive; Quality Gates block merges</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Control framework</td>
+            <td class="py-3 pr-4 text-text">Vibe Security 50 (43 machine-testable + 7 evidence-required)</td>
+            <td class="py-3 text-text-muted">No published control framework; rule-based detection with severity levels</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Code quality</td>
+            <td class="py-3 pr-4 text-text-muted">Not a primary focus</td>
+            <td class="py-3 text-text-muted">Yes — code smells, duplication, complexity, coverage metrics</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">AI-generated code focus</td>
+            <td class="py-3 pr-4 text-text">Built for AI-built apps; scans agent rules, MCP configs, AI patterns</td>
+            <td class="py-3 text-text-muted">AI Code Assurance (Enterprise/DC only); AI CodeFix (LLM-driven fix suggestions)</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="capabilities-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="capabilities-heading" class="text-2xl font-semibold text-text" data-reveal>Capability comparison</h2>
+      <table class="mt-8 w-full border-collapse text-sm">
+        <thead>
+          <tr class="border-b border-border text-left">
+            <th class="py-3 pr-4 font-semibold text-text">Capability</th>
+            <th class="py-3 pr-4 font-semibold text-text text-center">LyraShield AI</th>
+            <th class="py-3 font-semibold text-text text-center">SonarQube</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Static analysis (SAST)</td>
+            <td class="py-3 pr-4 text-center text-text">Agentic</td>
+            <td class="py-3 text-center text-text-muted">Yes (rule-based + taint)</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Code quality analysis</td>
+            <td class="py-3 pr-4 text-center text-text-muted">No</td>
+            <td class="py-3 text-center text-text-muted">Yes (code smells, duplication)</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">SCA (dependency scanning)</td>
+            <td class="py-3 pr-4 text-center text-text">Via engine</td>
+            <td class="py-3 text-center text-text-muted">Yes (CVE, malicious package, license)</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Evidence states</td>
+            <td class="py-3 pr-4 text-center text-text">Yes (4 states)</td>
+            <td class="py-3 text-center text-text-muted">No</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Deterministic retest</td>
+            <td class="py-3 pr-4 text-center text-text">Yes</td>
+            <td class="py-3 text-center text-text-muted">Quality Gates (re-scan)</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Coverage receipts</td>
+            <td class="py-3 pr-4 text-center text-text">Yes (per-control)</td>
+            <td class="py-3 text-center text-text-muted">Coverage metrics (line/branch)</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Assurance reports</td>
+            <td class="py-3 pr-4 text-center text-text">Yes (immutable snapshots)</td>
+            <td class="py-3 text-center text-text-muted">No</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">MCP server integration</td>
+            <td class="py-3 pr-4 text-center text-text">Yes (23+ agents)</td>
+            <td class="py-3 text-center text-text-muted">No</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">IaC scanning</td>
+            <td class="py-3 pr-4 text-center text-text-muted">No</td>
+            <td class="py-3 text-center text-text-muted">Yes (Terraform, K8s, Docker, etc.)</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Languages</td>
+            <td class="py-3 pr-4 text-center text-text">Language-agnostic</td>
+            <td class="py-3 text-center text-text-muted">40+ languages</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="deployment-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="deployment-heading" class="text-2xl font-semibold text-text" data-reveal>Deployment and pricing</h2>
+      <table class="mt-8 w-full border-collapse text-sm">
+        <thead>
+          <tr class="border-b border-border text-left">
+            <th class="py-3 pr-4 font-semibold text-text">Aspect</th>
+            <th class="py-3 pr-4 font-semibold text-text">LyraShield AI</th>
+            <th class="py-3 font-semibold text-text">SonarQube</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Deployment</td>
+            <td class="py-3 pr-4 text-text">Hosted + CLI + MCP + GitHub Action</td>
+            <td class="py-3 text-text-muted">SonarQube Cloud (SaaS) or SonarQube Server (self-hosted) + SonarLint IDE</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-text-muted">Pricing</td>
+            <td class="py-3 pr-4 text-text">Pre-launch; pricing to be announced</td>
+            <td class="py-3 text-text-muted">Cloud: Free (50k LOC), Team $34/mo (100k LOC), Enterprise (custom); Server: per-instance/year by LOC</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="summary-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="summary-heading" class="text-2xl font-semibold text-text" data-reveal>When to use which</h2>
+      <div class="mt-8 grid gap-6 md:grid-cols-2" data-reveal-group>
+        <div class="rounded-xl border border-border bg-bg-raised p-6" data-reveal>
+          <h3 class="font-semibold text-text">Use LyraShield AI when</h3>
+          <ul class="mt-4 space-y-3 text-text-muted">
+            <li>You need evidence-backed assurance with coverage receipts for release decisions</li>
+            <li>Your app is AI-built and you need AI-specific pattern coverage</li>
+            <li>You need immutable assurance reports for compliance or client handoff</li>
+            <li>You want security checks inside your AI coding agent via MCP</li>
+          </ul>
+        </div>
+        <div class="rounded-xl border border-border bg-bg-raised p-6" data-reveal>
+          <h3 class="font-semibold text-text">Use SonarQube when</h3>
+          <ul class="mt-4 space-y-3 text-text-muted">
+            <li>You need code quality analysis alongside security (code smells, duplication, complexity)</li>
+            <li>You want enforceable Quality Gates in your CI/CD pipeline</li>
+            <li>You need taint analysis for supported languages</li>
+            <li>You want IaC scanning (Terraform, Kubernetes, Docker)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between" data-reveal>
+      <div>
+        <h2 class="text-2xl font-semibold text-text">See the evidence approach in action.</h2>
+        <p class="mt-2 text-text-muted">Read the methodology or try the free browser-local tools.</p>
+      </div>
+      <div class="flex gap-3">
+        <a href="/methodology" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border px-5 text-sm font-semibold text-text hover:bg-bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Methodology</a>
+        <a href="/tools" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free tools</a>
+      </div>
+    </section>
+  </section>
+</Base>
