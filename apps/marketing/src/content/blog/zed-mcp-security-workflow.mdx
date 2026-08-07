@@ -1,0 +1,137 @@
+---
+title: Zed MCP security workflow for AI built apps
+description: Connect Zed to LyraShield AI via MCP to scan AI generated code for verified findings and wire a diff aware GitHub Action gate in your existing editor flow.
+pubDate: '2026-07-30'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification, supply-chain]
+draft: false
+heroImage: agent-security-12
+faq:
+  - q: 'How does Zed MCP integration work with LyraShield AI?'
+    a: 'Zed exposes MCP servers through settings.json context_servers. You register LyraShield locally with npx or remotely with a Bearer key, then call scan tools directly from the agent panel and review verified findings inline before creating a Fix PR.'
+  - q: 'What does the GitHub Action gate add beyond editor checks?'
+    a: 'The diff aware gate runs on pull requests, blocks risky code paths with SARIF results, and keeps retest and report steps consistent between local Zed runs and CI. It is designed to enforce the same policy for every contributor.'
+  - q: 'Is LyraShield scanning live today?'
+    a: 'Sprints 0 to 2 are shipped. The scan engine MVP, Fix PR generation, and billing are on the roadmap and described as designed to capabilities, not live automatic behavior. You can configure MCP now and adopt verification as it rolls out.'
+  - q: 'How should I manage the Bearer lsk_ key across local and CI setups?'
+    a: 'Treat the lsk_ key like any secret. Load it from your shell env for local stdio, from a password manager for remote HTTP in Zed, and from GitHub Actions encrypted secrets for the diff gate. Never hardcode it in settings.json and never commit it, because context_servers files are often shared between machines and repos.'
+---
+You can secure AI built apps in Zed by connecting LyraShield AI through the [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and running verified checks directly from the editor, then enforcing the same policy in CI with a diff aware GitHub Action gate. Zed reads servers from `settings.json` under `context_servers`, supporting local stdio and remote HTTP with a bearer key.
+
+Zed is fast and agent native, which makes it popular for vibe coding, but speed can leave security gaps when dependencies and routes are scaffolded by agents. The [vibe coding security guide](/blog/vibe-coding-security-guide) frames this problem as unverified generation at scale. LyraShield AI is an agent native AppSec layer for AI built software that follows a loop of Target to Scan to Verified Finding to Fix PR to Retest to Report. This post shows the exact Zed configuration for both local and remote MCP, how to verify the connection, how to run an inline check, and how to wire CI so findings stay actionable.
+
+## 1. Prerequisites and setup
+
+You need Zed 0.170 or newer, Node 18 or newer for `npx`, a LyraShield API key prefixed `lsk_` for remote mode, and a GitHub repo where you can add workflows. Install the MCP package once to warm the cache with `npx -y @lyrashield/mcp --help`. For remote mode, store your key as an environment variable and never commit it. Zed reads MCP servers from `settings.json` under `context_servers`, and the [Zed documentation](https://zed.dev/docs/assistant/context-servers) describes this field as the point where you add custom tools. Confirm you can read secrets scans and dependency data locally by checking your project against [OWASP Top 10](https://owasp.org/www-project-top-ten/) patterns and by reviewing vulnerable deps on [OSV](https://osv.dev/). If you have not used MCP before, skim the [MCP spec overview](https://modelcontextprotocol.io/specification/2025-03-26) to see how tools, resources, and prompts are exposed. Before editing `settings.json`, decide which transport suits your work, since both register under `context_servers` and you can switch without rewriting prompts.
+
+## 2. Configure the MCP server in Zed
+
+Zed supports local stdio and remote HTTP MCP servers. Use local for air gapped work and remote for shared team keys. Add one of these blocks to your Zed `settings.json`. The full reference lives in the [Zed integration guide](/docs/integrations/zed). Do not add bare paths elsewhere in your docs, always use markdown links like the [Zed integration guide](/docs/integrations/zed) to keep references valid.
+
+Local stdio mode:
+
+```json
+{
+  "context_servers": {
+    "lyrashield": {
+      "source": "custom",
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Remote HTTP mode with Bearer:
+
+```json
+{
+  "context_servers": {
+    "lyrashield-remote": {
+      "source": "custom",
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp", "--remote"],
+      "env": {
+        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}",
+        "LYRASHIELD_MCP_URL": "https://app.lyrashieldai.com/api/mcp"
+      }
+    }
+  }
+}
+```
+
+The remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and authenticates with `Authorization: Bearer lsk_...`. The stdio entry uses the pinned command `npx -y @lyrashield/mcp` as requested. You can also run the remote endpoint directly from tools that support streamable HTTP. Keep `$VAR` expansion explicit as shown, since Zed expands variables at launch. For comparison of editor setups, see the [Zed AI app security checklist](/blog/zed-ai-app-security-checklist) which walks through the same pattern for checklist driven reviews. The core difference is the `--remote` flag and `LYRASHIELD_MCP_URL` entry. In stdio mode the binary lives in the `npx` cache, pin a version if reproducibility matters. In remote mode the server is managed, but at the cost of network dependency.
+
+## 3. Verify the connection in Zed
+
+Restart Zed after editing `settings.json`, then open the Agent Panel and run `/context_servers` to list active servers. You should see `lyrashield` or `lyrashield-remote` with a green status. Try a tool call such as `lyrashield.list_targets` and then `lyrashield.scan_status`. If you see a permission error, confirm that `LYRASHIELD_API_KEY` is set in your shell and that Zed was launched from that shell, because context servers inherit env vars at startup. To rule out network issues for remote mode, curl the health path with your key, then retry. For tool troubleshooting patterns, the [Anthropic docs on MCP](https://www.anthropic.com/engineering/desktop) explain common env and transport failures that also apply to Zed. A smoke test calls `lyrashield.list_targets` and reads the JSON shape, because a malformed env shows up before full scans. If the remote returns a 401, your `lsk_` key is expired, so rotate and reexport.
+
+## 4. Run an inline security check from the editor
+
+With the server green, target your current project root and run a scan from the prompt. Use natural language in Zed like "scan this workspace for exposed secrets and vulnerable dependencies and summarize verified findings". LyraShield is designed to return verified findings with evidence, not unfiltered linter noise, and is designed to reduce false positives through proof based retest logic that is on the roadmap. For dependencies, cross check against [OSV](https://osv.dev/) advisories and for code patterns against [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html). When a finding appears, open the file reference and confirm the sink, then request a proposed fix PR. The Fix PR capability is designed to generate a minimal patch and is on the roadmap, it does not apply patches automatically without review. Keep the loop as Target to Scan to Verified Finding to Fix PR to Retest to Report to preserve auditability. An example: Suppose a finding flags a route that interpolates query input into SQL. A verified result should include the file path, the taint path to sink, and a retest snippet. You read that evidence, jump to the sink, then request proposals requiring review. The Fix PR is a minimal diff plus a test, which you approve.
+
+## 5. Wire the GitHub Action diff aware gate
+
+Editor checks catch issues early, CI gates prevent drift on pull requests. Add `.github/workflows/lyrashield.yml` with a SARIF upload so results appear in GitHub code scanning. The [GitHub docs for SARIF upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file) describe the required `security-events: write` permission. The workflow below uses the same pinned `npx` and remote endpoint pattern and keeps secretsGitHub scanning broad.
+
+```yaml
+name: lyrashield diff gate
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run LyraShield MCP scan
+        env:
+          LYRASHIELD_API_KEY: ${{ secrets.LYRASHIELD_API_KEY }}
+          LYRASHIELD_MCP_URL: https://app.lyrashieldai.com/api/mcp
+        run: |
+          npx -y @lyrashield/mcp scan --diff origin/main --format sarif --out results.sarif
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+```
+
+This runs only on changed files, which keeps the gate fast and focused. SARIF output integrates with GitHub code scanning and lets you track retest results after a Fix PR. If you need SCA and secrets history, see [docs.github.com on dependency review](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-supply-chain-security) for supply chain context. The `--diff origin/main` flag makes the gate diff aware: it scopes scans to changed files, so a one line edit avoids full scans. SARIF lands in the GitHub Security tab, where each rule maps to a file and line. Because the workflow reuses the same endpoint, findings reproduced locally get the same rule ID in CI.
+
+## 6. Add agent rules snippet
+
+Add a short rule file so every agent session in Zed follows the same security loop. Save as `.agent/rules/security.md` or the equivalent rules directory you use.
+
+```md
+# Security rules for Zed agents
+
+- Always start with Target identification: root, env, and data class.
+- Run LyraShield scan via MCP before proposing large refactors.
+- Treat only verified findings as blocking. Include evidence in the PR description.
+- For Fix PR, propose minimal diff, add tests for the verified finding, and request retest.
+- Update Report notes with scan ID and SARIF link.
+```
+
+This keeps behavior consistent between human and agent edits. The rule avoids phrases implying unattended fixes and frames the Fix PR as a proposed change designed to be reviewed. Think of the rules file as the contract your agent follows unsupervised. The first bullet forces target identification, stopping wrong directory scans. The fourth enforces approval-gated fix proposals, not unattended fixes, because the agent proposes a minimal diff.
+
+| Mode | Transport | Best for | Env key | URL |
+| --- | --- | --- | --- | --- |
+| Local stdio | npx -y @lyrashield/mcp | Local dev, offline | LYRASHIELD_API_KEY | internal process |
+| Remote HTTP | streamable HTTP with Bearer lsk_ | Team shared keys, CI | LYRASHIELD_API_KEY, LYRASHIELD_MCP_URL | https://app.lyrashieldai.com/api/mcp |
+| Diff gate | GitHub Action + SARIF | PR enforcement | LYRASHIELD_API_KEY secret | https://app.lyrashieldai.com/api/mcp |
+
+## 7. Why pair Zed with LyraShield
+
+Zed gives you speed and agent control, LyraShield adds verification and reporting that is designed to scale with AI built code. Pillar coverage from the [vibe coding security guide](/blog/vibe-coding-security-guide) explains why unverified scaffolding creates systemic risk across auth, injection, and supply chain. Zed runs the tools, LyraShield provides the evidence trail from Target to Scan to Verified Finding to Fix PR to Retest to Report. v1 is scoped to agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, so you can cover both code and dependencies without adding three separate scanners. Use the [Zed integration guide](/docs/integrations/zed) as the canonical config source, and keep the loop explicit in pull request templates so reviewers see scan IDs and retest links.
+
+To put this into practice, run your first scan in Zed, triage one verified finding, propose a Fix PR with tests, and confirm the SARIF report in GitHub code scanning. Then expand your checklist with the [AI app security checklist](/tools/ai-app-security-checklist) and [join the waitlist](https://lyrashieldai.com) to track when Fix PR generation and full engine execution moves from designed to live. The pairing works because Zed minimizes friction between writing and checking, while LyraShield adds verification that generation skips.

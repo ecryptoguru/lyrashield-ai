@@ -276,6 +276,21 @@ Fresh-run decision: no topic replacement is required. The July 14 refresh reinfo
 | 131 | MiMo Code MCP security workflow / `mimo-code-mcp-security-workflow`                                 | mimo code mcp security - workflow               | Workflow     | 1,400 | Pillar + Launch Checklist             |
 | 132 | Oh My Pi MCP security workflow / `oh-my-pi-mcp-security-workflow`                                   | oh my pi mcp security - workflow                | Workflow     | 1,400 | Pillar + Launch Checklist             |
 | 133 | Roo Code MCP security workflow / `roo-code-mcp-security-workflow`                                   | roo code mcp security - workflow                | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 134 | Amp MCP security workflow for verified agent scans / `amp-mcp-security-workflow`                    | amp mcp security - workflow                     | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 135 | Claude Code MCP Agent Rules Security Setup / `claude-code-mcp-agent-rules-security`                 | claude code mcp agent rules - security          | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 136 | Cline MCP security workflow for AI built apps / `cline-mcp-security-workflow`                       | cline mcp security - workflow                   | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 137 | OpenAI Codex MCP security workflow for PR reviews / `codex-mcp-security-workflow`                   | codex mcp security - workflow                   | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 138 | Cursor MCP Security Workflow for AI Built Apps / `cursor-mcp-security-workflow`                     | cursor mcp security - workflow                  | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 139 | Gemini CLI MCP security workflow for AI apps / `gemini-cli-mcp-security-workflow`                   | gemini cli mcp security - workflow              | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 140 | Hermes MCP workflow for verified security scans / `hermes-mcp-security-workflow`                    | hermes mcp security - workflow                  | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 141 | JetBrains MCP Security Workflow for AI IDEs / `jetbrains-mcp-security-workflow`                     | jetbrains mcp security - workflow               | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 142 | Kilo Code MCP security workflow that verifies before you ship / `kilo-code-mcp-security-workflow`   | kilo code mcp security - workflow               | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 143 | OpenClaw MCP security workflow for agent verification / `openclaw-mcp-security-workflow`            | openclaw mcp security - workflow                | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 144 | OpenCode MCP security workflow for AI built projects / `opencode-mcp-security-workflow`             | opencode mcp security - workflow                | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 145 | Pi Coding Agent MCP security workflow for fast scans / `pi-coding-agent-mcp-security-workflow`      | pi coding agent mcp security - workflow         | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 146 | VS Code MCP Security Workflow with Copilot / `vscode-mcp-security-copilot`                          | vscode mcp security - copilot                   | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 147 | Windsurf MCP Security Workflow for AI Editors / `windsurf-mcp-security-workflow`                    | windsurf mcp security - workflow                | Workflow     | 1,400 | Pillar + Launch Checklist             |
+| 148 | Zed MCP security workflow for AI built apps / `zed-mcp-security-workflow`                           | zed mcp security - workflow                     | Workflow     | 1,400 | Pillar + Launch Checklist             |
 
 ## 6. `/tools` product-led SEO surface
 

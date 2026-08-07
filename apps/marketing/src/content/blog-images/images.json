@@ -636,5 +636,49 @@
     "alt": "LyraShield MCP integration with Roo Code",
     "width": 1600,
     "height": 900
+  },
+  "agent-security-07": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-07/hero.avif",
+    "webp": "/images/blog/library/agent-security-07/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-07/hero.jpg",
+    "og": "/images/blog/library/agent-security-07/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-07/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Cursor",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-08": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-08/hero.avif",
+    "webp": "/images/blog/library/agent-security-08/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-08/hero.jpg",
+    "og": "/images/blog/library/agent-security-08/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-08/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Claude Code",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-09": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-09/hero.avif",
+    "webp": "/images/blog/library/agent-security-09/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-09/hero.jpg",
+    "og": "/images/blog/library/agent-security-09/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-09/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Windsurf",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-13": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-13/hero.avif",
+    "webp": "/images/blog/library/agent-security-13/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-13/hero.jpg",
+    "og": "/images/blog/library/agent-security-13/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-13/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Codex",
+    "width": 1600,
+    "height": 900
   }
 }

@@ -1,0 +1,168 @@
+---
+title: Gemini CLI MCP security workflow for AI apps
+description: Configure Gemini CLI with LyraShield AI via MCP to scan AI built apps for verified findings and enforce a diff aware GitHub Action gate with SARIF reporting.
+pubDate: '2026-07-30'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification, supply-chain]
+draft: false
+heroImage: agent-security-15
+faq:
+  - q: 'How does Gemini CLI load MCP servers?'
+    a: 'Gemini CLI reads settings.json mcpServers with fields like command, args, trust, includeTools, and env. It supports $VAR expansion and mcp.allowed policy.'
+  - q: 'What is the remote endpoint for LyraShield MCP?'
+    a: 'Remote endpoint is https://app.lyrashieldai.com/api/mcp with Authorization Bearer lsk_ key. You can use local stdio via npx -y @lyrashield/mcp or remote HTTP.'
+  - q: 'Is scan execution live?'
+    a: 'Sprints 0 to 2 are shipped. Scan engine MVP, Fix PR generation, and billing are on the roadmap and described as designed to. Configure MCP now and use verification as it becomes live.'
+  - q: 'How do I restrict which MCP tools Gemini CLI can call?'
+    a: 'Use the includeTools array in the server entry to allow only the tools you need, such as scan, list_targets, and get_finding. Set trust to false so the agent prompts before running a tool. Combine includeTools with the mcp.allowed policy list for a second layer of control.'
+---
+Secure AI generated apps from your terminal by connecting Gemini CLI to LyraShield AI through MCP, running verified checks without leaving the CLI, and enforcing the same policy in a diff aware GitHub Action. The server loads from `settings.json` under `mcpServers` and supports local stdio via `npx -y @lyrashield/mcp` plus remote HTTP with a bearer key.
+
+Gemini CLI brings agent assisted development to the command line, but terminal velocity can miss injection, auth, and supply chain risks introduced by scaffolding. The [vibe coding security guide](/blog/vibe-coding-security-guide) calls this unverified generation at scale. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Verified Finding to Fix PR to Retest to Report. This post shows the exact Gemini CLI config using `npx -y @lyrashield/mcp` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), plus verification and CI wiring.
+
+## 1. Prerequisites and setup
+
+You need Gemini CLI 0.9 or newer, Node 18 or newer, a LyraShield key prefixed `lsk_` for remote mode, and a GitHub repo for workflow setup. Gemini CLI stores MCP under `~/.gemini/settings.json` with key `mcpServers`, including `trust`, `includeTools`, and env expansion. The pattern is documented in the [Gemini CLI docs](https://github.com/google-gemini/gemini-cli) and summarized in the [Gemini CLI integration guide](/docs/integrations/gemini-cli). Warm the cache with `npx -y @lyrashield/mcp --help`. Review risk baselines via [OWASP Top 10](https://owasp.org/www-project-top-ten/) and advisory data via [OSV](https://osv.dev/). For protocol context, see [Model Context Protocol intro](https://modelcontextprotocol.io/docs/getting-started/intro). The `~/.gemini/settings.json` schema is a single JSON document. A trailing comma or missing bracket will block all servers from loading, so validate with a JSON linter after each edit. The `trust` key on each server controls whether the agent can invoke tools without prompting you first, and `includeTools` narrows which tools are even discoverable by the model.
+
+## 2. Configure Gemini CLI MCP servers
+
+Add entries to `~/.gemini/settings.json`. Use `trust` to control auto execution and `includeTools` to filter. The canonical reference is the [Gemini CLI integration guide](/docs/integrations/gemini-cli). Always link it as a markdown link, never a bare `/docs/integrations/gemini-cli` path.
+
+The `includeTools` array is your blast radius control. Without it, the model sees every tool the server exposes, including write tools you may not intend to expose during a read only scan. By listing only `scan`, `list_targets`, `get_finding`, and `scan_status`, you prevent the agent from calling a write tool that could mutate your repo or push a branch. The `mcp.allowed` policy list works as a second gate at the CLI level. When present, only server names in that array load at all. If you add a server entry but forget its name in `mcp.allowed`, the CLI silently skips it, which is a common debugging trap.
+
+Local stdio:
+
+```json
+{
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
+      },
+      "trust": false,
+      "includeTools": ["scan", "list_targets", "get_finding", "scan_status"],
+      "timeout": 120000
+    }
+  }
+}
+```
+
+Remote HTTP:
+
+```json
+{
+  "mcpServers": {
+    "lyrashield-remote": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp", "--remote"],
+      "env": {
+        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}",
+        "LYRASHIELD_MCP_URL": "https://app.lyrashieldai.com/api/mcp"
+      },
+      "trust": false,
+      "includeTools": ["scan", "list_targets", "get_finding"],
+      "timeout": 120000
+    }
+  },
+  "mcp": {
+    "allowed": ["lyrashield", "lyrashield-remote"]
+  }
+}
+```
+
+Remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer `lsk_`. The pinned npx form `npx -y @lyrashield/mcp` appears in both blocks. `$VAR` expansion and `mcp.allowed` policy are Gemini CLI specifics that control which servers run without prompting. For sibling editors, see the [Gemini CLI AI app security checklist](/blog/gemini-cli-app-security-checklist) which uses the same gate shape.
+
+One env expansion gotcha worth knowing is silent auth failure. If `${LYRASHIELD_API_KEY}` is not exported in the shell session that launched `gemini`, the MCP server starts with an empty key and every call returns a 401. The CLI does not surface a settings error, so the symptom looks like a server bug. The fix is to verify the variable in the parent shell before launch, not after.
+
+## 3. Verify the connection in Gemini CLI
+
+Restart Gemini CLI and run `gemini mcp list` or ask "list MCP tools". You should see `lyrashield` with `scan` and `get_finding`. Run a status call: `gemini mcp call lyrashield scan_status`. If auth fails, ensure `LYRASHIELD_API_KEY` is exported in the shell that launched `gemini`. If tools do not appear, check `mcp.allowed` includes your server names and that `includeTools` does not hide them. For troubleshooting, the [Gemini CLI GitHub repo](https://github.com/google-gemini/gemini-cli) issues show common env visibility problems, and the [MCP spec](https://modelcontextprotocol.io/specification/2025-03-26) explains transport negotiation. Another frequent issue is a mismatch between the server name in `mcpServers` and the name in `mcp.allowed`. Names are case sensitive and must match exactly, otherwise the policy gate drops the server with no error message.
+
+## 4. Run an inline check from the CLI
+
+From Gemini CLI, prompt "scan current repo diff against main for XSS, auth, and vulnerable dependencies, return only verified findings with evidence". LyraShield is designed to return verified findings with file, line, and proof, and is designed to support a retest step after a Fix PR, both items are on the roadmap and not claimed as live automatic behavior today. Map findings to [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) and dependency risks to [OSV](https://osv.dev/) advisories. For deployment hygiene, align env and header checks with [Cloudflare security best practices](https://www.cloudflare.com/learning/security/) and framework guidance from [Next.js security](https://nextjs.org/docs/app/guides/data-security).
+
+The distinction between a verified finding and raw lint noise matters for blocking merges. A verified finding includes a concrete file path, a line number, and a proof snippet that demonstrates exploitability. For example, a stored XSS finding points to `src/components/Comment.jsx` line 42, where unsanitized user input is rendered into the DOM, and the proof shows a payload string that executes in the browser. Raw lint noise, by contrast, flags a pattern without proof, such as a generic "dangerouslySetInnerHTML usage detected" with no reachable input source. You block on the former and triage the latter.
+
+Sample instruction for your Gemini CLI prompt library:
+
+```md
+Use lyrashield MCP:
+- Scope diff vs main
+- Return verified findings only with evidence and fix guidance
+- Group as auth, injection, secrets, supply chain
+- Propose Fix PR diff, wait for confirm before apply
+```
+
+Fix PR generation is designed to create minimal patches with tests and is on the roadmap. Keep report steps explicit so audits link scan ID and SARIF file. The current behavior is approval-gated fix proposals, not unattended fixes. The agent presents a diff for your review, you confirm, and only then is the patch applied. This review step is what keeps the loop safe for agent driven branches where a bad patch could silently introduce a new vulnerability.
+
+## 5. Wire the GitHub Action diff aware gate
+
+Add `.github/workflows/lyrashield.yml` with SARIF upload so PRs are blocked consistently, as described in [GitHub docs for SARIF upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github).
+
+```yaml
+name: lyrashield diff gate
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Scan diff via LyraShield MCP
+        env:
+          LYRASHIELD_API_KEY: ${{ secrets.LYRASHIELD_API_KEY }}
+          LYRASHIELD_MCP_URL: https://app.lyrashieldai.com/api/mcp
+        run: |
+          npx -y @lyrashield/mcp scan --diff origin/main --format sarif --out results.sarif
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+```
+
+The workflow mirrors your Gemini CLI transport: same endpoint [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and same key shape. Diff mode keeps scans fast for agent driven branches by only scanning changed files rather than the full tree. Use GitHub code scanning rules to require merge approval for critical verified findings while keeping notes informational.
+
+The SARIF file is uploaded to the GitHub security tab, where findings appear alongside CodeQL results with file, line, and severity metadata. This gives reviewers a single surface to triage both static analysis and LyraShield verified findings without switching tools.
+
+## 6. Add agent rules snippet
+
+Save as `.gemini/rules/security.md` or your rules path.
+
+```md
+# Security rules for Gemini CLI
+
+- Identify Target before scan: app root, routes, data class.
+- Run LyraShield via MCP for changed files vs main.
+- Block only on verified findings with evidence.
+- Propose Fix PR with minimal diff and tests, request retest.
+- Report scan ID and SARIF link in PR or CLI summary.
+```
+
+This keeps Target to Scan to Verified Finding to Fix PR to Retest to Report consistent across local CLI and CI. Point teammates to the [Gemini CLI integration guide](/docs/integrations/gemini-cli) and the pillar [vibe coding security guide](/blog/vibe-coding-security-guide) as markdown links in onboarding. Keeping the rules file short and declarative helps the agent follow it consistently. Long rule lists get truncated or deprioritized by the model, so favor a handful of concrete steps over verbose prose.
+
+| Setting | Meaning | Recommended |
+| --- | --- | --- |
+| command, args | How to launch MCP | npx -y @lyrashield/mcp |
+| trust | Auto run without prompt | false for security |
+| includeTools | Filter tools exposed | scan, list_targets, get_finding |
+| env, $VAR | Secret expansion | LYRASHIELD_API_KEY, LYRASHIELD_MCP_URL |
+| mcp.allowed | Policy allow list | ["lyrashield", "lyrashield-remote"] |
+
+## 7. Why pair Gemini CLI with LyraShield
+
+Gemini CLI gives you terminal native agent workflows, LyraShield adds verified security evidence that is designed to travel from CLI to CI without custom scripts. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains how AI built apps accumulate risks across injection, auth, and supply chain when verification is deferred. Pairing provides one loop from Target to Report with SARIF that GitHub code scanning understands per [docs.github.com on code scanning](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning). v1 is agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, Sprints 0 to 2 shipped, scan engine MVP, Fix PR, and billing remain designed to and on the roadmap.
+
+The value of a single transport across local and CI is consistency. The same MCP endpoint, the same `lsk_` key, and the same tool surface mean a finding you reproduce in your terminal is the same finding that blocks a PR in GitHub. You do not maintain two scan configurations or reconcile two result formats. SARIF output standardizes severity and location data so reviewers see results in the security tab they already use for CodeQL.
+
+Start with local stdio MCP, verify tool listing, run a diff scan on your next AI scaffolded branch, propose a reviewed Fix PR for one verified finding, and enforce the gate in CI. Deepen coverage with the [AI app security checklist](/tools/ai-app-security-checklist) and [join the waitlist](https://lyrashieldai.com) to track when full execution becomes live.
