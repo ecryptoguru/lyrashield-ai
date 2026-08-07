@@ -29,7 +29,7 @@ JetBrains AI Assistant supports MCP as JSON Level Project and Global. In Setting
 
 Secure it in four practical steps.
 
-First, never inline secrets in JSON. Use ${VAR} references and load values from env or your secret manager, with a .env file gitignored and keys rotated monthly.
+First, never inline secrets in JSON. Use `${VAR}` references and load values from env or your secret manager, with a .env file gitignored and keys rotated monthly.
 
 Second, set allow lists explicitly. Prefer empty auto approve and then include only read only tools you need. If the tool supports trust or codemode flags, disable code execution unless required and require explicit user approval for file writes.
 

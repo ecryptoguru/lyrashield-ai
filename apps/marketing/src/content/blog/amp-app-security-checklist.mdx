@@ -120,7 +120,7 @@ Target state for Amp-built PRs:
 Global: `~/.config/amp/settings.json` (or Windows `%APPDATA%`). Workspace: `.amp/settings.json` which requires explicit approval. Precedence: CLI `--mcp-config` > user/workspace > skills. Override skill-bundled servers in user config to enforce security settings.
 
 ### Q: How do I add LyraShield to Amp securely?
-From CLI: `amp mcp add lyrashield --header "Authorization=Bearer $LYRASHIELD_API_KEY" https://app.lyrashieldai.com/api/mcp. This starts OAuth flow if needed for other servers, but for LyraShield uses Bearer header. Store the key in your shell env or Amp's secret management, not in JSON literals. Full pattern in [amp integration guide](/docs/integrations/amp).
+From CLI: `amp mcp add lyrashield --header "Authorization=Bearer $LYRASHIELD_API_KEY" https://app.lyrashieldai.com/api/mcp`. This starts OAuth flow if needed for other servers, but for LyraShield uses Bearer header. Store the key in your shell env or Amp's secret management, not in JSON literals. Full pattern in [amp integration guide](/docs/integrations/amp).
 
 ### Q: What makes orbs risky?
 Orbs persist env vars and filesystem. A secret set in an orb remains until the orb is destroyed or rotated. Treat orb teardown like credential rotation: script it, do not leave to manual cleanup. See [hermes-app-security-checklist](/blog/hermes-app-security-checklist) for similar lifecycle controls around idle timeouts.
@@ -135,7 +135,7 @@ Hardening references: [OWASP Top 10](https://owasp.org/www-project-top-ten/) for
 
 ## Why pair Amp with LyraShield
 
-Amp gives you orchestration across models, remote persistence via orbs, and a clean extension model, ideal for shipping full features from a single prompt. LyraShield is designed to complement that with verification that is agent-native, not bolt-on. The integration surface is minimal: MCP server via `npx -y @lyrashield/mcp` locally or `https://app.lyrashieldai.com/api/mcp remotely using Bearer `lsk_` key, plus a GitHub Action planned to be diff-aware and SARIF-emitting for PR gating. That maps to the combination positioning, not a claim of exclusivity, many tools scan, LyraShield's design focus is verified findings tied to Fix PR → Retest → Report so AI-generated code does not reintroduce CWE-20/287/798 across sessions.
+Amp gives you orchestration across models, remote persistence via orbs, and a clean extension model, ideal for shipping full features from a single prompt. LyraShield is designed to complement that with verification that is agent-native, not bolt-on. The integration surface is minimal: MCP server via `npx -y @lyrashield/mcp` locally or `https://app.lyrashieldai.com/api/mcp` remotely using Bearer `lsk_` key, plus a GitHub Action planned to be diff-aware and SARIF-emitting for PR gating. That maps to the combination positioning, not a claim of exclusivity, many tools scan, LyraShield's design focus is verified findings tied to Fix PR → Retest → Report so AI-generated code does not reintroduce CWE-20/287/798 across sessions.
 
 Scan engine MVP, Fix-PR automation, and billing are not live; the project is currently on waitlist with docs at [amp integration guide](/docs/integrations/amp) and hub at [integrations hub](/docs/integrations). If you are comparing Amp to [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checklist) or [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist), the pattern holds: Amp owns generation, LyraShield owns verification and release evidence.
 
