@@ -1,9 +1,10 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { access, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { access, copyFile, mkdir, readFile, rm } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { execFile } from "node:child_process"
 import path from "node:path"
 import type { AgentEntry } from "@lyrashield/agent-registry"
+import { atomicWrite as hardenedAtomicWrite } from "./atomic-write.js"
 import type {
   CheckRulesOptions,
   RemoveRulesOptions,
@@ -94,10 +95,7 @@ async function isGitTrackedUnignored(projectRoot: string, targetPath: string): P
 async function atomicWrite(filePath: string, content: string): Promise<void> {
   const parent = path.dirname(filePath)
   await mkdir(parent, { recursive: true })
-  const tmp = `${filePath}.lyrashield-tmp`
-  await writeFile(tmp, content, "utf-8")
-  await writeFile(filePath, content, "utf-8")
-  await rm(tmp, { force: true })
+  await hardenedAtomicWrite(filePath, content)
 }
 
 async function getRuleFilePaths(agent: AgentEntry, projectRoot: string) {
