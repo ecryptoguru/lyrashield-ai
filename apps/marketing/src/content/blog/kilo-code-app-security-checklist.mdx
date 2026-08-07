@@ -132,7 +132,7 @@ Global `~/.config/kilo/kilo.jsonc` applies to all projects. Project `kilo.jsonc`
 In `kilo.jsonc`, `permission` keys are tool names. Values are `allow`/`deny`/`ask`. You can use globs like `filesystem_*` or `lyrashield_*` to batch. Evaluated top-down; deny should be explicit for `**/.env*`, `**/*.pem`, and CI secrets.
 
 ### Q: How do I add LyraShield MCP to Kilo Code?
-Local (stdio): `type: local`, `command: ["npx","-y","@lyrashield/mcp"]`, env references `LYRASHIELD_API_KEY`. Remote (Streamable HTTP): `type: remote`, `url: https://app.lyrashieldai.com/api/mcp, header `Authorization: Bearer {env:LYRASHIELD_API_KEY}`. See [kilo code integration guide](/docs/integrations/kilo-code) for the canonical snippet.
+Local (stdio): `type: local`, `command: ["npx","-y","@lyrashield/mcp"]`, env references `LYRASHIELD_API_KEY`. Remote (Streamable HTTP): `type: remote`, `url: https://app.lyrashieldai.com/api/mcp`, header `Authorization: Bearer {env:LYRASHIELD_API_KEY}`. See [kilo code integration guide](/docs/integrations/kilo-code) for the canonical snippet.
 
 ### Q: Do parallel agents increase security risk?
 Yes if they share state. Treat each parallel agent as an untrusted writer to the same repo. Require serialized merges through PRs, not direct pushes from agents to `main`.

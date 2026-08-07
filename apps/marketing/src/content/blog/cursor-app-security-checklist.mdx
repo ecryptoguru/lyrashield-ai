@@ -64,7 +64,7 @@ Secure pattern:
 
 Key hardening points:
 
-* Use ${env:VAR} interpolation, not raw tokens. Env vars stay outside git.
+* Use `${env:VAR}` interpolation, not raw tokens. Env vars stay outside git.
 * Keep .cursor/mcp.json in git but validate it in CI that no literal sk keys appear. Use a secret scanner before merge.
 * Limit tool scope per server. Prefer servers that expose only needed methods, like read only database tools for code generation context.
 * Separate local and shared config. Local overrides should not be committed with personal paths.
@@ -132,7 +132,7 @@ Pairing gives you a consistent loop across editors while Cursor handles fast ite
 
 Run through this before each release and keep the evidence.
 
-1. Verify .cursor/mcp.json has no raw secrets and all servers use ${env:}.
+1. Verify .cursor/mcp.json has no raw secrets and all servers use `${env:}`.
 2. Confirm rules file includes auth and input validation requirements.
 3. Check agent approval mode is on for shell and network.
 4. Run dependency and secret scans and upload SARIF.

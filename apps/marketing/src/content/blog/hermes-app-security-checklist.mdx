@@ -151,7 +151,7 @@ Target PR gate:
 Set `tools.include` whitelist for sensitive servers, `tools.exclude` blacklist for broad servers. Entries support exact names or fnmatch globs like `*_radar_*`. Disable utility wrappers with `tools.resources: false` and `prompts: false`. If filtering removes all tools and no wrappers remain, Hermes creates no runtime toolset, which is the safe default.
 
 ### Q: How do I add LyraShield to Hermes?
-Use stdio: `command: npx`, `args: ["-y","@lyrashield/mcp"]`, `env: {LYRASHIELD_API_KEY: "${env:LYRASHIELD_API_KEY}"}`. Or remote: `url: https://app.lyrashieldai.com/api/mcp, `headers: {Authorization: "Bearer ${env:LYRASHIELD_API_KEY}"}`. Add `tools` filtering and `timeout`. Docs canonical at [hermes integration guide](/docs/integrations/hermes).
+Use stdio: `command: npx`, `args: ["-y","@lyrashield/mcp"]`, `env: {LYRASHIELD_API_KEY: "${env:LYRASHIELD_API_KEY}"}`. Or remote: `url: https://app.lyrashieldai.com/api/mcp`, `headers: {Authorization: "Bearer ${env:LYRASHIELD_API_KEY}"}`. Add `tools` filtering and `timeout`. Docs canonical at [hermes integration guide](/docs/integrations/hermes).
 
 ### Q: Are catalog MCP servers safe?
 Catalog entries under `optional-mcps/` are Nous-reviewed but disabled by default, you still choose. Install only what you need, apply `include` filtering, and verify backing service authentication. No community submission tier exists for catalog; additions are via PR merge.
