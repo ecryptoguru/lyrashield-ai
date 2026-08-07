@@ -32,8 +32,10 @@ describe("Cloudflare marketing security headers", () => {
     expect(middleware).toContain('headers.set("X-Robots-Tag", "noindex")')
   })
 
-  it("keeps static and Worker security header values identical", () => {
-    const staticHeaders = headers
+  it("keeps static and Worker security header values identical for the catch-all route", () => {
+    // Extract only the /* route headers (not route-specific cache rules)
+    const catchAllBlock = headers.split("\n\n")[0]
+    const staticHeaders = catchAllBlock
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line && line !== "/*")
