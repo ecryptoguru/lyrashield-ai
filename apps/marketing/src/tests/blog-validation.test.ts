@@ -622,7 +622,13 @@ ${filler}
       writeImageSet(root, imageId)
     }
     const counts = new Map(sharedIds.map((imageId, index) => [imageId, distribution[index]]))
-    const assignments = sharedIds.flatMap((imageId) => Array(counts.get(imageId)!).fill(imageId))
+    // Interleave passes so no two consecutive articles reuse the same image.
+    const assignments: string[] = []
+    for (let pass = 0; pass < Math.max(...distribution); pass += 1) {
+      for (const imageId of sharedIds) {
+        if (counts.get(imageId)! > pass) assignments.push(imageId)
+      }
+    }
     const manifests = [
       {
         release: "authority",
