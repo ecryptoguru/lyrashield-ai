@@ -34,6 +34,30 @@ export const DEAD_URLS = Object.freeze({
   "https://www.jetbrains.com/help/idea/using-mcp-server.html":
     "https://www.jetbrains.com/help/ai-assistant/mcp.html",
   "https://www.first.org/epss/user-guide": "https://www.first.org/epss/",
+
+  // Round 2: found by a live check-links sweep of main after release 2, which
+  // had never been run against tranches 2-5 because check-links is not a gate.
+  "https://cwe.mitre.org/top25/archive/cwe/top25.html": "https://cwe.mitre.org/top25/",
+  "https://nodejs.org/en/docs/guides/": "https://nodejs.org/learn",
+  // The dead link also had the wrong entry number: Broken Object Level
+  // Authorization is API1 in the 2023 edition, not API2.
+  "https://owasp.org/API-Security/editions/2023/en/0xa2-broken-object-level-authorization/":
+    "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/",
+  "https://www.nist.gov/itl/ssdm/software-supply-chain-security":
+    "https://www.nist.gov/itl/executive-order-14028-improving-nations-cybersecurity/software-supply-chain-security-guidance",
+  "https://owasp.org/www-project-top-10-for-llm-applications/":
+    "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+  "https://www.anthropic.com/engineering/desktop":
+    "https://www.anthropic.com/engineering/desktop-extensions",
+  // Returns 405 rather than 404, so check-links flags it but a casual browser
+  // visit can look fine.
+  "https://docs.cline.bot/mcp": "https://docs.cline.bot/mcp/mcp-overview",
+
+  // DELIBERATELY NOT LISTED: https://aider.chat/docs/mcp/mcp.html
+  // Aider ships no native MCP support, so there is no equivalent page to point
+  // at. That makes aider-mcp-security-workflow an editorial question rather than
+  // a URL swap, and it is with the founder. Listing the URL here before the post
+  // is resolved would fail this gate on main. Add it once the post is settled.
 })
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")

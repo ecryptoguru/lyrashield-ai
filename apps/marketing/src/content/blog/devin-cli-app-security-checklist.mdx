@@ -1,7 +1,7 @@
 ---
 title: Secure a Devin CLI Built App Before Launch
 description: A release review checklist for Devin CLI apps covering data exposure, MCP config, secrets, dependencies, and independent launch evidence before you ship.
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -21,14 +21,14 @@ Before launching a Devin CLI built app, review what data entered the Cognition a
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. The same split applies here. A prompt such as do not deploy states intent. A missing production credential enforces it. This checklist walks through the app level review for a Devin CLI workflow without assuming the agent caused every defect.
 
-| Review area | Evidence to collect before launch |
-| --- | --- |
-| Data handling | Approved data classes, current Devin CLI settings, and a record of any sensitive prompt or terminal output |
-| Config and tools | Reviewed .devin/config.local.json servers and mcp__name tool namespace |
-| Secrets | Clean tree, scanned credentials, rotated keys, and local config kept out of version control |
-| Dependencies | Resolved lockfile, package identity, advisory result, and install script decision |
-| Application controls | Negative authorization, tenant boundary, and input validation tests |
-| Release evidence | Deployed surface checks, known limitations, owner, and a fresh retest after fixes |
+| Review area          | Evidence to collect before launch                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Data handling        | Approved data classes, current Devin CLI settings, and a record of any sensitive prompt or terminal output |
+| Config and tools     | Reviewed .devin/config.local.json servers and mcp\_\_name tool namespace                                   |
+| Secrets              | Clean tree, scanned credentials, rotated keys, and local config kept out of version control                |
+| Dependencies         | Resolved lockfile, package identity, advisory result, and install script decision                          |
+| Application controls | Negative authorization, tenant boundary, and input validation tests                                        |
+| Release evidence     | Deployed surface checks, known limitations, owner, and a fresh retest after fixes                          |
 
 ## 1. Review what data entered Devin CLI
 
@@ -38,7 +38,7 @@ That is a data handling review, not an application security result. Do not pipe 
 
 ## 2. Protect the gitignored MCP config and tool namespace
 
-Devin CLI stores MCP server configuration in .devin/config.local.json with a root mcpServers key, and the file is gitignored by default. Only stdio transport is documented for CLI MCP servers. You manage servers with the devin mcp commands: add to register a server, login to authenticate, enable to turn a server on, and disable to turn it off. Connected tools are namespaced as mcp__name, so you can see which server a tool call came from. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how these servers expose tools.
+Devin CLI stores MCP server configuration in .devin/config.local.json with a root mcpServers key, and the file is gitignored by default. Only stdio transport is documented for CLI MCP servers. You manage servers with the devin mcp commands: add to register a server, login to authenticate, enable to turn a server on, and disable to turn it off. Connected tools are namespaced as mcp\_\_name, so you can see which server a tool call came from. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how these servers expose tools.
 
 Treat the config file as policy bearing, even though it is gitignored. Review which MCP servers are enabled, what tools each exposes, and what credentials back them. The gitignore default protects local credentials but also means the team does not share the same server set automatically. If you need a shared definition, store the server entries in a separate committed file that references environment variables instead of literal secrets. Require a security owner for changes to agent configuration.
 
@@ -50,7 +50,7 @@ Keep live secrets outside the working tree using environment variables or a secr
 
 ## 4. Verify the resolved dependencies
 
-Devin CLI may add or upgrade packages while implementing a feature. Do not trust the import list at face value. Inspect the final manifest and lockfile, confirm package identity and publisher, and review advisory results before installing in an environment with credentials. The [OSV.dev database](https://osv.dev/) aggregates known vulnerability data across ecosystems and the [npm security best practices](https://nodejs.org/en/docs/guides/) cover lockfile integrity for Node projects.
+Devin CLI may add or upgrade packages while implementing a feature. Do not trust the import list at face value. Inspect the final manifest and lockfile, confirm package identity and publisher, and review advisory results before installing in an environment with credentials. The [OSV.dev database](https://osv.dev/) aggregates known vulnerability data across ecosystems and the [npm security best practices](https://nodejs.org/learn) cover lockfile integrity for Node projects.
 
 Review install scripts because a postinstall hook can run arbitrary code at install time. Inspect transitive changes because a new direct dependency can pull in dozens of unseen packages. Pin references to exact versions or hashes where practical. A dependency that passes an advisory check today can drift when a maintainer publishes a new version, so record the resolved versions and recheck before each release. If the agent added a package you do not recognize, read its documentation and source listing before trusting it with network or file access, because a popular name does not guarantee a safe implementation.
 

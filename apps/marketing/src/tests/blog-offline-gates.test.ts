@@ -36,6 +36,23 @@ describe("known-dead URL denylist", () => {
     )
   })
 
+  it("corrects the OWASP BOLA entry number, not just the path", () => {
+    // The dead link pointed at 0xa2; Broken Object Level Authorization is API1
+    // in the 2023 edition, so the replacement also fixes a factual error.
+    const dead =
+      "https://owasp.org/API-Security/editions/2023/en/0xa2-broken-object-level-authorization/"
+
+    expect(findDeadUrls(`See [BOLA](${dead}).`)).toEqual([dead])
+    expect(DEAD_URLS[dead]).toContain("0xa1-broken-object-level-authorization")
+  })
+
+  it("does not list the Aider MCP URL, which has no equivalent page", () => {
+    // Aider ships no native MCP support, so aider-mcp-security-workflow is an
+    // editorial question. Listing the URL before that post is resolved would
+    // fail the gate on main.
+    expect(Object.keys(DEAD_URLS)).not.toContain("https://aider.chat/docs/mcp/mcp.html")
+  })
+
   it("keeps every replacement out of the dead set", () => {
     for (const replacement of Object.values(DEAD_URLS)) {
       expect(Object.keys(DEAD_URLS)).not.toContain(replacement)

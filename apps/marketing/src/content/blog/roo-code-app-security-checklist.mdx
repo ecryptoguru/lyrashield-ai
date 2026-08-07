@@ -1,7 +1,7 @@
 ---
 title: Roo Code app security checklist
 description: Secure a Roo Code built app before launch with this evidence based checklist covering MCP config, permissions, secrets, dependencies, and verification.
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -16,6 +16,7 @@ faq:
   - q: Should I commit .roo/mcp.json with headers and tokens?
     a: Commit the server structure but never real tokens. Put secrets in a user level file or environment, and keep a separate redacted copy for the team to avoid leaking credentials.
 ---
+
 Secure a Roo Code built app before launch by using the streamable-http transport type, bounding alwaysAllow permissions, keeping tokens out of committed `.roo/mcp.json`, verifying AI suggested dependencies, and separating detected signals from verified proof. Roo Code requires the hyphenated streamable-http value for remote servers, so a single typo silently disconnects your security server. This checklist applies the [vibe coding security guide](/blog/vibe-coding-security-guide) method: run an evidence loop and retain the receipts.
 
 ## 1. Use the correct Roo Code MCP transport type
@@ -28,7 +29,7 @@ Validate the config before every scan. A server entry with a `url` but a placeho
 
 ## 2. Bound agent permissions with alwaysAllow
 
-Roo Code adds an `alwaysAllow` array and a `disabled` flag to each server entry, plus `disabledTools` and `watchPaths` for finer control. `alwaysAllow` lists tool names the agent can invoke without a confirmation prompt, which is convenient and dangerous: every auto approved tool becomes an autonomous action the model can choose. Apply least privilege from the [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0xa2-broken-object-level-authorization/) by allowing only the tools the current task needs, and leave destructive or production tools outside the array.
+Roo Code adds an `alwaysAllow` array and a `disabled` flag to each server entry, plus `disabledTools` and `watchPaths` for finer control. `alwaysAllow` lists tool names the agent can invoke without a confirmation prompt, which is convenient and dangerous: every auto approved tool becomes an autonomous action the model can choose. Apply least privilege from the [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/) by allowing only the tools the current task needs, and leave destructive or production tools outside the array.
 
 Record which tools are auto approved and who authorized them. If a server can write, delete, or spend money, that authority belongs in the release target scope you define in the [vibe coding security guide](/blog/vibe-coding-security-guide), not as an implicit default that persists across sessions. The `disabledTools` array lets you block specific tools a server exposes even when the server itself is enabled, which is useful when a single server bundles both safe and dangerous operations. Pair this with the [OWASP prompt injection guidance](https://owasp.org/www-project-top-10-for-large-language-model-applications/) so a hostile instruction from an issue body or a fetched document cannot invoke an auto approved destructive tool on the agent's behalf.
 
@@ -44,16 +45,16 @@ Treat `.roo/mcp.json` as a template, not a working credential store. Commit a re
 
 ## 4. Verify AI suggested dependencies
 
-Coding agents add packages as they work, and each addition extends your supply chain. A clean install is not evidence of safety. Begin with the resolved artifact, inspect the dependency graph for unexpected transitive changes, and match resolved versions against advisory data. The [OSV.dev](https://osv.dev/) database and the NIST [software supply chain security](https://www.nist.gov/itl/ssdm/software-supply-chain-security) guidance frame why a single mutable package can compromise a protected repo. Restrict install scripts, reproduce the build from reviewed inputs, and watch for unexpected transitive jumps that a lockfile diff reveals. A protected repository can still produce an untrusted artifact if its build pipeline accepts mutable inputs or carries broad credentials, so review CI actions and package registries alongside the code.
+Coding agents add packages as they work, and each addition extends your supply chain. A clean install is not evidence of safety. Begin with the resolved artifact, inspect the dependency graph for unexpected transitive changes, and match resolved versions against advisory data. The [OSV.dev](https://osv.dev/) database and the NIST [software supply chain security](https://www.nist.gov/itl/executive-order-14028-improving-nations-cybersecurity/software-supply-chain-security-guidance) guidance frame why a single mutable package can compromise a protected repo. Restrict install scripts, reproduce the build from reviewed inputs, and watch for unexpected transitive jumps that a lockfile diff reveals. A protected repository can still produce an untrusted artifact if its build pipeline accepts mutable inputs or carries broad credentials, so review CI actions and package registries alongside the code.
 
 Pin every dependency to an exact version or a locked hash, and reject install scripts that run postinstall hooks without review. When a coding agent proposes a new package, read the manifest for unexpected `preinstall` or `postinstall` hooks before approving, because a transitive dependency can execute arbitrary code at install time even when the top level package looks benign.
 
-| Check | What to verify | Evidence to retain |
-|---|---|---|
-| Transport type | `streamable-http` not `http` | Config excerpt with server connected |
-| Permissions | Minimal `alwaysAllow` list | Tool list after config change |
-| Secrets | No real tokens in committed config | Secrets scan plus git history check |
-| Dependencies | Resolved versions reviewed | Lockfile diff and advisory match |
+| Check          | What to verify                     | Evidence to retain                   |
+| -------------- | ---------------------------------- | ------------------------------------ |
+| Transport type | `streamable-http` not `http`       | Config excerpt with server connected |
+| Permissions    | Minimal `alwaysAllow` list         | Tool list after config change        |
+| Secrets        | No real tokens in committed config | Secrets scan plus git history check  |
+| Dependencies   | Resolved versions reviewed         | Lockfile diff and advisory match     |
 
 LyraShield's SCA layer keeps the receipt for each matched package, so a reviewer can see what was checked and what gaps remain.
 
