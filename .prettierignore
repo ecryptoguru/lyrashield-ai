@@ -12,3 +12,5 @@ apps/marketing/.astro
 apps/marketing/.wrangler
 apps/marketing/worker-configuration.d.ts
 apps/web/next-env.d.ts
+# Plugin templates are installed as-is into user environments; do not reformat.
+packages/agent-plugin/plugin

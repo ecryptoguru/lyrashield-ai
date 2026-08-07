@@ -62,10 +62,7 @@ function isOriginAllowed(request: Request): boolean {
 
 type TurnstileOutcome = "success" | "failed" | "transient-error"
 
-async function verifyTurnstileOnce(
-  token: string,
-  secret: string
-): Promise<TurnstileOutcome> {
+async function verifyTurnstileOnce(token: string, secret: string): Promise<TurnstileOutcome> {
   try {
     const body = new URLSearchParams({ secret, response: token })
     const verification = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {

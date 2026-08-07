@@ -74,7 +74,7 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
         </div>
         <div className="mt-1.5 flex items-center gap-1.5">
           <CircleDashed className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
-          <span className="text-muted-foreground text-[11px] font-medium leading-5">
+          <span className="text-muted-foreground text-[11px] leading-5 font-medium">
             Not connected — set up to connect
           </span>
         </div>
