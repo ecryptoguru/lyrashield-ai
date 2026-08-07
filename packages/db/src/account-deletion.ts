@@ -204,10 +204,6 @@ export async function deleteUserAccount(
         UPDATE "ReferralCode"
         SET "userId" = ${`${DELETED_USER}:`} || "id"
         WHERE "userId" = ${userId}`,
-      tx.scorecardShare.updateMany({
-        where: { createdById: userId },
-        data: { createdById: DELETED_USER },
-      }),
       // Anonymize the deleted user's referral attribution. Only reject rewards
       // still in flight (PENDING/QUALIFIED); already-REWARDED/REJECTED rows keep
       // their terminal status so referral metrics and reward history stay truthful.
@@ -271,6 +267,12 @@ export async function deleteUserAccount(
       })
       await tx.schedule.updateMany({
         where: { workspaceId, createdById: userId },
+        data: { createdById: DELETED_USER },
+      })
+      // ScorecardShare is a child table (RLS via snapshot.workspaceId).
+      // Must be updated inside the per-workspace RLS context.
+      await tx.scorecardShare.updateMany({
+        where: { createdById: userId, snapshot: { workspaceId } },
         data: { createdById: DELETED_USER },
       })
       await tx.invitation.updateMany({
