@@ -1,0 +1,124 @@
+---
+import AgentSnippet from "@components/AgentSnippet.astro"
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/goose", origin).toString()
+const title = "LyraShield MCP for Goose — Setup Guide"
+const description =
+  "Connect LyraShield to Goose (Block). Configure MCP servers as extensions in ~/.config/goose/config.yaml using YAML format with stdio or streamable_http transport."
+const updatedDate = "2026-08-07"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Set up LyraShield MCP in Goose",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Open ~/.config/goose/config.yaml",
+        text: "Open or create ~/.config/goose/config.yaml in your home directory.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Add the extensions entry",
+        text: "Add a lyrashield entry under the extensions key with type: stdio, cmd: npx, and args: [-y, @lyrashield/mcp].",
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Set your API key",
+        text: "Set LYRASHIELD_API_KEY in the environment block within the extensions entry.",
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Goose", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/goose"
+>
+  <h1>Goose</h1>
+  <p>
+    Goose (by Block) configures MCP servers as <code>extensions</code> in{" "}
+    <code>~/.config/goose/config.yaml</code>. The format is YAML with a nested map — not a{" "}
+    <code>mcpServers</code> JSON dict. Goose has no MCP rules file; project hints live in{" "}
+    <code>.goosehints</code>.
+  </p>
+
+  <h2>Get the exact values with the CLI</h2>
+  <p>
+    Goose uses a YAML config format that LyraShield's CLI cannot safely write automatically. Run{" "}
+    <code>npx lyrashield install goose</code> to print the exact values generated from the current
+    registry, then paste them into your config by hand.
+  </p>
+  <pre><code>npx lyrashield install goose</code></pre>
+
+  <h2>Local stdio setup</h2>
+  <p>
+    Add the following to <code>~/.config/goose/config.yaml</code> under the <code>extensions</code>{" "}
+    key. Goose's stdio entry uses <code>type: stdio</code> with <code>cmd</code> and{" "}
+    <code>args</code> fields.
+  </p>
+
+  <AgentSnippet agentId="goose" transport="stdio" />
+
+  <h2>Remote Streamable-HTTP setup</h2>
+  <p>
+    For environments where you prefer not to run a local process, connect to the remote endpoint.
+    Goose uses <code>type: streamable_http</code> with <code>uri</code> and <code>headers</code>.
+  </p>
+
+  <AgentSnippet agentId="goose" transport="remote-http" />
+
+  <div class="callout">
+    <strong>Read-only vs. read-and-write:</strong> Remote mutating tools (scan triggers, finding
+    submissions, report creation) require a read-and-write API key and a human out-of-band
+    approval. Read-only inspection tools work with any key.
+  </div>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Start Goose and ask: <em>"What LyraShield tools do you have access to?"</em> to confirm the
+    server is connected.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. The
+    <code>@lyrashield/mcp</code> package is published on npm, so
+    <code>npx -y @lyrashield/mcp</code> resolves directly.
+  </div>
+</DocsLayout>

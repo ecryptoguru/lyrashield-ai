@@ -1,0 +1,128 @@
+---
+import AgentSnippet from "@components/AgentSnippet.astro"
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/oh-my-pi", origin).toString()
+const title = "LyraShield MCP for Oh-My-Pi — Setup Guide"
+const description =
+  "Connect LyraShield to Oh-My-Pi (omp.sh). Configure .omp/mcp.json with the mcpServers object for stdio, or use type: http for the remote Streamable-HTTP endpoint."
+const updatedDate = "2026-08-07"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Set up LyraShield MCP in Oh-My-Pi",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Open the Oh-My-Pi config",
+        text: "Open or create .omp/mcp.json (project) or ~/.omp/agent/mcp.json (user).",
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Add the mcpServers entry",
+        text: 'Add the mcpServers key with command "npx", args ["-y","@lyrashield/mcp"], and env with LYRASHIELD_API_KEY.',
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Reload Oh-My-Pi",
+        text: "Restart Oh-My-Pi to apply the new config.",
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Oh-My-Pi", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/oh-my-pi"
+>
+  <h1>Oh-My-Pi</h1>
+  <p>
+    Oh-My-Pi (omp.sh) reads MCP server configuration from <code>.omp/mcp.json</code> (project) or{" "}
+    <code>~/.omp/agent/mcp.json</code> (user). User config is profile-aware at{" "}
+    <code>~/.omp/profiles/&lt;profile&gt;/agent/mcp.json</code>. Oh-My-Pi also auto-discovers MCP
+    servers from other tools like Claude Code and Cursor, so if you already have LyraShield
+    configured for those agents, Oh-My-Pi may pick it up automatically.
+  </p>
+
+  <h2>Install with the CLI (fastest)</h2>
+  <p>
+    Run <code>npx lyrashield install oh-my-pi</code> from your project root. It detects Oh-My-Pi,
+    writes the correct config automatically, and never inlines your API key into a file you might
+    commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+  </p>
+  <pre><code>npx lyrashield install oh-my-pi</code></pre>
+  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+
+  <h2>Local stdio setup</h2>
+  <p>
+    Add the following to <code>.omp/mcp.json</code> or <code>~/.omp/agent/mcp.json</code>. The stdio{" "}
+    <code>type</code> may be omitted (default stdio <code>{`{command, args, env}`}</code>). You can
+    also use <code>omp mcp add</code> or <code>omp plugin</code> to manage servers.
+  </p>
+
+  <AgentSnippet agentId="oh-my-pi" transport="stdio" />
+
+  <h2>Remote HTTP setup</h2>
+  <p>
+    For environments where you prefer not to run a local process, connect to the remote endpoint.
+    Oh-My-Pi uses <code>type: "http"</code> for Streamable HTTP. Supports OAuth via{" "}
+    <code>auth</code>/<code>oauth</code> fields.
+  </p>
+
+  <AgentSnippet agentId="oh-my-pi" transport="remote-http" />
+
+  <div class="callout">
+    <strong>Read-only vs. read-and-write:</strong> Remote mutating tools (scan triggers, finding
+    submissions, report creation) require a read-and-write API key and a human out-of-band
+    approval. Read-only inspection tools work with any key.
+  </div>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Restart Oh-My-Pi and ask: <em>"What LyraShield tools do you have access to?"</em> to confirm
+    the server is connected.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. The
+    <code>@lyrashield/mcp</code> package is published on npm, so
+    <code>npx -y @lyrashield/mcp</code> resolves directly.
+  </div>
+</DocsLayout>

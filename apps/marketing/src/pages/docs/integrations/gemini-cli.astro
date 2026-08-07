@@ -6,8 +6,8 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/gemini-cli", origin).toString()
 const title = "LyraShield MCP for Gemini CLI — Setup Guide"
 const description =
-  "Connect LyraShield to Gemini CLI. Two important gotchas: declare LYRASHIELD_API_KEY in the env block (Gemini CLI strips env vars containing KEY/TOKEN/SECRET from subprocesses) and avoid underscores in the server name."
-const updatedDate = "2026-07-31"
+  "Connect LyraShield to Gemini CLI (legacy). Two important gotchas: declare LYRASHIELD_API_KEY in the env block (Gemini CLI strips env vars containing KEY/TOKEN/SECRET from subprocesses) and avoid underscores in the server name. New setups should use Antigravity instead."
+const updatedDate = "2026-08-07"
 
 const jsonLd: unknown[] = [
   {
@@ -46,11 +46,18 @@ const jsonLd: unknown[] = [
   updatedDate={updatedDate}
   currentPath="/docs/integrations/gemini-cli"
 >
-  <h1>Gemini CLI</h1>
+  <h1>Gemini CLI (legacy → Antigravity)</h1>
   <p>
     Gemini CLI reads MCP servers from <code>~/.gemini/settings.json</code> under the{" "}
     <code>mcpServers</code> key.
   </p>
+
+  <div class="callout callout--warn">
+    <strong>Gemini CLI is being transitioned to Antigravity.</strong> New setups should use the{" "}
+    <a href="/docs/integrations/antigravity">Antigravity guide</a> instead — it uses the same{" "}
+    <code>~/.gemini/</code> config directory, so existing LyraShield entries continue to work. This
+    guide remains for legacy Gemini CLI users.
+  </div>
 
   <h2>Install with the CLI (fastest)</h2>
   <p>

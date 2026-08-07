@@ -1,0 +1,111 @@
+---
+import AgentSnippet from "@components/AgentSnippet.astro"
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/codebuff", origin).toString()
+const title = "LyraShield MCP for Codebuff — Setup Guide"
+const description =
+  "Connect LyraShield to Codebuff. Configure .agents/mcp.json with the mcpServers object for stdio transport. Codebuff is an open-source terminal agent installed via npm i -g codebuff."
+const updatedDate = "2026-08-07"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Set up LyraShield MCP in Codebuff",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Open .agents/mcp.json",
+        text: "Open or create .agents/mcp.json in your project root.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Add the mcpServers entry",
+        text: 'Add the mcpServers key with command "npx", args ["-y","@lyrashield/mcp"], and env with LYRASHIELD_API_KEY.',
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Start Codebuff",
+        text: "Run codebuff and verify the LyraShield server is listed.",
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Codebuff", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/codebuff"
+>
+  <h1>Codebuff</h1>
+  <p>
+    Codebuff is an open-source terminal agent (installed via <code>npm i -g codebuff</code>) that
+    reads MCP server configuration from <code>.agents/mcp.json</code> with a{" "}
+    <code>mcpServers</code> object of <code>{`{ command, args, env }`}</code> entries. Only stdio
+    transport is documented.
+  </p>
+
+  <h2>Install with the CLI (fastest)</h2>
+  <p>
+    Run <code>npx lyrashield install codebuff</code> from your project root. It detects Codebuff,
+    writes the correct config automatically, and never inlines your API key into a file you might
+    commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+  </p>
+  <pre><code>npx lyrashield install codebuff</code></pre>
+  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+
+  <h2>Local stdio setup</h2>
+  <p>
+    Add the following to <code>.agents/mcp.json</code>. Create the file if it does not exist.
+  </p>
+
+  <AgentSnippet agentId="codebuff" transport="stdio" />
+
+  <h2>Verify the connection</h2>
+  <p>
+    Start Codebuff and ask: <em>"What LyraShield tools do you have access to?"</em> to confirm the
+    server is connected. Codebuff also supports <code>/init</code> and <code>/publish</code>{" "}
+    commands and an agent store.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. The
+    <code>@lyrashield/mcp</code> package is published on npm, so
+    <code>npx -y @lyrashield/mcp</code> resolves directly.
+  </div>
+</DocsLayout>

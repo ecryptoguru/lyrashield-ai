@@ -1,0 +1,120 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/kiro", origin).toString()
+const title = "LyraShield Agent Plugin for Kiro — Setup Guide"
+const description =
+  "Install the LyraShield Agent Plugin for Kiro. The portable plugin bundles the MCP server and a security skill into a single installable package following the Agent Plugins v1.0.0 standard."
+const updatedDate = "2026-08-07"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Install the LyraShield Agent Plugin for Kiro",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Log in to LyraShield",
+        text: "Run npx lyrashield login to save your API key to ~/.lyrashield/credentials.json.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Install the plugin",
+        text: "Run npx lyrashield install kiro to install the Agent Plugin into ~/.kiro/plugins/lyrashield.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Verify the install",
+        text: "Run npx lyrashield doctor to confirm the plugin is installed and credentials are present.",
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Kiro", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/kiro"
+>
+  <h1>Kiro (Agent Plugin)</h1>
+  <p>
+    Kiro supports the open <strong>Agent Plugins v1.0.0</strong> standard (agent-plugins.org). The
+    LyraShield Agent Plugin bundles the MCP server and a security skill into a single installable
+    package, so Kiro gets both the tools and the guidance for when to run them in one step — no
+    hand-edited config required.
+  </p>
+
+  <h2>Install with the CLI (fastest)</h2>
+  <p>
+    Run <code>npx lyrashield login</code> first to save your API key to{" "}
+    <code>~/.lyrashield/credentials.json</code>. Then install the plugin:
+  </p>
+  <pre><code>npx lyrashield login
+npx lyrashield install kiro</code></pre>
+  <p>
+    The plugin is installed to <code>~/.kiro/plugins/lyrashield</code>. Kiro discovers plugins from{" "}
+    <code>~/.kiro/plugins/</code>; the portable <code>plugin.json</code> at the plugin root is the
+    manifest. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+  </p>
+
+  <div class="callout">
+    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
+    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
+    <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
+  </div>
+
+  <h2>What the plugin includes</h2>
+  <ul>
+    <li><strong>MCP server:</strong> the full LyraShield tool surface (scan triggers, finding inspection, report creation) via stdio transport.</li>
+    <li><strong>Security skill:</strong> guidance for when to run LyraShield checks during coding sessions.</li>
+    <li><strong>Rules file:</strong> writes <code>AGENTS.md</code> with LyraShield usage guidance.</li>
+  </ul>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Run <code>npx lyrashield doctor</code> to confirm the plugin is installed and credentials are
+    present. Then ask Kiro: <em>"What LyraShield tools do you have access to?"</em> to confirm the
+    server is connected.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. Run{" "}
+    <code>npx lyrashield login</code> before installing so the MCP stdio server can read
+    credentials.
+  </div>
+</DocsLayout>
