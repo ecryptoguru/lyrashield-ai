@@ -113,6 +113,42 @@ describe("POST /api/lite-scan", () => {
     expect(checkScanUrlSafe).not.toHaveBeenCalled()
   })
 
+  it("retries Turnstile verification on transient network failure then succeeds", async () => {
+    process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret"
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network timeout"))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const response = await POST(
+      request({ url: "https://example.com", authorized: true, turnstileToken: "test-token" })
+    )
+
+    expect(response.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not retry a definitive Turnstile failure (success: false)", async () => {
+    process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret"
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ success: false }),
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const response = await POST(
+      request({ url: "https://example.com", authorized: true, turnstileToken: "test-token" })
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({ error: "bot_check_failed" })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it("rejects private or reserved targets before fetching", async () => {
     process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret"
     checkScanUrlSafe.mockResolvedValue({ safe: false, reason: "blocked_ip" })

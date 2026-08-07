@@ -174,6 +174,8 @@ export function ScanInProgress({
           role="progressbar"
           aria-valuetext="Scan in progress — indeterminate"
           aria-label="Scan progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
         >
           <div className="h-full w-full animate-pulse bg-teal-500/60" />
         </div>

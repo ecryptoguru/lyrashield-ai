@@ -60,10 +60,12 @@ function isOriginAllowed(request: Request): boolean {
   return origin ? trustedOrigins().has(origin) : false
 }
 
-async function verifyTurnstile(token: string | undefined): Promise<boolean> {
-  const secret = process.env.TURNSTILE_SECRET_KEY
-  if (!secret) return false
-  if (!token) return false
+type TurnstileOutcome = "success" | "failed" | "transient-error"
+
+async function verifyTurnstileOnce(
+  token: string,
+  secret: string
+): Promise<TurnstileOutcome> {
   try {
     const body = new URLSearchParams({ secret, response: token })
     const verification = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
@@ -72,10 +74,36 @@ async function verifyTurnstile(token: string | undefined): Promise<boolean> {
       signal: AbortSignal.timeout(5_000),
     })
     const result = (await verification.json()) as { success?: boolean }
-    return result.success === true
+    return result.success === true ? "success" : "failed"
   } catch {
-    return false
+    // Network timeout / DNS / connection reset — transient, worth a retry.
+    return "transient-error"
   }
+}
+
+/**
+ * Verify a Turnstile token, retrying transient network failures (timeout,
+ * connection reset) up to TURNSTILE_MAX_RETRIES times with linear backoff.
+ * A definitive `success: false` is NOT retried — that is a real bot-check
+ * failure, not a transient outage.
+ */
+async function verifyTurnstile(token: string | undefined): Promise<boolean> {
+  const secret = process.env.TURNSTILE_SECRET_KEY
+  if (!secret) return false
+  if (!token) return false
+
+  const maxRetries = 2
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const outcome = await verifyTurnstileOnce(token, secret)
+    if (outcome === "success") return true
+    if (outcome === "failed") return false
+    // transient-error: back off before the next attempt (skip after the last)
+    if (attempt < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)))
+    }
+  }
+  // All attempts hit transient errors — fail closed (treat as bot-check failure).
+  return false
 }
 
 function linkedSameOriginAssets(html: string, pageUrl: string): string[] {

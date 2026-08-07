@@ -119,8 +119,8 @@ const jsonLd: unknown[] = [
   <pre><code>npx lyrashield init</code></pre>
   <p>
     <code>lyrashield</code> is published on npm (also as the scoped alias <code>@lyrashield/cli</code
-    >). It writes files directly for 9 of the 15 agents below, shells out to the vendor's own CLI for
-    Amp, and prints exact copy-paste values for the remaining 5 whose tooling has no config file to
+    >). It writes files directly for {agents.filter((a) => a.installStrategy === "config-file").length} of the {agents.filter((a) => a.installStrategy !== "agent-plugin").length} agents below, shells out to the vendor's own CLI for
+    {agents.filter((a) => a.installStrategy === "vendor-cli").length}, and prints exact copy-paste values for the remaining {agents.filter((a) => a.installStrategy === "guided-manual").length} whose tooling has no config file to
     safely write. Every per-agent guide below still documents the manual path — useful to see exactly
     what gets written, or if you'd rather not use Node.js.
   </p>

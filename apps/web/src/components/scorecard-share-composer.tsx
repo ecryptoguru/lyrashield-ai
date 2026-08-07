@@ -169,12 +169,22 @@ export function ScorecardShareComposer({
         : null
       const canShareFile = file && navigator.canShare?.({ files: [file] })
       const sourcedUrl = scorecardUrlWithSource(absolute(url), "native")
-      await navigator.share({
+      const shareData = {
         title: "LyraShield AI security review",
         ...(canShareFile
           ? { files: [file], text: `${caption}\n\n${sourcedUrl}` }
           : { text: caption, url: sourcedUrl }),
-      })
+      }
+      // Guard: some browsers expose navigator.share but cannot share the
+      // specific data (e.g. text+url without files). Fall back to copy.
+      if (typeof navigator.canShare === "function" && !navigator.canShare(shareData)) {
+        await copy(
+          `${caption}\n\n${sourcedUrl}`,
+          "Your device can't share this — post and link copied."
+        )
+        return
+      }
+      await navigator.share(shareData)
       setNotice("Shared from your device.")
       await track("native")
     } catch (cause) {
