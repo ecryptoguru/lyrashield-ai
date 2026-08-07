@@ -1,0 +1,143 @@
+---
+import AgentSnippet from "@components/AgentSnippet.astro"
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/antigravity", origin).toString()
+const title = "LyraShield MCP for Antigravity — Setup Guide"
+const description =
+  "Connect LyraShield to Antigravity (Google's successor to Gemini CLI). Configure ~/.gemini/config/mcp_config.json for stdio or use serverUrl for the remote Streamable-HTTP endpoint."
+const updatedDate = "2026-08-07"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Set up LyraShield MCP in Antigravity",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Open the shared MCP config",
+        text: "Open or create ~/.gemini/config/mcp_config.json — one shared config serves the Antigravity IDE, the agy CLI, and 2.0.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Add the lyrashield entry",
+        text: 'Add the mcpServers key with command "npx" and args ["-y","@lyrashield/mcp"], and set LYRASHIELD_API_KEY in the env block.',
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Reload Antigravity",
+        text: "Restart Antigravity or reload the window to apply the new config.",
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Antigravity", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/antigravity"
+>
+  <h1>Antigravity</h1>
+  <p>
+    Antigravity is Google's successor to Gemini CLI. It stores MCP configuration in a shared file at{" "}
+    <code>~/.gemini/config/mcp_config.json</code> that serves the Antigravity IDE, the{" "}
+    <code>agy</code> CLI, and Antigravity 2.0. A project-scoped alternative lives at{" "}
+    <code>.agents/mcp_config.json</code>.
+  </p>
+
+  <div class="callout">
+    <strong>Migrating from Gemini CLI?</strong> Antigravity replaces Gemini CLI and uses the same{" "}
+    <code>~/.gemini/</code> config directory. If you already have LyraShield configured for Gemini
+    CLI, the same entry works in Antigravity. See the{" "}
+    <a href="/docs/integrations/gemini-cli">Gemini CLI guide</a> for the legacy setup.
+  </div>
+
+  <h2>Install with the CLI (fastest)</h2>
+  <p>
+    Run <code>npx lyrashield install antigravity</code> from your project root. It detects
+    Antigravity, writes the correct config automatically, and never inlines your API key into a file
+    you might commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+  </p>
+  <pre><code>npx lyrashield install antigravity</code></pre>
+  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+
+  <h2>Local stdio setup</h2>
+  <p>
+    Add the following to <code>~/.gemini/config/mcp_config.json</code>. Create the file if it does
+    not exist. For project-scoped config, use <code>.agents/mcp_config.json</code> instead.
+  </p>
+
+  <AgentSnippet agentId="antigravity" transport="stdio" />
+
+  <h2>Remote endpoint</h2>
+  <p>
+    For Antigravity cloud environments that cannot run local processes, use{" "}
+    <code>serverUrl</code> instead of <code>command</code> + <code>args</code> to connect to the
+    remote Streamable-HTTP endpoint.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Gotcha — use <code>serverUrl</code>, not <code>url</code>:</strong> Antigravity uses{" "}
+    <code>serverUrl</code> for HTTP-based MCP servers. The <code>url</code> field is rejected.
+  </div>
+
+  <div class="callout">
+    <strong>Skills and rules:</strong> Shared skills live in <code>~/.gemini/skills</code>; project
+    rules go in <code>GEMINI.md</code> (project) or <code>AGENTS.md</code> (global).
+  </div>
+
+  <AgentSnippet agentId="antigravity" transport="remote-http" />
+
+  <div class="callout">
+    <strong>Read-only vs. read-and-write:</strong> Remote mutating tools (scan triggers, finding
+    submissions, report creation) require a read-and-write API key and a human out-of-band
+    approval. Read-only inspection tools work with any key.
+  </div>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Restart Antigravity and ask: <em>"What LyraShield tools do you have access to?"</em> to confirm
+    the server is connected.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. The
+    <code>@lyrashield/mcp</code> package is published on npm, so
+    <code>npx -y @lyrashield/mcp</code> resolves directly.
+  </div>
+</DocsLayout>

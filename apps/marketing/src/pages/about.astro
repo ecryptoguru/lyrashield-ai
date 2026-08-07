@@ -1,0 +1,239 @@
+---
+import Base from "@layouts/Base.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/about", origin).toString()
+const title = "About LyraShield AI — Evidence-Backed Release Assurance for AI-Built Apps"
+const description =
+  "LyraShield AI is founded by Ankit Das, a 2x EthIndia prize winner and certified AI/Web3 engineer with 16+ years of experience. Learn about the mission, approach, and team behind evidence-backed release assurance."
+const updatedDate = "2026-08-07"
+
+const founder = {
+  name: "Ankit Das",
+  role: "Founder & CEO",
+  bio: "AI/ML engineer and 2x EthIndia prize winner with 16+ years of experience across Web3, AI, and application security. Ankit built LyraShield AI after processing 6.8 billion tokens across 2,728 AI coding sessions and realizing that the most-used tool in his own workflow wasn't a scaffolding tool or UI generator — it was a security review plugin. LyraShield AI is the product of that insight: AI can write code quickly, but most review processes haven't adapted.",
+  linkedin: "https://www.linkedin.com/in/defiankit/",
+  github: "https://github.com/ecryptoguru",
+  x: "https://x.com/defiankit",
+  website: "https://www.lyrashieldai.com",
+}
+
+const credentials = [
+  { label: "2x EthIndia Prize Winner", detail: "Arbitrum Foundation & Scroll Network prizes (2023, solo); Coinbase CDP recognition (2024)" },
+  { label: "Certified Full-Stack Applied AI Engineer", detail: "OpenAI, LLMs, Langchain, Next.js, TypeScript, Node.js" },
+  { label: "Certified Web3 Developer", detail: "Solidity, DeFi, GameFi, NFTs — active since 2017" },
+  { label: "16+ Years Experience", detail: "CTO at FusionwaveAI, Head of Blockchain at Zuraverse, Web3 Consultant at Tegus" },
+]
+
+const stats = [
+  { value: "6.8B", label: "AI tokens processed", detail: "across 2,728 coding sessions" },
+  { value: "232", label: "Security review runs", detail: "the most-used plugin in his AI workflow" },
+  { value: "13h 4m", label: "Longest single session", detail: "evidence of building with AI daily" },
+  { value: "69", label: "Public repositories", detail: "Web3, AI, and security tooling" },
+]
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    name: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    isPartOf: { "@id": `${origin}/#website` },
+    mainEntity: { "@id": `${origin}/#organization` },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "About", item: canonical },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    name: founder.name,
+    jobTitle: founder.role,
+    url: canonical,
+    description: founder.bio,
+    sameAs: [founder.linkedin, founder.github, founder.x],
+    worksFor: { "@id": `${origin}/#organization` },
+    knowsAbout: [
+      "AI application security",
+      "release assurance",
+      "Web3 development",
+      "smart contracts",
+      "AI engineering",
+      "LLM integration",
+    ],
+    award: ["EthIndia 2023 Prize Winner", "EthIndia 2024 Prize Winner"],
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:py-24">
+    <header data-reveal-group>
+      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase" data-reveal="fade">About</p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>
+        Evidence over promises
+      </h1>
+      <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
+        LyraShield AI is the evidence-backed release-assurance layer for AI-built software. We
+        believe a security result should say what it knows — and what it does not — rather than
+        turning scanner confidence into a universal verdict.
+      </p>
+    </header>
+
+    <section aria-labelledby="origin-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="origin-heading" class="text-2xl font-semibold text-text" data-reveal>How LyraShield AI started</h2>
+      <p class="mt-5 leading-7 text-text-muted" data-reveal>
+        After processing 6.8 billion tokens across 2,728 AI coding sessions, our founder noticed
+        something: the most-used tool in his AI workflow wasn't a scaffolding generator or a UI
+        builder — it was a security review plugin, run 232 times. The insight was simple:
+        <strong>AI can write code quickly, but most review processes haven't adapted.</strong>
+      </p>
+      <p class="mt-4 leading-7 text-text-muted" data-reveal>
+        Traditional security tools were built for human-written code with human review cadences.
+        AI-generated code changes the equation: code arrives faster, patterns are different, and
+        the review bottleneck shifts from "who writes it" to "who verifies it." LyraShield AI was
+        built to close that gap with a methodology that preserves evidence provenance, coverage
+        limits, and retest state as separate, inspectable facts.
+      </p>
+    </section>
+
+    <section aria-labelledby="mission-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="mission-heading" class="text-2xl font-semibold text-text" data-reveal>Our mission</h2>
+      <p class="mt-5 leading-7 text-text-muted" data-reveal>
+        We do not claim that a clean scan proves an app is secure. We do not claim universal
+        coverage. We record what was checked, what was verified, and what remains uncertain —
+        then produce an immutable report that stakeholders can inspect. The Vibe Security 50
+        framework defines 43 machine-testable controls and 7 that require retained human evidence,
+        so you always know the boundary of what a scan can and cannot establish.
+      </p>
+    </section>
+
+    <section aria-labelledby="approach-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="approach-heading" class="text-2xl font-semibold text-text" data-reveal>Our approach</h2>
+      <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Evidence states</dt>
+          <dd class="mt-2 leading-7 text-text-muted">Every finding carries one of four states: detected candidate, independently verified, retest-confirmed, or inconclusive. A score never overrides these facts.</dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Coverage receipts</dt>
+          <dd class="mt-2 leading-7 text-text-muted">The Vibe Security 50 framework records per-control coverage: completed, limited, skipped, or not-applicable. You know exactly what was and was not checked.</dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Deterministic retests</dt>
+          <dd class="mt-2 leading-7 text-text-muted">When a fix is applied, a server-owned deterministic retest checks whether the condition is actually absent — not just whether the scanner stopped reporting it.</dd>
+        </div>
+        <div data-reveal>
+          <dt class="font-semibold text-text">Immutable reports</dt>
+          <dd class="mt-2 leading-7 text-text-muted">Assurance reports are frozen at creation time with tamper-evident manifests. They can be shared with stakeholders without risk of silent modification.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="founder-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="founder-heading" class="text-2xl font-semibold text-text" data-reveal>Founder</h2>
+      <div class="mt-8 rounded-xl border border-border bg-bg-raised p-6 sm:p-8" data-reveal>
+        <div class="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
+          <div class="flex size-20 shrink-0 items-center justify-center rounded-2xl border border-border bg-bg text-3xl font-bold text-accent">
+            AD
+          </div>
+          <div class="flex-1">
+            <h3 class="text-xl font-semibold text-text">{founder.name}</h3>
+            <p class="text-sm font-medium text-accent">{founder.role}</p>
+            <p class="mt-4 leading-7 text-text-muted">{founder.bio}</p>
+            <div class="mt-5 flex flex-wrap gap-4 text-sm">
+              <a href={founder.linkedin} class="inline-flex items-center gap-1.5 text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent" rel="noopener noreferrer" target="_blank">
+                <span aria-hidden="true">in</span> LinkedIn
+              </a>
+              <a href={founder.github} class="inline-flex items-center gap-1.5 text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent" rel="noopener noreferrer" target="_blank">
+                <span aria-hidden="true">gh</span> GitHub
+              </a>
+              <a href={founder.x} class="inline-flex items-center gap-1.5 text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent" rel="noopener noreferrer" target="_blank">
+                <span aria-hidden="true">X</span> @defiankit
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="credentials-heading" class="mt-12" data-reveal-group>
+      <h3 class="text-lg font-semibold text-text" data-reveal>Credentials & experience</h3>
+      <div class="mt-6 grid gap-4 sm:grid-cols-2" data-reveal-group>
+        {credentials.map((cred) => (
+          <div class="rounded-lg border border-border p-4" data-reveal>
+            <p class="font-medium text-text">{cred.label}</p>
+            <p class="mt-1 text-sm text-text-muted">{cred.detail}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section aria-labelledby="stats-heading" class="mt-12" data-reveal-group>
+      <h3 class="text-lg font-semibold text-text" data-reveal>Building with AI, daily</h3>
+      <p class="mt-2 text-sm text-text-muted" data-reveal>From ChatGPT Codex usage data — the real numbers behind the decision to build LyraShield AI.</p>
+      <div class="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4" data-reveal-group>
+        {stats.map((stat) => (
+          <div class="rounded-lg border border-border bg-bg-raised p-4 text-center" data-reveal>
+            <p class="text-2xl font-bold text-accent">{stat.value}</p>
+            <p class="mt-1 text-sm font-medium text-text">{stat.label}</p>
+            <p class="mt-1 text-xs text-text-muted">{stat.detail}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section aria-labelledby="values-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="values-heading" class="text-2xl font-semibold text-text" data-reveal>What we believe</h2>
+      <ul class="mt-8 space-y-5" data-reveal-group>
+        <li class="flex gap-4" data-reveal>
+          <span class="font-mono text-sm text-accent shrink-0">01</span>
+          <p class="leading-7 text-text-muted"><strong class="text-text">A clean scan is not a security guarantee.</strong> A score is an interpretation aid derived from evidence. It does not override the underlying findings, coverage limits, or retest receipts.</p>
+        </li>
+        <li class="flex gap-4" data-reveal>
+          <span class="font-mono text-sm text-accent shrink-0">02</span>
+          <p class="leading-7 text-text-muted"><strong class="text-text">Coverage is a fact, not a feeling.</strong> Which checks completed, were limited, were skipped, or did not apply — including retained limitations — must be visible on every report.</p>
+        </li>
+        <li class="flex gap-4" data-reveal>
+          <span class="font-mono text-sm text-accent shrink-0">03</span>
+          <p class="leading-7 text-text-muted"><strong class="text-text">Evidence states are not interchangeable.</strong> Detected, independently verified, retest-confirmed, and inconclusive are separate states with distinct meanings. Scanner confidence alone never creates a verified state.</p>
+        </li>
+        <li class="flex gap-4" data-reveal>
+          <span class="font-mono text-sm text-accent shrink-0">04</span>
+          <p class="leading-7 text-text-muted"><strong class="text-text">Fix proposals require approval binding.</strong> No Fix PR is opened until a server-generated patch is bound to an exact approval. The human stays in the loop.</p>
+        </li>
+        <li class="flex gap-4" data-reveal>
+          <span class="font-mono text-sm text-accent shrink-0">05</span>
+          <p class="leading-7 text-text-muted"><strong class="text-text">AI-built apps need AI-aware security.</strong> Agent rule injection, MCP misconfiguration, and prompt-injected code paths are real risks that traditional SAST tools were not designed to catch.</p>
+        </li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="contact-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="contact-heading" class="text-2xl font-semibold text-text" data-reveal>Contact</h2>
+      <p class="mt-5 leading-7 text-text-muted" data-reveal>
+        For security reports, partnership inquiries, or product questions, contact us at{" "}
+        <a href="mailto:abuse@lyrashieldai.com" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">abuse@lyrashieldai.com</a>.
+        For the latest product updates, join the <a href="/#waitlist" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">waitlist</a>.
+      </p>
+    </section>
+
+    <section class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between" data-reveal>
+      <div>
+        <h2 class="text-2xl font-semibold text-text">See the evidence approach in action.</h2>
+        <p class="mt-2 text-text-muted">Read the methodology or try the free browser-local tools.</p>
+      </div>
+      <div class="flex gap-3">
+        <a href="/methodology" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border px-5 text-sm font-semibold text-text hover:bg-bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Methodology</a>
+        <a href="/tools" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free tools</a>
+      </div>
+    </section>
+  </section>
+</Base>

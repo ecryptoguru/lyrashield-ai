@@ -1,0 +1,117 @@
+---
+import AgentSnippet from "@components/AgentSnippet.astro"
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/devin-cli", origin).toString()
+const title = "LyraShield MCP for Devin CLI — Setup Guide"
+const description =
+  "Connect LyraShield to Devin CLI (Cognition). Configure .devin/config.local.json with the mcpServers object for stdio transport. Manage servers with devin mcp add."
+const updatedDate = "2026-08-07"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Set up LyraShield MCP in Devin CLI",
+    step: [
+      {
+        "@type": "HowToStep",
+        position: 1,
+        name: "Open .devin/config.local.json",
+        text: "Open or create .devin/config.local.json in your project root. This file is gitignored.",
+      },
+      {
+        "@type": "HowToStep",
+        position: 2,
+        name: "Add the mcpServers entry",
+        text: 'Add the mcpServers key with command "npx" and args ["-y","@lyrashield/mcp"]. Set LYRASHIELD_API_KEY in the env block.',
+      },
+      {
+        "@type": "HowToStep",
+        position: 3,
+        name: "Verify with devin mcp list",
+        text: "Run devin mcp list to confirm the lyrashield server is registered.",
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Devin CLI", item: canonical },
+    ],
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/devin-cli"
+>
+  <h1>Devin CLI</h1>
+  <p>
+    Devin CLI (by Cognition, separate from Devin Desktop/Windsurf) reads MCP server configuration
+    from <code>.devin/config.local.json</code> in your project root. This file is gitignored and
+    uses a <code>mcpServers</code> object. Devin CLI supports stdio transport only.
+  </p>
+
+  <h2>Install with the CLI (fastest)</h2>
+  <p>
+    Run <code>npx lyrashield install devin-cli</code> from your project root. It detects Devin CLI,
+    writes the correct config automatically, and never inlines your API key into a file you might
+    commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
+  </p>
+  <pre><code>npx lyrashield install devin-cli</code></pre>
+  <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+
+  <h2>Local stdio setup</h2>
+  <p>
+    Add the following to <code>.devin/config.local.json</code>. Create the file if it does not
+    exist. You can also manage servers with <code>devin mcp add</code>.
+  </p>
+
+  <AgentSnippet agentId="devin-cli" transport="stdio" />
+
+  <div class="callout">
+    <strong>Managing servers:</strong> Use <code>devin mcp add|login|enable|disable</code> to
+    manage MCP servers. Remote servers needing OAuth authenticate via{" "}
+    <code>devin mcp login &lt;server&gt;</code>. MCP tools are namespaced as{" "}
+    <code>mcp__&lt;server&gt;__&lt;tool&gt;</code>.
+  </div>
+
+  <h2>Verify the connection</h2>
+  <p>
+    Run <code>devin mcp list</code> to confirm the lyrashield server is registered. Ask Devin:{" "}
+    <em>"What LyraShield tools do you have access to?"</em> to confirm the server is connected.
+  </p>
+
+  <div class="callout callout--warn">
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. The
+    <code>@lyrashield/mcp</code> package is published on npm, so
+    <code>npx -y @lyrashield/mcp</code> resolves directly.
+  </div>
+</DocsLayout>

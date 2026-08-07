@@ -11,7 +11,28 @@ const SECURITY_HEADERS = {
   "X-Frame-Options": "DENY",
 } as const
 
+// Permanent 301 redirects — handled in middleware so Cloudflare Workers
+// returns a true 301 instead of a meta-refresh HTML page (which is all
+// Astro static output can generate from Astro.redirect()).
+const PERMANENT_REDIRECTS: Record<string, string> = {
+  "/docs": "/docs/integrations",
+  "/resources": "/blog",
+  "/how-it-works": "/#how-it-works",
+}
+
 export const onRequest = defineMiddleware(async ({ url }, next) => {
+  const redirectTarget = PERMANENT_REDIRECTS[url.pathname]
+  if (redirectTarget) {
+    return new Response(null, {
+      status: 301,
+      headers: {
+        Location: redirectTarget,
+        "Cache-Control": "public, max-age=31536000",
+        "X-Robots-Tag": "noindex",
+      },
+    })
+  }
+
   const response = await next()
   const headers = new Headers(response.headers)
 

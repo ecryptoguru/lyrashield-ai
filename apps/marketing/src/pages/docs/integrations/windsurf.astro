@@ -6,8 +6,8 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/windsurf", origin).toString()
 const title = "LyraShield MCP for Windsurf — Setup Guide"
 const description =
-  "Connect LyraShield to Windsurf (Codeium). Configure the global mcp_config.json for stdio or add the remote Streamable-HTTP endpoint for the cloud-hosted Windsurf environment."
-const updatedDate = "2026-07-31"
+  "Connect LyraShield to Windsurf (Codeium). Install the Agent Plugin for one-step setup, or configure the global mcp_config.json for stdio or the remote Streamable-HTTP endpoint."
+const updatedDate = "2026-08-07"
 
 const jsonLd: unknown[] = [
   {
@@ -80,12 +80,32 @@ const jsonLd: unknown[] = [
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install windsurf</code> from your project root. It detects Windsurf,
-    writes the correct config automatically, and never inlines your API key into a file you might
+    installs the Agent Plugin by default, and never inlines your API key into a file you might
     commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
     <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
   </p>
   <pre><code>npx lyrashield install windsurf</code></pre>
   <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
+
+  <h2>Agent Plugin (recommended)</h2>
+  <p>
+    Windsurf supports the open Agent Plugins v1.0.0 standard (agent-plugins.org), and LyraShield
+    ships a portable plugin that bundles the MCP server and a security skill into a single
+    installable package. The skill teaches Windsurf when to run LyraShield checks, so you get both
+    the tools and the guidance in one step.
+  </p>
+  <p>
+    <code>npx lyrashield install windsurf</code> now installs the plugin by default. Run{" "}
+    <code>npx lyrashield login</code> first so the MCP server can read credentials without inlining
+    a key in any config file.
+  </p>
+  <pre><code>npx lyrashield login
+npx lyrashield install windsurf</code></pre>
+  <div class="callout">
+    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
+    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
+    <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
+  </div>
 
   <h2>Local stdio setup</h2>
   <p>
