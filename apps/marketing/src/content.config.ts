@@ -57,6 +57,24 @@ const blog = defineCollection({
   }),
 })
 
+const compare = defineCollection({
+  loader: glob({ base: "./src/content/compare", pattern: "**/*.{md,mdx}" }),
+  schema: z.object({
+    title: z.string().min(20).max(90),
+    description: z.string().min(70).max(160),
+    competitor: z.string().min(2).max(60),
+    heading: z.string().min(10).max(70),
+    disclaimer: z.string().min(80),
+    updatedDate: z.coerce.date(),
+    draft: z.boolean().default(true),
+    canonical: z.url().optional(),
+    faq: z
+      .array(z.object({ q: z.string(), a: z.string() }))
+      .min(2)
+      .max(4),
+  }),
+})
+
 const authors = defineCollection({
   loader: file("src/content/authors/authors.json"),
   schema: z.object({
@@ -69,4 +87,4 @@ const authors = defineCollection({
   }),
 })
 
-export const collections = { blog, authors, blogImages }
+export const collections = { blog, authors, blogImages, compare }

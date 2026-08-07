@@ -1,39 +1,23 @@
 ---
+import { getCollection } from "astro:content"
+
 import Base from "@layouts/Base.astro"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/compare", origin).toString()
 const title = "LyraShield AI vs Security Tools — Evidence-Based Comparisons"
 const description =
-  "How LyraShield AI compares to Snyk, GitHub Advanced Security, SonarQube, and Semgrep. Factual capability, deployment, and pricing comparisons."
+  "How LyraShield AI compares to Snyk, Semgrep, SonarQube, GitHub Advanced Security and other AppSec tools. Factual, publicly documented capability comparisons."
 const updatedDate = "2026-08-07"
 
-const comparisons = [
-  {
-    slug: "snyk",
-    name: "Snyk",
-    tagline: "Vulnerability scanning and dependency analysis",
-    focus: "SAST, SCA, container, IaC with DeepCode AI engine",
-  },
-  {
-    slug: "github-advanced-security",
-    name: "GitHub Advanced Security",
-    tagline: "Platform-integrated code scanning and secret detection",
-    focus: "CodeQL, secret scanning, Dependabot within GitHub",
-  },
-  {
-    slug: "sonarqube",
-    name: "SonarQube",
-    tagline: "Static analysis with code quality gates",
-    focus: "Code quality, security hotspots, taint analysis, IaC",
-  },
-  {
-    slug: "semgrep",
-    name: "Semgrep",
-    tagline: "Pattern-based scanning with custom rules",
-    focus: "Fast SAST, custom rules, SCA, secrets, AI triage",
-  },
-]
+const entries = await getCollection("compare", ({ data }) => data.draft === false)
+const comparisons = entries
+  .map((entry) => ({
+    slug: entry.id,
+    name: entry.data.competitor,
+    tagline: entry.data.description,
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name))
 
 const jsonLd: unknown[] = [
   {

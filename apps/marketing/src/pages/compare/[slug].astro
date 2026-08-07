@@ -1,0 +1,85 @@
+---
+import { getCollection, render } from "astro:content"
+
+import Base from "@layouts/Base.astro"
+
+export async function getStaticPaths() {
+  const comparisons = await getCollection("compare", ({ data }) => data.draft === false)
+  return comparisons.map((entry) => ({ params: { slug: entry.id }, props: { entry } }))
+}
+
+const { entry } = Astro.props
+const { title, description, competitor, heading, disclaimer, updatedDate, faq } = entry.data
+const { Content } = await render(entry)
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL(`/compare/${entry.id}`, origin).toString()
+const reviewed = updatedDate.toISOString().slice(0, 10)
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: reviewed,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "Compare", item: `${origin}/compare` },
+      { "@type": "ListItem", position: 3, name: `vs ${competitor}`, item: canonical },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+]
+---
+
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
+  <section class="mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:py-24">
+    <header data-reveal-group>
+      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase" data-reveal="fade">Comparison</p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>{heading}</h1>
+      <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>{description}</p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal>
+        Last reviewed: <time datetime={reviewed}>{reviewed}</time>
+      </p>
+    </header>
+
+    <div class="callout mt-10" data-reveal set:html={disclaimer} />
+
+    <div class="compare-body mt-16 border-t border-border pt-12" data-reveal-group>
+      <Content />
+    </div>
+
+    <section aria-labelledby="faq-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
+      <h2 id="faq-heading" class="text-2xl font-semibold text-text" data-reveal>Frequently asked questions</h2>
+      <dl class="mt-8 space-y-8">
+        {faq.map((item) => (
+          <div data-reveal>
+            <dt class="font-semibold text-text">{item.q}</dt>
+            <dd class="mt-2 leading-7 text-text-muted">{item.a}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+
+    <div class="mt-16 border-t border-border pt-12" data-reveal>
+      <a href="/compare" class="text-sm font-semibold text-accent hover:underline">All comparisons</a>
+    </div>
+  </section>
+</Base>

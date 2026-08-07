@@ -1,7 +1,9 @@
 ---
 title: "LyraShield AI vs RunSybil — Release Assurance vs AI-Native Black-Box Offensive Testing"
-description: "Factual comparison. [RunSybil](https://www.runsybil.com/) is an AI-native offensive security platform whose \"Sybil\" agents reason like elite attackers —..."
+description: "How LyraShield AI compares to Runsybil for AI-built application security. Evidence states, coverage framework, and release assurance differences."
 competitor: "Runsybil"
+heading: "LyraShield AI vs Runsybil"
+disclaimer: 'Factual comparison. [RunSybil](https://www.runsybil.com/) is an AI-native offensive security platform whose "Sybil" agents reason like elite attackers — black-box first, mapping the attack surface, chaining vulnerabilities across code, APIs, cloud, and infrastructure, and validating exploitability continuously on every deployment. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and approval-gated fixes. Both independently validate findings and run continuously. Neither replaces the other.'
 updatedDate: 2026-08-07
 draft: false
 faq:
@@ -15,44 +17,45 @@ faq:
 
 ## Core approach
 
-| Aspect | LyraShield AI | RunSybil |
-| --- | --- | --- |
-| Primary focus | Release assurance for AI-built apps | AI-native black-box offensive testing that automates hacker intuition |
-| Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus | Hierarchy of reasoning agents: map surface → hypothesis-driven tests → oversee campaign; black-box first, white-box-capable |
-| Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive | Hypothesis → confirmed/reproducible finding → prioritized → AI-ready remediation guidance |
-| Control framework | Vibe Security 50 (43 machine-testable + 7 evidence-required) | No published control framework; CTEM Phase 4 (Validation) focus |
-| Access model | App-layer + source/MCP/agent configs | Black-box first (no source required); accepts white-box context |
-| Fix model | Approval-gated: PR blocked until server-generated patch bound to exact approval | AI-ready remediation guidance integrated with coding tools; PR-level feedback |
+| Aspect            | LyraShield AI                                                                   | RunSybil                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Primary focus     | Release assurance for AI-built apps                                             | AI-native black-box offensive testing that automates hacker intuition                                                       |
+| Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus    | Hierarchy of reasoning agents: map surface → hypothesis-driven tests → oversee campaign; black-box first, white-box-capable |
+| Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive            | Hypothesis → confirmed/reproducible finding → prioritized → AI-ready remediation guidance                                   |
+| Control framework | Vibe Security 50 (43 machine-testable + 7 evidence-required)                    | No published control framework; CTEM Phase 4 (Validation) focus                                                             |
+| Access model      | App-layer + source/MCP/agent configs                                            | Black-box first (no source required); accepts white-box context                                                             |
+| Fix model         | Approval-gated: PR blocked until server-generated patch bound to exact approval | AI-ready remediation guidance integrated with coding tools; PR-level feedback                                               |
 
 ## Capability comparison
 
-| Capability | LyraShield AI | RunSybil |
-| --- | --- | --- |
-| Agentic / AI-driven pentest | Yes (app-layer) | Yes (hierarchical multi-agent) |
-| Independent exploit validation | Yes (verified state) | Yes (live exploitation; reproducible findings) |
-| Black-box (no source required) | Source/MCP-aware (not black-box-first) | Yes (core differentiator) |
-| SCA (dependency scanning) | Yes (engine) | Not a primary focus |
-| Secret scanning | Yes (engine + GitHub Action) | Not a primary focus |
-| Evidence states (4-state lifecycle) | Yes | Findings are confirmed/reproducible; no explicit multi-state lifecycle |
-| Deterministic retest | Yes | Continuous re-evaluation on every deployment |
-| Coverage receipts | Yes (per-control) | No |
-| Assurance reports (immutable) | Yes | Pre-validated findings with reproducible evidence |
-| MCP server integration | Yes (inside AI coding agents) | Not advertised as primary |
-| Approval-gated fix execution | Yes (PR blocked until patch bound to approval) | No (remediation guidance + PR feedback, not approval-gated execution) |
-| Multi-tenant / business-logic testing | App-layer | Yes (cross-tenant access, privilege escalation, transaction manipulation) |
-| AI-generated-code focus | Built for AI-built apps | Not specific to AI-generated code |
+| Capability                            | LyraShield AI                                  | RunSybil                                                                  |
+| ------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
+| Agentic / AI-driven pentest           | Yes (app-layer)                                | Yes (hierarchical multi-agent)                                            |
+| Independent exploit validation        | Yes (verified state)                           | Yes (live exploitation; reproducible findings)                            |
+| Black-box (no source required)        | Source/MCP-aware (not black-box-first)         | Yes (core differentiator)                                                 |
+| SCA (dependency scanning)             | Yes (engine)                                   | Not a primary focus                                                       |
+| Secret scanning                       | Yes (engine + GitHub Action)                   | Not a primary focus                                                       |
+| Evidence states (4-state lifecycle)   | Yes                                            | Findings are confirmed/reproducible; no explicit multi-state lifecycle    |
+| Deterministic retest                  | Yes                                            | Continuous re-evaluation on every deployment                              |
+| Coverage receipts                     | Yes (per-control)                              | No                                                                        |
+| Assurance reports (immutable)         | Yes                                            | Pre-validated findings with reproducible evidence                         |
+| MCP server integration                | Yes (inside AI coding agents)                  | Not advertised as primary                                                 |
+| Approval-gated fix execution          | Yes (PR blocked until patch bound to approval) | No (remediation guidance + PR feedback, not approval-gated execution)     |
+| Multi-tenant / business-logic testing | App-layer                                      | Yes (cross-tenant access, privilege escalation, transaction manipulation) |
+| AI-generated-code focus               | Built for AI-built apps                        | Not specific to AI-generated code                                         |
 
 ## Deployment and pricing
 
-| Aspect | LyraShield AI | RunSybil |
-| --- | --- | --- |
-| Deployment | Hosted + CLI + MCP + GitHub Action | Hosted; point at a target or run continuously; PR-level feedback |
-| Pricing | Open beta; pricing announced as it matures | Not public — demo/sales; subscription model (per ToS), USD, non-refundable |
-| Compliance posture | Assurance-record orientation for release sign-off | Used for SOC 2 pentest requirements; CTEM Phase 4 validation |
+| Aspect             | LyraShield AI                                     | RunSybil                                                                   |
+| ------------------ | ------------------------------------------------- | -------------------------------------------------------------------------- |
+| Deployment         | Hosted + CLI + MCP + GitHub Action                | Hosted; point at a target or run continuously; PR-level feedback           |
+| Pricing            | Open beta; pricing announced as it matures        | Not public — demo/sales; subscription model (per ToS), USD, non-refundable |
+| Compliance posture | Assurance-record orientation for release sign-off | Used for SOC 2 pentest requirements; CTEM Phase 4 validation               |
 
 ## When to use which
 
 ### Use LyraShield AI when
+
 - Your app is AI-built and you need AI-specific pattern coverage and a release-gate assurance record
 - You need immutable assurance reports with coverage receipts for compliance or client handoff
 - You want fixes approval-gated so a PR cannot execute until a server-generated patch is bound to an exact approval
@@ -60,6 +63,7 @@ faq:
 - You need SCA + secrets + agentic pentest in one release-assurance loop
 
 ### Use RunSybil when
+
 - You want black-box-first offensive testing that reasons like an attacker without needing source code
 - Your priority is continuous, hypothesis-driven exploit validation across code, APIs, cloud, and infrastructure
 - You need multi-tenant and business-logic testing (cross-tenant access, privilege escalation, transaction manipulation)
@@ -69,3 +73,7 @@ faq:
 ---
 
 RunSybil automates attacker intuition black-box; LyraShield AI gates AI-built-app releases. [Read our comparison methodology](https://lyrashieldai.com) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
+
+## Methodology and scope
+
+Every claim on this page is drawn from publicly documented capabilities at the date above. Read [how LyraShield tests, records evidence, and reports coverage](/methodology) for the assurance model behind the comparison, and treat anything not stated there as out of scope.
