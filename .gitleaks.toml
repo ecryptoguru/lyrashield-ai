@@ -2,7 +2,13 @@
 useDefault = true
 
 [allowlist]
-description = "Synthetic fixtures and AWS SDK environment lookup"
+description = "Synthetic fixtures, AWS SDK env lookup, and CI dummy secrets"
 regexTarget = "line"
-paths = ['''^apps/worker/src/engine/scanners/secrets-scanner\.test\.ts$''']
-regexes = ['''secretAccessKey:\s*env\.S3_SECRET_KEY''']
+paths = [
+  '''^apps/worker/src/engine/scanners/secrets-scanner\.test\.ts$''',
+  '''^\.github/workflows/ci\.yml$''',
+]
+regexes = [
+  '''secretAccessKey:\s*env\.S3_SECRET_KEY''',
+  '''dummy-ci-only-secret-not-a-real-credential''',
+]

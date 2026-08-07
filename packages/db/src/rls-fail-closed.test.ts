@@ -177,9 +177,14 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
    * them. Before flipping RLS back on, the checklist is:
    *
    *   1. Reproduce the 42501 write failure in CI against a real Postgres.
+   *      → The `rls-child-write-repro` CI job does this: it re-enables RLS on
+   *        the child tables after migrations and runs the write-path test below.
    *   2. Add a WRITE-path case here (insert through `withWorkspaceRLS`), not
    *      just the read cases below. Reads passing while writes fail is exactly
    *      how this reached production.
+   *        → The `succeeds writing a ScanEvent as the owning workspace` test
+   *          below is that case. It writes through `withWorkspaceRLS` exactly
+   *          as `addScanEvent` does. If the policy is broken, this throws 42501.
    *   3. Re-enable, then un-skip.
    */
   describe.skip("child tables scoped through a parent (DB-07)", () => {
@@ -251,6 +256,84 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         expect(affected).toBe(0)
       } finally {
         await prisma.$executeRaw`DELETE FROM "ScanEvent" WHERE id = ${event.id}`
+        await prisma.$executeRaw`DELETE FROM "Scan" WHERE id = ${scan.id}`
+      }
+    })
+
+    /**
+     * WRITE-PATH TEST — the missing case that let the 42501 reach production.
+     *
+     * The read-only tests above assert cross-workspace reads return 0. But a
+     * policy that always evaluates false (e.g., because the GUC is not visible
+     * to the policy check, or the EXISTS join fails) also returns 0 rows — so
+     * read-only assertions cannot distinguish "correctly fails closed" from
+     * "completely broken." This test writes a ScanEvent through the SAME
+     * `withWorkspaceRLS` path that `addScanEvent` uses, as the OWNING workspace.
+     * If the policy is correct, the write succeeds. If the policy is broken
+     * (as it was in production), the write throws Prisma error code 42501.
+     *
+     * This is the tripwire for re-enable: un-skip this test alongside the
+     * re-enable migration. If it fails with 42501, the root cause has not been
+     * fixed yet.
+     */
+    it("succeeds writing a ScanEvent as the owning workspace through withWorkspaceRLS", async () => {
+      const scan = await prisma.scan.create({
+        data: {
+          workspaceId,
+          targetId,
+          goal: "LAUNCH_REVIEW",
+          status: "COMPLETED",
+          createdById: `rls-fc-user-${suffix}`,
+        },
+      })
+
+      try {
+        // This mirrors addScanEvent exactly: set the GUC inside a transaction
+        // via withWorkspaceRLS, then insert a ScanEvent scoped through the
+        // scan's workspaceId via the EXISTS-join policy.
+        const { withWorkspaceRLS } = await import("./rls")
+        const event = await withWorkspaceRLS(workspaceId, async (tx) => {
+          // Verify scan ownership (defense-in-depth, same as addScanEvent).
+          const owned = await tx.scan.findUnique({
+            where: { id: scan.id },
+            select: { workspaceId: true },
+          })
+          expect(owned?.workspaceId).toBe(workspaceId)
+
+          // The actual write — this is where 42501 manifested in production.
+          return tx.scanEvent.create({
+            data: {
+              scanId: scan.id,
+              stage: "completed",
+              level: "info",
+              message: "rls write-path probe",
+            },
+          })
+        })
+
+        expect(event.id).toBeDefined()
+        expect(event.scanId).toBe(scan.id)
+
+        // Verify the event is visible to the owning workspace.
+        const count = await asWorkspace(workspaceId, async (tx) => {
+          const rows = await tx.$queryRaw<
+            Array<{ count: bigint }>
+          >`SELECT count(*)::bigint AS count FROM "ScanEvent" WHERE id = ${event.id}`
+          return Number(rows[0]?.count ?? 0)
+        })
+        expect(count).toBe(1)
+
+        // And invisible to a different workspace.
+        const otherCount = await asWorkspace(otherWorkspaceId, async (tx) => {
+          const rows = await tx.$queryRaw<
+            Array<{ count: bigint }>
+          >`SELECT count(*)::bigint AS count FROM "ScanEvent" WHERE id = ${event.id}`
+          return Number(rows[0]?.count ?? 0)
+        })
+        expect(otherCount).toBe(0)
+
+        await prisma.$executeRaw`DELETE FROM "ScanEvent" WHERE id = ${event.id}`
+      } finally {
         await prisma.$executeRaw`DELETE FROM "Scan" WHERE id = ${scan.id}`
       }
     })
