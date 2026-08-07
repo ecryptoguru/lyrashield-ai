@@ -256,6 +256,67 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     background: linear-gradient(90deg, var(--hero-cyan), rgba(84, 214, 223, 0.15));
   }
 
+  /* Mobile tightening (visual QA found both CTAs below the fold at 390px).
+     Desktop is untouched: this query only applies under 480px, well below the
+     1024px breakpoint that switches the hero to its two-column layout.
+     Strategy: shrink the H1 and line spacing so less height is spent before
+     any text, then reflow with flex order so the primary CTA renders right
+     after the lede instead of after two more paragraphs. The who-it's-for and
+     MCP-differentiator lines still exist in the DOM in their original reading
+     order (unchanged for screen readers and SEO); only their painted position
+     moves below the buttons on small screens. */
+  @media (max-width: 480px) {
+    .premium-hero__content {
+      display: flex;
+      flex-direction: column;
+      padding-block: clamp(3rem, 8vh, 4rem) clamp(1.75rem, 5vh, 2.5rem);
+    }
+
+    .premium-hero__eyebrow {
+      order: 0;
+      font-size: 0.68rem;
+    }
+
+    h1 {
+      order: 1;
+      font-size: clamp(2.35rem, 10.5vw, 2.9rem);
+      line-height: 1.02;
+      letter-spacing: -0.035em;
+    }
+
+    .premium-hero__lede {
+      order: 2;
+      margin-top: 0.75rem;
+      font-size: 0.98rem;
+      line-height: 1.55;
+    }
+
+    .premium-hero__actions {
+      order: 3;
+      margin-top: 1.1rem;
+    }
+
+    .premium-hero__actions a {
+      min-height: 2.9rem;
+      padding: 0.7rem 1.05rem;
+    }
+
+    .premium-hero__audience {
+      order: 4;
+      margin-top: 1.1rem;
+      font-size: 0.85rem;
+    }
+
+    .premium-hero__difference {
+      order: 5;
+      font-size: 0.85rem;
+    }
+
+    .premium-hero__boundary {
+      order: 6;
+    }
+  }
+
   .premium-hero__artifact {
     align-self: center;
     justify-self: end;
