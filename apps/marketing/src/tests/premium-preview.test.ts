@@ -35,11 +35,11 @@ describe("premium assurance-world homepage", () => {
   })
 
   it("uses approved gateway copy and conversion anchors", () => {
-    expect(hero).toContain("Release assurance for AI-built apps")
-    expect(hero).toContain("Know what was tested before you ship.")
+    expect(hero).toContain("release assurance for AI-built apps")
+    expect(hero).toContain("Ship AI-built apps with evidence, not hope.")
     expect(hero).toContain('href="/scan"')
-    expect(hero).toContain('href="#assurance-world"')
-    expect(hero).toContain("Passive public-surface check")
+    expect(hero).toContain("app.lyrashieldai.com/sign-up")
+    expect(hero).toContain("Passive + read-only")
   })
 
   it("builds all seven typed desktop and portrait media variants", () => {

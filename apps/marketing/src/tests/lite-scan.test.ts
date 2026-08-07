@@ -155,7 +155,7 @@ describe("Lite Check marketing surface", () => {
 
   it("previews the future product with clearly labeled sample and registry data", () => {
     expect(assurancePreview).toContain("Illustrative product preview · sample data")
-    expect(assurancePreview).toContain("Counts show product states, not production performance.")
+    expect(assurancePreview).toContain("illustrate the states, not production metrics")
     expect(assurancePreview).toContain("Vibe Security 50 registry")
     expect(assurancePreview).toContain(">43<")
     expect(assurancePreview).toContain(">7<")

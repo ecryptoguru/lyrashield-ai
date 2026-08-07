@@ -75,7 +75,7 @@ describe("public marketing claims", () => {
     expect(source).not.toMatch(
       /verifies every finding|opens the fix PR|one-click fix PR|provably gone|scans like an attacker/i
     )
-    expect(source).toContain("retest-confirmed fixes")
-    expect(source).toContain("PR execution stays blocked")
+    expect(source).toContain("retest-confirmed")
+    expect(source).toContain("Nothing auto-merges")
   })
 })
