@@ -1,6 +1,6 @@
 ---
 title: "LyraShield AI vs Mobb — Release Assurance vs SAST-Result Remediation"
-description: "How LyraShield AI compares to Mobb for AI-built application security. Evidence states, coverage framework, and release assurance differences."
+description: "How LyraShield AI compares to Mobb for remediation-first auto-fix. Evidence states, coverage framework, approval-gated fixes, and deployment model differences."
 competitor: "Mobb"
 heading: "LyraShield AI vs Mobb"
 disclaimer: "Factual comparison. Mobb is an AI-powered remediation platform that takes SAST scanner results as input and generates fix PRs, with a newer IDE layer (Mobb Vibe Shield) for AI-coding security. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA, and secrets scanning, producing immutable evidence reports and gating fixes behind approvals. The two target different parts of the workflow; neither replaces the other."

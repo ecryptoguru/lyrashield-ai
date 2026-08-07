@@ -1,6 +1,6 @@
 ---
 title: "LyraShield AI vs Pixee — Release Assurance vs Downstream Triage and Fixing"
-description: "How LyraShield AI compares to Pixee for AI-built application security. Evidence states, coverage framework, and release assurance differences."
+description: "How LyraShield AI compares to Pixee for remediation-first security layers. Approach, evidence states, approval-gated fixes, and coverage framework differences."
 competitor: "Pixee"
 heading: "LyraShield AI vs Pixee"
 disclaimer: "Factual comparison. Pixee is an agentic AppSec platform that triages and fixes vulnerabilities found by your existing SAST, SCA, and DAST tools — it is not itself a scanner. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA, and secrets scanning, producing immutable evidence reports and gating fixes behind approvals. The two occupy different positions in the pipeline; neither replaces the other."

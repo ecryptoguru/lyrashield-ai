@@ -4,14 +4,14 @@
     "slug": "aikido",
     "competitor": "Aikido",
     "faqCount": 4,
-    "descriptionSource": "interim-template"
+    "descriptionSource": "authored"
   },
   {
     "index": 2,
     "slug": "corgea",
     "competitor": "Corgea",
     "faqCount": 3,
-    "descriptionSource": "interim-template"
+    "descriptionSource": "authored"
   },
   {
     "index": 3,
@@ -25,35 +25,35 @@
     "slug": "horizon3",
     "competitor": "Horizon3.ai",
     "faqCount": 3,
-    "descriptionSource": "interim-template"
+    "descriptionSource": "authored"
   },
   {
     "index": 5,
     "slug": "mobb",
     "competitor": "Mobb",
     "faqCount": 3,
-    "descriptionSource": "interim-template"
+    "descriptionSource": "authored"
   },
   {
     "index": 6,
     "slug": "pentera",
     "competitor": "Pentera",
     "faqCount": 3,
-    "descriptionSource": "interim-template"
+    "descriptionSource": "authored"
   },
   {
     "index": 7,
     "slug": "pixee",
     "competitor": "Pixee",
     "faqCount": 3,
-    "descriptionSource": "interim-template"
+    "descriptionSource": "authored"
   },
   {
     "index": 8,
     "slug": "runsybil",
     "competitor": "Runsybil",
     "faqCount": 3,
-    "descriptionSource": "interim-template"
+    "descriptionSource": "authored"
   },
   {
     "index": 9,
@@ -81,13 +81,13 @@
     "slug": "xbow",
     "competitor": "XBOW",
     "faqCount": 4,
-    "descriptionSource": "interim-template"
+    "descriptionSource": "authored"
   },
   {
     "index": 13,
     "slug": "zeropath",
     "competitor": "ZeroPath",
     "faqCount": 3,
-    "descriptionSource": "interim-template"
+    "descriptionSource": "authored"
   }
 ]

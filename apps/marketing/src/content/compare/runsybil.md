@@ -1,6 +1,6 @@
 ---
 title: "LyraShield AI vs RunSybil — Release Assurance vs AI-Native Black-Box Offensive Testing"
-description: "How LyraShield AI compares to Runsybil for AI-built application security. Evidence states, coverage framework, and release assurance differences."
+description: "How LyraShield AI compares to RunSybil for AI black-box pentest. Evidence model, verification approach, coverage framework, and deployment model differences."
 competitor: "Runsybil"
 heading: "LyraShield AI vs Runsybil"
 disclaimer: 'Factual comparison. [RunSybil](https://www.runsybil.com/) is an AI-native offensive security platform whose "Sybil" agents reason like elite attackers — black-box first, mapping the attack surface, chaining vulnerabilities across code, APIs, cloud, and infrastructure, and validating exploitability continuously on every deployment. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and approval-gated fixes. Both independently validate findings and run continuously. Neither replaces the other.'

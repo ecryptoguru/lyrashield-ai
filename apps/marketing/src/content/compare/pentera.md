@@ -1,6 +1,6 @@
 ---
 title: "LyraShield AI vs Pentera — Release Assurance vs Automated Security Validation"
-description: "How LyraShield AI compares to Pentera for AI-built application security. Evidence states, coverage framework, and release assurance differences."
+description: "How LyraShield AI compares to Pentera for enterprise security validation. Approach, evidence states, retest workflows, and deployment model differences."
 competitor: "Pentera"
 heading: "LyraShield AI vs Pentera"
 disclaimer: "Factual comparison. [Pentera](https://pentera.io/platform/) is an AI-powered automated security validation platform that emulates real attacks across internal networks, external surface, cloud, and web applications in live production to reveal what is actually exploitable, then automates remediation and re-testing (Pentera Core, Surface, Cloud, Resolve). [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and approval-gated fixes. Pentera validates enterprise exposure across environments; LyraShield AI gates AI-generated-code releases. Neither replaces the other."

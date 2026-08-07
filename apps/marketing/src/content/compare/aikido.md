@@ -1,6 +1,6 @@
 ---
 title: "LyraShield AI vs Aikido — Release Assurance vs Unified Code-to-Runtime AppSec"
-description: "How LyraShield AI compares to Aikido for AI-built application security. Evidence states, coverage framework, and release assurance differences."
+description: "How LyraShield AI compares to Aikido for developer-centric CI/CD security. Approach, evidence states, coverage framework, and deployment model differences."
 competitor: "Aikido"
 heading: "LyraShield AI vs Aikido"
 disclaimer: "Factual comparison. [Aikido Security](https://www.aikido.dev/) is a unified security platform covering code, cloud, and runtime from one interface — SAST, SCA, secrets, IaC/container scanning, CSPM, DAST, AI pentesting, and runtime protection — with auto-generated fix PRs. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports, and approval-gated fixes. Aikido is a broad AppSec platform with a pentest layer; LyraShield AI is a focused release-assurance loop purpose-built for AI-generated code. Neither replaces the other."

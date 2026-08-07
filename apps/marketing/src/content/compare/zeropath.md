@@ -1,6 +1,6 @@
 ---
 title: "LyraShield AI vs ZeroPath — Release Assurance vs AI-Native AppSec Scanning"
-description: "How LyraShield AI compares to ZeroPath for AI-built application security. Evidence states, coverage framework, and release assurance differences."
+description: "How LyraShield AI compares to ZeroPath for AI-native SAST and auto-fix. Evidence states, deterministic retest, coverage framework, and deployment model."
 competitor: "ZeroPath"
 heading: "LyraShield AI vs ZeroPath"
 disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC, and DAST-style runtime validation into a single reasoning engine, and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it separates detection from proof, produces immutable evidence reports, and gates fixes behind approvals. Neither replaces the other."

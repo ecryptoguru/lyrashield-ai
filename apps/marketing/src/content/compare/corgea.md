@@ -1,6 +1,6 @@
 ---
 title: "LyraShield AI vs Corgea — Release Assurance vs AI AppSec with Pentest"
-description: "How LyraShield AI compares to Corgea for AI-built application security. Evidence states, coverage framework, and release assurance differences."
+description: "How LyraShield AI compares to Corgea for LLM-core SAST and auto-fix. Evidence states, retest workflows, coverage framework, and approval-gated fix differences."
 competitor: "Corgea"
 heading: "LyraShield AI vs Corgea"
 disclaimer: "Factual comparison. Corgea is an AI-native application security platform spanning AI SAST, SCA, secrets detection, IaC, container scanning, and a multi-agent AI pentest, delivering review-ready fix PRs. LyraShield AI is release assurance for AI-built apps — it separates detection from proof, produces immutable evidence reports, and gates fixes behind approvals. The two overlap on pentest, SCA, and secrets; neither fully replaces the other."
