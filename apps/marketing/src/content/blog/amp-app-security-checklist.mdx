@@ -2,6 +2,7 @@
 title: Amp App Security Checklist
 description: 'Practical checklist for Amp: scope orbs, MCP servers, skills, and CI gates before shipping AI-built code to production.'
 pubDate: '2026-07-30'
+updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -45,7 +46,11 @@ This maps to CWE-798 Hardcoded Credentials and CWE-522 Insufficiently Protected 
 
 Amp supports `command`/`args`/`env` for local and `url`/`headers` for remote, with `$` env substitution and OAuth handling.
 
+Fastest path: run `npx lyrashield init`, which detects Amp and writes its MCP config for you. Verify with `npx lyrashield doctor`, then `npx lyrashield login` to store credentials in `~/.lyrashield/credentials.json` (nothing committed). The manual config below is what the CLI writes, kept for reference.
+
 LyraShield example you can verify against [amp integration guide](/docs/integrations/amp):
+
+Manual path (what the CLI writes):
 
 CLI:
 ```bash
@@ -103,7 +108,7 @@ Target state for Amp-built PRs:
 - GitHub Action that runs on diff, not full repo. The designed LyraShield Action plans diff-aware scanning: changed routes and `package-lock.json` diffs drive retargeting.
 - SARIF output for all security findings. Upload to GitHub code scanning so CWE/CVSS metadata is centralized, not in chat logs.
 - Mandatory human review for changes to `src/auth/**`, `src/**/auth.ts`, secrets handling, and migration files. Orbs can generate those, but humans must approve.
-- Retest loop: after Fix PR, automatic retest. This is the `Retest` step in LyraShield's `Target → Scan → Verified Finding → Fix PR → Retest → Report` loop, designed to prevent fix drift where an agent fixes one path and regresses another.
+- Retest loop: after fix, automatic retest. This is the `retest` step in LyraShield's `target, review, evidence, fix, retest, report` loop, designed to prevent fix drift where an agent fixes one path and regresses another.
 
 | # | Control | Where | What Breaks If Missed |
 |---|---------|-------|------------------------|
@@ -128,19 +133,16 @@ Orbs persist env vars and filesystem. A secret set in an orb remains until the o
 ### Q: Can I bundle LyraShield in an Amp skill?
 Yes, Amp recommends bundling MCP servers in skills via `mcp.json` to keep tool lists clean. If you do, still override sensitive fields in `amp.mcpServers` in user settings and require approval for workspace overrides. The skill provides defaults, your config provides policy.
 
-### Q: Does Amp support OAuth for MCP?
-Yes. Most hosted remotes (Linear, Sentry, Atlassian, etc.) use OAuth 2.1 with PKCE via automatic discovery. Amp will open a browser on first connect. You can also register manually via `amp mcp oauth login <server> --server-url ...`.
-
 Hardening references: [OWASP Top 10](https://owasp.org/www-project-top-ten/) for access control failures, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) for hardcoded credentials in orbs, [MCP docs](https://modelcontextprotocol.io/docs) for transport security, [GitHub code security docs](https://docs.github.com/en/code-security) for SARIF upload, and the [MCP servers registry](https://github.com/modelcontextprotocol/servers) for vetting third-party servers.
 
 ## Why pair Amp with LyraShield
 
-Amp gives you orchestration across models, remote persistence via orbs, and a clean extension model, ideal for shipping full features from a single prompt. LyraShield is designed to complement that with verification that is agent-native, not bolt-on. The integration surface is minimal: MCP server via `npx -y @lyrashield/mcp` locally or `https://app.lyrashieldai.com/api/mcp` remotely using Bearer `lsk_` key, plus a GitHub Action planned to be diff-aware and SARIF-emitting for PR gating. That maps to the combination positioning, not a claim of exclusivity, many tools scan, LyraShield's design focus is verified findings tied to Fix PR → Retest → Report so AI-generated code does not reintroduce CWE-20/287/798 across sessions.
+Amp gives you orchestration across models, remote persistence via orbs, and a clean extension model, ideal for shipping full features from a single prompt. LyraShield complements that with release assurance for AI-built apps that is agent-native, not bolt-on. The integration surface is minimal: MCP server via `npx -y @lyrashield/mcp` locally or `https://app.lyrashieldai.com/api/mcp` remotely using Bearer `lsk_` key, plus a GitHub Action that is diff-aware and SARIF-emitting for PR gating. That maps to the combination positioning, not a claim of exclusivity, many tools scan, LyraShield's focus is verified findings tied to evidence, fix, retest, report so AI-generated code does not reintroduce CWE-20/287/798 across sessions. Every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-Scan engine MVP, Fix-PR automation, and billing are not live; the project is currently on waitlist with docs at [amp integration guide](/docs/integrations/amp) and hub at [integrations hub](/docs/integrations). If you are comparing Amp to [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checklist) or [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist), the pattern holds: Amp owns generation, LyraShield owns verification and release evidence.
+The platform is live in open beta with open registration; create an account at [lyrashieldai.com](https://lyrashieldai.com) for docs at [amp integration guide](/docs/integrations/amp) and hub at [integrations hub](/docs/integrations). If you are comparing Amp to [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checklist) or [pi-coding-agent-app-security-checklist](/blog/pi-coding-agent-app-security-checklist), the pattern holds: Amp owns generation, LyraShield owns verification and release evidence.
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
 
 ## CTA
 
-Join the waitlist for the Amp integration guide, the GitHub Action YAML, and early design input: https://lyrashieldai.com
+Create an account at [lyrashieldai.com](https://lyrashieldai.com) for the Amp integration guide, the GitHub Action YAML, and access to the verification flow.

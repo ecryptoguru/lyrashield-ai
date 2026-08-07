@@ -2,6 +2,7 @@
 title: Pi Coding Agent App Security Checklist
 description: 'Harden Pi Coding Agent: standard MCP paths, host discovery controls, tool scoping, and diff-aware CI for AI-built apps.'
 pubDate: '2026-07-30'
+updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -49,6 +50,8 @@ This maps to supply chain control and is analogous to Amp's workspace approval g
 ## 3. Scope MCP authority: disable, directTools, and least-privilege env
 
 Pi supports per-server `disabled`, global `idleTimeout` (default 10min), `requestTimeoutMs` (default 30s), `toolPrefix`, `showStatusIcon`, `autoAuth`, and `directTools` controls. `/mcp disable <name>` and `/mcp enable <name>` persist only `disabled` in `.pi/mcp.json`, the source file is never rewritten and credentials never copied. Run `/reload` after toggling.
+
+Fastest path: run `npx lyrashield init`, which detects Pi and writes its MCP config. Verify with `npx lyrashield doctor`, then `npx lyrashield login` to store credentials in `~/.lyrashield/credentials.json` (nothing committed). The manual config below is what the CLI writes.
 
 LyraShield config, canonical at [picode integration guide](/docs/integrations/picode):
 
@@ -124,7 +127,7 @@ Pi's four modes (plan, act, etc. per architecture) benefit from mode-aware appro
 Target CI:
 - Mode-based CODEOWNERS: changes to `src/auth/**` require human review regardless of Pi mode that generated them.
 - Diff-aware lockfile review: if Pi adds a dependency, require SCA and secrets scan on diff, not full scan.
-- SARIF upload: Pi-generated PRs should emit SARIF from any scanner, not just pretty logs. The designed LyraShield GitHub Action, SCA + secrets + agentic pentest with SARIF, is intended for this slot, enabling `Retest` after Fix PR rather than trusting first-pass generation.
+- SARIF upload: Pi-generated PRs should emit SARIF from any scanner, not just pretty logs. The LyraShield GitHub Action, SCA + secrets + agentic pentest with SARIF, is intended for this slot, enabling `retest` after fix rather than trusting first-pass generation.
 - `/mcp` status in CI logs. Running `/mcp tools` and capturing tool list in a build artifact gives auditors a snapshot of what verifiers were available when the PR was built.
 
 | # | Control | File/Command | If Skipped |
@@ -150,19 +153,16 @@ In `.mcp.json` or `.pi/mcp.json` under `mcpServers`: local `command: npx`, `args
 ### Q: How do I disable a server without deleting config?
 Run `/mcp disable <name>` in Pi, it writes `disabled: true` only in `.pi/mcp.json` project override, which is highest precedence. Run `/reload` so tool surfaces refresh. Manual equivalent is `"disabled": true` in any MCP config. Re-enable with `/mcp enable <name>`.
 
-### Q: What about `directTools` vs proxy tool?
-Pi can hide the generic `mcp` proxy once direct tools are cached via `disableProxyTool`. Keep global `directTools: false` and enable per-server for vetted servers like LyraShield. This reduces prompt surface for prompt-injection.
-
 Primary references: [OWASP Top 10](https://owasp.org/www-project-top-ten/) for injection and misconfiguration, [CWE-20](https://cwe.mitre.org/data/definitions/20.html) for validation gaps when pi.dev extensions load untrusted context, [MCP spec](https://modelcontextprotocol.io/specification/2025-06-18) for the standard .mcp.json shape Pi adopts, [GitHub Actions security](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments) for diff-aware gates, and [OSV](https://osv.dev/) for lockfile scanning after Pi adds dependencies.
 
 ## Why pair Pi Coding Agent with LyraShield
 
-Pi gives you a minimal, composable harness with explicit standard paths and safe defaults like `hostConfigDiscovery: off`. That minimalism maps well to verification: you add only what you need, and Pi shows provenance. LyraShield is designed to fit that slot, a narrow MCP surface for `Target → Scan → Verified Finding → Fix PR → Retest → Report` plus SCA and secrets, emitting SARIF for existing code-scanning.
+Pi gives you a minimal, composable harness with explicit standard paths and safe defaults like `hostConfigDiscovery: off`. That minimalism maps well to verification: you add only what you need, and Pi shows provenance. LyraShield fits that slot as release assurance for AI-built apps, a narrow MCP surface for `target, review, evidence, fix, retest, report` plus SCA and secrets, emitting SARIF for existing code-scanning. LyraShield separates detection from proof: every finding produces an immutable assurance record, and fix proposals are approval-gated, PR execution is blocked until a server-generated patch is bound to the exact approval.
 
-You configure LyraShield once in `.mcp.json` (shared) or `.pi/mcp.json` (Pi-specific) using `npx -y @lyrashield/mcp` locally or `https://app.lyrashieldai.com/api/mcp` remotely with `lsk_` Bearer key per [picode integration guide](/docs/integrations/picode). The combination is about verifier isolation: Pi owns generation and orchestration across packages/extensions, LyraShield owns verification evidence that survives mode transitions. Scan engine MVP, Fix-PR creation, and billing are not live, current value is waitlist access and integration templates to lock Pi projects before shipping. Teams comparing Pi to [kilo-code-app-security-checklist](/blog/kilo-code-app-security-checklist) and [hermes-app-security-checklist](/blog/hermes-app-security-checklist) will find the same pairing pattern holds.
+You configure LyraShield once in `.mcp.json` (shared) or `.pi/mcp.json` (Pi-specific) using `npx -y @lyrashield/mcp` locally or `https://app.lyrashieldai.com/api/mcp` remotely with `lsk_` Bearer key per [picode integration guide](/docs/integrations/picode). The combination is about verifier isolation: Pi owns generation and orchestration, LyraShield owns verification evidence that survives mode transitions. The platform is live in open beta, with the scan engine and automated fix execution on the roadmap.
 
 Before you merge, run the [AI app security checklist](/tools/ai-app-security-checklist) to verify auth, secrets, and dependencies one more time.
 
 ## CTA
 
-Join the waitlist for Pi integration snippets, extension pinning guide, and early access to diff-aware verification: https://lyrashieldai.com
+Create an account at [lyrashieldai.com](https://lyrashieldai.com) for Pi integration snippets, extension pinning guide, and access to diff-aware verification.

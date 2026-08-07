@@ -1,7 +1,7 @@
 ---
 title: Windsurf security workflow for AI generated apps
 description: Harden Windsurf MCP config, rules, dependencies and secrets with SARIF evidence for secure AI assisted releases of your app.
-pubDate: 2026-07-30
+pubDate: '2026-07-30'
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -14,8 +14,10 @@ faq:
     a: Rules in .codeium/windsurf/memories and muserules.md state auth requirements, forbidden patterns and review needs so Cascade prefers secure defaults for routes and handlers.
   - q: What SARIF should I keep for Windsurf builds?
     a: Keep SARIF from secret scanning and dependency scanning at minimum. Upload to GitHub code scanning on pull requests and on main for release evidence and trend tracking.
+  - q: Where does Windsurf store MCP server config?
+    a: Windsurf stores MCP servers in mcp_config.json under mcpServers at the project or user level. Use project scope for the LyraShield entry so the team shares one definition, and keep the lsk_ key in an env reference rather than a literal in the committed file.
 ---
-Windsurf with Cascade can edit many files and call external MCP tools quickly, so you must lock down MCP config, tighten project rules, gate dependencies and secrets and keep SARIF for every release. This workflow covers mcp_config.json with serverUrl, Cascade memories hardening and verifiable evidence. Baseline controls are in our [vibe coding security guide](/blog/vibe-coding-security-guide) with Windsurf specific checks below.
+Windsurf with Cascade can edit many files and call external MCP tools quickly, so you must lock down MCP config, tighten project rules, gate dependencies and secrets and keep SARIF for every release. This workflow covers mcp_config.json with serverUrl, Cascade memories hardening and verifiable evidence. Pair it with LyraShield as release assurance for AI built apps. Baseline controls are in our [vibe coding security guide](/blog/vibe-coding-security-guide) with Windsurf specific checks below.
 
 ## Understand Windsurf and Cascade risk
 
@@ -28,6 +30,8 @@ Map issues to common references. OWASP Top Ten at [OWASP Top Ten](https://owasp.
 ## Lock down MCP in mcp_config.json with serverUrl
 
 Windsurf loads MCP servers from global ~/.codeium/windsurf/mcp_config.json for personal tools and local .codeium/windsurf/mcp_config.json for team shared servers. Both files use a mcpServers object. Remote servers use serverUrl field for HTTPS endpoints.
+
+Fastest path: run `npx lyrashield init`, which detects Windsurf and writes the config for you. Verify with `npx lyrashield doctor`. Log in with `npx lyrashield login` so credentials land in ~/.lyrashield/credentials.json and nothing gets committed. For a one-step install, use the [Agent Plugin](https://agent-plugins.org) (Agent Plugins v1.0.0), the preferred route for launch clients like Windsurf. The manual config below is what the CLI writes, kept for reference.
 
 Secure example with zero raw secrets committed:
 
@@ -117,11 +121,11 @@ Keep evidence for several releases so you can show trend, exception closure and 
 
 ## Why pair Windsurf with LyraShield
 
-LyraShield AI at https://lyrashieldai.com is built for AI built software as agent native application security. The intended loop is Target to Scan to Verified Finding to Fix PR to Retest to Report, keeping findings tied to code and to evidence you can show to teammates.
+LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, every finding produces an immutable assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP integration is designed for Windsurf. Local stdio via npx -y @lyrashield/mcp runs with env var keys, and remote via serverUrl https://app.lyrashieldai.com/api/mcp is designed to accept Bearer lsk key from env. Diff aware GitHub Action and SARIF output are designed to surface verified findings in pull requests so review stays in context.
+MCP integration fits Windsurf. Local stdio via npx -y @lyrashield/mcp runs with env var keys, and remote via serverUrl https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key from env. Diff aware GitHub Action and SARIF output surface verified findings in pull requests so review stays in context.
 
-Build transparency: Sprints 0 to 2 are shipped. Scan engine MVP, automated fix PR and billing are on the roadmap and not live today. Today LyraShield provides hardened workflow and SARIF shape so teams can prepare before automated scans are enabled. V1 is designed to include agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF.
+Build transparency: LyraShield is live in open beta with open registration. Scan engine MVP, automated fix execution and billing are on the roadmap. Today LyraShield provides hardened workflow and SARIF shape so teams can prepare before automated scans are enabled. V1 targets agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF.
 
 This pairing keeps Windsurf velocity while adding consistent verification across visual builders and IDE tools.
 
@@ -135,4 +139,4 @@ Before you ship a Windsurf built release, confirm gates.
 * Auth, payment or file upload changes include tests and reviewer.
 * Security evidence file updated per release tag with MCP list and date.
 
-Reuse the same evidence loop on every release with our [AI app security checklist tool](/tools/ai-app-security-checklist) and join the waitlist at https://lyrashieldai.com for upcoming scan milestones. For related builder patterns see [V0 app security checklist](/blog/v0-app-security-checklist) and [Replit app security checklist](/blog/replit-app-security-checklist) to keep controls uniform.
+Reuse the same evidence loop on every release with our [AI app security checklist tool](/tools/ai-app-security-checklist) and create an account at https://lyrashieldai.com to start building assurance records today. For related builder patterns see [V0 app security checklist](/blog/v0-app-security-checklist) and [Replit app security checklist](/blog/replit-app-security-checklist) to keep controls uniform.

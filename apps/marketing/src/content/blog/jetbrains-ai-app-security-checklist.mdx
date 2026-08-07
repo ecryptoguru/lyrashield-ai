@@ -1,7 +1,8 @@
 ---
 title: JetBrains AI App Security Checklist for Vibe Coding
 description: Secure JetBrains AI Assistant workflows with MCP hardening plus secrets scanning and verified review before every merge.
-pubDate: 2026-07-30
+pubDate: '2026-07-30'
+updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -13,6 +14,8 @@ faq:
     a: You can ship safer code with disciplined review and open source scanners. LyraShield is designed to add agent native verification with SCA and secrets checks plus a diff aware gate on the roadmap.
   - q: What is the fastest win for JetBrains AI Assistant security
     a: Rotate leaked secrets, enforce branch protection with SARIF upload, and restrict MCP tool permissions to read only where possible to reduce blast radius.
+  - q: Where does JetBrains AI Assistant store MCP server config?
+    a: JetBrains stores MCP servers in the IDE settings under Tools or the project config depending on version. Use the built in MCP settings panel to add the LyraShield server so the entry survives IDE updates, and keep the lsk_ key in env rather than the config file.
 ---
 
 When you ship apps with JetBrains AI Assistant, AI generated code can introduce secrets, vulnerable dependencies, and weak auth that reach production fast. This checklist gives a direct security review for JetBrains AI Assistant, from MCP hardening to merge gates and retest, with verified configs you can copy. Pair it with our pillar guide at [vibe coding security guide](/blog/vibe-coding-security-guide) and apply it on every pull request.
@@ -28,6 +31,8 @@ The official MCP spec defines how tool listing and invocation works over stdio a
 JetBrains AI Assistant supports MCP as JSON Level Project and Global. In Settings go to Tools then AI Assistant then MCP Servers, then choose As JSON. Project level JSON lives under .idea or team shared config, global level lives in IDE user config directory. Project scope is preferred for team repos so changes are reviewed in pull requests. Vendor guidance is at [JetBrains MCP docs](https://www.jetbrains.com/help/ai-assistant/mcp.html).
 
 Secure it in four practical steps.
+
+Fastest path: run `npx lyrashield init`, which detects JetBrains AI Assistant and writes the MCP config for you. Verify with `npx lyrashield doctor`, then run `npx lyrashield login` to store credentials in ~/.lyrashield/credentials.json with nothing committed to your repo. The manual config below is what the CLI writes, kept for reference.
 
 First, never inline secrets in JSON. Use `${VAR}` references and load values from env or your secret manager, with a .env file gitignored and keys rotated monthly.
 
@@ -98,10 +103,10 @@ Supply chain hygiene matters because AI generated code often pulls transitive de
 
 ## Why pair JetBrains AI Assistant with LyraShield
 
-LyraShield AI is an agent native application security platform for AI built software at [https://lyrashieldai.com](https://lyrashieldai.com) and our core loop is Target then Scan then Verified Finding then Fix PR then Retest then Report, designed for teams shipping with JetBrains AI Assistant and other AI coding tools.
+LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with JetBrains AI Assistant and other AI coding tools. We separate detection from proof: findings come with evidence you can verify, and every result is an immutable assurance record tied to the exact commit and scan.
 
-Today our team has shipped Sprints 0 through 2 foundations. The full scan engine MVP, automated fix-PR generation, and billing are not live, so we describe them as designed to behave in specific ways and features on the roadmap rather than claiming live scans with remediation already shipped. What is designed to help JetBrains AI Assistant users includes a single MCP server you can add via stdio `npx -y @lyrashield/mcp` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer lsk_ key, diff aware gating that posts SARIF to GitHub code scanning, and v1 coverage that is designed to include agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, with findings mapped to CWE and OWASP for faster remediation.
+The platform is live in open beta with open registration. The full scan engine MVP, automated fix execution, and billing are on the roadmap. What works today includes a single MCP server you can add via stdio `npx -y @lyrashield/mcp` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer lsk_ key, diff aware gating that posts SARIF to GitHub code scanning, and v1 coverage spanning agentic pentest, SCA, secrets, GitHub Action, and SARIF, with findings mapped to CWE and OWASP for faster remediation.
 
-LyraShield is designed to sit after your JetBrains AI Assistant drafts and before merge, giving you verified findings instead of noisy rescans. It is on the roadmap to compare target behavior before and after an automated fix-PR and to enforce retest as part of the check suite.
+LyraShield sits after your JetBrains AI Assistant drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval, and retest runs the same scanners on the fix commit to confirm remediation.
 
-Ready to apply this checklist beyond this tool. Run the interactive version at [AI app security checklist](/tools/ai-app-security-checklist) and bring your score to the waitlist at [https://lyrashieldai.com](https://lyrashieldai.com) to get early access to the MCP server and GitHub Action.
+Ready to apply this checklist beyond this tool. Run the interactive version at [AI app security checklist](/tools/ai-app-security-checklist) and create an account at [https://lyrashieldai.com](https://lyrashieldai.com) to get started with the MCP server and GitHub Action.

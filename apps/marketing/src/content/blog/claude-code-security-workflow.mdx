@@ -1,7 +1,7 @@
 ---
 title: Claude Code security workflow for AI built apps
 description: Secure Claude Code workflows with MCP scope checks, permission hardening, dependency gating and SARIF evidence for trustworthy releases.
-pubDate: 2026-07-30
+pubDate: '2026-07-30'
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -14,8 +14,10 @@ faq:
     a: Use plan mode for read only exploration then switch to controlled execution with approval prompts. Require review before edits to auth, payment or infra code.
   - q: What evidence should I keep for Claude Code releases?
     a: Keep SARIF from secret and dependency scans plus a log of MCP servers used and the pull request with permission settings. That supports later verification and audit.
+  - q: Where does Claude Code store MCP server config?
+    a: Claude Code stores MCP servers in .mcp.json at the project root for team scope or the user config for local scope. Use project scope for the LyraShield server so CI and local checks share one entry, and keep the lsk_ key in an env reference rather than a literal in the file.
 ---
-Claude Code reads your repo, edits many files, runs commands and calls MCP tools in one session, so you need scoped permissions and locked down config. This workflow shows how to harden .mcp.json across local, project and user scopes, limit tool permissions, gate secrets and dependencies and collect SARIF for every pull request. See our [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls before applying Claude Code specific checks.
+Claude Code reads your repo, edits many files, runs commands and calls MCP tools in one session, so you need scoped permissions and locked down config. This workflow shows how to harden .mcp.json across local, project and user scopes, limit tool permissions, gate secrets and dependencies and collect SARIF for every pull request. Pair it with LyraShield as release assurance for AI built apps. See our [vibe coding security guide](/blog/vibe-coding-security-guide) for baseline controls before applying Claude Code specific checks.
 
 ## Understand Claude Code risk surface
 
@@ -23,11 +25,13 @@ Claude Code operates with your shell permissions and broad file access. A single
 
 Common patterns seen in AI assisted code include leftover debug endpoints that skip auth, hardcoded test secrets that become real credentials and transitive dependencies added without review. Use consistent references when you file tickets so severity is clear to reviewers.
 
-OWASP Top Ten lists injection and misconfiguration as persistent app risks, see [OWASP Top Ten](https://owasp.org/www-project-top-ten/). Credential handling weakness maps to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html) and command injection to [CWE 78 for OS command injection](https://cwe.mitre.org/data/definitions/78.html). MCP server security expectations including auth are defined in [MCP authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). If you also ship with visual builders, our [Replit app security checklist](/blog/replit-app-security-checklist) shows similar permission and evidence ideas in a different runtime, which helps keep a consistent verification story across tools.
+OWASP Top Ten lists injection and misconfiguration as persistent app risks, see [OWASP Top Ten](https://owasp.org/www-project-top-ten/). Credential handling maps to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html) and command injection to [CWE 78](https://cwe.mitre.org/data/definitions/78.html). MCP auth expectations are at [MCP authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). For visual builders, our [Replit app security checklist](/blog/replit-app-security-checklist) shows similar permission ideas.
 
 ## Configure MCP in .mcp.json with scoped permissions
 
 Claude Code supports three scopes for MCP config. Local scope applies to just this session. Project scope lives in .mcp.json at repo root and is shared with the team via git. User scope lives in personal config like dot Claude dot json or .mcp.json in home and is for personal helpers. Prefer project scope for team servers that every developer needs, and user scope for personal tools that should not be in git.
+
+Fastest path: run `npx lyrashield init`, which detects Claude Code and writes the config for you. Verify with `npx lyrashield doctor`. Log in with `npx lyrashield login` so credentials land in ~/.lyrashield/credentials.json and nothing gets committed. For a one-step install, use the [Agent Plugin](https://agent-plugins.org) (Agent Plugins v1.0.0), the preferred route for launch clients like Claude Code. The manual config below is what the CLI writes, kept for reference.
 
 Secure example for project .mcp.json:
 
@@ -120,11 +124,11 @@ If you use remote MCP, log server version used during generation. Small details 
 
 ## Why pair Claude Code with LyraShield
 
-LyraShield AI is an agent native application security platform for AI built software, see https://lyrashieldai.com. The intended flow is Target to Scan to Verified Finding to Fix PR to Retest to Report, so findings stay tied to code changes and evidence.
+LyraShield AI is release assurance for AI built apps, see https://lyrashieldai.com. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, every finding produces an immutable assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP integration is designed for Claude Code. Local stdio via npx -y @lyrashield/mcp uses env var keys for project scope, and remote at https://app.lyrashieldai.com/api/mcp is designed to accept Bearer lsk key with user or project scope. GitHub Action is designed to be diff aware and produce SARIF for code scanning so results appear in your pull request.
+MCP integration fits Claude Code. Local stdio via npx -y @lyrashield/mcp uses env var keys for project scope, and remote at https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key with user or project scope. GitHub Action is diff aware and produces SARIF for code scanning so results appear in your pull request.
 
-Build honesty note: Sprints 0 to 2 shipped. Scan engine MVP, automated fix PR creation and billing are on the roadmap and not live today. Current value is the hardened workflow, MCP config pattern and SARIF shape that lets teams prepare for upcoming automated verification. V1 is designed to include agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF.
+Build honesty note: LyraShield is live in open beta with open registration. Scan engine MVP, automated fix execution and billing are on the roadmap. Current value is the hardened workflow, MCP config pattern and SARIF shape that lets teams prepare for upcoming automated verification. V1 targets agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF.
 
 This pairing keeps Claude Code speed while preserving a consistent verification narrative across editors.
 
@@ -138,4 +142,4 @@ Before merge, confirm these controls.
 * Auth and payment changes have tests and assigned reviewer.
 * Release evidence file updated with MCP servers and commit.
 
-Apply the same evidence pattern using our [AI app security checklist tool](/tools/ai-app-security-checklist) and join the waitlist at https://lyrashieldai.com for upcoming scan and automated fix PR milestones. For related multi builder flows see [V0 app security checklist](/blog/v0-app-security-checklist) and [Base44 app security checklist](/blog/base44-app-security-checklist) to keep controls uniform across your fleet.
+Apply the same evidence pattern using our [AI app security checklist tool](/tools/ai-app-security-checklist) and create an account at https://lyrashieldai.com to start building assurance records today. For related multi builder flows see [V0 app security checklist](/blog/v0-app-security-checklist) and [Base44 app security checklist](/blog/base44-app-security-checklist) to keep controls uniform across your fleet.

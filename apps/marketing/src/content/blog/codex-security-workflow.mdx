@@ -1,7 +1,7 @@
 ---
 title: Codex app security workflow for trusted releases
 description: Lock down Codex config and MCP servers, gate dependencies and secrets, and capture SARIF evidence for every AI assisted release.
-pubDate: 2026-07-30
+pubDate: '2026-07-30'
 updatedDate: 2026-08-07
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -14,8 +14,10 @@ faq:
     a: Run OSV and package manager audit on each PR. Block high severity issues and track any exception with owner and expiry. Never auto accept new packages.
   - q: Is Codex CLI safe with production secrets?
     a: No. Keep production secrets in a secret manager and outside agent context. Use scoped staging credentials and require human approval for prod access.
+  - q: Where does Codex store MCP server config?
+    a: Codex stores MCP servers in ~/.codex/config.toml under [mcp_servers.*] sections with command, args, and bearer_token_env_var for remote auth. Keep the token in an env var referenced by the config so the literal never lands in the committed TOML file.
 ---
-OpenAI Codex CLI can read, edit and run across your repo quickly, so secure its config, MCP servers and dependency changes before shipping. This workflow shows how to lock down ~/.codex/config.toml using bearer_token_env_var, require approval for risky edits and collect SARIF for release evidence. Baseline context is in our [vibe coding security guide](/blog/vibe-coding-security-guide), then apply Codex specific controls below for team use.
+OpenAI Codex CLI can read, edit and run across your repo quickly, so secure its config, MCP servers and dependency changes before shipping. This workflow shows how to lock down ~/.codex/config.toml using bearer_token_env_var, require approval for risky edits and collect SARIF for release evidence. Pair it with LyraShield as release assurance for AI built apps. Baseline context is in our [vibe coding security guide](/blog/vibe-coding-security-guide), then apply Codex specific controls below for team use.
 
 ## Map Codex to your threat model
 
@@ -30,6 +32,8 @@ If you also ship with Lovable or Bolt, review our [Lovable app security checklis
 ## Harden config.toml and MCP servers
 
 Codex CLI reads .codex/ config.toml from your home directory. MCP servers are defined under mcp_servers tables. This file is the control plane for external tools, so harden it like production config.
+
+Fastest path: run `npx lyrashield init`, which detects Codex and writes the config for you. Verify with `npx lyrashield doctor`. Log in with `npx lyrashield login` so credentials land in ~/.lyrashield/credentials.json and nothing gets committed. For a one-step install, use the [Agent Plugin](https://agent-plugins.org) (Agent Plugins v1.0.0), the preferred route for launch clients like Codex. The manual config below is what the CLI writes, kept for reference.
 
 Secure example without inline secrets:
 
@@ -105,11 +109,11 @@ That file plus SARIF provides a repeatable proof point for internal review and f
 
 ## Why pair Codex with LyraShield
 
-LyraShield AI at https://lyrashieldai.com is designed as agent native application security for AI built software. The intended loop is Target to Scan to Verified Finding to Fix PR to Retest to Report, so findings stay tied to code changes and verifiable evidence.
+LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, every finding produces an immutable assurance record, and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP integration fits Codex config.toml design. Stdio via npx -y @lyrashield/mcp runs locally with env var secrets, remote at https://app.lyrashieldai.com/api/mcp is designed to accept bearer_token_env_var for team use. The GitHub Action is designed to be diff aware, so it scans what changed and posts verified findings with a proposed automated fix PR path. SARIF output is designed for GitHub code scanning so results appear in your pull request.
+MCP integration fits Codex config.toml design. Stdio via npx -y @lyrashield/mcp runs locally with env var secrets, remote at https://app.lyrashieldai.com/api/mcp accepts bearer_token_env_var for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
 
-Build honesty: Sprints 0 to 2 shipped. Scan engine MVP, automated fix PR generation and billing are on the roadmap and not live today. LyraShield today defines the config pattern and SARIF shape so teams can prepare for upcoming automated verification. V1 is designed to include agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, which complements Codex for Node and Python stacks where dependency risk is high.
+Build honesty: LyraShield is live in open beta with open registration. Scan engine MVP, automated fix execution and billing are on the roadmap. Today LyraShield defines the config pattern and SARIF shape so teams can prepare for upcoming automated verification. V1 targets agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, complementing Codex for Node and Python stacks where dependency risk is high.
 
 ## Final checks before you ship
 
@@ -121,4 +125,4 @@ Before merge and release, confirm these controls.
 * Require tests and reviewer for auth, payment or file upload changes.
 * Update security evidence file per release with MCP list, commit and reviewers.
 
-Apply the same evidence flow with our [AI app security checklist tool](/tools/ai-app-security-checklist) and join the waitlist at https://lyrashieldai.com for upcoming scan milestones. For cross builder consistency, also review [Bolt app security checklist](/blog/bolt-app-security-checklist) and [Replit app security checklist](/blog/replit-app-security-checklist).
+Apply the same evidence flow with our [AI app security checklist tool](/tools/ai-app-security-checklist) and create an account at https://lyrashieldai.com to start building assurance records today. For cross builder consistency, also review [Bolt app security checklist](/blog/bolt-app-security-checklist) and [Replit app security checklist](/blog/replit-app-security-checklist).
