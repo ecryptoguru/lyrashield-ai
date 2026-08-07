@@ -1,0 +1,80 @@
+---
+title: GitHub Copilot MCP Security Workflow Setup Guide
+description: Setup guide for the LyraShield MCP security workflow in GitHub Copilot using the Agent Plugin and CLI, with config, verification, and a GitHub Action diff gate.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification]
+draft: false
+heroImage: agent-security-23
+faq:
+  - q: How do I install LyraShield into GitHub Copilot?
+    a: Use the Agent Plugin one step install which bundles the MCP server and a security skill into the Copilot plugins directory. Run the CLI login first so credentials resolve.
+  - q: Where does the Copilot plugin write instructions?
+    a: The plugin writes a copilot instructions file in the repository that shapes how Copilot uses the workflow. Review that file in code review like source.
+  - q: What does the CLI doctor command verify?
+    a: It verifies that the MCP server is reachable, credentials resolve, and the plugin manifest is valid so you can confirm setup without a manual guess.
+  - q: Can I configure Copilot manually without the plugin?
+    a: Yes. The manual path runs the MCP server over stdio or a remote endpoint with a Bearer token. This is what the CLI writes, not the primary path.
+---
+
+This workflow sets up the LyraShield MCP security workflow for GitHub Copilot so the agent can run security checks inside your project. It leads with the Agent Plugin one step install and the LyraShield CLI, then covers the manual path, verification, an inline check, a GitHub Action diff gate, and an agent rules snippet. Pair it with the [vibe coding security guide](/blog/vibe-coding-security-guide) for broader context.
+
+## 1. Install prerequisites and authenticate
+
+Install Node so the `npx` commands resolve, then run `npx lyrashield login` to store your credentials in a local file under your home directory. Nothing is committed to the repository, because credentials live in a per user file and the CLI never writes them into source. This matters for shared repos where a committed token would leak to every collaborator and to the git history. Confirm with `npx lyrashield doctor` that the server is reachable and the credentials resolve before you configure Copilot, because a failed login surfaces here instead of mid install. The [Node.js downloads page](https://nodejs.org/en/download) is the canonical source for the runtime. Run login and doctor from the project root so any project scoped config is detected correctly, and re-run doctor whenever you suspect the connection has drifted. If you share a machine with teammates, note that the credentials file is per user, so each person runs login once rather than sharing a single credential file. Re-run doctor after any credential refresh, because a stale credentials file will cause the plugin to fail silently on the next tool call.
+
+## 2. Install the GitHub Copilot Agent Plugin
+
+For GitHub Copilot, the preferred path is the Agent Plugin one step install, which bundles the MCP server and a security skill into the Copilot plugins directory. The plugin lands in a per user plugins directory with a manifest file, an MCP server running over stdio, and it writes a copilot instructions file in the repository that shapes how Copilot uses the workflow. Run `npx lyrashield login` first so the plugin can resolve your credentials, then trigger the install so the manifest points at the right transport. The [Agent Plugins specification](https://agent-plugins.org/) defines the manifest format and how launch clients discover plugins. This is the primary path for Copilot because it is one step and keeps the server and skill versioned together, which means an update to the server ships with the matching skill rather than drifting apart. Review the generated instructions file in your first pull request so the team sees what the plugin changed, because the instructions file shapes every subsequent Copilot suggestion in the repo. Keep the plugin directory under your home folder and out of version control, since committing it would share your local transport and token references. If your team standardizes on the plugin, document the install command in onboarding so every new contributor gets the same one step setup. After the install lands, open the copilot instructions file alongside the plugin manifest in your first pull request, because the instructions file shapes Copilot behavior on every subsequent prompt. If the instructions file references a transport that no longer exists, Copilot will surface a tool call failure at the first security check, so confirm the manifest transport matches before you merge.
+
+## 3. Configure the manual path if needed
+
+If you cannot use the plugin, the manual path is what the CLI writes when it configures Copilot. It runs the MCP server over stdio with `npx -y @lyrashield/mcp stdio`, or points at the remote endpoint `https://app.lyrashieldai.com/api/mcp` with a Bearer token prefixed `lsk_`. Add the server to the Copilot MCP configuration so the agent can reach it, and store the token in the local credentials file rather than the config you commit. The manual path is secondary because it does not bundle the security skill and the copilot instructions file that the plugin provides, so you have to convey conventions yourself. The [Model Context Protocol transport documentation](https://modelcontextprotocol.io/) explains the stdio and remote transport options. Use the remote path when you cannot run a local Node process, and the stdio path when you want everything on your machine. Whichever you pick, store the Bearer token in the local credentials file that `npx lyrashield login` writes, and reference it from the config rather than pasting it inline, so a config file shared for troubleshooting never carries a live token. When you use the remote path with a Bearer token prefixed `lsk_`, rotate the token through `npx lyrashield login` on a schedule so a leaked reference does not grant long lived access. Your security team should allowlist `https://app.lyrashieldai.com/api/mcp` before the remote path goes live.
+
+## 4. Verify the connection and run an inline check
+
+After install, verify that Copilot can reach the server by asking the agent to run a security check on the current project. The agent should call the LyraShield tools to target the app, run review, and return findings you can act on. Confirm with `npx lyrashield doctor` that the plugin manifest is valid and the server is reachable, so you know setup succeeded without a manual guess. Run an inline check on a small change before wiring CI, because a green local run proves the credentials and transport are correct end to end. If the agent cannot see the tools, recheck the plugin directory and the credentials file, and confirm the instructions file names the right transport. A failed inline check is cheaper to debug now than a red CI run later. If the inline check returns findings, read them before wiring CI so you understand the output format the GitHub Action will produce, and so you can set expectations with your team about what a blocked build looks like. The evidence from the inline check is an immutable assurance record, so when you move to CI the same finding links to the same evidence without re running the scan, which keeps the audit trail consistent between local and remote runs.
+
+## 5. Add the GitHub Action diff gate
+
+Wire the workflow into CI so every pull request is scanned on the changed diff, not the whole repository. The LyraShield GitHub Action runs on pull request events, targets the changed files, and emits SARIF output you can ingest. Approval gated fix proposals are proposals requiring review, so the action blocks only on new findings while a human approves any fix. The [GitHub Actions security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions) describes the permissions and secret handling to apply. Run the action on every pull request so review cannot be skipped under deadline pressure, and pin your action versions so an upstream change cannot alter your gate. Store any token the action needs as a GitHub Actions secret rather than in the workflow file, and give the job the minimum permissions it needs, because a scanner job does not need write access to your repository contents. The action uploads the SARIF file to the GitHub security tab via the CodeQL upload action, so findings appear alongside existing code scanning alerts, and each finding links back to the changed file in the pull request diff. Because the scan targets only the changed files in the diff range, the action runs fast even on large repositories where a full scan would timeout.
+
+```yaml
+name: LyraShield Security Check
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: npx -y @lyrashield/mcp scan --diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} --format sarif > lyrashield.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: lyrashield.sarif
+```
+
+## 6. Add an agent rules snippet
+
+The plugin writes a copilot instructions file, so keep your project rules focused on how the team should use the workflow. A short snippet tells Copilot to run a check before completing a feature and to attach evidence to the pull request. Keep the snippet under ten lines so Copilot treats it as a standing rule, and phrase each rule as an imperative so the agent treats it as non negotiable. If your team has a severity threshold, name it in the snippet.
+
+```markdown
+Before finishing a feature, run a LyraShield security check and attach the findings link to the pull request. Never commit secrets. If a high severity issue is found, stop and ask for review.
+```
+
+| Workflow step | Command or action | Purpose |
+| --- | --- | --- |
+| Authenticate | npx lyrashield login | Store credentials locally |
+| Install plugin | Agent Plugin one step | Bundle server and skill |
+| Verify | npx lyrashield doctor | Confirm server reachable |
+| CI gate | GitHub Action on diff | Block on new findings |
+
+## Why pair GitHub Copilot with LyraShield AI
+
+LyraShield AI gives you release assurance for AI built apps through a target, review, evidence, fix, retest, report loop. For Copilot it contributes agentic pentest, software composition analysis, and secrets scanning, then writes each finding to an immutable assurance record that separates detection from proof. Approval gated fix proposals are proposals requiring review, so a human stays in the loop before anything ships. The platform is live with open registration, so you can [create an account](https://lyrashieldai.com) and pair it with the [AI app security checklist tool](/tools/ai-app-security-checklist). For a review focused companion, see the [Codex security workflow](/blog/codex-security-workflow) post.

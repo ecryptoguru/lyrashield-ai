@@ -1,0 +1,67 @@
+---
+title: Secure a Codebuff Built App Before Launch
+description: A release review checklist for Codebuff apps covering data exposure, agent tools, secrets, dependencies, and independent launch evidence before you ship.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification]
+draft: false
+heroImage: agent-security-27
+faq:
+  - q: Is Codebuff safe because it is open source
+    a: Open source means you can audit the code, not that someone already audited your app. You still need to review what data entered the agent, verify dependencies, scan for secrets, and test authorization before launch.
+  - q: Where does Codebuff keep its MCP config
+    a: Codebuff uses .agents/mcp.json with a root mcpServers key holding command, args, and env for each server. Only stdio transport is documented in the official guide.
+  - q: What is the main risk with Codebuff agent store tools
+    a: A published agent can expose a write action or network call under an innocent name. Review each agent before adding it, disable unused tools, and scope credentials to the current task.
+  - q: Should I commit the Codebuff MCP config
+    a: Commit .agents/mcp.json so the team shares the same server set, but keep any embedded secrets in environment variables referenced by env, never as literal strings in the file.
+---
+
+Before launching a Codebuff built app, review what data entered the terminal agent, protect its .agents/mcp.json config, verify dependencies the agent added, scan for committed secrets, and collect independent launch evidence. Codebuff is an open source terminal agent with a published agent store, and that openness means you can audit the tool but must still verify what it produced. The editor accelerates implementation but does not verify the runtime security of what it helped create.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. The same split applies here. A prompt such as do not deploy states intent. A missing production credential enforces it. This checklist walks through the app level review for a Codebuff workflow without assuming the agent caused every defect.
+
+| Review area | Evidence to collect before launch |
+| --- | --- |
+| Data handling | Approved data classes, current Codebuff settings, and a record of any sensitive prompt or terminal output |
+| Config and tools | Reviewed .agents/mcp.json servers and any agent store tools before adding them |
+| Secrets | Clean tree, scanned credentials, rotated keys, and env based secrets not literal strings |
+| Dependencies | Resolved lockfile, package identity, advisory result, and install script decision |
+| Application controls | Negative authorization, tenant boundary, and input validation tests |
+| Release evidence | Deployed surface checks, known limitations, owner, and a fresh retest after fixes |
+
+## 1. Review what data entered Codebuff
+
+Codebuff runs in the terminal and can read files, run commands, and call connected tools. List the repositories, files, prompts, terminal output, database samples, and logs that developers exposed to it. Classify each item using the same rules that govern other development services. The [Codebuff documentation](https://codebuff.com/docs) covers agent capabilities and data flow. Confirm the current settings before relying on any default.
+
+That is a data handling review, not an application security result. Do not pipe production secrets, customer records, private keys, or unrestricted database exports into a terminal merely because the agent runs locally. Keep live secrets outside the working tree. Use placeholders and synthetic fixtures for examples. If a credential may have entered any unapproved path, rotate it and check use logs. The [OWASP guide to sensitive data exposure](https://owasp.org/www-community/Improper_Error_Handling) applies to any data that crosses a trust boundary, including a local terminal.
+
+## 2. Protect the config and agent store tools
+
+Codebuff stores MCP server configuration in .agents/mcp.json with a root mcpServers key. Each server entry holds command, args, and env, and only stdio transport is documented in the official guide. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how these servers expose tools to an agent. Codebuff also supports an agent store where published agents can be added to a project, and the Codebuff CLI offers /init and /publish commands.
+
+Treat every config file and agent store entry as policy bearing code. Review which MCP servers are enabled, what tools each exposes, and what credentials back them. A published agent can expose a write action or network call under an innocent name, so review each one before adding it to your project. Disable unused tools. Scope credentials to the current task. Version control .agents/mcp.json so the team shares the same server set, and require a security owner for changes to agent configuration.
+
+## 3. Keep secrets out of the generated tree
+
+Codebuff can produce code that embeds a real key, token, or connection string into a committed file. Run a secret scan across the whole repository before launch. The [CWE list of credential handling weaknesses](https://cwe.mitre.org/data/definitions/798.html) covers hard coded passwords and the broader [MITRE CWE database](https://cwe.mitre.org/) tracks related credential exposure patterns. Do not rely on the agent noticing its own mistake.
+
+Keep live secrets outside the working tree using environment variables or a secrets manager. The env field in a Codebuff MCP server entry can reference a variable instead of storing a literal string. Use placeholders and synthetic fixtures for examples the agent sees. Review the final diff for any new string that resembles a key, token, or connection string. If a credential may have been committed, rotate it immediately and check access logs.
+
+## 4. Verify the resolved dependencies
+
+Codebuff may add or upgrade packages while implementing a feature. Do not trust the import list at face value. Inspect the final manifest and lockfile, confirm package identity and publisher, and review advisory results before installing in an environment with credentials. The [OSV.dev database](https://osv.dev/) aggregates known vulnerability data across ecosystems and the [npm security best practices](https://nodejs.org/en/docs/guides/) cover lockfile integrity for Node projects.
+
+Review install scripts because a postinstall hook can run arbitrary code at install time. Inspect transitive changes because a new direct dependency can pull in dozens of unseen packages. Pin references to exact versions or hashes where practical. A dependency that passes an advisory check today can drift when a maintainer publishes a new version, so record the resolved versions and recheck before each release. If the agent added a package you do not recognize, read its documentation and source listing before trusting it with network or file access, because a popular name does not guarantee a safe implementation.
+
+## 5. Test the application policy, not the generated shape
+
+The generated app can have routes, forms, and database queries that compile and render but still fail to enforce authorization. Test the policy directly. Verify a second user is denied access to the first user's resources. Confirm tenant boundaries hold when two organizations share the same deployment. Check input validation on every endpoint that accepts user data. The [OWASP Application Security Verification Standard](https://owasp.org/www-project-application-security-verification-standard/) defines structured requirements for authorization and session controls.
+
+Run negative cases, not just the happy path. A test that confirms a feature works is weaker than a test that confirms an unauthorized request is blocked. Exercise error paths, edge cases, and concurrent operations. Generated code often handles the expected flow well and the unexpected flow poorly. Record the negative test results as part of your release evidence so a reviewer can see what was checked, not just what passed. Keep a copy of the test commands, the input data, and the observed response for each negative case so the check can be repeated after a fix without re-deriving the scenario from memory.
+
+## Why pair Codebuff with LyraShield
+
+Codebuff accelerates implementation as an open source terminal agent. LyraShield AI provides release assurance for AI built apps through a loop of target, review, evidence, fix, retest, and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when, and with what result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
+
+As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate, and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request, which keeps the check fast enough to run on every push. [Create an account](https://lyrashieldai.com) to start a release review, or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Claude Code security workflow](/blog/claude-code-security-workflow) covers a related terminal agent if your team uses multiple tools.

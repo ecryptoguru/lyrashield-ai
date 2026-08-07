@@ -515,5 +515,71 @@
     "alt": "LyraShield MCP integration with OpenClaw",
     "width": 1600,
     "height": 900
+  },
+  "agent-security-23": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-23/hero.avif",
+    "webp": "/images/blog/library/agent-security-23/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-23/hero.jpg",
+    "og": "/images/blog/library/agent-security-23/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-23/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Github Copilot",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-24": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-24/hero.avif",
+    "webp": "/images/blog/library/agent-security-24/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-24/hero.jpg",
+    "og": "/images/blog/library/agent-security-24/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-24/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Copilot Cli",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-25": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-25/hero.avif",
+    "webp": "/images/blog/library/agent-security-25/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-25/hero.jpg",
+    "og": "/images/blog/library/agent-security-25/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-25/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Aider",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-26": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-26/hero.avif",
+    "webp": "/images/blog/library/agent-security-26/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-26/hero.jpg",
+    "og": "/images/blog/library/agent-security-26/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-26/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Antigravity",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-27": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-27/hero.avif",
+    "webp": "/images/blog/library/agent-security-27/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-27/hero.jpg",
+    "og": "/images/blog/library/agent-security-27/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-27/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Codebuff",
+    "width": 1600,
+    "height": 900
+  },
+  "agent-security-28": {
+    "cluster": "agent-security",
+    "avif": "/images/blog/library/agent-security-28/hero.avif",
+    "webp": "/images/blog/library/agent-security-28/hero.webp",
+    "jpeg": "/images/blog/library/agent-security-28/hero.jpg",
+    "og": "/images/blog/library/agent-security-28/og.jpg",
+    "socialPortrait": "/images/blog/library/agent-security-28/social-portrait.jpg",
+    "alt": "LyraShield MCP integration with Devin Cli",
+    "width": 1600,
+    "height": 900
   }
 }

@@ -1,0 +1,51 @@
+---
+title: Copilot CLI App Security Checklist for Agents
+description: A security checklist for reviewing apps built with GitHub Copilot CLI covering MCP config, secrets, dependencies, and verifiable evidence with LyraShield AI.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, access-control]
+draft: false
+heroImage: agent-security-24
+faq:
+  - q: Where does Copilot CLI store MCP server configuration?
+    a: Copilot CLI uses a global config file at the user level or a project level file. Both define mcpServers entries that the agent loads at startup.
+  - q: Should I commit the project MCP config file?
+    a: Only if it contains no secrets and uses remote servers with token references. Use a global config for anything containing credentials.
+  - q: How do I restrict which MCP tools Copilot CLI can call?
+    a: Use the tools allowlist field in the server entry so the agent can only invoke the tools you explicitly permit.
+  - q: Can LyraShield AI scan Copilot CLI generated changes?
+    a: Yes. The LyraShield GitHub Action runs on the changed diff so only new risks block the build while preexisting issues are reported separately.
+---
+
+GitHub Copilot CLI runs as a terminal agent that can call MCP servers, so a security checklist must review MCP configuration, secrets, dependency safety, and verifiable evidence. This checklist gives concrete Copilot CLI steps for each area and pairs the review with [LyraShield AI](https://lyrashieldai.com) for detection plus immutable proof. For cross tool context see the [vibe coding security guide](/blog/vibe-coding-security-guide).
+
+## 1. Review MCP configuration and tool permissions
+
+Copilot CLI loads MCP servers from a global config file or a project level file, so inspect both before letting the agent run. The global file at the user level applies to every project, while a project file scopes servers to one repository, so prefer the project file for anything repository specific and keep the global file minimal. For each server entry set a tools allowlist so the agent can only invoke the tools you explicitly permit, rather than every tool the server exposes, because an overbroad server can hand the agent destructive or exfiltration tools you never meant to enable. Use the `copilot mcp add` command to register servers consistently instead of hand editing JSON, because malformed config can break the agent or leak settings into logs. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how servers expose tools and why allowlists matter. Treat the config file as sensitive, because it can point the agent at arbitrary local or remote servers. Keep the global config lean, because any server listed there is available to the agent in every project on your machine, which widens the blast radius of a malicious entry. When you add a server through `copilot mcp add`, review the resulting entry before you save it, so you catch a typo that points at the wrong transport or an unintended scope.
+
+## 2. Audit secrets in CLI generated code and config
+
+Copilot CLI can scaffold code and write config that includes example keys, tokens, and connection strings, so scan for hardcoded secrets before commit. Move real values into environment variables or a managed secrets store, and verify that no credential lands in the MCP config file you commit. Keep any global config that holds a remote server token out of version control entirely, because a global file with a token becomes a credential shared across every project on your machine. Run a dedicated secrets scanner on the pull request diff rather than relying on visual review, because secrets take many formats and a terminal workflow makes it easy to accept a large diff without reading every line. The [CWE entry on cleartext storage of sensitive information](https://cwe.mitre.org/data/definitions/312.html) explains why this class of flaw persists. Rotate any credential that was written to a file before you caught it, because disk exposure should be treated as a leak.
+
+## 3. Validate dependencies the CLI introduces
+
+Copilot CLI pulls packages as it scaffolds, so review the dependency manifest for unexpected or risky additions on every pull request. Pin versions instead of floating ranges, because a floating range lets a new, unreviewed version enter your build without a code change. Check each new package against a vulnerability database before merge, and treat transitive dependencies with the same scrutiny as direct ones, since a safe looking direct package can pull in a vulnerable transitive one. Remove packages the generated code imports but never calls, because dead dependencies still expand your attack surface and slow installs. Prefer packages with active maintainers and clear license terms, and note any package that appears in only one of your projects. The [OSV database](https://osv.dev/) is a free, queryable source for known vulnerabilities across ecosystems. Re-scan after every dependency update, since a transitive package can introduce an advisory even when your direct list is unchanged. Keep a deny list of packages your team has reviewed and rejected, so a future Copilot CLI scaffold does not reintroduce them under a slightly different name. When the CLI imports a package you have never used, spend a minute on the package registry checking its publish history and maintainer count before accepting it.
+
+## 4. Capture verifiable evidence per change
+
+A checklist run is only useful if you can prove it happened and what it found, so record the scanner output, the dependency review, and the secret scan verdict for each pull request. Link that evidence to the commit it covers, and keep detection results separate from the proof that review occurred, because conflating them lets a failed scan be silently edited to look clean later. Use the free [AI app security checklist tool](/tools/ai-app-security-checklist) to standardize what each review records, so a teammate can reconstruct what was checked without reading your mind. Store evidence where it cannot be retroactively modified, because the value is auditability across many AI assisted changes over time. Link the evidence record in the pull request description so a reviewer can find it in one click. If you work across multiple repositories, standardize the evidence location so an auditor does not have to learn a new layout per repo, because consistency is what makes evidence usable at scale. Note who reviewed each finding and what they decided, so a later reader can trace a dismissed alert back to its reasoning.
+
+## 5. Gate merges on the checklist
+
+Wire the checklist into your pull request flow so review cannot be skipped under deadline pressure. Block merge when secrets are found, when a dependency has an unpatched high severity advisory, or when the evidence record is missing. Run the LyraShield GitHub Action on the changed diff so only new risks block the build, not preexisting ones that would otherwise stall every pull request. Surface results in the pull request comment so reviewers see the verdict alongside the change, and require an explicit human acknowledgement before a blocked finding is dismissed. This mirrors how teams apply CI gates generally, as described in the [GitHub Actions security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions). Treat the gate as the last automated checkpoint before a human merges, not as a substitute for reading the diff. When a finding is dismissed, require the reviewer to record why in the evidence record, so the dismissal is auditable later rather than a silent override.
+
+| Checklist area | What to review | Gate action |
+| --- | --- | --- |
+| MCP config | Global and project config, tools allowlist | Restrict tools, no secrets in project file |
+| Secrets handling | Generated keys, tokens, config credentials | Block merge, rotate |
+| Dependencies | New packages, pinned versions, advisories | Block on high severity |
+| Evidence | Scan output linked to commit | Require before merge |
+
+## Why pair Copilot CLI with LyraShield AI
+
+LyraShield AI gives you release assurance for AI built apps through a target, review, evidence, fix, retest, report loop. For Copilot CLI projects it contributes agentic pentest, software composition analysis, and secrets scanning, then writes each finding to an immutable assurance record that separates detection from proof. Approval gated fix proposals are proposals requiring review, so a human stays in the loop before anything ships. The platform is live with open registration, so you can [create an account](https://lyrashieldai.com) and pair it with the [AI app security checklist tool](/tools/ai-app-security-checklist). For setup and the Copilot CLI MCP config path, see the [Claude Code security workflow](/blog/claude-code-security-workflow) companion post. Pairing the checklist with a diff aware CI gate means a finding blocks the merge before it reaches a customer, not after a post mortem.

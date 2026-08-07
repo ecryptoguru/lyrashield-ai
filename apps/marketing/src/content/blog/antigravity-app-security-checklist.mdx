@@ -1,0 +1,67 @@
+---
+title: Secure an Antigravity Built App Before Launch
+description: A release review checklist for Antigravity apps covering data exposure, config, secrets, dependencies, and independent launch evidence before you ship.
+pubDate: '2026-08-07'
+author: lyrashield-team
+tags: [vibe-coding-security, agent-security, verification]
+draft: false
+heroImage: agent-security-26
+faq:
+  - q: Does Antigravity privacy mode make my app secure
+    a: No. Privacy controls govern what Google may store or train on, not whether your generated app enforces authorization, validates input, or keeps secrets out of source. Run the app level checks in this checklist separately.
+  - q: Where does Antigravity keep its MCP config
+    a: Antigravity uses ~/.gemini/config/mcp_config.json for a shared setup or .agents/mcp_config.json for a project scope, both under a root mcpServers key. Remote servers use a serverUrl field, not url.
+  - q: What is the highest risk with Antigravity generated apps
+    a: Hardcoded secrets in committed files and dependencies installed without advisory review. Both travel from the editor into production unless you verify the lockfile, scan for exposed credentials, and keep live keys out of agent reach.
+  - q: Should I block Antigravity from editing CI files
+    a: Yes. Treat .github/workflows and deployment config as policy bearing code. Require a security owner for changes to agent config and CI so a broad prompt cannot silently widen the release path.
+---
+
+Before launching an Antigravity built app, review what data entered the agent, protect its config and rules files, verify the resolved dependencies, test authorization and tenant boundaries, and collect independent launch evidence. Antigravity is the Google successor to Gemini CLI and reuses the same ~/.gemini/ path, so prior config carries over. The editor accelerates implementation but does not verify the runtime security of what it helped create.
+
+The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. The same split applies here. A rules file states intent. A server side authorization check enforces it. This checklist walks through the app level review for an Antigravity workflow without assuming the agent caused every defect.
+
+| Review area | Evidence to collect before launch |
+| --- | --- |
+| Data handling | Approved data classes, current Antigravity settings, and a record of any sensitive prompt or file exposure |
+| Config and rules | Reviewed MCP servers in mcp_config.json and GEMINI.md or AGENTS.md owners |
+| Secrets | Clean tree, scanned credentials, rotated keys, and placeholders for examples |
+| Dependencies | Resolved lockfile, package identity, advisory result, and install script decision |
+| Application controls | Negative authorization, tenant boundary, and input validation tests |
+| Release evidence | Deployed surface checks, known limitations, owner, and a fresh retest after fixes |
+
+## 1. Review what data entered Antigravity
+
+Start with the data, not the privacy label. List the repositories, files, prompts, screenshots, terminal output, database samples, support tickets, and logs that developers exposed to Antigravity. Classify each item using the same rules that govern other development services. Google documents Antigravity data handling under its [Gemini for Cloud privacy terms](https://cloud.google.com/terms/gemini) and the broader [Google Cloud data processing terms](https://cloud.google.com/terms/data-processing). Confirm the current workspace and team setting before relying on any label.
+
+That is a data handling contract, not an application security result. Do not paste production secrets, customer records, private keys, or unrestricted database exports into a prompt merely because a privacy control is active. Keep live secrets outside the working tree. Use placeholders and synthetic fixtures for examples. If a credential may have entered any unapproved path, rotate it and check use logs. Deleting a conversation is not a substitute for revocation, as the [OWASP guide to sensitive data exposure](https://owasp.org/www-community/Improper_Error_Handling) makes clear for any data that crosses a trust boundary.
+
+## 2. Protect the config and rules Antigravity loads
+
+Antigravity stores MCP server configuration in ~/.gemini/config/mcp_config.json for a shared setup or .agents/mcp_config.json for a project scope, both under a root mcpServers key. A remote server entry uses a serverUrl field, and url is rejected. Skills live in ~/.gemini/skills and rules live in GEMINI.md or AGENTS.md. Migrating from Gemini CLI reuses the same ~/.gemini/ path, so existing config carries forward. The [Model Context Protocol specification](https://modelcontextprotocol.io/) defines how these servers expose tools.
+
+Treat every config and rules file as policy bearing code. Review which MCP servers are enabled, what tools each exposes, and what credentials back them. A server that can read issues is a different capability from one that can merge pull requests or change repository settings. Version control GEMINI.md and AGENTS.md, require a security owner for changes to agent configuration, and run harmless scope tests to confirm which rules are active before trusting the folder.
+
+## 3. Keep secrets out of the generated tree
+
+Antigravity can produce code that looks correct but embeds a real key, token, or connection string into a committed file. Run a secret scan across the whole repository before launch. The [CWE list of credential handling weaknesses](https://cwe.mitre.org/data/definitions/798.html) covers hard coded passwords and the broader [MITRE CWE database](https://cwe.mitre.org/) tracks related credential exposure patterns. Do not rely on the agent noticing its own mistake.
+
+Keep live secrets outside the working tree using environment variables or a secrets manager. Use placeholders and synthetic fixtures for examples the agent sees. Review the final diff for any new string that resembles a key, token, or connection string. If a credential may have been committed, rotate it immediately and check access logs. A clean scan plus rotation is stronger than a scan alone because a scan can miss a key format it has not seen before.
+
+## 4. Verify the resolved dependencies
+
+Antigravity may add or upgrade packages while implementing a feature. Do not trust the import list at face value. Inspect the final manifest and lockfile, confirm package identity and publisher, and review advisory results before installing in an environment with credentials. The [OSV.dev database](https://osv.dev/) aggregates known vulnerability data across ecosystems and the [npm security best practices](https://nodejs.org/en/docs/guides/) cover lockfile integrity for Node projects.
+
+Review install scripts because a postinstall hook can run arbitrary code at install time. Inspect transitive changes because a new direct dependency can pull in dozens of unseen packages. Pin references to exact versions or hashes where practical. A dependency that passes an advisory check today can drift when a maintainer publishes a new version, so record the resolved versions and recheck before each release. If the agent added a package you do not recognize, read its documentation and source listing before trusting it with network or file access, because a popular name does not guarantee a safe implementation.
+
+## 5. Test the application policy, not the generated shape
+
+The generated app can have routes, forms, and database queries that compile and render but still fail to enforce authorization. Test the policy directly. Verify a second user is denied access to the first user's resources. Confirm tenant boundaries hold when two organizations share the same deployment. Check input validation on every endpoint that accepts user data. The [OWASP Application Security Verification Standard](https://owasp.org/www-project-application-security-verification-standard/) defines structured requirements for authorization and session controls.
+
+Run negative cases, not just the happy path. A test that confirms a feature works is weaker than a test that confirms an unauthorized request is blocked. Exercise error paths, edge cases, and concurrent operations. Generated code often handles the expected flow well and the unexpected flow poorly. Record the negative test results as part of your release evidence so a reviewer can see what was checked, not just what passed. Keep a copy of the test commands, the input data, and the observed response for each negative case so the check can be repeated after a fix without re-deriving the scenario from memory.
+
+## Why pair Antigravity with LyraShield
+
+Antigravity accelerates implementation. LyraShield AI provides release assurance for AI built apps through a loop of target, review, evidence, fix, retest, and report. The platform separates detection from proof: it flags candidate issues and keeps them in a detected state until independent verification confirms the behavior. An immutable assurance record captures what was checked, when, and with what result, so the evidence survives the conversation that produced the code. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
+
+As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate, and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request, which keeps the check fast enough to run on every push. [Create an account](https://lyrashieldai.com) to start a release review, or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Gemini CLI security checklist](/blog/gemini-cli-app-security-checklist) covers the predecessor tool if your team is mid migration.
