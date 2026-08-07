@@ -20,18 +20,40 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   </picture>
   <div class="premium-hero__veil" aria-hidden="true"></div>
   <div class="premium-hero__content">
-    <p class="premium-hero__eyebrow">Open registration · Release assurance for AI-built apps</p>
-    <h1 id="premium-hero-title">Know what was tested before you ship.</h1>
+    <p class="premium-hero__eyebrow">
+      Open beta · Live with open registration · Security that runs where you build
+    </p>
+    <h1 id="premium-hero-title">Ship AI-built apps with evidence, not hope.</h1>
     <p class="premium-hero__lede">
-      Turn an authorized target, retained evidence, and a fresh retest into one reviewable assurance record.
+      LyraShield is release assurance for AI-built apps: one reviewable record that shows what you
+      checked, what you found, what you fixed, and what a fresh retest actually confirmed before you
+      shipped. You get a clear answer to "did we check it properly?" without claiming there are no
+      issues.
+    </p>
+    <p class="premium-hero__audience">
+      Built for vibe coders, solo builders, indie devs, and small teams shipping AI-built apps.
+      Useful as a second pair of eyes for CTOs and security engineers reviewing that code.
+    </p>
+    <p class="premium-hero__difference">
+      Install once in Cursor, Claude Code, VS Code + Copilot, Windsurf, and more (MCP), and get
+      checks, fix proposals to review, and a shareable report without leaving your coding agent.
     </p>
     <div class="premium-hero__actions">
-      <a class="premium-hero__primary" href="/scan" data-cta-id="premium-hero-lite-check">Run a free Lite Check</a>
-      <a class="premium-hero__secondary" href="#assurance-world" data-cta-id="premium-hero-assurance-world">
-        See the assurance loop <span aria-hidden="true">↓</span>
+      <a class="premium-hero__primary" href="#free-scan" data-cta-id="premium-hero-lite-check">
+        Run free Lite Check <span class="premium-hero__cta-reason">30 sec, no signup</span>
+      </a>
+      <a
+        class="premium-hero__secondary"
+        href="https://app.lyrashieldai.com/sign-up"
+        data-cta-id="premium-hero-create-account"
+      >
+        Create free account <span class="premium-hero__cta-reason">full target → report loop</span>
       </a>
     </div>
-    <p class="premium-hero__boundary">Passive public-surface check · No account required · Full platform open for registration</p>
+    <p class="premium-hero__boundary">
+      Passive + read-only. No codebase stored. No guarantee of no issues, just honest evidence.
+      We're in open beta.
+    </p>
   </div>
 
   <div class="premium-hero__artifact hidden lg:block" aria-hidden="true">
@@ -145,6 +167,17 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     line-height: 1.65;
   }
 
+  /* Who-it's-for and the MCP differentiator sit below the lede at a step down in
+     size, so the hero still reads as one block rather than four competing ones. */
+  .premium-hero__audience,
+  .premium-hero__difference {
+    max-width: 640px;
+    margin: 0.75rem 0 0;
+    color: #91a7b8;
+    font-size: clamp(0.94rem, 1.1vw, 1.02rem);
+    line-height: 1.6;
+  }
+
   .premium-hero__actions {
     display: flex;
     flex-wrap: wrap;
@@ -186,6 +219,18 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     background: rgba(8, 17, 28, 0.62);
   }
 
+  /* The reason-to-click rides inside the button, one step down and dimmer, so the
+     label stays the thing you read first. */
+  .premium-hero__cta-reason {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    opacity: 0.75;
+  }
+
   .premium-hero__boundary {
     margin: 0.9rem 0 0;
     color: #91a7b8;
@@ -209,6 +254,67 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     width: min(10vw, 7rem);
     height: 1px;
     background: linear-gradient(90deg, var(--hero-cyan), rgba(84, 214, 223, 0.15));
+  }
+
+  /* Mobile tightening (visual QA found both CTAs below the fold at 390px).
+     Desktop is untouched: this query only applies under 480px, well below the
+     1024px breakpoint that switches the hero to its two-column layout.
+     Strategy: shrink the H1 and line spacing so less height is spent before
+     any text, then reflow with flex order so the primary CTA renders right
+     after the lede instead of after two more paragraphs. The who-it's-for and
+     MCP-differentiator lines still exist in the DOM in their original reading
+     order (unchanged for screen readers and SEO); only their painted position
+     moves below the buttons on small screens. */
+  @media (max-width: 480px) {
+    .premium-hero__content {
+      display: flex;
+      flex-direction: column;
+      padding-block: clamp(3rem, 8vh, 4rem) clamp(1.75rem, 5vh, 2.5rem);
+    }
+
+    .premium-hero__eyebrow {
+      order: 0;
+      font-size: 0.68rem;
+    }
+
+    h1 {
+      order: 1;
+      font-size: clamp(2.35rem, 10.5vw, 2.9rem);
+      line-height: 1.02;
+      letter-spacing: -0.035em;
+    }
+
+    .premium-hero__lede {
+      order: 2;
+      margin-top: 0.75rem;
+      font-size: 0.98rem;
+      line-height: 1.55;
+    }
+
+    .premium-hero__actions {
+      order: 3;
+      margin-top: 1.1rem;
+    }
+
+    .premium-hero__actions a {
+      min-height: 2.9rem;
+      padding: 0.7rem 1.05rem;
+    }
+
+    .premium-hero__audience {
+      order: 4;
+      margin-top: 1.1rem;
+      font-size: 0.85rem;
+    }
+
+    .premium-hero__difference {
+      order: 5;
+      font-size: 0.85rem;
+    }
+
+    .premium-hero__boundary {
+      order: 6;
+    }
   }
 
   .premium-hero__artifact {

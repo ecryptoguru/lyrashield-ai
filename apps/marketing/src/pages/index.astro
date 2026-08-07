@@ -19,32 +19,32 @@ const renderHash = import.meta.env.DEV ? "local" : import.meta.env.PUBLIC_MOTION
 const motionManifest = createMotionMediaManifest(mediaUrl, renderHash)
 
 const description =
-  "LyraShield AI records what was tested, separates detected risks from retest-confirmed fixes, and creates an assurance report for AI-built apps."
+  "Ship AI-built apps with evidence, not hope. One reviewable record of what you checked, what you fixed, and what a fresh retest confirmed before release. Open beta."
 
 const faqItems = [
   {
     q: "What is release assurance for an AI-built app?",
-    a: "It is a review record that states which authorized checks ran, what they covered, the evidence behind each result, and what a retest established before a release ships.",
-  },
-  {
-    q: "Is this live today?",
-    a: "The passive Lite Check and five browser-local tools are public. The full release-assurance platform is live with open registration and remains in active development; subscribe for product updates.",
+    a: "One reviewable record that states which authorized targets you checked, what coverage ran, the evidence behind each finding, and what a retest actually confirmed before release. It is a record of what was tested, not a guarantee there are no issues.",
   },
   {
     q: "What does a LyraShield result actually prove?",
-    a: "Only what the retained evidence supports. New scans distinguish detected candidates, independently verified findings, validated fixes, inconclusive retests, and checks that were limited or not applicable.",
+    a: "Only what the retained evidence supports. We keep detected candidates, independently verified findings, validated fixes (retest-confirmed), inconclusive retests, and checks that were limited or not applicable distinct. Missing proof stays visible.",
   },
   {
-    q: "Does LyraShield open Fix PRs today?",
-    a: "Not yet. LyraShield creates approval-gated fix proposals, but PR execution stays blocked until the patch is generated server-side and bound to the exact approval.",
+    q: "Does LyraShield automatically fix my code?",
+    a: "No. LyraShield creates approval-gated fix proposals that explain the issue and stage a server-generated patch. Every code change requires your explicit review and approval. Nothing auto-merges.",
   },
   {
-    q: "Does it replace my existing tools?",
-    a: "No. SCA, secret scanning, URL checks, and repository review are coverage layers inside a wider assurance workflow. Specialist tools may still provide deeper coverage in their category.",
+    q: "Is this a replacement for my other security scanners?",
+    a: "No. SCA, secrets scanning, dependency checks, and repo review are coverage layers inside a wider release-assurance workflow. Specialist tools may still provide deeper coverage in their own category. The value here is the combined loop and evidence record, not claiming depth parity alone.",
   },
   {
-    q: "What does it cost?",
-    a: "Pricing and plan boundaries will be announced as the open beta matures.",
+    q: "What is live today and what is on the roadmap?",
+    a: "Live today: free Lite Check (passive public URL scan), five browser-local tools, the full release-assurance platform in open beta with open registration (target, review, evidence, fix proposal, retest, report), the MCP server for agent-native use, and GitHub integration. Near-term roadmap: deeper deterministic coverage, richer SARIF interop, a reusable GitHub Action with a diff-aware gate, and expanded shareable report variants. Pricing and plan limits will be announced as the beta matures.",
+  },
+  {
+    q: "Do you store my codebase?",
+    a: "No. Scans run in hardened, short-lived environments. The Lite Check is passive and read-only. The full platform retains scope, receipts, findings, and evidence states, not a copy of your source.",
   },
 ]
 
@@ -91,7 +91,7 @@ const jsonLd = [
 ---
 
 <Base
-  title="LyraShield AI — Release assurance for AI-built apps"
+  title="LyraShield AI — Ship AI-built apps with evidence, not hope"
   description={description}
   canonical={pageUrl}
   jsonLd={jsonLd}

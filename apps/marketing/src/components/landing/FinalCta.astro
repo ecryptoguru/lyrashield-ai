@@ -5,12 +5,17 @@ import WaitlistForm from "@components/WaitlistForm.astro"
 <section id="waitlist" aria-labelledby="waitlist-heading" class="px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
   <div class="mx-auto max-w-3xl text-center" data-reveal-group>
     <h2 id="waitlist-heading" data-reveal class="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
-      Get release assurance updates.
+      Ready to ship something you can stand behind?
     </h2>
     <p data-reveal class="mt-5 text-lg leading-8 text-text-muted">
-      Stay in the loop on new evidence states, scan depth, and ways to share an honest assurance record.
+      Most AI apps work before they are safe to ship. Start with the free check that takes 30 seconds and no signup. When you are ready for the full loop, from what you are shipping to a report you can share, create a free account. We are in open beta, building in public.
     </p>
   </div>
+  <div class="mt-9 flex flex-wrap items-center justify-center gap-4" data-reveal>
+    <a href="/scan" data-cta-id="final-cta-lite-check" class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Run free Lite Check</a>
+    <a href="https://app.lyrashieldai.com/sign-up" data-cta-id="final-cta-create-account" class="lift inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg-raised px-6 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create free account, join open beta</a>
+  </div>
+  <p class="mx-auto mt-5 max-w-3xl text-center text-sm leading-6 text-text-muted" data-reveal>Passive + read-only · Browser-local tools available · No guarantees, just honest evidence. Pricing coming later as beta matures.</p>
   <div class="mt-12" data-reveal>
     <WaitlistForm />
   </div>
