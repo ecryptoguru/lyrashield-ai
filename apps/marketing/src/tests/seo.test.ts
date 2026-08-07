@@ -126,8 +126,13 @@ describe("marketing SEO metadata", () => {
     expect(header.match(/href="\/scan"/g)).toHaveLength(2)
     expect(header.match(/\$\{appUrl\}\/sign-in/g)).toHaveLength(2)
     expect(header).not.toContain('href="/#free-scan"')
-    expect(premiumHero).toContain('href="/scan" data-cta-id="premium-hero-lite-check"')
-    expect(premiumHero).not.toContain('href="#free-scan"')
+    // The hero primary CTA now jumps to the on-page Lite Check form instead of the
+    // canonical page (founder-approved). The canonical page must still be reachable
+    // from the homepage, so assert that rather than dropping the guarantee.
+    expect(premiumHero).toContain('href="#free-scan" data-cta-id="premium-hero-lite-check"')
+    expect(source("../components/landing/HomeLiteScan.astro")).toContain('href="/scan"')
+    expect(source("../components/landing/HomeLiteScan.astro")).toContain('action="/scan"')
+    expect(source("../components/landing/FinalCta.astro")).toContain('href="/scan"')
     expect(scanner).toContain(
       'const title = "Free AI App Security Check — Passive URL Scan | LyraShield AI"'
     )
