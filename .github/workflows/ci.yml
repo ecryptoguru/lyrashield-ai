@@ -61,6 +61,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Test path classifier
+        shell: bash
+        run: bash .github/scripts/tests/test-classify-paths.sh
+
       - name: Classify changed files
         id: classify
         shell: bash
@@ -93,37 +97,10 @@ jobs:
           echo "Changed files:"
           echo "$files"
 
-          # Path classification patterns
-          docs_pattern='^(\.gitignore|\.prettierignore|\.prettierrc\.json|\.editorconfig|\.gitattributes|\.nvmrc|\.python-version|LICENSE|renovate\.json|.*\.md|\.devin/|\.claude/|\.codeium/|\.cursor/|\.agents/|\.windsurf/)$'
-          marketing_pattern='^apps/(marketing|marketing-motion)/'
-          app_pattern='^apps/(web|worker|agent)/'
-          shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|\.github/)'
-
-          docs_only=true
-          marketing=false
-          app=false
-          shared=false
-
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            if ! echo "$f" | grep -qE "$docs_pattern"; then
-              docs_only=false
-            fi
-            if echo "$f" | grep -qE "$marketing_pattern"; then
-              marketing=true
-            fi
-            if echo "$f" | grep -qE "$app_pattern"; then
-              app=true
-            fi
-            if echo "$f" | grep -qE "$shared_pattern"; then
-              shared=true
-            fi
-          done <<< "$files"
-
-          echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
-          echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
-          echo "app=$app" >> "$GITHUB_OUTPUT"
-          echo "shared=$shared" >> "$GITHUB_OUTPUT"
+          # Classification logic lives in .github/scripts/classify-paths.sh
+          # so it is testable independently of the workflow runtime.
+          # See .github/scripts/tests/test-classify-paths.sh.
+          printf '%s\n' "$files" | bash .github/scripts/classify-paths.sh
 
   lint-and-typecheck:
     name: Lint, Typecheck, Test & Build
