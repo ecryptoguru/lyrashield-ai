@@ -37,7 +37,7 @@ describe("premium assurance-world homepage", () => {
   it("uses approved gateway copy and conversion anchors", () => {
     expect(hero).toContain("release assurance for AI-built apps")
     expect(hero).toContain("Ship AI-built apps with evidence, not hope.")
-    expect(hero).toContain('href="/scan"')
+    expect(hero).toContain('href="#free-scan"')
     expect(hero).toContain("app.lyrashieldai.com/sign-up")
     expect(hero).toContain("Passive + read-only")
   })
