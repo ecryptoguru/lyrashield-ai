@@ -235,6 +235,10 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm --filter @lyrashield/marketing blog:validate:mdx
 
+      - name: Validate blog offline gates
+        if: needs.changes.outputs.docs-only != 'true'
+        run: pnpm --filter @lyrashield/marketing blog:validate:offline
+
       - name: Validate compare content
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm --filter @lyrashield/marketing compare:validate

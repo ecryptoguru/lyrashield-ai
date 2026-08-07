@@ -1,21 +1,22 @@
 ---
 title: Zed MCP security workflow for AI built apps
 description: Connect Zed to LyraShield AI via MCP to scan AI generated code for verified findings and wire a diff aware GitHub Action gate in your existing editor flow.
-pubDate: '2026-07-30'
+pubDate: "2026-07-30"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-12
 faq:
-  - q: 'How does Zed MCP integration work with LyraShield AI?'
-    a: 'Zed exposes MCP servers through settings.json context_servers. You register LyraShield locally with npx or remotely with a Bearer key, then call scan tools directly from the agent panel and review verified findings inline before creating a Fix PR.'
-  - q: 'What does the GitHub Action gate add beyond editor checks?'
-    a: 'The diff aware gate runs on pull requests, blocks risky code paths with SARIF results, and keeps retest and report steps consistent between local Zed runs and CI. It is designed to enforce the same policy for every contributor.'
-  - q: 'Is LyraShield scanning live today?'
-    a: 'Sprints 0 to 2 are shipped. The scan engine MVP, Fix PR generation, and billing are on the roadmap and described as designed to capabilities, not live automatic behavior. You can configure MCP now and adopt verification as it rolls out.'
-  - q: 'How should I manage the Bearer lsk_ key across local and CI setups?'
-    a: 'Treat the lsk_ key like any secret. Load it from your shell env for local stdio, from a password manager for remote HTTP in Zed, and from GitHub Actions encrypted secrets for the diff gate. Never hardcode it in settings.json and never commit it, because context_servers files are often shared between machines and repos.'
+  - q: "How does Zed MCP integration work with LyraShield AI?"
+    a: "Zed exposes MCP servers through settings.json context_servers. You register LyraShield locally with npx or remotely with a Bearer key, then call scan tools directly from the agent panel and review verified findings inline before creating a Fix PR."
+  - q: "What does the GitHub Action gate add beyond editor checks?"
+    a: "The diff aware gate runs on pull requests, blocks risky code paths with SARIF results, and keeps retest and report steps consistent between local Zed runs and CI. It is designed to enforce the same policy for every contributor."
+  - q: "Is LyraShield scanning live today?"
+    a: "Sprints 0 to 2 are shipped. The scan engine MVP, Fix PR generation, and billing are on the roadmap and described as designed to capabilities, not live automatic behavior. You can configure MCP now and adopt verification as it rolls out."
+  - q: "How should I manage the Bearer lsk_ key across local and CI setups?"
+    a: "Treat the lsk_ key like any secret. Load it from your shell env for local stdio, from a password manager for remote HTTP in Zed, and from GitHub Actions encrypted secrets for the diff gate. Never hardcode it in settings.json and never commit it, because context_servers files are often shared between machines and repos."
 ---
+
 You can secure AI built apps in Zed by connecting LyraShield AI through the [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and running verified checks directly from the editor, then enforcing the same policy in CI with a diff aware GitHub Action gate. Zed reads servers from `settings.json` under `context_servers`, supporting local stdio and remote HTTP with a bearer key.
 
 Zed is fast and agent native, which makes it popular for vibe coding, but speed can leave security gaps when dependencies and routes are scaffolded by agents. The [vibe coding security guide](/blog/vibe-coding-security-guide) frames this problem as unverified generation at scale. LyraShield AI is an agent native AppSec layer for AI built software that follows a loop of Target to Scan to Verified Finding to Fix PR to Retest to Report. This post shows the exact Zed configuration for both local and remote MCP, how to verify the connection, how to run an inline check, and how to wire CI so findings stay actionable.
@@ -75,7 +76,7 @@ With the server green, target your current project root and run a scan from the 
 
 ## 5. Wire the GitHub Action diff aware gate
 
-Editor checks catch issues early, CI gates prevent drift on pull requests. Add `.github/workflows/lyrashield.yml` with a SARIF upload so results appear in GitHub code scanning. The [GitHub docs for SARIF upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file) describe the required `security-events: write` permission. The workflow below uses the same pinned `npx` and remote endpoint pattern and keeps secretsGitHub scanning broad.
+Editor checks catch issues early, CI gates prevent drift on pull requests. Add `.github/workflows/lyrashield.yml` with a SARIF upload so results appear in GitHub code scanning. The [GitHub docs for SARIF upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github) describe the required `security-events: write` permission. The workflow below uses the same pinned `npx` and remote endpoint pattern and keeps secretsGitHub scanning broad.
 
 ```yaml
 name: lyrashield diff gate
@@ -124,11 +125,11 @@ Add a short rule file so every agent session in Zed follows the same security lo
 
 This keeps behavior consistent between human and agent edits. The rule avoids phrases implying unattended fixes and frames the Fix PR as a proposed change designed to be reviewed. Think of the rules file as the contract your agent follows unsupervised. The first bullet forces target identification, stopping wrong directory scans. The fourth enforces approval-gated fix proposals, not unattended fixes, because the agent proposes a minimal diff.
 
-| Mode | Transport | Best for | Env key | URL |
-| --- | --- | --- | --- | --- |
-| Local stdio | npx -y @lyrashield/mcp | Local dev, offline | LYRASHIELD_API_KEY | internal process |
-| Remote HTTP | streamable HTTP with Bearer lsk_ | Team shared keys, CI | LYRASHIELD_API_KEY, LYRASHIELD_MCP_URL | https://app.lyrashieldai.com/api/mcp |
-| Diff gate | GitHub Action + SARIF | PR enforcement | LYRASHIELD_API_KEY secret | https://app.lyrashieldai.com/api/mcp |
+| Mode        | Transport                         | Best for             | Env key                                | URL                                  |
+| ----------- | --------------------------------- | -------------------- | -------------------------------------- | ------------------------------------ |
+| Local stdio | npx -y @lyrashield/mcp            | Local dev, offline   | LYRASHIELD_API_KEY                     | internal process                     |
+| Remote HTTP | streamable HTTP with Bearer lsk\_ | Team shared keys, CI | LYRASHIELD_API_KEY, LYRASHIELD_MCP_URL | https://app.lyrashieldai.com/api/mcp |
+| Diff gate   | GitHub Action + SARIF             | PR enforcement       | LYRASHIELD_API_KEY secret              | https://app.lyrashieldai.com/api/mcp |
 
 ## 7. Why pair Zed with LyraShield
 
