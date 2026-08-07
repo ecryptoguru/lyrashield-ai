@@ -124,7 +124,14 @@ export const engineRunRecordSchema = z
     max_output_tokens: z.number().int().min(1).optional(),
     max_agents: z.number().int().min(1).optional(),
     scan_mode: boundedString,
-    terminal_reason: boundedString,
+    terminal_reason: z.enum([
+      "completed",
+      "content_filter_stopped",
+      "engine_stopped",
+      "budget_exceeded",
+      "cancelled",
+      "timed_out",
+    ]),
   })
   .strip()
 

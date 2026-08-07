@@ -363,7 +363,7 @@ export function ScanDetailClient({
         }
         let refreshedFindings: FindingItem[] | null = null
         if (
-          ["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(
+          ["COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(
             updated.status
           )
         ) {

@@ -218,6 +218,7 @@ describe("Enum parity (Zod vs Prisma)", () => {
       "RUNNING",
       "VERIFYING",
       "COMPLETED",
+      "PARTIAL",
       "FAILED",
       "CANCELLED",
       "REQUIRES_APPROVAL",
