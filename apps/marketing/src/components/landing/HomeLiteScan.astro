@@ -7,9 +7,11 @@ const scannerAvailable = Boolean(appOrigin)
   <div class="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[.8fr_1.2fr] lg:items-center" data-reveal-group>
     <div class="max-w-xl" data-reveal="left">
       <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Live URL scan · passive and read-only</p>
-      <h2 id="free-scan-heading" class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl">Check your public app before it ships.</h2>
-      <p class="mt-5 text-lg leading-8 text-text-muted">Look for exposed secrets, missing browser protections, risky data-layer signals, and HTTPS issues. Results in seconds. No signup.</p>
-      <a href="/scan" class="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">What the Lite Check covers and cannot prove</a>
+      <h2 id="free-scan-heading" class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl">See your app&apos;s gaps in 30 seconds. Free, no signup.</h2>
+      <p class="mt-5 text-lg leading-8 text-text-muted">Paste your live app URL. In seconds, get a passive, read-only check for exposed secrets, missing browser protections (security headers, CORS), risky frontend data-layer signals, and HTTPS issues. Nothing to install, no login, results run locally where possible.</p>
+      <p class="mt-4 text-lg leading-8 text-text-muted">It is the fastest way to know what to fix before you share your link with users, investors, or clients, and to give your coding agent something concrete to work from.</p>
+      <a href="/scan" class="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">What it covers / what it cannot prove</a>
+      <p class="mt-5 text-sm leading-6 text-text-muted">Want the full repo and target loop? <a href="https://app.lyrashieldai.com/sign-up" data-cta-id="home-lite-scan-create-account" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create a free account</a>.</p>
     </div>
 
     <form id="home-lite-scan-form" action="/scan" data-reveal="right" class="border-l-2 border-accent pl-5 sm:pl-8">
