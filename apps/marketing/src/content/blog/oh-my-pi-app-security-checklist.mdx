@@ -1,7 +1,7 @@
 ---
 title: Oh My Pi app security checklist
 description: Secure an Oh My Pi built app before launch with this evidence based checklist covering MCP config, permissions, secrets, dependencies, and verification.
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -16,6 +16,7 @@ faq:
   - q: Can I disable a discovered MCP server without editing its source config?
     a: Yes. Add the server name to the disabledServers list in your user mcp.json. disabledServers wins over the source entry enabled value and over enabledServers.
 ---
+
 Secure an Oh My Pi built app before launch by using the correct agent subdirectory config path, bounding discovered MCP permissions, keeping tokens out of committed config, verifying AI suggested dependencies, and separating detected signals from verified proof. Oh My Pi auto discovers MCP servers from several tools, so a stale path or an unwanted discovered server widens what the agent can touch. This checklist applies the [vibe coding security guide](/blog/vibe-coding-security-guide) method: run an evidence loop and retain the receipts.
 
 ## 1. Use the correct Oh My Pi MCP config location
@@ -28,7 +29,7 @@ The agent subdirectory is load bearing: Oh My Pi only reads `~/.omp/agent/mcp.js
 
 ## 2. Bound agent permissions and discovery scope
 
-Discovery means an MCP server you configured for another tool can appear in your Oh My Pi agent session without an explicit OMP entry. That is convenient and a real privilege expansion. Treat each discovered server as a new boundary and apply least privilege from the [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0xa2-broken-object-level-authorization/). Use the `disabledServers` denylist in your user `mcp.json` to suppress a server you do not want, and remember that `disabledServers` wins over both the source `enabled` value and the `enabledServers` allowlist.
+Discovery means an MCP server you configured for another tool can appear in your Oh My Pi agent session without an explicit OMP entry. That is convenient and a real privilege expansion. Treat each discovered server as a new boundary and apply least privilege from the [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/). Use the `disabledServers` denylist in your user `mcp.json` to suppress a server you do not want, and remember that `disabledServers` wins over both the source `enabled` value and the `enabledServers` allowlist.
 
 Record which servers are active and who approved them. If a server can write or delete data, that authority belongs in the release target scope you define in the [vibe coding security guide](/blog/vibe-coding-security-guide), not as an implicit discovery default. The `mcp.enableProjectConfig` setting lets you exclude every project level source before deduplication, which is useful when a team repo keeps reintroducing a server you do not want the agent to reach. Pair the denylist with the [OWASP prompt injection guidance](https://owasp.org/www-project-top-10-for-large-language-model-applications/) so a hostile instruction cannot turn a discovered tool against you.
 
@@ -42,16 +43,16 @@ A practical split is to store the server entry with a placeholder in the committ
 
 ## 4. Verify AI suggested dependencies
 
-Oh My Pi agents add packages as they work, and each addition extends your supply chain. A clean install is not proof of safety. Begin with the resolved artifact, inspect the dependency graph for unexpected transitive changes, and match resolved versions against advisory data. The [OSV.dev](https://osv.dev/) database and the NIST [software supply chain security](https://www.nist.gov/itl/ssdm/software-supply-chain-security) guidance frame why a single mutable package can compromise a protected repo. Restrict install scripts, reproduce the build from reviewed inputs, and watch for unexpected transitive jumps that a lockfile diff reveals. A protected repository can still produce an untrusted artifact if its build pipeline accepts mutable inputs or carries broad credentials, so review CI actions and package registries alongside the code.
+Oh My Pi agents add packages as they work, and each addition extends your supply chain. A clean install is not proof of safety. Begin with the resolved artifact, inspect the dependency graph for unexpected transitive changes, and match resolved versions against advisory data. The [OSV.dev](https://osv.dev/) database and the NIST [software supply chain security](https://www.nist.gov/itl/executive-order-14028-improving-nations-cybersecurity/software-supply-chain-security-guidance) guidance frame why a single mutable package can compromise a protected repo. Restrict install scripts, reproduce the build from reviewed inputs, and watch for unexpected transitive jumps that a lockfile diff reveals. A protected repository can still produce an untrusted artifact if its build pipeline accepts mutable inputs or carries broad credentials, so review CI actions and package registries alongside the code.
 
 Treat each AI suggested package as an untrusted input until it clears the SCA layer. Capture the resolved version and integrity hash, not just the requested range, because a mutable registry can serve a different artifact next install. Rerun the advisory match after the lockfile settles, since a fix can pull in a vulnerable transitive.
 
-| Check | What to verify | Evidence to retain |
-|---|---|---|
-| Config path | `~/.omp/agent/mcp.json` not `~/.omp/mcp.json` | Config excerpt with server loaded |
-| Permissions | Unwanted servers in `disabledServers` | Tool list after discovery |
-| Secrets | No real tokens in committed config | Secrets scan plus git history check |
-| Dependencies | Resolved versions reviewed | Lockfile diff and advisory match |
+| Check        | What to verify                                | Evidence to retain                  |
+| ------------ | --------------------------------------------- | ----------------------------------- |
+| Config path  | `~/.omp/agent/mcp.json` not `~/.omp/mcp.json` | Config excerpt with server loaded   |
+| Permissions  | Unwanted servers in `disabledServers`         | Tool list after discovery           |
+| Secrets      | No real tokens in committed config            | Secrets scan plus git history check |
+| Dependencies | Resolved versions reviewed                    | Lockfile diff and advisory match    |
 
 LyraShield's SCA layer keeps the receipt for each matched package. Extend that evidence by capturing the agent session log that introduced each dependency, so a reviewer can trace why a package was added and whether it still holds.
 

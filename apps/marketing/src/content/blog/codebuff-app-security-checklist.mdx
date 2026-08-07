@@ -1,7 +1,7 @@
 ---
 title: Secure a Codebuff Built App Before Launch
 description: A release review checklist for Codebuff apps covering data exposure, agent tools, secrets, dependencies, and independent launch evidence before you ship.
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -21,14 +21,14 @@ Before launching a Codebuff built app, review what data entered the terminal age
 
 The [vibe coding security guide](/blog/vibe-coding-security-guide) separates generated code from the controls that enforce what it may do. The same split applies here. A prompt such as do not deploy states intent. A missing production credential enforces it. This checklist walks through the app level review for a Codebuff workflow without assuming the agent caused every defect.
 
-| Review area | Evidence to collect before launch |
-| --- | --- |
-| Data handling | Approved data classes, current Codebuff settings, and a record of any sensitive prompt or terminal output |
-| Config and tools | Reviewed .agents/mcp.json servers and any agent store tools before adding them |
-| Secrets | Clean tree, scanned credentials, rotated keys, and env based secrets not literal strings |
-| Dependencies | Resolved lockfile, package identity, advisory result, and install script decision |
-| Application controls | Negative authorization, tenant boundary, and input validation tests |
-| Release evidence | Deployed surface checks, known limitations, owner, and a fresh retest after fixes |
+| Review area          | Evidence to collect before launch                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| Data handling        | Approved data classes, current Codebuff settings, and a record of any sensitive prompt or terminal output |
+| Config and tools     | Reviewed .agents/mcp.json servers and any agent store tools before adding them                            |
+| Secrets              | Clean tree, scanned credentials, rotated keys, and env based secrets not literal strings                  |
+| Dependencies         | Resolved lockfile, package identity, advisory result, and install script decision                         |
+| Application controls | Negative authorization, tenant boundary, and input validation tests                                       |
+| Release evidence     | Deployed surface checks, known limitations, owner, and a fresh retest after fixes                         |
 
 ## 1. Review what data entered Codebuff
 
@@ -50,7 +50,7 @@ Keep live secrets outside the working tree using environment variables or a secr
 
 ## 4. Verify the resolved dependencies
 
-Codebuff may add or upgrade packages while implementing a feature. Do not trust the import list at face value. Inspect the final manifest and lockfile, confirm package identity and publisher, and review advisory results before installing in an environment with credentials. The [OSV.dev database](https://osv.dev/) aggregates known vulnerability data across ecosystems and the [npm security best practices](https://nodejs.org/en/docs/guides/) cover lockfile integrity for Node projects.
+Codebuff may add or upgrade packages while implementing a feature. Do not trust the import list at face value. Inspect the final manifest and lockfile, confirm package identity and publisher, and review advisory results before installing in an environment with credentials. The [OSV.dev database](https://osv.dev/) aggregates known vulnerability data across ecosystems and the [npm security best practices](https://nodejs.org/learn) cover lockfile integrity for Node projects.
 
 Review install scripts because a postinstall hook can run arbitrary code at install time. Inspect transitive changes because a new direct dependency can pull in dozens of unseen packages. Pin references to exact versions or hashes where practical. A dependency that passes an advisory check today can drift when a maintainer publishes a new version, so record the resolved versions and recheck before each release. If the agent added a package you do not recognize, read its documentation and source listing before trusting it with network or file access, because a popular name does not guarantee a safe implementation.
 

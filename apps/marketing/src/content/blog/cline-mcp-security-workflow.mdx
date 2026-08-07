@@ -1,28 +1,29 @@
 ---
 title: Cline MCP security workflow for AI built apps
 description: Install LyraShield AI in Cline via cline mcp settings json for verified findings, Fix PRs designed to be reviewed, and a diff aware GitHub Action SARIF gate.
-pubDate: '2026-07-30'
+pubDate: "2026-07-30"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-16
 faq:
-  - q: 'Where does Cline store MCP config?'
-    a: 'Cline stores MCP servers in cline_mcp_settings.json under mcpServers with command, args, env, autoApprove, disabled, and type for streamable HTTP remote mode.'
-  - q: 'How do I use LyraShield remote with Cline?'
-    a: 'Use type streamableHttp with URL https://app.lyrashieldai.com/api/mcp and Authorization Bearer LYRASHIELD_API_KEY. Local uses npx -y @lyrashield/mcp via stdio.'
-  - q: 'What is LyraShield build status?'
-    a: 'Sprints 0 to 2 are shipped. Scan engine MVP, Fix PR generation, and billing are on the roadmap. The integration is usable now for configuration and policy wiring.'
-  - q: 'Should I use autoApprove for LyraShield tools?'
-    a: 'Use autoApprove sparingly. Keep read only tools like list_targets and get_finding allowed, but gate fix and retest tools behind a prompt so the agent cannot run them without your confirmation. Every auto approved tool is an action the agent takes autonomously.'
+  - q: "Where does Cline store MCP config?"
+    a: "Cline stores MCP servers in cline_mcp_settings.json under mcpServers with command, args, env, autoApprove, disabled, and type for streamable HTTP remote mode."
+  - q: "How do I use LyraShield remote with Cline?"
+    a: "Use type streamableHttp with URL https://app.lyrashieldai.com/api/mcp and Authorization Bearer LYRASHIELD_API_KEY. Local uses npx -y @lyrashield/mcp via stdio."
+  - q: "What is LyraShield build status?"
+    a: "Sprints 0 to 2 are shipped. Scan engine MVP, Fix PR generation, and billing are on the roadmap. The integration is usable now for configuration and policy wiring."
+  - q: "Should I use autoApprove for LyraShield tools?"
+    a: "Use autoApprove sparingly. Keep read only tools like list_targets and get_finding allowed, but gate fix and retest tools behind a prompt so the agent cannot run them without your confirmation. Every auto approved tool is an action the agent takes autonomously."
 ---
+
 You can run secure AI app development in Cline by adding LyraShield AI as an MCP server, getting verified findings with evidence inside Cline, and enforcing the same checks in CI with a diff aware GitHub Action that uploads SARIF.
 
 Cline automates file edits and terminal actions, which speeds up feature work but can introduce secrets, injection, and vulnerable dependencies when scaffolding is agent driven. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification must be part of the agent loop. LyraShield AI is agent native AppSec for AI built software with a loop from Target to Scan to Verified Finding to Fix PR to Retest to Report. This guide gives exact Cline config using `npx -y @lyrashield/mcp` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification, inline checks, and the GitHub gate.
 
 ## 1. Prerequisites and setup
 
-You need Cline extension 3.12 or newer in VS Code or compatible editor, Node 18 or newer, a LyraShield key `lsk_` for remote mode, and permission to add workflows. Cline reads MCP from `cline_mcp_settings.json` under `mcpServers` with keys such as `command`, `args`, `env`, `autoApprove`, `disabled`, and `type`. The `command` and `args` keys launch a local stdio server, `env` injects variables that Cline expands at runtime, and `type` selects the transport. Use `type: "streamableHttp"` for remote servers that expose a URL endpoint. The `disabled` key lets you toggle a server without deleting its entry. The editor docs and the [Cline documentation](https://docs.cline.bot/mcp) describe this file, and the canonical steps are in the [Cline integration guide](/docs/integrations/cline). Warm the cache with `npx -y @lyrashield/mcp --help` so the first scan does not stall on package download. Review baseline risks via [OWASP Top 10](https://owasp.org/www-project-top-ten/) and dependency advisories via [OSV](https://osv.dev/). For protocol basics, see [Model Context Protocol intro](https://modelcontextprotocol.io/docs/getting-started/intro).
+You need Cline extension 3.12 or newer in VS Code or compatible editor, Node 18 or newer, a LyraShield key `lsk_` for remote mode, and permission to add workflows. Cline reads MCP from `cline_mcp_settings.json` under `mcpServers` with keys such as `command`, `args`, `env`, `autoApprove`, `disabled`, and `type`. The `command` and `args` keys launch a local stdio server, `env` injects variables that Cline expands at runtime, and `type` selects the transport. Use `type: "streamableHttp"` for remote servers that expose a URL endpoint. The `disabled` key lets you toggle a server without deleting its entry. The editor docs and the [Cline documentation](https://docs.cline.bot/mcp/mcp-overview) describe this file, and the canonical steps are in the [Cline integration guide](/docs/integrations/cline). Warm the cache with `npx -y @lyrashield/mcp --help` so the first scan does not stall on package download. Review baseline risks via [OWASP Top 10](https://owasp.org/www-project-top-ten/) and dependency advisories via [OSV](https://osv.dev/). For protocol basics, see [Model Context Protocol intro](https://modelcontextprotocol.io/docs/getting-started/intro).
 
 ## 2. Configure Cline MCP servers
 
@@ -70,7 +71,7 @@ The `autoApprove` array controls which tool names run without your confirmation.
 
 ## 3. Verify the connection in Cline
 
-Reload VS Code after editing `cline_mcp_settings.json`, then open Cline and open MCP servers panel. You should see `lyrashield` and `lyrashield-remote` listed as active. Call "scan status" from the tool list. If auth fails, verify that `LYRASHIELD_API_KEY` is exported in the terminal that launched VS Code, because Cline inherits env from the host. If the server stays `disabled`, set `disabled: false` and reload. The [Cline MCP docs](https://docs.cline.bot/mcp) note that `autoApprove` can hide confirmations, so keep it minimal for security tools. For general MCP troubleshooting, the [MCP spec](https://modelcontextprotocol.io/specification/2025-03-26) describes tool discovery and error shapes.
+Reload VS Code after editing `cline_mcp_settings.json`, then open Cline and open MCP servers panel. You should see `lyrashield` and `lyrashield-remote` listed as active. Call "scan status" from the tool list. If auth fails, verify that `LYRASHIELD_API_KEY` is exported in the terminal that launched VS Code, because Cline inherits env from the host. If the server stays `disabled`, set `disabled: false` and reload. The [Cline MCP docs](https://docs.cline.bot/mcp/mcp-overview) note that `autoApprove` can hide confirmations, so keep it minimal for security tools. For general MCP troubleshooting, the [MCP spec](https://modelcontextprotocol.io/specification/2025-03-26) describes tool discovery and error shapes.
 
 A common failure is a silent key mismatch. If you launched VS Code from a desktop shortcut instead of a terminal where `LYRASHIELD_API_KEY` is exported, Cline sees an empty string and returns auth errors. Confirm the variable with `printenv LYRASHIELD_API_KEY` before relaunching. If remote mode connects but tool calls time out, verify that your network allows outbound HTTPS to `https://app.lyrashieldai.com`.
 
@@ -147,11 +148,11 @@ This codifies consistent security behavior between Cline, GitHub, and other edit
 
 Agent rules work because Cline reads `.clinerules` files at the start of every session and treats them as standing instructions. When you commit `.clinerules/security.md` to the repository, every contributor gets the same scan requirement without reading a wiki page. Keep rules short and imperative, five to seven lines maximum, because long rule files dilute attention. Pair the rules with a PR template that asks for the scan ID and SARIF link.
 
-| Mode | Config file | Launch style | Auth |
-| --- | --- | --- | --- |
-| Local | cline_mcp_settings.json | npx -y @lyrashield/mcp stdio | env LYRASHIELD_API_KEY |
-| Remote | cline_mcp_settings.json | streamableHttp | Bearer https://app.lyrashieldai.com/api/mcp |
-| CI gate | .github/workflows/lyrashield.yml | npx -y @lyrashield/mcp scan | secrets.LYRASHIELD_API_KEY |
+| Mode    | Config file                      | Launch style                 | Auth                                        |
+| ------- | -------------------------------- | ---------------------------- | ------------------------------------------- |
+| Local   | cline_mcp_settings.json          | npx -y @lyrashield/mcp stdio | env LYRASHIELD_API_KEY                      |
+| Remote  | cline_mcp_settings.json          | streamableHttp               | Bearer https://app.lyrashieldai.com/api/mcp |
+| CI gate | .github/workflows/lyrashield.yml | npx -y @lyrashield/mcp scan  | secrets.LYRASHIELD_API_KEY                  |
 
 ## 7. Why pair Cline with LyraShield
 

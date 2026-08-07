@@ -1,7 +1,7 @@
 ---
 title: MiMo Code app security checklist
 description: Secure a Xiaomi MiMo Code built app before launch with this evidence based checklist covering MCP config, permissions, secrets, dependencies, and verification.
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -16,6 +16,7 @@ faq:
   - q: Should I commit .mimocode/mimocode.jsonc to my repo?
     a: Commit the structure without secrets, but keep any apiKey or token in a user level file outside the repo. Plaintext secrets in a committed project file are a real risk.
 ---
+
 Secure a Xiaomi MiMo Code built app before launch by fixing the MCP root key, bounding agent permissions, keeping plaintext secrets out of committed config, verifying AI suggested dependencies, and separating detected signals from verified proof. MiMoCode uses the mcp root key and a flexible MCP model, so a silent misconfiguration or an over broad tool grant becomes a real release risk. This checklist follows the [vibe coding security guide](/blog/vibe-coding-security-guide) method: run an evidence loop and retain the receipts.
 
 ## 1. Lock down MiMo Code MCP configuration
@@ -26,7 +27,7 @@ Local servers take a `command` array plus an `environment` map. Remote servers t
 
 ## 2. Bound agent permissions and tool exposure
 
-MiMoCode exposes MCP tools to the agent session after the server starts, and every tool you grant becomes an action the model can choose autonomously. Treat each MCP server as a new privilege boundary. Prefer the principle of least privilege described in the [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0xa2-broken-object-level-authorization/): grant only the tools the task needs, disable servers you are not actively using with `enabled: false`, and review the tool list after any config change. Never grant a production database or billing tool to a coding agent that only needs read access to fix a bug.
+MiMoCode exposes MCP tools to the agent session after the server starts, and every tool you grant becomes an action the model can choose autonomously. Treat each MCP server as a new privilege boundary. Prefer the principle of least privilege described in the [OWASP API Security Top 10](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/): grant only the tools the task needs, disable servers you are not actively using with `enabled: false`, and review the tool list after any config change. Never grant a production database or billing tool to a coding agent that only needs read access to fix a bug.
 
 Keep a written record of which servers are enabled and who approved them. If an MCP server can write or delete data, that authority belongs in the release target scope alongside the [vibe coding security guide](/blog/vibe-coding-security-guide), not as an implicit default. A useful test is to ask what the agent could do if every enabled tool ran against production right now; if that list includes destructive or spend actions, narrow it before you ship. Pair that review with the [OWASP prompt injection guidance](https://owasp.org/www-project-top-10-for-large-language-model-applications/) so a hostile instruction from an issue or a document cannot turn a granted tool against you. Document the approval scope for each enabled server in a short access log, noting who authorized it and when the tool set last changed. Re run this log after every config edit, because a new server entry can inherit a broader tool set if copied from a template. Keep the log alongside your release evidence so a reviewer can trace any enabled tool to a named approval.
 
@@ -38,14 +39,14 @@ Run a secrets scan over the whole repository, not just the MiMoCode config. The 
 
 ## 4. Verify AI suggested dependencies
 
-Coding agents routinely add packages, and each one extends your supply chain. A clean install log is not proof that a dependency is safe. Begin with the resolved artifact, not the name in a source file, and inspect the dependency graph for unexpected transitive changes. The [OSV.dev](https://osv.dev/) database and NIST guidance on [software supply chain security](https://www.nist.gov/itl/ssdm/software-supply-chain-security) frame the risks: a single mutable or typosquatted package can compromise a protected repository.
+Coding agents routinely add packages, and each one extends your supply chain. A clean install log is not proof that a dependency is safe. Begin with the resolved artifact, not the name in a source file, and inspect the dependency graph for unexpected transitive changes. The [OSV.dev](https://osv.dev/) database and NIST guidance on [software supply chain security](https://www.nist.gov/itl/executive-order-14028-improving-nations-cybersecurity/software-supply-chain-security-guidance) frame the risks: a single mutable or typosquatted package can compromise a protected repository.
 
-| Check | What to verify | Evidence to retain |
-|---|---|---|
-| MCP root key | `mcp` not `mcpServers` | Config excerpt with server loaded |
-| Permissions | Only needed tools enabled | Tool list after config change |
-| Secrets | No plaintext keys committed | Secrets scan plus git history check |
-| Dependencies | Resolved versions reviewed | Lockfile diff and advisory match |
+| Check        | What to verify              | Evidence to retain                  |
+| ------------ | --------------------------- | ----------------------------------- |
+| MCP root key | `mcp` not `mcpServers`      | Config excerpt with server loaded   |
+| Permissions  | Only needed tools enabled   | Tool list after config change       |
+| Secrets      | No plaintext keys committed | Secrets scan plus git history check |
+| Dependencies | Resolved versions reviewed  | Lockfile diff and advisory match    |
 
 LyraShield's SCA layer matches resolved packages against advisory data and keeps the receipt, so a later reviewer can see what was checked and what was not. Pin transitive dependencies in your lockfile rather than accepting floating ranges, and run the resolution check after every agent generated commit to catch a swap that adds a new advisory. Compare the resolved hash against the registry hash to catch a substituted package before it reaches your build.
 

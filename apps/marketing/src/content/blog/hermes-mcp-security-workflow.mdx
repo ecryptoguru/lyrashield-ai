@@ -1,31 +1,31 @@
 ---
 title: Hermes MCP workflow for verified security scans
 description: Integrate LyraShield AI with Hermes AI via YAML config to run verified scans per target and enforce diff aware PR gating.
-pubDate: '2026-07-30'
+pubDate: "2026-07-30"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-19
 faq:
-  - q: 'Where does Hermes store MCP config?'
-    a: 'Global ~/.hermes/config.yaml under mcp_servers. Each entry uses tools include or exclude, ssl_verify flag, and ${env:VAR} for secrets. Remote URL https://app.lyrashieldai.com/api/mcp uses bearer header.'
-  - q: 'How do I verify the MCP connection?'
-    a: 'Restart Hermes, open the MCP panel, and list tools from lyrashield servers. Expect scan_target, get_finding, list_targets, and report tooling to appear with transport type.'
-  - q: 'Can I gate PRs from Hermes workflows?'
-    a: 'Yes. Add the LyraShield GitHub Action in diff aware mode with SARIF upload and require the security job in branch protection.'
-  - q: 'Where does Hermes read MCP server config from?'
-    a: 'Hermes reads MCP servers from its settings file under mcpServers with local stdio and remote entries. Use the pinned npx -y @lyrashield/mcp command for local and the remote endpoint with a Bearer lsk_ key for shared team or CI use. Keep the key in an env reference, never as a literal in the committed config.'
+  - q: "Where does Hermes store MCP config?"
+    a: "Global ~/.hermes/config.yaml under mcp_servers. Each entry uses tools include or exclude, ssl_verify flag, and ${env:VAR} for secrets. Remote URL https://app.lyrashieldai.com/api/mcp uses bearer header."
+  - q: "How do I verify the MCP connection?"
+    a: "Restart Hermes, open the MCP panel, and list tools from lyrashield servers. Expect scan_target, get_finding, list_targets, and report tooling to appear with transport type."
+  - q: "Can I gate PRs from Hermes workflows?"
+    a: "Yes. Add the LyraShield GitHub Action in diff aware mode with SARIF upload and require the security job in branch protection."
+  - q: "Where does Hermes read MCP server config from?"
+    a: "Hermes reads MCP servers from its settings file under mcpServers with local stdio and remote entries. Use the pinned npx -y @lyrashield/mcp command for local and the remote endpoint with a Bearer lsk_ key for shared team or CI use. Keep the key in an env reference, never as a literal in the committed config."
 ---
 
 You can pair Hermes AI with LyraShield AI over MCP to get target aware scans, verified findings, and fix PR drafts without leaving your agent workflow. In this guide you will add the local server using pinned npx -y @lyrashield/mcp plus the remote endpoint at https://app.lyrashieldai.com/api/mcp inside ~/.hermes/config.yaml, verify tool discovery, run a scoped inline check, and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
 
-Fast generation from Hermes is powerful, but without verification you can ship injection flaws, broken access control, and vulnerable deps. Use the [vibe coding security guide](/blog/vibe-coding-security-guide) as your policy spine, then map categories to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/archive/cwe/top25.html) for concrete weakness definitions that justify your triage order. The combination of vibe coding speed with verified scans is what keeps agents productive while still satisfying review requirements that security teams care about.
+Fast generation from Hermes is powerful, but without verification you can ship injection flaws, broken access control, and vulnerable deps. Use the [vibe coding security guide](/blog/vibe-coding-security-guide) as your policy spine, then map categories to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) for concrete weakness definitions that justify your triage order. The combination of vibe coding speed with verified scans is what keeps agents productive while still satisfying review requirements that security teams care about.
 
 LyraShield follows a clear loop of Target to Scan to Verified Finding to Fix PR to Retest to Report, designed to keep human approval in place while the engine matures.
 
 ## 1. Prerequisites and project baseline
 
-You need Node.js 20 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Hermes installed locally, Git with PR workflow, and a LyraShield API key shaped as lsk_... Export LYRASHIELD_API_KEY in your shell and never commit the raw value. Hermes reads `${env:VAR}` inside config.yaml at startup, so the indirect reference stays safe.
+You need Node.js 20 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Hermes installed locally, Git with PR workflow, and a LyraShield API key shaped as lsk\_... Export LYRASHIELD_API_KEY in your shell and never commit the raw value. Hermes reads `${env:VAR}` inside config.yaml at startup, so the indirect reference stays safe.
 
 LyraShield v1 is designed to cover agentic pentest plus SCA plus secrets scanning plus GitHub Action plus SARIF. Scan engine MVP and fix PR automation are on the roadmap and not yet live, so treat this as designed to require human review before merge. Read [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) to see why stdio suits local tools and streamable http suits remote servers.
 
@@ -118,7 +118,7 @@ Add OWASP mapping when present.
 Persist report id for PR gate.
 ```
 
-A good response contains finding id, severity, CWE, file and line, evidence snippet, and suggested patch location. LyraShield is designed to surface verified findings with evidence instead of speculative lints, so prioritize verified items. See [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/archive/cwe/top25.html) for definitions when triaging. When a finding maps to injection, the evidence snippet usually shows the unsanitized sink, which makes the fix obvious without additional hunting.
+A good response contains finding id, severity, CWE, file and line, evidence snippet, and suggested patch location. LyraShield is designed to surface verified findings with evidence instead of speculative lints, so prioritize verified items. See [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) for definitions when triaging. When a finding maps to injection, the evidence snippet usually shows the unsanitized sink, which makes the fix obvious without additional hunting.
 
 This inline step also surfaces secrets that were templated into fixtures. Since v1 includes secrets scanning alongside SCA, one scan can reveal both hardcoded creds and vulnerable packages. Rotate any exposed secret before merging the fix PR.
 
@@ -133,9 +133,9 @@ name: lyrashield security gate
 on:
   pull_request:
     paths:
-      - 'src/**'
-      - 'app/**'
-      - 'packages/**'
+      - "src/**"
+      - "app/**"
+      - "packages/**"
   push:
     branches: [main]
 
@@ -172,6 +172,7 @@ Add a repo local rules file that Hermes loads, for example hermes.md or .hermes/
 
 ```markdown
 # Hermes security rules
+
 - Before finishing a feature, call lyrashield scan_target on changed scope.
 - Only surface verified findings with CWE and file evidence.
 - For high severity verified findings, draft a fix branch via create_fix_pr_draft but require review before merge.
@@ -182,15 +183,15 @@ Add a repo local rules file that Hermes loads, for example hermes.md or .hermes/
 
 This file encodes the loop of Target to Scan to Verified Finding to Fix PR to Retest to Report as daily practice. Keep it in version control so all Hermes sessions inherit the guardrail. Teammates who clone the repo get identical verification without extra setup steps.
 
-| Stage | Hermes behavior | LyraShield verification | Evidence artifact |
-| --- | --- | --- | --- |
-| Generation | Generates APIs and UI from prompts via nousresearch patterns | N/A | Prompt trace |
-| Inline check | Calls scan_target with tight scope plus include filters | Verified findings plus SCA plus secrets with file proof | Finding id plus CWE plus file path |
-| PR gate | Pushes diff to GitHub | Diff aware scan plus SARIF plus fail on high | GitHub check green and code scanning annotations |
-| Fix loop | Opens draft branch on request | Context aware patch drafts designed to include tests | Retest that marks finding closed |
+| Stage        | Hermes behavior                                              | LyraShield verification                                 | Evidence artifact                                |
+| ------------ | ------------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------ |
+| Generation   | Generates APIs and UI from prompts via nousresearch patterns | N/A                                                     | Prompt trace                                     |
+| Inline check | Calls scan_target with tight scope plus include filters      | Verified findings plus SCA plus secrets with file proof | Finding id plus CWE plus file path               |
+| PR gate      | Pushes diff to GitHub                                        | Diff aware scan plus SARIF plus fail on high            | GitHub check green and code scanning annotations |
+| Fix loop     | Opens draft branch on request                                | Context aware patch drafts designed to include tests    | Retest that marks finding closed                 |
 
 ## Why pair Hermes with LyraShield
 
-Hermes gives you strong local capability and prompt control, but local generation still needs centralized policy. LyraShield adds verified evidence rather than noisy warnings, maps issues to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/archive/cwe/top25.html), explains dependency risk with context from [OSV database](https://osv.dev/), and keeps the workflow inside MCP so you avoid switching to a separate UI. The v1 scope stays honest: agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, with broader automation on the roadmap but not presented as live today. For Hermes users that value local control, this pairing preserves local execution for stdio while still giving you remote reporting via bearer auth when you need shared visibility.
+Hermes gives you strong local capability and prompt control, but local generation still needs centralized policy. LyraShield adds verified evidence rather than noisy warnings, maps issues to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), explains dependency risk with context from [OSV database](https://osv.dev/), and keeps the workflow inside MCP so you avoid switching to a separate UI. The v1 scope stays honest: agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, with broader automation on the roadmap but not presented as live today. For Hermes users that value local control, this pairing preserves local execution for stdio while still giving you remote reporting via bearer auth when you need shared visibility.
 
 Finish by running [AI app security checklist](/tools/ai-app-security-checklist) on the release candidate and confirming your yaml matches [Hermes integration guide](/docs/integrations/hermes). When ready to evaluate managed verification, [join the waitlist](https://lyrashieldai.com) and keep the PR gate as your source of truth.

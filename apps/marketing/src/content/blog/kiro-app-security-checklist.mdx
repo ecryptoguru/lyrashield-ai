@@ -1,7 +1,7 @@
 ---
 title: Kiro App Security Checklist for AI Built Code
 description: A security checklist for reviewing Kiro generated applications covering configuration, secrets, dependencies, and immutable evidence with LyraShield AI.
-pubDate: '2026-08-07'
+pubDate: "2026-08-07"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification]
 draft: false
@@ -21,7 +21,7 @@ Kiro generates full features from prompts, so a security checklist must review c
 
 ## 1. Review Kiro configuration and permissions
 
-Kiro plugins and agent configuration can load external MCP servers and skills, so lock down what the agent can reach before it generates anything. Start by inspecting the installed plugin set and the plugin manifest, then prune anything you did not intentionally add. A plugin you do not recognize is the highest risk item on this list, because a malicious plugin can run arbitrary MCP tools on your behalf the moment Kiro loads it. Limit file system and network access to the directories the project actually needs, and disable broad workspace access when a narrower scope works. Confirm that AGENTS.md and any security skill shipped by a plugin match your policy rather than silently overriding it, because a bundled skill can instruct the agent to skip checks you expect to run. The [OWASP guide to agentic AI](https://owasp.org/www-project-top-10-for-llm-applications/) is a useful baseline for agent permission boundaries. Review the plugin set after every update, because a version bump can change what a plugin does without an obvious signal. Kiro plugins install to a per user plugins directory, and each plugin carries a manifest file that declares its MCP server and skills, so read that manifest when a plugin behaves unexpectedly. If you used the LyraShield CLI to set up Kiro, run `npx lyrashield doctor` periodically to confirm the manifest still resolves and that no second plugin was added beside it.
+Kiro plugins and agent configuration can load external MCP servers and skills, so lock down what the agent can reach before it generates anything. Start by inspecting the installed plugin set and the plugin manifest, then prune anything you did not intentionally add. A plugin you do not recognize is the highest risk item on this list, because a malicious plugin can run arbitrary MCP tools on your behalf the moment Kiro loads it. Limit file system and network access to the directories the project actually needs, and disable broad workspace access when a narrower scope works. Confirm that AGENTS.md and any security skill shipped by a plugin match your policy rather than silently overriding it, because a bundled skill can instruct the agent to skip checks you expect to run. The [OWASP guide to agentic AI](https://owasp.org/www-project-top-10-for-large-language-model-applications/) is a useful baseline for agent permission boundaries. Review the plugin set after every update, because a version bump can change what a plugin does without an obvious signal. Kiro plugins install to a per user plugins directory, and each plugin carries a manifest file that declares its MCP server and skills, so read that manifest when a plugin behaves unexpectedly. If you used the LyraShield CLI to set up Kiro, run `npx lyrashield doctor` periodically to confirm the manifest still resolves and that no second plugin was added beside it.
 
 ## 2. Audit secrets handling in generated code
 
@@ -39,12 +39,12 @@ A checklist run is only useful if you can prove it happened and what it found, s
 
 Wire the checklist into your pull request flow so review cannot be skipped under deadline pressure. Block merge when secrets are found, when a dependency has an unpatched high severity advisory, or when the evidence record is missing. Run the LyraShield GitHub Action on the changed diff so only new risks block the build, not preexisting ones that would otherwise stall every pull request. Surface the results in the pull request comment for reviewers, and require an explicit human acknowledgement before a blocked finding is dismissed. This mirrors how teams apply CI gates generally, as described in the [GitHub Actions security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions). Treat the gate as the last automated checkpoint before a human merges, not as a substitute for reading the diff. When a finding is dismissed, require the reviewer to record why in the evidence record, so the dismissal is auditable later rather than a silent override.
 
-| Checklist area | What to review | Gate action |
-| --- | --- | --- |
-| Config and permissions | Plugin manifest, MCP servers, AGENTS.md | Remove unknown plugins |
-| Secrets handling | Hardcoded keys, tokens, connection strings | Block merge, rotate |
-| Dependencies | New packages, pinned versions, advisories | Block on high severity |
-| Evidence | Scan output linked to commit | Require before merge |
+| Checklist area         | What to review                             | Gate action            |
+| ---------------------- | ------------------------------------------ | ---------------------- |
+| Config and permissions | Plugin manifest, MCP servers, AGENTS.md    | Remove unknown plugins |
+| Secrets handling       | Hardcoded keys, tokens, connection strings | Block merge, rotate    |
+| Dependencies           | New packages, pinned versions, advisories  | Block on high severity |
+| Evidence               | Scan output linked to commit               | Require before merge   |
 
 ## Why pair Kiro with LyraShield AI
 

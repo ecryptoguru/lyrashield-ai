@@ -1,31 +1,31 @@
 ---
 title: OpenClaw MCP security workflow for agent verification
 description: Integrate LyraShield AI with OpenClaw via MCP and GitHub Action to verify builds, upload SARIF, and enforce diff aware checks.
-pubDate: '2026-07-30'
+pubDate: "2026-07-30"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-21
 faq:
-  - q: 'Where does OpenClaw store MCP config?'
-    a: 'Global ~/.openclaw/openclaw.json under mcp.servers. Use transport stdio for local npx -y @lyrashield/mcp and streamable-http for remote https://app.lyrashieldai.com/api/mcp with bearer header. openclaw mcp add can also create entries.'
-  - q: 'How do I filter exposed tools?'
-    a: 'Use toolFilter allow list with scan_target, get_finding, list_targets, get_report, create_fix_pr_draft. Keeps the agent surface minimal and focused on verification.'
-  - q: 'Does OpenClaw support bearer auth for remote MCP?'
-    a: 'Yes. Set transport streamable-http, url https://app.lyrashieldai.com/api/mcp, and headers.Authorization to Bearer ${env:LYRASHIELD_API_KEY}.'
-  - q: 'How do I verify the LyraShield connection works in OpenClaw?'
-    a: 'Restart OpenClaw, then use the MCP panel to list servers and tools. Expect the lyrashield entry with scan_target, get_finding, and list_targets exposed. Run npx lyrashield doctor to confirm the config is valid, the server entry is present, and your credentials resolve before you run a scan.'
+  - q: "Where does OpenClaw store MCP config?"
+    a: "Global ~/.openclaw/openclaw.json under mcp.servers. Use transport stdio for local npx -y @lyrashield/mcp and streamable-http for remote https://app.lyrashieldai.com/api/mcp with bearer header. openclaw mcp add can also create entries."
+  - q: "How do I filter exposed tools?"
+    a: "Use toolFilter allow list with scan_target, get_finding, list_targets, get_report, create_fix_pr_draft. Keeps the agent surface minimal and focused on verification."
+  - q: "Does OpenClaw support bearer auth for remote MCP?"
+    a: "Yes. Set transport streamable-http, url https://app.lyrashieldai.com/api/mcp, and headers.Authorization to Bearer ${env:LYRASHIELD_API_KEY}."
+  - q: "How do I verify the LyraShield connection works in OpenClaw?"
+    a: "Restart OpenClaw, then use the MCP panel to list servers and tools. Expect the lyrashield entry with scan_target, get_finding, and list_targets exposed. Run npx lyrashield doctor to confirm the config is valid, the server entry is present, and your credentials resolve before you run a scan."
 ---
 
 You can connect OpenClaw to LyraShield AI over MCP to get target aware scans, verified findings with evidence, and fix PR drafts inside your normal agent loop. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp plus remote at https://app.lyrashieldai.com/api/mcp inside ~/.openclaw/openclaw.json, verify tool discovery, run a scoped inline check, and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
 
-OpenClaw is built to run many tools in parallel and to coordinate long lived sessions. That parallelism accelerates vibe coding and also expands attack surface quickly, which is why verification close to generation helps. Keep the [vibe coding security guide](/blog/vibe-coding-security-guide) open as your policy reference, then map findings to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/archive/cwe/top25.html) so triage has a shared vocabulary. Teams that generate large microservice surfaces in one session benefit most from this pairing, because otherwise review struggles to keep up with generation speed.
+OpenClaw is built to run many tools in parallel and to coordinate long lived sessions. That parallelism accelerates vibe coding and also expands attack surface quickly, which is why verification close to generation helps. Keep the [vibe coding security guide](/blog/vibe-coding-security-guide) open as your policy reference, then map findings to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) so triage has a shared vocabulary. Teams that generate large microservice surfaces in one session benefit most from this pairing, because otherwise review struggles to keep up with generation speed.
 
 LyraShield follows a loop of Target to Scan to Verified Finding to Fix PR to Retest to Report. It is designed to keep human approval in place while engine automation matures.
 
 ## 1. Prerequisites and workspace baseline
 
-You need Node.js 20 or newer which you can verify via [Node.js docs](https://nodejs.org/en/docs), OpenClaw CLI installed, Git with PR workflow, and a LyraShield key in form lsk_... Export LYRASHIELD_API_KEY in your shell. OpenClaw reads `${env:LYRASHIELD_API_KEY}` at runtime, so secrets stay out of checked in json.
+You need Node.js 20 or newer which you can verify via [Node.js docs](https://nodejs.org/en/docs), OpenClaw CLI installed, Git with PR workflow, and a LyraShield key in form lsk\_... Export LYRASHIELD_API_KEY in your shell. OpenClaw reads `${env:LYRASHIELD_API_KEY}` at runtime, so secrets stay out of checked in json.
 
 LyraShield v1 is designed to cover agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF. Scan engine MVP and fix PR automation are on the roadmap and not yet live, so treat steps as designed to require review before merge. For protocol context, see [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro).
 
@@ -67,7 +67,13 @@ JSON option with tool filtering:
           "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
         },
         "toolFilter": {
-          "allow": ["scan_target", "get_finding", "list_targets", "get_report", "create_fix_pr_draft"]
+          "allow": [
+            "scan_target",
+            "get_finding",
+            "list_targets",
+            "get_report",
+            "create_fix_pr_draft"
+          ]
         }
       },
       "lyrashield-remote": {
@@ -130,7 +136,7 @@ Include OWASP mapping when present.
 Save report id for PR gate.
 ```
 
-A verified answer should contain finding id, severity, CWE, file plus line, evidence snippet, and suggested patch location. LyraShield is designed to surface verified findings with evidence rather than speculative lints, so prioritize those. Refer to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/archive/cwe/top25.html) for category background during triage. When evidence shows a route missing auth, the fix is typically a middleware addition rather than rewriting the handler, which keeps patches small and reviewable.
+A verified answer should contain finding id, severity, CWE, file plus line, evidence snippet, and suggested patch location. LyraShield is designed to surface verified findings with evidence rather than speculative lints, so prioritize those. Refer to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) for category background during triage. When evidence shows a route missing auth, the fix is typically a middleware addition rather than rewriting the handler, which keeps patches small and reviewable.
 
 Since v1 includes secrets scanning alongside SCA, a single call can surface both hardcoded secrets and vulnerable packages. Treat inline scanning as early signal and keep PR gating as mandatory, because local checks can be skipped when developers are rushing to meet a demo.
 
@@ -145,9 +151,9 @@ name: lyrashield security gate
 on:
   pull_request:
     paths:
-      - 'src/**'
-      - 'app/**'
-      - 'packages/**'
+      - "src/**"
+      - "app/**"
+      - "packages/**"
   push:
     branches: [main]
 
@@ -184,6 +190,7 @@ Add a local rules file that OpenClaw loads at session start, such as openclaw.md
 
 ```markdown
 # OpenClaw security rules
+
 - Before marking a task done, call lyrashield scan_target on changed scope.
 - Surface only verified findings with CWE and file evidence.
 - For high severity verified findings, draft a fix branch via create_fix_pr_draft but require review before merge.
@@ -194,15 +201,15 @@ Add a local rules file that OpenClaw loads at session start, such as openclaw.md
 
 This encodes the loop Target to Scan to Verified Finding to Fix PR to Retest to Report as daily behavior. Store it in version control so new OpenClaw sessions inherit the same guardrails. Consistent rules across clones also mean that when OpenClaw runs in autonomous mode, it still follows the same verification steps a human developer would have taken.
 
-| Stage | OpenClaw behavior | LyraShield verification | Review signal |
-| --- | --- | --- | --- |
-| Generation | Generates APIs, workers, and UI in parallel | N/A | Session log |
-| Inline check | Calls scan_target with toolFilter allowed set | Verified findings plus SCA plus secrets with evidence | Finding id with CWE and file path |
-| PR gate | Pushes diff to GitHub | Diff aware scan plus SARIF plus fail on high | GitHub required check green |
-| Fix flow | Opens draft branch on request | Draft patch designed to include tests and retest | Retest marks finding closed in report |
+| Stage        | OpenClaw behavior                             | LyraShield verification                               | Review signal                         |
+| ------------ | --------------------------------------------- | ----------------------------------------------------- | ------------------------------------- |
+| Generation   | Generates APIs, workers, and UI in parallel   | N/A                                                   | Session log                           |
+| Inline check | Calls scan_target with toolFilter allowed set | Verified findings plus SCA plus secrets with evidence | Finding id with CWE and file path     |
+| PR gate      | Pushes diff to GitHub                         | Diff aware scan plus SARIF plus fail on high          | GitHub required check green           |
+| Fix flow     | Opens draft branch on request                 | Draft patch designed to include tests and retest      | Retest marks finding closed in report |
 
 ## Why pair OpenClaw with LyraShield
 
-OpenClaw gives you parallel tool use and strong session control, but parallelism without policy can ship risks faster than reviews catch them. LyraShield contributes verified findings with evidence instead of noisy warnings, maps each to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/archive/cwe/top25.html), adds dependency context from [OSV database](https://osv.dev/) patterns, and keeps the workflow inside MCP so you avoid context switching. The v1 scope stays honest: agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, with broader automation on the roadmap but not billed as live today. For OpenClaw teams that generate large surfaces quickly, this combination provides fast local signal plus mandatory PR protection, which is the minimum bar for keeping agent generated apps trustworthy.
+OpenClaw gives you parallel tool use and strong session control, but parallelism without policy can ship risks faster than reviews catch them. LyraShield contributes verified findings with evidence instead of noisy warnings, maps each to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), adds dependency context from [OSV database](https://osv.dev/) patterns, and keeps the workflow inside MCP so you avoid context switching. The v1 scope stays honest: agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, with broader automation on the roadmap but not billed as live today. For OpenClaw teams that generate large surfaces quickly, this combination provides fast local signal plus mandatory PR protection, which is the minimum bar for keeping agent generated apps trustworthy.
 
 Finish by running [AI app security checklist](/tools/ai-app-security-checklist) on the release candidate and confirming your json matches [OpenClaw integration guide](/docs/integrations/openclaw). When ready to evaluate managed verification, [join the waitlist](https://lyrashieldai.com) and keep the required security check as your source of truth for verification.
