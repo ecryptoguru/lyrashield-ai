@@ -41,6 +41,26 @@ describe("exportMarketplace", () => {
     await expect(readFile(path.join(output, "plugin.json"), "utf8")).resolves.toContain(
       "LyraShield AI"
     )
+    const claudeManifest = JSON.parse(
+      await readFile(path.join(output, ".claude-plugin", "plugin.json"), "utf8")
+    ) as { $schema?: string; repository?: string; version?: string }
+    const claudeMcp = JSON.parse(await readFile(path.join(output, ".mcp.json"), "utf8")) as {
+      mcpServers?: Record<string, { type?: string; url?: string }>
+    }
+    expect(claudeManifest).toMatchObject({
+      $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
+      repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
+      version: "0.1.9",
+    })
+    expect(claudeMcp.mcpServers).toEqual({
+      lyrashield: {
+        type: "streamable-http",
+        url: "https://app.lyrashieldai.com/api/mcp",
+      },
+    })
+    await expect(
+      readFile(path.join(output, "skills", "lyrashield", "SKILL.md"), "utf8")
+    ).resolves.toContain("Pre-PR check")
     await expect(readFile(path.join(output, "apps", "worker"))).rejects.toThrow()
     await expect(
       readFile(path.join(output, "zed-extension", "extension.toml"), "utf8")

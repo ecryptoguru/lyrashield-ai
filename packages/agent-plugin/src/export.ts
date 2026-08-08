@@ -32,6 +32,7 @@ const PUBLIC_FILES = [
   ".codex-plugin/plugin.json",
   ".cursor-plugin/plugin.json",
   ".kiro-plugin/plugin.json",
+  ".mcp.json",
 ] as const
 
 const MARKETPLACE_ARTIFACTS = [
@@ -67,6 +68,11 @@ export async function exportMarketplace(destination: string): Promise<void> {
       force: true,
     })
   }
+  // Claude Code loads skills and MCP configuration only from the plugin root.
+  await cp(path.join(pluginRoot, "skills"), path.join(destination, "skills"), {
+    recursive: true,
+    force: true,
+  })
   await cp(
     path.join(marketplaceDocs, "gemini-extension", "gemini-extension.json"),
     path.join(destination, "gemini-extension.json"),
@@ -103,7 +109,7 @@ export async function exportMarketplace(destination: string): Promise<void> {
         version: plugin.version,
         license: plugin.license,
         source: "@lyrashield/agent-plugin",
-        generatedFiles: [...PUBLIC_FILES, ...MARKETPLACE_ARTIFACTS],
+        generatedFiles: [...PUBLIC_FILES, "skills", ...MARKETPLACE_ARTIFACTS],
         forbidden: [
           "apps/web",
           "apps/worker",

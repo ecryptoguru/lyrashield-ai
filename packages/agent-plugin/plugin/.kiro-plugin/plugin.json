@@ -1,14 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "lyrashield",
-  "version": "0.1.0",
+  "version": "0.1.9",
   "description": "LyraShield AI security and release-assurance plugin",
   "author": {
     "name": "LyraShield AI",
     "url": "https://lyrashieldai.com"
   },
   "homepage": "https://lyrashieldai.com",
-  "repository": "https://github.com/ecryptoguru/lyrashieldai",
+  "repository": "https://github.com/ecryptoguru/lyrashield-marketplace",
   "license": "Apache-2.0",
   "keywords": [
     "security",
