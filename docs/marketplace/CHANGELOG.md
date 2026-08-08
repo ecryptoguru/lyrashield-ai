@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.10
+
+- Declared the bundled skill in the OpenAI/Codex manifest using the current plugin format.
+
 ## 0.1.9
 
 - Added Claude Code-native root `skills/` and `.mcp.json` artifacts.

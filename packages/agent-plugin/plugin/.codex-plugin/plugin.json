@@ -1,6 +1,6 @@
 {
   "name": "lyrashield",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "LyraShield AI security and release-assurance plugin",
   "skills": "./skills/",
   "author": {

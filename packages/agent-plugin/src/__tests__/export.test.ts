@@ -50,7 +50,7 @@ describe("exportMarketplace", () => {
     expect(claudeManifest).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
-      version: "0.1.9",
+      version: "0.1.10",
     })
     const codexManifest = JSON.parse(
       await readFile(path.join(output, ".codex-plugin", "plugin.json"), "utf8")
