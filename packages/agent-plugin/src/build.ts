@@ -30,6 +30,10 @@ ${renderMarkdownBody(LYRASHIELD_POLICY, 2)}
       client === "claude"
         ? { ...manifest, $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json" }
         : manifest
-    await writeFile(path.join(shimDir, "plugin.json"), JSON.stringify(clientManifest, null, 2), "utf-8")
+    await writeFile(
+      path.join(shimDir, "plugin.json"),
+      JSON.stringify(clientManifest, null, 2),
+      "utf-8"
+    )
   }
 }
