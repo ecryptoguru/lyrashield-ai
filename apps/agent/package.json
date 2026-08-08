@@ -16,7 +16,7 @@
     "@lyrashield/integrations": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "bullmq": "^5.81.2"
+    "bullmq": "^5.81.3"
   },
   "devDependencies": {
     "typescript": "^6.0.0",
