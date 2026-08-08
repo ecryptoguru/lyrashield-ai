@@ -1,5 +1,5 @@
-import { cookies } from "next/headers"
-import { requireWorkspaceAccess } from "@lyrashield/auth/server"
+import { cookies, headers } from "next/headers"
+import { auth, requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { isProd } from "@lyrashield/config"
 import { z } from "zod"
@@ -25,6 +25,12 @@ export async function POST(request: Request) {
       return apiError("FORBIDDEN", "You do not have permission to perform this action", 403)
     }
     const cookieStore = await cookies()
+    if (!session.apiKey && !session.oauth) {
+      await auth.api.updateSession({
+        headers: await headers(),
+        body: { activeWorkspaceId: parsed.data.workspaceId },
+      })
+    }
     cookieStore.set("activeWorkspaceId", parsed.data.workspaceId, {
       httpOnly: true,
       sameSite: "lax",

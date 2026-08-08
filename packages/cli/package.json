@@ -2,7 +2,7 @@
   "name": "lyrashield",
   "version": "0.1.0",
   "description": "LyraShield AI CLI \u2014 install, scan, and gate your AI coding agents.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

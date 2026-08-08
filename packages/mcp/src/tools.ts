@@ -1,8 +1,83 @@
 import { LyraShieldClient } from "@lyrashield/sdk"
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js"
 
 export type McpToolResult = {
   content: Array<{ type: "text"; text: string }>
   isError?: boolean
+  structuredContent?: Record<string, unknown>
+}
+
+export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
+  lyrashield_scan_target: {
+    title: "Run a LyraShield scan",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+  lyrashield_get_findings: { title: "Get findings", readOnlyHint: true, openWorldHint: false },
+  lyrashield_get_launch_readiness: {
+    title: "Get launch readiness",
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
+  lyrashield_create_report: {
+    title: "Create security report",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  lyrashield_list_workspaces: {
+    title: "List workspaces",
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
+  lyrashield_list_targets: { title: "List targets", readOnlyHint: true, openWorldHint: false },
+  lyrashield_get_scan_status: {
+    title: "Get scan status",
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
+  lyrashield_check_diff: { title: "Check a diff", readOnlyHint: true, openWorldHint: true },
+  lyrashield_run_pr_scan: {
+    title: "Run a pull-request scan",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+  lyrashield_explain_finding: {
+    title: "Explain a finding",
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
+  lyrashield_generate_fix_plan: {
+    title: "Generate a fix plan",
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
+  lyrashield_record_fix_proposal: {
+    title: "Record a fix proposal",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  lyrashield_verify_fix: {
+    title: "Verify a fix",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+  lyrashield_create_pr_security_recap: {
+    title: "Create pull-request security recap",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
 }
 
 export interface McpTool {
@@ -14,6 +89,12 @@ export interface McpTool {
    * before their handler runs — read-only tools are not. (S8)
    */
   mutating: boolean
+  annotations?: ToolAnnotations
+  outputSchema?: {
+    type: "object"
+    properties?: Record<string, object>
+    required?: string[]
+  }
   inputSchema: {
     type: "object"
     properties: Record<string, unknown>
@@ -48,6 +129,10 @@ async function apiCall(
 }
 
 function makeToolResult(data: unknown): McpToolResult {
+  const structuredContent =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : { data }
   return {
     content: [
       {
@@ -55,6 +140,7 @@ function makeToolResult(data: unknown): McpToolResult {
         text: JSON.stringify(data, null, 2),
       },
     ],
+    structuredContent,
   }
 }
 
@@ -62,6 +148,7 @@ function makeErrorResult(message: string): McpToolResult {
   return {
     content: [{ type: "text", text: JSON.stringify({ error: message }) }],
     isError: true,
+    structuredContent: { error: message },
   }
 }
 

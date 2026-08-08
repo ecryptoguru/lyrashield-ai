@@ -1,82 +1,12 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import Ajv from "ajv"
+import Ajv2020 from "ajv/dist/2020.js"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 
-const ajv = new Ajv({ strict: false })
+import pluginSchema from "../schemas/plugin.schema.json" with { type: "json" }
+import mcpSchema from "../schemas/mcp.schema.json" with { type: "json" }
 
-const pluginSchema = {
-  type: "object",
-  properties: {
-    $schema: { type: "string" },
-    name: { type: "string" },
-    version: { type: "string" },
-    description: { type: "string" },
-    author: {
-      type: "object",
-      properties: {
-        name: { type: "string" },
-        url: { type: "string" },
-      },
-    },
-    homepage: { type: "string" },
-    repository: { type: "string" },
-    license: { type: "string" },
-    keywords: {
-      type: "array",
-      items: { type: "string" },
-    },
-  },
-  required: ["name", "version"],
-} as const
-
-const mcpServerSchema = {
-  type: "object",
-  properties: {
-    type: { enum: ["stdio", "streamable-http", "sse"] },
-  },
-  required: ["type"],
-  oneOf: [
-    {
-      additionalProperties: false,
-      properties: {
-        type: { const: "stdio" },
-        command: { type: "string" },
-        args: { type: "array", items: { type: "string" } },
-      },
-      required: ["type", "command", "args"],
-    },
-    {
-      additionalProperties: false,
-      properties: {
-        type: { const: "streamable-http" },
-        url: { type: "string" },
-      },
-      required: ["type", "url"],
-    },
-    {
-      additionalProperties: false,
-      properties: {
-        type: { const: "sse" },
-        url: { type: "string" },
-      },
-      required: ["type", "url"],
-    },
-  ],
-} as const
-
-const mcpSchema = {
-  type: "object",
-  properties: {
-    $schema: { type: "string" },
-    mcpServers: {
-      type: "object",
-      additionalProperties: mcpServerSchema,
-    },
-  },
-  required: ["mcpServers"],
-} as const
-
+const ajv = new Ajv2020({ strict: false })
 const validatePluginJson = ajv.compile(pluginSchema)
 const validateMcpJson = ajv.compile(mcpSchema)
 

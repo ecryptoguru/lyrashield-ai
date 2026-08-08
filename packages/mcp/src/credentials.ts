@@ -18,12 +18,12 @@ import {
 
 export { CREDENTIALS_DIR, CREDENTIALS_FILE }
 
-export type Credentials = Pick<StoredCredentials, "apiKey" | "apiUrl">
+export type Credentials = Pick<StoredCredentials, "apiKey" | "oauthAccessToken" | "apiUrl">
 
 export class NoApiKeyError extends Error {
   constructor() {
     super(
-      "LYRASHIELD_API_KEY is not set and no credentials file was found. Run `lyrashield login` or set LYRASHIELD_API_KEY."
+      "No LyraShield bearer credential was found. Run `lyrashield login`, set LYRASHIELD_API_KEY, or set LYRASHIELD_OAUTH_ACCESS_TOKEN."
     )
     this.name = "NoApiKeyError"
   }

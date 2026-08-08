@@ -17,6 +17,7 @@ export {
   type McpTool,
   type McpToolResult,
   type ToolHandlerContext,
+  MCP_TOOL_ANNOTATIONS,
 } from "./tools"
 export { PromptInjectionGuard, type GuardResult } from "./prompt-injection-guard"
 export {

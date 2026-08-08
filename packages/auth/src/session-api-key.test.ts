@@ -7,6 +7,7 @@ const getSessionApi = vi.fn()
 vi.mock("./auth", () => ({
   auth: { api: { getSession: (...args: unknown[]) => getSessionApi(...args) } },
 }))
+vi.mock("./oauth", () => ({ verifyOAuthBearer: vi.fn().mockResolvedValue(null) }))
 
 const verifyApiKeyMock = vi.fn()
 const userFindUnique = vi.fn()

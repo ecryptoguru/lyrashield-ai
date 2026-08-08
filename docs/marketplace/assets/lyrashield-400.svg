@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" role="img" aria-labelledby="title desc">
+  <title id="title">LyraShield AI</title>
+  <desc id="desc">LyraShield AI shield mark</desc>
+  <rect width="400" height="400" rx="72" fill="#101828"/>
+  <path d="M200 54 316 96v92c0 76-49 127-116 158-67-31-116-82-116-158V96z" fill="#6ee7b7"/>
+  <path d="m143 202 38 38 77-83" fill="none" stroke="#101828" stroke-linecap="round" stroke-linejoin="round" stroke-width="24"/>
+</svg>

@@ -1,5 +1,11 @@
 import { logger } from "@lyrashield/logger"
-import { createAllTools, type McpTool, type McpToolResult, type ToolHandlerContext } from "./tools"
+import {
+  createAllTools,
+  MCP_TOOL_ANNOTATIONS,
+  type McpTool,
+  type McpToolResult,
+  type ToolHandlerContext,
+} from "./tools"
 import { PromptInjectionGuard } from "./prompt-injection-guard"
 
 /**
@@ -69,6 +75,8 @@ export class McpServer {
       name: t.name,
       description: t.description,
       inputSchema: t.inputSchema,
+      annotations: t.annotations ?? MCP_TOOL_ANNOTATIONS[t.name],
+      outputSchema: t.outputSchema ?? { type: "object", additionalProperties: true },
     }))
   }
 

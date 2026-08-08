@@ -160,6 +160,7 @@ export function createLyraShieldServer(options: CreateServerOptions = {}): {
     return {
       content: result.content,
       ...(result.isError ? { isError: true } : {}),
+      ...(result.structuredContent ? { structuredContent: result.structuredContent } : {}),
     }
   })
 

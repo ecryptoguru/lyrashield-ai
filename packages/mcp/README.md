@@ -6,7 +6,7 @@ Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **st
 
 ## What it can do
 
-Every tool calls the LyraShield REST API with your workspace API key. **Mutating tools require human approval** — the server asks you in-editor (MCP elicitation) before starting a scan, recording a fix proposal, or queueing a retest.
+Every tool calls the LyraShield REST API with a workspace API key or OAuth bearer. **Mutating tools require human approval** — the server asks you in-editor (MCP elicitation) before starting a scan, recording a fix proposal, or queueing a retest.
 
 | Tool                                  | Kind  | What it does                                                  |
 | ------------------------------------- | ----- | ------------------------------------------------------------- |
@@ -117,12 +117,12 @@ The remote endpoint runs the same guard and tools as stdio. Because a stateless 
 - **In a bare terminal with a TTY**: you're prompted on the controlling terminal.
 - **No approval channel available** (e.g. a headless process): mutating tools fail closed.
 
-### Trusted CI opt-out
+### Operator-only CI opt-out
 
-Set `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true` in the environment to skip the human-approval gate for remote mutating tools. This is a process-wide, fail-open opt-out and is intended only for genuinely trusted, pre-reviewed automation or CI. The local stdio server still prompts interactively even when this flag is set.
+Set `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true` only in a documented operator-controlled automation environment. It is not a marketplace or normal-user feature. OAuth clients can never use this bypass; every OAuth write remains scope- and approval-gated.
 
 Read-only tools never prompt. A read-only key is additionally rejected server-side for any write action.
 
 ## License
 
-UNLICENSED — © FusionWave AI. Not for redistribution.
+Apache-2.0 — LyraShield AI client artifact. The hosted LyraShield service remains proprietary.

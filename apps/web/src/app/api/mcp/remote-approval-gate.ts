@@ -5,7 +5,6 @@ import {
   getApproval,
   hashInput,
   verifyInputHash,
-  type VerifiedApiKey,
 } from "@lyrashield/db"
 import { McpServer, type McpToolResult, type RemoteApprovalGate } from "@lyrashield/mcp"
 import { env } from "@lyrashield/config"
@@ -46,7 +45,12 @@ function stripApprovalId(args: Record<string, unknown>): Record<string, unknown>
 }
 
 export interface RemoteApprovalGateOptions {
-  apiKeyInfo: VerifiedApiKey
+  apiKeyInfo: {
+    workspaceId: string
+    scopes: string[]
+    createdById: string
+    keyId: string
+  }
   toolContext: { apiBaseUrl: string; apiKey: string; fetchFn?: typeof fetch }
 }
 
@@ -55,8 +59,8 @@ export function makeRemoteApprovalGate(options: RemoteApprovalGateOptions): Remo
   const { workspaceId, scopes, createdById } = apiKeyInfo
 
   return async (toolName, args) => {
-    if (!scopes.includes("write")) {
-      return denied("This API key does not have write scope; mutating tools are refused.")
+    if (!scopes.includes("write") && !scopes.includes("lyrashield.write")) {
+      return denied("This connection does not have write scope; mutating tools are refused.")
     }
 
     const approvalIdArg = (args.approvalId as string | undefined) ?? undefined

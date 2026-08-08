@@ -39,6 +39,13 @@ export default function SignInPage() {
   // loading. Show a skeleton for the OAuth row while the probe is pending.
   const [providersLoading, setProvidersLoading] = useState(true)
 
+  function callbackURL(): string {
+    const requested = new URLSearchParams(window.location.search).get("callbackURL")
+    return requested && requested.startsWith("/") && !requested.startsWith("//")
+      ? requested
+      : "/dashboard"
+  }
+
   useEffect(() => {
     let active = true
     const oauthError = new URLSearchParams(window.location.search).get("error")
@@ -107,7 +114,7 @@ export default function SignInPage() {
       const { error: signInError } = await authClient.signIn.email({
         email,
         password,
-        callbackURL: "/dashboard",
+        callbackURL: callbackURL(),
       })
 
       if (signInError) {
@@ -134,7 +141,7 @@ export default function SignInPage() {
     try {
       const { error: socialError } = await authClient.signIn.social({
         provider: "github",
-        callbackURL: "/dashboard",
+        callbackURL: callbackURL(),
         errorCallbackURL: "/sign-in",
       })
       if (socialError) {
@@ -153,7 +160,7 @@ export default function SignInPage() {
     try {
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/dashboard",
+        callbackURL: callbackURL(),
       })
     } catch {
       setError("Google sign in failed. Please try again.")
@@ -168,7 +175,7 @@ export default function SignInPage() {
     try {
       const { error: socialError } = await authClient.signIn.social({
         provider: "microsoft",
-        callbackURL: "/dashboard",
+        callbackURL: callbackURL(),
         errorCallbackURL: "/sign-in",
       })
       if (socialError) {

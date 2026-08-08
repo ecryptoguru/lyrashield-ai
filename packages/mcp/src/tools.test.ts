@@ -5,6 +5,7 @@ import {
   createGetLaunchReadinessTool,
   createCreateReportTool,
   type ToolHandlerContext,
+  MCP_TOOL_ANNOTATIONS,
 } from "./tools"
 
 const mockFetch = vi.fn()
@@ -35,6 +36,18 @@ const context: ToolHandlerContext = {
 
 beforeEach(() => {
   mockFetch.mockReset()
+})
+
+describe("MCP safety metadata", () => {
+  it("annotates every published tool explicitly", async () => {
+    const { createAllTools } = await import("./tools")
+    const tools = createAllTools(context)
+    expect(tools).toHaveLength(Object.keys(MCP_TOOL_ANNOTATIONS).length)
+    for (const tool of tools) {
+      expect(MCP_TOOL_ANNOTATIONS[tool.name]).toBeDefined()
+      expect(typeof MCP_TOOL_ANNOTATIONS[tool.name]?.readOnlyHint).toBe("boolean")
+    }
+  })
 })
 
 describe("createScanTargetTool", () => {

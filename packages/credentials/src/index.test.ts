@@ -22,6 +22,7 @@ beforeEach(() => {
   readFile.mockReset()
   delete process.env.LYRASHIELD_API_KEY
   delete process.env.LYRASHIELD_API_URL
+  delete process.env.LYRASHIELD_OAUTH_ACCESS_TOKEN
 })
 
 afterEach(() => {
@@ -102,6 +103,14 @@ describe("resolveCredentials", () => {
     expect(resolved.apiKey).toBe("file-key")
     expect(resolved.apiUrl).toBe(DEFAULT_API_URL)
     expect(resolved.source).toBe("file")
+  })
+
+  it("accepts an OAuth bearer as the interactive credential fallback", async () => {
+    process.env.LYRASHIELD_OAUTH_ACCESS_TOKEN = "oauth-token"
+    readFile.mockRejectedValueOnce(enoent())
+    const resolved = await resolveCredentials()
+    expect(resolved.apiKey).toBe("oauth-token")
+    expect(resolved.source).toBe("env")
   })
 
   it("reports source none when nothing is configured", async () => {
