@@ -1,0 +1,16 @@
+{
+  "name": "lyrashield-ai",
+  "version": "0.1.0",
+  "description": "Evidence-backed release assurance for AI-built software.",
+  "mcpServers": {
+    "lyrashield": {
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
+    }
+  },
+  "contextFileName": "GEMINI.md",
+  "excludeTools": ["propose_fix", "execute_fix"]
+}

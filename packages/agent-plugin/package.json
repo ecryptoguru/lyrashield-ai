@@ -2,7 +2,7 @@
   "name": "@lyrashield/agent-plugin",
   "version": "0.1.0",
   "description": "LyraShield Agent Plugin package",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -16,6 +16,7 @@
   "files": [
     "dist",
     "plugin",
+    "schemas",
     "README.md"
   ],
   "scripts": {
@@ -23,6 +24,7 @@
     "typecheck": "tsc --noEmit",
     "build": "tsup",
     "build:plugin": "tsx src/build.ts",
+    "export:marketplace": "tsx src/export.ts",
     "prepublishOnly": "tsup",
     "test": "vitest run"
   },

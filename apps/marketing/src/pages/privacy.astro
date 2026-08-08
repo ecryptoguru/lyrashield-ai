@@ -1,0 +1,21 @@
+---
+import Base from "@layouts/Base.astro"
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/privacy", origin).toString()
+const supportEmail = (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
+const description = "LyraShield AI privacy practices for the hosted dashboard, OAuth connections, MCP, CLI, and public tools."
+---
+<Base title="Privacy | LyraShield AI" description={description} canonical={canonical} noindex>
+  <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+    <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Privacy · draft for approval</p>
+    <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Privacy at LyraShield AI</h1>
+    <p class="mt-6 text-lg leading-8 text-text-muted">This draft describes the current data flows and remains subject to founder and counsel approval before marketplace submission.</p>
+    <div class="prose prose-slate mt-12 max-w-none dark:prose-invert">
+      <h2>Data we process</h2><p>The dashboard processes account, workspace membership, integration, scan, finding, evidence, approval, and audit records needed to provide release assurance. OAuth stores client, consent, refresh-token, and access-token records; tokens are not placed in prompts or configuration snippets.</p>
+      <h2>Agent connections</h2><p>Hosted MCP requests carry a short-lived OAuth bearer or an API key. Each OAuth connection is bound to one workspace. We record privacy-safe connection and error events without token values, prompts, targets, findings, or report contents.</p>
+      <h2>Retention and sharing</h2><p>Customer records are retained according to the account and service configuration. Public scorecards are explicitly privacy-bounded. We do not sell customer data.</p>
+      <h2>Your choices</h2><p>You can disconnect OAuth clients, revoke tokens, delete API keys, and request account or workspace deletion through the dashboard or <a href={`mailto:${supportEmail}`}>{supportEmail}</a>.</p>
+      <h2>Security reports</h2><p>Report suspected vulnerabilities through the <a href="/security-reporting">security-reporting channel</a>. Do not include credentials or customer data.</p>
+    </div>
+  </article>
+</Base>

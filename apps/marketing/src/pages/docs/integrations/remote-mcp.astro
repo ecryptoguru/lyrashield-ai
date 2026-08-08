@@ -11,7 +11,7 @@ const updatedDate = "2026-07-31"
 const faqItems = [
   {
     q: "Can cloud editors run mutating LyraShield tools?",
-    a: "Remote mutating tools (scan triggers, finding submissions, report creation) require a human out-of-band approval. When a cloud agent calls one, the server returns a PENDING result with an approvalId and a URL. After a human approves it in the LyraShield dashboard, the agent can re-call the same tool with the approvalId to execute it once. Read-only inspection and reporting tools work everywhere without approval. A `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true` opt-out still exists for genuinely trusted CI, but the approval flow is the recommended path.",
+    a: "Remote mutating tools (scan triggers, finding submissions, report creation) require an explicit OAuth write scope plus human out-of-band approval. When a cloud agent calls one, the server returns a PENDING result with an approvalId and a URL. After a human approves it in the LyraShield dashboard, the agent can re-call the same tool with the approvalId to execute it once. Read-only inspection and reporting tools work everywhere without approval. An operator-only CI override exists outside marketplace UX.",
   },
   {
     q: "What is the difference between remote MCP and the GitHub Action?",
@@ -80,8 +80,9 @@ const jsonLd: unknown[] = [
     <strong>Human approval required:</strong> Remote mutating tools (scan triggers, finding
     submissions, report creation) return a PENDING result and an approval URL. They run only after a
     human approves the action in the LyraShield dashboard. Read-only inspection and reporting tools
-    work everywhere. A <code>LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true</code> opt-out still works for
-    genuinely trusted CI, but the approval flow is the recommended path.
+    work everywhere. OAuth connections are read-only by default; write scope is explicit and every
+    mutating call still enters the approval flow. The <code>LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true</code>
+    setting is operator-only and must not be exposed in marketplace setup.
   </div>
 
   <h2>Endpoint details</h2>

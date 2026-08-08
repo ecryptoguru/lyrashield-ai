@@ -1,11 +1,19 @@
 import { betterAuth } from "better-auth"
 import { prismaAdapter } from "better-auth/adapters/prisma"
-import { genericOAuth, microsoftEntraId } from "better-auth/plugins"
+import {
+  bearer,
+  deviceAuthorization,
+  genericOAuth,
+  jwt,
+  microsoftEntraId,
+} from "better-auth/plugins"
+import { oauthProvider } from "@better-auth/oauth-provider"
 import { prisma } from "@lyrashield/db"
 import type { MemberRole } from "@lyrashield/db"
 import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { isOAuthProviderConfigured } from "./oauth-providers"
+import { hasPermission, PERMISSIONS } from "./permissions"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
 const GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET
@@ -18,6 +26,85 @@ const secureCookies = new URL(env.BETTER_AUTH_URL).protocol === "https:"
 const githubEnabled = isOAuthProviderConfigured(GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET)
 const googleEnabled = isOAuthProviderConfigured(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
 const microsoftEnabled = isOAuthProviderConfigured(AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)
+
+export const OAUTH_WORKSPACE_CLAIM = "https://lyrashieldai.com/workspace_id"
+export const OAUTH_SCOPE_READ = "lyrashield.read"
+export const OAUTH_SCOPE_WRITE = "lyrashield.write"
+export const OAUTH_RESOURCE = new URL("/api/mcp", env.NEXT_PUBLIC_APP_URL).toString()
+export const OAUTH_ISSUER = new URL("/api/auth", env.BETTER_AUTH_URL).toString().replace(/\/$/, "")
+const oauthScopes = [
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+  OAUTH_SCOPE_READ,
+  OAUTH_SCOPE_WRITE,
+]
+
+const oauthProviderPlugin = oauthProvider({
+  loginPage: "/sign-in",
+  consentPage: "/oauth/consent",
+  scopes: oauthScopes,
+  validAudiences: [OAUTH_RESOURCE, env.NEXT_PUBLIC_APP_URL],
+  allowDynamicClientRegistration: true,
+  allowUnauthenticatedClientRegistration: true,
+  allowPublicClientPrelogin: true,
+  clientRegistrationDefaultScopes: oauthScopes.slice(0, 5),
+  clientRegistrationAllowedScopes: oauthScopes,
+  postLogin: {
+    page: "/oauth/select-workspace",
+    shouldRedirect: async ({ user, session, scopes }) => {
+      const needsWorkspace = scopes.includes(OAUTH_SCOPE_READ) || scopes.includes(OAUTH_SCOPE_WRITE)
+      if (!needsWorkspace || !session) return false
+      const workspaceId =
+        typeof session.activeWorkspaceId === "string" ? session.activeWorkspaceId : undefined
+      return !workspaceId || session.userId !== user.id
+    },
+    consentReferenceId: async ({ user, session, scopes }) => {
+      const needsWorkspace = scopes.includes(OAUTH_SCOPE_READ) || scopes.includes(OAUTH_SCOPE_WRITE)
+      if (!needsWorkspace || !session) return undefined
+      const workspaceId =
+        typeof session.activeWorkspaceId === "string" ? session.activeWorkspaceId : undefined
+      if (!workspaceId) throw new Error("OAUTH_WORKSPACE_REQUIRED")
+      const member = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: user.id } },
+        select: { status: true },
+      })
+      if (member?.status !== "active") throw new Error("OAUTH_WORKSPACE_ACCESS_REVOKED")
+      return workspaceId
+    },
+  },
+  customAccessTokenClaims: async ({ user, scopes, referenceId, resource }) => {
+    if (!user || !referenceId || (resource && resource !== OAUTH_RESOURCE)) return {}
+
+    const member = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId: referenceId, userId: user.id } },
+      select: { role: true, status: true },
+    })
+    if (!member || member.status !== "active") throw new Error("OAUTH_WORKSPACE_ACCESS_REVOKED")
+    if (scopes.includes(OAUTH_SCOPE_WRITE) && !hasPermission(member.role, PERMISSIONS.agent.act)) {
+      throw new Error("OAUTH_WRITE_SCOPE_FORBIDDEN")
+    }
+
+    return {
+      [OAUTH_WORKSPACE_CLAIM]: referenceId,
+    }
+  },
+  advertisedMetadata: {
+    scopes_supported: oauthScopes,
+    claims_supported: [
+      "sub",
+      "iss",
+      "aud",
+      "exp",
+      "iat",
+      "sid",
+      "scope",
+      "azp",
+      OAUTH_WORKSPACE_CLAIM,
+    ],
+  },
+})
 /**
  * Verification is enforced when it is both asked for and actually deliverable.
  *
@@ -181,21 +268,30 @@ export const auth = betterAuth({
       disableSignUp: false,
     },
   },
-  plugins: microsoftEnabled
-    ? [
-        genericOAuth({
-          config: [
-            microsoftEntraId({
-              clientId: AZURE_AD_CLIENT_ID ?? "",
-              clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
-              tenantId: AZURE_AD_TENANT_ID || "common",
-              disableSignUp: false,
-            }),
-          ],
-        }),
-      ]
-    : [],
+  plugins: [
+    jwt(),
+    bearer(),
+    deviceAuthorization({ verificationUri: "/device" }),
+    oauthProviderPlugin,
+    ...(microsoftEnabled
+      ? [
+          genericOAuth({
+            config: [
+              microsoftEntraId({
+                clientId: AZURE_AD_CLIENT_ID ?? "",
+                clientSecret: AZURE_AD_CLIENT_SECRET ?? "",
+                tenantId: AZURE_AD_TENANT_ID || "common",
+                disableSignUp: false,
+              }),
+            ],
+          }),
+        ]
+      : []),
+  ],
   session: {
+    additionalFields: {
+      activeWorkspaceId: { type: "string", required: false, input: true },
+    },
     expiresIn: 60 * 60 * 24 * 7, // 7 days (rolling)
     updateAge: 60 * 60 * 24, // 1 day (refresh interval)
     cookieCache: {

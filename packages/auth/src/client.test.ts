@@ -16,6 +16,8 @@ describe("auth client", () => {
   it("uses Better Auth's same-origin endpoint instead of a build-time app URL", async () => {
     await import("./client")
 
-    expect(createAuthClient).toHaveBeenCalledWith()
+    expect(createAuthClient).toHaveBeenCalledWith(
+      expect.objectContaining({ plugins: expect.any(Array) })
+    )
   })
 })

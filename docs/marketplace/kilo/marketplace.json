@@ -1,0 +1,15 @@
+{
+  "name": "lyrashield-ai",
+  "displayName": "LyraShield AI",
+  "description": "Evidence-backed release assurance for AI-built software.",
+  "license": "Apache-2.0",
+  "mcp": {
+    "url": "https://app.lyrashieldai.com/api/mcp",
+    "oauthProtectedResource": "https://app.lyrashieldai.com/.well-known/oauth-protected-resource",
+    "defaultScope": "lyrashield.read",
+    "writeScope": "lyrashield.write"
+  },
+  "skill": "skills/lyrashield/SKILL.md",
+  "support": "https://lyrashieldai.com/support",
+  "privacy": "https://lyrashieldai.com/privacy"
+}

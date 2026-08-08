@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("next/headers", () => ({
   cookies: () => Promise.resolve({ set: vi.fn() }),
+  headers: () => Promise.resolve(new Headers()),
 }))
 
 const requireWorkspaceAccess = vi.hoisted(() => vi.fn())
 vi.mock("@lyrashield/auth/server", () => ({
   requireWorkspaceAccess: (...args: unknown[]) => requireWorkspaceAccess(...args),
+  auth: { api: { updateSession: vi.fn() } },
 }))
 
 import { POST } from "./route"

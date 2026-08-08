@@ -2,7 +2,7 @@
   "name": "@lyrashield/cli",
   "version": "0.1.0",
   "description": "Alias package for the LyraShield AI CLI. Install via npm as @lyrashield/cli or as the unscoped lyrashield package.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

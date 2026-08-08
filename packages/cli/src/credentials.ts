@@ -14,13 +14,14 @@ import {
   CREDENTIALS_FILE,
   getEnvApiKey,
   getEnvApiUrl,
+  getEnvOAuthAccessToken,
   readCredentialsFile,
   resolveCredentials,
   type ResolvedCredentials,
   type StoredCredentials,
 } from "@lyrashield/credentials"
 
-export { CREDENTIALS_DIR, CREDENTIALS_FILE, getEnvApiKey, getEnvApiUrl }
+export { CREDENTIALS_DIR, CREDENTIALS_FILE, getEnvApiKey, getEnvApiUrl, getEnvOAuthAccessToken }
 
 export type Credentials = StoredCredentials
 export type EffectiveCredentials = ResolvedCredentials

@@ -33,11 +33,11 @@ const faqItems = [
   },
   {
     q: "Do I need an API key to use the MCP server?",
-    a: "Yes. Set the LYRASHIELD_API_KEY environment variable to a workspace key created in LyraShield under Settings → API keys. Keys are prefixed lsk_ and carry either read-only or read-and-write scopes.",
+    a: "No for marketplace clients: use the hosted OAuth connection and select one workspace. API keys remain available for CLI, CI, and agents without OAuth; set LYRASHIELD_API_KEY to a workspace key created under Settings → API keys.",
   },
   {
     q: "Which editors use the remote MCP endpoint instead of the local stdio server?",
-    a: "Cloud-hosted editors that cannot run local processes — such as Lovable, Bolt.new, Replit, and v0 — use the remote Streamable-HTTP endpoint at https://app.lyrashieldai.com/api/mcp with a Bearer API key. Read-only MCP tools work everywhere; remote mutating tools require an explicit opt-in.",
+    a: "Cloud-hosted editors that cannot run local processes — such as Lovable, Bolt.new, Replit, and v0 — use protected-resource discovery at https://app.lyrashieldai.com/api/mcp. OAuth is read-only by default; explicit write scope and LyraShield approval are required for mutating tools.",
   },
   {
     q: "Is the @lyrashield/mcp package available on npm now?",
@@ -46,6 +46,10 @@ const faqItems = [
   {
     q: "Can I use LyraShield in a CI pipeline without an AI editor?",
     a: "Yes. The GitHub Action integration runs LyraShield checks directly in your workflow without any AI assistant. It is the recommended path for cloud-only editors and for teams that want automated checks on every pull request.",
+  },
+  {
+    q: "How does CLI login work without pasting a secret?",
+    a: "Run lyrashield login --oauth. The CLI opens the LyraShield device-authorization page, lets you choose one workspace, and stores the short-lived bearer locally. API-key login remains available for CI and non-interactive environments.",
   },
   {
     q: "Is there a CLI, or do I have to hand-edit config files?",
@@ -196,7 +200,9 @@ const jsonLd: unknown[] = [
   <h2>Remote MCP endpoint</h2>
   <p>
     Cloud editors that cannot run local processes connect to the remote Streamable-HTTP endpoint at
-    <code>https://app.lyrashieldai.com/api/mcp</code> with a Bearer API key. The
+    <code>https://app.lyrashieldai.com/api/mcp</code>. Marketplace clients discover the OAuth
+    authorization server automatically, select exactly one workspace, and start with read access.
+    The
     <a href="/docs/integrations/remote-mcp">Remote MCP</a> guide covers Lovable, Bolt.new, Replit,
     and v0. The <a href="/docs/integrations/github-action">GitHub Action</a> is the recommended
     complement for automated PR checks.
@@ -207,6 +213,15 @@ const jsonLd: unknown[] = [
       <span class="nav-card__sub">Lovable · Bolt.new · Replit · v0</span>
     </a>
   </div>
+
+  <h2 id="oauth">Hosted OAuth connection</h2>
+  <p>
+    OAuth clients use authorization code + PKCE (S256), refresh and revocation, and a consent screen
+    that names the client, workspace, and requested scopes. A connection is bound to one active
+    workspace; changing workspaces requires disconnecting and reconnecting. Write scope is optional,
+    and every write still enters the exact-argument approval flow. Use the API-key guide below only
+    for CI or clients that cannot complete OAuth.
+  </p>
 
   <h2>Cross-cutting setup</h2>
   <div class="nav-cards">

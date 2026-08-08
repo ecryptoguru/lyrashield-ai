@@ -1,23 +1,23 @@
-import { verifyApiKey, type VerifiedApiKey } from "@lyrashield/db"
+import { verifyApiKey } from "@lyrashield/db"
 import { handleRemoteMcpRequest } from "@lyrashield/mcp"
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { makeRemoteApprovalGate } from "./remote-approval-gate"
+import { verifyOAuthBearer } from "@lyrashield/auth/server"
 
 /**
  * Remote LyraShield MCP endpoint (Streamable HTTP) at /api/mcp.
  *
  * This is how cloud coding platforms that can't run a local stdio server
- * (Lovable, Bolt.new, Replit, v0, …) reach LyraShield. Authentication is the
+ * (Lovable, Bolt.new, Replit, v0, …) reach LyraShield. Authentication is a
  * workspace API key as a Bearer token — the same `lsk_` key used by the stdio
- * server; the tools re-call the REST API with it, so the I1 workspace-binding
- * and read/write scope enforcement apply uniformly.
+ * server — or an OAuth access token for the hosted MCP resource. The tools
+ * re-call the REST API with the same bearer, so workspace and scope enforcement
+ * apply uniformly.
  *
- * Mutating tools are refused here (no interactive approval channel over a
- * stateless HTTP request). A trusted automation can opt in process-wide via
- * LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true — off by default. Each remote
- * request is still bounded to its own workspace API key and its own write scope.
- * Interactive mutations belong on the local stdio server, which prompts the human.
+ * Mutating tools use the remote out-of-band approval gate. A trusted API-key
+ * automation can still opt in process-wide via
+ * LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true; OAuth clients never bypass it.
  *
  * Rate limiting is applied by the shared /api/* middleware bucket.
  */
@@ -32,29 +32,57 @@ function unauthorized(): Response {
   return new Response(
     JSON.stringify({
       jsonrpc: "2.0",
-      error: { code: -32001, message: "Unauthorized: valid LyraShield API key required" },
+      error: {
+        code: -32001,
+        message: "Unauthorized: valid LyraShield API key or OAuth bearer required",
+      },
       id: null,
     }),
     {
       status: 401,
       headers: {
         "Content-Type": "application/json",
-        "WWW-Authenticate": 'Bearer realm="LyraShield MCP"',
+        "WWW-Authenticate": `Bearer realm="LyraShield MCP", resource_metadata="${new URL("/.well-known/oauth-protected-resource", env.NEXT_PUBLIC_APP_URL).toString()}"`,
       },
     }
   )
 }
 
-async function authenticate(request: Request): Promise<VerifiedApiKey | null> {
+export interface RemoteAuthInfo {
+  workspaceId: string
+  scopes: string[]
+  createdById: string
+  keyId: string
+  prefix: string
+  kind: "api-key" | "oauth"
+}
+
+async function authenticate(request: Request): Promise<RemoteAuthInfo | null> {
   const header = request.headers.get("authorization")
   if (!header?.startsWith("Bearer ")) return null
-  const rawKey = header.slice("Bearer ".length).trim()
-  return verifyApiKey(rawKey)
+  const rawToken = header.slice("Bearer ".length).trim()
+  if (!rawToken) return null
+
+  if (rawToken.startsWith("lsk_")) {
+    const apiKey = await verifyApiKey(rawToken)
+    return apiKey ? { ...apiKey, kind: "api-key" } : null
+  }
+
+  const oauth = await verifyOAuthBearer(rawToken)
+  if (!oauth) return null
+  return {
+    workspaceId: oauth.workspaceId,
+    scopes: oauth.scopes,
+    createdById: oauth.userId,
+    keyId: `oauth:${oauth.clientId ?? "client"}`,
+    prefix: "oauth",
+    kind: "oauth",
+  }
 }
 
 async function handle(request: Request): Promise<Response> {
-  const apiKeyInfo = await authenticate(request)
-  if (!apiKeyInfo) return unauthorized()
+  const authInfo = await authenticate(request)
+  if (!authInfo) return unauthorized()
 
   try {
     const toolContext = {
@@ -64,13 +92,14 @@ async function handle(request: Request): Promise<Response> {
 
     return await handleRemoteMcpRequest(request, {
       toolContext,
-      allowMutations: ALLOW_REMOTE_MUTATIONS,
+      // Only the explicit API-key automation path may bypass OOB approval.
+      allowMutations: ALLOW_REMOTE_MUTATIONS && authInfo.kind === "api-key",
       remoteApprovalContext: {
-        workspaceId: apiKeyInfo.workspaceId,
-        scopes: apiKeyInfo.scopes,
-        apiKeyInfo: { keyId: apiKeyInfo.keyId, createdById: apiKeyInfo.createdById },
+        workspaceId: authInfo.workspaceId,
+        scopes: authInfo.scopes,
+        apiKeyInfo: { keyId: authInfo.keyId, createdById: authInfo.createdById },
       },
-      remoteApprovalGate: makeRemoteApprovalGate({ apiKeyInfo, toolContext }),
+      remoteApprovalGate: makeRemoteApprovalGate({ apiKeyInfo: authInfo, toolContext }),
     })
   } catch (err) {
     logger.error("Remote MCP request failed", {

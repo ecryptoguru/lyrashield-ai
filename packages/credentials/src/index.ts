@@ -31,6 +31,9 @@ export const DEFAULT_API_URL = "https://app.lyrashieldai.com"
 
 export interface StoredCredentials {
   apiKey?: string
+  oauthAccessToken?: string
+  oauthRefreshToken?: string
+  oauthExpiresAt?: string
   apiUrl?: string
   workspaceId?: string
   installId: string
@@ -54,6 +57,10 @@ export function getEnvApiUrl(): string | undefined {
   return process.env.LYRASHIELD_API_URL
 }
 
+export function getEnvOAuthAccessToken(): string | undefined {
+  return process.env.LYRASHIELD_OAUTH_ACCESS_TOKEN
+}
+
 /**
  * Normalize a parsed credentials object to the known field set, trimming string
  * values and dropping unknown keys. A hand-edited or partially-written file can
@@ -66,6 +73,10 @@ export function normalizeCredentials(parsed: Partial<StoredCredentials>): Stored
   }
   if (typeof parsed.apiKey === "string" && parsed.apiKey.trim()) {
     normalized.apiKey = parsed.apiKey.trim()
+  }
+  for (const field of ["oauthAccessToken", "oauthRefreshToken", "oauthExpiresAt"] as const) {
+    const value = parsed[field]
+    if (typeof value === "string" && value.trim()) normalized[field] = value.trim()
   }
   if (typeof parsed.apiUrl === "string" && parsed.apiUrl.trim()) {
     normalized.apiUrl = parsed.apiUrl.trim()
@@ -131,16 +142,17 @@ export async function resolveCredentials(
   options: { tolerateUnreadableFile?: boolean } = {}
 ): Promise<ResolvedCredentials> {
   const envKey = getEnvApiKey()
+  const envOAuth = getEnvOAuthAccessToken()
   const envUrl = getEnvApiUrl()
   const stored = options.tolerateUnreadableFile
     ? await tryReadCredentialsFile()
     : await readCredentialsFile()
 
   return {
-    apiKey: envKey ?? stored?.apiKey,
+    apiKey: envKey ?? envOAuth ?? stored?.apiKey ?? stored?.oauthAccessToken,
     apiUrl: envUrl ?? stored?.apiUrl ?? DEFAULT_API_URL,
     workspaceId: stored?.workspaceId,
     installId: stored?.installId,
-    source: envKey || envUrl ? "env" : stored ? "file" : "none",
+    source: envKey || envOAuth || envUrl ? "env" : stored ? "file" : "none",
   }
 }

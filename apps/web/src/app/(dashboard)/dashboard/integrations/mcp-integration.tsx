@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Check, Copy, Plug } from "lucide-react"
+import { Check, Copy, ExternalLink, Plug } from "lucide-react"
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui"
 import { writeClipboard } from "@/components/scorecard-share-composer"
 
@@ -62,6 +62,26 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
           Connect coding agents like Claude Code, Cursor, and cloud IDEs to LyraShield so they can
           read evidence and scan results from this workspace.
         </p>
+
+        <div className="border-primary/30 bg-primary/5 rounded-lg border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Recommended: connect with OAuth</p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                Marketplace clients use protected-resource discovery, select one workspace, and
+                start read-only. Write actions always stay behind LyraShield approval.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-10 shrink-0"
+              onClick={() => window.open(`${docsUrl}#oauth`, "_blank", "noopener,noreferrer")}
+            >
+              Connection guide <ExternalLink className="ml-1 size-3.5" aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
 
         <div className="space-y-1.5">
           <span className="text-sm font-medium">Endpoint</span>
@@ -190,13 +210,9 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
         </div>
 
         <p className="text-muted-foreground bg-muted/40 rounded-md border px-3 py-2 text-xs leading-relaxed">
-          Remote use is read-only by default. Your agent can fetch evidence and scan results;
-          changes that write data happen on the local stdio MCP server where you approve them. A
-          trusted automation can opt in to remote writes with{" "}
-          <code className="bg-muted rounded px-1 font-mono">
-            LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true
-          </code>
-          .
+          Remote OAuth connections are read-only by default. Any write scope is explicit and still
+          requires the exact-argument LyraShield approval flow. API keys remain available below for
+          CI and clients without OAuth.
         </p>
       </CardContent>
     </Card>

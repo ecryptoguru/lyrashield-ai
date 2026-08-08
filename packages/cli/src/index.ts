@@ -53,7 +53,7 @@ function usage(): string {
   return `lyrashield <command> [args]
 
 Commands:
-  login                Store an API key
+  login [--oauth]      Store an API key or complete OAuth device login
   logout               Remove stored credentials
   use <workspace>      Set default workspace
   agents               List registry agents and detection state

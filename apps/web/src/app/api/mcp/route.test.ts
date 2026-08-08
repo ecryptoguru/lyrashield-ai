@@ -10,6 +10,10 @@ vi.mock("@lyrashield/mcp", () => ({
 
 vi.mock("@lyrashield/config", () => ({ env: { NEXT_PUBLIC_APP_URL: "https://app.example.com" } }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+const verifyOAuthBearer = vi.fn()
+vi.mock("@lyrashield/auth/server", () => ({
+  verifyOAuthBearer: (...args: unknown[]) => verifyOAuthBearer(...args),
+}))
 
 import { POST } from "./route"
 
@@ -49,6 +53,25 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
       expect.objectContaining({
         toolContext: { apiBaseUrl: "https://app.example.com", apiKey: "lsk_good" },
         allowMutations: false,
+      })
+    )
+  })
+
+  it("accepts an OAuth bearer but never enables the remote-write bypass", async () => {
+    verifyOAuthBearer.mockResolvedValue({
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scopes: ["lyrashield.read", "lyrashield.write"],
+      clientId: "client-1",
+    })
+    handleRemoteMcpRequest.mockResolvedValue(new Response("{}", { status: 200 }))
+    const res = await POST(req("Bearer oauth-token"))
+    expect(res.status).toBe(200)
+    expect(handleRemoteMcpRequest).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.objectContaining({
+        allowMutations: false,
+        toolContext: { apiBaseUrl: "https://app.example.com", apiKey: "oauth-token" },
       })
     )
   })

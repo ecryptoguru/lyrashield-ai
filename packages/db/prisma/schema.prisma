@@ -23,6 +23,11 @@ model User {
   sessions      Session[]
   accounts      Account[]
   verifications Verification[]
+  oauthclients       OauthClient[]
+  oauthrefreshtokens OauthRefreshToken[]
+  oauthaccesstokens  OauthAccessToken[]
+  oauthconsents      OauthConsent[]
+  deviceCodes        DeviceCode[]
 
   @@map("users")
 }
@@ -36,8 +41,11 @@ model Session {
   ipAddress    String?
   userAgent    String?
   userId       String
+  activeWorkspaceId String?
 
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oauthrefreshtokens OauthRefreshToken[]
+  oauthaccesstokens  OauthAccessToken[]
 
   @@index([userId])
   @@map("sessions")
@@ -77,6 +85,142 @@ model Verification {
 
   @@index([identifier])
   @@map("verifications")
+}
+
+model DeviceCode {
+  id              String    @id
+  deviceCode      String    @unique
+  userCode        String    @unique
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt       DateTime
+  status          String
+  lastPolledAt    DateTime?
+  pollingInterval Int?
+  clientId        String?
+  scope           String?
+
+  @@index([userId])
+  @@map("device_codes")
+}
+
+// ─── Better Auth OAuth provider tables ─────────────────────────────────────
+// Generated from @better-auth/oauth-provider. The plural table names preserve
+// the existing Better Auth naming convention in this schema.
+
+model Jwks {
+  id         String    @id
+  publicKey  String
+  privateKey String
+  createdAt  DateTime
+  expiresAt  DateTime?
+
+  @@map("jwks")
+}
+
+model OauthClient {
+  id                      String              @id
+  clientId                String
+  clientSecret            String?
+  disabled                Boolean?            @default(false)
+  skipConsent             Boolean?
+  enableEndSession        Boolean?
+  subjectType             String?
+  scopes                  String[]
+  userId                  String?
+  user                    User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt               DateTime?
+  updatedAt               DateTime?
+  name                    String?
+  uri                     String?
+  icon                    String?
+  contacts                String[]
+  tos                     String?
+  policy                  String?
+  softwareId              String?
+  softwareVersion         String?
+  softwareStatement       String?
+  redirectUris            String[]
+  postLogoutRedirectUris  String[]
+  tokenEndpointAuthMethod String?
+  grantTypes              String[]
+  responseTypes           String[]
+  public                  Boolean?
+  type                    String?
+  requirePKCE             Boolean?
+  referenceId             String?
+  metadata                Json?
+  oauthrefreshtokens      OauthRefreshToken[]
+  oauthaccesstokens       OauthAccessToken[]
+  oauthconsents           OauthConsent[]
+
+  @@unique([clientId])
+  @@index([userId])
+  @@map("oauth_clients")
+}
+
+model OauthRefreshToken {
+  id                String             @id
+  token             String
+  clientId          String
+  oauthclient       OauthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId         String?
+  session           Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId       String?
+  expiresAt         DateTime?
+  createdAt         DateTime?
+  revoked           DateTime?
+  authTime          DateTime?
+  scopes            String[]
+  oauthaccesstokens OauthAccessToken[]
+
+  @@unique([token])
+  @@index([clientId])
+  @@index([sessionId])
+  @@index([userId])
+  @@map("oauth_refresh_tokens")
+}
+
+model OauthAccessToken {
+  id                String             @id
+  token             String?
+  clientId          String
+  oauthclient       OauthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId         String?
+  session           Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId            String?
+  user              User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId       String?
+  refreshId         String?
+  oauthrefreshtoken OauthRefreshToken? @relation(fields: [refreshId], references: [id], onDelete: Cascade)
+  expiresAt         DateTime?
+  createdAt         DateTime?
+  scopes            String[]
+
+  @@unique([token])
+  @@index([clientId])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([refreshId])
+  @@map("oauth_access_tokens")
+}
+
+model OauthConsent {
+  id          String      @id
+  clientId    String
+  oauthclient OauthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId String?
+  scopes      String[]
+  createdAt   DateTime?
+  updatedAt   DateTime?
+
+  @@index([clientId])
+  @@index([userId])
+  @@map("oauth_consents")
 }
 
 // ─── Application Models ─────────────────────────────────────────────────────

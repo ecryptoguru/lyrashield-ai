@@ -3,6 +3,7 @@ import { auth } from "./auth"
 import { prisma, setWorkspaceContext, verifyApiKey } from "@lyrashield/db"
 import type { MemberRole, WorkspaceMember } from "@lyrashield/db"
 import { hasPermission, hasMinimumRole, type Permission } from "./permissions"
+import { verifyOAuthBearer, type OAuthBearerContext } from "./oauth"
 
 export interface ApiKeyAuthContext {
   keyId: string
@@ -11,6 +12,8 @@ export interface ApiKeyAuthContext {
   scopes: string[]
   prefix: string
 }
+
+export type OAuthAuthContext = OAuthBearerContext
 
 export interface AuthSession {
   userId: string
@@ -25,6 +28,8 @@ export interface AuthSession {
    * workspace, and read-only keys are rejected for mutating permissions.
    */
   apiKey?: ApiKeyAuthContext
+  /** Present for a hosted MCP request authenticated with an OAuth bearer token. */
+  oauth?: OAuthAuthContext
 }
 
 /**
@@ -43,18 +48,25 @@ const READ_SCOPE_PERMISSIONS: ReadonlySet<string> = new Set([
   "report:download",
 ])
 
-async function getApiKeySession(): Promise<AuthSession | null> {
+async function getBearerSession(): Promise<AuthSession | null> {
   const headerList = await headers()
   const authorization = headerList.get("authorization")
-  if (!authorization?.startsWith("Bearer lsk_")) return null
+  if (!authorization?.startsWith("Bearer ")) return null
 
-  const verified = await verifyApiKey(authorization.slice("Bearer ".length).trim())
-  if (!verified) return null
+  const rawToken = authorization.slice("Bearer ".length).trim()
+  if (!rawToken) return null
+
+  const verified = rawToken.startsWith("lsk_") ? await verifyApiKey(rawToken) : null
+  const oauth = verified ? null : await verifyOAuthBearer(rawToken)
+  if (!verified && !oauth) return null
+
+  const userId = verified?.createdById ?? oauth?.userId
+  if (!userId) return null
 
   // The key acts on behalf of its creator. If the creator is gone (deleted
   // account), the key dies with them.
   const creator = await prisma.user.findUnique({
-    where: { id: verified.createdById },
+    where: { id: userId },
     select: { id: true, email: true, name: true, image: true },
   })
   if (!creator) return null
@@ -64,13 +76,17 @@ async function getApiKeySession(): Promise<AuthSession | null> {
     userEmail: creator.email,
     userName: creator.name,
     userImage: creator.image ?? null,
-    sessionId: `apikey:${verified.keyId}`,
-    apiKey: {
-      keyId: verified.keyId,
-      workspaceId: verified.workspaceId,
-      scopes: verified.scopes,
-      prefix: verified.prefix,
-    },
+    sessionId: verified ? `apikey:${verified.keyId}` : (oauth?.sessionId ?? `oauth:${userId}`),
+    ...(verified
+      ? {
+          apiKey: {
+            keyId: verified.keyId,
+            workspaceId: verified.workspaceId,
+            scopes: verified.scopes,
+            prefix: verified.prefix,
+          },
+        }
+      : { oauth: oauth! }),
   }
 }
 
@@ -96,7 +112,7 @@ export async function getSession(): Promise<AuthSession | null> {
 
   // No browser session — fall back to workspace API key bearer auth
   // (MCP server, CLI, CI). Cookie sessions always win when both are present.
-  return getApiKeySession()
+  return getBearerSession()
 }
 
 export async function requireAuth(): Promise<AuthSession> {
@@ -137,6 +153,9 @@ export async function requireWorkspaceAccess(
   if (session.apiKey && session.apiKey.workspaceId !== workspaceId) {
     throw new Error("FORBIDDEN")
   }
+  if (session.oauth && session.oauth.workspaceId !== workspaceId) {
+    throw new Error("FORBIDDEN")
+  }
 
   const ctx = await getWorkspaceMembership(workspaceId, session.userId)
 
@@ -172,7 +191,9 @@ export async function requirePermission(
 
   // Scope enforcement for API-key auth: read-only keys may exercise only the
   // explicit read allowlist; everything else requires the "write" scope.
-  if (session.apiKey && !session.apiKey.scopes.includes("write")) {
+  const hasWriteScope =
+    session.apiKey?.scopes.includes("write") ?? session.oauth?.scopes.includes("lyrashield.write")
+  if ((session.apiKey || session.oauth) && !hasWriteScope) {
     if (!READ_SCOPE_PERMISSIONS.has(permission)) {
       throw new Error("FORBIDDEN")
     }
