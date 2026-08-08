@@ -30,7 +30,7 @@ Set a real local `BETTER_AUTH_SECRET` in `.env`. When using Compose, set `REDIS_
 
 Optional auth/worker toggles in `.env`:
 
-- `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` — set to `1` to require verified email before sign-in. Requires `BREVO_API_KEY` and `EMAIL_FROM` to send verification and password-reset emails.
+- `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` — set to `1` to require verified email before sign-in. Requires `BREVO_API_KEY`, `EMAIL_FROM`, and `NOTIFICATION_FROM_EMAIL` to send verification and password-reset emails. A Brevo API key is provisioned and verified locally; Brevo IP security is disabled at the account level because production Azure Container Apps has dynamic outbound NAT IPs. See `docs/deployment/PRODUCTION_DEPLOYMENT.md` §1.
 - `LYRASHIELD_WORKER_CONCURRENCY` — BullMQ worker concurrency (default `1`).
 
 The web app expects `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_MARKETING_URL` (and optionally `PORT`) in `apps/web/.env`:
@@ -75,7 +75,7 @@ pnpm build
 git diff --check
 ```
 
-Current `main` passes **1357 core tests in 138 files**, **82 marketing tests in 12 files**, **16 motion tests**, and **3 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+Current `main` passes **1,482 core tests in 146 files** (8 skipped), **112 marketing tests in 15 files**, **16 motion tests**, and **3 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Use the CLI
 
@@ -84,7 +84,7 @@ The CLI package (`packages/cli`) builds from the same monorepo. With the local w
 ```bash
 cp .env apps/web/.env
 pnpm --filter @lyrashield/cli build
-npx @lyrashield/cli login        # uses LYRASHIELD_API_KEY from the environment
+npx @lyrashield/cli login        # OAuth device flow (browser) or LYRASHIELD_API_KEY from env
 npx @lyrashield/cli use <workspace>
 ```
 
