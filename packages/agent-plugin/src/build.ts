@@ -29,7 +29,14 @@ ${renderMarkdownBody(LYRASHIELD_POLICY, 2)}
     const clientManifest =
       client === "claude"
         ? { ...manifest, $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json" }
-        : manifest
+        : client === "codex"
+          ? (() => {
+              const openAiManifest = { ...manifest }
+              delete openAiManifest.$schema
+              const { name, version, description, ...metadata } = openAiManifest
+              return { name, version, description, skills: "./skills/", ...metadata }
+            })()
+          : manifest
     await writeFile(
       path.join(shimDir, "plugin.json"),
       JSON.stringify(clientManifest, null, 2),

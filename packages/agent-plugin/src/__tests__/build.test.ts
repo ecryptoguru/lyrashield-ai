@@ -22,6 +22,7 @@ describe("buildPlugin", () => {
       await access(shim)
       const content = await readFile(shim, "utf-8")
       expect(JSON.parse(content).name).toBe("lyrashield")
+      if (client === "codex") expect(JSON.parse(content).skills).toBe("./skills/")
     }
   })
 })

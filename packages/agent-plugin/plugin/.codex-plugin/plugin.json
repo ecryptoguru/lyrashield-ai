@@ -1,8 +1,8 @@
 {
-  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "lyrashield",
   "version": "0.1.9",
   "description": "LyraShield AI security and release-assurance plugin",
+  "skills": "./skills/",
   "author": {
     "name": "LyraShield AI",
     "url": "https://lyrashieldai.com"

@@ -52,6 +52,11 @@ describe("exportMarketplace", () => {
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
       version: "0.1.9",
     })
+    const codexManifest = JSON.parse(
+      await readFile(path.join(output, ".codex-plugin", "plugin.json"), "utf8")
+    ) as { $schema?: string; skills?: string }
+    expect(codexManifest).toMatchObject({ skills: "./skills/" })
+    expect(codexManifest.$schema).toBeUndefined()
     expect(claudeMcp.mcpServers).toEqual({
       lyrashield: {
         type: "streamable-http",
