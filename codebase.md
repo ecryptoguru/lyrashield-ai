@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current merged baseline — 2026-08-02:** 5 apps, 15 shared packages (including `packages/score`), 33 web page files, 69 API route files, 40 Prisma models, 18 enums, 30 migrations, and 21 RLS-protected workspace tables. **As of 2026-08-07 the 9 child tables (`ScanEvent`, `Evidence`, `ScanResultManifest`, `ScanCoverageReceipt`, `FixProposal`, `PullRequest`, `Ticket`, `ScorecardShare`, `ScorecardEvent`) have RLS re-enabled**, bringing database-level coverage to all 30 tables — `20260803000003_child_table_rls_disable` rolled back the enable after a production `42501` outage, and `20260807000003_child_table_rls_re_enable` restored it once the cause was traced to `account-deletion.ts` writing outside `withWorkspaceRLS`. See Deep Review v12 P0-1. PR #115 plus UX V2 Phases 0–10 and follow-up merges pass lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks. The follow-up merges add `Finding.statusReason`, engine PRs #20–#40 on the sibling repo, dashboard polling/ETag/API hardening, Redis architecture separation, deploy workflow smoke-check retries, UX V2 (mobile shell, terminology mapping, feature flags, notification preferences, V2 route aliases, Trust Command Center), a UX V2 polish batch (safe-area insets, bottom sheet animations, shared enum labels, ownership attestation, release verdict documentation, parallel queries, font preload, skeleton radius matching), and reach **1357 core tests in 138 files**, **82 marketing tests in 12 files**, **16 motion tests**, and **3 Playwright Chromium tests**. Sections 17–57 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current merged baseline — 2026-08-09:** 5 apps, 16 shared packages (including `packages/score` and `packages/agent-plugin`), 40 web page route files, 76 API route files, 43 Prisma models, 21 enums, 31 migrations, and 21 RLS-protected workspace tables. **As of 2026-08-07 the 9 child tables (`ScanEvent`, `Evidence`, `ScanResultManifest`, `ScanCoverageReceipt`, `FixProposal`, `PullRequest`, `Ticket`, `ScorecardShare`, `ScorecardEvent`) have RLS re-enabled**, bringing database-level coverage to all 30 tables — `20260803000003_child_table_rls_disable` rolled back the enable after a production `42501` outage, and `20260807000003_child_table_rls_re_enable` restored it once the cause was traced to `account-deletion.ts` writing outside `withWorkspaceRLS`. See Deep Review v12 P0-1. PR #247 merged the OAuth/legal/MCP/marketplace v0.1.8 reconciliation: hosted OAuth for MCP remote clients, CLI device login, legal/support pages, the `@lyrashield/agent-plugin` package, and marketplace v0.1.8 export. The full suite passes lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks, reaching **1,482 core tests in 146 files** (8 skipped), **112 marketing tests in 15 files**, **16 motion tests**, and **3 Playwright Chromium tests**. Sections 17–65 are dated implementation history; their older counts are checkpoints, not the current gate.
 
 ---
 
@@ -54,30 +54,30 @@ Public copy uses **LyraShield AI**. Internal package scopes (`@lyrashield/*`), e
 
 ## 2. Tech Stack
 
-| Layer                   | Technology                       | Version                                               |
-| ----------------------- | -------------------------------- | ----------------------------------------------------- |
-| Web framework           | Next.js (App Router, Turbopack)  | 16.2.x                                                |
-| Language                | TypeScript                       | 6.0.x                                                 |
-| Runtime                 | React                            | 19.x                                                  |
-| ORM                     | Prisma (with @prisma/adapter-pg) | 7.8.x                                                 |
-| Database                | PostgreSQL                       | 16 (Docker)                                           |
-| Cache/Queue             | Redis                            | 7 (Docker)                                            |
-| Auth                    | Better Auth                      | 1.6.x                                                 |
-| Validation              | Zod                              | 4.x                                                   |
-| Styling                 | TailwindCSS (CSS-first config)   | 4.3.x                                                 |
-| Component variants      | class-variance-authority (cva)   | 0.7.x                                                 |
-| Icons                   | lucide-react                     | 1.23.x                                                |
-| Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                       |
-| Testing                 | Vitest + Playwright              | 1357 core + 82 marketing + 16 motion + 3 Chromium E2E |
-| Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration  |
-| Job queue               | BullMQ                           | 5.80.x                                                |
-| Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate       |
-| MCP                     | JSON-RPC over stdio              | API-backed tools + prompt-injection guard             |
-| Scan engine             | Python controlled derivative     | 1.1.0.post1 over pinned Strix v1.1.0 substrate        |
-| Marketing site          | Astro 7 + @astrojs/cloudflare    | Server output on Cloudflare Workers                   |
-| Marketing storage       | Cloudflare D1                    | Waitlist + fallback-rate-limit migrations             |
-| Marketing rate limiting | Cloudflare Rate Limits           | WAITLIST_RL binding for waitlist API                  |
-| Marketing analytics     | PostHog                          | posthog-js client-side capture                        |
+| Layer                   | Technology                       | Version                                                |
+| ----------------------- | -------------------------------- | ------------------------------------------------------ |
+| Web framework           | Next.js (App Router, Turbopack)  | 16.2.x                                                 |
+| Language                | TypeScript                       | 6.0.x                                                  |
+| Runtime                 | React                            | 19.x                                                   |
+| ORM                     | Prisma (with @prisma/adapter-pg) | 7.8.x                                                  |
+| Database                | PostgreSQL                       | 16 (Docker)                                            |
+| Cache/Queue             | Redis                            | 7 (Docker)                                             |
+| Auth                    | Better Auth                      | 1.6.x                                                  |
+| Validation              | Zod                              | 4.x                                                    |
+| Styling                 | TailwindCSS (CSS-first config)   | 4.3.x                                                  |
+| Component variants      | class-variance-authority (cva)   | 0.7.x                                                  |
+| Icons                   | lucide-react                     | 1.23.x                                                 |
+| Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                        |
+| Testing                 | Vitest + Playwright              | 1482 core + 112 marketing + 16 motion + 3 Chromium E2E |
+| Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration   |
+| Job queue               | BullMQ                           | 5.80.x                                                 |
+| Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate        |
+| MCP                     | JSON-RPC over stdio              | API-backed tools + prompt-injection guard              |
+| Scan engine             | Python controlled derivative     | 1.1.0.post1 over pinned Strix v1.1.0 substrate         |
+| Marketing site          | Astro 7 + @astrojs/cloudflare    | Server output on Cloudflare Workers                    |
+| Marketing storage       | Cloudflare D1                    | Waitlist + fallback-rate-limit migrations              |
+| Marketing rate limiting | Cloudflare Rate Limits           | WAITLIST_RL binding for waitlist API                   |
+| Marketing analytics     | PostHog                          | posthog-js client-side capture                         |
 
 **Key version notes**:
 
@@ -352,7 +352,7 @@ Next.js page-data collection does not reliably load the root `.env`; export requ
 
 ### MCP
 
-`LYRASHIELD_API_URL` selects the product API (default `http://localhost:3000`); `LYRASHIELD_API_KEY` supplies MCP authentication when configured. On `feat/agent-plugin-integration`, the MCP server also resolves these from env vars or falls back to reading `~/.lyrashield/credentials.json` (the CLI credentials file, 0o600 perms) so no inline secrets are required. The MCP server is additionally distributed as a portable Agent Plugin via `@lyrashield/agent-plugin` (Agent Plugins v1.0.0), which packages the server plus skills with a `plugin.json` manifest, `mcp.json`, and `skills/lyrashield/SKILL.md`, and generates client-specific manifest shims for Claude, Cursor, Codex, and Kiro. A complete user-facing API-key issuance lifecycle is still pending. The current tool catalog, supported scan enums, and approval behavior are documented in `userguide.md` §22.
+`LYRASHIELD_API_URL` selects the product API (default `http://localhost:3000`); `LYRASHIELD_API_KEY` supplies MCP authentication when configured. The MCP server also resolves these from env vars or falls back to reading `~/.lyrashield/credentials.json` (the CLI credentials file, 0o600 perms) so no inline secrets are required. Remote MCP clients (`/api/mcp`) authenticate via hosted OAuth 2.0 with workspace selection and optional write scope, in addition to the existing `lsk_` API-key bearer flow. The MCP server is additionally distributed as a portable Agent Plugin via `@lyrashield/agent-plugin` (Agent Plugins v1.0.0), which packages the server plus skills with a `plugin.json` manifest, `mcp.json`, and `skills/lyrashield/SKILL.md`, and generates client-specific manifest shims for Claude, Cursor, Codex, and Kiro. A complete user-facing API-key issuance lifecycle is still pending. The current tool catalog, supported scan enums, and approval behavior are documented in `userguide.md` §22 and `packages/mcp/README.md`.
 
 ### Marketing Worker
 
@@ -2369,3 +2369,15 @@ A DEEP scan against an approved repository completed successfully after all fixe
 - **Homepage rewrite (PR #238):** `PremiumHero.astro`'s H1 changed to `"Ship AI-built apps with evidence, not hope."`, with an eyebrow, who-it's-for line, MCP-differentiator line, and dual CTAs (Lite Check anchored to the on-page `#free-scan` form via `seo.test.ts`'s updated canonical-navigation contract; account creation via `app.lyrashieldai.com/sign-up`). `lib/motion-manifest.ts`'s seven chapters (§49) were reworded in the same register; chapter `id`s, which key the immutable R2 motion media paths, are unchanged. A `@media (max-width: 480px)` block reorders the CTAs above the who-it's-for/differentiator copy via CSS `order` (DOM order, and therefore reading order and SEO, is untouched) and shrinks the H1 — verified in a headless-Chromium render of the actual `astro build` output, not asserted: the primary CTA's bounding box sits fully inside an 844px-tall 390px viewport. Desktop is byte-identical outside the new media query.
 - **A transitive `nanoid` advisory (GHSA-2v37-7h3g-55p8, high) was cleared (PR #240)** via a `pnpm-workspace.yaml` `overrides` entry (`nanoid: ">=3.3.17"`), not `package.json`'s `pnpm.overrides` field, which pnpm 11 silently ignores. `nanoid` is not a direct dependency anywhere in the workspace; it arrives via `postcss` → `vite` → `@astrojs/cloudflare`.
 - **Not yet done:** no scheduled workflow runs `blog:check-links`; a newly-dead external URL is only caught by a manual sweep or by already being in `DEAD_URLS`.
+
+## §65 — OAuth/legal routes, MCP endpoints, and marketplace v0.1.8 (2026-08-09, PR #247, `main` at `dae5153`)
+
+- **Hosted OAuth 2.0 for remote MCP clients is merged.** Remote MCP clients (`/api/mcp`) now authenticate via hosted OAuth with workspace selection and optional write scope, in addition to the existing `lsk_` API-key bearer flow. New routes in `apps/web/src/app/`: `/oauth/consent` (with `oauth-consent-form.tsx`), `/oauth/select-workspace` (with `oauth-workspace-picker.tsx`), `/device` and `/device/approve` (CLI device flow), `.well-known/oauth-authorization-server/api/auth`, `.well-known/oauth-protected-resource` (root), and `api/mcp/.well-known/oauth-protected-resource`. `apps/web/src/lib/oauth-resource-metadata.ts` provides the metadata helper. Remote connections are read-only by default; write actions require explicit scope and approval. OAuth clients can never use the `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS` bypass.
+- **OAuth provider schema is merged.** Migration `20260808000000_oauth_provider` adds `OAuthClient`, `OAuthConsent`, and `OAuthToken` models to `schema.prisma`, bringing the model count to 43 and the migration count to 31. `packages/auth/src/oauth.ts` implements the OAuth provider logic; `packages/auth/src/auth.ts` wires it into the Better Auth instance with advertised scopes and claims.
+- **CLI OAuth device login is merged.** `packages/cli/src/commands/login.ts` implements a `login` command that opens a browser-based device approval flow, writes tokens to `~/.lyrashield/credentials.json` (0o600 perms), and falls back to `LYRASHIELD_API_KEY` from the environment. `packages/credentials/src/index.ts` is the single source of truth for that file — its location, env-over-file precedence, default API URL, and normalization — shared by the CLI and MCP server so the two cannot drift; both bundle it via `noExternal` so it stays private.
+- **`@lyrashield/agent-plugin` package is merged.** Implements the open Agent Plugins v1.0.0 spec, packaging the MCP server and skills into a portable plugin with `plugin.json`, `mcp.json`, and `skills/lyrashield/SKILL.md`, plus client-specific manifest shims for Claude, Cursor, Codex, and Kiro. `packages/agent-plugin/src/export.ts` generates the deterministic marketplace release boundary; `packages/agent-plugin/schemas/plugin.schema.json` and `mcp.schema.json` validate the manifests. The plugin license is Apache-2.0; the hosted service remains proprietary. This brings the shared package count to 16.
+- **Marketplace v0.1.8 is tagged and released** at `ecryptoguru/lyrashield-marketplace` (tag `v0.1.8`, release https://github.com/ecryptoguru/lyrashield-marketplace/releases/tag/v0.1.8). The export reconciles the drifted v0.1.7 with current source, including the corrected Codebuff publisher slug (`lyrashield`), refreshed OAuth/legal link metadata, and the Apache-2.0 plugin license. `docs/marketplace/CHANGELOG.md` records the v0.1.8 release notes; `docs/marketplace/README.md` documents the export boundary, submission order, and submission tracking.
+- **Legal/support pages are merged.** `/privacy`, `/support`, and `/security-reporting` are live on the marketing site (`apps/marketing/src/pages/*.astro`).
+- **Brevo email integration is verified locally.** `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1` with `BREVO_API_KEY`, `EMAIL_FROM`, and `NOTIFICATION_FROM_EMAIL` set boots cleanly in `NODE_ENV=production`; a live test email was sent and accepted by Brevo (messageId `<202608082018.99543067577@smtp-relay.mailin.fr>`). Brevo IP security is disabled at the account level because Azure Container Apps Consumption has 180+ dynamic outbound NAT IPs that cannot be statically allowlisted. Production Container App secrets for `BREVO_API_KEY`, `EMAIL_FROM`, and `NOTIFICATION_FROM_EMAIL` are not yet provisioned — the production app still runs with `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0`.
+- **MCP server updates:** `packages/mcp/src/tools.ts` added safety metadata and structured results to tool calls. `packages/mcp/src/server.ts` and `packages/mcp/src/create-server.ts` updated for OAuth bearer token support. `packages/mcp/README.md` documents the remote (Streamable HTTP) endpoint, OAuth authentication, and the operator-only `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS` opt-out.
+- **Full test suite passes:** 1,482 core tests in 146 files (8 skipped), 112 marketing tests in 15 files, 16 motion tests, lint, typecheck, format check, and `apps/web` production build all green.

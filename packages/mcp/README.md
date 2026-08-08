@@ -93,9 +93,13 @@ Per-client config for OpenCode, Kilo Code, Cline, Zed, and the cloud platforms l
 
 The server reads `LYRASHIELD_API_KEY` and `LYRASHIELD_API_URL` from the environment first. If those are absent, it falls back to `~/.lyrashield/credentials.json` — the credentials file written by `lyrashield login` (with `0o600` permissions). This means `npx -y @lyrashield/mcp` works without any env vars after a single `lyrashield login`.
 
+`lyrashield login` uses an OAuth device flow: it opens a browser to approve the CLI, writes the resulting token to `~/.lyrashield/credentials.json`, and falls back to `LYRASHIELD_API_KEY` from the environment if the browser flow is unavailable. `packages/credentials` is the single source of truth for that file — its location, env-over-file precedence, default API URL, and normalization — shared by the CLI and MCP server so the two cannot drift.
+
 ### Remote (Streamable HTTP) — for cloud editors
 
-Point any remote-MCP-capable client at the hosted endpoint and authenticate with the same `lsk_` key as a Bearer token:
+Point any remote-MCP-capable client at the hosted endpoint. Two authentication methods are supported:
+
+**API key (Bearer token):**
 
 ```json
 {
@@ -108,6 +112,8 @@ Point any remote-MCP-capable client at the hosted endpoint and authenticate with
   }
 }
 ```
+
+**OAuth 2.0 (hosted):** remote clients that support OAuth 2.0 (per the MCP spec) can authenticate through the hosted OAuth flow at `/oauth/consent` with workspace selection and optional write scope. The discovery endpoints are `.well-known/oauth-authorization-server` and `.well-known/oauth-protected-resource`. Remote connections are read-only by default; write actions require explicit scope and approval.
 
 The remote endpoint runs the same guard and tools as stdio. Because a stateless HTTP request has no way to prompt a human, **mutating tools are refused over remote by default** — run those from the local stdio server (which prompts you), or use a pre-authorized trusted automation. Read-only tools work everywhere.
 
