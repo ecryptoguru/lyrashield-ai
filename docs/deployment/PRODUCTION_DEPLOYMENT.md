@@ -16,24 +16,24 @@
 
 Accepted risks that are live right now. Each one is a deliberate decision, not an oversight, and each has a defined way out. Review this list before any traffic-growth campaign.
 
-### 1. Email verification is disabled — open registration accepts unverified addresses
+### 1. Email verification is disabled in production — Brevo key verified locally, production secrets not yet provisioned
 
-**Status:** accepted, deferred. `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0` is set explicitly in `.github/workflows/deploy-azure.yml` and `.env.example`.
+**Status:** partially resolved. A Brevo API key is provisioned and verified locally (a live test email was sent and accepted by Brevo on 2026-08-08). `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1` with `BREVO_API_KEY`, `EMAIL_FROM`, and `NOTIFICATION_FROM_EMAIL` boots cleanly in `NODE_ENV=production` locally. However, the production `lyrashield-app` Container App still runs with `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0` and no `BREVO_API_KEY` secret, so production registration still accepts unverified addresses.
 
-**Exposure.** Registration is open, so anyone can create an account against an address they do not control and it will reach the dashboard. That permits impersonation of a real person or brand (`ceo@customer.example`), bot and throwaway sign-ups, and inflated activation numbers. Referral attribution is partly protected — rewards only settle after a referred workspace completes a real scan — but sign-up-level abuse is unmitigated.
+**Exposure.** Until the production Container App secrets are set, registration is open in production, so anyone can create an account against an address they do not control and it will reach the dashboard. That permits impersonation of a real person or brand (`ceo@customer.example`), bot and throwaway sign-ups, and inflated activation numbers. Referral attribution is partly protected — rewards only settle after a referred workspace completes a real scan — but sign-up-level abuse is unmitigated.
 
-**Why it is deferred.** No Brevo key is provisioned. The schema default is `"1"`, and production config validation refuses to boot when verification is required but undeliverable, so the flag must be `"0"` until a mail provider exists. That refusal is intentional: the app will not claim to verify addresses it cannot actually mail.
+**Brevo IP security.** Brevo's "Block unknown IP addresses" setting is disabled at the account level. Azure Container Apps Consumption has 180+ dynamic outbound NAT IPs that cannot be statically allowlisted; maintaining an IP allowlist would silently break email sending when the NAT pool changes. The trade-off is that any holder of the Brevo API key can send emails from any IP — protect the key accordingly.
 
 **Way out (small, well-defined).**
 
-1. Provision a Brevo API key and a verified sender address.
-2. Set `BREVO_API_KEY` and `EMAIL_FROM` as production secrets.
-3. Set the `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` repository variable to `1` (the deploy workflow reads it, defaulting to `0`).
+1. A Brevo API key is provisioned and verified. The sender address (`support@lyrashieldai.com`) must be verified in Brevo.
+2. Set `BREVO_API_KEY`, `EMAIL_FROM`, and `NOTIFICATION_FROM_EMAIL` as production secrets on the `lyrashield-app` Container App.
+3. Set the `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` environment variable to `1` on the Container App (or via a repository variable read by `deploy-azure.yml`).
 4. Deploy. `packages/auth` enforces verification once the flag and the provider are both present; the boot-time refinement in `packages/config/src/env.ts` guarantees the two can never disagree.
 
 **Do not** re-enable the flag without the key. The deploy will fail fast by design rather than silently accepting unverified sign-ups.
 
-**Related history.** The flag was declared in the env schema and read by no code until 2026-07-30, so setting it previously had no effect and real behaviour derived from whether `BREVO_API_KEY` happened to be set. It is now authoritative.
+**Related history.** The flag was declared in the env schema and read by no code until 2026-07-30, so setting it previously had no effect and real behaviour derived from whether `BREVO_API_KEY` happened to be set. It is now authoritative. PR #247 (2026-08-09) verified the full Brevo integration locally.
 
 ### 2. Verify the runtime database role cannot bypass RLS
 

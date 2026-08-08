@@ -42,6 +42,6 @@ program.
 - OpenClaw: [ClawHub listing](https://clawhub.ai/ecryptoguru/skills/lyrashield) is published as a community listing; it is not an official OpenClaw channel.
 - Kiro: submission was received and is awaiting review.
 - Claude: [plugin submission](https://platform.claude.com/plugins/submit) was received and is awaiting review.
-- Codebuff: [LyraShield AI publisher](https://codebuff.com/publishers/lyrashield) lists `lyrashield/lyrashield-review@0.1.0`.
+- Codebuff: [LyraShield AI publisher](https://codebuff.com/publishers/lyrashield) lists `lyrashield` (corrected in v0.1.8 from the drifted `lyrashield/lyrashield-review@0.1.0`).
 - Cursor: [publisher application](https://cursor.com/marketplace/publish) was submitted; awaiting review.
 - OpenAI/Codex: portal access is available, but creation is blocked by OpenAI's requirement for a valid default payment method before developer/business identity verification can begin.
