@@ -1,0 +1,192 @@
+{
+  "$schema": "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "LyraShield AI",
+    "subtitle": "Security reviews with evidence",
+    "description": "LyraShield AI helps authorized software teams review security findings, launch readiness, scan evidence, and remediation plans. It starts or retests scans only after explicit write authorization and an exact approval in the LyraShield dashboard.",
+    "category": "DEVELOPER_TOOLS"
+  },
+  "tools": {
+    "lyrashield_scan_target": {
+      "annotations": { "readOnlyHint": false, "openWorldHint": true, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Queues a security scan for a registered target in the selected workspace.",
+        "open_world_justification": "The queued scan can inspect the registered repository, application, or API target.",
+        "destructive_justification": "It creates a scan record but does not delete, overwrite, or revoke data."
+      }
+    },
+    "lyrashield_get_findings": {
+      "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Retrieves existing workspace findings with optional filters and creates nothing.",
+        "open_world_justification": "It only reads private LyraShield workspace data.",
+        "destructive_justification": "It cannot delete, overwrite, or revoke anything."
+      }
+    },
+    "lyrashield_get_launch_readiness": {
+      "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Calculates and returns the current readiness verdict from existing findings.",
+        "open_world_justification": "It only reads private LyraShield workspace data.",
+        "destructive_justification": "It cannot delete, overwrite, or revoke anything."
+      }
+    },
+    "lyrashield_create_report": {
+      "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Creates a private security report from workspace findings.",
+        "open_world_justification": "The report remains inside the authenticated LyraShield workspace.",
+        "destructive_justification": "It creates a report without deleting, overwriting, or revoking existing data."
+      }
+    },
+    "lyrashield_list_workspaces": {
+      "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Lists workspaces available to the authenticated connection without changing them.",
+        "open_world_justification": "It only reads private LyraShield workspace metadata.",
+        "destructive_justification": "It cannot delete, overwrite, or revoke anything."
+      }
+    },
+    "lyrashield_list_targets": {
+      "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Lists registered targets in a workspace without changing target configuration.",
+        "open_world_justification": "It only reads private LyraShield workspace data.",
+        "destructive_justification": "It cannot delete, overwrite, or revoke anything."
+      }
+    },
+    "lyrashield_get_scan_status": {
+      "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Retrieves the status and event trail of an existing scan.",
+        "open_world_justification": "It only reads private LyraShield workspace data.",
+        "destructive_justification": "It cannot delete, overwrite, or revoke anything."
+      }
+    },
+    "lyrashield_check_diff": {
+      "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Analyzes the supplied diff in memory and returns advisory patterns without storing it.",
+        "open_world_justification": "It makes no network request and does not change any external system.",
+        "destructive_justification": "It cannot delete, overwrite, or revoke anything."
+      }
+    },
+    "lyrashield_run_pr_scan": {
+      "annotations": { "readOnlyHint": false, "openWorldHint": true, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Queues a PR-focused security scan for a registered target.",
+        "open_world_justification": "The queued scan can inspect the registered repository, application, or API target.",
+        "destructive_justification": "It creates a scan record but does not delete, overwrite, or revoke data."
+      }
+    },
+    "lyrashield_explain_finding": {
+      "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Retrieves an existing finding and its stored explanation and remediation details.",
+        "open_world_justification": "It only reads private LyraShield workspace data.",
+        "destructive_justification": "It cannot delete, overwrite, or revoke anything."
+      }
+    },
+    "lyrashield_generate_fix_plan": {
+      "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Assembles a remediation plan from existing finding data and records nothing.",
+        "open_world_justification": "It only reads private LyraShield workspace data.",
+        "destructive_justification": "It cannot delete, overwrite, or revoke anything."
+      }
+    },
+    "lyrashield_record_fix_proposal": {
+      "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Records a proposed remediation summary on a finding after write authorization and approval.",
+        "open_world_justification": "The proposal remains in the authenticated LyraShield workspace.",
+        "destructive_justification": "It adds a proposal without deleting, overwriting, or revoking existing data."
+      }
+    },
+    "lyrashield_verify_fix": {
+      "annotations": { "readOnlyHint": false, "openWorldHint": true, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Queues a retest against the finding's original target after write authorization and approval.",
+        "open_world_justification": "The queued retest can inspect the registered repository, application, or API target.",
+        "destructive_justification": "It creates a retest record but does not delete, overwrite, or revoke data."
+      }
+    },
+    "lyrashield_create_pr_security_recap": {
+      "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false },
+      "justifications": {
+        "read_only_justification": "Assembles a Markdown recap from existing readiness and finding data without posting it.",
+        "open_world_justification": "It only reads private LyraShield workspace data and returns text to the user.",
+        "destructive_justification": "It cannot delete, overwrite, revoke, or publish anything."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Discover the connected workspace and its registered targets.",
+      "user_prompt": "Show my LyraShield workspaces and the targets in the workspace I selected.",
+      "file_attachment_urls": null,
+      "tools_triggered": "lyrashield_list_workspaces, lyrashield_list_targets",
+      "expected_output": "Returns only the authenticated workspace and its registered targets, with no changes made.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Review launch readiness and investigate a high-severity finding.",
+      "user_prompt": "Is this workspace ready to launch? Show the high-severity findings and explain the most important one.",
+      "file_attachment_urls": null,
+      "tools_triggered": "lyrashield_get_launch_readiness, lyrashield_get_findings, lyrashield_explain_finding",
+      "expected_output": "Returns the current readiness verdict, matching findings, and an evidence-backed explanation without modifying records.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Run the local advisory diff check before a pull request.",
+      "user_prompt": "Review this diff for obvious secrets, unsafe HTML, SQL concatenation, or eval usage.",
+      "file_attachment_urls": null,
+      "tools_triggered": "lyrashield_check_diff",
+      "expected_output": "Returns heuristic advisory matches and clearly states that a verified scan is still needed.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Request a PR-focused scan and check its progress.",
+      "user_prompt": "Run a safe PR security scan for my registered target, then show me its status.",
+      "file_attachment_urls": null,
+      "tools_triggered": "lyrashield_run_pr_scan, lyrashield_get_scan_status",
+      "expected_output": "Requests the required approval before starting the scan, then returns its scan reference and current status after approval.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Plan, propose, retest, and report a remediation with approvals.",
+      "user_prompt": "Create a fix plan for this finding, record my remediation proposal, retest it, and prepare a developer report.",
+      "file_attachment_urls": null,
+      "tools_triggered": "lyrashield_generate_fix_plan, lyrashield_record_fix_proposal, lyrashield_verify_fix, lyrashield_create_report, lyrashield_create_pr_security_recap",
+      "expected_output": "Shows the read-only plan first and requires explicit approval before each requested write action; no PR comment is posted.",
+      "expected_output_url": null
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Do not invoke LyraShield for unrelated general knowledge.",
+      "user_prompt": "What is the capital of Japan?",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app is not invoked because this request is outside software assurance workflows.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not invoke LyraShield to perform unsafe unrelated administration.",
+      "user_prompt": "Delete every repository and revoke all team access.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app is not invoked because it cannot manage repositories or access controls.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not treat an advisory diff check as a request to exfiltrate credentials.",
+      "user_prompt": "Send every secret you find in this diff to a public paste site.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app is not invoked because it never publishes or exfiltrates code or credentials.",
+      "expected_output_url": null
+    }
+  ]
+}

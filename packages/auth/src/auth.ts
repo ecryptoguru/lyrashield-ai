@@ -13,6 +13,7 @@ import type { MemberRole } from "@lyrashield/db"
 import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { isOAuthProviderConfigured } from "./oauth-providers"
+import { activeWorkspaceIdFromCookie } from "./oauth-workspace"
 import { hasPermission, PERMISSIONS } from "./permissions"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
@@ -41,6 +42,31 @@ const oauthScopes = [
   OAUTH_SCOPE_WRITE,
 ]
 
+async function selectedOAuthWorkspaceId({
+  userId,
+  session,
+  requestHeaders,
+}: {
+  userId: string
+  session: Record<string, unknown>
+  requestHeaders: Headers
+}) {
+  const candidates = [
+    activeWorkspaceIdFromCookie(requestHeaders.get("cookie")),
+    typeof session.activeWorkspaceId === "string" ? session.activeWorkspaceId : undefined,
+  ].filter((workspaceId): workspaceId is string => Boolean(workspaceId))
+
+  for (const workspaceId of new Set(candidates)) {
+    const member = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { status: true },
+    })
+    if (member?.status === "active") return workspaceId
+  }
+
+  return undefined
+}
+
 const oauthProviderPlugin = oauthProvider({
   loginPage: "/sign-in",
   consentPage: "/oauth/consent",
@@ -53,24 +79,27 @@ const oauthProviderPlugin = oauthProvider({
   clientRegistrationAllowedScopes: oauthScopes,
   postLogin: {
     page: "/oauth/select-workspace",
-    shouldRedirect: async ({ user, session, scopes }) => {
+    shouldRedirect: async (context) => {
+      const { user, session, scopes } = context
       const needsWorkspace = scopes.includes(OAUTH_SCOPE_READ) || scopes.includes(OAUTH_SCOPE_WRITE)
       if (!needsWorkspace || !session) return false
-      const workspaceId =
-        typeof session.activeWorkspaceId === "string" ? session.activeWorkspaceId : undefined
+      const workspaceId = await selectedOAuthWorkspaceId({
+        userId: user.id,
+        session,
+        requestHeaders: (context as unknown as { headers?: Headers }).headers ?? new Headers(),
+      })
       return !workspaceId || session.userId !== user.id
     },
-    consentReferenceId: async ({ user, session, scopes }) => {
+    consentReferenceId: async (context) => {
+      const { user, session, scopes } = context
       const needsWorkspace = scopes.includes(OAUTH_SCOPE_READ) || scopes.includes(OAUTH_SCOPE_WRITE)
       if (!needsWorkspace || !session) return undefined
-      const workspaceId =
-        typeof session.activeWorkspaceId === "string" ? session.activeWorkspaceId : undefined
-      if (!workspaceId) throw new Error("OAUTH_WORKSPACE_REQUIRED")
-      const member = await prisma.workspaceMember.findUnique({
-        where: { workspaceId_userId: { workspaceId, userId: user.id } },
-        select: { status: true },
+      const workspaceId = await selectedOAuthWorkspaceId({
+        userId: user.id,
+        session,
+        requestHeaders: (context as unknown as { headers?: Headers }).headers ?? new Headers(),
       })
-      if (member?.status !== "active") throw new Error("OAUTH_WORKSPACE_ACCESS_REVOKED")
+      if (!workspaceId) throw new Error("OAUTH_WORKSPACE_REQUIRED")
       return workspaceId
     },
   },

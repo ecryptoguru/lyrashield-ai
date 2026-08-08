@@ -46,6 +46,8 @@ describe("MCP safety metadata", () => {
     for (const tool of tools) {
       expect(MCP_TOOL_ANNOTATIONS[tool.name]).toBeDefined()
       expect(typeof MCP_TOOL_ANNOTATIONS[tool.name]?.readOnlyHint).toBe("boolean")
+      expect(typeof MCP_TOOL_ANNOTATIONS[tool.name]?.destructiveHint).toBe("boolean")
+      expect(typeof MCP_TOOL_ANNOTATIONS[tool.name]?.openWorldHint).toBe("boolean")
     }
   })
 })

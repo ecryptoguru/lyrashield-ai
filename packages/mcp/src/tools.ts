@@ -15,10 +15,16 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     idempotentHint: false,
     openWorldHint: true,
   },
-  lyrashield_get_findings: { title: "Get findings", readOnlyHint: true, openWorldHint: false },
+  lyrashield_get_findings: {
+    title: "Get findings",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   lyrashield_get_launch_readiness: {
     title: "Get launch readiness",
     readOnlyHint: true,
+    destructiveHint: false,
     openWorldHint: false,
   },
   lyrashield_create_report: {
@@ -31,15 +37,27 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   lyrashield_list_workspaces: {
     title: "List workspaces",
     readOnlyHint: true,
+    destructiveHint: false,
     openWorldHint: false,
   },
-  lyrashield_list_targets: { title: "List targets", readOnlyHint: true, openWorldHint: false },
+  lyrashield_list_targets: {
+    title: "List targets",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   lyrashield_get_scan_status: {
     title: "Get scan status",
     readOnlyHint: true,
+    destructiveHint: false,
     openWorldHint: false,
   },
-  lyrashield_check_diff: { title: "Check a diff", readOnlyHint: true, openWorldHint: true },
+  lyrashield_check_diff: {
+    title: "Check a diff",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   lyrashield_run_pr_scan: {
     title: "Run a pull-request scan",
     readOnlyHint: false,
@@ -50,11 +68,13 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   lyrashield_explain_finding: {
     title: "Explain a finding",
     readOnlyHint: true,
+    destructiveHint: false,
     openWorldHint: false,
   },
   lyrashield_generate_fix_plan: {
     title: "Generate a fix plan",
     readOnlyHint: true,
+    destructiveHint: false,
     openWorldHint: false,
   },
   lyrashield_record_fix_proposal: {
@@ -73,10 +93,9 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   },
   lyrashield_create_pr_security_recap: {
     title: "Create pull-request security recap",
-    readOnlyHint: false,
+    readOnlyHint: true,
     destructiveHint: false,
-    idempotentHint: false,
-    openWorldHint: true,
+    openWorldHint: false,
   },
 }
 
