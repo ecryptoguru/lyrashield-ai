@@ -113,7 +113,6 @@ export async function exportMarketplace(destination: string): Promise<void> {
         forbidden: [
           "apps/web",
           "apps/worker",
-          "apps/agent",
           "packages/db",
           ".env",
           "credentials.json",
