@@ -62,9 +62,9 @@ docker compose --profile marketing down
 
 This Docker target proves the generated static pages and assets. The Worker-backed preview above separately proves Wrangler routing, D1 migrations, and waitlist/referral API behavior because Astro's Cloudflare prerender subprocess is not reliable inside Docker Desktop's VM.
 
-## Authority blog and premium assurance world release
+## Authority blog, `/compare`, and the outcome-forward homepage
 
-PR #88 merged and deployed on 2026-07-17. The release manifest maps 100 published authority articles and a 36-image source-artwork library. The canonical homepage renders the premium seven-chapter assurance world; `/premium-preview` is intentionally absent in production.
+PR #88 merged and deployed on 2026-07-17 with an initial manifest of 100 published authority articles and a 36-image library. The program has since grown to **161 published articles across releases `authority` through `batch-10`, backed by a 75-image library** (`PROGRAM_ARTICLE_COUNT` and `IMAGE_CORPUS` in `apps/marketing/scripts/blog-validation-lib.mjs`). A sibling collection, `/compare` (13 competitor-comparison pages, `src/content/compare-program.json`, gated by `compare:validate`), was added alongside it. The canonical homepage (rewritten 2026-08-08, PR #238) renders the premium seven-chapter assurance world under the H1 `"Ship AI-built apps with evidence, not hope."`; `/premium-preview` is intentionally absent in production. See `BLOG_AUTHORING.md` for the full editorial contract.
 
 Validate one planned release at a time:
 
@@ -74,7 +74,15 @@ pnpm --filter @lyrashield/marketing blog:validate:images -- --release batch-1
 pnpm --filter @lyrashield/marketing blog:check-links -- --release batch-1
 ```
 
-The program-completeness test requires all 100 mapped articles to be published. It must pass before any subsequent article release can be approved.
+Then the whole-repository gates, which take no `--release` flag and are the ones CI actually runs (`blog:check-links` is deliberately excluded from CI — it makes ~50 live third-party requests):
+
+```bash
+pnpm --filter @lyrashield/marketing blog:validate:mdx
+pnpm --filter @lyrashield/marketing blog:validate:offline
+pnpm --filter @lyrashield/marketing compare:validate
+```
+
+The program-completeness test requires all `PROGRAM_ARTICLE_COUNT` mapped articles to be published. It must pass before any subsequent article release can be approved. There is no draft-flag scheduling: `draft: true` on a mapped article fails this gate and the internal-link check for anything that links to it, and `pubDate` has no publish-gating effect anywhere in the codebase. A staggered rollout is one independently-complete release tranche per PR, merged on its scheduled day.
 
 To inspect the built release candidate, build and start the production-shaped Worker preview in one terminal:
 
