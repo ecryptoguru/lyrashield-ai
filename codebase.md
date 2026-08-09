@@ -750,13 +750,9 @@ logger.info("Project created", { projectId: "abc", workspaceId: "xyz" })
 | `apps/worker/src/engine/scanners/url-scanner.ts`     | AI-builder-aware URL checks using `safeFetch`                                  |
 | `apps/worker/src/queue.ts`                           | BullMQ worker (re-exports shared enqueueScan)                                  |
 | `apps/web/src/lib/queue.ts`                          | Web scan-enqueue wrapper (re-exports shared enqueueScan)                       |
-| `apps/agent/src/queue.ts`                            | Agent scan-enqueue wrapper (re-exports shared enqueueScan)                     |
-| `packages/integrations/src/queue.ts`                 | Shared getScanQueue/enqueueScan for web, worker, and agent                     |
+| `packages/integrations/src/queue.ts`                 | Shared getScanQueue/enqueueScan for web and worker                             |
 | `packages/integrations/src/redis.ts`                 | Redis connection helper (GitHub token cache, queue)                            |
 | `apps/worker/src/schedules.ts`                       | Atomic schedule claims and enqueueing                                          |
-| `apps/agent/src/registry.ts`                         | Action permissions, approval gate, audit logging                               |
-| `apps/agent/src/actions.ts`                          | Six registered agent actions                                                   |
-| `apps/agent/src/service-token.ts`                    | Signed short-lived service tokens                                              |
 | `packages/auth/src/auth.ts`                          | Better Auth server configuration                                               |
 | `packages/auth/src/session.ts`                       | Session/workspace/permission guards                                            |
 | `packages/auth/src/permissions.ts`                   | Role hierarchy and permission matrix                                           |
@@ -1616,12 +1612,6 @@ Implemented the Agent Action Layer that exposes core LyraShield operations as ty
 **Types (`packages/types/src/index.ts`):**
 
 - `ApprovalStatusSchema` — Zod enum for approval statuses.
-- `ServiceTokenPayload` — userId, workspaceId, role, issuedAt, expiresAt.
-- `AgentActionContext` — userId, workspaceId, role (passed to every action handler).
-- `AgentActionResult` — success/data or error/code, needsApproval + approvalId for gated actions.
-- `AgentActionDefinition<TInput, TOutput>` — name, description, inputSchema (Zod), permission, needsApproval?, handler, auditAction, auditResourceType.
-- Input schemas: `ListTargetsInputSchema`, `RunScanInputSchema`, `GetScanStatusInputSchema`, `ListFindingsInputSchema`, `GetFindingInputSchema`, `ExplainFindingInputSchema`.
-- `CreateApprovalInputSchema` — for creating approval requests.
 
 **DB service (`packages/db/src/agent-approval-service.ts`):**
 
@@ -1640,39 +1630,21 @@ Implemented the Agent Action Layer that exposes core LyraShield operations as ty
 - Added `agent.view`, `agent.act`, `agent.approve` to PERMISSIONS.
 - Role assignments: ADMIN/SECURITY_ADMIN get all 3; APPSEC_MANAGER/DEVELOPER get view+act; MEMBER/AUDITOR/VIEWER/EXTERNAL_PENTESTER get view only; BILLING_ADMIN gets none.
 
-**Agent package (`apps/agent/`):**
-
-- `package.json` — `@lyrashield/agent` workspace package, depends on auth/config/db/logger/types + bullmq + zod + vitest.
-- `tsconfig.json` — Extends shared library config, `rootDir: ./src`, Node types.
-- `src/service-token.ts` — `signServiceToken` (HMAC-SHA256, base64url, `lst.` prefix, 5-min TTL) + `verifyServiceToken` (validates prefix, signature, payload field types, expiry). Uses `BETTER_AUTH_SECRET` env var (min 32 chars). Payload validation checks `userId`, `workspaceId`, `role`, `issuedAt`, `expiresAt` are present and correctly typed.
-- `src/registry.ts` — `ActionRegistry` class: `register(action)`, `list()`, `execute(name, input, context)`. Execute flow: validate input with Zod → check permission via `hasPermission` → check `needsApproval` → create approval if needed (return NEEDS_APPROVAL) → if `approvalId` provided, verify approval exists, is APPROVED, not expired, **actionName matches**, and **inputHash matches** via `verifyInputHash` → call handler → audit log (wrapped in separate try/catch so handler success isn't lost if audit fails) → return result. Error codes: UNKNOWN_ACTION, VALIDATION_ERROR, FORBIDDEN, NEEDS_APPROVAL, APPROVAL_NOT_FOUND, APPROVAL_NOT_APPROVED, APPROVAL_EXPIRED, APPROVAL_MISMATCH, APPROVAL_INPUT_MISMATCH, EXECUTION_ERROR.
-- `src/queue.ts` — BullMQ queue helper (`enqueueScanJob`) mirroring `apps/web/src/lib/queue.ts`. Creates scan queue with Redis connection, 3 retries, exponential backoff. Used by `run-scan` action to enqueue scan jobs.
-- `src/actions.ts` — 6 action definitions:
-  1. `list-targets` — Lists targets in workspace (permission: `agent:view`). Response includes `projectId`.
-  2. `run-scan` — Creates scan + **enqueues BullMQ job** via `queue.ts` (permission: `agent:act`, needsApproval when mode is DEEP). Validates target exists, **validates policyId exists** if provided, checks no active scan in progress. On enqueue failure, marks scan as FAILED with errorCategory QUEUE. Uses `triggerType: "agent"`.
-  3. `get-scan-status` — Gets scan with events (permission: `agent:view`).
-  4. `list-findings` — Cursor-paginated findings list (permission: `agent:view`). Response includes `createdAt`.
-  5. `get-finding` — Single finding with evidence (permission: `agent:view`).
-  6. `explain-finding` — Plain-language explanation via **static import** of `explainFinding` from `./plain-language-bridge` (permission: `agent:view`).
-- `src/plain-language-bridge.ts` — Inlined `explainFinding` function (CWE explanations, generic severity explanations, category labels) to avoid cross-app tsconfig rootDir issues.
-- `src/index.ts` — Exports + `createAgentRegistry()` factory. Exports `enqueueScanJob` from `./queue`.
-
 **API routes (`apps/web/src/app/api/agent-approvals/`):**
 
 - `route.ts` — GET: list approvals (paginated, status filter, `agent:view` permission).
 - `[id]/approve/route.ts` — POST: approve a pending approval (`agent:approve` permission).
 - `[id]/deny/route.ts` — POST: deny a pending approval (`agent:approve` permission).
 
-**Tests (35 new):**
+The earlier headless `apps/agent` package has been retired; the same action/approval behavior is now exposed through `apps/web` (agent-approvals API) and `packages/mcp` (MCP tool catalog).
 
-- `apps/agent/src/service-token.test.ts` — 8 tests: sign/verify roundtrip, wrong prefix, tampered token, expired token, malformed payload, missing/short secret, **valid signature but missing payload fields**.
-- `apps/agent/src/registry.test.ts` — 11 tests: register/list, duplicate detection, unknown action, input validation, permission denial, successful execution, approval gate, handler errors, **audit log failure doesn't lose handler success**, **approval actionName mismatch**, **approval inputHash mismatch**.
+**Tests (16):**
+
 - `packages/db/src/agent-approval-service.test.ts` — 5 tests: deterministic hash, different actions hash differently, different inputs hash differently, verify matching, verify mismatched.
 - `packages/auth/src/agent-permissions.test.ts` — 11 tests: permission definitions, all role checks (ADMIN, SECURITY_ADMIN, APPSEC_MANAGER, DEVELOPER, MEMBER, VIEWER, AUDITOR, EXTERNAL_PENTESTER, BILLING_ADMIN), universal view check.
 
 **Other updates:**
 
-- `turbo.json` — Added `LYRASHIELD_AGENT_SERVICE_TOKEN` to globalEnv.
 - `packages/db/src/rls.test.ts` — Added `AgentApproval` to RLS_TABLES (now 18).
 
 ### Deep code review fixes (7 fixes: 4 P1, 3 P2)
@@ -1697,7 +1669,7 @@ Focused remediation after a fresh full-repository review.
 
 ### Security and tenant isolation
 
-- **Agent workspace binding** (`apps/agent/src/registry.ts`) rejects an input `workspaceId` that differs from the authenticated service-token context.
+- **Agent workspace binding** (`apps/web/src/app/api/agent-approvals/*` and `packages/db/src/agent-approval-service.ts`) rejects an approval or action whose `workspaceId` does not match the caller's session or cannot be verified by the workspace-scoped DB service.
 - **Report ownership enforcement** (`apps/web/src/app/api/reports/route.ts`, `packages/db/src/report-service.ts`) uses workspace-scoped scan/finding queries, preventing cross-workspace scan IDs from being attached or exposed.
 - **URL scanner SSRF defense-in-depth** (`apps/worker/src/engine/scanners/url-scanner.ts`) resolves the hostname before requesting it, rejects private/reserved addresses, manually revalidates each redirect target, and disables automatic redirects. A transport-level egress proxy with pinned DNS remains the durable deployment control.
 
@@ -2305,7 +2277,7 @@ A five-batch deep review remediation addressing stop-bleeding P0s, structural te
 - `packages/cli/src/installers/atomic-write.ts` now checks only the immediate destination directory with `lstat` and `isSymbolicLink()`, fixing a false positive on macOS where `/var` is a symlink to `/private/var` and every temp path under it was rejected.
 - `packages/cli/src/__tests__/installers/atomic-write.test.ts` adds a test proving a symlinked destination directory is rejected while non-symlinked paths under a symlinked ancestor remain writable.
 - `packages/db/src/agent-approval-service.test.ts` adds a test proving `saveApprovalResult` scopes the update by both `id` and `workspaceId`.
-- `apps/agent/src/registry.test.ts` and `apps/worker/src/engine/finding-persister.test.ts` updated to match new call signatures.
+- `apps/worker/src/engine/finding-persister.test.ts` updated to match new call signatures.
 - `packages/agent-registry` snapshots regenerated to match the current 24-agent registry.
 
 ### Verification

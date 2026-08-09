@@ -1,6 +1,14 @@
-# @lyrashield/cli
+# @lyrashield/cli (deprecated)
 
-This is a scoped npm alias for the primary [`lyrashield`](../cli) CLI. It exposes the same CLI under the `lyrashield-cli` binary, so you can install or run it from either package name.
+> This scoped alias package is **deprecated** and will be removed in the next major release. Please migrate to the primary [`lyrashield`](../cli) package.
+
+```sh
+# before (deprecated)
+npx @lyrashield/cli <command> [args]
+
+# after
+npx lyrashield <command> [args]
+```
 
 ## Usage
 
