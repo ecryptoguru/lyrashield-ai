@@ -72,11 +72,9 @@ describe("findTargetByRepository", () => {
   const repo = parseRepoIdentifier("ecryptoguru/lyrashield-ai")!
 
   it("reuses an API target even though the list payload omits repoProvider", async () => {
-    const request = vi
-      .fn()
-      .mockResolvedValue({
-        items: [{ id: "t-1", name: "LyraShield", repoFullName: repo.repoFullName }],
-      })
+    const request = vi.fn().mockResolvedValue({
+      items: [{ id: "t-1", name: "LyraShield", repoFullName: repo.repoFullName }],
+    })
     const target = await findTargetByRepository({ request } as never, "ws-1", repo)
 
     expect(target).toMatchObject({ id: "t-1", name: "LyraShield" })
