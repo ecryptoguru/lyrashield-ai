@@ -49,6 +49,7 @@ describe("marketing SEO metadata", () => {
     expect(methodology).toContain('dateModified: "2026-07-29"')
     expect(llms).toContain("43 controls are machine-testable and 7 require retained human evidence")
     expect(llms).toContain("`${origin}/vibe-security-50`")
+    expect(llms).toContain('"/docs/integrations/goose"')
     expect(llms).not.toContain("`${origin}/scan`")
   })
 
