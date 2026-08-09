@@ -62,7 +62,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `apps/web` — Next.js workspace for targets, scans, evidence, reports, scorecards, and approval-gated API/MCP actions.
 - `apps/worker` — BullMQ scan worker with queue admission, reconciliation, evidence receipts, and controlled engine execution.
 - `apps/marketing` — Astro 7 / Cloudflare Workers marketing site.
-- `packages/cli` / `packages/cli-alias` — the published `lyrashield` / `@lyrashield/cli` command-line tool.
+- `packages/cli` — the published `lyrashield` command-line tool. (`@lyrashield/cli` is deprecated and will be removed in the next major release; use `lyrashield` instead.)
 - `packages/agent-registry` — the single source of truth for all 24 supported coding agents (config paths, formats, install strategy); the CLI installers and the docs site are both generated against it.
 - `packages/agent-rules` — renders LyraShield's security policy into each agent's native rules/instructions format (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others).
 - `packages/mcp` — the published `@lyrashield/mcp` server.
