@@ -1,5 +1,19 @@
 # Changelog
 
+## Next
+
+- Added a narrow MIT-0 grant for the OpenClaw skill directory so the community ClawHub listing can
+  publish its `v1.0.1` metadata correction without changing the Apache-2.0 license of the broader
+  marketplace bundle.
+
+## 0.1.12
+
+- Declared Zed's required Node process capability in the extension manifest.
+
+## 0.1.11
+
+- Corrected API-key settings links in the Cline and Zed installation guides.
+
 ## 0.1.10
 
 - Declared the bundled skill in the OpenAI/Codex manifest using the current plugin format.

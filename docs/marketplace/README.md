@@ -37,7 +37,7 @@ program.
 
 - Cline: [issue #2213](https://github.com/cline/mcp-marketplace/issues/2213) submitted; awaiting review.
 - Kilo: [PR #217](https://github.com/Kilo-Org/kilo-marketplace/pull/217) submitted; awaiting review.
-- Zed: [PR #7137](https://github.com/zed-industries/extensions/pull/7137) submitted; local Cargo validation remains pending because Rust is not installed here.
+- Zed: [PR #7149](https://github.com/zed-industries/extensions/pull/7149) submitted; upstream package, Danger, and CLA checks pass; awaiting maintainer review.
 - Gemini CLI: public repository topic `gemini-cli-extension` and root `gemini-extension.json` are live.
 - OpenClaw: [ClawHub listing](https://clawhub.ai/ecryptoguru/skills/lyrashield) is published as a community listing; it is not an official OpenClaw channel.
 - Kiro: submission was received and is awaiting review.
