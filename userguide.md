@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last verified against the application code and open-registration deployment: 2026-07-31
+Last verified against the application code and open-registration deployment: 2026-08-10
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
@@ -65,7 +65,7 @@ Use the public methodology page to understand scoring, evidence states, and limi
 1. Open [https://app.lyrashieldai.com](https://app.lyrashieldai.com).
 2. Select **Sign up**.
 3. Enter your name, email, and password.
-4. Complete email verification when prompted, then continue through onboarding.
+4. Complete email verification when prompted (only when the deployment has `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1` and a configured mail provider), then continue through onboarding.
 
 Registration is open to all users. The application preserves the intended destination through authentication. Use **Forgot password** when the email provider is configured for password reset.
 
@@ -412,18 +412,40 @@ LyraShield ships three ways to run checks from a coding agent, an editor, or a t
 
 ### CLI
 
-The `lyrashield` command-line tool (published on npm; also available as the scoped alias `@lyrashield/cli`) installs, configures, and drives scans without hand-editing any config file:
+The `lyrashield` command-line tool (published on npm; the scoped alias `@lyrashield/cli` is deprecated and will be removed in the next major release) installs, configures, and drives scans without hand-editing any config file:
 
 ```bash
-npx lyrashield login              # store a workspace API key
+npx lyrashield login              # browser-based OAuth device login or workspace API key
 npx lyrashield init                # detect installed coding agents and configure them
 npx lyrashield doctor              # check what's configured and what's missing
 npx lyrashield gate                # CI-friendly diff-aware security gate
 ```
 
-`init`/`install <agent>` support 16 agents with a real config file the CLI can write directly (merging into any existing file, never overwriting it, and never inlining a raw API key into a file conventionally shared with a team unless you explicitly opt in and the file is gitignored). For Amp, the CLI shells out to Amp's own `amp mcp add` command. For the 7 agents whose current tooling has no config file to safely write — Cline, JetBrains AI & Junie, PiCode, OpenClaw, Hermes, Goose, and Aider — `install` prints the exact command, arguments, and environment values to paste in, generated from the same source of truth the writable installers use, rather than leaving you to copy them from a documentation page that can drift out of sync.
+`login` writes `~/.lyrashield/credentials.json` with `0o600` permissions. If the browser-based OAuth device flow is unavailable, it falls back to `LYRASHIELD_API_KEY` from the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com` and is resolved consistently by `packages/credentials`, which is the single source of truth for the credentials file.
+
+`init`/`install <agent>` choose an install strategy based on the agent. All 24 distinct agents are rendered from `packages/agent-registry`, which produces 30 registry entries. Four clients have confirmed Agent Plugins v1.0.0 manifests; the registry also retains reserved entries for VS Code and GitHub Copilot pending independent verification.
+
+- **Agent Plugin** — for Claude Code, Cursor, OpenAI Codex, and Kiro, the CLI prefers a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key. Pass `--strategy agent-plugin` or `--strategy config-file` to force a specific strategy when both are available.
+- **Config-file** — 16 clients whose settings can be safely written; the CLI merges into the existing file, never overwrites, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
+- **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
+- **Guided manual** — for the 7 clients whose tooling has no writable config file — Cline, JetBrains AI & Junie, PiCode, OpenClaw, Hermes, Goose, and Aider — `install` prints exact copy-paste command/argument/environment values, generated from the same source of truth the writable installers use.
+
+`uninstall <agent>` removes the LyraShield entry from the chosen agent's config or plugin directory.
 
 Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `findings`, `explain <findingId>`, `fix-plan <findingId>`, `verify <findingId>`, `report`, `readiness`, `targets`, and `rules add/remove/check <agent>` (writes or removes LyraShield's security policy in that agent's native rules format — `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others — inside a checksummed block so re-running never clobbers your own edits to the surrounding file). `check-diff` is the same fast, local, **advisory** heuristic as the MCP tool of the same purpose — not a verified scan. Every command supports `--json` for scripting, and `gate` exits non-zero when a finding at or above the configured severity is present, matching the GitHub Action's own gate semantics.
+
+**Project defaults** make scans one-command: `lyrashield project use` detects the current git repo, creates or reuses a repo target, and saves it as the default project. `lyrashield scan` then starts a scan without `--target`. Switch projects with `lyrashield project switch <targetId>`, list them with `lyrashield project list`, or clear with `lyrashield project clear`. To scan the current git repo instead of the saved default, pass `--auto`; to scan another repository, pass `--repo <owner/repo>`.
+
+**Scan modes and cost:** pick the cheapest mode that answers the question. Deeper modes consume more compute and, in the SaaS plan, more billable minutes.
+
+| What you ask             | Goal                             | Mode       |
+| ------------------------ | -------------------------------- | ---------- |
+| Pre-PR check             | `CHECK_PR`                       | `SAFE`     |
+| Quick check              | `TEST_APP`                       | `QUICK`    |
+| Standard repo review     | `TEST_APP`                       | `STANDARD` |
+| Launch review            | `LAUNCH_REVIEW`                  | `STANDARD` |
+| Deep / compliance review | `TEST_APP` / `COMPLIANCE_REVIEW` | `DEEP`     |
+| Weekly monitor           | `WEEKLY_MONITOR`                 | `SAFE`     |
 
 ### MCP
 
@@ -443,13 +465,20 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 
 #### Write tools
 
-- `lyrashield_scan_target` — start a scan on a registered target;
-- `lyrashield_run_pr_scan` — start a PR-focused (CHECK_PR) scan;
+- `lyrashield_scan_target` — start a scan on a registered target. Pass `targetId` directly, or pass `repo` (e.g. `ecryptoguru/lyrashield-ai`) to create or reuse a target; `auto: true` detects the current git repo only for local stdio MCP;
+- `lyrashield_run_pr_scan` — start a PR-focused (CHECK_PR) scan. It has the same `repo` support, and local-stdio-only `auto` support, as `lyrashield_scan_target`;
 - `lyrashield_record_fix_proposal` — record a fix proposal on a finding;
 - `lyrashield_verify_fix` — queue a retest to verify a fix;
 - `lyrashield_create_report` — create an executive, developer, or compliance report.
 
-Read actions follow API-key scope and workspace permissions. Locally, mutating MCP actions require interactive approval on the controlling terminal (or your editor's own approval prompt, where the editor supports MCP elicitation) and fail closed when no approval channel is available. Over the remote-HTTP transport, a mutating call is not simply refused: it creates a pending approval and returns an approval link rather than executing, so a human can approve it out of band; resubmitting the same call with the approval ID re-validates the exact input before running, so approving one request can never be reused to execute a different one. A pre-authorized trusted-automation opt-in remains available for CI that should never pause for approval. Model-facing inputs pass through the prompt-injection guard in every case.
+Read actions follow API-key scope and workspace permissions. Locally, mutating MCP actions require interactive approval on the controlling terminal (or your editor's own approval prompt, where the editor supports MCP elicitation) and fail closed when no approval channel is available.
+
+The remote-HTTP transport supports two authentication methods:
+
+- **Bearer API key** — `Authorization: Bearer lsk_…` with a read-only or read/write key.
+- **OAuth 2.0** — the hosted flow at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` (also under `/api/mcp/`) lets an MCP client authenticate through `/oauth/consent`, select a workspace, and request an optional write scope. Remote connections are **read-only by default**; write actions require the OAuth write scope plus explicit approval. OAuth clients cannot use the operator-only `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS` bypass.
+
+A pre-authorized trusted-automation opt-in remains available for CI that should never pause for approval. Model-facing inputs pass through the prompt-injection guard in every case.
 
 Use the same supported scan modes as the API: SAFE, QUICK, STANDARD, DEEP, or CUSTOM. Dashboard users should normally prefer the named presets rather than raw modes.
 
@@ -470,7 +499,7 @@ Billing plans, plan quotas, automatic server-generated Fix PRs, intrusive exploi
 ### Sign-in keeps loading
 
 - Confirm the authenticated app origin and Better Auth URL match the deployment.
-- Complete email verification when prompted; use password reset when it is enabled for the deployment.
+- Complete email verification when prompted. Email verification and password reset require `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1` with a configured mail provider (e.g., Brevo); if the deployment has these disabled, the operator must help with account recovery.
 - Clear the site session and sign in again.
 - If a password is uncertain, use an enabled social provider or ask the operator for invite/account help; never share the password.
 - Ask the operator to inspect the authentication API and application logs without sharing your password.

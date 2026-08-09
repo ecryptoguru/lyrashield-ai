@@ -5,29 +5,12 @@ import { fileURLToPath } from "node:url"
 import { buildPlugin } from "./build.js"
 import { getPluginDir } from "./index.js"
 
-const APACHE_2_LICENSE = `                                 Apache License
-                           Version 2.0, January 2004
-                        http://www.apache.org/licenses/
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-`
-
 const PUBLIC_FILES = [
   "README.md",
   "CHANGELOG.md",
-  "plugin/plugin.json",
-  "plugin/mcp.json",
-  "plugin/skills",
+  "plugin.json",
+  "mcp.json",
+  "skills",
   ".claude-plugin/plugin.json",
   ".codex-plugin/plugin.json",
   ".cursor-plugin/plugin.json",
@@ -46,6 +29,16 @@ const MARKETPLACE_ARTIFACTS = [
   "openclaw",
   "reviewer-pack",
   "assets",
+  "scripts",
+  ".github",
+] as const
+
+const GENERATED_FILES = [
+  ...PUBLIC_FILES,
+  "gemini-extension.json",
+  "GEMINI.md",
+  "LICENSE",
+  ...MARKETPLACE_ARTIFACTS,
 ] as const
 
 /** Export only installable client artifacts; hosted service code never crosses this boundary. */
@@ -57,23 +50,15 @@ export async function exportMarketplace(destination: string): Promise<void> {
   await mkdir(destination, { recursive: true })
 
   for (const relative of PUBLIC_FILES) {
-    const sourceRelative = relative.startsWith("plugin/")
-      ? relative.slice("plugin/".length)
-      : relative
     const source =
       relative === "README.md" || relative === "CHANGELOG.md"
         ? path.join(marketplaceDocs, relative)
-        : path.join(pluginRoot, sourceRelative)
+        : path.join(pluginRoot, relative)
     await cp(source, path.join(destination, relative), {
       recursive: true,
       force: true,
     })
   }
-  // Claude Code loads skills and MCP configuration only from the plugin root.
-  await cp(path.join(pluginRoot, "skills"), path.join(destination, "skills"), {
-    recursive: true,
-    force: true,
-  })
   await cp(
     path.join(marketplaceDocs, "gemini-extension", "gemini-extension.json"),
     path.join(destination, "gemini-extension.json"),
@@ -84,7 +69,7 @@ export async function exportMarketplace(destination: string): Promise<void> {
     path.join(destination, "GEMINI.md"),
     { force: true }
   )
-  await cp(path.join(pluginRoot, "plugin.json"), path.join(destination, "plugin.json"), {
+  await cp(path.join(marketplaceDocs, "LICENSE"), path.join(destination, "LICENSE"), {
     force: true,
   })
   for (const relative of MARKETPLACE_ARTIFACTS) {
@@ -101,7 +86,6 @@ export async function exportMarketplace(destination: string): Promise<void> {
   }
   if (plugin.license !== "Apache-2.0") throw new Error("Marketplace plugin must be Apache-2.0")
 
-  await writeFile(path.join(destination, "LICENSE"), APACHE_2_LICENSE, "utf8")
   await writeFile(
     path.join(destination, "manifest.json"),
     `${JSON.stringify(
@@ -110,7 +94,7 @@ export async function exportMarketplace(destination: string): Promise<void> {
         version: plugin.version,
         license: plugin.license,
         source: "@lyrashield/agent-plugin",
-        generatedFiles: [...PUBLIC_FILES, "skills", ...MARKETPLACE_ARTIFACTS],
+        generatedFiles: GENERATED_FILES,
         forbidden: [
           "apps/web",
           "apps/worker",

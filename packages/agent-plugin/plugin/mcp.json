@@ -1,15 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
-    "lyrashield-stdio": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
-    },
-    "lyrashield-remote": {
+    "lyrashield": {
       "type": "streamable-http",
       "url": "https://app.lyrashieldai.com/api/mcp"
     }

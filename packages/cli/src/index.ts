@@ -33,6 +33,7 @@ const COMMANDS: Record<string, CommandThunk> = {
   install: () => import("./commands/install.js").then((m) => m.handleInstall),
   uninstall: () => import("./commands/uninstall.js").then((m) => m.handleUninstall),
   scan: () => import("./commands/scan.js").then((m) => m.handleScan),
+  "pr-scan": () => import("./commands/pr-scan.js").then((m) => m.handlePrScan),
   status: () => import("./commands/status.js").then((m) => m.handleStatus),
   findings: () => import("./commands/findings.js").then((m) => m.handleFindings),
   explain: () => import("./commands/explain.js").then((m) => m.handleExplain),
@@ -42,6 +43,7 @@ const COMMANDS: Record<string, CommandThunk> = {
   gate: () => import("./commands/gate.js").then((m) => m.handleGate),
   report: () => import("./commands/report.js").then((m) => m.handleReport),
   readiness: () => import("./commands/readiness.js").then((m) => m.handleReadiness),
+  project: () => import("./commands/project.js").then((m) => m.handleProject),
   targets: () => import("./commands/targets.js").then((m) => m.handleTargets),
   rules: () => import("./commands/rules.js").then((m) => m.handleRules),
   hook: () => import("./commands/hook.js").then((m) => m.handleHook),
@@ -61,7 +63,9 @@ Commands:
   init                 Detect and configure installed agents
   install <agent>      Configure a single agent
   uninstall <agent>    Remove LyraShield entry for a single agent
+  project              Manage the default project
   scan                 Start a security scan
+  pr-scan              Start a PR-focused scan (alias for scan --goal CHECK_PR)
   status [scanId]      Show scan status
   findings             List findings
   explain <findingId>  Explain a finding

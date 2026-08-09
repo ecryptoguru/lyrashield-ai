@@ -5,8 +5,11 @@ The `lyrashield` command-line interface installs, configures, and drives LyraShi
 ## Quick start
 
 ```sh
-npx lyrashield login              # paste an API key when prompted
+npx lyrashield login              # browser-based OAuth device login, or paste an API key
 npx lyrashield use <workspace>
+npx lyrashield project use        # detect the current git repo and set it as the default project
+npx lyrashield scan               # scan the default project (uses default mode)
+npx lyrashield pr-scan --auto     # run a low-cost PR check on the current repo
 ```
 
 You can also set `LYRASHIELD_API_KEY` (and optionally `LYRASHIELD_API_URL`) in the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com`.
@@ -21,28 +24,55 @@ lyrashield <command> [args] [--json]
 
 ### Authentication and setup
 
-- `login` — store an API key locally (`~/.lyrashield/credentials.json` with `0o600` permissions)
+- `login` — open a browser-based OAuth device flow and write the resulting token to `~/.lyrashield/credentials.json` with `0o600` permissions; falls back to `LYRASHIELD_API_KEY` from the environment if the device flow is unavailable
 - `logout` — remove stored credentials
 - `use <workspace>` — set the default workspace for subsequent commands
 - `doctor` — diagnose credentials, API reachability, and locally detected agents
 
 ### Agent installation
 
-- `init` — detect and configure all installed agents. For agents that support the Agent Plugins v1.0.0 standard (Claude Code, Cursor, Windsurf, VS Code, Codex, Kiro), `init` prefers an **Agent Plugin** install; for all others it falls back to config-file edits.
+- `init` — detect and configure all installed agents. For agents that support the Agent Plugins v1.0.0 standard today (Claude Code, Cursor, OpenAI Codex, Kiro), `init` prefers an **Agent Plugin** install; for all others it falls back to config-file edits.
 - `install <agent> [--transport stdio|remote-http] [--global|--project] [--inline-secret] [--dry-run]` — add LyraShield to a single agent. For agents supporting the `agent-plugin` strategy, this installs the portable plugin (from `@lyrashield/agent-plugin`) to the agent's plugin directory; `--dry-run` still works and previews the install without writing.
 - `uninstall <agent>` — remove the LyraShield entry from a single agent's config. For `agent-plugin`-strategy agents, this removes the plugin from the agent's plugin directory.
 - `rules add <agent>|remove <agent>|check` — add, remove, or validate an agent rules file (`AGENTS.md`, `CLAUDE.md`, etc.)
 
 `install` refuses to write raw secrets into shared-by-convention files unless you pass `--inline-secret` and the file is gitignored. Use `--dry-run` to preview the config change without writing it.
 
+### Project defaults
+
+- `project use [path] [--repo <repo>] [--name <name>]` — detect the current git repo (or use the given path, owner/repo, HTTPS URL, or SSH URL) and set it as the default project
+- `project list` — list workspace targets; the default project is marked with `*`
+- `project switch <targetId>` — switch the default project to an existing target
+- `project current` — show the current default project
+- `project clear` — clear the default project
+
+The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). Once set, `lyrashield scan` can run without `--target`. The default project is workspace-scoped; if you switch workspace with `lyrashield use <workspace>`, a saved default from another workspace is ignored.
+
 ### Targets and scans
 
-- `scan --target <targetId> [--goal <goal>] [--mode <mode>]` — start a scan
+- `scan [--target <targetId>] [--goal <goal>] [--mode <mode>] [--auto] [--repo <repo>]` — start a scan
+  - Default mode is `STANDARD`; use `pr-scan` for a low-cost `SAFE` pre-PR check.
   - Goals: `CHECK_PR`, `TEST_APP`, `LAUNCH_REVIEW`, `WEEKLY_MONITOR`, `FULL_PENTEST`, `COMPLIANCE_REVIEW`
   - Modes: `SAFE`, `QUICK`, `STANDARD`, `DEEP`, `CUSTOM`
+  - With no target and no default project, pass `--auto` to detect the current git repo and create or reuse a target
+  - Pass `--repo` as `owner/repo`, an HTTPS URL, or an SSH URL (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git`, `git@github.com:ecryptoguru/lyrashield-ai.git`)
+- `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>]` — shortcut for `scan --goal CHECK_PR --mode SAFE`
 - `status [scanId] [--watch]` — list scans or inspect one scan
 - `targets [--name ... --type ... --url ... --repo ...]` — list or create targets
 - `readiness [--target <targetId>]` — get the launch-readiness verdict
+
+### Scan mode guide
+
+Pick the cheapest mode that answers the question. Deeper modes consume more compute and, in the SaaS plan, more billable minutes.
+
+| Intent                   | Goal                             | Mode       |
+| ------------------------ | -------------------------------- | ---------- |
+| Pre-PR check             | `CHECK_PR`                       | `SAFE`     |
+| Quick check              | `TEST_APP`                       | `QUICK`    |
+| Standard repo review     | `TEST_APP`                       | `STANDARD` |
+| Launch review            | `LAUNCH_REVIEW`                  | `STANDARD` |
+| Deep / compliance review | `TEST_APP` / `COMPLIANCE_REVIEW` | `DEEP`     |
+| Weekly monitor           | `WEEKLY_MONITOR`                 | `SAFE`     |
 
 ### Findings and fixes
 

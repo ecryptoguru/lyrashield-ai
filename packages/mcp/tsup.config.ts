@@ -3,9 +3,8 @@ import { defineConfig } from "tsup"
 /**
  * Bundle the MCP server into a self-contained, publishable package.
  *
- * The workspace dependencies (@lyrashield/types, @lyrashield/logger) are NOT
- * published to npm, so they must be bundled in (`noExternal`). The MCP SDK and
- * zod stay external and are declared as real dependencies in package.json.
+ * All workspace dependencies are private and bundled in (`noExternal`). The
+ * public MCP SDK and zod stay external and are declared in package.json.
  */
 export default defineConfig({
   entry: {

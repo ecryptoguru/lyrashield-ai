@@ -60,6 +60,7 @@ ARG BUILD_APP_URL="https://app.example.invalid"
 ARG BUILD_PUBLIC_APP_URL="https://app.example.invalid"
 ARG BUILD_PUBLIC_MARKETING_URL="https://lyrashieldai.com"
 ARG BUILD_TRUSTED_PROXY_IP_HEADER="x-forwarded-for"
+ARG BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="0"
 
 RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     BETTER_AUTH_SECRET="build-placeholder-not-used-at-runtime" \
@@ -67,6 +68,7 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     NEXT_PUBLIC_APP_URL="$BUILD_PUBLIC_APP_URL" \
     NEXT_PUBLIC_MARKETING_URL="$BUILD_PUBLIC_MARKETING_URL" \
     TRUSTED_PROXY_IP_HEADER="$BUILD_TRUSTED_PROXY_IP_HEADER" \
+    LYRASHIELD_REQUIRE_EMAIL_VERIFICATION="$BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION" \
     pnpm exec turbo run build --filter=@lyrashield/web
 
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────

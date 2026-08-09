@@ -7,9 +7,10 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "bin": {
-    "lyrashield": "./dist/index.js"
+    "lyrashield": "./bin/lyrashield.mjs"
   },
   "files": [
+    "bin",
     "dist",
     "README.md"
   ],

@@ -538,7 +538,9 @@ export interface AgentEntry {
 }
 ```
 
-- [ ] **Step 2: Add new agent entries for launch clients**
+- [ ] **Step 2: Add new agent entries for the 6 launch clients (Claude Code, Cursor, OpenAI Codex, Kiro, plus VS Code and GitHub Copilot reserved)**
+
+The `@lyrashield/agent-plugin` build emits client manifest shims only for the four clients with confirmed support today (Claude Code, Cursor, OpenAI Codex, Kiro); the remaining two registry entries are reserved for when those clients finalize support.
 
 Append to `packages/agent-registry/src/agents.ts`:
 

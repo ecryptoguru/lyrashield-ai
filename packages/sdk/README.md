@@ -29,6 +29,7 @@ The client always prepends `/api/v1` to bare paths, so callers should pass paths
 - `LyraShieldClient`, `LyraShieldClientOptions`, `RequestOptions`
 - `LyraShieldError`, `NotModified`, `isNotModified`
 - `paginate`, `listAll`
+- `parseRepoIdentifier`, `ParsedRepo` — parse bare `owner/repo` strings, HTTPS/SSH git URLs, and GitLab nested groups into `{ repoProvider, repoOwner, repoName, repoFullName }`
 - Resource helpers in `src/resources/*`
 
 ## See also

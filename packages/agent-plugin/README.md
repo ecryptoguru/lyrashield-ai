@@ -11,10 +11,12 @@ The canonical plugin lives in the `plugin/` directory:
 
 - `plugin/plugin.json` — the manifest (name, version, description, author, homepage,
   repository, license, keywords).
-- `plugin/mcp.json` — MCP server config. Uses the stdio transport and launches the server
-  with `npx -y @lyrashield/mcp`.
+- `plugin/mcp.json` — OAuth-first Streamable HTTP MCP server config. The hosted service
+  performs authorization discovery and keeps write scope approval-gated.
 - `plugin/skills/lyrashield/SKILL.md` — the skill body, generated from the
-  `@lyrashield/agent-rules` policy.
+  `@lyrashield/agent-rules` policy. It now includes a mode/cost guide, example
+  user prompts and matching tool calls, and a minute-awareness note so the agent
+  picks the cheapest depth that fits the request.
 
 ## Client manifest shims
 

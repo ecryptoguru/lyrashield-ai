@@ -66,7 +66,7 @@ describe("createScanTargetTool", () => {
       expect.objectContaining({ method: "POST" })
     )
     const request = mockFetch.mock.calls[0]![1] as RequestInit
-    expect(JSON.parse(String(request.body))).toMatchObject({ goal: "TEST_APP", mode: "SAFE" })
+    expect(JSON.parse(String(request.body))).toMatchObject({ goal: "TEST_APP", mode: "STANDARD" })
     const modeSchema = tool.inputSchema.properties.mode as { description: string }
     expect(modeSchema.description).toContain("STANDARD")
   })
@@ -78,6 +78,60 @@ describe("createScanTargetTool", () => {
     expect(result.isError).toBe(true)
     const data = JSON.parse(result.content[0]!.text)
     expect(data.error).toBe("Target not found")
+  })
+
+  it("resolves a repo argument to a target and creates it when missing", async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeApiResponse({ items: [] }))
+      .mockResolvedValueOnce(makeApiResponse({ id: "t-123", name: "lyrashield-ai" }))
+      .mockResolvedValueOnce(makeApiResponse({ id: "scan-1", status: "QUEUED" }))
+    const tool = createScanTargetTool(context)
+    const result = await tool.handler({ workspaceId: "ws-1", repo: "ecryptoguru/lyrashield-ai" })
+    expect(result.isError).toBeUndefined()
+    const data = JSON.parse(result.content[0]!.text)
+    expect(data.action).toBe("scan_triggered")
+    expect(data.repository).toBe("ecryptoguru/lyrashield-ai")
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:3000/api/v1/targets",
+      expect.objectContaining({ method: "POST" })
+    )
+    const createCall = mockFetch.mock.calls[1]![1] as RequestInit
+    expect(JSON.parse(String(createCall.body))).toMatchObject({
+      workspaceId: "ws-1",
+      name: "lyrashield-ai",
+      type: "REPO",
+      repoProvider: "github",
+      repoOwner: "ecryptoguru",
+      repoName: "lyrashield-ai",
+    })
+  })
+
+  it("reuses an existing repo target when the target list omits repoProvider", async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        makeApiResponse({
+          items: [{ id: "t-existing", repoFullName: "ecryptoguru/lyrashield-ai" }],
+        })
+      )
+      .mockResolvedValueOnce(makeApiResponse({ id: "scan-1", status: "QUEUED" }))
+    const tool = createScanTargetTool(context)
+
+    const result = await tool.handler({ workspaceId: "ws-1", repo: "ecryptoguru/lyrashield-ai" })
+
+    expect(result.isError).toBeUndefined()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    const scanRequest = mockFetch.mock.calls[1]![1] as RequestInit
+    expect(JSON.parse(String(scanRequest.body))).toMatchObject({ targetId: "t-existing" })
+  })
+
+  it("rejects auto-detection on the hosted transport", async () => {
+    const remoteTool = createScanTargetTool({ ...context, allowAutoDetect: false })
+
+    const result = await remoteTool.handler({ workspaceId: "ws-1", auto: true })
+
+    expect(result.isError).toBe(true)
+    expect(result.content[0]!.text).toContain("local stdio MCP server")
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })
 
