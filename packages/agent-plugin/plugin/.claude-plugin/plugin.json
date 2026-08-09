@@ -16,5 +16,6 @@
     "lyrashield",
     "mcp",
     "ai-coding"
-  ]
+  ],
+  "mcpServers": "./.mcp.json"
 }

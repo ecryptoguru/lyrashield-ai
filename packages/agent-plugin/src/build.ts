@@ -28,13 +28,24 @@ ${renderMarkdownBody(LYRASHIELD_POLICY, 2)}
     await mkdir(shimDir, { recursive: true })
     const clientManifest =
       client === "claude"
-        ? { ...manifest, $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json" }
+        ? {
+            ...manifest,
+            $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
+            mcpServers: "./.mcp.json",
+          }
         : client === "codex"
           ? (() => {
               const openAiManifest = { ...manifest }
               delete openAiManifest.$schema
               const { name, version, description, ...metadata } = openAiManifest
-              return { name, version, description, skills: "./skills/", ...metadata }
+              return {
+                name,
+                version,
+                description,
+                skills: "./skills/",
+                mcpServers: "./.mcp.json",
+                ...metadata,
+              }
             })()
           : manifest
     await writeFile(

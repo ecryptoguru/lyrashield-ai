@@ -110,7 +110,7 @@ export async function exportMarketplace(destination: string): Promise<void> {
         license: plugin.license,
         source: "@lyrashield/agent-plugin",
         generatedFiles: [...PUBLIC_FILES, "skills", ...MARKETPLACE_ARTIFACTS],
-        forbidden: ["apps/web", "apps/worker", "packages/db", ".env", "credentials.json"],
+        forbidden: ["apps/web", "apps/worker", "apps/agent", "packages/db", ".env", "credentials.json"],
       },
       null,
       2

@@ -2,6 +2,14 @@
   "name": "lyrashield-ai",
   "version": "0.1.0",
   "description": "Evidence-backed release assurance for AI-built software.",
+  "settings": [
+    {
+      "name": "LyraShield API Key",
+      "description": "Your LyraShield workspace API key (starts with lsk_). Used to authenticate MCP tool calls.",
+      "envVar": "LYRASHIELD_API_KEY",
+      "sensitive": true
+    }
+  ],
   "mcpServers": {
     "lyrashield": {
       "command": "npx",

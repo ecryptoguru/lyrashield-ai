@@ -69,7 +69,7 @@ describe("exportMarketplace", () => {
     await expect(readFile(path.join(output, "apps", "worker"))).rejects.toThrow()
     await expect(
       readFile(path.join(output, "zed-extension", "extension.toml"), "utf8")
-    ).resolves.toContain("lyrashield-ai")
+    ).resolves.toContain("lyrashield-mcp")
     await expect(
       readFile(path.join(output, "codebuff", "lyrashield-review.ts"), "utf8")
     ).resolves.toContain("lyrashield-review")
