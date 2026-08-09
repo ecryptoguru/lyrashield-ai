@@ -41,7 +41,7 @@ program.
 - Gemini CLI: public repository topic `gemini-cli-extension` and root `gemini-extension.json` are live.
 - OpenClaw: [ClawHub listing](https://clawhub.ai/ecryptoguru/skills/lyrashield) is published as a community listing; it is not an official OpenClaw channel.
 - Kiro: submission was received and is awaiting review.
-- Claude: [plugin submission](https://platform.claude.com/plugins/submit) was received and is awaiting review.
-- Codebuff: [LyraShield AI publisher](https://codebuff.com/publishers/lyrashield) lists `lyrashield` (corrected in v0.1.8 from the drifted `lyrashield/lyrashield-review@0.1.0`).
-- Cursor: [publisher application](https://cursor.com/marketplace/publish) was submitted; awaiting review.
-- OpenAI/Codex: portal access is available, but creation is blocked by OpenAI's requirement for a valid default payment method before developer/business identity verification can begin.
+- Claude: [plugin submissions](https://platform.claude.com/plugins/submissions) show two LyraShield AI submissions pending review.
+- Codebuff: the [LyraShield AI publisher](https://codebuff.com/publishers/lyrashield) has a public but unverified `0.1.0` listing; `0.1.1` republishes the MCP declaration and is pending publication.
+- Cursor: the authenticated [publisher application](https://cursor.com/marketplace/publish) is available for submission; no existing LyraShield application status is exposed in the portal.
+- OpenAI/Codex: the [review version](https://platform.openai.com/apps-manage) is submitted and locked for review; the portal exposes no editable draft state.
