@@ -2,14 +2,14 @@
 name: lyrashield
 description: Review LyraShield release-assurance evidence through an OAuth-first MCP connection.
 version: 0.1.0
-license: Apache-2.0
+license: MIT-0
 metadata:
   category: security
   author: LyraShield AI
   source:
     repository: https://github.com/ecryptoguru/lyrashield-marketplace
     path: openclaw
-    license_path: LICENSE
+    license_path: openclaw/LICENSE
   openclaw:
     requires:
       env:
