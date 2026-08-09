@@ -6,9 +6,8 @@ Start here. This file is the current handoff and execution queue; `codebase.md` 
 
 LyraShield AI is the evidence-backed release-assurance layer for AI-built software. Its loop is **Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report**. Findings remain detected until independent verification evidence exists, clean deterministic retests are described as retest-confirmed, and PR execution is a guarded future step that requires a server-generated patch and exact approval binding.
 
-- `apps/web` — Next.js 16 dashboard
+- `apps/web` — Next.js 16 dashboard and approval-gated API/MCP actions
 - `apps/worker` — BullMQ scan worker
-- `apps/agent` — approval-gated agent actions
 - `apps/marketing` — Astro 7 / Cloudflare Workers marketing site
 - `apps/marketing-motion` — deterministic Three.js assurance-world motion workspace (production tooling; the Astro site consumes rendered posters/clips)
 - `packages/*` — auth, config, credentials, db, egress-proxy, integrations, logger, MCP, score, security, types, UI, agent-rules, cli-alias, plus the CLI/agent-install stack (`packages/cli`, `packages/agent-registry`, `packages/agent-plugin`, `packages/sdk`). `packages/credentials` is the single source of truth for `~/.lyrashield/credentials.json` — its location, env-over-file precedence, default API URL, and normalization — shared by the CLI and MCP server so the two cannot drift; both bundle it via `noExternal`, so it stays private.
@@ -142,7 +141,7 @@ Do not rename the `@lyrashield/*` package scope or `LYRASHIELD_*` variables with
 - **API client**: `apps/web/src/lib/api-client.ts` distinguishes caller cancellation from timeouts and propagates already-aborted signals.
 - **Client-IP extraction**: the web app trusts only the header named by `TRUSTED_PROXY_IP_HEADER`; production ingress must strip client-supplied copies. Cloudflare marketing uses `cf-connecting-ip` and an atomic D1 fallback limiter.
 - **GitHub token cache**: `packages/integrations/src/redis.ts` and `queue.ts` added; `packages/integrations/src/github.ts` caches installation tokens and `enqueueScan` is centralized.
-- **Queue unification**: `apps/web/src/lib/queue.ts`, `apps/agent/src/queue.ts`, and `apps/worker/src/queue.ts` now consume `packages/integrations/src/queue.ts` (`getScanQueue`, `enqueueScan`).
+- **Queue unification**: `apps/web/src/lib/queue.ts` and `apps/worker/src/queue.ts` now consume `packages/integrations/src/queue.ts` (`getScanQueue`, `enqueueScan`).
 - **Prettier scope**: `.prettierignore` excludes `.devin`, `.windsurf`, generated Astro/Wrangler files, and `next-env.d.ts`.
 - **Privacy and E2E**: `DELETE /api/account` blocks sole owners, anonymizes loose attribution, preserves audit-chain validity, and is exposed in Settings. Playwright covers signup/signin, onboarding, target and scan creation, and cross-tenant scan/finding/report denial.
 - **Operations**: `/api/health`, `/api/ready`, and Next.js request-error instrumentation are implemented. CI runs formatting and Chromium E2E. Docker contexts exclude generated output and the sibling engine virtualenv.
