@@ -1,11 +1,30 @@
-# LyraShield AI Zed extension
+# LyraShield AI MCP
 
-This extension registers the hosted LyraShield MCP context server in Zed. It launches the
-published `@lyrashield/mcp` package with the base API URL; authenticate interactively with
-`lyrashield login --oauth`, or use the shared API-key credential fallback for CI.
+Zed extension for the [LyraShield AI](https://lyrashieldai.com) MCP server. Adds verified security scans, findings review, and the fix → verify loop to the Zed agent panel.
 
-The default connection is read-only and bound to one workspace. Write-capable actions require
-the LyraShield write scope and the exact-argument approval gate. The dashboard remains the
-source of truth for evidence and approvals.
+## Setup
 
-Client source is Apache-2.0. Hosted LyraShield service code is not included.
+The `@lyrashield/mcp` package is downloaded and kept up to date automatically.
+
+Add your API key to your Zed settings under `context_servers.lyrashield-mcp.settings.api_key`:
+
+```json
+{
+  "context_servers": {
+    "lyrashield-mcp": {
+      "settings": {
+        "api_key": "lsk_your_key_here",
+        "api_url": "https://app.lyrashieldai.com"
+      }
+    }
+  }
+}
+```
+
+`api_url` is optional and defaults to `https://app.lyrashieldai.com`.
+
+See `configuration/installation_instructions.md` for full setup and troubleshooting.
+
+## License
+
+Extension source is Apache-2.0. The hosted LyraShield service and the `@lyrashield/mcp` package are not included.

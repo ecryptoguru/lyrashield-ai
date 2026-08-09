@@ -1,0 +1,43 @@
+id: lyrashield
+name: LyraShield AI
+description: Evidence-backed release assurance for AI-built software. Run security scans, review findings, and drive the fix -> verify loop from your agent.
+author: LyraShield AI
+url: https://github.com/ecryptoguru/lyrashield-marketplace
+category: security
+tags:
+  - security
+  - appsec
+  - release-assurance
+  - mcp
+prerequisites:
+  - Node.js (for NPX option)
+content:
+  - name: NPX
+    prerequisites:
+      - Node.js
+    content: |
+      {
+        "command": "npx",
+        "args": ["-y", "@lyrashield/mcp"],
+        "env": {
+          "LYRASHIELD_API_URL": "{{LYRASHIELD_API_URL}}",
+          "LYRASHIELD_API_KEY": "{{LYRASHIELD_API_KEY}}"
+        }
+      }
+  - name: Streamable HTTP
+    content: |
+      {
+        "type": "streamable-http",
+        "url": "{{LYRASHIELD_API_URL}}/api/mcp",
+        "headers": {
+          "Authorization": "Bearer {{LYRASHIELD_API_KEY}}"
+        }
+      }
+parameters:
+  - name: LyraShield API URL
+    key: LYRASHIELD_API_URL
+    placeholder: https://app.lyrashieldai.com
+    optional: true
+  - name: LyraShield API Key
+    key: LYRASHIELD_API_KEY
+    placeholder: ls_your_api_key_here

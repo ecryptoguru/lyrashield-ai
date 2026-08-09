@@ -4,7 +4,10 @@
     "lyrashield-stdio": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"]
+      "args": ["-y", "@lyrashield/mcp"],
+      "env": {
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
+      }
     },
     "lyrashield-remote": {
       "type": "streamable-http",

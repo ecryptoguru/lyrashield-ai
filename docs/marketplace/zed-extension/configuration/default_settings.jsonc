@@ -1,0 +1,6 @@
+{
+  // Your LyraShield workspace API key (lsk_…).
+  "api_key": "",
+  // Optional LyraShield app URL. Leave empty to use https://app.lyrashieldai.com.
+  "api_url": ""
+}

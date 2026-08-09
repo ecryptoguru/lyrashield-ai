@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "lyrashield": {
+      "type": "streamableHttp",
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <YOUR_LYRASHIELD_API_KEY>"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

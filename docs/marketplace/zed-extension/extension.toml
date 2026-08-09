@@ -1,10 +1,14 @@
-id = "lyrashield-ai"
-name = "LyraShield AI"
+id = "lyrashield-mcp"
+name = "LyraShield AI MCP"
 version = "0.1.0"
 schema_version = 1
 authors = ["LyraShield AI <support@lyrashieldai.com>"]
-description = "Evidence-backed release assurance through the LyraShield MCP server."
+description = "Run verified security scans, review findings, and drive the fix/verify loop from the Zed agent panel via the LyraShield MCP server."
 repository = "https://github.com/ecryptoguru/lyrashield-zed-extension"
 
-[context_servers.lyrashield]
-name = "LyraShield AI"
+[context_servers.lyrashield-mcp]
+name = "LyraShield AI MCP"
+
+[[capabilities]]
+kind = "npm:install"
+package = "@lyrashield/mcp"

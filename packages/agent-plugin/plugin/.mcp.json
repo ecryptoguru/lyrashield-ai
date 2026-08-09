@@ -1,8 +1,12 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
     "lyrashield": {
       "type": "streamable-http",
-      "url": "https://app.lyrashieldai.com/api/mcp"
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LYRASHIELD_API_KEY}"
+      }
     }
   }
 }

@@ -1,5 +1,4 @@
 {
-  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "lyrashield",
   "version": "0.1.10",
   "description": "LyraShield AI security and release-assurance plugin",
@@ -16,5 +15,19 @@
     "lyrashield",
     "mcp",
     "ai-coding"
-  ]
+  ],
+  "mcpServers": {
+    "lyrashield": {
+      "url": "https://app.lyrashieldai.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LYRASHIELD_API_KEY}"
+      }
+    }
+  },
+  "variables": {
+    "LYRASHIELD_API_KEY": {
+      "type": "string",
+      "description": "API key for the LyraShield MCP server"
+    }
+  }
 }

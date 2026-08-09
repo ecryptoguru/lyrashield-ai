@@ -1,6 +1,19 @@
 ---
-name: openclaw
+name: lyrashield
 description: Review LyraShield release-assurance evidence through an OAuth-first MCP connection.
+version: 0.1.0
+license: Apache-2.0
+metadata:
+  category: security
+  author: LyraShield AI
+  source:
+    repository: https://github.com/ecryptoguru/lyrashield-marketplace
+    path: openclaw
+    license_path: LICENSE
+  openclaw:
+    requires:
+      env:
+        - LYRASHIELD_API_KEY
 ---
 
 # LyraShield AI review skill
