@@ -45,7 +45,7 @@ function primaryConfigPath(agent: AgentEntry): string | undefined {
   return loc?.path
 }
 
-function buildConfigSnippet(agent: AgentEntry, mcpEndpointUrl: string): string | undefined {
+function buildConfigSnippet(agent: AgentEntry, apiUrl: string): string | undefined {
   // renderConfig only supports config-file agents (json/toml/yaml). jsonc agents
   // and guided-manual agents get a fallback handled by the caller.
   if (agent.installStrategy !== "config-file" || agent.format === "jsonc") return undefined
@@ -55,8 +55,8 @@ function buildConfigSnippet(agent: AgentEntry, mcpEndpointUrl: string): string |
     // variant is offered as a note for cloud IDEs.
     const rendered = renderConfig(agent, {
       transport: "stdio",
-      apiUrl: mcpEndpointUrl,
-      secretMode: "inline",
+      apiUrl,
+      secretMode: "shell",
     })
     return rendered.content + (supportsRemote ? "" : "")
   } catch {
@@ -64,13 +64,13 @@ function buildConfigSnippet(agent: AgentEntry, mcpEndpointUrl: string): string |
   }
 }
 
-function buildRemoteSnippet(agent: AgentEntry, mcpEndpointUrl: string): string | undefined {
+function buildRemoteSnippet(agent: AgentEntry, apiUrl: string): string | undefined {
   if (agent.installStrategy !== "config-file" || agent.format === "jsonc") return undefined
   if (!agent.transports.includes("remote-http")) return undefined
   try {
     return renderConfig(agent, {
       transport: "remote-http",
-      apiUrl: mcpEndpointUrl,
+      apiUrl,
       secretMode: "header",
     }).content
   } catch {
@@ -80,10 +80,10 @@ function buildRemoteSnippet(agent: AgentEntry, mcpEndpointUrl: string): string |
 
 /**
  * Build the ordered wizard for one agent. Returns null if the agent is unknown.
- * mcpEndpointUrl is the absolute /api/mcp URL (or the placeholder base); the
- * api key is always a placeholder, never a real secret.
+ * apiUrl is the app API base. Local stdio receives this base; remote MCP
+ * clients receive the derived /api/mcp endpoint.
  */
-export function buildAgentWizard(agentId: string, mcpEndpointUrl: string): AgentWizardData | null {
+export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardData | null {
   const agent = getAgent(agentId)
   if (!agent) return null
 
@@ -118,10 +118,12 @@ export function buildAgentWizard(agentId: string, mcpEndpointUrl: string): Agent
     })
   }
 
-  // 2) Config
-  const localSnippet = buildConfigSnippet(agent, mcpEndpointUrl)
-  const remoteSnippet = buildRemoteSnippet(agent, mcpEndpointUrl)
-  if (localSnippet) {
+  // 2) Config. Agent Plugins bundle their MCP configuration, so installation is enough.
+  const localSnippet = buildConfigSnippet(agent, apiUrl)
+  const remoteSnippet = buildRemoteSnippet(agent, apiUrl)
+  if (agent.installStrategy === "agent-plugin") {
+    // No manual config step.
+  } else if (localSnippet) {
     steps.push({
       id: "config",
       kind: "config",
@@ -153,22 +155,23 @@ export function buildAgentWizard(agentId: string, mcpEndpointUrl: string): Agent
       title: "Add LyraShield in the agent",
       summary: `${agent.displayName} is configured through its own UI. Add a new MCP server and use the endpoint below with a Bearer key.`,
       snippet: supportsRemote
-        ? `URL: ${mcpEndpointUrl}\nAuthorization: Bearer ${API_KEY_PLACEHOLDER}`
+        ? `URL: ${apiUrl}/api/mcp\nAuthorization: Bearer ${API_KEY_PLACEHOLDER}`
         : `Run: npx -y @lyrashield/mcp\nEnv: LYRASHIELD_API_KEY=${API_KEY_PLACEHOLDER}`,
       copyLabel: `Copy ${agent.displayName} connection values`,
       note: agent.gotchas[0],
     })
   }
 
-  // 3) API key
+  // 3) Authentication
   steps.push({
     id: "api-key",
     kind: "api-key",
-    title: "Add your API key",
-    summary: `Create a workspace key in Settings → API keys (it starts with lsk_), then run login so the CLI and MCP server can use it.`,
-    command: "lyrashield login",
+    title: "Authenticate",
+    summary:
+      "Recommended: sign in with the read-only OAuth device flow so the CLI and local MCP server can use your selected workspace.",
+    command: "lyrashield login --oauth",
     copyLabel: "Copy login command",
-    note: "The key is stored at ~/.lyrashield/credentials.json. Replace the <paste lsk_ key> placeholder in any config above.",
+    note: "Credentials are stored at ~/.lyrashield/credentials.json. For API-key-only clients, create an lsk_ key in Settings → API keys and run `lyrashield login` instead.",
   })
 
   // 4) Rules / skills

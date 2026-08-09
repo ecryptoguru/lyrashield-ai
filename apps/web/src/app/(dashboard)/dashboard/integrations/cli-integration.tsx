@@ -7,7 +7,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle } from "@lyrashield/ui
 import { writeClipboard } from "@/components/scorecard-share-composer"
 
 const INSTALL_CMD = "npx lyrashield@latest install <agent>"
-const LOGIN_CMD = "lyrashield login"
+const OAUTH_LOGIN_CMD = "lyrashield login --oauth"
 const DOCTOR_CMD = "lyrashield doctor"
 
 export function CliIntegration({ docsUrl }: { docsUrl: string }) {
@@ -90,24 +90,16 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
           <span className="text-sm font-medium">Setup</span>
           <ol className="text-muted-foreground ml-5 list-decimal space-y-3 text-sm">
             <li className="leading-6">
-              Create an API key in{" "}
-              <Link
-                href="/dashboard/settings"
-                className="text-foreground underline underline-offset-2 hover:no-underline"
-              >
-                Settings → API keys
-              </Link>{" "}
-              — keys are shown once at creation.
+              Recommended: run the OAuth device login, select a workspace in your browser, and keep
+              the resulting read-only credentials local to this machine.
             </li>
             <li className="space-y-2 leading-6">
               <div>
                 Run{" "}
                 <code className="bg-muted text-foreground rounded px-1 py-0.5 font-mono text-xs">
-                  {LOGIN_CMD}
+                  {OAUTH_LOGIN_CMD}
                 </code>{" "}
-                and paste your{" "}
-                <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">lsk_</code> key. It
-                is saved to{" "}
+                . Credentials are saved to{" "}
                 <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">
                   ~/.lyrashield/credentials.json
                 </code>
@@ -119,12 +111,12 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
                   tabIndex={0}
                   aria-label="Login command"
                 >
-                  {LOGIN_CMD}
+                  {OAUTH_LOGIN_CMD}
                 </code>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => void copy(LOGIN_CMD, "login")}
+                  onClick={() => void copy(OAUTH_LOGIN_CMD, "login")}
                   aria-label="Copy login command"
                   className="min-h-11 min-w-11 shrink-0 sm:min-h-9"
                 >
@@ -187,14 +179,18 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
         ) : null}
 
         <p className="text-muted-foreground bg-muted/40 rounded-md border border-dashed px-3 py-2 text-xs leading-relaxed">
-          For most agents the CLI writes the config file for you; for some (Cline, JetBrains,
-          PiCode, OpenClaw, Hermes) print values to paste, Amp shells out to its vendor CLI.
+          For API-key-only clients or CI, create an <code>lsk_</code> key in Settings → API keys and
+          run <code>lyrashield login</code>. For most agents the CLI writes the config file; Cline,
+          JetBrains, PiCode, OpenClaw, Hermes, Goose, and Aider print values to paste.
         </p>
 
         <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           <span>
-            Also available as{" "}
-            <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">@lyrashield/cli</code>.
+            Use the{" "}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">lyrashield</code>{" "}
+            package;{" "}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-xs">@lyrashield/cli</code>{" "}
+            is deprecated.
           </span>
           <Link
             href={docsUrl}

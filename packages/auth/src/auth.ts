@@ -75,6 +75,8 @@ const oauthProviderPlugin = oauthProvider({
   allowDynamicClientRegistration: true,
   allowUnauthenticatedClientRegistration: true,
   allowPublicClientPrelogin: true,
+  // apps/web serves the required path-based issuer metadata route.
+  silenceWarnings: { oauthAuthServerConfig: true },
   // Dynamic MCP clients must be allowed to request the approval-gated write
   // scope. This only permits a request; consent and the per-action gate remain required.
   clientRegistrationDefaultScopes: oauthScopes,
