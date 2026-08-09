@@ -51,8 +51,8 @@ Pi reads MCP servers from project local .mcp.json and from global ~/.pi/mcp.json
   "mcpServers": {
     "lyrashield": {
       "type": "stdio",
-      "command": "npx -y @lyrashield/mcp",
-      "args": [],
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
       "env": {
         "LYRASHIELD_API_KEY": "${VAR:LYRASHIELD_API_KEY}"
       },

@@ -23,7 +23,7 @@ Zed is fast and agent native, which makes it popular for vibe coding, but speed 
 
 ## 1. Prerequisites and setup
 
-You need Zed 0.170 or newer, Node 18 or newer for `npx`, a LyraShield API key prefixed `lsk_` for remote mode, and a GitHub repo where you can add workflows. Install the MCP package once to warm the cache with `npx -y @lyrashield/mcp --help`. For remote mode, store your key as an environment variable and never commit it. Zed reads MCP servers from `settings.json` under `context_servers`, and the [Zed documentation](https://zed.dev/docs/assistant/context-servers) describes this field as the point where you add custom tools. Confirm you can read secrets scans and dependency data locally by checking your project against [OWASP Top 10](https://owasp.org/www-project-top-ten/) patterns and by reviewing vulnerable deps on [OSV](https://osv.dev/). If you have not used MCP before, skim the [MCP spec overview](https://modelcontextprotocol.io/specification/2025-03-26) to see how tools, resources, and prompts are exposed. Before editing `settings.json`, decide which transport suits your work, since both register under `context_servers` and you can switch without rewriting prompts.
+You need Zed 0.170 or newer, Node 18 or newer for `npx`, a LyraShield API key prefixed `lsk_` for remote mode, and a GitHub repo where you can add workflows. Restart Zed after you save the MCP configuration, then confirm the server in the Agent Panel. For remote mode, store your key as an environment variable and never commit it. Zed reads MCP servers from `settings.json` under `context_servers`, and the [Zed documentation](https://zed.dev/docs/assistant/context-servers) describes this field as the point where you add custom tools. Confirm you can read secrets scans and dependency data locally by checking your project against [OWASP Top 10](https://owasp.org/www-project-top-ten/) patterns and by reviewing vulnerable deps on [OSV](https://osv.dev/). If you have not used MCP before, skim the [MCP spec overview](https://modelcontextprotocol.io/specification/2025-03-26) to see how tools, resources, and prompts are exposed. Before editing `settings.json`, decide which transport suits your work, since both register under `context_servers` and you can switch without rewriting prompts.
 
 ## 2. Configure the MCP server in Zed
 
@@ -95,19 +95,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Run LyraShield MCP scan
-        env:
-          LYRASHIELD_API_KEY: ${{ secrets.LYRASHIELD_API_KEY }}
-          LYRASHIELD_MCP_URL: https://app.lyrashieldai.com/api/mcp
-        run: |
-          npx -y @lyrashield/mcp scan --diff origin/main --format sarif --out results.sarif
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+      - uses: ecryptoguru/lyrashield-ai@v1
         with:
-          sarif_file: results.sarif
+          fail_on_severity: HIGH
 ```
 
-This runs only on changed files, which keeps the gate fast and focused. SARIF output integrates with GitHub code scanning and lets you track retest results after a Fix PR. If you need SCA and secrets history, see [docs.github.com on dependency review](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-supply-chain-security) for supply chain context. The `--diff origin/main` flag makes the gate diff aware: it scopes scans to changed files, so a one line edit avoids full scans. SARIF lands in the GitHub Security tab, where each rule maps to a file and line. Because the workflow reuses the same endpoint, findings reproduced locally get the same rule ID in CI.
+This runs only on changed files, which keeps the gate fast and focused. SARIF output integrates with GitHub code scanning. If you need SCA and secrets history, see [docs.github.com on dependency review](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-supply-chain-security) for supply chain context. The action derives the pull-request diff, so a one-line edit avoids a full scan. SARIF lands in the GitHub Security tab, where each rule maps to a file and line. The local MCP server and the runner-local CI gate are complementary checks, not the same remote scan.
 
 ## 6. Add agent rules snippet
 

@@ -22,7 +22,7 @@ Gemini CLI brings agent assisted development to the command line, but terminal v
 
 ## 1. Prerequisites and setup
 
-You need Gemini CLI 0.9 or newer, Node 18 or newer, a LyraShield key prefixed `lsk_` for remote mode, and a GitHub repo for workflow setup. Gemini CLI stores MCP under `~/.gemini/settings.json` with key `mcpServers`, including `trust`, `includeTools`, and env expansion. The pattern is documented in the [Gemini CLI docs](https://github.com/google-gemini/gemini-cli) and summarized in the [Gemini CLI integration guide](/docs/integrations/gemini-cli). Warm the cache with `npx -y @lyrashield/mcp --help`. Review risk baselines via [OWASP Top 10](https://owasp.org/www-project-top-ten/) and advisory data via [OSV](https://osv.dev/). For protocol context, see [Model Context Protocol intro](https://modelcontextprotocol.io/docs/getting-started/intro). The `~/.gemini/settings.json` schema is a single JSON document. A trailing comma or missing bracket will block all servers from loading, so validate with a JSON linter after each edit. The `trust` key on each server controls whether the agent can invoke tools without prompting you first, and `includeTools` narrows which tools are even discoverable by the model.
+You need Gemini CLI 0.9 or newer, Node 18 or newer, a LyraShield key prefixed `lsk_` for remote mode, and a GitHub repo for workflow setup. Gemini CLI stores MCP under `~/.gemini/settings.json` with key `mcpServers`, including `trust`, `includeTools`, and env expansion. The pattern is documented in the [Gemini CLI docs](https://github.com/google-gemini/gemini-cli) and summarized in the [Gemini CLI integration guide](/docs/integrations/gemini-cli). Restart Gemini CLI, then use its MCP tool list to confirm discovery. Review risk baselines via [OWASP Top 10](https://owasp.org/www-project-top-ten/) and advisory data via [OSV](https://osv.dev/). For protocol context, see [Model Context Protocol intro](https://modelcontextprotocol.io/docs/getting-started/intro). The `~/.gemini/settings.json` schema is a single JSON document. A trailing comma or missing bracket will block all servers from loading, so validate with a JSON linter after each edit. The `trust` key on each server controls whether the agent can invoke tools without prompting you first, and `includeTools` narrows which tools are even discoverable by the model.
 
 ## 2. Configure Gemini CLI MCP servers
 
@@ -119,16 +119,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Scan diff via LyraShield MCP
-        env:
-          LYRASHIELD_API_KEY: ${{ secrets.LYRASHIELD_API_KEY }}
-          LYRASHIELD_MCP_URL: https://app.lyrashieldai.com/api/mcp
-        run: |
-          npx -y @lyrashield/mcp scan --diff origin/main --format sarif --out results.sarif
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+      - uses: ecryptoguru/lyrashield-ai@v1
         with:
-          sarif_file: results.sarif
+          fail_on_severity: HIGH
 ```
 
 The workflow mirrors your Gemini CLI transport: same endpoint [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and same key shape. Diff mode keeps scans fast for agent driven branches by only scanning changed files rather than the full tree. Use GitHub code scanning rules to require merge approval for critical verified findings while keeping notes informational.

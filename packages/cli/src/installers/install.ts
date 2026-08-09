@@ -43,8 +43,8 @@ export interface InstallAgentResult {
 
 function renderManualInstructions(agent: AgentEntry, opts: InstallAgentOptions): string {
   const serverName = opts.serverName ?? "lyrashield"
-  const command = "npx -y @lyrashield/mcp"
-  const args = ["stdio"]
+  const command = "npx"
+  const args = ["-y", "@lyrashield/mcp"]
   const env = {
     LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY",
     LYRASHIELD_API_URL: opts.apiUrl,

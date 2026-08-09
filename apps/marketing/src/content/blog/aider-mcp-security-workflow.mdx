@@ -47,13 +47,9 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: ecryptoguru/lyrashield-ai@v1
         with:
-          fetch-depth: 0
-      - run: npx -y @lyrashield/mcp scan --diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} --format sarif > lyrashield.sarif
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: lyrashield.sarif
+          fail_on_severity: HIGH
 ```
 
 This gate works whether or not Aider ever ships MCP, because it runs in CI on the diff, independent of the editor. SARIF output integrates with GitHub code scanning so findings appear in the pull request view, and the [GitHub docs for SARIF upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github) describe the required `security-events: write` permission.

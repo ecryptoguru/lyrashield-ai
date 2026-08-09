@@ -22,7 +22,7 @@ OpenAI Codex excels at large refactors, but refactors can introduce auth bypasse
 
 ## 1. Prerequisites and setup
 
-You need Codex CLI 0.12 or newer, Node 18 or newer, a LyraShield key starting with `lsk_`, and a repo where you can add GitHub workflows. Codex loads MCP from `~/.codex/config.toml`, as described in the [Codex MCP docs](https://github.com/openai/codex) under MCP servers. Keep your key in env, not in files. Warm the package cache once with `npx -y @lyrashield/mcp --version`. Review baseline risks through [OWASP Top 10](https://owasp.org/www-project-top-ten/) and weak config guidance from [CISA secure by design](https://www.cisa.gov/securebydesign). For dependency risk, browse [OSV](https://osv.dev/) to see how advisories map to versions. The [Model Context Protocol spec](https://modelcontextprotocol.io/docs/getting-started/intro) explains how tools like `scan` and `list_findings` are exposed. Every Codex session reads `~/.codex/config.toml` on startup, so one edit registers MCP tools for all projects. Confirm `codex --version` shows 0.12 or higher and `node --version` shows 18 or higher, since older builds ignore `bearer_token_env_var`. Store `LYRASHIELD_API_KEY` in your shell profile or a secret manager, never inside the repo.
+You need Codex CLI 0.12 or newer, Node 18 or newer, a LyraShield key starting with `lsk_`, and a repo where you can add GitHub workflows. Codex loads MCP from `~/.codex/config.toml`, as described in the [Codex MCP docs](https://github.com/openai/codex) under MCP servers. Keep your key in env, not in files. Register the configured server, then use `codex mcp list` to confirm tool discovery. Review baseline risks through [OWASP Top 10](https://owasp.org/www-project-top-ten/) and weak config guidance from [CISA secure by design](https://www.cisa.gov/securebydesign). For dependency risk, browse [OSV](https://osv.dev/) to see how advisories map to versions. The [Model Context Protocol spec](https://modelcontextprotocol.io/docs/getting-started/intro) explains how tools like `scan` and `list_findings` are exposed. Every Codex session reads `~/.codex/config.toml` on startup, so one edit registers MCP tools for all projects. Confirm `codex --version` shows 0.12 or higher and `node --version` shows 18 or higher, since older builds ignore `bearer_token_env_var`. Store `LYRASHIELD_API_KEY` in your shell profile or a secret manager, never inside the repo.
 
 ## 2. Configure Codex MCP servers
 
@@ -57,7 +57,7 @@ The local stdio entry is best for solo dev because Codex spawns the MCP server a
 
 ## 3. Verify the connection in Codex
 
-Start a new Codex session with `codex --verbose` and run `codex mcp list` or ask the agent "list MCP servers". You should see `lyrashield` and `lyrashield_remote` as available. Try a dry tool call: "call lyrashield.scan_status". If it fails, check that `LYRASHIELD_API_KEY` is exported and that Node can resolve `npx`. Common failure is launching Codex from a GUI that does not inherit shell env. For auth debugging, the [OpenAI platform docs](https://openai.com/index/openai-api/) discuss bearer handling, and [docs.github.com on encrypted secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) covers secret propagation for CI parity. A second failure is a stale `npx` cache, so run `npx -y @lyrashield/mcp --version` after upgrades to refresh the package. If `bearer_token_env_var` is set but the env var is empty, Codex connects without auth and the server rejects calls with a 401, which shows as a tool error rather than a crash.
+Start a new Codex session with `codex --verbose` and run `codex mcp list` or ask the agent "list MCP servers". You should see `lyrashield` and `lyrashield_remote` as available. Try a dry tool call: "call lyrashield.scan_status". If it fails, check that `LYRASHIELD_API_KEY` is exported and that Node can resolve `npx`. Common failure is launching Codex from a GUI that does not inherit shell env. For auth debugging, the [OpenAI platform docs](https://openai.com/index/openai-api/) discuss bearer handling, and [docs.github.com on encrypted secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) covers secret propagation for CI parity. Reopen Codex after package upgrades so `npx` resolves the current package. If `bearer_token_env_var` is set but the env var is empty, Codex connects without auth and the server rejects calls with a 401, which shows as a tool error rather than a crash.
 
 ## 4. Run an inline scan from a Codex session
 
@@ -97,16 +97,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Scan diff with LyraShield MCP
-        env:
-          LYRASHIELD_API_KEY: ${{ secrets.LYRASHIELD_API_KEY }}
-          LYRASHIELD_MCP_URL: https://app.lyrashieldai.com/api/mcp
-        run: |
-          npx -y @lyrashield/mcp scan --diff origin/main --format sarif --out results.sarif
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+      - uses: ecryptoguru/lyrashield-ai@v1
         with:
-          sarif_file: results.sarif
+          fail_on_severity: HIGH
 ```
 
 The `--diff` flag limits analysis to changed files, which is critical for Codex generated PRs that touch many files. SARIF upload lets you use GitHub code scanning rules to block merges on critical verified findings while still keeping low risk notes informational. The diff aware gate matters because a full repo scan on a large codebase can time out the job and drown reviewers in preexisting issues, whereas the diff scan returns only findings tied to the PR changes. Add a branch protection rule requiring the gate to pass before merge.

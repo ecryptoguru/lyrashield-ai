@@ -50,7 +50,8 @@ Hermes stores MCP servers in ~/.hermes/config.yaml under mcp_servers. Each entry
 mcp_servers:
   lyrashield:
     transport: stdio
-    command: npx -y @lyrashield/mcp
+    command: npx
+    args: ["-y", "@lyrashield/mcp"]
     env:
       LYRASHIELD_API_KEY: ${env:LYRASHIELD_API_KEY}
     tools:

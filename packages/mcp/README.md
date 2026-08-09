@@ -97,6 +97,8 @@ Per-client config for OpenCode, Kilo Code, Cline, Zed, and the cloud platforms l
 
 The server reads `LYRASHIELD_API_KEY` and `LYRASHIELD_API_URL` from the environment first. If those are absent, it falls back to `~/.lyrashield/credentials.json` — the credentials file written by `lyrashield login` (with `0o600` permissions). This means `npx -y @lyrashield/mcp` works without any env vars after a single `lyrashield login`.
 
+`@lyrashield/mcp` is an MCP stdio server, not a command-line scanner: start it with `npx -y @lyrashield/mcp` and let your MCP client call its tools. For pull-request CI, use the [LyraShield GitHub Action](../../README.md#github-action) instead.
+
 `lyrashield login` uses an OAuth device flow: it opens a browser to approve the CLI, writes the resulting token to `~/.lyrashield/credentials.json`, and falls back to `LYRASHIELD_API_KEY` from the environment if the browser flow is unavailable. `packages/credentials` is the single source of truth for that file — its location, env-over-file precedence, default API URL, and normalization — shared by the CLI and MCP server so the two cannot drift.
 
 ### Remote (Streamable HTTP) — for cloud editors
