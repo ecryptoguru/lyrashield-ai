@@ -41,7 +41,7 @@ impl LyraShieldMcpExtension {
                      }}\n  \
                  }}\n\
              }}\n\n\
-             Get your key at https://app.lyrashieldai.com/settings/api-keys"
+             Get your key at https://app.lyrashieldai.com/dashboard/settings"
         )
     }
 }

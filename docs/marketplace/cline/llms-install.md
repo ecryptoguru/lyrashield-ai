@@ -19,7 +19,7 @@
 }
 ```
 
-3. Replace `<YOUR_LYRASHIELD_API_KEY>` with your API key from https://app.lyrashieldai.com/settings/api-keys.
+3. Replace `<YOUR_LYRASHIELD_API_KEY>` with your API key from https://app.lyrashieldai.com/dashboard/settings.
 4. Save the file. Cline will discover the tools automatically.
 
 For the full Cline MCP Marketplace listing, open an issue at https://github.com/cline/mcp-marketplace/issues/new?template=mcp-server-submission.yml with:
