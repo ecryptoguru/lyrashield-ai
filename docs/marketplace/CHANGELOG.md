@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.12
+
+- Declared Zed's required Node process capability in the extension manifest.
+
+## 0.1.11
+
+- Corrected API-key settings links in the Cline and Zed installation guides.
+
 ## 0.1.10
 
 - Declared the bundled skill in the OpenAI/Codex manifest using the current plugin format.
