@@ -10,16 +10,17 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
 
-  // Copy-paste-ready config for the two most common setups. The endpoint URL is
-  // pre-filled; the user only replaces the key placeholder. This is the single
-  // biggest DX win for an MCP product — no manual JSON assembly.
+  const apiUrl = endpointUrl.replace(/\/api\/mcp$/, "")
+
+  // Copy-paste-ready config for the two most common setups. Local stdio uses
+  // credentials from `lyrashield login --oauth`; remote config remains the API-key fallback.
   const localConfig = `{
   "mcpServers": {
     "lyrashield": {
       "command": "npx",
       "args": ["-y", "@lyrashield/mcp"],
       "env": {
-        "LYRASHIELD_API_KEY": "<paste lsk_ key>"
+        "LYRASHIELD_API_URL": "${apiUrl}"
       }
     }
   }
@@ -115,9 +116,7 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium">
-              Local config (Claude Code, Cursor, most agents)
-            </span>
+            <span className="text-sm font-medium">Local config (OAuth CLI login)</span>
             <Button
               size="sm"
               variant="ghost"
@@ -145,7 +144,7 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-medium">
-              Remote config (cloud IDEs — Lovable, Bolt, Replit, v0)
+              API-key fallback (cloud IDEs — Lovable, Bolt, Replit, v0)
             </span>
             <Button
               size="sm"
@@ -172,7 +171,7 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
         </div>
 
         <div className="space-y-1.5">
-          <span className="text-sm font-medium">Setup</span>
+          <span className="text-sm font-medium">API-key fallback</span>
           <ol className="text-muted-foreground list-inside list-decimal space-y-1 text-sm">
             <li>
               Create an API key in{" "}
@@ -210,9 +209,9 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
         </div>
 
         <p className="text-muted-foreground bg-muted/40 rounded-md border px-3 py-2 text-xs leading-relaxed">
-          Remote OAuth connections are read-only by default. Any write scope is explicit and still
-          requires the exact-argument LyraShield approval flow. API keys remain available below for
-          CI and clients without OAuth.
+          OAuth connections are read-only by default. Any write scope is explicit and still requires
+          the exact-argument LyraShield approval flow. Use API keys only for CI or clients without
+          OAuth.
         </p>
       </CardContent>
     </Card>

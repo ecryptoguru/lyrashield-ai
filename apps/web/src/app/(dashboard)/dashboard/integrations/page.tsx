@@ -73,7 +73,8 @@ export default async function IntegrationsPage({
 
   const appOriginRaw = (env.NEXT_PUBLIC_APP_URL as string | undefined) ?? ""
   const appOrigin = appOriginRaw.replace(/\/+$/, "")
-  const mcpEndpointUrl = appOrigin ? `${appOrigin}/api/mcp` : "/api/mcp"
+  const apiUrl = appOrigin
+  const mcpEndpointUrl = `${apiUrl}/api/mcp`
   const marketingUrl =
     (env.NEXT_PUBLIC_MARKETING_URL as string | undefined)?.replace(/\/+$/, "") ||
     "https://lyrashieldai.com"

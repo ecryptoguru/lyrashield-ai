@@ -50,7 +50,8 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
   const installCmd = `npx lyrashield install ${agent.id}`
-  const primaryLocation = agent.locations[0]?.path ?? null
+  const locations = agent.pluginLocations?.length ? agent.pluginLocations : agent.locations
+  const primaryLocation = locations[0]?.path ?? null
 
   async function handleCopy() {
     setCopyError(null)
@@ -75,12 +76,12 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
         <div className="mt-1.5 flex items-center gap-1.5">
           <CircleDashed className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
           <span className="text-muted-foreground text-[11px] leading-5 font-medium">
-            Not connected — set up to connect
+            Setup status is not detected
           </span>
         </div>
         {primaryLocation ? (
           <p className="text-muted-foreground mt-2 line-clamp-2 font-mono text-[11px] leading-5 break-all">
-            {agent.locations.map((l) => l.path).join(" · ")}
+            {locations.map((l) => l.path).join(" · ")}
           </p>
         ) : (
           <p className="text-muted-foreground mt-2 text-[11px] leading-5">

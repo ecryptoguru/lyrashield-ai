@@ -719,7 +719,7 @@ const claudeCodePlugin: AgentEntry = {
   },
   gotchas: [
     "Claude Code may also discover `.claude-plugin/plugin.json`; the package includes a manifest shim in that directory.",
-    "The MCP stdio server reads credentials from `~/.lyrashield/credentials.json` — run `lyrashield login` before installing.",
+    "The MCP stdio server reads credentials from `~/.lyrashield/credentials.json` — run `lyrashield login --oauth` before installing.",
   ],
 }
 
@@ -747,7 +747,7 @@ const cursorPlugin: AgentEntry = {
   },
   gotchas: [
     "Cursor discovers Agent Plugins from `~/.cursor/plugins/local/`; the portable `plugin.json` at the plugin root is the manifest.",
-    "Run `lyrashield login` before installing so the MCP stdio server can read credentials.",
+    "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
   ],
 }
 
@@ -775,7 +775,7 @@ const vscodePlugin: AgentEntry = {
   },
   gotchas: [
     "VS Code auto-detects the plugin format by checking for format-specific manifest paths.",
-    "Run `lyrashield login` before installing so the MCP stdio server can read credentials.",
+    "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
   ],
 }
 
@@ -803,7 +803,7 @@ const openaiCodexPlugin: AgentEntry = {
   },
   gotchas: [
     "Codex recognizes root `plugin.json` files using the Agent Plugins 1.0 schema and maps them to Codex plugin manifests.",
-    "Run `lyrashield login` before installing so the MCP stdio server can read credentials.",
+    "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
   ],
 }
 
@@ -831,7 +831,7 @@ const githubCopilotPlugin: AgentEntry = {
   },
   gotchas: [
     "GitHub Copilot CLI scans each plugin directory for a `plugin.json` manifest at the root.",
-    "Run `lyrashield login` before installing so the MCP stdio server can read credentials.",
+    "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
   ],
 }
 
@@ -859,7 +859,7 @@ const kiroPlugin: AgentEntry = {
   },
   gotchas: [
     "Kiro discovers plugins from `~/.kiro/plugins/`; the portable `plugin.json` at the plugin root is the manifest.",
-    "Run `lyrashield login` before installing so the MCP stdio server can read credentials.",
+    "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
   ],
 }
 

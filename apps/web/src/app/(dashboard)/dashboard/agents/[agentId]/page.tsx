@@ -36,13 +36,12 @@ export default async function AgentWizardPage({
   if (!agent) notFound()
 
   const appOrigin = ((env.NEXT_PUBLIC_APP_URL as string | undefined) ?? "").replace(/\/+$/, "")
-  const mcpEndpointUrl = appOrigin ? `${appOrigin}/api/mcp` : "/api/mcp"
   const marketingUrl =
     (env.NEXT_PUBLIC_MARKETING_URL as string | undefined)?.replace(/\/+$/, "") ||
     "https://lyrashieldai.com"
   const docsUrl = `${marketingUrl}/docs/integrations/${agent.docsSlug}`
 
-  const data = buildAgentWizard(agent.id, mcpEndpointUrl)
+  const data = buildAgentWizard(agent.id, appOrigin)
   if (!data) notFound()
 
   if (!workspaceId) {
@@ -66,8 +65,8 @@ export default async function AgentWizardPage({
         <h1 className="text-2xl font-bold tracking-tight">Set up {data.displayName}</h1>
         <p className="text-muted-foreground max-w-3xl text-sm leading-6">
           Follow the steps to connect {data.displayName} to LyraShield — install the integration,
-          add your API key, sync rules, and verify. Everything uses the real CLI commands, so you
-          can paste them into your terminal.
+          authenticate, sync rules, and verify. Everything uses the real CLI commands, so you can
+          paste them into your terminal.
         </p>
       </div>
 
