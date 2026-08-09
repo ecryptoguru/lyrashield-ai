@@ -68,9 +68,11 @@ jobs:
           # that param. Strip only uselibpqcompat, keep everything else (sslmode,
           # application_name, etc.) that pg_dump understands.
           pg_dump_url="$DATABASE_DIRECT_URL"
-          pg_dump_url="${pg_dump_url//uselibpqcompat=1/}"
-          # Clean up any dangling & or ? left behind
-          pg_dump_url="$(sed 's/[?&]$//; s/&&/\&/g; s/?&/?/g' <<< "$pg_dump_url")"
+          # Supabase connection strings may include uselibpqcompat=1 (or the
+          # URL-encoded equivalent) for the Node driver, but pg_dump uses libpq
+          # and rejects it. Remove the parameter in any position and clean up
+          # any dangling or duplicated ?/& that remain.
+          pg_dump_url="$(sed -E 's/([?&])uselibpqcompat[^&]*(&|$)/\1/; s/&&/\&/g; s/\?&/?/g; s/[?&]$//' <<< "$pg_dump_url")"
 
           docker run --rm \
             --env PG_URL="$pg_dump_url" \
