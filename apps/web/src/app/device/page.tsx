@@ -1,10 +1,11 @@
 "use client"
 
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { useState } from "react"
 import { authClient } from "@lyrashield/auth"
 
 export default function DevicePage() {
+  const router = useRouter()
   const params = useSearchParams()
   const [userCode, setUserCode] = useState(params.get("user_code") ?? "")
   const [error, setError] = useState<string | null>(null)
@@ -17,7 +18,7 @@ export default function DevicePage() {
     try {
       const result = await authClient.device({ query: { user_code: code } })
       if (!result.data) throw new Error("That device code is invalid or expired.")
-      window.location.assign(`/device/approve?user_code=${encodeURIComponent(code)}`)
+      router.push(`/device/approve?user_code=${encodeURIComponent(code)}`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "That device code is invalid or expired.")
       setBusy(false)
