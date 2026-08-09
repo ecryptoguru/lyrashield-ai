@@ -29,7 +29,7 @@ For Kiro, the preferred path is the Agent Plugin one step install, which bundles
 
 ## 3. Configure the manual path if needed
 
-If you cannot use the plugin, the manual path is what the CLI writes when it configures Kiro. It runs the MCP server over stdio with `npx -y @lyrashield/mcp stdio`, or points at the remote endpoint `https://app.lyrashieldai.com/api/mcp` with a Bearer token prefixed `lsk_`. Add the server to the Kiro MCP configuration so the agent can reach it, and store the token in the local credentials file rather than the config you commit. The manual path is secondary because it does not bundle the security skill and AGENTS.md that the plugin provides, so you have to convey conventions yourself. The [Model Context Protocol transport documentation](https://modelcontextprotocol.io/) explains the stdio and remote transport options. Use the remote path when you cannot run a local Node process, and the stdio path when you want everything on your machine. Whichever you pick, store the Bearer token in the local credentials file that `npx lyrashield login` writes, and reference it from the config rather than pasting it inline, so a config file shared for troubleshooting never carries a live token. If you use the remote endpoint, rotate the Bearer token on a schedule, because a remote MCP server trusts the token alone for identity. Kiro design.md and spec.md hooks can reference the workflow by name, so when a hook fires the agent knows to call the registered server rather than requiring an inline reminder each time.
+If you cannot use the plugin, the manual path is what the CLI writes when it configures Kiro. It runs the MCP server over stdio with `npx -y @lyrashield/mcp`, or points at the remote endpoint `https://app.lyrashieldai.com/api/mcp` with a Bearer token prefixed `lsk_`. Add the server to the Kiro MCP configuration so the agent can reach it, and store the token in the local credentials file rather than the config you commit. The manual path is secondary because it does not bundle the security skill and AGENTS.md that the plugin provides, so you have to convey conventions yourself. The [Model Context Protocol transport documentation](https://modelcontextprotocol.io/) explains the stdio and remote transport options. Use the remote path when you cannot run a local Node process, and the stdio path when you want everything on your machine. Whichever you pick, store the Bearer token in the local credentials file that `npx lyrashield login` writes, and reference it from the config rather than pasting it inline, so a config file shared for troubleshooting never carries a live token. If you use the remote endpoint, rotate the Bearer token on a schedule, because a remote MCP server trusts the token alone for identity. Kiro design.md and spec.md hooks can reference the workflow by name, so when a hook fires the agent knows to call the registered server rather than requiring an inline reminder each time.
 
 ## 4. Verify the connection and run an inline check
 
@@ -51,13 +51,9 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: ecryptoguru/lyrashield-ai@v1
         with:
-          fetch-depth: 0
-      - run: npx -y @lyrashield/mcp scan --diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} --format sarif > lyrashield.sarif
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: lyrashield.sarif
+          fail_on_severity: HIGH
 ```
 
 ## 6. Add an agent rules snippet

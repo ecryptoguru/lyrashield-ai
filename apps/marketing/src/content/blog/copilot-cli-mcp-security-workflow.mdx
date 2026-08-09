@@ -25,7 +25,7 @@ Install Node so the `npx` commands resolve, then run `npx lyrashield login` to s
 
 ## 2. Register the MCP server with Copilot CLI
 
-Use the `copilot mcp add` command to register the LyraShield server consistently, rather than hand editing the JSON, because malformed config can break the agent or leak settings into logs. For a local server use type local with stdio transport running `npx -y @lyrashield/mcp stdio`. For a remote server use type http with the endpoint `https://app.lyrashieldai.com/api/mcp` and a Bearer token prefixed `lsk_`. The global config file at the user level applies to every project, while a project level file scopes the server to one repository, so prefer the project file for anything repository specific and keep the global file free of tokens. The [GitHub Copilot CLI documentation](https://docs.github.com/en/copilot) describes the config locations and the add command. Decide between local and remote based on whether you can run a Node process in your environment, since the remote path removes the local runtime dependency. After you run `copilot mcp add`, open the resulting config file once to confirm the entry landed in the scope you intended, because a server meant for one project that lands in the global file becomes available everywhere.
+Use the `copilot mcp add` command to register the LyraShield server consistently, rather than hand editing the JSON, because malformed config can break the agent or leak settings into logs. For a local server use type local with stdio transport running `npx -y @lyrashield/mcp`. For a remote server use type http with the endpoint `https://app.lyrashieldai.com/api/mcp` and a Bearer token prefixed `lsk_`. The global config file at the user level applies to every project, while a project level file scopes the server to one repository, so prefer the project file for anything repository specific and keep the global file free of tokens. The [GitHub Copilot CLI documentation](https://docs.github.com/en/copilot) describes the config locations and the add command. Decide between local and remote based on whether you can run a Node process in your environment, since the remote path removes the local runtime dependency. After you run `copilot mcp add`, open the resulting config file once to confirm the entry landed in the scope you intended, because a server meant for one project that lands in the global file becomes available everywhere.
 
 ## 3. Set the tools allowlist and the manual path
 
@@ -51,13 +51,9 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: ecryptoguru/lyrashield-ai@v1
         with:
-          fetch-depth: 0
-      - run: npx -y @lyrashield/mcp scan --diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} --format sarif > lyrashield.sarif
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: lyrashield.sarif
+          fail_on_severity: HIGH
 ```
 
 ## 6. Add an agent rules snippet

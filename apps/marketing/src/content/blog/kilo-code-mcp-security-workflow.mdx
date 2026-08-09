@@ -35,7 +35,7 @@ Quick sanity checks for the MCP package and env wiring:
 node -v
 npm view @lyrashield/mcp version
 export LYRASHIELD_API_KEY=lsk_your_key_here
-npx -y @lyrashield/mcp --help
+npx lyrashield doctor
 ```
 
 For a concrete remediation checklist that mirrors your stack, keep a sibling reference such as [Kilo Code app security checklist](/blog/kilo-code-app-security-checklist) open while you implement. It helps you map a verified finding to a specific fix pattern without guessing.
@@ -52,8 +52,8 @@ Kilo Code reads MCP servers from kilo.jsonc at project root or from the global f
     "servers": {
       "lyrashield": {
         "type": "local",
-        "command": "npx -y @lyrashield/mcp",
-        "args": [],
+        "command": "npx",
+        "args": ["-y", "@lyrashield/mcp"],
         "env": {
           "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
         },

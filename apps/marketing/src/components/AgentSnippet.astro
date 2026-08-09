@@ -44,7 +44,7 @@ function buildKeyNote(snippet: string): string {
 }
 
 function buildManualCommand(): string {
-  return `LYRASHIELD_API_KEY=${apiKey} LYRASHIELD_API_URL=${API_URL} npx -y @lyrashield/mcp stdio`
+  return `LYRASHIELD_API_KEY=${apiKey} LYRASHIELD_API_URL=${API_URL} npx -y @lyrashield/mcp`
 }
 
 function buildRemoteManualCommand(agent: AgentEntry): string {

@@ -23,6 +23,7 @@ function parseJsoncContent(content: string): Record<string, unknown> {
 
 const claude = getAgent("claude-code")!
 const kilo = getAgent("kilo-code")!
+const aider = getAgent("aider")!
 
 describe("conformance: install/uninstall round-trips", () => {
   let cwd: string
@@ -33,6 +34,19 @@ describe("conformance: install/uninstall round-trips", () => {
 
   afterEach(async () => {
     await rm(cwd, { recursive: true, force: true })
+  })
+
+  it("prints an executable stdio command for guided-manual agents", async () => {
+    const result = await installAgent({
+      agent: aider,
+      transport: "stdio",
+      apiUrl: API_URL,
+      cwd,
+    })
+
+    expect(result.outcome).toBe("MANUAL_REQUIRED")
+    expect(result.message).toContain("Command:     npx")
+    expect(result.message).toContain('Args:        ["-y","@lyrashield/mcp"]')
   })
 
   it("claude-code merge-safety keeps foreign servers and unrelated keys", async () => {

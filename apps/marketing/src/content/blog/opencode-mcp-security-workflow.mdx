@@ -115,21 +115,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Run LyraShield scan
-        env:
-          LYRASHIELD_API_KEY: ${{ secrets.LYRASHIELD_API_KEY }}
-          LYRASHIELD_MCP_URL: https://app.lyrashieldai.com/api/mcp
-        run: |
-          npx -y @lyrashield/mcp scan --diff origin/main --format sarif --out results.sarif
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+      - uses: ecryptoguru/lyrashield-ai@v1
         with:
-          sarif_file: results.sarif
+          fail_on_severity: HIGH
 ```
 
-The workflow uses the same remote endpoint [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and the same key shape. Diff scanning aligns with OpenCode codemode workflows where many files change in one agent run. Uploading SARIF lets you block on verified findings without blocking on informational notes.
+The workflow runs in your own GitHub runner and does not need a LyraShield API key. Diff scanning aligns with OpenCode codemode workflows where many files change in one agent run. It uploads SARIF and can block on the configured severity threshold.
 
-The `--diff origin/main` flag tells the scanner to evaluate only changed files relative to the target branch, which keeps CI fast on large repos. The SARIF output is uploaded to the GitHub security tab via `github/codeql-action/upload-sarif@v3`, where findings appear with file, line, severity, and remediation guidance. Because the Action calls the same remote endpoint as the editor integration, a finding you saw locally and a finding that blocks CI carry the same ID and evidence.
+The action derives the pull-request diff before it evaluates it, which keeps CI fast on large repos. Its SARIF output is uploaded to the GitHub security tab with file, line, severity, and remediation guidance. The local MCP integration and CI gate are complementary checks; they do not claim to produce the same finding ID or evidence record.
 
 ## 6. Add agent rules snippet
 

@@ -49,7 +49,7 @@ OpenClaw stores MCP servers under mcp.servers inside ~/.openclaw/openclaw.json. 
 CLI options:
 
 ```bash
-openclaw mcp add lyrashield --transport stdio --command "npx -y @lyrashield/mcp" --env LYRASHIELD_API_KEY=$LYRASHIELD_API_KEY
+openclaw mcp add lyrashield --transport stdio --command npx --args "-y @lyrashield/mcp" --env LYRASHIELD_API_KEY=$LYRASHIELD_API_KEY
 openclaw mcp add lyrashield-remote --transport streamable-http --url https://app.lyrashieldai.com/api/mcp --header "Authorization: Bearer $LYRASHIELD_API_KEY"
 ```
 
@@ -61,8 +61,8 @@ JSON option with tool filtering:
     "servers": {
       "lyrashield": {
         "transport": "stdio",
-        "command": "npx -y @lyrashield/mcp",
-        "args": [],
+        "command": "npx",
+        "args": ["-y", "@lyrashield/mcp"],
         "env": {
           "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
         },

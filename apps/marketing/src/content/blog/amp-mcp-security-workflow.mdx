@@ -8,7 +8,7 @@ draft: false
 heroImage: agent-security-18
 faq:
   - q: "How do I add LyraShield MCP server to Amp?"
-    a: 'Use amp mcp add lyrashield --type stdio --command "npx -y @lyrashield/mcp" with env LYRASHIELD_API_KEY, or edit settings.json amp.mcpServers to add local and remote https://app.lyrashieldai.com/api/mcp with Authorization bearer using $LYRASHIELD_API_KEY.'
+    a: 'Use amp mcp add lyrashield --type stdio --command npx with arguments -y @lyrashield/mcp and env LYRASHIELD_API_KEY, or edit settings.json amp.mcpServers to add local and remote https://app.lyrashieldai.com/api/mcp with Authorization bearer using $LYRASHIELD_API_KEY.'
   - q: "Does Amp support remote MCP with bearer auth?"
     a: "Yes. Configure url plus headers containing Authorization Bearer $LYRASHIELD_API_KEY. Amp expands $VAR references at runtime so the key is not checked in."
   - q: "Can I block auto merge if high findings remain?"
@@ -47,7 +47,7 @@ Amp supports two ways to add MCP servers. The CLI path is simplest for quick set
 CLI option for local stdio:
 
 ```bash
-amp mcp add lyrashield --type stdio --command "npx -y @lyrashield/mcp" --env LYRASHIELD_API_KEY=$LYRASHIELD_API_KEY
+amp mcp add lyrashield --type stdio --command npx --args "-y @lyrashield/mcp" --env LYRASHIELD_API_KEY=$LYRASHIELD_API_KEY
 amp mcp add lyrashield-remote --type http --url https://app.lyrashieldai.com/api/mcp --header "Authorization: Bearer $LYRASHIELD_API_KEY"
 ```
 
@@ -58,8 +58,8 @@ Settings.json option for project local or user global config:
   "amp.mcpServers": {
     "lyrashield": {
       "type": "stdio",
-      "command": "npx -y @lyrashield/mcp",
-      "args": [],
+      "command": "npx",
+      "args": ["-y", "@lyrashield/mcp"],
       "env": {
         "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
       },
