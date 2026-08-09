@@ -625,12 +625,6 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@lyrashield/credentials':
-        specifier: workspace:*
-        version: link:../credentials
-      '@lyrashield/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@3.25.76)
@@ -638,9 +632,15 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
+      '@lyrashield/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../logger
+      '@lyrashield/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@lyrashield/types':
         specifier: workspace:*
         version: link:../types

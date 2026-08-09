@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { access, mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
@@ -21,10 +21,9 @@ describe("exportMarketplace", () => {
     const manifest = JSON.parse(await readFile(path.join(output, "manifest.json"), "utf8")) as {
       license: string
       forbidden: string[]
+      generatedFiles: string[]
     }
-    const plugin = JSON.parse(
-      await readFile(path.join(output, "plugin", "plugin.json"), "utf8")
-    ) as {
+    const plugin = JSON.parse(await readFile(path.join(output, "plugin.json"), "utf8")) as {
       license: string
     }
     expect(plugin.license).toBe("Apache-2.0")
@@ -41,6 +40,16 @@ describe("exportMarketplace", () => {
     await expect(readFile(path.join(output, "plugin.json"), "utf8")).resolves.toContain(
       "LyraShield AI"
     )
+    const portableMcp = JSON.parse(await readFile(path.join(output, "mcp.json"), "utf8")) as {
+      mcpServers?: Record<string, { type?: string; url?: string; headers?: unknown }>
+    }
+    expect(portableMcp.mcpServers).toEqual({
+      lyrashield: {
+        type: "streamable-http",
+        url: "https://app.lyrashieldai.com/api/mcp",
+      },
+    })
+    await expect(access(path.join(output, "plugin"))).rejects.toThrow()
     const claudeManifest = JSON.parse(
       await readFile(path.join(output, ".claude-plugin", "plugin.json"), "utf8")
     ) as { $schema?: string; repository?: string; version?: string }
@@ -50,7 +59,7 @@ describe("exportMarketplace", () => {
     expect(claudeManifest).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
-      version: "0.1.10",
+      version: "0.1.14",
     })
     const codexManifest = JSON.parse(
       await readFile(path.join(output, ".codex-plugin", "plugin.json"), "utf8")
@@ -61,9 +70,6 @@ describe("exportMarketplace", () => {
       lyrashield: {
         type: "streamable-http",
         url: "https://app.lyrashieldai.com/api/mcp",
-        headers: {
-          Authorization: "Bearer ${LYRASHIELD_API_KEY}",
-        },
       },
     })
     await expect(
@@ -91,6 +97,42 @@ describe("exportMarketplace", () => {
     await expect(readFile(path.join(output, "openclaw", "SKILL.md"), "utf8")).resolves.toContain(
       "community ClawHub listing"
     )
+    await expect(readFile(path.join(output, "openclaw", "SKILL.md"), "utf8")).resolves.toContain(
+      "license: MIT-0"
+    )
+    await expect(readFile(path.join(output, "openclaw", "LICENSE"), "utf8")).resolves.toContain(
+      "MIT No Attribution"
+    )
+    await expect(readFile(path.join(output, "LICENSE"), "utf8")).resolves.toContain(
+      "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+    )
+    expect(manifest.generatedFiles).toEqual([
+      "README.md",
+      "CHANGELOG.md",
+      "plugin.json",
+      "mcp.json",
+      "skills",
+      ".claude-plugin/plugin.json",
+      ".codex-plugin/plugin.json",
+      ".cursor-plugin/plugin.json",
+      ".kiro-plugin/plugin.json",
+      ".mcp.json",
+      ".mcp.kiro.json",
+      "gemini-extension.json",
+      "GEMINI.md",
+      "LICENSE",
+      "zed-extension",
+      "codebuff",
+      "gemini-extension",
+      "kiro-power",
+      "cline",
+      "kilo",
+      "openclaw",
+      "reviewer-pack",
+      "assets",
+      "scripts",
+      ".github",
+    ])
     await expect(
       readFile(path.join(output, "assets", "lyrashield-400.svg"), "utf8")
     ).resolves.toContain('width="400"')

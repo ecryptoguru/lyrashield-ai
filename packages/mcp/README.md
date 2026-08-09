@@ -26,6 +26,10 @@ Every tool calls the LyraShield REST API with a workspace API key or OAuth beare
 | `lyrashield_create_report`            | write | Generate a shareable report                                   |
 
 > `lyrashield_check_diff` is a lightweight local heuristic (obvious hardcoded secrets, `eval`, unsafe HTML, SQL concatenation) meant as a pre-PR pre-filter. It is **not** a scanner — run `lyrashield_run_pr_scan` for verified, exploit-validated results.
+>
+> `lyrashield_scan_target` and `lyrashield_run_pr_scan` accept `targetId` directly, or you can pass `repo` (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git`, or `git@github.com:ecryptoguru/lyrashield-ai.git`) to create or reuse a target automatically. `auto: true` detects the current git repo only in the local stdio server; hosted MCP clients must pass `repo` or `targetId`.
+>
+> **Mode guide:** choose the cheapest mode that fits the question — `SAFE` for pre-PR, `QUICK` for fast checks, `STANDARD` for repo/launch review, `DEEP` for deep or compliance review. Deeper modes consume more compute and, in the SaaS plan, more billable minutes. `lyrashield_scan_target` defaults to `STANDARD`; `lyrashield_run_pr_scan` defaults to `SAFE`.
 
 ## Setup
 

@@ -1,6 +1,6 @@
 # @lyrashield/cli (deprecated)
 
-> This scoped alias package is **deprecated** and will be removed in the next major release. Please migrate to the primary [`lyrashield`](../cli) package.
+> This scoped alias package is **deprecated** and will be removed in the next major release. Please migrate to the primary [`lyrashield`](../cli) package. This package now ships a thin `lyrashield-cli` bin shim that forwards to the `lyrashield` implementation, so existing `npx @lyrashield/cli` and `lyrashield-cli` invocations continue to work.
 
 ```sh
 # before (deprecated)

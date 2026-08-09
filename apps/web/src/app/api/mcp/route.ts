@@ -88,6 +88,7 @@ async function handle(request: Request): Promise<Response> {
     const toolContext = {
       apiBaseUrl: env.NEXT_PUBLIC_APP_URL,
       apiKey: request.headers.get("authorization")!.slice("Bearer ".length).trim(),
+      allowAutoDetect: false,
     }
 
     return await handleRemoteMcpRequest(request, {

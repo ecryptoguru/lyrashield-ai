@@ -7,18 +7,18 @@ Ship a single portable Agent Plugins 1.0.0 package for LyraShield that installs 
 ## Context
 
 - `agent-plugins.org` defines a portable package format: a `plugin.json` manifest, a `skills/` directory of Agent Skills, and an `mcp.json` of stdio / streamable-http / legacy SSE MCP servers.
-- At launch (2026-08), Agent Plugins are supported by Claude Code, Cursor, VS Code, GitHub Copilot, Kiro, and OpenAI Codex.
+- At launch (2026-08), the built `@lyrashield/agent-plugin` package ships manifest shims for Claude Code, Cursor, Kiro, and OpenAI Codex, with registry entries reserved for VS Code and GitHub Copilot as those clients finalize Agent Plugin support.
 - LyraShield already ships `@lyrashield/mcp` (an MCP 1.30+ server with stdio and Streamable HTTP transports) and `@lyrashield/agent-registry` / `@lyrashield/cli` for 24 per-editor configs.
 - The Agent Plugins spec explicitly forbids embedding credentials in `mcp.json` `env` or `headers`; credential storage is client-managed.
 
 ## Decisions
 
-| Decision               | Choice                                                                                                         | Rationale                                                                                                                 |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Credential model       | `@lyrashield/mcp` falls back to `~/.lyrashield/credentials.json` when `LYRASHIELD_API_KEY` is not set          | Best UX: user runs `lyrashield login` once, the plugin works in any editor, and no secret appears in the portable config. |
-| Package strategy       | New `packages/agent-plugin` is the canonical plugin directory; CLI copies it into client-specific plugin paths | Keeps the package versioned, testable, and independent of per-client filesystem conventions.                              |
-| Rollout scope          | Add Agent Plugin install paths for the six launch clients in one branch                                        | Aligns with the request to “do all,” with conformance tests validating the package before the CLI/registry changes.       |
-| Backward compatibility | Keep existing per-client configs and `lyrashield install <agent>` behavior                                     | Clients not yet supporting Agent Plugins continue to work; users can opt into the new path when it is available.          |
+| Decision               | Choice                                                                                                         | Rationale                                                                                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Credential model       | `@lyrashield/mcp` falls back to `~/.lyrashield/credentials.json` when `LYRASHIELD_API_KEY` is not set          | Best UX: user runs `lyrashield login` once, the plugin works in any editor, and no secret appears in the portable config.                                |
+| Package strategy       | New `packages/agent-plugin` is the canonical plugin directory; CLI copies it into client-specific plugin paths | Keeps the package versioned, testable, and independent of per-client filesystem conventions.                                                             |
+| Rollout scope          | Add Agent Plugin install paths for the four launch clients in one branch.                                      | Aligns with the clients that support Agent Plugins today (Claude Code, Cursor, OpenAI Codex, Kiro); registry entries for the remaining two are reserved. |
+| Backward compatibility | Keep existing per-client configs and `lyrashield install <agent>` behavior                                     | Clients not yet supporting Agent Plugins continue to work; users can opt into the new path when it is available.                                         |
 
 ## Components
 

@@ -51,7 +51,11 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
     expect(handleRemoteMcpRequest).toHaveBeenCalledWith(
       expect.any(Request),
       expect.objectContaining({
-        toolContext: { apiBaseUrl: "https://app.example.com", apiKey: "lsk_good" },
+        toolContext: expect.objectContaining({
+          apiBaseUrl: "https://app.example.com",
+          apiKey: "lsk_good",
+          allowAutoDetect: false,
+        }),
         allowMutations: false,
       })
     )
@@ -71,7 +75,11 @@ describe("POST /api/mcp (remote MCP endpoint)", () => {
       expect.any(Request),
       expect.objectContaining({
         allowMutations: false,
-        toolContext: { apiBaseUrl: "https://app.example.com", apiKey: "oauth-token" },
+        toolContext: expect.objectContaining({
+          apiBaseUrl: "https://app.example.com",
+          apiKey: "oauth-token",
+          allowAutoDetect: false,
+        }),
       })
     )
   })

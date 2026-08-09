@@ -29,7 +29,14 @@ npx lyrashield init                # detect installed agents and configure them
 npx lyrashield gate                # CI-friendly diff-aware security gate
 ```
 
-`lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`). It writes agent configs directly — merging, not overwriting, and never inlining a raw API key into a file your team commits — for 16 agents, shells out to the vendor's own CLI for Amp, and prints exact copy-paste values for the 7 agents whose tooling has no config file to write (Cline, JetBrains, PiCode, OpenClaw, Hermes, Goose, Aider). Run `npx lyrashield doctor` any time to check what's configured and what's missing.
+`lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`, now deprecated). It installs via three strategies, all driven by the same `packages/agent-registry` source of truth:
+
+- **Agent Plugin** — for the 4 launch clients with Agent Plugins v1.0.0 support today (Claude Code, Cursor, OpenAI Codex, Kiro), `npx lyrashield init` and `npx lyrashield install <agent>` prefer a portable plugin install from `@lyrashield/agent-plugin`. Plugin files land in the client-specific plugin directory and never inline a raw API key.
+- **Config-file** — for 16 clients whose settings can be safely written, the CLI merges into the existing file, never overwrites, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
+- **Guided manual** — for 7 clients whose tooling has no writable config file (Cline, JetBrains, PiCode, OpenClaw, Hermes, Goose, Aider), the CLI prints exact copy-paste command/argument/env values.
+- **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
+
+Run `npx lyrashield doctor` any time to check what's configured and what's missing.
 
 **MCP server** — for editors that speak Model Context Protocol directly:
 
@@ -62,8 +69,10 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 - `apps/web` — Next.js workspace for targets, scans, evidence, reports, scorecards, and approval-gated API/MCP actions.
 - `apps/worker` — BullMQ scan worker with queue admission, reconciliation, evidence receipts, and controlled engine execution.
 - `apps/marketing` — Astro 7 / Cloudflare Workers marketing site.
+- `apps/marketing-motion` — deterministic Three.js assurance-world motion workspace; the Astro site consumes rendered posters and clips.
 - `packages/cli` — the published `lyrashield` command-line tool. (`@lyrashield/cli` is deprecated and will be removed in the next major release; use `lyrashield` instead.)
-- `packages/agent-registry` — the single source of truth for all 24 supported coding agents (config paths, formats, install strategy); the CLI installers and the docs site are both generated against it.
+- `packages/agent-registry` — the single source of truth for 24 distinct coding agents rendered as 30 registry entries; 6 clients have both a config-file and a reserved `agent-plugin` entry. The CLI installers and the docs site are both generated against it.
+- `packages/agent-plugin` — the portable Agent Plugins v1.0.0 package that bundles the MCP server and a `lyrashield` skill for the 4 launch clients with Agent Plugins support today (Claude Code, Cursor, OpenAI Codex, Kiro).
 - `packages/agent-rules` — renders LyraShield's security policy into each agent's native rules/instructions format (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others).
 - `packages/mcp` — the published `@lyrashield/mcp` server.
 - `packages/sdk` — the typed REST client shared by the CLI and the MCP server, so their behavior can't drift apart.

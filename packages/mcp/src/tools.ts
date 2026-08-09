@@ -1,5 +1,9 @@
-import { LyraShieldClient } from "@lyrashield/sdk"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+import { LyraShieldClient, parseRepoIdentifier, type ParsedRepo } from "@lyrashield/sdk"
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js"
+
+const execFileAsync = promisify(execFile)
 
 export type McpToolResult = {
   content: Array<{ type: "text"; text: string }>
@@ -126,6 +130,8 @@ export interface ToolHandlerContext {
   apiBaseUrl: string
   apiKey: string
   fetchFn?: typeof fetch
+  /** Remote MCP servers cannot inspect the coding client's working directory. */
+  allowAutoDetect?: boolean
 }
 
 function getClient(context: ToolHandlerContext): LyraShieldClient {
@@ -145,6 +151,92 @@ async function apiCall(
   const client = getClient(context)
   const sdkPath = path.replace(/^\/api\/v1/, "").replace(/^\/api/, "") || "/"
   return client.request(method, sdkPath, body ? { body } : undefined)
+}
+
+async function detectGitRepo(cwd = process.cwd()): Promise<ParsedRepo | undefined> {
+  try {
+    const { stdout } = await execFileAsync("git", ["remote", "-v"], { cwd })
+    for (const line of stdout.split("\n")) {
+      const match = line.match(/^origin\s+(\S+)\s+\(fetch\)/)
+      if (match) {
+        const remote = match[1]
+        if (remote) {
+          const repo = parseRepoIdentifier(remote)
+          if (repo) return repo
+        }
+      }
+    }
+  } catch {
+    // not a git repo or git not available
+  }
+  return undefined
+}
+
+async function findOrCreateRepoTarget(
+  context: ToolHandlerContext,
+  workspaceId: string,
+  repo: ParsedRepo
+): Promise<string> {
+  let cursor: string | undefined
+  do {
+    const params = new URLSearchParams({ workspaceId })
+    if (cursor) params.set("cursor", cursor)
+    const list = (await apiCall(context, "GET", `/api/targets?${params.toString()}`)) as {
+      items?: Array<{
+        id: string
+        repoFullName?: string | null
+      }>
+      nextCursor?: string | null
+    }
+
+    const existing = list.items?.find((t) => t.repoFullName === repo.repoFullName)
+    if (existing) return existing.id
+    cursor = list.nextCursor ?? undefined
+  } while (cursor)
+
+  const created = (await apiCall(context, "POST", "/api/targets", {
+    workspaceId,
+    name: repo.repoName,
+    type: "REPO",
+    repoProvider: repo.repoProvider,
+    repoOwner: repo.repoOwner,
+    repoName: repo.repoName,
+    repoFullName: repo.repoFullName,
+  })) as { id: string }
+
+  return created.id
+}
+
+async function resolveTargetId(
+  context: ToolHandlerContext,
+  args: Record<string, unknown>
+): Promise<{ targetId: string; repository?: string }> {
+  if (typeof args.targetId === "string") {
+    return { targetId: args.targetId }
+  }
+
+  if (!args.workspaceId || typeof args.workspaceId !== "string") {
+    throw new Error("workspaceId is required")
+  }
+
+  let repo: ParsedRepo | undefined
+  if (typeof args.repo === "string") {
+    repo = parseRepoIdentifier(args.repo)
+    if (!repo) throw new Error(`Invalid repo: ${args.repo}`)
+  } else if (args.auto === true) {
+    if (context.allowAutoDetect === false) {
+      throw new Error(
+        "auto=true is available only from the local stdio MCP server. Pass repo or targetId to the hosted MCP endpoint."
+      )
+    }
+    repo = await detectGitRepo()
+    if (!repo) throw new Error("No git origin remote found in the current directory.")
+  } else {
+    throw new Error("Either targetId, repo, or auto=true is required.")
+  }
+
+  const targetId = await findOrCreateRepoTarget(context, args.workspaceId, repo)
+  return { targetId, repository: repo.repoFullName }
 }
 
 function makeToolResult(data: unknown): McpToolResult {
@@ -176,12 +268,22 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_scan_target",
     mutating: true,
     description:
-      "Trigger a security scan on a registered target. Requires workspaceId and targetId.",
+      "Trigger a security scan on a registered target. Provide targetId, or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
-        targetId: { type: "string", description: "Target ID to scan" },
+        targetId: { type: "string", description: "Target ID to scan (or use repo/auto instead)" },
+        repo: {
+          type: "string",
+          description:
+            "Repository to scan, e.g. ecryptoguru/lyrashield-ai. If the target does not exist, it is created.",
+        },
+        auto: {
+          type: "boolean",
+          description:
+            "Detect the current git repo from the working directory and use or create a target.",
+        },
         goal: {
           type: "string",
           description:
@@ -192,17 +294,20 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
           description: "Scan mode: SAFE, QUICK, STANDARD, DEEP, or CUSTOM",
         },
       },
-      required: ["workspaceId", "targetId"],
+      required: ["workspaceId"],
     },
     handler: async (args) => {
       try {
+        const resolved = await resolveTargetId(context, args)
         const data = await apiCall(context, "POST", "/api/scans", {
           workspaceId: args.workspaceId,
-          targetId: args.targetId,
+          targetId: resolved.targetId,
           goal: (args.goal as string) ?? "TEST_APP",
-          mode: (args.mode as string) ?? "SAFE",
+          mode: (args.mode as string) ?? "STANDARD",
         })
-        return makeToolResult({ action: "scan_triggered", scan: data })
+        const result: Record<string, unknown> = { action: "scan_triggered", scan: data }
+        if (resolved.repository) result.repository = resolved.repository
+        return makeToolResult(result)
       } catch (err) {
         return makeErrorResult(err instanceof Error ? err.message : String(err))
       }
@@ -473,28 +578,44 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_run_pr_scan",
     mutating: true,
     description:
-      "Start a PR-focused security scan (goal CHECK_PR) on a registered target. Returns the scanId to poll with lyrashield_get_scan_status.",
+      "Start a PR-focused security scan (goal CHECK_PR) on a registered target. Provide targetId, or provide repo (owner/repo) and/or auto=true to detect and auto-create a repo target.",
     inputSchema: {
       type: "object",
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
-        targetId: { type: "string", description: "Target ID (the repo/app to scan)" },
+        targetId: {
+          type: "string",
+          description: "Target ID (the repo/app to scan, or use repo/auto instead)",
+        },
+        repo: {
+          type: "string",
+          description:
+            "Repository to scan, e.g. ecryptoguru/lyrashield-ai. If the target does not exist, it is created.",
+        },
+        auto: {
+          type: "boolean",
+          description:
+            "Detect the current git repo from the working directory and use or create a target.",
+        },
         mode: {
           type: "string",
           description: "Scan mode: SAFE (default), QUICK, STANDARD, DEEP, or CUSTOM",
         },
       },
-      required: ["workspaceId", "targetId"],
+      required: ["workspaceId"],
     },
     handler: async (args) => {
       try {
+        const resolved = await resolveTargetId(context, args)
         const data = await apiCall(context, "POST", "/api/scans", {
           workspaceId: args.workspaceId,
-          targetId: args.targetId,
+          targetId: resolved.targetId,
           goal: "CHECK_PR",
           mode: (args.mode as string) ?? "SAFE",
         })
-        return makeToolResult({ action: "pr_scan_started", scan: data })
+        const result: Record<string, unknown> = { action: "pr_scan_started", scan: data }
+        if (resolved.repository) result.repository = resolved.repository
+        return makeToolResult(result)
       } catch (err) {
         return makeErrorResult(err instanceof Error ? err.message : String(err))
       }

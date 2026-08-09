@@ -1,11 +1,12 @@
 # LyraShield AI marketplace release source
 
-The installable client boundary is `packages/agent-plugin/plugin/` plus the generated
-client shims. It is Apache-2.0; the hosted dashboard, worker, and engine remain proprietary.
+The installable client boundary is the exported root `plugin.json`, OAuth-first `mcp.json`,
+`skills/`, and generated client shims. It is Apache-2.0; the hosted dashboard, worker, and engine
+remain proprietary. The OpenClaw directory additionally carries its narrow MIT-0 grant.
 The release job must export only these files to the dedicated public `lyrashield-marketplace`
 repository:
 
-- `plugin.json`, `mcp.json`, `skills/`, client shims, and client adapters
+- root `plugin.json`, `mcp.json`, `skills/`, client shims, and client adapters
 - Zed extension and Codebuff agent sources
 - marketplace icons, screenshots, changelog, support/privacy/terms links, and test fixtures
 
@@ -42,6 +43,7 @@ program.
 - OpenClaw: [ClawHub listing](https://clawhub.ai/ecryptoguru/skills/lyrashield) is published as a community listing; it is not an official OpenClaw channel.
 - Kiro: submission was received and is awaiting review.
 - Claude: [plugin submissions](https://platform.claude.com/plugins/submissions) show two LyraShield AI submissions pending review.
-- Codebuff: the [LyraShield AI publisher](https://codebuff.com/publishers/lyrashield) has a public but unverified `0.1.0` listing; `0.1.1` republishes the MCP declaration and is pending publication.
+- Codebuff: the [LyraShield AI publisher](https://codebuff.com/publishers/lyrashield) has a public,
+  unverified `0.1.1` listing with the MCP declaration live.
 - Cursor: the authenticated [publisher application](https://cursor.com/marketplace/publish) is available for submission; no existing LyraShield application status is exposed in the portal.
 - OpenAI/Codex: the [review version](https://platform.openai.com/apps-manage) is submitted and locked for review; the portal exposes no editable draft state.

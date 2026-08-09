@@ -76,6 +76,7 @@ jobs:
             BUILD_PUBLIC_APP_URL=${{ env.SCANNER_URL }}
             BUILD_PUBLIC_MARKETING_URL=${{ env.MARKETING_URL }}
             BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
+            BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ env.REQUIRE_EMAIL_VERIFICATION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -171,6 +172,9 @@ jobs:
       # 500s until someone remembered to run this by hand. Ordering matters: new code must
       # never meet an old schema, which means migrations must be additive and
       # backward-compatible with the currently running image.
+      - name: Configure git default branch
+        run: git config --global init.defaultBranch main
+
       - name: Checkout for migrations
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

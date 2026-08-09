@@ -22,6 +22,9 @@ jobs:
       pull-requests: read
       security-events: write
     steps:
+      - name: Configure git default branch
+        run: git config --global init.defaultBranch main
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -56,6 +59,9 @@ jobs:
       app: ${{ steps.classify.outputs.app }}
       shared: ${{ steps.classify.outputs.shared }}
     steps:
+      - name: Configure git default branch
+        run: git config --global init.defaultBranch main
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -149,6 +155,9 @@ jobs:
       LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
 
     steps:
+      - name: Configure git default branch
+        run: git config --global init.defaultBranch main
+
       - name: Checkout
         if: needs.changes.outputs.docs-only != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -311,6 +320,9 @@ jobs:
       LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
 
     steps:
+      - name: Configure git default branch
+        run: git config --global init.defaultBranch main
+
       - name: Checkout
         if: needs.changes.outputs.docs-only != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -394,6 +406,9 @@ jobs:
       # main includes marketing changes that fail CI, fix them in a push that touches
       # marketing or shared files — or run this workflow manually from the Actions tab.
       # The smoke step below is what actually proves the deploy landed.
+      - name: Configure git default branch
+        run: git config --global init.defaultBranch main
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
