@@ -61,6 +61,9 @@ describe("exportMarketplace", () => {
       lyrashield: {
         type: "streamable-http",
         url: "https://app.lyrashieldai.com/api/mcp",
+        headers: {
+          Authorization: "Bearer ${LYRASHIELD_API_KEY}",
+        },
       },
     })
     await expect(
