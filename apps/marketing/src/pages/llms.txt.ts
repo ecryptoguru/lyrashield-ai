@@ -21,6 +21,7 @@ const docsPaths = [
   "/docs/integrations/gemini-cli",
   "/docs/integrations/github-action",
   "/docs/integrations/github-copilot",
+  "/docs/integrations/goose",
   "/docs/integrations/hermes",
   "/docs/integrations/jetbrains",
   "/docs/integrations/kilo-code",
