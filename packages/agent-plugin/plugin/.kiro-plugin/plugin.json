@@ -1,5 +1,4 @@
 {
-  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "lyrashield",
   "version": "0.1.10",
   "description": "LyraShield AI security and release-assurance plugin",
@@ -16,5 +15,11 @@
     "lyrashield",
     "mcp",
     "ai-coding"
-  ]
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.kiro.json",
+  "kiro": {
+    "skills": "./skills/",
+    "mcpServers": "./.mcp.kiro.json"
+  }
 }

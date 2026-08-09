@@ -33,6 +33,7 @@ const PUBLIC_FILES = [
   ".cursor-plugin/plugin.json",
   ".kiro-plugin/plugin.json",
   ".mcp.json",
+  ".mcp.kiro.json",
 ] as const
 
 const MARKETPLACE_ARTIFACTS = [
