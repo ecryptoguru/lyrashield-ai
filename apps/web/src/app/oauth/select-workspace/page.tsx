@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@lyrashield/auth/server"
 import { prisma } from "@lyrashield/db"
+import { serializeOAuthQuery } from "../oauth-query"
 import { OAuthWorkspacePicker } from "./oauth-workspace-picker"
 
 export const dynamic = "force-dynamic"
@@ -12,6 +13,7 @@ export default async function OAuthWorkspacePage({
 }) {
   const params = await searchParams
   const session = await getSession()
+  const oauthQuery = serializeOAuthQuery(params)
   if (!session) redirect("/sign-in")
   const memberships = await prisma.workspaceMember.findMany({
     where: { userId: session.userId, status: "active" },
@@ -20,7 +22,7 @@ export default async function OAuthWorkspacePage({
   })
   return (
     <OAuthWorkspacePicker
-      oauthQuery={typeof params.oauth_query === "string" ? params.oauth_query : undefined}
+      oauthQuery={oauthQuery}
       workspaces={memberships.map((membership) => ({
         id: membership.workspaceId,
         name: membership.workspace.name,
