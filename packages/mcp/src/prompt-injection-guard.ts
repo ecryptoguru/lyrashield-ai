@@ -150,10 +150,17 @@ const CONTEXT_BOUNDARY_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
 export class PromptInjectionGuard {
   private maxInputLength: number
   private strictMode: boolean
+  private timeoutMs: number
 
-  constructor(options?: { maxInputLength?: number; strictMode?: boolean }) {
+  constructor(options?: { maxInputLength?: number; strictMode?: boolean; timeoutMs?: number }) {
     this.maxInputLength = options?.maxInputLength ?? 10000
     this.strictMode = options?.strictMode ?? true
+    this.timeoutMs = options?.timeoutMs ?? 1000
+  }
+
+  private isDeadlineExceeded(deadline: number): boolean {
+    if (this.timeoutMs <= 0) return false
+    return Date.now() > deadline
   }
 
   /**
@@ -188,6 +195,7 @@ export class PromptInjectionGuard {
 
   check(input: string): GuardResult {
     const detectedPatterns: string[] = []
+    const deadline = this.timeoutMs > 0 ? Date.now() + this.timeoutMs : 0
 
     if (input.length > this.maxInputLength) {
       return {
@@ -200,6 +208,17 @@ export class PromptInjectionGuard {
     const normalized = this.normalizeInput(input)
 
     for (const { pattern, name } of INJECTION_PATTERNS) {
+      if (this.isDeadlineExceeded(deadline)) {
+        logger.warn("Prompt injection guard exceeded time budget", {
+          inputLength: input.length,
+          timeoutMs: this.timeoutMs,
+        })
+        return {
+          allowed: false,
+          reason: "Prompt injection guard exceeded time budget",
+          detectedPatterns: ["guard_timeout"],
+        }
+      }
       pattern.lastIndex = 0
       if (pattern.test(normalized)) {
         detectedPatterns.push(name)
@@ -207,6 +226,17 @@ export class PromptInjectionGuard {
     }
 
     for (const { pattern, name } of CONTEXT_BOUNDARY_PATTERNS) {
+      if (this.isDeadlineExceeded(deadline)) {
+        logger.warn("Prompt injection guard exceeded time budget", {
+          inputLength: input.length,
+          timeoutMs: this.timeoutMs,
+        })
+        return {
+          allowed: false,
+          reason: "Prompt injection guard exceeded time budget",
+          detectedPatterns: ["guard_timeout"],
+        }
+      }
       pattern.lastIndex = 0
       if (pattern.test(normalized)) {
         detectedPatterns.push(name)

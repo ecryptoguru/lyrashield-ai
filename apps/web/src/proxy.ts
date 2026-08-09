@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { isDev } from "@lyrashield/config"
 import { checkAuthRateLimit, checkApiRateLimit, checkLiteScanRateLimit } from "@/lib/rate-limit"
 
+// This is the Next.js 16 middleware entry. Next.js detects `proxy.ts` as the
+// proxy/middleware file; do not create a separate `middleware.ts` or the build
+// will fail with the `middleware-to-proxy` error.
+
 let warnedUnknownIp = false
 const READ_ONLY_AUTH_PATHS = new Set(["/api/auth/providers", "/api/auth/get-session"])
 
