@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { getSession } from "@lyrashield/auth/server"
 import { prisma } from "@lyrashield/db"
+import { serializeOAuthQuery } from "../oauth-query"
 import { OAuthConsentForm } from "./oauth-consent-form"
 
 export const dynamic = "force-dynamic"
@@ -12,12 +13,9 @@ export default async function OAuthConsentPage({
 }) {
   const params = await searchParams
   const session = await getSession()
-  const query = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) query.set(key, Array.isArray(value) ? (value[0] ?? "") : value)
-  }
+  const oauthQuery = serializeOAuthQuery(params)
   if (!session)
-    redirect(`/sign-in?callbackURL=${encodeURIComponent(`/oauth/consent?${query.toString()}`)}`)
+    redirect(`/sign-in?callbackURL=${encodeURIComponent(`/oauth/consent?${oauthQuery}`)}`)
 
   const memberships = await prisma.workspaceMember.findMany({
     where: { userId: session.userId, status: "active" },
@@ -29,7 +27,7 @@ export default async function OAuthConsentPage({
     <OAuthConsentForm
       clientName={typeof params.client_name === "string" ? params.client_name : "LyraShield AI"}
       scope={typeof params.scope === "string" ? params.scope : "lyrashield.read"}
-      oauthQuery={typeof params.oauth_query === "string" ? params.oauth_query : undefined}
+      oauthQuery={oauthQuery}
       workspaces={memberships.map((membership) => ({
         id: membership.workspaceId,
         name: membership.workspace.name,
