@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Trash2 } from "lucide-react"
 import { Button, FormField, Input, buttonVariants } from "@lyrashield/ui"
@@ -21,6 +22,7 @@ interface DeleteAccountProps {
 }
 
 export function DeleteAccount({ plan }: DeleteAccountProps) {
+  const router = useRouter()
   const [confirmation, setConfirmation] = useState("")
   const [error, setError] = useState("")
   const [deleting, setDeleting] = useState(false)
@@ -51,7 +53,7 @@ export function DeleteAccount({ plan }: DeleteAccountProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirmation }),
       })
-      window.location.assign("/sign-in")
+      router.push("/sign-in")
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message)
