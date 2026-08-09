@@ -2,6 +2,8 @@
 
 ## Next
 
+- Republished Codebuff `lyrashield-review` as `0.1.1` with its read-only LyraShield MCP
+  server declaration; the prior public `0.1.0` listing had an empty MCP server map.
 - Added a narrow MIT-0 grant for the OpenClaw skill directory so the community ClawHub listing can
   publish its `v1.0.1` metadata correction without changing the Apache-2.0 license of the broader
   marketplace bundle.
