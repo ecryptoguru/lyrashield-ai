@@ -7,9 +7,12 @@ describe("serializeOAuthQuery", () => {
       serializeOAuthQuery({
         client_id: "client",
         scope: ["lyrashield.read"],
+        ba_param: ["client_id", "scope", "state"],
         state: "state",
         absent: undefined,
       })
-    ).toBe("client_id=client&scope=lyrashield.read&state=state")
+    ).toBe(
+      "client_id=client&scope=lyrashield.read&ba_param=client_id&ba_param=scope&ba_param=state&state=state"
+    )
   })
 })
