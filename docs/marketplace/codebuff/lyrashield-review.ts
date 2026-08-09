@@ -8,6 +8,16 @@ const definition: AgentDefinition = {
   model: "anthropic/claude-sonnet-4.5",
   outputMode: "last_message",
   includeMessageHistory: true,
+  mcpServers: {
+    lyrashield: {
+      command: "npx",
+      args: ["-y", "@lyrashield/mcp"],
+      env: {
+        LYRASHIELD_API_URL: "https://app.lyrashieldai.com",
+        LYRASHIELD_API_KEY: process.env.LYRASHIELD_API_KEY ?? "",
+      },
+    },
+  },
   toolNames: ["read_files", "code_search", "run_terminal_command", "end_turn"],
   spawnerPrompt: "Use for a read-only LyraShield release-assurance review of the current change.",
   systemPrompt: "You are LyraShield Review. Never apply changes or bypass approvals.",

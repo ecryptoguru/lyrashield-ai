@@ -1,3 +1,7 @@
+declare global {
+  const process: { env: Record<string, string | undefined> }
+}
+
 export interface AgentDefinition {
   id: string
   version?: string
