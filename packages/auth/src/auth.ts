@@ -324,8 +324,10 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 days (rolling)
     updateAge: 60 * 60 * 24, // 1 day (refresh interval)
     cookieCache: {
-      enabled: true,
-      maxAge: 5 * 60, // 5 minutes
+      // OAuth post-login selection updates this custom session field immediately.
+      // The provider does not expose request headers to consentReferenceId, so a
+      // cached session would otherwise bind the authorization to the prior workspace.
+      enabled: false,
     },
   },
   advanced: {

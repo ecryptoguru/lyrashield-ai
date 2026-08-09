@@ -59,9 +59,8 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 
 ## What is here
 
-- `apps/web` — Next.js workspace for targets, scans, evidence, reports, scorecards, and approval-gated actions.
+- `apps/web` — Next.js workspace for targets, scans, evidence, reports, scorecards, and approval-gated API/MCP actions.
 - `apps/worker` — BullMQ scan worker with queue admission, reconciliation, evidence receipts, and controlled engine execution.
-- `apps/agent` — approval-gated agent actions.
 - `apps/marketing` — Astro 7 / Cloudflare Workers marketing site.
 - `packages/cli` — the published `lyrashield` command-line tool. (`@lyrashield/cli` is deprecated and will be removed in the next major release; use `lyrashield` instead.)
 - `packages/agent-registry` — the single source of truth for all 24 supported coding agents (config paths, formats, install strategy); the CLI installers and the docs site are both generated against it.

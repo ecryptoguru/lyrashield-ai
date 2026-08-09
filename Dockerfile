@@ -26,7 +26,6 @@ COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/security/package.json ./packages/security/
 COPY packages/egress-proxy/package.json ./packages/egress-proxy/
 COPY apps/worker/package.json ./apps/worker/
-COPY apps/agent/package.json ./apps/agent/
 
 RUN pnpm install --frozen-lockfile
 

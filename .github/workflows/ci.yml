@@ -385,7 +385,7 @@ jobs:
       # The marketing fix from 2026-07-29 sat merged-but-undeployed for exactly this reason.
       #
       # Shared changes (packages/, root config) can affect the marketing build, so they
-      # also trigger a deploy. App-only changes (apps/web, apps/worker, apps/agent) do not
+      # also trigger a deploy. App-only changes (apps/web, apps/worker) do not
       # affect the Cloudflare marketing Worker and skip this deploy. If a direct push to
       # main includes marketing changes that fail CI, fix them in a push that touches
       # marketing or shared files — or run this workflow manually from the Actions tab.

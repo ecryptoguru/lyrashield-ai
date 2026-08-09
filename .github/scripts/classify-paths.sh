@@ -5,7 +5,7 @@
 # to GITHUB_OUTPUT (or stdout when run outside a workflow):
 #   docs-only  — every changed file is a docs/config/agent-rules file
 #   marketing  — at least one file is under apps/marketing or apps/marketing-motion
-#   app        — at least one file is under apps/web, apps/worker, or apps/agent
+#   app        — at least one file is under apps/web or apps/worker
 #   shared     — at least one file is in a shared location (packages/, root config, .github/)
 #
 # Extracted from .github/workflows/ci.yml by Deep Review v12 (P1-5) so the
@@ -20,7 +20,7 @@ set -euo pipefail
 #   affect the product, narrow this pattern rather than broadening it.
 docs_pattern='^(\.gitignore|\.prettierignore|\.prettierrc\.json|\.editorconfig|\.gitattributes|\.nvmrc|\.python-version|LICENSE|renovate\.json|.*\.md|\.devin/|\.claude/|\.codeium/|\.cursor/|\.agents/|\.windsurf/)$'
 marketing_pattern='^apps/(marketing|marketing-motion)/'
-app_pattern='^apps/(web|worker|agent)/'
+app_pattern='^apps/(web|worker)/'
 shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|\.github/)'
 
 docs_only=true
