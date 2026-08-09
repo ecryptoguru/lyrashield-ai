@@ -127,6 +127,20 @@ runs:
           mv "${RESULTS_FILE}.tmp" "$RESULTS_FILE"
         }
 
+        # Return the higher-ranked of two severity strings so the gate reflects the
+        # worst finding across the whole diff, not just the last one checked.
+        bump_severity() {
+          local a="$1" b="$2"
+          case "$a" in
+            CRITICAL) echo "$a"; return ;;
+            HIGH) if [ "$b" = "CRITICAL" ]; then echo "$b"; else echo "$a"; fi; return ;;
+            MEDIUM) if [ "$b" = "CRITICAL" ] || [ "$b" = "HIGH" ]; then echo "$b"; else echo "$a"; fi; return ;;
+            LOW) if [ "$b" = "CRITICAL" ] || [ "$b" = "HIGH" ] || [ "$b" = "MEDIUM" ]; then echo "$b"; else echo "$a"; fi; return ;;
+            INFO) if [ "$b" = "NONE" ]; then echo "$a"; else echo "$b"; fi; return ;;
+            *) echo "$b"; return ;;
+          esac
+        }
+
         SECRETS=0
         if [ "$SECRETS_OUTCOME" = "failure" ]; then
           SECRETS=1
@@ -136,20 +150,21 @@ runs:
         # High-signal risky-pattern checks on added lines of changed files.
         ISSUES=0
         ISSUES_SEVERITY="NONE"
+        # Track the most severe issue found across all changed files.
         while IFS= read -r file; do
           [ -f "$file" ] || continue
           ADDED="$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" -- "$file" | grep -v '^+++' | sed -n 's/^+//p' || true)"
-          if grep -qE '(password|secret|api_key|apikey|token)[[:space:]]*[=:][[:space:]]*["'"'"'][^"'"'"']{8,}["'"'"']' <<< "$ADDED"; then
-            add_result "hardcoded-secret" "warning" "Potential hardcoded secret in $file" "$file"; ISSUES=1; ISSUES_SEVERITY="MEDIUM"
+          if grep -qE '(password|secret|api_key|apikey|token)[[:space:]]*[=:][[:space:]]*["'"''][^'"'"']{8,}["'"'']' <<< "$ADDED"; then
+            add_result "hardcoded-secret" "warning" "Potential hardcoded secret in $file" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "MEDIUM")
           fi
           if grep -qE '(SELECT|INSERT|UPDATE|DELETE).*\+.*\$\{' <<< "$ADDED"; then
-            add_result "sql-injection" "warning" "Potential SQL injection in $file" "$file"; ISSUES=1; ISSUES_SEVERITY="MEDIUM"
+            add_result "sql-injection" "warning" "Potential SQL injection in $file" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "MEDIUM")
           fi
           if grep -qE '(csrf|cors|xss|helmet|secure).*(false|disabled|off|none)' <<< "$ADDED"; then
-            add_result "disabled-security-control" "warning" "Security control may be disabled in $file" "$file"; ISSUES=1; ISSUES_SEVERITY="MEDIUM"
+            add_result "disabled-security-control" "warning" "Security control may be disabled in $file" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "MEDIUM")
           fi
           if grep -qE '(^|[^.[:alnum:]_])(eval|exec)[[:space:]]*\(' <<< "$ADDED"; then
-            add_result "eval-exec" "warning" "Use of eval/exec in $file" "$file"; ISSUES=1; ISSUES_SEVERITY="MEDIUM"
+            add_result "eval-exec" "error" "Use of eval/exec in $file" "$file"; ISSUES=1; ISSUES_SEVERITY=$(bump_severity "$ISSUES_SEVERITY" "HIGH")
           fi
         done < changed_files.txt
 

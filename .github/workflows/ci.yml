@@ -136,7 +136,11 @@ jobs:
       DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
       SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
       REDIS_URL: "redis://localhost:6379"
-      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+      # The test step imports packages that load the full env config. These are the
+      # minimum required vars to pass env validation. The secret is a dummy value that
+      # only exists in CI — it is not a real credential and must be static so forks and
+      # Dependabot PRs (which do not receive repository secrets) can run tests.
+      BETTER_AUTH_SECRET: dummy-ci-only-secret-not-a-real-credential-32chars
       BETTER_AUTH_URL: "http://127.0.0.1:3100"
       NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3100"
       TRUSTED_PROXY_IP_HEADER: "x-forwarded-for"

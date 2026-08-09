@@ -5,6 +5,9 @@ import { NextRequest } from "next/server"
 vi.mock("@/lib/rate-limit", () => ({
   checkAuthRateLimit: vi.fn().mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
   checkApiRateLimit: vi.fn().mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
+  checkLiteScanRateLimit: vi
+    .fn()
+    .mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
 }))
 
 // Import after mock
