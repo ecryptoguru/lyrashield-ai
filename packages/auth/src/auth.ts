@@ -75,7 +75,9 @@ const oauthProviderPlugin = oauthProvider({
   allowDynamicClientRegistration: true,
   allowUnauthenticatedClientRegistration: true,
   allowPublicClientPrelogin: true,
-  clientRegistrationDefaultScopes: oauthScopes.slice(0, 5),
+  // Dynamic MCP clients must be allowed to request the approval-gated write
+  // scope. This only permits a request; consent and the per-action gate remain required.
+  clientRegistrationDefaultScopes: oauthScopes,
   clientRegistrationAllowedScopes: oauthScopes,
   postLogin: {
     page: "/oauth/select-workspace",
