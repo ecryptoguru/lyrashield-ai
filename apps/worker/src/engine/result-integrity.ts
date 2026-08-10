@@ -1,6 +1,7 @@
 import { createHash } from "crypto"
 import { getWorkspaceContext, prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { VIBE_SECURITY_CONTROLS, VIBE_SECURITY_COVERAGE_VERSION } from "@lyrashield/security"
+import type { UrlExecutionSummary } from "@lyrashield/types"
 import type { EngineVulnerability } from "./output-parser"
 import type { NormalizedFinding } from "./normalizer"
 import type { ScannerCoverageIssue } from "./scanner-coverage"
@@ -20,6 +21,7 @@ type ResultManifestInput = {
   engineFindingCount: number
   coverageIssues: ScannerCoverageIssue[]
   matchedControlRanks?: number[]
+  urlExecution?: UrlExecutionSummary
   engineExecution?: {
     model: string
     reasoningEffort: string
@@ -248,6 +250,7 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
     },
     sourceCheckoutAvailable: input.sourceCheckoutAvailable,
     scannerContractVersion: SCANNER_CONTRACT_VERSION,
+    urlExecution: input.urlExecution ?? null,
     engineExecution: input.engineExecution ?? null,
     // Coverage limitations are part of the immutable result contract. Keep
     // their bounded subjects and reasons in the manifest, not only in the

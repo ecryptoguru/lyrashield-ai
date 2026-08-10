@@ -15,6 +15,21 @@ export type UrlScanMode = "SAFE" | "STANDARD" | "DEEP"
 
 export type UrlRequestMethod = "GET" | "HEAD" | "OPTIONS"
 
+export type UrlExecutionSummary = {
+  contractVersion: string
+  profile: string
+  methods: UrlRequestMethod[]
+  subjectCount: number
+  documentCount: number
+  assetCount: number
+  operationCount: number
+  methodProbeCount: number
+  originProbeCount: number
+  totalBytes: number
+  truncated: boolean
+  issueCodes: string[]
+}
+
 export type UrlScanProfileId =
   | "WEB_APP_SAFE"
   | "WEB_APP_STANDARD"

@@ -1054,6 +1054,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         engineFindingCount: orchestratorResult.engineFindings.length,
         coverageIssues: orchestratorResult.coverageIssues,
         matchedControlRanks: coverage.matchedControlRanks,
+        urlExecution: orchestratorResult.urlExecution,
         engineExecution,
       })
 

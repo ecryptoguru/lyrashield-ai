@@ -61,6 +61,7 @@ interface ScanData {
   events: ScanEvent[]
   integrity: {
     manifestChecksum: string | null
+    urlExecution?: Record<string, unknown> | null
     coverage: Array<{
       scanner: string
       controlId: string
@@ -350,7 +351,13 @@ export function ScanDetailClient({
             createdAt: asIsoString(event.createdAt)!,
           })),
           integrity: {
+            ...scan.integrity,
             manifestChecksum: updated.resultManifest?.checksum ?? null,
+            urlExecution:
+              ((updated.resultManifest as Record<string, unknown> | undefined)?.urlExecution as
+                Record<string, unknown> |
+                undefined |
+                null) ?? scan.integrity.urlExecution,
             coverage: (updated.coverageReceipts ?? []).map((receipt) => ({
               scanner: receipt.scanner,
               controlId: receipt.controlId,
@@ -387,7 +394,7 @@ export function ScanDetailClient({
         // Network errors during polling are non-fatal — keep showing stale data
       }
     },
-    [scan.id, scan.target, scan.workspaceId]
+    [scan.id, scan.target, scan.workspaceId, scan.integrity]
   )
 
   useEffect(() => {
@@ -726,6 +733,26 @@ export function ScanDetailClient({
               <p className="text-muted-foreground mt-1 text-xs">
                 Deterministic scanner findings are included in the total and the findings list
                 below.
+              </p>
+            </Card>
+          )}
+
+          {scan.integrity.urlExecution && (
+            <Card className="mb-6 p-4" aria-labelledby="url-execution-heading">
+              <h2 id="url-execution-heading" className="font-semibold">
+                URL execution scope
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                {renderUrlExecutionLine(scan.integrity.urlExecution)}
+              </p>
+              {Array.isArray(scan.integrity.urlExecution.issueCodes) &&
+                scan.integrity.urlExecution.issueCodes.length > 0 && (
+                  <p className="mt-2 text-sm text-amber-600">
+                    Coverage limited: {scan.integrity.urlExecution.issueCodes.join(", ")}
+                  </p>
+                )}
+              <p className="text-muted-foreground mt-2 text-xs">
+                This public, non-mutating review did not authenticate or validate exploitability.
               </p>
             </Card>
           )}
@@ -1099,4 +1126,35 @@ export function ScanDetailClient({
       </details>
     </div>
   )
+}
+
+function renderUrlExecutionLine(execution: Record<string, unknown>): string {
+  const labels: Record<string, string> = {
+    WEB_APP_SAFE: "Surface Review",
+    WEB_APP_STANDARD: "Expanded Surface Review",
+    WEB_APP_DEEP: "Behavioral Surface Review",
+    API_SAFE: "Endpoint Review",
+    API_STANDARD: "Contract Review",
+    API_DEEP: "Contract Behavior Review",
+  }
+  const name = labels[String(execution.profile)] ?? String(execution.profile ?? "URL scan")
+  const methods = Array.isArray(execution.methods) ? execution.methods.join(", ") : ""
+  const parts: string[] = []
+  if (typeof execution.documentCount === "number" && execution.documentCount > 0) {
+    parts.push(`${execution.documentCount} pages`)
+  }
+  if (typeof execution.assetCount === "number" && execution.assetCount > 0) {
+    parts.push(`${execution.assetCount} assets`)
+  }
+  if (typeof execution.operationCount === "number" && execution.operationCount > 0) {
+    parts.push(`${execution.operationCount} operations`)
+  }
+  if (typeof execution.methodProbeCount === "number" && execution.methodProbeCount > 0) {
+    parts.push(`${execution.methodProbeCount} method probes`)
+  }
+  if (typeof execution.originProbeCount === "number" && execution.originProbeCount > 0) {
+    parts.push(`${execution.originProbeCount} origin probes`)
+  }
+  const scope = parts.length > 0 ? ` · ${parts.join(" · ")}` : ""
+  return `${name}${scope} · ${methods}`
 }

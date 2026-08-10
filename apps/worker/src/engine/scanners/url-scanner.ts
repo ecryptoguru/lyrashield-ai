@@ -8,7 +8,7 @@ import {
   type SurfaceCollectionIssue,
   type SurfaceSignal,
 } from "@lyrashield/security"
-import { getUrlScanProfile, type UrlScanProfile } from "@lyrashield/types"
+import { getUrlScanProfile, type UrlScanProfile, type UrlExecutionSummary, type UrlRequestMethod } from "@lyrashield/types"
 import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 import { runUrlBehaviorProbes } from "./url-behavior-probes"
@@ -23,20 +23,6 @@ export interface UrlScanConfig {
   coverageIssues?: ScannerCoverageIssue[]
   /** OpenAPI document URL for API Contract/Behavior scans. */
   apiSpecUrl?: string | null
-}
-
-export type UrlRequestMethod = "GET" | "HEAD" | "OPTIONS"
-
-export type UrlExecutionSummary = {
-  contractVersion: string
-  profile: string
-  methods: UrlRequestMethod[]
-  subjectCount: number
-  totalBytes: number
-  truncated: boolean
-  methodProbes: number
-  originProbes: number
-  issues: SurfaceCollectionIssue[]
 }
 
 export type UrlScannerResult = {
@@ -88,16 +74,20 @@ function buildExecution(
   methodProbes = 0,
   originProbes = 0
 ): UrlExecutionSummary {
+  const subjects = collection.subjects
   return {
     contractVersion: collection.contractVersion,
     profile: collection.profile.id,
-    methods: collection.profile.allowedMethods as UrlRequestMethod[],
-    subjectCount: collection.subjects.length,
+    methods: [...new Set(collection.profile.allowedMethods)].sort() as UrlRequestMethod[],
+    subjectCount: subjects.length,
+    documentCount: subjects.filter((s) => s.kind === "document").length,
+    assetCount: subjects.filter((s) => s.kind === "asset").length,
+    operationCount: subjects.filter((s) => s.kind === "api_operation").length,
+    methodProbeCount: methodProbes,
+    originProbeCount: originProbes,
     totalBytes: collection.totalBytes,
     truncated: collection.truncated,
-    methodProbes,
-    originProbes,
-    issues: collection.issues,
+    issueCodes: [...new Set(collection.issues.map((i) => i.code))].sort(),
   }
 }
 

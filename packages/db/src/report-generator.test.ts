@@ -125,6 +125,58 @@ describe("report-generator", () => {
       expect(data.findingsByCategory).toEqual({ injection: 2 })
       expect(data.scanInfo?.coverage).toEqual({ completed: 1, limited: 1, notApplicable: 1 })
     })
+
+    it("includes urlExecution from the result manifest", async () => {
+      mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
+      mockPrisma.scan.findFirst.mockResolvedValue({
+        id: "scan-1",
+        status: "completed",
+        summary: "URL scan",
+        target: { name: "example.com", type: "WEB_APP", url: "https://example.com" },
+        startedAt: new Date("2026-01-01"),
+        endedAt: new Date("2026-01-02"),
+        targetId: "target-1",
+        resultManifest: {
+          checksum: "manifest-checksum",
+          manifest: {
+            urlExecution: {
+              contractVersion: "url-scan/2.0.0",
+              profile: "WEB_APP_STANDARD",
+              methods: ["GET"],
+              subjectCount: 17,
+              documentCount: 10,
+              assetCount: 7,
+              operationCount: 0,
+              methodProbeCount: 0,
+              originProbeCount: 0,
+              totalBytes: 2048,
+              truncated: true,
+              issueCodes: ["LIMIT_REACHED"],
+            },
+          },
+        },
+        coverageReceipts: [],
+      })
+      mockPrisma.finding.findMany.mockResolvedValue([])
+      mockPrisma.scoreSnapshot.findMany.mockResolvedValue([])
+
+      const data = await gatherReportData("ws-1", "scan-1")
+
+      expect(data.scanInfo?.urlExecution).toEqual({
+        contractVersion: "url-scan/2.0.0",
+        profile: "WEB_APP_STANDARD",
+        methods: ["GET"],
+        subjectCount: 17,
+        documentCount: 10,
+        assetCount: 7,
+        operationCount: 0,
+        methodProbeCount: 0,
+        originProbeCount: 0,
+        totalBytes: 2048,
+        truncated: true,
+        issueCodes: ["LIMIT_REACHED"],
+      })
+    })
   })
 
   describe("generateReportHTML", () => {
@@ -184,6 +236,53 @@ describe("report-generator", () => {
       expect(html).toContain("Assurance verdict")
       expect(html).toContain("Priority Actions")
       expect(html).toContain("Methodology and Limits")
+    })
+
+    it("renders URL execution scope and limitations in report HTML", () => {
+      const html = generateReportHTML({
+        title: "URL Scan Report",
+        type: "developer",
+        workspaceName: "Test Workspace",
+        scanInfo: {
+          scanId: "scan-1",
+          status: "COMPLETED",
+          summary: null,
+          targetName: "example.com",
+          targetType: "WEB_APP",
+          targetUrl: "https://example.com",
+          startedAt: new Date("2026-01-01"),
+          endedAt: new Date("2026-01-02"),
+          manifestChecksum: "checksum",
+          coverage: { completed: 1, limited: 0, notApplicable: 0 },
+          urlExecution: {
+            contractVersion: "url-scan/2.0.0",
+            profile: "WEB_APP_STANDARD",
+            methods: ["GET"],
+            subjectCount: 17,
+            documentCount: 10,
+            assetCount: 7,
+            operationCount: 0,
+            methodProbeCount: 0,
+            originProbeCount: 0,
+            totalBytes: 2048,
+            truncated: true,
+            issueCodes: ["LIMIT_REACHED"],
+          },
+        },
+        findings: [],
+        findingsBySeverity: {},
+        totalFindings: 0,
+        verifiedCount: 0,
+        fixedCount: 0,
+        retestSummary: { passed: 0, failed: 0, pending: 0 },
+        findingsTruncated: false,
+        generatedAt: new Date("2026-07-06"),
+      })
+
+      expect(html).toContain("URL Execution Scope")
+      expect(html).toContain("Expanded Surface Review · 10 pages · 7 assets · GET")
+      expect(html).toContain("Coverage limited: LIMIT_REACHED")
+      expect(html).toContain("non-mutating review did not authenticate")
     })
 
     it("generates HTML with no findings", () => {

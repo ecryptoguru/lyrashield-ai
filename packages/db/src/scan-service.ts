@@ -239,7 +239,7 @@ export async function getScanWithEvents(
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 200,
         },
-        resultManifest: { select: { checksum: true } },
+        resultManifest: { select: { checksum: true, manifest: true } },
         coverageReceipts: {
           orderBy: { controlId: "asc" },
         },

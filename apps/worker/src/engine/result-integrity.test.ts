@@ -162,6 +162,42 @@ describe("result integrity", () => {
     })
   })
 
+  it("stores urlExecution aggregate scope and no raw response bodies", async () => {
+    vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
+
+    const urlExecution: import("@lyrashield/types").UrlExecutionSummary = {
+      contractVersion: "url-scan/2.0.0",
+      profile: "WEB_APP_STANDARD",
+      methods: ["GET"],
+      subjectCount: 17,
+      documentCount: 10,
+      assetCount: 7,
+      operationCount: 0,
+      methodProbeCount: 0,
+      originProbeCount: 0,
+      totalBytes: 2048,
+      truncated: true,
+      issueCodes: ["LIMIT_REACHED"],
+    }
+
+    await persistResultManifest({
+      scanId: "scan-1",
+      target: { id: "target-1", type: "WEB_APP", url: "https://example.com" },
+      sourceCheckoutAvailable: false,
+      engineFindingCount: 0,
+      coverageIssues: [],
+      urlExecution,
+    })
+
+    const createCall = vi.mocked(prisma.scanResultManifest.create).mock.calls[0][0] as {
+      data: { manifest: unknown }
+    }
+    const manifest = createCall.data.manifest as { urlExecution: unknown }
+    expect(manifest.urlExecution).toEqual(urlExecution)
+    expect(JSON.stringify(manifest)).not.toContain("<html")
+    expect(JSON.stringify(manifest)).not.toContain("token=")
+  })
+
   it("stores a manifest once and uses idempotent coverage receipts", async () => {
     vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
 

@@ -8,7 +8,7 @@ import {
   type SurfaceSignal,
   type SurfaceSubject,
 } from "@lyrashield/security"
-import { type UrlRequestMethod, type UrlScanProfile } from "@lyrashield/types"
+import { type UrlRequestMethod, type UrlScanProfile, type UrlExecutionSummary } from "@lyrashield/types"
 import type { EngineVulnerability } from "../output-parser"
 
 export type OpenApiOperationAttempt = {
@@ -23,6 +23,7 @@ export type OpenApiScannerResult = {
   subjects: SurfaceSubject[]
   issues: SurfaceCollectionIssue[]
   attemptedOperations: OpenApiOperationAttempt[]
+  execution: UrlExecutionSummary
 }
 
 export type OpenApiSpec = {
@@ -71,6 +72,23 @@ type OpenApiSchema = {
 type OpenApiResponse = {
   description?: string
   content?: Record<string, { schema?: OpenApiSchema }>
+}
+
+function buildEmptyExecution(profile: UrlScanProfile, issueCodes: string[] = []): UrlExecutionSummary {
+  return {
+    contractVersion: "url-scan/2.0.0",
+    profile: profile.id,
+    methods: [...new Set(profile.allowedMethods)].sort() as UrlRequestMethod[],
+    subjectCount: 0,
+    documentCount: 0,
+    assetCount: 0,
+    operationCount: 0,
+    methodProbeCount: 0,
+    originProbeCount: 0,
+    totalBytes: 0,
+    truncated: false,
+    issueCodes: [...issueCodes].sort(),
+  }
 }
 
 const ALL_SAFE_METHODS: UrlRequestMethod[] = ["GET", "HEAD", "OPTIONS"]
@@ -373,7 +391,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "Scan was cancelled before the OpenAPI contract could be fetched.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations }
+    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
   }
 
   const specOutcome = await safeFetchDetailed(apiSpecUrl, {
@@ -390,7 +408,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: `Could not fetch OpenAPI spec: ${specOutcome.reason}`,
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations }
+    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
   }
 
   const rawBody = specOutcome.result.html.trim()
@@ -400,7 +418,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec response body was empty.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations }
+    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
   }
 
   let parsed: unknown
@@ -412,7 +430,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec could not be parsed as JSON or YAML.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations }
+    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
   }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -421,7 +439,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec must be a JSON or YAML object.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations }
+    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
   }
 
   const spec = parsed as OpenApiSpec
@@ -432,7 +450,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec must be version 3.x.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations }
+    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
   }
 
   const paths = spec.paths ?? {}
@@ -443,7 +461,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: `OpenAPI spec declares ${pathNames.length} paths; the maximum supported is 500.`,
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations }
+    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
   }
 
   const baseServer = resolveServer(spec, targetUrl)
@@ -454,7 +472,7 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(baseServer),
       reason: "OpenAPI server URL is not on the same origin as the target.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations }
+    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
   }
 
   // Build a sorted list of candidate operations. Safe methods fall back to the
@@ -685,6 +703,25 @@ export async function scanOpenApi(options: {
 
   const findings = signals.filter((s) => s.state === "DETECTED").map(toEngineVulnerability)
 
+  const operationSubjects = subjects.filter((s) => s.kind === "api_operation")
+  const methodProbeSubjects = subjects.filter((s) => s.kind === "probe" && s.method !== "GET")
+  const originProbeSubjects = subjects.filter((s) => s.kind === "probe" && s.method === "GET")
+
+  const execution: UrlExecutionSummary = {
+    contractVersion: "url-scan/2.0.0",
+    profile: profile.id,
+    methods: [...new Set(profile.allowedMethods)].sort() as UrlRequestMethod[],
+    subjectCount: subjects.length,
+    documentCount: 0,
+    assetCount: 0,
+    operationCount: operationSubjects.length,
+    methodProbeCount: methodProbeSubjects.length,
+    originProbeCount: originProbeSubjects.length,
+    totalBytes,
+    truncated: totalBytes >= profile.maxTotalBytes,
+    issueCodes: [...new Set(issues.map((i) => i.code))].sort(),
+  }
+
   logger.info("OpenAPI contract scan complete", {
     targetUrl: redactUrlForLogs(targetUrl),
     apiSpecUrl: redactUrlForLogs(apiSpecUrl),
@@ -694,5 +731,5 @@ export async function scanOpenApi(options: {
     issues: issues.length,
   })
 
-  return { findings, signals, subjects, issues, attemptedOperations }
+  return { findings, signals, subjects, issues, attemptedOperations, execution }
 }
