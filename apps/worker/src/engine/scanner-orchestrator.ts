@@ -13,6 +13,7 @@ import {
 import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
+import type { UrlScanProfile } from "@lyrashield/types"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
 import type { ScannerCoverageIssue } from "./scanner-coverage"
 import { redactUrlForLogs, createEgressProxyFetchFn } from "@lyrashield/security"
@@ -36,6 +37,7 @@ export interface ScannerOrchestratorConfig {
   workspaceDir?: string
   scannerPhaseTimeoutMs?: number
   isCancelled?: () => Promise<boolean>
+  urlProfile?: UrlScanProfile
 }
 
 export interface ScannerOrchestratorResult {
@@ -144,6 +146,7 @@ async function runSecretsScan(
 async function runUrlScan(
   scanId: string,
   targetUrl: string,
+  profile: UrlScanProfile,
   workspaceDir: string,
   coverageIssues: ScannerCoverageIssue[],
   signal: AbortSignal
@@ -161,6 +164,7 @@ async function runUrlScan(
         : undefined
     const { findings } = await scanUrl({
       targetUrl,
+      profile,
       coverageIssues,
       signal,
       fetchFn,
@@ -256,8 +260,8 @@ export async function runScannerOrchestrator(
         hasSourceCheckout
           ? runSecretsScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
-        targetUrl
-          ? runUrlScan(scanId, targetUrl, absWorkspace, coverageIssues, signal)
+        targetUrl && config.urlProfile
+          ? runUrlScan(scanId, targetUrl, config.urlProfile, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
         hasSourceCheckout
           ? runAgentConfigScan(scanId, absWorkspace, coverageIssues, signal)

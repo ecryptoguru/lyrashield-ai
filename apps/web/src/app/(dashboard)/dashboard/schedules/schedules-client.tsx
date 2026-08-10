@@ -18,7 +18,7 @@ import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { formatDate, formatDateTime } from "@/lib/date-format"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getScanPreset, SCAN_PRESETS, type ScanPresetId } from "@/lib/scan-presets"
+import { getManualScanOptions, type ManualScanOption } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 
 interface ScheduleItem {
@@ -93,12 +93,26 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   const [targets, setTargets] = useState<TargetOption[]>([])
   const [selectedTargetId, setSelectedTargetId] = useState("")
   const [cron, setCron] = useState("0 0 * * 0")
-  const [presetId, setPresetId] = useState<ScanPresetId>("WEEKLY_MONITOR")
+  const [presetId, setPresetId] = useState("")
   const [creating, setCreating] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [frequency, setFrequency] = useState("WEEKLY")
-  const selectedTargetUsesEngine =
-    targets.find((target) => target.id === selectedTargetId)?.type === "REPO"
+
+  const selectedTargetDetails = targets.find((target) => target.id === selectedTargetId)
+  const selectedTargetUsesEngine = selectedTargetDetails?.type === "REPO"
+  const availableOptions = getManualScanOptions({
+    type: selectedTargetDetails?.type ?? "",
+    hasApiSpec: Boolean(
+      (selectedTargetDetails as { apiSpecUrl?: string | null } | undefined)?.apiSpecUrl
+    ),
+  })
+  const selectedOption = availableOptions.find((o) => o.id === presetId) ?? availableOptions[0]
+
+  useEffect(() => {
+    if (availableOptions.length > 0 && !availableOptions.some((o) => o.id === presetId)) {
+      setPresetId(availableOptions[0]!.id)
+    }
+  }, [availableOptions, presetId])
 
   const loadSchedules = useCallback(async () => {
     setLoading(true)
@@ -155,18 +169,21 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
     setCreating(true)
     setError(null)
     try {
-      const preset = getScanPreset(presetId)
+      if (!selectedOption) {
+        setError("No review option is available for this target")
+        return
+      }
       await apiPost(`/api/schedules`, {
         workspaceId,
         targetId: selectedTargetId,
         cron,
-        goal: preset.goal,
-        mode: preset.mode,
+        goal: selectedOption.goal,
+        mode: selectedOption.mode,
       })
       setShowCreateForm(false)
       setSelectedTargetId("")
       setCron("0 0 * * 0")
-      setPresetId("WEEKLY_MONITOR")
+      setPresetId("")
       setFrequency("WEEKLY")
       setShowAdvanced(false)
       await loadSchedules()
@@ -294,12 +311,12 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                   <FormField label="Review depth" htmlFor="scan-preset">
                     <Select
                       id="scan-preset"
-                      value={presetId}
-                      onChange={(e) => setPresetId(e.target.value as ScanPresetId)}
+                      value={selectedOption?.id ?? ""}
+                      onChange={(e) => setPresetId(e.target.value)}
                     >
-                      {Object.entries(SCAN_PRESETS).map(([id, preset]) => (
-                        <option key={id} value={id}>
-                          {preset.label}
+                      {availableOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
                         </option>
                       ))}
                     </Select>
@@ -308,7 +325,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
               )}
             </div>
             <p className="text-muted-foreground text-xs">
-              {getScanPreset(presetId).description}{" "}
+              {selectedOption?.description}{" "}
               {selectedTargetId && !selectedTargetUsesEngine
                 ? "This target uses deterministic scanners."
                 : "A protected run limit is applied automatically."}

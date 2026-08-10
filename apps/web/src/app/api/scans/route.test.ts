@@ -98,7 +98,9 @@ describe("POST /api/scans", () => {
     vi.clearAllMocks()
     defaultAuthMock()
     vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
+    vi.mocked(enqueueScanJob).mockResolvedValue("job-1")
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({ id: "default-policy" } as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
   })
 
   it("returns 400 for invalid JSON body", async () => {
@@ -363,6 +365,66 @@ describe("POST /api/scans", () => {
     )
 
     expect(res.status).toBe(403)
+  })
+
+  const webTarget = {
+    id: "web-1",
+    name: "Example",
+    type: "WEB_APP",
+    url: "https://example.com",
+    repoFullName: null,
+    apiSpecUrl: null,
+  }
+
+  it.each(["STANDARD", "DEEP", "CUSTOM"])("rejects unavailable %s for a URL target", async (mode) => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-1",
+        targetId: "web-1",
+        goal: "TEST_APP",
+        mode,
+      })
+    )
+
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.error.code).toBe("URL_MODE_UNAVAILABLE")
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
+  it("allows Safe and legacy Quick for a web target", async () => {
+    vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-web",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      triggerType: "manual",
+      startedAt: null,
+      endedAt: null,
+      durationMs: null,
+      summary: null,
+      errorCategory: null,
+      errorMessage: null,
+      targetId: "web-1",
+      createdAt: new Date(),
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-safe",
+        targetId: "web-1",
+        goal: "TEST_APP",
+        mode: "QUICK",
+      })
+    )
+
+    expect(res.status).toBe(201)
+    expect(enqueueScanJob).toHaveBeenCalled()
   })
 })
 

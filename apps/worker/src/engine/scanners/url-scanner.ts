@@ -8,12 +8,13 @@ import {
   type SurfaceCollectionIssue,
   type SurfaceSignal,
 } from "@lyrashield/security"
-import { getUrlScanProfile } from "@lyrashield/types"
+import { getUrlScanProfile, type UrlScanProfile } from "@lyrashield/types"
 import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 
 export interface UrlScanConfig {
   targetUrl: string
+  profile?: UrlScanProfile
   fetchFn?: typeof fetch
   /** Injectable DNS resolver — only for tests. */
   resolver?: import("@lyrashield/security").HostResolver
@@ -91,7 +92,7 @@ export async function scanUrl(config: UrlScanConfig): Promise<UrlScannerResult> 
   const { targetUrl, fetchFn, resolver, coverageIssues, signal } = config
   logger.info("Starting AI-builder-aware URL scan", { targetUrl: redactUrlForLogs(targetUrl) })
 
-  const profile = getUrlScanProfile("WEB_APP", "SAFE")
+  const profile = config.profile ?? getUrlScanProfile("WEB_APP", "SAFE")
   const collection = await collectPublicSurface({
     seedUrl: targetUrl,
     profile,

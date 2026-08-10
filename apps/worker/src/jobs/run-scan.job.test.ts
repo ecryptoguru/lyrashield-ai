@@ -208,6 +208,18 @@ it("keeps URL targets out of the unpinned external engine", async () => {
     expect.any(String),
     { targetType: "WEB_APP" }
   )
+  expect(addScanEvent).not.toHaveBeenCalledWith(
+    "scan-1",
+    "budget_cap",
+    "info",
+    expect.any(String),
+    expect.anything()
+  )
+  expect(runScannerOrchestrator).toHaveBeenCalledWith(
+    expect.objectContaining({
+      urlProfile: expect.objectContaining({ id: "WEB_APP_SAFE" }),
+    })
+  )
 })
 
 it("extracts only finite non-negative engine cost signals", () => {
