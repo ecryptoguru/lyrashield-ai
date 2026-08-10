@@ -22,10 +22,7 @@ import { formatDateTime } from "@/lib/date-format"
 import { RUN_PLURAL, RUN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
-import {
-  getManualScanOptions,
-  type ManualScanOption,
-} from "@/lib/scan-presets"
+import { getManualScanOptions } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { getGoalLabel } from "@/lib/labels"
 import { formatEstimate } from "@/lib/estimator"
@@ -242,12 +239,6 @@ export function ScansClient({
   const selectedOption = availableOptions.find((o) => o.id === selectedPreset) ?? availableOptions[0]
   const selectedTargetUsesEngine = selectedTargetType === "REPO"
 
-  useEffect(() => {
-    if (availableOptions.length > 0 && !availableOptions.some((o) => o.id === selectedPreset)) {
-      setSelectedPreset(availableOptions[0]!.id)
-    }
-  }, [availableOptions, selectedPreset])
-
   const ACTIVE_STATUS_PARAM = "QUEUED,PREFLIGHT,RUNNING,VERIFYING,REQUIRES_APPROVAL"
 
   useEffect(() => {
@@ -399,7 +390,7 @@ export function ScansClient({
                 className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
               >
                 {availableOptions.map((option) => {
-                  const isSelected = selectedPreset === option.id
+                  const isSelected = selectedOption?.id === option.id
                   return (
                     <button
                       key={option.id}

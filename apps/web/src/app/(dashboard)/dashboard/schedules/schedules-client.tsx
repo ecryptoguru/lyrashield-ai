@@ -18,7 +18,7 @@ import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { formatDate, formatDateTime } from "@/lib/date-format"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getManualScanOptions, type ManualScanOption } from "@/lib/scan-presets"
+import { getManualScanOptions } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 
 interface ScheduleItem {
@@ -107,12 +107,6 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
     ),
   })
   const selectedOption = availableOptions.find((o) => o.id === presetId) ?? availableOptions[0]
-
-  useEffect(() => {
-    if (availableOptions.length > 0 && !availableOptions.some((o) => o.id === presetId)) {
-      setPresetId(availableOptions[0]!.id)
-    }
-  }, [availableOptions, presetId])
 
   const loadSchedules = useCallback(async () => {
     setLoading(true)
