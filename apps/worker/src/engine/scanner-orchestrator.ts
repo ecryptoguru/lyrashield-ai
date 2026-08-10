@@ -13,6 +13,7 @@ import {
 import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
+import { scanOpenApi } from "./scanners/openapi-scanner"
 import type { UrlScanProfile } from "@lyrashield/types"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
 import type { ScannerCoverageIssue } from "./scanner-coverage"
@@ -164,16 +165,26 @@ async function runUrlScan(
             readTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS,
           })
         : undefined
-    const { findings } = await scanUrl({
-      targetUrl,
-      profile,
-      coverageIssues,
-      signal,
-      fetchFn,
-      apiSpecUrl,
-    })
-    logger.info("URL scan phase complete", { scanId, findingCount: findings.length })
-    return findings
+    const isApiContract =
+      profile.targetType === "API" && (profile.mode === "STANDARD" || profile.mode === "DEEP")
+    const scanResult = isApiContract && apiSpecUrl
+      ? await scanOpenApi({
+          targetUrl,
+          apiSpecUrl,
+          profile,
+          fetchFn,
+          signal,
+        })
+      : await scanUrl({
+          targetUrl,
+          profile,
+          coverageIssues,
+          signal,
+          fetchFn,
+          apiSpecUrl,
+        })
+    logger.info("URL scan phase complete", { scanId, findingCount: scanResult.findings.length })
+    return scanResult.findings
   } catch (err) {
     logger.warn("URL scan phase failed", {
       scanId,

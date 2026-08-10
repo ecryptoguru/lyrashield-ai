@@ -181,6 +181,8 @@ export const RELEASED_URL_PROFILE_IDS = new Set<string>([
   "WEB_APP_STANDARD",
   "WEB_APP_DEEP",
   "API_SAFE",
+  "API_STANDARD",
+  "API_DEEP",
 ])
 
 const URL_SCAN_MODES: readonly UrlScanMode[] = ["SAFE", "STANDARD", "DEEP"]

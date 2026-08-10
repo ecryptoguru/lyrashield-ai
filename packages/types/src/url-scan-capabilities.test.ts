@@ -58,20 +58,17 @@ describe("URL scan capabilities", () => {
     expect(getUrlModeAvailability("API", "SAFE", false)).toEqual({ available: true })
     expect(getUrlModeAvailability("WEB_APP", "STANDARD", false)).toEqual({ available: true })
     expect(getUrlModeAvailability("WEB_APP", "DEEP", false)).toEqual({ available: true })
+    expect(getUrlModeAvailability("API", "STANDARD", true)).toEqual({ available: true })
+    expect(getUrlModeAvailability("API", "DEEP", true)).toEqual({ available: true })
     expect(getUrlModeAvailability("API", "STANDARD", false)).toEqual({
       available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Contract Review is not available yet.",
-    })
-    expect(getUrlModeAvailability("API", "STANDARD", true)).toEqual({
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Contract Review is not available yet.",
+      code: "API_SPEC_REQUIRED",
+      reason: "Contract Review requires an OpenAPI document.",
     })
     expect(getUrlModeAvailability("API", "DEEP", false)).toEqual({
       available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Contract Behavior Review is not available yet.",
+      code: "API_SPEC_REQUIRED",
+      reason: "Contract Behavior Review requires an OpenAPI document.",
     })
   })
 

@@ -74,6 +74,35 @@ describe("getManualScanOptions", () => {
     })
   })
 
+  it("returns Contract and Contract Behavior options for an API target with an OpenAPI spec", () => {
+    const options = getManualScanOptions({ type: "API", hasApiSpec: true })
+    expect(options.map((o) => o.id)).toEqual(["API_SAFE", "API_STANDARD", "API_DEEP"])
+    expect(options[0]).toMatchObject({
+      id: "API_SAFE",
+      label: "Endpoint Review",
+      mode: "SAFE",
+      goal: "LAUNCH_REVIEW",
+      estimate: { low: 1, high: 2 },
+      available: true,
+    })
+    expect(options[1]).toMatchObject({
+      id: "API_STANDARD",
+      label: "Contract Review",
+      mode: "STANDARD",
+      goal: "TEST_APP",
+      estimate: { low: 2, high: 4 },
+      available: true,
+    })
+    expect(options[2]).toMatchObject({
+      id: "API_DEEP",
+      label: "Contract Behavior Review",
+      mode: "DEEP",
+      goal: "FULL_PENTEST",
+      estimate: { low: 4, high: 8 },
+      available: true,
+    })
+  })
+
   it("returns the repository fallback for unknown target types", () => {
     const options = getManualScanOptions({ type: "CLOUD_ACCOUNT" })
     expect(options.map((o) => o.id)).toEqual(["RELEASE_CHECK", "CODE_REVIEW", "DEEP_REVIEW"])
