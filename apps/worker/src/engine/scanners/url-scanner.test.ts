@@ -31,12 +31,20 @@ function makeResponse(html: string, headers: Record<string, string> = {}, status
   }
 }
 
+function makeFixtureJwt(header: string, payload: string) {
+  return [header, payload, "signature123"].join(".")
+}
+
 describe("scanUrl", () => {
   it("does not report Supabase anon keys that are public by design", async () => {
+    const anonKey = makeFixtureJwt(
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+      "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE2MDAwMDAwMDB9"
+    )
     const html = `
       <script>
         const supabaseUrl = "https://abcdefgh.supabase.co";
-        const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE2MDAwMDAwMDB9.signature123";
+        const supabaseKey = "${anonKey}";
       </script>
     `
     mockFetch.mockResolvedValueOnce(makeResponse(html))
@@ -49,10 +57,14 @@ describe("scanUrl", () => {
   })
 
   it("detects Supabase service_role keys without retaining the key", async () => {
+    const serviceRoleKey = makeFixtureJwt(
+      "eyJhbGciOiJIUzI1NiJ9",
+      "eyJyb2xlIjoic2VydmljZV9yb2xlIn0"
+    )
     const html = `
       <script>
         const supabaseUrl = "https://abcdefgh.supabase.co";
-        const supabaseKey = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.signature123";
+        const supabaseKey = "${serviceRoleKey}";
       </script>
     `
     mockFetch.mockResolvedValueOnce(makeResponse(html))
