@@ -33,6 +33,7 @@ describe("scanAgentConfig", () => {
     const findings = await scanAgentConfig({ repoPath: root })
     expect(findings).toHaveLength(1)
     expect(findings[0]?.title).toContain("poisoned agent instruction")
+    expect(findings[0]?.control_ids).toEqual([45])
     expect(findings[0]?.code_locations?.[0]?.start_line).toBe(5)
   })
 
@@ -73,6 +74,7 @@ jobs:
     expect(
       findings.some((finding) => finding.id.startsWith("ci-pull-request-target-confused-deputy"))
     ).toBe(true)
+    expect(findings.every((finding) => finding.control_ids?.includes(47))).toBe(true)
   })
 
   it("accepts a read-only pull_request workflow", async () => {

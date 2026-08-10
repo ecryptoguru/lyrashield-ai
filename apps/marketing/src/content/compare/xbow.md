@@ -24,7 +24,7 @@ faq:
 | Primary focus     | Release assurance for AI-built apps; immutable assurance reports + approval-gated fixes                 | Continuous, proof-driven autonomous pentesting across the attack surface                      |
 | Scanning approach | Agentic engine with coverage framework and evidence states; scans agent rules, MCP configs, AI patterns | AI agents that explore apps/APIs like an attacker, chain vulnerabilities into working attacks |
 | Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive                                    | Vulnerability → proven with a working exploit → complete case file with remediation           |
-| Control framework | Vibe Security 50 (43 machine-testable + 7 evidence-required)                                            | No published control framework; governance via SOC 2, ISO 27001, PCI DSS, NIS 2 alignment     |
+| Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                             | No published control framework; governance via SOC 2, ISO 27001, PCI DSS, NIS 2 alignment     |
 | Scope of coverage | App-layer + SCA + secrets + AI-pattern coverage; purpose-built for AI-built apps                        | Application + API attack surface (expanding to broader attack paths)                          |
 | Report artifact   | Immutable assurance snapshot + coverage receipts per control                                            | Per-finding case file: chained path, working exploit, decision log, remediation               |
 

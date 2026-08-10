@@ -15,15 +15,16 @@ describe("Vibe Security 50 coverage contract", () => {
     )
   })
 
-  it("sends every machine-testable control to the engine", () => {
+  it("sends every machine-reviewable control and its strategy to the engine", () => {
     const instruction = buildVibeSecurityInstruction("FULL_PENTEST")
     for (const control of VIBE_SECURITY_CONTROLS.filter(
       (candidate) => candidate.strategy !== "evidence"
     )) {
-      expect(instruction).toContain(`${control.rank}. ${control.title}`)
+      expect(instruction).toContain(`${control.rank} | ${control.strategy} | ${control.title}`)
     }
     expect(instruction).toContain(VIBE_SECURITY_COVERAGE_VERSION)
     expect(instruction).toContain("Report only evidence-backed findings")
+    expect(instruction).toContain("Every reported finding must include")
   })
 
   it("keeps findings separate from controls that require external evidence", () => {
@@ -34,7 +35,7 @@ describe("Vibe Security 50 coverage contract", () => {
     ])
 
     expect(summary.totalControls).toBe(50)
-    expect(summary.machineControlsRequested).toBe(43)
+    expect(summary.reviewControlsRequested).toBe(43)
     expect(summary.evidenceControlsRequired).toBe(7)
     expect(summary.matchedControlRanks).toEqual([11, 27])
     expect(summary.evidenceControlRanks).toEqual([34, 35, 36, 43, 46, 48, 50])

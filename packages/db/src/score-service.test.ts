@@ -431,7 +431,10 @@ describe("score-service", () => {
             status: "VERIFYING",
             mode: "STANDARD",
             target: { id: "t-1", projectId: "p-1", branch: "main" },
-            coverageReceipts: [{ status: "COMPLETED" }],
+            coverageReceipts: [
+              { controlId: "engine", status: "COMPLETED" },
+              { controlId: "vibe-34", status: "BLOCKED" },
+            ],
           }),
           update: vi.fn().mockResolvedValue({ id: "scan-1", status: "COMPLETED" }),
         },
@@ -462,6 +465,9 @@ describe("score-service", () => {
         where: { id: "t-1" },
         data: { lastScanAt: expect.any(Date) },
       })
+      expect(tx.scoreSnapshot.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ shareEligible: true }) })
+      )
     })
 
     it("keeps unvalidated FIXED findings in the score until a trusted receipt exists", async () => {
@@ -475,7 +481,7 @@ describe("score-service", () => {
             status: "VERIFYING",
             mode: "STANDARD",
             target: { id: "t-1", projectId: null, branch: "main" },
-            coverageReceipts: [{ status: "COMPLETED" }],
+            coverageReceipts: [{ controlId: "engine", status: "COMPLETED" }],
           }),
           update: vi.fn().mockResolvedValue({ id: "scan-1", status: "COMPLETED" }),
         },
@@ -521,7 +527,7 @@ describe("score-service", () => {
             status: "VERIFYING",
             mode: "STANDARD",
             target: { id: "t-1", projectId: null, branch: "main" },
-            coverageReceipts: [{ status: "BLOCKED" }],
+            coverageReceipts: [{ controlId: "engine", status: "BLOCKED" }],
           }),
           update: vi.fn().mockResolvedValue({ id: "scan-1", status: "COMPLETED" }),
         },

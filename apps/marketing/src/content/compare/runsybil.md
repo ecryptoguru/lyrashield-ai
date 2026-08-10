@@ -22,7 +22,7 @@ faq:
 | Primary focus     | Release assurance for AI-built apps                                             | AI-native black-box offensive testing that automates hacker intuition                                                       |
 | Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus    | Hierarchy of reasoning agents: map surface → hypothesis-driven tests → oversee campaign; black-box first, white-box-capable |
 | Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive            | Hypothesis → confirmed/reproducible finding → prioritized → AI-ready remediation guidance                                   |
-| Control framework | Vibe Security 50 (43 machine-testable + 7 evidence-required)                    | No published control framework; CTEM Phase 4 (Validation) focus                                                             |
+| Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                     | No published control framework; CTEM Phase 4 (Validation) focus                                                             |
 | Access model      | App-layer + source/MCP/agent configs                                            | Black-box first (no source required); accepts white-box context                                                             |
 | Fix model         | Approval-gated: PR blocked until server-generated patch bound to exact approval | AI-ready remediation guidance integrated with coding tools; PR-level feedback                                               |
 

@@ -97,6 +97,37 @@ describe("result integrity", () => {
     })
   })
 
+  it("keeps unmatched hybrid controls inconclusive instead of treating absent signals as clean", () => {
+    const receipts = buildCoverageReceipts({
+      scanId: "scan-1",
+      target: { id: "target-1", type: "URL", url: "https://example.com" },
+      sourceCheckoutAvailable: false,
+      engineFindingCount: 0,
+      coverageIssues: [],
+    })
+
+    expect(receipts.find((receipt) => receipt.controlId === "vibe-14")).toMatchObject({
+      status: "BLOCKED",
+      metadata: expect.objectContaining({ outcome: "INCONCLUSIVE" }),
+    })
+  })
+
+  it("preserves scanner limitations on hybrid control receipts", () => {
+    const receipts = buildCoverageReceipts({
+      scanId: "scan-1",
+      target: { id: "target-1", type: "URL", url: "https://example.com" },
+      sourceCheckoutAvailable: false,
+      engineFindingCount: 0,
+      coverageIssues: [{ scanner: "url", status: "partial", reason: "Target was unreachable" }],
+    })
+
+    expect(receipts.find((receipt) => receipt.controlId === "vibe-14")).toMatchObject({
+      status: "BLOCKED",
+      reason: expect.stringContaining("Target was unreachable"),
+      metadata: expect.objectContaining({ outcome: "INCONCLUSIVE" }),
+    })
+  })
+
   it("retains every coverage limitation and subject in the scanner receipt", () => {
     const receipts = buildCoverageReceipts({
       scanId: "scan-1",

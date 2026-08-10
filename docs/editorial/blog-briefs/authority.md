@@ -87,7 +87,7 @@ Use the exact sequence `Target -> Scan -> Evidence State -> Fix Proposal -> Rete
 - OAuth Security BCP requires exact redirect URI matching in the stated cases and applies PKCE guidance to web applications as well as native clients.
 - OWASP GenAI guidance treats prompt injection as a system-design problem and recommends least privilege plus human approval for high-risk actions.
 - NIST SP 800-115 requires testing methods to be chosen with their benefits and limitations in view.
-- Vibe Security 50 contains 43 machine-testable controls and 7 evidence-required controls. An unreported control is not a pass.
+- Vibe Security 50 contains 43 code/URL review controls and 7 evidence-required controls. An unreported control is not a pass.
 
 ## Safe examples
 

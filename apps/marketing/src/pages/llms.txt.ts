@@ -108,7 +108,7 @@ export const GET: APIRoute = async (context) => {
     "Independently verified: a separate verification receipt supports the finding.",
     "Retest-confirmed: a server-owned deterministic retest found the relevant condition absent with complete applicable coverage.",
     "Inconclusive: the retained evidence cannot establish that the condition is gone.",
-    "Vibe Security 50: 43 controls are machine-testable and 7 require retained human evidence.",
+    "Vibe Security 50: 43 controls are routed to code or URL review where applicable and 7 require operational or human evidence outside the scan.",
     "",
     "## Public URLs",
     ...publicPaths,

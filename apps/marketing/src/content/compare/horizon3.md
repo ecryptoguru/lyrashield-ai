@@ -22,7 +22,7 @@ faq:
 | Primary focus     | Release assurance for AI-built apps                                          | Continuous, autonomous production pentesting and exposure validation                       |
 | Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus | Autonomous AI that pivots through networks, chaining weaknesses and safely exploiting them |
 | Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive         | Attack path → proven exploit with impact → prioritized → fix → Quick Verify retest         |
-| Control framework | Vibe Security 50 (43 machine-testable + 7 evidence-required)                 | No published control framework; threat-informed, attack-path prioritization                |
+| Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                  | No published control framework; threat-informed, attack-path prioritization                |
 | Environment focus | App-layer + AI-generated code; MCP/agent configs                             | Internal + external + cloud + Kubernetes + Active Directory + web apps + identity          |
 | Deployment model  | Hosted + CLI + MCP + GitHub Action                                           | Internal tests via Docker/OVA; external from Horizon3 cloud; no agents                     |
 

@@ -3,12 +3,13 @@ import { lstat, readFile, readdir } from "fs/promises"
 import { join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
+import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 
 export interface SecretsScanConfig {
   repoPath: string
   workspaceDir: string
-  maxFileSize?: number
   signal?: AbortSignal
+  coverageIssues?: ScannerCoverageIssue[]
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -220,12 +221,15 @@ async function walkDir(
   dir: string,
   basePath: string,
   files: string[],
-  state = { entries: 0 },
+  state = { entries: 0, bounded: false, oversizedFiles: 0 },
   depth = 0,
   signal?: AbortSignal
 ): Promise<void> {
   throwIfAborted(signal)
-  if (depth > MAX_WALK_DEPTH || state.entries >= MAX_WALK_ENTRIES) return
+  if (depth > MAX_WALK_DEPTH || state.entries >= MAX_WALK_ENTRIES) {
+    state.bounded = true
+    return
+  }
   let entries
   try {
     entries = await readdir(dir)
@@ -235,7 +239,10 @@ async function walkDir(
 
   for (const entry of entries) {
     throwIfAborted(signal)
-    if (++state.entries > MAX_WALK_ENTRIES) break
+    if (++state.entries > MAX_WALK_ENTRIES) {
+      state.bounded = true
+      break
+    }
     const fullPath = join(dir, entry)
     let s
     try {
@@ -250,10 +257,13 @@ async function walkDir(
       if (!IGNORED_DIRS.has(entry)) {
         await walkDir(fullPath, basePath, files, state, depth + 1, signal)
       }
-    } else if (s.isFile() && s.size <= MAX_FILE_SIZE) {
+    } else if (s.isFile()) {
       const ext = entry.substring(entry.lastIndexOf("."))
-      if (!IGNORED_EXTENSIONS.has(ext)) {
+      if (IGNORED_EXTENSIONS.has(ext)) continue
+      if (s.size <= MAX_FILE_SIZE) {
         files.push(fullPath)
+      } else {
+        state.oversizedFiles++
       }
     }
   }
@@ -326,12 +336,28 @@ function getLanguageFromExt(ext: string): string {
 }
 
 export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVulnerability[]> {
-  const { repoPath, workspaceDir, signal } = config
+  const { repoPath, workspaceDir, signal, coverageIssues } = config
   throwIfAborted(signal)
   logger.info("Starting secrets scan", { repoPath })
 
   const files: string[] = []
-  await walkDir(repoPath, repoPath, files, { entries: 0 }, 0, signal)
+  const walkState = { entries: 0, bounded: false, oversizedFiles: 0 }
+  await walkDir(repoPath, repoPath, files, walkState, 0, signal)
+  if (walkState.bounded) {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "secrets",
+      status: "bounded",
+      reason: "Secret-file discovery reached its bounded repository walk limit",
+    })
+  }
+  if (walkState.oversizedFiles > 0) {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "secrets",
+      status: "bounded",
+      subject: `${walkState.oversizedFiles} file(s)`,
+      reason: `Files exceeding the ${MAX_FILE_SIZE}-byte scanner limit were not inspected`,
+    })
+  }
 
   logger.info("Files to scan", { total: files.length })
 
@@ -392,6 +418,7 @@ export async function scanSecrets(config: SecretsScanConfig): Promise<EngineVuln
           impact: `Hardcoded secrets can be extracted from source code, git history, or built artifacts. An attacker with access to this code can use the secret to access the associated service (AWS, GitHub, database, etc.) and potentially escalate to full system compromise.`,
           remediation_steps: `Remove the hardcoded secret from ${relPath}. Move it to an environment variable or a secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault). Rotate the exposed secret immediately — it should be considered compromised.`,
           poc_description: `Read line ${lineNum} of ${relPath} to find the hardcoded ${pattern.name}. The matched value has been redacted for security.`,
+          control_ids: [3],
           code_locations: [
             {
               file: relPath,

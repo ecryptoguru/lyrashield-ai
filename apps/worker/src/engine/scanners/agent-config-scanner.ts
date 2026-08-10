@@ -71,7 +71,8 @@ function finding(
   remediation_steps: string,
   file: string,
   line: number,
-  snippet: string
+  snippet: string,
+  controlId: 45 | 47
 ): EngineVulnerability {
   return {
     id,
@@ -82,6 +83,7 @@ function finding(
     cwe,
     description,
     remediation_steps,
+    control_ids: [controlId],
     code_locations: [{ file, start_line: line, end_line: line, snippet: snippet.slice(0, 240) }],
   }
 }
@@ -196,7 +198,8 @@ async function scanInstructionFiles(
           "Remove the directive, require review for agent instruction changes, and keep agent tools least-privileged and approval-gated.",
           file,
           index + 1,
-          line
+          line,
+          45
         )
       )
     }
@@ -265,7 +268,8 @@ async function scanWorkflows(
           "Replace write-all with the smallest job-level permissions required and keep contents read-only unless a reviewed step must write.",
           file,
           writeAllLine + 1,
-          lines[writeAllLine] ?? ""
+          lines[writeAllLine] ?? "",
+          47
         )
       )
     }
@@ -285,7 +289,8 @@ async function scanWorkflows(
           "Use pull_request with read-only permissions for untrusted code. If pull_request_target is required, never execute or check out the pull request head in the privileged job.",
           file,
           line,
-          lines[line - 1] ?? "pull_request_target"
+          lines[line - 1] ?? "pull_request_target",
+          47
         )
       )
     }

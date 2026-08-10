@@ -39,7 +39,7 @@ const faq = [
   },
   {
     q: "What is the Vibe Security 50?",
-    a: "It is a fixed list of 50 controls LyraShield AI reviews on AI-built apps. 43 are machine-testable and 7 require retained human evidence because a repository or URL scan cannot establish them safely.",
+    a: "It is a fixed list of 50 controls LyraShield AI reviews on AI-built apps. 43 are routed to code or URL review where applicable and 7 require operational or human evidence outside the scan because a repository or URL scan cannot establish them safely.",
   },
 ]
 const jsonLd = [
@@ -168,7 +168,7 @@ const jsonLd = [
       <h2 id="limits-heading" class="text-2xl font-semibold text-text">What this methodology does not claim</h2>
       <ul class="mt-6 grid gap-4 text-text-muted sm:grid-cols-2">
         <li>It does not prove an application has no vulnerabilities.</li>
-        <li>It does not imply every one of the Vibe Security 50 controls is machine-testable.</li>
+        <li>It does not imply every Vibe Security 50 control can be established by one scan.</li>
         <li>It does not replace an authorized penetration test or specialist point tool.</li>
         <li>It does not open a Fix PR until a server-generated patch is bound to an exact approval.</li>
       </ul>

@@ -228,7 +228,7 @@ Six evidence planes converging on a controlled release aperture, with visible in
 
 ### Sources and claim guardrails
 
-Use B5-S15 through B5-S19. Do not promise comprehensive coverage. Keep the Vibe Security 50 split at 43 machine-testable and 7 evidence-required controls when mentioned. A checked control is documentation, not independent verification.
+Use B5-S15 through B5-S19. Do not promise comprehensive coverage. Keep the Vibe Security 50 split at 43 code/URL review and 7 evidence-required controls when mentioned. A checked control is documentation, not independent verification.
 
 ## Topic 73: The Two-Account Test for Data Isolation
 

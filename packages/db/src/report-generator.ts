@@ -76,7 +76,7 @@ export async function gatherReportData(
       include: {
         target: { select: { name: true, type: true, url: true } },
         resultManifest: { select: { checksum: true } },
-        coverageReceipts: { select: { status: true } },
+        coverageReceipts: { select: { controlId: true, status: true } },
       },
     })
 
@@ -92,15 +92,17 @@ export async function gatherReportData(
         startedAt: scan.startedAt,
         endedAt: scan.endedAt,
         manifestChecksum: scan.resultManifest?.checksum ?? null,
-        coverage: (scan.coverageReceipts ?? []).reduce(
-          (acc, receipt) => {
-            if (receipt.status === "PARTIAL") acc.completed++
-            else if (receipt.status === "NOT_APPLICABLE") acc.notApplicable++
-            else acc.limited++
-            return acc
-          },
-          { completed: 0, limited: 0, notApplicable: 0 }
-        ),
+        coverage: (scan.coverageReceipts ?? [])
+          .filter((receipt) => receipt.controlId.startsWith("vibe-"))
+          .reduce(
+            (acc, receipt) => {
+              if (receipt.status === "COMPLETED") acc.completed++
+              else if (receipt.status === "NOT_APPLICABLE") acc.notApplicable++
+              else acc.limited++
+              return acc
+            },
+            { completed: 0, limited: 0, notApplicable: 0 }
+          ),
       }
     }
 

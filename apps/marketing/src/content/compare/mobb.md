@@ -22,7 +22,7 @@ faq:
 | Primary focus           | Evidence-backed release assurance for AI-built apps                                            | Fix SAST findings at scale; "platform for AI code trust"                                            |
 | Scanning approach       | Agentic engine, coverage framework, evidence states                                            | Ingests external SAST results, or self-scans via Opengrep (SAST)                                    |
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                           | Ingested → auto-triaged (Fixable / Irrelevant / Remaining) → fix PR or commit                       |
-| Control framework       | Vibe Security 50 (43 machine-testable + 7 evidence-required)                                   | No published control framework; auto-triage classification                                          |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                    | No published control framework; auto-triage classification                                          |
 | Fix model               | Approval-gated; PR execution blocked until a server-generated patch is bound to exact approval | Deterministic rules plus GenAI validation; fixes re-scanned to confirm cleared; PR or direct commit |
 | AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                           | Mobb Vibe Shield IDE/MCP layer; Mobb Tracy AI-code governance dashboards                            |
 

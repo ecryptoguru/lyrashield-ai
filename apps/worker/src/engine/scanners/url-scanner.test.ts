@@ -32,7 +32,7 @@ function makeResponse(html: string, headers: Record<string, string> = {}, status
 }
 
 describe("scanUrl", () => {
-  it("detects Supabase anon key exposure", async () => {
+  it("does not report Supabase anon keys that are public by design", async () => {
     const html = `
       <script>
         const supabaseUrl = "https://abcdefgh.supabase.co";
@@ -45,13 +45,28 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const supabaseFinding = findings.find((f) => f.id.includes("supabase-anon-key"))
-    expect(supabaseFinding).toBeDefined()
-    expect(supabaseFinding!.severity).toBe("HIGH")
-    expect(supabaseFinding!.cwe).toBe("CWE-200")
+    expect(findings.some((finding) => finding.id.includes("supabase"))).toBe(false)
   })
 
-  it("detects Firebase config exposure", async () => {
+  it("detects Supabase service_role keys without retaining the key", async () => {
+    const html = `
+      <script>
+        const supabaseUrl = "https://abcdefgh.supabase.co";
+        const supabaseKey = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.signature123";
+      </script>
+    `
+    mockFetch.mockResolvedValueOnce(makeResponse(html))
+    const findings = await scanUrl({
+      targetUrl: "https://example.com",
+      fetchFn: mockFetch,
+      resolver: stubResolver,
+    })
+    const finding = findings.find((candidate) => candidate.id.includes("supabase-privileged-key"))
+    expect(finding).toMatchObject({ severity: "CRITICAL", control_ids: [3] })
+    expect(JSON.stringify(finding)).not.toContain("signature123")
+  })
+
+  it("does not report Firebase client configuration as a secret", async () => {
     const html = `
       <script>
         const firebaseConfig = {
@@ -66,9 +81,8 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const firebaseFinding = findings.find((f) => f.id.includes("firebase-config"))
-    expect(firebaseFinding).toBeDefined()
-    expect(firebaseFinding!.severity).toBe("MEDIUM")
+    expect(findings.some((finding) => finding.id.includes("firebase"))).toBe(false)
+    expect(findings.some((finding) => finding.id.includes("generic-api-key"))).toBe(false)
   })
 
   it("detects missing security headers", async () => {
@@ -80,6 +94,7 @@ describe("scanUrl", () => {
     })
     const headerFindings = findings.filter((f) => f.id.includes("missing-header"))
     expect(headerFindings.length).toBeGreaterThanOrEqual(3)
+    expect(headerFindings.every((finding) => finding.control_ids?.includes(27))).toBe(true)
   })
 
   it("does not report missing headers when present", async () => {
@@ -100,7 +115,7 @@ describe("scanUrl", () => {
     expect(headerFindings).toHaveLength(0)
   })
 
-  it("detects CORS wildcard with credentials", async () => {
+  it("does not claim wildcard CORS with credentials is browser-exploitable", async () => {
     mockFetch.mockResolvedValueOnce(
       makeResponse("<html></html>", {
         "access-control-allow-origin": "*",
@@ -112,13 +127,10 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const corsFinding = findings.find((f) => f.id.includes("cors-wildcard-with-credentials"))
-    expect(corsFinding).toBeDefined()
-    expect(corsFinding!.severity).toBe("HIGH")
-    expect(corsFinding!.cwe).toBe("CWE-942")
+    expect(findings.some((finding) => finding.id.includes("cors"))).toBe(false)
   })
 
-  it("detects IDOR patterns", async () => {
+  it("does not claim predictable identifiers prove IDOR", async () => {
     const html = `<script>fetch('/api/users/12345').then(r => r.json())</script>`
     mockFetch.mockResolvedValueOnce(makeResponse(html))
     const findings = await scanUrl({
@@ -126,12 +138,10 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const idorFinding = findings.find((f) => f.id.includes("idor-pattern"))
-    expect(idorFinding).toBeDefined()
-    expect(idorFinding!.cwe).toBe("CWE-639")
+    expect(findings.some((finding) => finding.id.includes("idor"))).toBe(false)
   })
 
-  it("detects AI builder platform markers", async () => {
+  it("does not turn an AI-builder attribution marker into a security finding", async () => {
     const html = `<html><!-- Built with Lovable --></html>`
     mockFetch.mockResolvedValueOnce(makeResponse(html))
     const findings = await scanUrl({
@@ -139,12 +149,10 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const aiFinding = findings.find((f) => f.id.includes("ai-builder"))
-    expect(aiFinding).toBeDefined()
-    expect(aiFinding!.severity).toBe("INFO")
+    expect(findings.some((finding) => finding.id.includes("ai-builder"))).toBe(false)
   })
 
-  it("detects open redirect patterns", async () => {
+  it("does not claim a dynamic redirect assignment proves an open redirect", async () => {
     const html = `<script>window.location = redirectUrl;</script>`
     mockFetch.mockResolvedValueOnce(makeResponse(html))
     const findings = await scanUrl({
@@ -152,9 +160,7 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const redirectFinding = findings.find((f) => f.id.includes("open-redirect"))
-    expect(redirectFinding).toBeDefined()
-    expect(redirectFinding!.cwe).toBe("CWE-601")
+    expect(findings.some((finding) => finding.id.includes("open-redirect"))).toBe(false)
   })
 
   it("detects exposed Stripe key", async () => {
@@ -168,6 +174,7 @@ describe("scanUrl", () => {
     const stripeFinding = findings.find((f) => f.id.includes("stripe-secret-key"))
     expect(stripeFinding).toBeDefined()
     expect(stripeFinding!.severity).toBe("HIGH")
+    expect(stripeFinding!.control_ids).toEqual([3])
   })
 
   it("detects cleartext HTTP transport", async () => {
@@ -177,7 +184,10 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.find((finding) => finding.id === "url-insecure-http")?.cwe).toBe("CWE-319")
+    expect(findings.find((finding) => finding.id === "url-insecure-http")).toMatchObject({
+      cwe: "CWE-319",
+      control_ids: [29],
+    })
   })
 
   it("detects cleartext HTTP when the final redirect target is HTTPS", async () => {
@@ -204,6 +214,7 @@ describe("scanUrl", () => {
     })
     const cookieFinding = findings.find((finding) => finding.id === "url-insecure-cookie-0")
     expect(cookieFinding?.title).toContain("Secure, HttpOnly, SameSite")
+    expect(cookieFinding?.control_ids).toEqual([28])
     expect(JSON.stringify(cookieFinding)).not.toContain("super-secret-value")
   })
 
@@ -230,7 +241,10 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.find((finding) => finding.id === "url-verbose-error")?.cwe).toBe("CWE-209")
+    expect(findings.find((finding) => finding.id === "url-verbose-error")).toMatchObject({
+      cwe: "CWE-209",
+      control_ids: [31],
+    })
   })
 
   it("detects production source-map references", async () => {
@@ -240,7 +254,10 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.find((finding) => finding.id === "url-source-map-exposed")?.cwe).toBe("CWE-540")
+    expect(findings.find((finding) => finding.id === "url-source-map-exposed")).toMatchObject({
+      cwe: "CWE-540",
+      control_ids: [32],
+    })
   })
 
   it("returns empty array when fetch fails", async () => {
@@ -263,7 +280,7 @@ describe("scanUrl", () => {
     expect(findings).toHaveLength(0)
   })
 
-  it("detects missing webhook signature verification", async () => {
+  it("does not infer missing webhook verification from a public bundle", async () => {
     const html = `<script>fetch('/api/webhook/stripe', { method: 'POST', body: JSON.stringify({ event: 'payment' }) })</script>`
     mockFetch.mockResolvedValueOnce(makeResponse(html))
     const findings = await scanUrl({
@@ -271,22 +288,7 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const webhookFinding = findings.find((f) => f.id.includes("webhook-no-verification"))
-    expect(webhookFinding).toBeDefined()
-    expect(webhookFinding!.severity).toBe("HIGH")
-    expect(webhookFinding!.cwe).toBe("CWE-345")
-  })
-
-  it("does not report webhook finding when signature verification is present", async () => {
-    const html = `<script>const event = stripe.webhooks.constructEvent(body, stripeSignature); fetch('/api/webhook/stripe', { method: 'POST' })</script>`
-    mockFetch.mockResolvedValueOnce(makeResponse(html))
-    const findings = await scanUrl({
-      targetUrl: "https://example.com",
-      fetchFn: mockFetch,
-      resolver: stubResolver,
-    })
-    const webhookFinding = findings.find((f) => f.id.includes("webhook-no-verification"))
-    expect(webhookFinding).toBeUndefined()
+    expect(findings.some((finding) => finding.id.includes("webhook-no-verification"))).toBe(false)
   })
 
   it("does not produce duplicate Google API key finding when Firebase config is present", async () => {
@@ -304,10 +306,7 @@ describe("scanUrl", () => {
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const googleKeyFindings = findings.filter((f) => f.id.includes("google-api-key"))
-    const firebaseFindings = findings.filter((f) => f.id.includes("firebase-config"))
-    expect(googleKeyFindings).toHaveLength(0)
-    expect(firebaseFindings).toHaveLength(1)
+    expect(findings.some((finding) => finding.id.includes("api-key"))).toBe(false)
   })
 
   it("detects mixed-case headers correctly (case-insensitive)", async () => {

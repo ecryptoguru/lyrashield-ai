@@ -24,7 +24,7 @@ faq:
 | Primary focus           | Evidence-backed release assurance for AI-built apps                             | Unified AppSec platform: code, cloud, runtime in one system                        |
 | Scanning approach       | Agentic engine with coverage framework and evidence states; AI-pattern focus    | Multi-engine (SAST, SCA, secrets, IaC, containers, CSPM, DAST) + AI pentest agents |
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive            | Open → triaged (AutoT deprioritizes non-risk) → AutoFix PR or ticket               |
-| Control framework       | Vibe Security 50 (43 machine-testable + 7 evidence-required)                    | No published control framework; rule engine + context-based prioritization         |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                     | No published control framework; rule engine + context-based prioritization         |
 | AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns            | AI Code Quality review + malware detection; not AI-code-specific assurance         |
 | Fix model               | Approval-gated: PR blocked until server-generated patch bound to exact approval | AutoFix generates reviewable PRs across code, deps, IaC, containers                |
 
