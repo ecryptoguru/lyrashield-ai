@@ -120,7 +120,7 @@ function urlOptions(
     })
   }
 
-  return options.filter((option) => option.available)
+  return options
 }
 
 export function getManualScanOptions(target: {

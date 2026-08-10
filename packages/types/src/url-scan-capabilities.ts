@@ -284,3 +284,44 @@ export function getUrlModeAvailability(
 
   return { available: true }
 }
+
+export type ResolveTargetScanModeInput = {
+  targetType: string
+  mode: string
+  hasApiSpec: boolean
+}
+
+export type ResolveTargetScanModeResult =
+  | { ok: true; profile: UrlScanProfile | null }
+  | {
+      ok: false
+      code: Exclude<UrlModeAvailability, { available: true }>["code"]
+      reason: string
+    }
+
+export function resolveTargetScanMode(
+  input: ResolveTargetScanModeInput,
+  releasedIds: ReadonlySet<string> = RELEASED_URL_PROFILE_IDS
+): ResolveTargetScanModeResult {
+  if (input.targetType !== "WEB_APP" && input.targetType !== "API") {
+    return { ok: true, profile: null }
+  }
+
+  const availability = getUrlModeAvailability(
+    input.targetType,
+    input.mode,
+    input.hasApiSpec,
+    releasedIds
+  )
+
+  if (!availability.available) {
+    return {
+      ok: false,
+      code: availability.code,
+      reason: availability.reason,
+    }
+  }
+
+  const profile = getUrlScanProfile(input.targetType, input.mode)
+  return { ok: true, profile }
+}

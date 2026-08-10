@@ -61,9 +61,13 @@ describe("getManualScanOptions", () => {
     })
   })
 
-  it("returns only Endpoint Review for an API target without an OpenAPI spec", () => {
+  it("shows Endpoint Review plus locked guidance for an API target without an OpenAPI spec", () => {
     const options = getManualScanOptions({ type: "API" })
-    expect(options).toHaveLength(1)
+    expect(options.map((o) => ({ id: o.id, available: o.available }))).toEqual([
+      { id: "API_SAFE", available: true },
+      { id: "API_STANDARD", available: false },
+      { id: "API_DEEP", available: false },
+    ])
     expect(options[0]).toMatchObject({
       id: "API_SAFE",
       label: "Endpoint Review",

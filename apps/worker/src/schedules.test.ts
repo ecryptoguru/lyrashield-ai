@@ -167,19 +167,15 @@ describe("processDueSchedules", () => {
     )
   })
 
-  it("disables and skips scheduled WEB_APP STANDARD scans", async () => {
+  it("allows scheduled WEB_APP STANDARD scans after surface review is implemented", async () => {
     vi.mocked(getDueSchedules).mockResolvedValue([
       { ...schedule, mode: "STANDARD", target: { ...schedule.target, type: "WEB_APP" } },
     ] as never)
 
     const enqueued = await processDueSchedules()
 
-    expect(enqueued).toBe(0)
-    expect(mockPrisma.schedule.update).toHaveBeenCalledWith({
-      where: { id: "schedule-1" },
-      data: { enabled: false },
-    })
-    expect(createScan).not.toHaveBeenCalled()
+    expect(enqueued).toBe(1)
+    expect(createScan).toHaveBeenCalled()
   })
 
   it("disables and skips scheduled API DEEP scans without an OpenAPI spec", async () => {

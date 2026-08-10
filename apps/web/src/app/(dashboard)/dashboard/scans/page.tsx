@@ -68,7 +68,7 @@ export default async function ScansPage({
   const [targets, { items, nextCursor }] = await Promise.all([
     prisma.target.findMany({
       where: { workspaceId, deletedAt: null },
-      select: { id: true, name: true, type: true, url: true, repoFullName: true },
+      select: { id: true, name: true, type: true, url: true, apiSpecUrl: true, repoFullName: true },
       orderBy: { name: "asc" },
       take: 200,
     }),
@@ -108,6 +108,7 @@ export default async function ScansPage({
           name: t.name,
           type: t.type,
           url: t.url,
+          apiSpecUrl: t.apiSpecUrl,
           repoFullName: t.repoFullName,
         }))}
         initialData={initialData}

@@ -3,6 +3,7 @@ import {
   URL_SCAN_CONTRACT_VERSION,
   getUrlModeAvailability,
   getUrlScanProfile,
+  resolveTargetScanMode,
 } from "./url-scan-capabilities"
 
 describe("URL scan capabilities", () => {
@@ -69,6 +70,37 @@ describe("URL scan capabilities", () => {
       available: false,
       code: "API_SPEC_REQUIRED",
       reason: "Contract Behavior Review requires an OpenAPI document.",
+    })
+  })
+
+  it("resolves target/mode combinations and returns a typed result", () => {
+    expect(resolveTargetScanMode({ targetType: "REPO", mode: "STANDARD", hasApiSpec: false })).toEqual({
+      ok: true,
+      profile: null,
+    })
+
+    expect(resolveTargetScanMode({ targetType: "API", mode: "STANDARD", hasApiSpec: false })).toEqual({
+      ok: false,
+      code: "API_SPEC_REQUIRED",
+      reason: "Contract Review requires an OpenAPI document.",
+    })
+
+    const apiStandard = resolveTargetScanMode({ targetType: "API", mode: "STANDARD", hasApiSpec: true })
+    expect(apiStandard.ok).toBe(true)
+    if (apiStandard.ok) {
+      expect(apiStandard.profile?.id).toBe("API_STANDARD")
+    }
+
+    const webStandard = resolveTargetScanMode({ targetType: "WEB_APP", mode: "STANDARD", hasApiSpec: false })
+    expect(webStandard.ok).toBe(true)
+    if (webStandard.ok) {
+      expect(webStandard.profile?.id).toBe("WEB_APP_STANDARD")
+    }
+
+    expect(resolveTargetScanMode({ targetType: "WEB_APP", mode: "FAKE", hasApiSpec: false })).toEqual({
+      ok: false,
+      code: "URL_MODE_UNSUPPORTED",
+      reason: "Mode 'FAKE' is not supported for URL or API targets",
     })
   })
 

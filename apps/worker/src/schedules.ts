@@ -9,6 +9,7 @@ import {
 } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { assertScanWorkerAvailable, enqueueScan } from "./queue"
+import { resolveTargetScanMode } from "@lyrashield/types"
 
 const ACTIVE_SCAN_STATUSES = [
   "QUEUED",
@@ -70,20 +71,24 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
           return
         }
 
-        const isUrlTarget = schedule.target.type === "WEB_APP" || schedule.target.type === "API"
-        const isDeepMode = schedule.mode === "STANDARD" || schedule.mode === "DEEP"
-        if (isUrlTarget && isDeepMode) {
-          const apiWithSpec = schedule.target.type === "API" && schedule.target.apiSpecUrl
-          if (!apiWithSpec) {
+        if (schedule.target.type === "WEB_APP" || schedule.target.type === "API") {
+          const resolved = resolveTargetScanMode({
+            targetType: schedule.target.type,
+            mode: schedule.mode,
+            hasApiSpec: Boolean(schedule.target.apiSpecUrl),
+          })
+          if (!resolved.ok) {
             await prisma.schedule.update({
               where: { id: schedule.id },
               data: { enabled: false },
             })
-            logger.warn("Disabled legacy URL Standard/Deep schedule", {
+            logger.warn("Disabled schedule with unavailable mode", {
               scheduleId: schedule.id,
               targetId: schedule.targetId,
-              type: schedule.target.type,
+              targetType: schedule.target.type,
               mode: schedule.mode,
+              reason: resolved.reason,
+              code: resolved.code,
             })
             return
           }

@@ -31,13 +31,14 @@ interface ScheduleItem {
   lastRunAt: string | null
   nextRunAt: string | null
   createdAt: string
-  target: { id: string; name: string; type: string; url: string | null }
+  target: { id: string; name: string; type: string; url: string | null; apiSpecUrl: string | null }
 }
 
 interface TargetOption {
   id: string
   name: string
   type: string
+  apiSpecUrl: string | null
 }
 
 const targetOptionSchema = z
@@ -45,6 +46,7 @@ const targetOptionSchema = z
     id: z.string(),
     name: z.string(),
     type: z.string(),
+    apiSpecUrl: z.string().nullable(),
   })
   .passthrough()
 
@@ -67,6 +69,7 @@ const scheduleItemSchema = z
         name: z.string(),
         type: z.string(),
         url: z.string().nullable(),
+        apiSpecUrl: z.string().nullable(),
       })
       .passthrough(),
   })
@@ -97,16 +100,42 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   const [creating, setCreating] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [frequency, setFrequency] = useState("WEEKLY")
+  const [modeResetNotice, setModeResetNotice] = useState<string | null>(null)
 
   const selectedTargetDetails = targets.find((target) => target.id === selectedTargetId)
   const selectedTargetUsesEngine = selectedTargetDetails?.type === "REPO"
   const availableOptions = getManualScanOptions({
     type: selectedTargetDetails?.type ?? "",
-    hasApiSpec: Boolean(
-      (selectedTargetDetails as { apiSpecUrl?: string | null } | undefined)?.apiSpecUrl
-    ),
+    hasApiSpec: Boolean(selectedTargetDetails?.apiSpecUrl),
   })
-  const selectedOption = availableOptions.find((o) => o.id === presetId) ?? availableOptions[0]
+  const enabledOptions = availableOptions.filter((o) => o.available)
+  const selectedOption = enabledOptions.find((o) => o.id === presetId) ?? enabledOptions[0]
+
+  function handleSelectTarget(targetId: string) {
+    setSelectedTargetId(targetId)
+    if (!targetId) {
+      setPresetId("")
+      setModeResetNotice(null)
+      return
+    }
+    const currentStillAvailable = enabledOptions.find((o) => o.id === presetId)
+    if (currentStillAvailable) {
+      setModeResetNotice(null)
+      return
+    }
+    const firstAvailable = enabledOptions[0]
+    if (firstAvailable) {
+      setPresetId(firstAvailable.id)
+      setModeResetNotice(
+        presetId
+          ? `Review depth reset to ${firstAvailable.label} because the previous choice is not available for this target.`
+          : null
+      )
+    } else {
+      setPresetId("")
+      setModeResetNotice(null)
+    }
+  }
 
   const loadSchedules = useCallback(async () => {
     setLoading(true)
@@ -229,7 +258,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                 <Select
                   id="schedule-target"
                   value={selectedTargetId}
-                  onChange={(e) => setSelectedTargetId(e.target.value)}
+                  onChange={(e) => handleSelectTarget(e.target.value)}
                 >
                   <option value="">Select a target</option>
                   {targets.map((t) => (
@@ -309,8 +338,14 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                       onChange={(e) => setPresetId(e.target.value)}
                     >
                       {availableOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
+                        <option
+                          key={option.id}
+                          value={option.id}
+                          disabled={!option.available}
+                          title={option.disabledReason}
+                        >
                           {option.label}
+                          {!option.available ? ` — ${option.disabledReason}` : ""}
                         </option>
                       ))}
                     </Select>
@@ -318,6 +353,16 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                 </div>
               )}
             </div>
+            {modeResetNotice && (
+              <p className="text-amber-600 text-xs" role="status" aria-live="polite">
+                {modeResetNotice}
+              </p>
+            )}
+            {selectedTargetId && selectedTargetDetails?.type === "API" && (
+              <p className="text-muted-foreground text-xs" role="status" aria-live="polite">
+                Contract and Contract Behavior schedules require an OpenAPI document on the target.
+              </p>
+            )}
             <p className="text-muted-foreground text-xs">
               {selectedOption?.description}{" "}
               {selectedTargetId && !selectedTargetUsesEngine

@@ -1,5 +1,5 @@
 import { createScan, getFinding, prisma, updateScanStatus } from "@lyrashield/db"
-import type { ScanMode } from "@lyrashield/types"
+import { type ScanMode, resolveTargetScanMode } from "@lyrashield/types"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -53,6 +53,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return apiError("RETEST_UNAVAILABLE", "The finding's source scan is unavailable", 409)
     }
 
+    const target = await prisma.target.findFirst({
+      where: { id: sourceScan.targetId, workspaceId, deletedAt: null },
+    })
+    if (!target) {
+      return apiError("RETEST_UNAVAILABLE", "The finding's target is unavailable", 409)
+    }
+
+    const resolved = resolveTargetScanMode({
+      targetType: target.type,
+      mode: sourceScan.mode,
+      hasApiSpec: Boolean(target.apiSpecUrl),
+    })
+    if (!resolved.ok) {
+      return apiError(resolved.code, resolved.reason, 400)
+    }
+
     const candidates = await prisma.findingCandidate.findMany({
       where: { findingId: id, workspaceId, scanId: sourceScan.id },
       select: { scannerSource: true },
@@ -61,6 +77,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       sourceScan.mode,
       candidates.map((candidate) => candidate.scannerSource)
     )
+
+    const retestResolved = resolveTargetScanMode({
+      targetType: target.type,
+      mode: retestProfile.mode,
+      hasApiSpec: Boolean(target.apiSpecUrl),
+    })
+    if (!retestResolved.ok) {
+      return apiError(retestResolved.code, retestResolved.reason, 400)
+    }
 
     const existingPending = await prisma.retest.findFirst({
       where: {

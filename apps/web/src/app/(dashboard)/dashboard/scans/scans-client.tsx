@@ -67,6 +67,7 @@ interface TargetItem {
   name: string
   type: string
   url: string | null
+  apiSpecUrl: string | null
   repoFullName: string | null
 }
 
@@ -76,6 +77,7 @@ const scanTargetSchema = z
     name: z.string(),
     type: z.string(),
     url: z.string().nullable(),
+    apiSpecUrl: z.string().nullable(),
     repoFullName: z.string().nullable(),
   })
   .passthrough()
@@ -130,6 +132,7 @@ export function ScansClient({
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const [selectedTarget, setSelectedTarget] = useState("")
   const [selectedPreset, setSelectedPreset] = useState("")
+  const [modeResetNotice, setModeResetNotice] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -232,14 +235,44 @@ export function ScansClient({
   const selectedTargetType = selectedTargetDetails?.type ?? ""
   const availableOptions = getManualScanOptions({
     type: selectedTargetType,
-    hasApiSpec: Boolean(
-      (selectedTargetDetails as { apiSpecUrl?: string | null } | undefined)?.apiSpecUrl
-    ),
+    hasApiSpec: Boolean(selectedTargetDetails?.apiSpecUrl),
   })
-  const selectedOption = availableOptions.find((o) => o.id === selectedPreset) ?? availableOptions[0]
+  const enabledOptions = availableOptions.filter((o) => o.available)
+  const selectedOption = enabledOptions.find((o) => o.id === selectedPreset) ?? enabledOptions[0]
   const selectedTargetUsesEngine = selectedTargetType === "REPO"
 
   const ACTIVE_STATUS_PARAM = "QUEUED,PREFLIGHT,RUNNING,VERIFYING,REQUIRES_APPROVAL"
+
+  function handleSelectTarget(targetId: string) {
+    setSelectedTarget(targetId)
+    if (!targetId) {
+      setSelectedPreset("")
+      setModeResetNotice(null)
+      return
+    }
+    const target = targets.find((t) => t.id === targetId)
+    const options = getManualScanOptions({
+      type: target?.type ?? "",
+      hasApiSpec: Boolean(target?.apiSpecUrl),
+    })
+    const currentStillAvailable = options.find((o) => o.id === selectedPreset && o.available)
+    if (currentStillAvailable) {
+      setModeResetNotice(null)
+      return
+    }
+    const firstAvailable = options.find((o) => o.available)
+    if (firstAvailable) {
+      setSelectedPreset(firstAvailable.id)
+      setModeResetNotice(
+        selectedPreset
+          ? `Review type reset to ${firstAvailable.label} because the previous choice is not available for this target.`
+          : null
+      )
+    } else {
+      setSelectedPreset("")
+      setModeResetNotice(null)
+    }
+  }
 
   useEffect(() => {
     if (!hasActiveScans) return
@@ -367,7 +400,7 @@ export function ScansClient({
               <Select
                 id="scan-target"
                 value={selectedTarget}
-                onChange={(e) => setSelectedTarget(e.target.value)}
+                onChange={(e) => handleSelectTarget(e.target.value)}
               >
                 <option value="">Select a {TARGET_SINGULAR.toLowerCase()}…</option>
                 {targets.map((t) => (
@@ -391,6 +424,7 @@ export function ScansClient({
               >
                 {availableOptions.map((option) => {
                   const isSelected = selectedOption?.id === option.id
+                  const isDisabled = !option.available
                   return (
                     <button
                       key={option.id}
@@ -398,14 +432,17 @@ export function ScansClient({
                       type="button"
                       role="radio"
                       aria-checked={isSelected}
-                      aria-label={`${option.label}: ${option.description}`}
+                      aria-disabled={isDisabled}
+                      aria-label={`${option.label}: ${option.description}${isDisabled ? ` (${option.disabledReason})` : ""}`}
                       tabIndex={isSelected ? 0 : -1}
-                      onClick={() => setSelectedPreset(option.id)}
+                      disabled={isDisabled}
+                      onClick={() => !isDisabled && setSelectedPreset(option.id)}
                       onKeyDown={(e) => {
+                        if (isDisabled) return
                         if (e.key === "ArrowRight" || e.key === "ArrowDown") {
                           e.preventDefault()
-                          const idx = availableOptions.findIndex((o) => o.id === option.id)
-                          const next = availableOptions[(idx + 1) % availableOptions.length]
+                          const idx = enabledOptions.findIndex((o) => o.id === option.id)
+                          const next = enabledOptions[(idx + 1) % enabledOptions.length]
                           if (next) {
                             setSelectedPreset(next.id)
                             document.getElementById(`preset-${next.id}`)?.focus()
@@ -413,10 +450,10 @@ export function ScansClient({
                         }
                         if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
                           e.preventDefault()
-                          const idx = availableOptions.findIndex((o) => o.id === option.id)
+                          const idx = enabledOptions.findIndex((o) => o.id === option.id)
                           const prev =
-                            availableOptions[
-                              (idx - 1 + availableOptions.length) % availableOptions.length
+                            enabledOptions[
+                              (idx - 1 + enabledOptions.length) % enabledOptions.length
                             ]
                           if (prev) {
                             setSelectedPreset(prev.id)
@@ -426,9 +463,11 @@ export function ScansClient({
                       }}
                       className={cn(
                         "group focus-visible:ring-ring relative flex min-h-23 w-full flex-col items-start rounded-lg border p-4 text-left shadow-xs transition-[border-color,box-shadow,background-color] duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
-                        isSelected
-                          ? "border-primary bg-primary/6 dark:bg-primary/12 ring-primary/20 shadow-sm ring-1"
-                          : "border-border bg-card hover:border-border/80 hover:bg-accent/50"
+                        isDisabled
+                          ? "opacity-60 cursor-not-allowed bg-muted/40 border-dashed"
+                          : isSelected
+                            ? "border-primary bg-primary/6 dark:bg-primary/12 ring-primary/20 shadow-sm ring-1"
+                            : "border-border bg-card hover:border-border/80 hover:bg-accent/50"
                       )}
                     >
                       <div className="flex w-full items-center justify-between gap-2">
@@ -450,6 +489,9 @@ export function ScansClient({
                       <span className="text-muted-foreground mt-1.5 line-clamp-3 text-xs leading-relaxed">
                         {option.description}
                       </span>
+                      {isDisabled && option.disabledReason ? (
+                        <span className="mt-2 text-[11px] text-amber-600">{option.disabledReason}</span>
+                      ) : null}
                     </button>
                   )
                 })}
@@ -461,6 +503,16 @@ export function ScansClient({
                   ? "This target uses deterministic scanners."
                   : "A protected limit is applied automatically."}
               </p>
+              {modeResetNotice && (
+                <p className="text-amber-600 mt-2 text-xs" role="status" aria-live="polite">
+                  {modeResetNotice}
+                </p>
+              )}
+              {selectedTarget && selectedTargetType === "API" && (
+                <p className="text-muted-foreground mt-2 text-xs" role="status" aria-live="polite">
+                  Contract and Contract Behavior reviews require an OpenAPI document on the target.
+                </p>
+              )}
               <p
                 className="text-foreground mt-3 flex items-center gap-1.5 text-sm font-medium"
                 role="status"
@@ -468,10 +520,9 @@ export function ScansClient({
                 <Clock className="text-muted-foreground size-4" aria-hidden="true" />
                 Estimated time: {selectedOption ? formatEstimate(selectedOption.estimate) : "—"}
               </p>
-              {selectedTarget && selectedTargetType && availableOptions.length === 1 && (
+              {selectedTarget && selectedTargetType && enabledOptions.length === 1 && (
                 <p className="text-muted-foreground mt-2 text-xs" role="status" aria-live="polite">
-                  Deeper review options will become available after their backend implementation
-                  ships and passes release-gate tests.
+                  Deeper review options will become available after their requirements are met.
                 </p>
               )}
             </div>

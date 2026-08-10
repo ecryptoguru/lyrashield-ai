@@ -1,4 +1,5 @@
 import { listSchedules, createSchedule, getNextRunAt, prisma } from "@lyrashield/db"
+import { resolveTargetScanMode } from "@lyrashield/types"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -82,6 +83,15 @@ export async function POST(request: Request) {
     })
     if (!target) {
       return apiError("TARGET_NOT_FOUND", "Target not found", 404)
+    }
+
+    const resolved = resolveTargetScanMode({
+      targetType: target.type,
+      mode,
+      hasApiSpec: Boolean(target.apiSpecUrl),
+    })
+    if (!resolved.ok) {
+      return apiError(resolved.code, resolved.reason, 400)
     }
 
     const existing = await prisma.schedule.findFirst({

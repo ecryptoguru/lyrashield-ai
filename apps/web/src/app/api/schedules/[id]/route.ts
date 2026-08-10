@@ -1,4 +1,5 @@
 import { getSchedule, updateSchedule, deleteSchedule, getNextRunAt, prisma } from "@lyrashield/db"
+import { resolveTargetScanMode } from "@lyrashield/types"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -76,6 +77,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const schedule = await getSchedule(id, workspaceId)
     if (!schedule) {
       return apiError("SCHEDULE_NOT_FOUND", "Schedule not found", 404)
+    }
+
+    if (updateData.mode) {
+      const target = await prisma.target.findFirst({
+        where: { id: schedule.targetId, workspaceId, deletedAt: null },
+      })
+      if (!target) {
+        return apiError("TARGET_NOT_FOUND", "Target not found", 404)
+      }
+      const resolved = resolveTargetScanMode({
+        targetType: target.type,
+        mode: updateData.mode,
+        hasApiSpec: Boolean(target.apiSpecUrl),
+      })
+      if (!resolved.ok) {
+        return apiError(resolved.code, resolved.reason, 400)
+      }
     }
 
     const updated = await updateSchedule(id, workspaceId, updateData)
