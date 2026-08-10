@@ -514,7 +514,7 @@ export function ScanDetailClient({
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back to scans
         </Link>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="flex items-center gap-3 text-2xl font-bold tracking-tight">
               <Radar className="h-6 w-6" aria-hidden="true" />
@@ -738,16 +738,21 @@ export function ScanDetailClient({
           )}
 
           {scan.integrity.urlExecution && (
-            <Card className="mb-6 p-4" aria-labelledby="url-execution-heading">
+            <Card
+              className="mb-6 p-4"
+              role="region"
+              aria-labelledby="url-execution-heading"
+              aria-describedby="url-execution-limitations"
+            >
               <h2 id="url-execution-heading" className="font-semibold">
                 URL execution scope
               </h2>
-              <p className="text-muted-foreground mt-1 text-sm">
+              <p className="text-muted-foreground mt-1 text-sm" id="url-execution-limitations">
                 {renderUrlExecutionLine(scan.integrity.urlExecution)}
               </p>
               {Array.isArray(scan.integrity.urlExecution.issueCodes) &&
                 scan.integrity.urlExecution.issueCodes.length > 0 && (
-                  <p className="mt-2 text-sm text-amber-600">
+                  <p className="mt-2 text-sm text-amber-600" role="status" aria-live="polite">
                     Coverage limited: {scan.integrity.urlExecution.issueCodes.join(", ")}
                   </p>
                 )}
