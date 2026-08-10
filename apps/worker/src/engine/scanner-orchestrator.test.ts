@@ -42,17 +42,29 @@ vi.mock("./scanners/secrets-scanner", () => ({
 }))
 
 vi.mock("./scanners/url-scanner", () => ({
-  scanUrl: vi.fn().mockResolvedValue([
-    {
-      id: "url-missing-header-content-security-policy",
-      title: "Missing Content-Security-Policy header",
-      severity: "MEDIUM",
-      timestamp: new Date().toISOString(),
-      cwe: "CWE-693",
-      description: "Missing CSP header",
-      remediation_steps: "Add CSP header",
+  scanUrl: vi.fn().mockResolvedValue({
+    findings: [
+      {
+        id: "url-missing-header-content-security-policy",
+        title: "Missing Content-Security-Policy header",
+        severity: "MEDIUM",
+        timestamp: new Date().toISOString(),
+        cwe: "CWE-693",
+        description: "Missing CSP header",
+        remediation_steps: "Add CSP header",
+      },
+    ],
+    execution: {
+      contractVersion: "url-scan/2.0.0",
+      profile: "WEB_APP_SAFE",
+      methods: ["GET"],
+      subjectCount: 1,
+      totalBytes: 100,
+      truncated: false,
+      issues: [],
     },
-  ]),
+    issues: [],
+  }),
 }))
 
 vi.mock("./scanners/agent-config-scanner", () => ({
@@ -367,17 +379,29 @@ describe("runScannerOrchestrator", () => {
       remediation_steps: "Add CSP",
     }
 
-    vi.mocked(scanUrl).mockResolvedValueOnce([
-      {
-        id: "url-missing-header-content-security-policy",
-        title: "Missing Content-Security-Policy header",
-        severity: "MEDIUM",
-        timestamp: new Date().toISOString(),
-        cwe: "CWE-693",
-        description: "Missing CSP header",
-        remediation_steps: "Add CSP header",
+    vi.mocked(scanUrl).mockResolvedValueOnce({
+      findings: [
+        {
+          id: "url-missing-header-content-security-policy",
+          title: "Missing Content-Security-Policy header",
+          severity: "MEDIUM",
+          timestamp: new Date().toISOString(),
+          cwe: "CWE-693",
+          description: "Missing CSP header",
+          remediation_steps: "Add CSP header",
+        },
+      ],
+      execution: {
+        contractVersion: "url-scan/2.0.0",
+        profile: "WEB_APP_SAFE",
+        methods: ["GET"],
+        subjectCount: 1,
+        totalBytes: 100,
+        truncated: false,
+        issues: [],
       },
-    ])
+      issues: [],
+    })
 
     const result = await runScannerOrchestrator({
       scanId: "scan-1",

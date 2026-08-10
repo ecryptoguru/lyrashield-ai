@@ -159,7 +159,7 @@ async function runUrlScan(
             readTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS,
           })
         : undefined
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl,
       coverageIssues,
       signal,

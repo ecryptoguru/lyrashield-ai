@@ -15,7 +15,7 @@ describe("buildLiteScorecardPayload", () => {
     expect(payload).toEqual({
       kind: "lite-check",
       payloadVersion: 1,
-      checkVersion: "lite-2026-07-16.1",
+      checkVersion: "lite-2026-08-10.1",
       generatedAt: "2026-07-16T00:00:00.000Z",
       needsAttention: 1,
       worthReviewing: 2,
