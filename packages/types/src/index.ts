@@ -147,24 +147,65 @@ export const CreateRepoTargetSchema = z.object({
   environment: TargetEnvironmentSchema.default("STAGING"),
 })
 
-export const CreateUrlTargetSchema = z.object({
+function urlWithoutCredsQueryOrFragment(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== "https:") return false
+    if (parsed.username || parsed.password) return false
+    if (parsed.search) return false
+    if (parsed.hash) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+export const CreateUrlTargetSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    projectId: z.string().optional(),
+    type: z.enum(["WEB_APP", "API"]),
+    name: z
+      .string()
+      .min(1)
+      .max(100)
+      .trim()
+      .refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
+    url: z.url(),
+    apiSpecUrl: z
+      .string()
+      .refine(
+        (v) => urlWithoutCredsQueryOrFragment(v),
+        "OpenAPI URL must be a public HTTPS URL with no credentials, query, or fragment"
+      )
+      .optional(),
+    environment: TargetEnvironmentSchema.default("STAGING"),
+    ownershipAttested: z
+      .boolean()
+      .refine(
+        (v) => v === true,
+        "You must attest that you own or are authorized to scan this target"
+      ),
+  })
+  .superRefine((data, ctx) => {
+    if (data.apiSpecUrl && data.type !== "API") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["apiSpecUrl"],
+        message: "OpenAPI URL is only allowed for API targets",
+      })
+    }
+  })
+
+export const PatchApiSpecSchema = z.object({
   workspaceId: z.string().min(1),
-  projectId: z.string().optional(),
-  type: z.enum(["WEB_APP", "API"]),
-  name: z
+  apiSpecUrl: z
     .string()
-    .min(1)
-    .max(100)
-    .trim()
-    .refine((v) => !/[\u0000-\u001F\u007F]/.test(v), "Control characters not allowed"),
-  url: z.url(),
-  environment: TargetEnvironmentSchema.default("STAGING"),
-  ownershipAttested: z
-    .boolean()
     .refine(
-      (v) => v === true,
-      "You must attest that you own or are authorized to scan this target"
-    ),
+      (v) => urlWithoutCredsQueryOrFragment(v),
+      "OpenAPI URL must be a public HTTPS URL with no credentials, query, or fragment"
+    )
+    .nullable(),
 })
 
 export const CreateScanSchema = z.object({

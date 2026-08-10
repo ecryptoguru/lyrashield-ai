@@ -28,6 +28,7 @@ export interface ScannerOrchestratorConfig {
     id: string
     type: string
     url?: string | null
+    apiSpecUrl?: string | null
     repoFullName?: string | null
     name: string
   }
@@ -149,7 +150,8 @@ async function runUrlScan(
   profile: UrlScanProfile,
   workspaceDir: string,
   coverageIssues: ScannerCoverageIssue[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  apiSpecUrl?: string | null
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting URL scan phase", { scanId, targetUrl: redactUrlForLogs(targetUrl) })
@@ -168,6 +170,7 @@ async function runUrlScan(
       coverageIssues,
       signal,
       fetchFn,
+      apiSpecUrl,
     })
     logger.info("URL scan phase complete", { scanId, findingCount: findings.length })
     return findings
@@ -261,7 +264,7 @@ export async function runScannerOrchestrator(
           ? runSecretsScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
         targetUrl && config.urlProfile
-          ? runUrlScan(scanId, targetUrl, config.urlProfile, absWorkspace, coverageIssues, signal)
+          ? runUrlScan(scanId, targetUrl, config.urlProfile, absWorkspace, coverageIssues, signal, target.apiSpecUrl)
           : Promise.resolve([] as EngineVulnerability[]),
         hasSourceCheckout
           ? runAgentConfigScan(scanId, absWorkspace, coverageIssues, signal)

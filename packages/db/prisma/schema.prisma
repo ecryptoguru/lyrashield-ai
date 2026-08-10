@@ -472,6 +472,7 @@ model Target {
   type            TargetType
   name            String
   url             String?
+  apiSpecUrl      String?
   repoProvider    String?
   repoOwner       String?
   repoName        String?

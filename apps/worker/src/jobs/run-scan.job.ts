@@ -548,7 +548,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // 2. Fetch target details for the engine
       const target = await prisma.target.findFirst({
         where: { id: targetId, deletedAt: null },
-        select: { id: true, type: true, name: true, url: true, repoFullName: true, branch: true },
+        select: { id: true, type: true, name: true, url: true, repoFullName: true, branch: true, apiSpecUrl: true },
       })
 
       if (!target) {
@@ -934,6 +934,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           url: target.url,
           repoFullName: target.repoFullName,
           name: target.name,
+          apiSpecUrl: target.apiSpecUrl,
         },
         goal,
         mode,

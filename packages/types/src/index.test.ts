@@ -446,4 +446,52 @@ describe("CreateUrlTargetSchema", () => {
       }).success
     ).toBe(false)
   })
+
+  it("accepts a valid API OpenAPI URL", () => {
+    expect(
+      CreateUrlTargetSchema.safeParse({
+        workspaceId: "ws-1",
+        type: "API",
+        name: "My API",
+        url: "https://api.example.com",
+        apiSpecUrl: "https://api.example.com/openapi.yaml",
+        ownershipAttested: true,
+      }).success
+    ).toBe(true)
+  })
+
+  it("rejects an OpenAPI URL on a WEB_APP target", () => {
+    expect(
+      CreateUrlTargetSchema.safeParse({
+        workspaceId: "ws-1",
+        type: "WEB_APP",
+        name: "My App",
+        url: "https://example.com",
+        apiSpecUrl: "https://example.com/openapi.yaml",
+        ownershipAttested: true,
+      }).success
+    ).toBe(false)
+  })
+
+  it("rejects an OpenAPI URL with query, fragment, or credentials", () => {
+    const base = {
+      workspaceId: "ws-1",
+      type: "API",
+      name: "My API",
+      url: "https://api.example.com",
+      ownershipAttested: true,
+    }
+    expect(
+      CreateUrlTargetSchema.safeParse({ ...base, apiSpecUrl: "http://api.example.com/openapi.yaml" }).success
+    ).toBe(false)
+    expect(
+      CreateUrlTargetSchema.safeParse({ ...base, apiSpecUrl: "https://user:pass@api.example.com/openapi.yaml" }).success
+    ).toBe(false)
+    expect(
+      CreateUrlTargetSchema.safeParse({ ...base, apiSpecUrl: "https://api.example.com/openapi.yaml?version=2" }).success
+    ).toBe(false)
+    expect(
+      CreateUrlTargetSchema.safeParse({ ...base, apiSpecUrl: "https://api.example.com/openapi.yaml#section" }).success
+    ).toBe(false)
+  })
 })

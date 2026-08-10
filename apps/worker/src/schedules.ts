@@ -70,6 +70,25 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
           return
         }
 
+        const isUrlTarget = schedule.target.type === "WEB_APP" || schedule.target.type === "API"
+        const isDeepMode = schedule.mode === "STANDARD" || schedule.mode === "DEEP"
+        if (isUrlTarget && isDeepMode) {
+          const apiWithSpec = schedule.target.type === "API" && schedule.target.apiSpecUrl
+          if (!apiWithSpec) {
+            await prisma.schedule.update({
+              where: { id: schedule.id },
+              data: { enabled: false },
+            })
+            logger.warn("Disabled legacy URL Standard/Deep schedule", {
+              scheduleId: schedule.id,
+              targetId: schedule.targetId,
+              type: schedule.target.type,
+              mode: schedule.mode,
+            })
+            return
+          }
+        }
+
         const scan = await createScan({
           workspaceId: schedule.workspaceId,
           targetId: schedule.targetId,

@@ -4,7 +4,7 @@ import type { Schedule, ScanGoal, ScanMode } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 
 export interface ScheduleWithDetails extends Schedule {
-  target: { id: string; name: string; type: string; url: string | null }
+  target: { id: string; name: string; type: string; url: string | null; apiSpecUrl: string | null }
 }
 
 function parseCronField(value: string, min: number, max: number): number | "*" | null {
@@ -223,7 +223,7 @@ export async function getDueSchedules(now: Date): Promise<ScheduleWithDetails[]>
       OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }],
     },
     include: {
-      target: { select: { id: true, name: true, type: true, url: true } },
+      target: { select: { id: true, name: true, type: true, url: true, apiSpecUrl: true } },
     },
     take: 50,
   })

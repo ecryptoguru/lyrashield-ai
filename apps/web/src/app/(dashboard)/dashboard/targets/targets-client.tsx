@@ -24,6 +24,7 @@ interface Target {
   name: string
   type: string
   url: string | null
+  apiSpecUrl: string | null
   repoFullName: string | null
   branch: string | null
   environment: string
@@ -84,6 +85,7 @@ export function TargetsClient({
   const [urlForm, setUrlForm] = useState({
     name: "",
     url: "",
+    apiSpecUrl: "",
     urlType: "WEB_APP" as "WEB_APP" | "API",
     ownershipAttested: false,
   })
@@ -205,10 +207,11 @@ export function TargetsClient({
         type: urlForm.urlType,
         name: urlForm.name,
         url: urlForm.url,
+        apiSpecUrl: urlForm.urlType === "API" ? urlForm.apiSpecUrl || undefined : undefined,
         ownershipAttested: urlForm.ownershipAttested,
       })
       setShowForm(false)
-      setUrlForm({ name: "", url: "", urlType: "WEB_APP", ownershipAttested: false })
+      setUrlForm({ name: "", url: "", apiSpecUrl: "", urlType: "WEB_APP", ownershipAttested: false })
       await fetchTargets()
       router.refresh()
     } catch (e) {
@@ -472,6 +475,21 @@ export function TargetsClient({
                   }
                 />
               </FormField>
+              {urlForm.urlType === "API" && (
+                <FormField label="OpenAPI / Swagger URL" htmlFor="api-spec-url">
+                  <p className="text-muted-foreground mb-1 text-xs">
+                    Required for Contract and Contract Behavior reviews. Public HTTPS URL with no
+                    query, fragment, or credentials.
+                  </p>
+                  <Input
+                    id="api-spec-url"
+                    type="url"
+                    value={urlForm.apiSpecUrl}
+                    onChange={(e) => setUrlForm({ ...urlForm, apiSpecUrl: e.target.value })}
+                    placeholder="https://api.example.com/openapi.yaml"
+                  />
+                </FormField>
+              )}
               <label className="flex items-start gap-2 text-sm">
                 <input
                   type="checkbox"

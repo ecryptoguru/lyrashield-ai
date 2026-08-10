@@ -21,6 +21,8 @@ export interface UrlScanConfig {
   resolver?: import("@lyrashield/security").HostResolver
   signal?: AbortSignal
   coverageIssues?: ScannerCoverageIssue[]
+  /** OpenAPI document URL for API Contract/Behavior scans. */
+  apiSpecUrl?: string | null
 }
 
 export type UrlRequestMethod = "GET" | "HEAD" | "OPTIONS"
