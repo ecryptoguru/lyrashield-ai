@@ -57,10 +57,7 @@ describe("scanUrl", () => {
   })
 
   it("detects Supabase service_role keys without retaining the key", async () => {
-    const serviceRoleKey = makeFixtureJwt(
-      "eyJhbGciOiJIUzI1NiJ9",
-      "eyJyb2xlIjoic2VydmljZV9yb2xlIn0"
-    )
+    const serviceRoleKey = makeFixtureJwt("eyJhbGciOiJIUzI1NiJ9", "eyJyb2xlIjoic2VydmljZV9yb2xlIn0")
     const html = `
       <script>
         const supabaseUrl = "https://abcdefgh.supabase.co";
