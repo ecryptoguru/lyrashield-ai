@@ -211,7 +211,13 @@ export function TargetsClient({
         ownershipAttested: urlForm.ownershipAttested,
       })
       setShowForm(false)
-      setUrlForm({ name: "", url: "", apiSpecUrl: "", urlType: "WEB_APP", ownershipAttested: false })
+      setUrlForm({
+        name: "",
+        url: "",
+        apiSpecUrl: "",
+        urlType: "WEB_APP",
+        ownershipAttested: false,
+      })
       await fetchTargets()
       router.refresh()
     } catch (e) {

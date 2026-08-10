@@ -17,7 +17,7 @@ export interface OAuthBearerContext {
 }
 
 const resourceClient = oauthProviderResourceClient(auth)
-const { verifyAccessToken } = resourceClient.getActions()
+const { verifyBearerToken } = resourceClient.getActions()
 
 type OAuthJwtPayload = Record<string, unknown> & {
   sub?: string
@@ -34,7 +34,7 @@ function stringClaim(payload: OAuthJwtPayload, name: string): string | undefined
 /** Verify an OAuth access token issued for the hosted MCP resource. */
 export async function verifyOAuthBearer(token: string): Promise<OAuthBearerContext | null> {
   try {
-    const payload = await verifyAccessToken(token, {
+    const payload = await verifyBearerToken(token, {
       verifyOptions: { issuer: OAUTH_ISSUER, audience: OAUTH_RESOURCE },
       jwksUrl: `${OAUTH_ISSUER}/jwks`,
     })

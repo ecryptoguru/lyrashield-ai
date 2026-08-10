@@ -490,7 +490,9 @@ export function ScansClient({
                         {option.description}
                       </span>
                       {isDisabled && option.disabledReason ? (
-                        <span className="mt-2 text-[11px] text-amber-600">{option.disabledReason}</span>
+                        <span className="mt-2 text-[11px] text-amber-600">
+                          {option.disabledReason}
+                        </span>
                       ) : null}
                     </button>
                   )

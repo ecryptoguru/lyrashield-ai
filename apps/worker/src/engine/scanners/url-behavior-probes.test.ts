@@ -56,7 +56,9 @@ describe("runUrlBehaviorProbes", () => {
 
     expect(result.subjects.filter((s) => s.kind === "probe").length).toBeGreaterThan(0)
     expect(new Set(recorded.map((r) => r.method))).toEqual(new Set(["HEAD", "OPTIONS", "GET"]))
-    expect(recorded).not.toEqual(expect.arrayContaining([expect.objectContaining({ method: "POST" })]))
+    expect(recorded).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ method: "POST" })])
+    )
   })
 
   it("detects reflected origin with credentials", async () => {
@@ -102,7 +104,9 @@ describe("runUrlBehaviorProbes", () => {
     const collection = await deepCollection(fetchFn)
     const result = await runUrlBehaviorProbes({ collection, fetchFn, resolver: stubResolver })
 
-    expect(result.signals.some((signal) => signal.id.includes("cors-reflected-credentials"))).toBe(false)
+    expect(result.signals.some((signal) => signal.id.includes("cors-reflected-credentials"))).toBe(
+      false
+    )
   })
 
   it("records a failure issue when a behavior probe fails", async () => {
@@ -173,7 +177,9 @@ describe("runUrlBehaviorProbes", () => {
 
     const result = await runUrlBehaviorProbes({ collection, fetchFn, resolver: stubResolver })
 
-    const methodProbeCount = result.subjects.filter((s) => s.method === "HEAD" || s.method === "OPTIONS").length
+    const methodProbeCount = result.subjects.filter(
+      (s) => s.method === "HEAD" || s.method === "OPTIONS"
+    ).length
     const originProbeCount = result.subjects.filter((s) => s.method === "GET").length
 
     expect(methodProbeCount).toBe(profile.maxMethodProbes)

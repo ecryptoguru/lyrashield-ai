@@ -482,16 +482,28 @@ describe("CreateUrlTargetSchema", () => {
       ownershipAttested: true,
     }
     expect(
-      CreateUrlTargetSchema.safeParse({ ...base, apiSpecUrl: "http://api.example.com/openapi.yaml" }).success
+      CreateUrlTargetSchema.safeParse({
+        ...base,
+        apiSpecUrl: "http://api.example.com/openapi.yaml",
+      }).success
     ).toBe(false)
     expect(
-      CreateUrlTargetSchema.safeParse({ ...base, apiSpecUrl: "https://user:pass@api.example.com/openapi.yaml" }).success
+      CreateUrlTargetSchema.safeParse({
+        ...base,
+        apiSpecUrl: "https://user:pass@api.example.com/openapi.yaml",
+      }).success
     ).toBe(false)
     expect(
-      CreateUrlTargetSchema.safeParse({ ...base, apiSpecUrl: "https://api.example.com/openapi.yaml?version=2" }).success
+      CreateUrlTargetSchema.safeParse({
+        ...base,
+        apiSpecUrl: "https://api.example.com/openapi.yaml?version=2",
+      }).success
     ).toBe(false)
     expect(
-      CreateUrlTargetSchema.safeParse({ ...base, apiSpecUrl: "https://api.example.com/openapi.yaml#section" }).success
+      CreateUrlTargetSchema.safeParse({
+        ...base,
+        apiSpecUrl: "https://api.example.com/openapi.yaml#section",
+      }).success
     ).toBe(false)
   })
 })

@@ -97,10 +97,7 @@ function goalForUrlMode(mode: UrlScanMode): string {
   }
 }
 
-function urlOptions(
-  targetType: UrlTargetType,
-  hasApiSpec: boolean
-): ManualScanOption[] {
+function urlOptions(targetType: UrlTargetType, hasApiSpec: boolean): ManualScanOption[] {
   const modes: UrlScanMode[] = ["SAFE", "STANDARD", "DEEP"]
   const options: ManualScanOption[] = []
 
@@ -154,9 +151,7 @@ export function isScanPresetId(id: string): id is ScanPresetId {
   return (Object.keys(SCAN_PRESETS) as ScanPresetId[]).includes(id as ScanPresetId)
 }
 
-export function getUrlProfileFromOption(
-  option: ManualScanOption
-): UrlScanProfile | null {
+export function getUrlProfileFromOption(option: ManualScanOption): UrlScanProfile | null {
   try {
     return getUrlScanProfile(
       option.id.startsWith("API") ? "API" : "WEB_APP",

@@ -49,8 +49,6 @@ const HIGH_CONFIDENCE_SECRET_PATTERNS: ReadonlyArray<RegExp> = [
   /\b(?:DATABASE_URL|PRIVATE_KEY|CLIENT_SECRET|API_SECRET|ACCESS_TOKEN)\s*[:=]\s*["'][^"'\s]{16,}["']/gi,
 ]
 
-
-
 function signalId(detector: string, subjectUrl: string): string {
   const digest = createHash("sha256").update(subjectUrl).digest("hex").slice(0, 12)
   return `${detector}.${digest}`
@@ -156,8 +154,7 @@ function cspSignals(subject: SurfaceSubject): SurfaceSignal[] {
       severity: "LOW",
       title: "Frame embedding protection is missing",
       description: "Neither X-Frame-Options nor a CSP frame-ancestors rule was visible.",
-      remediation:
-        "Set X-Frame-Options or a CSP frame-ancestors directive to control framing.",
+      remediation: "Set X-Frame-Options or a CSP frame-ancestors directive to control framing.",
       evidence: {},
     })
   }
@@ -282,7 +279,8 @@ function transportSignals(subject: SurfaceSubject): SurfaceSignal[] {
       state: "DETECTED",
       severity: "HIGH",
       title: "Application is served over insecure HTTP",
-      description: "The target is reachable over cleartext HTTP, allowing network attackers to read or modify requests and responses.",
+      description:
+        "The target is reachable over cleartext HTTP, allowing network attackers to read or modify requests and responses.",
       remediation:
         "Redirect all HTTP traffic to HTTPS and enable HSTS after confirming every supported subdomain is HTTPS-ready.",
       evidence: { finalProtocol: url.protocol },
@@ -295,9 +293,9 @@ function transportSignals(subject: SurfaceSubject): SurfaceSignal[] {
       state: "DETECTED",
       severity: "MEDIUM",
       title: "Redirect chain included insecure HTTP",
-      description: "The scan reached the target through an HTTP redirect. The final page is HTTPS, but the chain exposed traffic in cleartext.",
-      remediation:
-        "Serve the initial request over HTTPS and redirect HTTP to HTTPS with HSTS.",
+      description:
+        "The scan reached the target through an HTTP redirect. The final page is HTTPS, but the chain exposed traffic in cleartext.",
+      remediation: "Serve the initial request over HTTPS and redirect HTTP to HTTPS with HSTS.",
       evidence: { finalProtocol: url.protocol },
     })
   }
@@ -311,8 +309,7 @@ function transportSignals(subject: SurfaceSubject): SurfaceSignal[] {
       severity: "MEDIUM",
       title: "The HTTPS page references HTTP content",
       description: "At least one public asset reference uses an unencrypted HTTP URL.",
-      remediation:
-        "Load all subresources over HTTPS or use relative protocol-less URLs.",
+      remediation: "Load all subresources over HTTPS or use relative protocol-less URLs.",
       evidence: {},
     })
   }
@@ -449,7 +446,8 @@ export function analyzePublicSurface(collection: SurfaceCollection): SurfaceSign
     signals.push(...sourceMapSignals(subject))
   }
 
-  const primarySubject = document ?? collection.subjects[0] ?? ({ requestedUrl: collection.seedUrl } as SurfaceSubject)
+  const primarySubject =
+    document ?? collection.subjects[0] ?? ({ requestedUrl: collection.seedUrl } as SurfaceSubject)
   const fullText = collectionText(collection)
   signals.push(...privilegedSecretSignals(fullText, primarySubject))
   signals.push(...dataLayerSignals(fullText, primarySubject))

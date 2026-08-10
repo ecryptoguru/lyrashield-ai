@@ -96,8 +96,7 @@ export async function gatherReportData(
     if (scan) {
       targetId = scan.targetId
       const manifestRecord = scan.resultManifest?.manifest as
-        | { urlExecution?: NonNullable<ReportData["scanInfo"]>["urlExecution"] }
-        | undefined
+        { urlExecution?: NonNullable<ReportData["scanInfo"]>["urlExecution"] } | undefined
       scanInfo = {
         scanId: scan.id,
         status: scan.status,
@@ -574,7 +573,9 @@ export function generateReportHTML(data: ReportData): string {
 </html>`
 }
 
-function renderUrlExecutionLine(execution: NonNullable<NonNullable<ReportData["scanInfo"]>["urlExecution"]>): string {
+function renderUrlExecutionLine(
+  execution: NonNullable<NonNullable<ReportData["scanInfo"]>["urlExecution"]>
+): string {
   const labels: Record<string, string> = {
     WEB_APP_SAFE: "Surface Review",
     WEB_APP_STANDARD: "Expanded Surface Review",

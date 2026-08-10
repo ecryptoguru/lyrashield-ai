@@ -29,7 +29,12 @@ vi.mock("@lyrashield/auth/server", () => ({
 
 vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: {
-    schedule: { view: "schedule:view", create: "schedule:create", update: "schedule:update", delete: "schedule:delete" },
+    schedule: {
+      view: "schedule:view",
+      create: "schedule:create",
+      update: "schedule:update",
+      delete: "schedule:delete",
+    },
   },
 }))
 
@@ -84,9 +89,12 @@ describe("PATCH /api/schedules/[id]", () => {
   it("rejects an API Standard update when the spec has been removed", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(apiTargetNoSpec as never)
 
-    const res = await PATCH(makePatchRequest("sched-1", { workspaceId: "ws-1", mode: "STANDARD" }), {
-      params: Promise.resolve({ id: "sched-1" }),
-    })
+    const res = await PATCH(
+      makePatchRequest("sched-1", { workspaceId: "ws-1", mode: "STANDARD" }),
+      {
+        params: Promise.resolve({ id: "sched-1" }),
+      }
+    )
 
     expect(res.status).toBe(400)
     const json = await res.json()
@@ -97,9 +105,12 @@ describe("PATCH /api/schedules/[id]", () => {
   it("allows a mode update when the target still supports it", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(apiTarget as never)
 
-    const res = await PATCH(makePatchRequest("sched-1", { workspaceId: "ws-1", mode: "STANDARD" }), {
-      params: Promise.resolve({ id: "sched-1" }),
-    })
+    const res = await PATCH(
+      makePatchRequest("sched-1", { workspaceId: "ws-1", mode: "STANDARD" }),
+      {
+        params: Promise.resolve({ id: "sched-1" }),
+      }
+    )
 
     expect(res.status).toBe(200)
     expect(updateSchedule).toHaveBeenCalled()

@@ -201,14 +201,14 @@ The authenticated dashboard exposes one-off review depths that depend on the sel
 
 Web App and API targets use the pinned deterministic URL scanner. The external AI engine is not invoked for these targets. The available modes are:
 
-| User option               | Target type | Backend mode | Requirements                                      |
-| ------------------------- | ----------- | ------------ | ------------------------------------------------- |
-| Surface Review            | Web App     | SAFE         | Public HTTP(S) URL                                |
-| Expanded Surface Review   | Web App     | STANDARD     | Public HTTP(S) URL                                |
-| Behavioral Surface Review | Web App     | DEEP         | Public HTTP(S) URL                                |
-| Endpoint Review           | API         | SAFE         | Public HTTP(S) URL                                |
-| Contract Review           | API         | STANDARD     | An OpenAPI document URL on the target             |
-| Contract Behavior Review  | API         | DEEP         | An OpenAPI document URL on the target             |
+| User option               | Target type | Backend mode | Requirements                          |
+| ------------------------- | ----------- | ------------ | ------------------------------------- |
+| Surface Review            | Web App     | SAFE         | Public HTTP(S) URL                    |
+| Expanded Surface Review   | Web App     | STANDARD     | Public HTTP(S) URL                    |
+| Behavioral Surface Review | Web App     | DEEP         | Public HTTP(S) URL                    |
+| Endpoint Review           | API         | SAFE         | Public HTTP(S) URL                    |
+| Contract Review           | API         | STANDARD     | An OpenAPI document URL on the target |
+| Contract Behavior Review  | API         | DEEP         | An OpenAPI document URL on the target |
 
 These reviews are passive and non-mutating: they do not authenticate, exploit, fuzz, or enumerate arbitrary paths beyond the configured scope. Contract and Contract Behavior reviews use the supplied OpenAPI document to bound the operations reviewed.
 

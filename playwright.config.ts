@@ -26,6 +26,7 @@ export default defineConfig({
   webServer: {
     command:
       "export BETTER_AUTH_URL=http://127.0.0.1:3100 NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 " +
+      "NEXT_PUBLIC_MARKETING_URL=https://lyrashieldai.com " +
       "ADDITIONAL_TRUSTED_ORIGINS=http://127.0.0.1:3100 TRUSTED_PROXY_IP_HEADER=x-forwarded-for " +
       "HOSTNAME=127.0.0.1 PORT=3100 NODE_ENV=production LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0; " +
       (process.env.CI ? "" : "pnpm --filter @lyrashield/web build && ") +

@@ -73,11 +73,7 @@ function normalizeUrl(raw: string): string | null {
   }
 }
 
-function normalizeDiscoveredUrl(
-  raw: string,
-  base: string,
-  allowedOrigin: string
-): string | null {
+function normalizeDiscoveredUrl(raw: string, base: string, allowedOrigin: string): string | null {
   try {
     const url = new URL(raw, base)
     if (!["http:", "https:"].includes(url.protocol) || url.origin !== allowedOrigin) {
@@ -183,9 +179,11 @@ function extractAnchorUrls(html: string, base: string, allowedOrigin: string): s
     if (!normalized) continue
     const url = new URL(normalized)
     // Drop non-HTML assets and fragments/queries already stripped.
-    if (/\.(?:m?js|css|png|jpe?g|gif|svg|webp|ico|pdf|zip|tar\.gz|mp4|webm|ogg|woff2?|ttf|eot)$/i.test(
-      url.pathname
-    )) {
+    if (
+      /\.(?:m?js|css|png|jpe?g|gif|svg|webp|ico|pdf|zip|tar\.gz|mp4|webm|ogg|woff2?|ttf|eot)$/i.test(
+        url.pathname
+      )
+    ) {
       continue
     }
     urls.add(normalized)
@@ -219,10 +217,7 @@ function extractSitemapUrls(xml: string, allowedOrigin: string): string[] {
 
 function extractSourceMapReferences(body: string, base: string, allowedOrigin: string): string[] {
   const urls = new Set<string>()
-  const patterns = [
-    /sourceMappingURL\s*=\s*([^\s"'<>]+)/gi,
-    /sourceMap\s*=\s*["']([^"']+)["']/gi,
-  ]
+  const patterns = [/sourceMappingURL\s*=\s*([^\s"'<>]+)/gi, /sourceMap\s*=\s*["']([^"']+)["']/gi]
   for (const pattern of patterns) {
     for (const match of body.matchAll(pattern)) {
       const raw = match[1]?.trim()
@@ -449,7 +444,9 @@ async function collectSafeAssets(ctx: {
         if (!outcome.ok) {
           if (ctx.signal.aborted) {
             truncated = true
-            ctx.issues.push(issue("LIMIT_REACHED", assetUrl, "Scan wall-time budget was exhausted."))
+            ctx.issues.push(
+              issue("LIMIT_REACHED", assetUrl, "Scan wall-time budget was exhausted.")
+            )
           } else {
             ctx.issues.push(issue("FETCH_FAILED", assetUrl, describeOutcome(outcome)))
           }
@@ -458,7 +455,9 @@ async function collectSafeAssets(ctx: {
 
         const result = outcome.result
         if (new URL(result.finalUrl).origin !== ctx.finalOrigin) {
-          ctx.issues.push(issue("OUT_OF_SCOPE", result.finalUrl, "Asset redirected out of the target origin."))
+          ctx.issues.push(
+            issue("OUT_OF_SCOPE", result.finalUrl, "Asset redirected out of the target origin.")
+          )
           return
         }
 
@@ -589,7 +588,11 @@ async function collectExpandedSurface(ctx: {
 
   // The seed was already fetched and recorded. Start BFS from its links and
   // assets, then fetch the common discovery endpoints.
-  const seedAnchors = extractAnchorUrls(ctx.seedResult.html, ctx.seedResult.finalUrl, ctx.finalOrigin)
+  const seedAnchors = extractAnchorUrls(
+    ctx.seedResult.html,
+    ctx.seedResult.finalUrl,
+    ctx.finalOrigin
+  )
     .filter((url) => !seen.has(url))
     .sort((a, b) => a.localeCompare(b))
   for (const url of seedAnchors) {
@@ -601,7 +604,11 @@ async function collectExpandedSurface(ctx: {
 
   // Seed common discovery endpoints once, at the start of the crawl.
   if (ctx.profile.maxDepth > 0) {
-    const robotsUrl = normalizeDiscoveredUrl("/robots.txt", ctx.seedResult.finalUrl, ctx.finalOrigin)
+    const robotsUrl = normalizeDiscoveredUrl(
+      "/robots.txt",
+      ctx.seedResult.finalUrl,
+      ctx.finalOrigin
+    )
     if (robotsUrl) pendingSitemaps.push({ kind: "robots", url: robotsUrl })
 
     const rootSitemapUrl = normalizeDiscoveredUrl(
@@ -669,14 +676,20 @@ async function collectExpandedSurface(ctx: {
 
       const result = outcome.result
       if (new URL(result.finalUrl).origin !== ctx.finalOrigin) {
-        ctx.issues.push(issue("OUT_OF_SCOPE", result.finalUrl, "Resource redirected out of the target origin."))
+        ctx.issues.push(
+          issue("OUT_OF_SCOPE", result.finalUrl, "Resource redirected out of the target origin.")
+        )
         return
       }
 
       ctx.totalBytes += result.bodyBytes
       if (result.bodyTruncated) {
         ctx.issues.push(
-          issue("LIMIT_REACHED", result.finalUrl, `Response body truncated at ${result.bodyBytes} bytes.`)
+          issue(
+            "LIMIT_REACHED",
+            result.finalUrl,
+            `Response body truncated at ${result.bodyBytes} bytes.`
+          )
         )
       }
 
@@ -746,7 +759,12 @@ async function collectExpandedSurface(ctx: {
 
   // The seed is already recorded as a document. For Safe web mode the asset
   // loop above already ran; for expanded modes we run the BFS scheduler.
-  while (queue.length > 0 || pendingSitemaps.length > 0 || pendingAssets.length > 0 || executing.size > 0) {
+  while (
+    queue.length > 0 ||
+    pendingSitemaps.length > 0 ||
+    pendingAssets.length > 0 ||
+    executing.size > 0
+  ) {
     if (ctx.signal.aborted) {
       truncated = true
       ctx.issues.push(issue("LIMIT_REACHED", ctx.seed, "Scan wall-time budget was exhausted."))
@@ -783,7 +801,10 @@ async function collectExpandedSurface(ctx: {
         }
       }
 
-      const maxSpend = Math.min(ctx.profile.maxResponseBytes, ctx.profile.maxTotalBytes - ctx.totalBytes - reservedBytes)
+      const maxSpend = Math.min(
+        ctx.profile.maxResponseBytes,
+        ctx.profile.maxTotalBytes - ctx.totalBytes - reservedBytes
+      )
       if (maxSpend <= 0) {
         truncated = true
         ctx.issues.push(

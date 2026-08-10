@@ -5,9 +5,7 @@ import { collectPublicSurface, type SurfaceCollection } from "./public-surface"
 type PendingFetch = { url: string; resolve: () => void }
 
 function buildHtml(assets: string[]) {
-  const tags = assets
-    .map((asset) => `<script src="${asset}"></script>`)
-    .join("\n")
+  const tags = assets.map((asset) => `<script src="${asset}"></script>`).join("\n")
   return `<html><body>${tags}</body></html>`
 }
 
@@ -395,7 +393,12 @@ describe("collectPublicSurface", () => {
 })
 
 describe("Standard web discovery", () => {
-  function buildStandardFetch(pages: Record<string, { html?: string; status?: number; headers?: Record<string, string>; redirect?: string }>) {
+  function buildStandardFetch(
+    pages: Record<
+      string,
+      { html?: string; status?: number; headers?: Record<string, string>; redirect?: string }
+    >
+  ) {
     return vi.fn(async (url: string, init: RequestInit) => {
       if (init.signal?.aborted) {
         throw new DOMException("aborted", "AbortError")
@@ -436,8 +439,14 @@ describe("Standard web discovery", () => {
     "https://example.com/account": { html: "<html><body>account</body></html>" },
     "https://example.com/docs": { html: "<html><body>docs</body></html>" },
     "https://example.com/contact": { html: "<html><body>contact</body></html>" },
-    "https://example.com/a.js": { html: "// a", headers: { "content-type": "application/javascript" } },
-    "https://example.com/about.js": { html: "// about", headers: { "content-type": "application/javascript" } },
+    "https://example.com/a.js": {
+      html: "// a",
+      headers: { "content-type": "application/javascript" },
+    },
+    "https://example.com/about.js": {
+      html: "// about",
+      headers: { "content-type": "application/javascript" },
+    },
   }
 
   it("performs bounded BFS, drops cross-origin links, and reports truncation", async () => {

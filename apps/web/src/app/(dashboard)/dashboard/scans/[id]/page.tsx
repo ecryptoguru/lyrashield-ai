@@ -93,12 +93,11 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
       createdAt: e.createdAt.toISOString(),
     })),
     integrity: {
-      manifestChecksum: (scan.resultManifest as { checksum?: string | null } | undefined | null)?.checksum ?? null,
+      manifestChecksum:
+        (scan.resultManifest as { checksum?: string | null } | undefined | null)?.checksum ?? null,
       urlExecution: (
         (scan.resultManifest as { manifest?: unknown } | undefined | null)?.manifest as
-          | { urlExecution?: unknown }
-          | undefined
-          | null
+          { urlExecution?: unknown } | undefined | null
       )?.urlExecution as Record<string, unknown> | undefined,
       coverage: scan.coverageReceipts.map((receipt) => ({
         scanner: receipt.scanner,

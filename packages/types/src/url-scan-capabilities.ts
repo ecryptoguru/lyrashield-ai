@@ -31,12 +31,7 @@ export type UrlExecutionSummary = {
 }
 
 export type UrlScanProfileId =
-  | "WEB_APP_SAFE"
-  | "WEB_APP_STANDARD"
-  | "WEB_APP_DEEP"
-  | "API_SAFE"
-  | "API_STANDARD"
-  | "API_DEEP"
+  "WEB_APP_SAFE" | "WEB_APP_STANDARD" | "WEB_APP_DEEP" | "API_SAFE" | "API_STANDARD" | "API_DEEP"
 
 export type UrlScanProfile = {
   id: UrlScanProfileId
@@ -86,8 +81,7 @@ const PROFILES = {
     targetType: "WEB_APP",
     mode: "STANDARD",
     label: "Expanded Surface Review",
-    description:
-      "Up to 20 same-origin pages and 30 client assets; passive GET requests only.",
+    description: "Up to 20 same-origin pages and 30 client assets; passive GET requests only.",
     maxDocuments: 20,
     maxAssets: 30,
     maxDepth: 2,

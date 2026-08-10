@@ -53,10 +53,7 @@ function probeSubject(
   }
 }
 
-function isReflectedCors(
-  headers: Record<string, string>,
-  sentOrigin: string
-): boolean {
+function isReflectedCors(headers: Record<string, string>, sentOrigin: string): boolean {
   const allowOrigin = headers["access-control-allow-origin"]
   if (!allowOrigin) return false
   if (allowOrigin === "*") return false
@@ -119,11 +116,16 @@ export async function runUrlBehaviorProbes(options: {
 
   for (const document of documents) {
     if (signal?.aborted) {
-      issues.push(issue("LIMIT_REACHED", document.requestedUrl, "Scan wall-time budget was exhausted."))
+      issues.push(
+        issue("LIMIT_REACHED", document.requestedUrl, "Scan wall-time budget was exhausted.")
+      )
       break
     }
 
-    if (methodProbesUsed >= profile.maxMethodProbes && originProbesUsed >= profile.maxOriginProbes) {
+    if (
+      methodProbesUsed >= profile.maxMethodProbes &&
+      originProbesUsed >= profile.maxOriginProbes
+    ) {
       issues.push(
         issue(
           "LIMIT_REACHED",
@@ -154,7 +156,9 @@ export async function runUrlBehaviorProbes(options: {
           if (signal?.aborted) {
             issues.push(issue("LIMIT_REACHED", url, "Scan wall-time budget was exhausted."))
           } else {
-            issues.push(issue("FETCH_FAILED", url, `Behavior ${method} probe failed: ${outcome.reason}`))
+            issues.push(
+              issue("FETCH_FAILED", url, `Behavior ${method} probe failed: ${outcome.reason}`)
+            )
           }
           continue
         }

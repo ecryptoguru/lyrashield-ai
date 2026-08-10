@@ -55,7 +55,13 @@ const schedule = {
   deletedAt: null,
   createdAt: new Date("2026-01-01T00:00:00Z"),
   updatedAt: new Date("2026-01-01T00:00:00Z"),
-  target: { id: "target-1", name: "Example", type: "WEB_APP", url: "https://example.com", apiSpecUrl: null },
+  target: {
+    id: "target-1",
+    name: "Example",
+    type: "WEB_APP",
+    url: "https://example.com",
+    apiSpecUrl: null,
+  },
 }
 
 const mockPrisma = prisma as unknown as {
@@ -198,7 +204,11 @@ describe("processDueSchedules", () => {
       {
         ...schedule,
         mode: "STANDARD",
-        target: { ...schedule.target, type: "API", apiSpecUrl: "https://api.example.com/openapi.yaml" },
+        target: {
+          ...schedule.target,
+          type: "API",
+          apiSpecUrl: "https://api.example.com/openapi.yaml",
+        },
       },
     ] as never)
 

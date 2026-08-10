@@ -168,26 +168,28 @@ async function runUrlScan(
         : undefined
     const isApiContract =
       profile.targetType === "API" && (profile.mode === "STANDARD" || profile.mode === "DEEP")
-    const scanResult = isApiContract && apiSpecUrl
-      ? await scanOpenApi({
-          targetUrl,
-          apiSpecUrl,
-          profile,
-          fetchFn,
-          signal,
-        })
-      : await scanUrl({
-          targetUrl,
-          profile,
-          coverageIssues,
-          signal,
-          fetchFn,
-          apiSpecUrl,
-        })
+    const scanResult =
+      isApiContract && apiSpecUrl
+        ? await scanOpenApi({
+            targetUrl,
+            apiSpecUrl,
+            profile,
+            fetchFn,
+            signal,
+          })
+        : await scanUrl({
+            targetUrl,
+            profile,
+            coverageIssues,
+            signal,
+            fetchFn,
+            apiSpecUrl,
+          })
     for (const issue of scanResult.issues) {
       recordCoverageIssue(coverageIssues, {
         scanner: "url",
-        status: issue.code === "LIMIT_REACHED" || issue.code === "OUT_OF_SCOPE" ? "bounded" : "partial",
+        status:
+          issue.code === "LIMIT_REACHED" || issue.code === "OUT_OF_SCOPE" ? "bounded" : "partial",
         subject: issue.subject,
         reason: `${issue.code}: ${issue.reason}`,
       })
@@ -285,7 +287,15 @@ export async function runScannerOrchestrator(
           ? runSecretsScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
         targetUrl && config.urlProfile
-          ? runUrlScan(scanId, targetUrl, config.urlProfile, absWorkspace, coverageIssues, signal, target.apiSpecUrl)
+          ? runUrlScan(
+              scanId,
+              targetUrl,
+              config.urlProfile,
+              absWorkspace,
+              coverageIssues,
+              signal,
+              target.apiSpecUrl
+            )
           : Promise.resolve({ findings: [] as EngineVulnerability[], execution: undefined }),
         hasSourceCheckout
           ? runAgentConfigScan(scanId, absWorkspace, coverageIssues, signal)
@@ -300,7 +310,12 @@ export async function runScannerOrchestrator(
   let urlExecution: UrlExecutionSummary | undefined
   for (let index = 0; index < scannerResults.length; index++) {
     const result = scannerResults[index]
-    const value = result?.status === "fulfilled" ? (result.value as EngineVulnerability[] | { findings: EngineVulnerability[]; execution?: UrlExecutionSummary }) : undefined
+    const value =
+      result?.status === "fulfilled"
+        ? (result.value as
+            | EngineVulnerability[]
+            | { findings: EngineVulnerability[]; execution?: UrlExecutionSummary })
+        : undefined
     if (index === 2 && value && "findings" in value) {
       rawFindings.push(value.findings)
       urlExecution = value.execution

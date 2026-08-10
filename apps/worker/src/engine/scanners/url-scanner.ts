@@ -8,7 +8,12 @@ import {
   type SurfaceCollectionIssue,
   type SurfaceSignal,
 } from "@lyrashield/security"
-import { getUrlScanProfile, type UrlScanProfile, type UrlExecutionSummary, type UrlRequestMethod } from "@lyrashield/types"
+import {
+  getUrlScanProfile,
+  type UrlScanProfile,
+  type UrlExecutionSummary,
+  type UrlRequestMethod,
+} from "@lyrashield/types"
 import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 import { runUrlBehaviorProbes } from "./url-behavior-probes"
@@ -146,7 +151,9 @@ export async function scanUrl(config: UrlScanConfig): Promise<UrlScannerResult> 
         signals.push(signal)
       }
     }
-    methodProbes = probeResult.subjects.filter((s) => s.method === "HEAD" || s.method === "OPTIONS").length
+    methodProbes = probeResult.subjects.filter(
+      (s) => s.method === "HEAD" || s.method === "OPTIONS"
+    ).length
     originProbes = probeResult.subjects.filter((s) => s.method === "GET").length
   }
 

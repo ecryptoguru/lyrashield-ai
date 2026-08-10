@@ -32,7 +32,12 @@ const standardSpec = {
     "/health": {
       get: {
         operationId: "getHealth",
-        responses: { "200": { description: "OK", content: { "application/json": { schema: { type: "object" } } } } },
+        responses: {
+          "200": {
+            description: "OK",
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+        },
       },
       head: { responses: { "200": { description: "OK" } } },
       post: { summary: "admin reset" },
@@ -40,7 +45,9 @@ const standardSpec = {
     "/about": {
       get: {
         operationId: "getAbout",
-        responses: { "200": { description: "OK", content: { "text/plain": { schema: { type: "string" } } } } },
+        responses: {
+          "200": { description: "OK", content: { "text/plain": { schema: { type: "string" } } } },
+        },
       },
       head: { responses: { "200": { description: "OK" } } },
     },
@@ -80,7 +87,12 @@ const deepSpec = {
     "/health": {
       get: {
         operationId: "getHealth",
-        responses: { "200": { description: "OK", content: { "application/json": { schema: { type: "object" } } } } },
+        responses: {
+          "200": {
+            description: "OK",
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+        },
       },
       head: { responses: { "200": { description: "OK" } } },
       options: { responses: { "204": { description: "CORS" } } },
@@ -124,7 +136,10 @@ const deepSpec = {
 const specWithTooManyPaths = {
   openapi: "3.0.0",
   paths: Object.fromEntries(
-    Array.from({ length: 501 }, (_, i) => [`/path-${i}`, { get: { responses: { "200": { description: "OK" } } } }])
+    Array.from({ length: 501 }, (_, i) => [
+      `/path-${i}`,
+      { get: { responses: { "200": { description: "OK" } } } },
+    ])
   ),
 }
 
@@ -157,10 +172,24 @@ describe("scanOpenApi", () => {
       resolver: PUBLIC_RESOLVER,
     })
 
-    expect(result.attemptedOperations.map((o) => o.method)).toEqual(["GET", "HEAD", "GET", "HEAD", "GET", "HEAD", "GET", "HEAD", "GET", "HEAD"])
+    expect(result.attemptedOperations.map((o) => o.method)).toEqual([
+      "GET",
+      "HEAD",
+      "GET",
+      "HEAD",
+      "GET",
+      "HEAD",
+      "GET",
+      "HEAD",
+      "GET",
+      "HEAD",
+    ])
     expect(result.attemptedOperations).toHaveLength(10)
     expect(result.issues).toContainEqual(
-      expect.objectContaining({ code: "AUTHENTICATION_REQUIRED", subject: expect.stringContaining("/private") })
+      expect.objectContaining({
+        code: "AUTHENTICATION_REQUIRED",
+        subject: expect.stringContaining("/private"),
+      })
     )
     expect(fetchFn).not.toHaveBeenCalledWith(
       expect.stringContaining("outside.example"),
@@ -191,7 +220,14 @@ describe("scanOpenApi", () => {
 
     const ops = result.attemptedOperations
     expect(ops.length).toBeGreaterThanOrEqual(4)
-    expect(ops.some((o) => o.method === "GET" && o.path === "/users/{id}" && o.url === "https://api.example.com/users/42")).toBe(true)
+    expect(
+      ops.some(
+        (o) =>
+          o.method === "GET" &&
+          o.path === "/users/{id}" &&
+          o.url === "https://api.example.com/users/42"
+      )
+    ).toBe(true)
     expect(ops.some((o) => o.method === "OPTIONS")).toBe(true)
     expect(ops.every((o) => ["GET", "HEAD", "OPTIONS"].includes(o.method))).toBe(true)
   })
@@ -211,9 +247,7 @@ describe("scanOpenApi", () => {
     })
 
     expect(result.attemptedOperations).toHaveLength(0)
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({ code: "UNSUPPORTED_CONTENT" })
-    )
+    expect(result.issues).toContainEqual(expect.objectContaining({ code: "UNSUPPORTED_CONTENT" }))
   })
 
   it("skips operations whose server is off-origin", async () => {
@@ -234,9 +268,7 @@ describe("scanOpenApi", () => {
     })
 
     expect(result.attemptedOperations).toHaveLength(0)
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({ code: "OUT_OF_SCOPE" })
-    )
+    expect(result.issues).toContainEqual(expect.objectContaining({ code: "OUT_OF_SCOPE" }))
   })
 
   it("records SCHEMA_UNSUPPORTED for non-scalar response schemas", async () => {
@@ -258,7 +290,10 @@ describe("scanOpenApi", () => {
     })
 
     expect(result.issues).toContainEqual(
-      expect.objectContaining({ code: "SCHEMA_UNSUPPORTED", subject: expect.stringContaining("/malformed") })
+      expect.objectContaining({
+        code: "SCHEMA_UNSUPPORTED",
+        subject: expect.stringContaining("/malformed"),
+      })
     )
   })
 
@@ -305,7 +340,12 @@ describe("scanOpenApi", () => {
       paths: {
         "/health": {
           get: {
-            responses: { "200": { description: "OK", content: { "application/json": { schema: { type: "object" } } } } },
+            responses: {
+              "200": {
+                description: "OK",
+                content: { "application/json": { schema: { type: "object" } } },
+              },
+            },
           },
         },
       },

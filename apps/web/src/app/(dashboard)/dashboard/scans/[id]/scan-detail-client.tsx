@@ -355,9 +355,7 @@ export function ScanDetailClient({
             manifestChecksum: updated.resultManifest?.checksum ?? null,
             urlExecution:
               ((updated.resultManifest as Record<string, unknown> | undefined)?.urlExecution as
-                Record<string, unknown> |
-                undefined |
-                null) ?? scan.integrity.urlExecution,
+                Record<string, unknown> | undefined | null) ?? scan.integrity.urlExecution,
             coverage: (updated.coverageReceipts ?? []).map((receipt) => ({
               scanner: receipt.scanner,
               controlId: receipt.controlId,

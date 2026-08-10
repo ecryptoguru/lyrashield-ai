@@ -4,7 +4,11 @@ const collectPublicSurface = vi.fn()
 const checkScanUrlSafe = vi.fn()
 const analyzeLiteSurface = vi.fn()
 
-vi.mock("@lyrashield/security", () => ({ collectPublicSurface, checkScanUrlSafe, analyzeLiteSurface }))
+vi.mock("@lyrashield/security", () => ({
+  collectPublicSurface,
+  checkScanUrlSafe,
+  analyzeLiteSurface,
+}))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
 
 const { POST } = await import("./route")

@@ -8,7 +8,11 @@ import {
   type SurfaceSignal,
   type SurfaceSubject,
 } from "@lyrashield/security"
-import { type UrlRequestMethod, type UrlScanProfile, type UrlExecutionSummary } from "@lyrashield/types"
+import {
+  type UrlRequestMethod,
+  type UrlScanProfile,
+  type UrlExecutionSummary,
+} from "@lyrashield/types"
 import type { EngineVulnerability } from "../output-parser"
 
 export type OpenApiOperationAttempt = {
@@ -34,10 +38,7 @@ export type OpenApiSpec = {
 }
 
 type OpenApiPathItem = Partial<
-  Record<
-    "get" | "head" | "options" | "post" | "put" | "patch" | "delete",
-    OpenApiOperation
-  >
+  Record<"get" | "head" | "options" | "post" | "put" | "patch" | "delete", OpenApiOperation>
 >
 
 type OpenApiOperation = {
@@ -74,7 +75,10 @@ type OpenApiResponse = {
   content?: Record<string, { schema?: OpenApiSchema }>
 }
 
-function buildEmptyExecution(profile: UrlScanProfile, issueCodes: string[] = []): UrlExecutionSummary {
+function buildEmptyExecution(
+  profile: UrlScanProfile,
+  issueCodes: string[] = []
+): UrlExecutionSummary {
   return {
     contractVersion: "url-scan/2.0.0",
     profile: profile.id,
@@ -356,10 +360,7 @@ function authRequiredSignal(operation: OpenApiOperationAttempt): SurfaceSignal {
   }
 }
 
-function isReflectedCors(
-  headers: Record<string, string>,
-  sentOrigin: string
-): boolean {
+function isReflectedCors(headers: Record<string, string>, sentOrigin: string): boolean {
   const allowOrigin = headers["access-control-allow-origin"]
   if (!allowOrigin || allowOrigin === "*") return false
   if (allowOrigin !== sentOrigin) return false
@@ -391,7 +392,17 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "Scan was cancelled before the OpenAPI contract could be fetched.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
+    return {
+      findings: [],
+      signals,
+      subjects,
+      issues,
+      attemptedOperations,
+      execution: buildEmptyExecution(
+        profile,
+        issues.map((i) => i.code)
+      ),
+    }
   }
 
   const specOutcome = await safeFetchDetailed(apiSpecUrl, {
@@ -408,7 +419,17 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: `Could not fetch OpenAPI spec: ${specOutcome.reason}`,
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
+    return {
+      findings: [],
+      signals,
+      subjects,
+      issues,
+      attemptedOperations,
+      execution: buildEmptyExecution(
+        profile,
+        issues.map((i) => i.code)
+      ),
+    }
   }
 
   const rawBody = specOutcome.result.html.trim()
@@ -418,7 +439,17 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec response body was empty.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
+    return {
+      findings: [],
+      signals,
+      subjects,
+      issues,
+      attemptedOperations,
+      execution: buildEmptyExecution(
+        profile,
+        issues.map((i) => i.code)
+      ),
+    }
   }
 
   let parsed: unknown
@@ -430,7 +461,17 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec could not be parsed as JSON or YAML.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
+    return {
+      findings: [],
+      signals,
+      subjects,
+      issues,
+      attemptedOperations,
+      execution: buildEmptyExecution(
+        profile,
+        issues.map((i) => i.code)
+      ),
+    }
   }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -439,7 +480,17 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec must be a JSON or YAML object.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
+    return {
+      findings: [],
+      signals,
+      subjects,
+      issues,
+      attemptedOperations,
+      execution: buildEmptyExecution(
+        profile,
+        issues.map((i) => i.code)
+      ),
+    }
   }
 
   const spec = parsed as OpenApiSpec
@@ -450,7 +501,17 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: "OpenAPI spec must be version 3.x.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
+    return {
+      findings: [],
+      signals,
+      subjects,
+      issues,
+      attemptedOperations,
+      execution: buildEmptyExecution(
+        profile,
+        issues.map((i) => i.code)
+      ),
+    }
   }
 
   const paths = spec.paths ?? {}
@@ -461,7 +522,17 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(apiSpecUrl),
       reason: `OpenAPI spec declares ${pathNames.length} paths; the maximum supported is 500.`,
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
+    return {
+      findings: [],
+      signals,
+      subjects,
+      issues,
+      attemptedOperations,
+      execution: buildEmptyExecution(
+        profile,
+        issues.map((i) => i.code)
+      ),
+    }
   }
 
   const baseServer = resolveServer(spec, targetUrl)
@@ -472,13 +543,24 @@ export async function scanOpenApi(options: {
       subject: redactUrlForLogs(baseServer),
       reason: "OpenAPI server URL is not on the same origin as the target.",
     })
-    return { findings: [], signals, subjects, issues, attemptedOperations, execution: buildEmptyExecution(profile, issues.map((i) => i.code)) }
+    return {
+      findings: [],
+      signals,
+      subjects,
+      issues,
+      attemptedOperations,
+      execution: buildEmptyExecution(
+        profile,
+        issues.map((i) => i.code)
+      ),
+    }
   }
 
   // Build a sorted list of candidate operations. Safe methods fall back to the
   // GET operation definition when the spec does not explicitly declare them, so
   // every GET path is also probed with HEAD (and, in Deep, OPTIONS).
-  const candidates: Array<{ path: string; method: UrlRequestMethod; operation: OpenApiOperation }> = []
+  const candidates: Array<{ path: string; method: UrlRequestMethod; operation: OpenApiOperation }> =
+    []
   for (const path of pathNames.sort()) {
     const item = deepDeref(spec, paths[path]) as OpenApiPathItem | undefined
     if (!item) continue
@@ -486,9 +568,7 @@ export async function scanOpenApi(options: {
       ALL_SAFE_METHODS.includes(m)
     )
     for (const method of methods) {
-      const operation =
-        item[METHOD_TO_KEY[method]] ??
-        (method !== "GET" ? item.get : undefined)
+      const operation = item[METHOD_TO_KEY[method]] ?? (method !== "GET" ? item.get : undefined)
       if (operation) {
         candidates.push({ path, method, operation: deepDeref(spec, operation) as OpenApiOperation })
       }
@@ -497,7 +577,11 @@ export async function scanOpenApi(options: {
 
   const isDeep = profile.id === "API_DEEP"
   const maxOperations = profile.maxOperations
-  const executed: Array<{ attempt: OpenApiOperationAttempt; headers: Record<string, string>; status: number }> = []
+  const executed: Array<{
+    attempt: OpenApiOperationAttempt
+    headers: Record<string, string>
+    status: number
+  }> = []
   let totalBytes = 0
 
   for (const candidate of candidates) {
@@ -530,7 +614,8 @@ export async function scanOpenApi(options: {
       issues.push({
         code: "AUTHENTICATION_REQUIRED",
         subject: redactUrlForLogs(url),
-        reason: "Operation declares security requirements and cannot be probed without credentials.",
+        reason:
+          "Operation declares security requirements and cannot be probed without credentials.",
       })
       signals.push(authRequiredSignal(attempt))
       continue
@@ -627,7 +712,9 @@ export async function scanOpenApi(options: {
   // Deep behavior: bounded origin probes for CORS on executed GET operations.
   if (isDeep && executed.length > 0) {
     const originProbeUrl = "https://lyrashield.invalid"
-    const getOps = executed.filter((e) => e.attempt.method === "GET").slice(0, profile.maxOriginProbes)
+    const getOps = executed
+      .filter((e) => e.attempt.method === "GET")
+      .slice(0, profile.maxOriginProbes)
     for (const { attempt } of getOps) {
       if (signal?.aborted) break
 

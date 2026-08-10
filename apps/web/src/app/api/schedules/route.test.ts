@@ -29,7 +29,12 @@ vi.mock("@lyrashield/auth/server", () => ({
 
 vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: {
-    schedule: { view: "schedule:view", create: "schedule:create", update: "schedule:update", delete: "schedule:delete" },
+    schedule: {
+      view: "schedule:view",
+      create: "schedule:create",
+      update: "schedule:update",
+      delete: "schedule:delete",
+    },
   },
 }))
 

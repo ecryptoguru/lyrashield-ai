@@ -6,11 +6,7 @@ export const LITE_CHECK_VERSION = "lite-2026-08-10.1" as const
 
 export type LiteCheckSeverity = "needs_attention" | "worth_reviewing" | "ok"
 export type LiteCheckCategory =
-  | "exposed_secrets"
-  | "security_headers"
-  | "data_layer"
-  | "transport"
-  | "framework"
+  "exposed_secrets" | "security_headers" | "data_layer" | "transport" | "framework"
 
 export type LiteCheck = {
   category: LiteCheckCategory
@@ -80,7 +76,8 @@ function toLiteSeverity(signal: SurfaceSignal): LiteCheckSeverity {
 
 function toLiteCategory(signal: SurfaceSignal): LiteCheckCategory {
   if (signal.id.includes("privileged-secret")) return "exposed_secrets"
-  if (signal.id.includes("insecure-transport") || signal.id.includes("mixed-content")) return "transport"
+  if (signal.id.includes("insecure-transport") || signal.id.includes("mixed-content"))
+    return "transport"
   if (signal.id.includes("data-layer")) return "data_layer"
   if (signal.id.includes("source-map") || signal.id.includes("framework")) return "framework"
   if (signal.id.includes("verbose-error")) return "framework"
@@ -143,7 +140,8 @@ function baselineChecks(): LiteCheck[] {
       category: "framework",
       severity: "ok",
       title: "No supported framework marker found",
-      whatItIs: "This version did not recognize a supported framework marker in the fetched assets.",
+      whatItIs:
+        "This version did not recognize a supported framework marker in the fetched assets.",
       whyItMatters:
         "Framework detection helps scope a deeper review; it does not determine whether the application is vulnerable.",
       learnMoreUrl: LEARN_MORE_URL,

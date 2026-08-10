@@ -59,10 +59,13 @@ describe("PATCH /api/targets/[id]", () => {
       apiSpecUrl: "https://api.example.com/openapi.yaml",
     } as never)
 
-    const res = await PATCH(makeRequest("t1", {
-      workspaceId: "ws-1",
-      apiSpecUrl: "https://api.example.com/openapi.yaml",
-    }), { params: Promise.resolve({ id: "t1" }) })
+    const res = await PATCH(
+      makeRequest("t1", {
+        workspaceId: "ws-1",
+        apiSpecUrl: "https://api.example.com/openapi.yaml",
+      }),
+      { params: Promise.resolve({ id: "t1" }) }
+    )
 
     expect(res.status).toBe(200)
     const json = await res.json()
@@ -86,10 +89,13 @@ describe("PATCH /api/targets/[id]", () => {
       type: "WEB_APP",
     } as never)
 
-    const res = await PATCH(makeRequest("t1", {
-      workspaceId: "ws-1",
-      apiSpecUrl: "https://api.example.com/openapi.yaml",
-    }), { params: Promise.resolve({ id: "t1" }) })
+    const res = await PATCH(
+      makeRequest("t1", {
+        workspaceId: "ws-1",
+        apiSpecUrl: "https://api.example.com/openapi.yaml",
+      }),
+      { params: Promise.resolve({ id: "t1" }) }
+    )
 
     expect(res.status).toBe(400)
     const json = await res.json()
@@ -97,10 +103,13 @@ describe("PATCH /api/targets/[id]", () => {
   })
 
   it("rejects an apiSpecUrl with query or fragment", async () => {
-    const res = await PATCH(makeRequest("t1", {
-      workspaceId: "ws-1",
-      apiSpecUrl: "https://api.example.com/openapi.yaml?version=2",
-    }), { params: Promise.resolve({ id: "t1" }) })
+    const res = await PATCH(
+      makeRequest("t1", {
+        workspaceId: "ws-1",
+        apiSpecUrl: "https://api.example.com/openapi.yaml?version=2",
+      }),
+      { params: Promise.resolve({ id: "t1" }) }
+    )
 
     expect(res.status).toBe(400)
     const json = await res.json()
@@ -115,10 +124,13 @@ describe("PATCH /api/targets/[id]", () => {
     } as never)
     vi.mocked(checkScanUrlSafe).mockResolvedValue({ safe: false, reason: "blocked_ip" } as never)
 
-    const res = await PATCH(makeRequest("t1", {
-      workspaceId: "ws-1",
-      apiSpecUrl: "https://api.example.com/openapi.yaml",
-    }), { params: Promise.resolve({ id: "t1" }) })
+    const res = await PATCH(
+      makeRequest("t1", {
+        workspaceId: "ws-1",
+        apiSpecUrl: "https://api.example.com/openapi.yaml",
+      }),
+      { params: Promise.resolve({ id: "t1" }) }
+    )
 
     expect(res.status).toBe(400)
     const json = await res.json()
@@ -138,10 +150,13 @@ describe("PATCH /api/targets/[id]", () => {
       apiSpecUrl: null,
     } as never)
 
-    const res = await PATCH(makeRequest("t1", {
-      workspaceId: "ws-1",
-      apiSpecUrl: null,
-    }), { params: Promise.resolve({ id: "t1" }) })
+    const res = await PATCH(
+      makeRequest("t1", {
+        workspaceId: "ws-1",
+        apiSpecUrl: null,
+      }),
+      { params: Promise.resolve({ id: "t1" }) }
+    )
 
     expect(res.status).toBe(200)
     const json = await res.json()
