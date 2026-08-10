@@ -9,6 +9,7 @@ import {
 } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { assertScanWorkerAvailable, enqueueScan } from "./queue"
+import { resolveTargetScanMode } from "@lyrashield/types"
 
 const ACTIVE_SCAN_STATUSES = [
   "QUEUED",
@@ -68,6 +69,29 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
             targetId: schedule.targetId,
           })
           return
+        }
+
+        if (schedule.target.type === "WEB_APP" || schedule.target.type === "API") {
+          const resolved = resolveTargetScanMode({
+            targetType: schedule.target.type,
+            mode: schedule.mode,
+            hasApiSpec: Boolean(schedule.target.apiSpecUrl),
+          })
+          if (!resolved.ok) {
+            await prisma.schedule.update({
+              where: { id: schedule.id },
+              data: { enabled: false },
+            })
+            logger.warn("Disabled schedule with unavailable mode", {
+              scheduleId: schedule.id,
+              targetId: schedule.targetId,
+              targetType: schedule.target.type,
+              mode: schedule.mode,
+              reason: resolved.reason,
+              code: resolved.code,
+            })
+            return
+          }
         }
 
         const scan = await createScan({

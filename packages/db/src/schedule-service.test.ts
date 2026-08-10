@@ -126,7 +126,9 @@ describe("schedule-service", () => {
       expect(result.nextCursor).toBeNull()
       expect(mockPrisma.schedule.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          include: { target: { select: { id: true, name: true, type: true, url: true } } },
+          include: {
+            target: { select: { id: true, name: true, type: true, url: true, apiSpecUrl: true } },
+          },
         })
       )
     })

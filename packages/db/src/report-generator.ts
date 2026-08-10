@@ -17,6 +17,19 @@ export interface ReportData {
     endedAt: Date | null
     manifestChecksum: string | null
     coverage: { completed: number; limited: number; notApplicable: number }
+    urlExecution?: {
+      profile: string
+      methods: string[]
+      subjectCount: number
+      documentCount: number
+      assetCount: number
+      operationCount: number
+      methodProbeCount: number
+      originProbeCount: number
+      totalBytes: number
+      truncated: boolean
+      issueCodes: string[]
+    }
   } | null
   findings: Array<{
     id: string
@@ -75,13 +88,15 @@ export async function gatherReportData(
       where: { id: scanId, workspaceId, deletedAt: null },
       include: {
         target: { select: { name: true, type: true, url: true } },
-        resultManifest: { select: { checksum: true } },
+        resultManifest: { select: { checksum: true, manifest: true } },
         coverageReceipts: { select: { controlId: true, status: true } },
       },
     })
 
     if (scan) {
       targetId = scan.targetId
+      const manifestRecord = scan.resultManifest?.manifest as
+        { urlExecution?: NonNullable<ReportData["scanInfo"]>["urlExecution"] } | undefined
       scanInfo = {
         scanId: scan.id,
         status: scan.status,
@@ -103,6 +118,7 @@ export async function gatherReportData(
             },
             { completed: 0, limited: 0, notApplicable: 0 }
           ),
+        urlExecution: manifestRecord?.urlExecution,
       }
     }
 
@@ -290,6 +306,7 @@ export async function gatherReportData(
         "Counts are frozen at report creation time and do not change with live scan state.",
         "Findings are ordered by severity and limited to the 500 most recent records.",
         "Detection is not verification; a verified finding requires an independent verification receipt.",
+        "This public, non-mutating review did not authenticate or validate exploitability.",
         scanInfo?.manifestChecksum
           ? `Result manifest SHA-256: ${scanInfo.manifestChecksum}. Coverage: ${scanInfo.coverage.completed} completed, ${scanInfo.coverage.limited} limited, ${scanInfo.coverage.notApplicable} not applicable.`
           : "This legacy scan has no immutable result manifest; treat its coverage and verification state as incomplete.",
@@ -414,6 +431,15 @@ export function generateReportHTML(data: ReportData): string {
         .join("")}</ul></div>`
     : ""
 
+  const urlExecution = data.scanInfo?.urlExecution
+  const urlExecutionSection = urlExecution
+    ? `<div class="section"><h2>URL Execution Scope</h2>
+        <p style="margin-bottom:12px;">${escapeHtml(renderUrlExecutionLine(urlExecution))}</p>
+        ${urlExecution.issueCodes.length > 0 ? `<p style="color:#ea580c;font-size:12px;margin-bottom:12px;">Coverage limited: ${escapeHtml(urlExecution.issueCodes.join(", "))}</p>` : ""}
+        <p style="color:#617083;font-size:12px;">This public, non-mutating review did not authenticate or validate exploitability.</p>
+      </div>`
+    : ""
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -506,6 +532,8 @@ export function generateReportHTML(data: ReportData): string {
 
     ${methodologySection}
 
+    ${urlExecutionSection}
+
     <div class="section">
       <h2>Findings by Severity</h2>
       ${severityBars || "<p style='color:#6b7280;font-size:13px;'>No findings</p>"}
@@ -543,6 +571,29 @@ export function generateReportHTML(data: ReportData): string {
   </div>
 </body>
 </html>`
+}
+
+function renderUrlExecutionLine(
+  execution: NonNullable<NonNullable<ReportData["scanInfo"]>["urlExecution"]>
+): string {
+  const labels: Record<string, string> = {
+    WEB_APP_SAFE: "Surface Review",
+    WEB_APP_STANDARD: "Expanded Surface Review",
+    WEB_APP_DEEP: "Behavioral Surface Review",
+    API_SAFE: "Endpoint Review",
+    API_STANDARD: "Contract Review",
+    API_DEEP: "Contract Behavior Review",
+  }
+  const name = labels[execution.profile] ?? execution.profile
+  const methods = execution.methods.join(", ")
+  const parts: string[] = []
+  if (execution.documentCount > 0) parts.push(`${execution.documentCount} pages`)
+  if (execution.assetCount > 0) parts.push(`${execution.assetCount} assets`)
+  if (execution.operationCount > 0) parts.push(`${execution.operationCount} operations`)
+  if (execution.methodProbeCount > 0) parts.push(`${execution.methodProbeCount} method probes`)
+  if (execution.originProbeCount > 0) parts.push(`${execution.originProbeCount} origin probes`)
+  const scope = parts.length > 0 ? ` · ${parts.join(" · ")}` : ""
+  return `${name}${scope} · ${methods}`
 }
 
 function toIso(value: Date | string): string {

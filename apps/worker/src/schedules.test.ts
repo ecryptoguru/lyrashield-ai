@@ -55,7 +55,13 @@ const schedule = {
   deletedAt: null,
   createdAt: new Date("2026-01-01T00:00:00Z"),
   updatedAt: new Date("2026-01-01T00:00:00Z"),
-  target: { id: "target-1", name: "Example", type: "WEB_APP", url: "https://example.com" },
+  target: {
+    id: "target-1",
+    name: "Example",
+    type: "WEB_APP",
+    url: "https://example.com",
+    apiSpecUrl: null,
+  },
 }
 
 const mockPrisma = prisma as unknown as {
@@ -165,6 +171,51 @@ describe("processDueSchedules", () => {
       },
       "workspace-1"
     )
+  })
+
+  it("allows scheduled WEB_APP STANDARD scans after surface review is implemented", async () => {
+    vi.mocked(getDueSchedules).mockResolvedValue([
+      { ...schedule, mode: "STANDARD", target: { ...schedule.target, type: "WEB_APP" } },
+    ] as never)
+
+    const enqueued = await processDueSchedules()
+
+    expect(enqueued).toBe(1)
+    expect(createScan).toHaveBeenCalled()
+  })
+
+  it("disables and skips scheduled API DEEP scans without an OpenAPI spec", async () => {
+    vi.mocked(getDueSchedules).mockResolvedValue([
+      { ...schedule, mode: "DEEP", target: { ...schedule.target, type: "API" } },
+    ] as never)
+
+    const enqueued = await processDueSchedules()
+
+    expect(enqueued).toBe(0)
+    expect(mockPrisma.schedule.update).toHaveBeenCalledWith({
+      where: { id: "schedule-1" },
+      data: { enabled: false },
+    })
+    expect(createScan).not.toHaveBeenCalled()
+  })
+
+  it("allows scheduled API STANDARD scans when an OpenAPI spec is configured", async () => {
+    vi.mocked(getDueSchedules).mockResolvedValue([
+      {
+        ...schedule,
+        mode: "STANDARD",
+        target: {
+          ...schedule.target,
+          type: "API",
+          apiSpecUrl: "https://api.example.com/openapi.yaml",
+        },
+      },
+    ] as never)
+
+    const enqueued = await processDueSchedules()
+
+    expect(enqueued).toBe(1)
+    expect(createScan).toHaveBeenCalled()
   })
 
   it("continues processing other schedules when one schedule fails", async () => {

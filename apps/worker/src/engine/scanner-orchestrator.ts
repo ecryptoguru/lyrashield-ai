@@ -13,8 +13,10 @@ import {
 import { scanSca } from "./scanners/sca-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
+import { scanOpenApi } from "./scanners/openapi-scanner"
+import type { UrlScanProfile, UrlExecutionSummary } from "@lyrashield/types"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
-import type { ScannerCoverageIssue } from "./scanner-coverage"
+import { recordCoverageIssue, type ScannerCoverageIssue } from "./scanner-coverage"
 import { redactUrlForLogs, createEgressProxyFetchFn } from "@lyrashield/security"
 import { join, resolve } from "path"
 import { mkdir } from "fs/promises"
@@ -27,6 +29,7 @@ export interface ScannerOrchestratorConfig {
     id: string
     type: string
     url?: string | null
+    apiSpecUrl?: string | null
     repoFullName?: string | null
     name: string
   }
@@ -36,6 +39,7 @@ export interface ScannerOrchestratorConfig {
   workspaceDir?: string
   scannerPhaseTimeoutMs?: number
   isCancelled?: () => Promise<boolean>
+  urlProfile?: UrlScanProfile
 }
 
 export interface ScannerOrchestratorResult {
@@ -48,6 +52,7 @@ export interface ScannerOrchestratorResult {
   coverageIssues: ScannerCoverageIssue[]
   stats: ReturnType<typeof getFindingStats>
   filteredFalsePositives: number
+  urlExecution?: UrlExecutionSummary
 }
 
 async function withScannerPhaseTimeout<T>(
@@ -144,10 +149,12 @@ async function runSecretsScan(
 async function runUrlScan(
   scanId: string,
   targetUrl: string,
+  profile: UrlScanProfile,
   workspaceDir: string,
   coverageIssues: ScannerCoverageIssue[],
-  signal: AbortSignal
-): Promise<EngineVulnerability[]> {
+  signal: AbortSignal,
+  apiSpecUrl?: string | null
+): Promise<{ findings: EngineVulnerability[]; execution?: UrlExecutionSummary }> {
   try {
     logger.info("Starting URL scan phase", { scanId, targetUrl: redactUrlForLogs(targetUrl) })
     const fetchFn =
@@ -159,14 +166,37 @@ async function runUrlScan(
             readTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS,
           })
         : undefined
-    const findings = await scanUrl({
-      targetUrl,
-      coverageIssues,
-      signal,
-      fetchFn,
-    })
-    logger.info("URL scan phase complete", { scanId, findingCount: findings.length })
-    return findings
+    const isApiContract =
+      profile.targetType === "API" && (profile.mode === "STANDARD" || profile.mode === "DEEP")
+    const scanResult =
+      isApiContract && apiSpecUrl
+        ? await scanOpenApi({
+            targetUrl,
+            apiSpecUrl,
+            profile,
+            fetchFn,
+            signal,
+          })
+        : await scanUrl({
+            targetUrl,
+            profile,
+            coverageIssues,
+            signal,
+            fetchFn,
+            apiSpecUrl,
+          })
+    for (const issue of scanResult.issues) {
+      recordCoverageIssue(coverageIssues, {
+        scanner: "url",
+        status:
+          issue.code === "LIMIT_REACHED" || issue.code === "OUT_OF_SCOPE" ? "bounded" : "partial",
+        subject: issue.subject,
+        reason: `${issue.code}: ${issue.reason}`,
+      })
+    }
+
+    logger.info("URL scan phase complete", { scanId, findingCount: scanResult.findings.length })
+    return { findings: scanResult.findings, execution: scanResult.execution }
   } catch (err) {
     logger.warn("URL scan phase failed", {
       scanId,
@@ -256,9 +286,17 @@ export async function runScannerOrchestrator(
         hasSourceCheckout
           ? runSecretsScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
-        targetUrl
-          ? runUrlScan(scanId, targetUrl, absWorkspace, coverageIssues, signal)
-          : Promise.resolve([] as EngineVulnerability[]),
+        targetUrl && config.urlProfile
+          ? runUrlScan(
+              scanId,
+              targetUrl,
+              config.urlProfile,
+              absWorkspace,
+              coverageIssues,
+              signal,
+              target.apiSpecUrl
+            )
+          : Promise.resolve({ findings: [] as EngineVulnerability[], execution: undefined }),
         hasSourceCheckout
           ? runAgentConfigScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
@@ -268,17 +306,35 @@ export async function runScannerOrchestrator(
   )
 
   const scannerNames = ["sca", "secrets", "url", "agent_config"] as const
-  const rawFindings = scannerResults.map((result, index) => {
-    if (result.status === "fulfilled") return result.value
-    const scanner = scannerNames[index]!
-    coverageIssues.push({
-      scanner,
-      status: "partial",
-      reason:
-        result.reason instanceof Error ? result.reason.message.slice(0, 500) : "Scanner failed",
-    })
-    return [] as EngineVulnerability[]
-  })
+  const rawFindings: EngineVulnerability[][] = []
+  let urlExecution: UrlExecutionSummary | undefined
+  for (let index = 0; index < scannerResults.length; index++) {
+    const result = scannerResults[index]
+    const value =
+      result?.status === "fulfilled"
+        ? (result.value as
+            | EngineVulnerability[]
+            | { findings: EngineVulnerability[]; execution?: UrlExecutionSummary })
+        : undefined
+    if (index === 2 && value && "findings" in value) {
+      rawFindings.push(value.findings)
+      urlExecution = value.execution
+    } else if (Array.isArray(value)) {
+      rawFindings.push(value)
+    } else {
+      rawFindings.push([] as EngineVulnerability[])
+    }
+
+    if (result?.status === "rejected") {
+      const scanner = scannerNames[index]!
+      coverageIssues.push({
+        scanner,
+        status: "partial",
+        reason:
+          result.reason instanceof Error ? result.reason.message.slice(0, 500) : "Scanner failed",
+      })
+    }
+  }
   const scaRaw = rawFindings[0] ?? []
   const secretsRaw = rawFindings[1] ?? []
   const urlRaw = rawFindings[2] ?? []
@@ -393,5 +449,6 @@ export async function runScannerOrchestrator(
     coverageIssues,
     stats,
     filteredFalsePositives,
+    urlExecution,
   }
 }

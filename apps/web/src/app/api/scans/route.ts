@@ -2,7 +2,7 @@ import { createHash } from "crypto"
 import { prisma, createScan, listScans, updateScanStatus, type ScanListItem } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { CreateScanSchema, ScanStatusSchema } from "@lyrashield/types"
+import { CreateScanSchema, ScanStatusSchema, resolveTargetScanMode } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
@@ -79,6 +79,17 @@ export async function POST(request: Request) {
     })
     if (!target) {
       return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
+    }
+
+    if (target.type === "WEB_APP" || target.type === "API") {
+      const resolved = resolveTargetScanMode({
+        targetType: target.type,
+        mode: data.mode,
+        hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
+      })
+      if (!resolved.ok) {
+        return apiError(resolved.code, resolved.reason, 400)
+      }
     }
 
     const policy = await prisma.policy.findFirst({

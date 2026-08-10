@@ -116,4 +116,119 @@ describe("safeFetch", () => {
     expect(result).toBeNull()
     expect(fetchFn).toHaveBeenCalledTimes(2)
   })
+
+  it("reports exact body bytes for a short response", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response("hello world", { status: 200 }))
+
+    const result = await safeFetch("https://example.com", {
+      fetchFn,
+      resolver: async () => ["93.184.216.34"],
+      maxBytes: 100,
+    })
+
+    expect(result).not.toBeNull()
+    expect(result?.bodyBytes).toBe(11)
+    expect(result?.bodyTruncated).toBe(false)
+  })
+
+  it("reports bodyTruncated for an oversized response", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response("0123456789", { status: 200 }))
+
+    const result = await safeFetch("https://example.com", {
+      fetchFn,
+      resolver: async () => ["93.184.216.34"],
+      maxBytes: 5,
+    })
+
+    expect(result).not.toBeNull()
+    expect(result?.bodyBytes).toBe(5)
+    expect(result?.bodyTruncated).toBe(true)
+  })
+
+  it("defaults to GET when no method is supplied", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }))
+
+    await safeFetch("https://example.com", {
+      fetchFn,
+      resolver: async () => ["93.184.216.34"],
+    })
+
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://example.com",
+      expect.objectContaining({ method: "GET" })
+    )
+  })
+
+  it("sends HEAD and OPTIONS requests to the fetch implementation", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response(null, { status: 200 }))
+
+    for (const method of ["HEAD", "OPTIONS"] as const) {
+      await safeFetch("https://example.com", {
+        fetchFn,
+        resolver: async () => ["93.184.216.34"],
+        method,
+      })
+    }
+
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://example.com",
+      expect.objectContaining({ method: "HEAD" })
+    )
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://example.com",
+      expect.objectContaining({ method: "OPTIONS" })
+    )
+  })
+
+  it("adds Origin and Accept headers when requested", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }))
+
+    await safeFetch("https://example.com", {
+      fetchFn,
+      resolver: async () => ["93.184.216.34"],
+      origin: "https://lyrashield.invalid",
+      accept: "application/json",
+    })
+
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://example.com",
+      expect.objectContaining({
+        headers: {
+          "User-Agent": "LyraShield-Scanner/1.0",
+          Origin: "https://lyrashield.invalid",
+          Accept: "application/json",
+        },
+      })
+    )
+  })
+
+  it("preserves the chosen method when following a redirect", async () => {
+    const fetchFn = vi.fn()
+    fetchFn
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://example.com/final" },
+        })
+      )
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }))
+
+    await safeFetch("https://example.com/start", {
+      fetchFn,
+      resolver: async () => ["93.184.216.34"],
+      method: "HEAD",
+    })
+
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+    expect(fetchFn).toHaveBeenNthCalledWith(
+      1,
+      "https://example.com/start",
+      expect.objectContaining({ method: "HEAD" })
+    )
+    expect(fetchFn).toHaveBeenNthCalledWith(
+      2,
+      "https://example.com/final",
+      expect.objectContaining({ method: "HEAD" })
+    )
+  })
 })

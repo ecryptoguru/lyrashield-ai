@@ -22,13 +22,7 @@ import { formatDateTime } from "@/lib/date-format"
 import { RUN_PLURAL, RUN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
-import {
-  getScanPreset,
-  getScanPresetEstimate,
-  SCAN_PRESETS,
-  SCAN_PRESET_ORDER,
-  type ScanPresetId,
-} from "@/lib/scan-presets"
+import { getManualScanOptions } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { getGoalLabel } from "@/lib/labels"
 import { formatEstimate } from "@/lib/estimator"
@@ -73,6 +67,7 @@ interface TargetItem {
   name: string
   type: string
   url: string | null
+  apiSpecUrl: string | null
   repoFullName: string | null
 }
 
@@ -82,6 +77,7 @@ const scanTargetSchema = z
     name: z.string(),
     type: z.string(),
     url: z.string().nullable(),
+    apiSpecUrl: z.string().nullable(),
     repoFullName: z.string().nullable(),
   })
   .passthrough()
@@ -135,7 +131,8 @@ export function ScansClient({
   const [refreshing, setRefreshing] = useState(false)
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const [selectedTarget, setSelectedTarget] = useState("")
-  const [selectedPreset, setSelectedPreset] = useState<ScanPresetId>("RELEASE_CHECK")
+  const [selectedPreset, setSelectedPreset] = useState("")
+  const [modeResetNotice, setModeResetNotice] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -146,17 +143,20 @@ export function ScansClient({
       setError("Select a target to scan")
       return
     }
+    if (!selectedOption) {
+      setError("No review option is available for this target")
+      return
+    }
     setCreating(true)
     setError(null)
     try {
-      const preset = getScanPreset(selectedPreset)
       const result = await apiPost(
         "/api/scans",
         {
           workspaceId,
           targetId: selectedTarget,
-          goal: preset.goal,
-          mode: preset.mode,
+          goal: selectedOption.goal,
+          mode: selectedOption.mode,
         },
         { schema: scanItemSchema }
       )
@@ -231,10 +231,48 @@ export function ScansClient({
   }
 
   const hasActiveScans = scans.some((scan) => isActiveScan(scan.status))
-  const selectedTargetUsesEngine =
-    targets.find((target) => target.id === selectedTarget)?.type === "REPO"
+  const selectedTargetDetails = targets.find((target) => target.id === selectedTarget)
+  const selectedTargetType = selectedTargetDetails?.type ?? ""
+  const availableOptions = getManualScanOptions({
+    type: selectedTargetType,
+    hasApiSpec: Boolean(selectedTargetDetails?.apiSpecUrl),
+  })
+  const enabledOptions = availableOptions.filter((o) => o.available)
+  const selectedOption = enabledOptions.find((o) => o.id === selectedPreset) ?? enabledOptions[0]
+  const selectedTargetUsesEngine = selectedTargetType === "REPO"
 
   const ACTIVE_STATUS_PARAM = "QUEUED,PREFLIGHT,RUNNING,VERIFYING,REQUIRES_APPROVAL"
+
+  function handleSelectTarget(targetId: string) {
+    setSelectedTarget(targetId)
+    if (!targetId) {
+      setSelectedPreset("")
+      setModeResetNotice(null)
+      return
+    }
+    const target = targets.find((t) => t.id === targetId)
+    const options = getManualScanOptions({
+      type: target?.type ?? "",
+      hasApiSpec: Boolean(target?.apiSpecUrl),
+    })
+    const currentStillAvailable = options.find((o) => o.id === selectedPreset && o.available)
+    if (currentStillAvailable) {
+      setModeResetNotice(null)
+      return
+    }
+    const firstAvailable = options.find((o) => o.available)
+    if (firstAvailable) {
+      setSelectedPreset(firstAvailable.id)
+      setModeResetNotice(
+        selectedPreset
+          ? `Review type reset to ${firstAvailable.label} because the previous choice is not available for this target.`
+          : null
+      )
+    } else {
+      setSelectedPreset("")
+      setModeResetNotice(null)
+    }
+  }
 
   useEffect(() => {
     if (!hasActiveScans) return
@@ -362,7 +400,7 @@ export function ScansClient({
               <Select
                 id="scan-target"
                 value={selectedTarget}
-                onChange={(e) => setSelectedTarget(e.target.value)}
+                onChange={(e) => handleSelectTarget(e.target.value)}
               >
                 <option value="">Select a {TARGET_SINGULAR.toLowerCase()}…</option>
                 {targets.map((t) => (
@@ -384,53 +422,62 @@ export function ScansClient({
                 aria-label="Review type"
                 className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
               >
-                {SCAN_PRESET_ORDER.map((presetId) => {
-                  const preset = SCAN_PRESETS[presetId]
-                  const isSelected = selectedPreset === presetId
+                {availableOptions.map((option) => {
+                  const isSelected = selectedOption?.id === option.id
+                  const isDisabled = !option.available
                   return (
                     <button
-                      key={presetId}
-                      id={`preset-${presetId}`}
+                      key={option.id}
+                      id={`preset-${option.id}`}
                       type="button"
                       role="radio"
                       aria-checked={isSelected}
-                      aria-label={`${preset.label}: ${preset.description}`}
+                      aria-disabled={isDisabled}
+                      aria-label={`${option.label}: ${option.description}${isDisabled ? ` (${option.disabledReason})` : ""}`}
                       tabIndex={isSelected ? 0 : -1}
-                      onClick={() => setSelectedPreset(presetId)}
+                      disabled={isDisabled}
+                      onClick={() => !isDisabled && setSelectedPreset(option.id)}
                       onKeyDown={(e) => {
+                        if (isDisabled) return
                         if (e.key === "ArrowRight" || e.key === "ArrowDown") {
                           e.preventDefault()
-                          const idx = SCAN_PRESET_ORDER.indexOf(presetId)
-                          const next = SCAN_PRESET_ORDER[(idx + 1) % SCAN_PRESET_ORDER.length]!
-                          setSelectedPreset(next)
-                          document.getElementById(`preset-${next}`)?.focus()
+                          const idx = enabledOptions.findIndex((o) => o.id === option.id)
+                          const next = enabledOptions[(idx + 1) % enabledOptions.length]
+                          if (next) {
+                            setSelectedPreset(next.id)
+                            document.getElementById(`preset-${next.id}`)?.focus()
+                          }
                         }
                         if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
                           e.preventDefault()
-                          const idx = SCAN_PRESET_ORDER.indexOf(presetId)
+                          const idx = enabledOptions.findIndex((o) => o.id === option.id)
                           const prev =
-                            SCAN_PRESET_ORDER[
-                              (idx - 1 + SCAN_PRESET_ORDER.length) % SCAN_PRESET_ORDER.length
-                            ]!
-                          setSelectedPreset(prev)
-                          document.getElementById(`preset-${prev}`)?.focus()
+                            enabledOptions[
+                              (idx - 1 + enabledOptions.length) % enabledOptions.length
+                            ]
+                          if (prev) {
+                            setSelectedPreset(prev.id)
+                            document.getElementById(`preset-${prev.id}`)?.focus()
+                          }
                         }
                       }}
                       className={cn(
                         "group focus-visible:ring-ring relative flex min-h-23 w-full flex-col items-start rounded-lg border p-4 text-left shadow-xs transition-[border-color,box-shadow,background-color] duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
-                        isSelected
-                          ? "border-primary bg-primary/6 dark:bg-primary/12 ring-primary/20 shadow-sm ring-1"
-                          : "border-border bg-card hover:border-border/80 hover:bg-accent/50"
+                        isDisabled
+                          ? "opacity-60 cursor-not-allowed bg-muted/40 border-dashed"
+                          : isSelected
+                            ? "border-primary bg-primary/6 dark:bg-primary/12 ring-primary/20 shadow-sm ring-1"
+                            : "border-border bg-card hover:border-border/80 hover:bg-accent/50"
                       )}
                     >
                       <div className="flex w-full items-center justify-between gap-2">
-                        <span className="text-sm font-semibold tracking-tight">{preset.label}</span>
+                        <span className="text-sm font-semibold tracking-tight">{option.label}</span>
                         <div className="flex items-center gap-1.5">
                           <Badge
-                            variant={modeBadgeVariant(preset.mode)}
+                            variant={modeBadgeVariant(option.mode)}
                             className="px-2 py-0 text-[10px] font-semibold tracking-wide uppercase"
                           >
-                            {preset.mode}
+                            {option.mode}
                           </Badge>
                           {isSelected ? (
                             <span className="bg-primary text-primary-foreground inline-flex size-5 items-center justify-center rounded-full">
@@ -440,26 +487,46 @@ export function ScansClient({
                         </div>
                       </div>
                       <span className="text-muted-foreground mt-1.5 line-clamp-3 text-xs leading-relaxed">
-                        {preset.description}
+                        {option.description}
                       </span>
+                      {isDisabled && option.disabledReason ? (
+                        <span className="mt-2 text-[11px] text-amber-600">
+                          {option.disabledReason}
+                        </span>
+                      ) : null}
                     </button>
                   )
                 })}
               </div>
 
               <p className="text-muted-foreground mt-2 text-xs">
-                {getScanPreset(selectedPreset).hint}{" "}
+                {selectedOption?.hint}{" "}
                 {selectedTarget && !selectedTargetUsesEngine
                   ? "This target uses deterministic scanners."
                   : "A protected limit is applied automatically."}
               </p>
+              {modeResetNotice && (
+                <p className="text-amber-600 mt-2 text-xs" role="status" aria-live="polite">
+                  {modeResetNotice}
+                </p>
+              )}
+              {selectedTarget && selectedTargetType === "API" && (
+                <p className="text-muted-foreground mt-2 text-xs" role="status" aria-live="polite">
+                  Contract and Contract Behavior reviews require an OpenAPI document on the target.
+                </p>
+              )}
               <p
                 className="text-foreground mt-3 flex items-center gap-1.5 text-sm font-medium"
                 role="status"
               >
                 <Clock className="text-muted-foreground size-4" aria-hidden="true" />
-                Estimated time: {formatEstimate(getScanPresetEstimate(selectedPreset))}
+                Estimated time: {selectedOption ? formatEstimate(selectedOption.estimate) : "—"}
               </p>
+              {selectedTarget && selectedTargetType && enabledOptions.length === 1 && (
+                <p className="text-muted-foreground mt-2 text-xs" role="status" aria-live="polite">
+                  Deeper review options will become available after their requirements are met.
+                </p>
+              )}
             </div>
 
             <div>
@@ -480,71 +547,66 @@ export function ScansClient({
                 Details
               </button>
 
-              {showAdvanced && (
+              {showAdvanced && selectedOption && (
                 <div
                   id="scan-advanced-panel"
                   className="bg-muted/40 border-border mt-2 rounded-lg border p-4"
                 >
-                  {(() => {
-                    const preset = getScanPreset(selectedPreset)
-                    return (
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-sm font-medium">{preset.label}</p>
-                          <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                            {preset.hint}
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <div className="bg-card border-border rounded-md border px-3 py-2.5">
-                            <p className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
-                              Goal
-                            </p>
-                            <p className="mt-1 text-xs font-medium">
-                              {getGoalLabel(preset.goal)}
-                              <span className="text-muted-foreground ml-1.5 font-normal">
-                                · {preset.goal}
-                              </span>
-                            </p>
-                          </div>
-                          <div className="bg-card border-border rounded-md border px-3 py-2.5">
-                            <p className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
-                              Mode
-                            </p>
-                            <div className="mt-1.5 flex items-center gap-2">
-                              <Badge
-                                variant={modeBadgeVariant(preset.mode)}
-                                className="text-[11px] font-semibold tracking-wide uppercase"
-                              >
-                                {preset.mode}
-                              </Badge>
-                              <span className="text-muted-foreground text-xs">
-                                {preset.mode === "SAFE"
-                                  ? "Bounded, fast"
-                                  : preset.mode === "STANDARD"
-                                    ? "Repo + deps"
-                                    : "Cross-file deep"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <p className="text-muted-foreground text-[11px] leading-relaxed">
-                          No extra fields — we send{" "}
-                          <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">
-                            goal
-                          </code>{" "}
-                          and{" "}
-                          <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">
-                            mode
-                          </code>{" "}
-                          from this preset.{" "}
-                          {selectedTarget && !selectedTargetUsesEngine
-                            ? "This URL target uses deterministic scanners."
-                            : "Engine targets get a protected run budget automatically."}
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium">{selectedOption.label}</p>
+                      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                        {selectedOption.hint}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="bg-card border-border rounded-md border px-3 py-2.5">
+                        <p className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+                          Goal
+                        </p>
+                        <p className="mt-1 text-xs font-medium">
+                          {getGoalLabel(selectedOption.goal)}
+                          <span className="text-muted-foreground ml-1.5 font-normal">
+                            · {selectedOption.goal}
+                          </span>
                         </p>
                       </div>
-                    )
-                  })()}
+                      <div className="bg-card border-border rounded-md border px-3 py-2.5">
+                        <p className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+                          Mode
+                        </p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <Badge
+                            variant={modeBadgeVariant(selectedOption.mode)}
+                            className="text-[11px] font-semibold tracking-wide uppercase"
+                          >
+                            {selectedOption.mode}
+                          </Badge>
+                          <span className="text-muted-foreground text-xs">
+                            {selectedOption.mode === "SAFE"
+                              ? "Bounded, fast"
+                              : selectedOption.mode === "STANDARD"
+                                ? "Expanded coverage"
+                                : "Deep review"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground text-[11px] leading-relaxed">
+                      No extra fields — we send{" "}
+                      <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">
+                        goal
+                      </code>{" "}
+                      and{" "}
+                      <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">
+                        mode
+                      </code>{" "}
+                      from this option.{" "}
+                      {selectedTarget && !selectedTargetUsesEngine
+                        ? "This URL target uses deterministic scanners."
+                        : "Engine targets get a protected run budget automatically."}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

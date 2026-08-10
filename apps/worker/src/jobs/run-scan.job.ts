@@ -15,6 +15,7 @@ import {
   qualifyReferralForWorkspace,
   type ScanStatus,
 } from "@lyrashield/db"
+import { getUrlScanProfile, type UrlScanProfile } from "@lyrashield/types"
 import { runPreflight } from "./preflight.job"
 import {
   runEngine,
@@ -461,6 +462,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     let globalScanTimeoutReached = false
     let scanRuntimeBudgetMs = MAX_SCAN_RUNTIME_MS
     let billablePhaseStarted = false
+    let urlProfile: UrlScanProfile | undefined
+    let engineProfile: ReturnType<typeof resolveEngineProfile> | undefined
+    let engineModel: string | undefined
     try {
       // A manifest is the immutable checkpoint after findings and retests have
       // been persisted. If an infrastructure error interrupted only the final
@@ -544,7 +548,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // 2. Fetch target details for the engine
       const target = await prisma.target.findFirst({
         where: { id: targetId, deletedAt: null },
-        select: { id: true, type: true, name: true, url: true, repoFullName: true, branch: true },
+        select: {
+          id: true,
+          type: true,
+          name: true,
+          url: true,
+          repoFullName: true,
+          branch: true,
+          apiSpecUrl: true,
+        },
       })
 
       if (!target) {
@@ -598,63 +610,6 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
       const scanStartedAtMs = Date.now()
       scanRuntimeBudgetMs = resolveScanRuntimeBudgetMs(policy?.maxDurationMinutes)
-      const maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
-      if (maxBudgetUsd <= 0) {
-        const errorMessage = "Protected run limit is zero"
-        log.warn("Scan rejected: zero budget", { scanId, workspaceId, policyMaxBudgetUsd })
-        try {
-          await addScanEvent(scanId, "budget_exceeded", "error", errorMessage, {
-            maxBudgetUsd,
-            policyMaxBudgetUsd,
-          })
-        } catch (eventErr) {
-          log.warn("Failed to persist budget_exceeded event", {
-            scanId,
-            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-          })
-        }
-        return {
-          status: "failed",
-          errorCategory: "BUDGET_EXCEEDED",
-          errorMessage,
-        }
-      }
-
-      const engineProfile = resolveEngineProfile(mode)
-      const engineModel =
-        target.type === "REPO" ? requireEngineModel(engineProfile.model) : engineProfile.model
-      const budgetSource =
-        typeof policyMaxBudgetUsd === "number" &&
-        Number.isFinite(policyMaxBudgetUsd) &&
-        policyMaxBudgetUsd > 0
-          ? "policy"
-          : "mode_default"
-
-      try {
-        await addScanEvent(scanId, "budget_cap", "info", "Protected run limit enabled", {
-          maxBudgetUsd,
-          source: budgetSource,
-        })
-      } catch (eventErr) {
-        log.warn("Failed to persist budget_cap event", {
-          scanId,
-          error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-        })
-      }
-
-      if (target.type === "REPO") {
-        // Once the external engine begins, an automatic BullMQ replay could
-        // spend twice for the same scan. Preflight remains retryable; the
-        // billable phase is terminal and any rerun requires a fresh scan.
-        await addScanEvent(
-          scanId,
-          "billable_boundary",
-          "info",
-          "Automatic retries disabled before provider-billable analysis",
-          { retryPolicy: "fresh_scan_required" }
-        )
-        billablePhaseStarted = true
-      }
 
       const hasGlobalScanTimeout = (): boolean => {
         if (Date.now() - scanStartedAtMs >= scanRuntimeBudgetMs) {
@@ -707,40 +662,106 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       }
 
-      const engineResult: EngineRunResult =
-        target.type === "REPO"
-          ? await runEngine(
-              {
-                scanId,
-                goal,
-                mode,
-                target: {
-                  id: target.id,
-                  type: target.type as TargetType,
-                  url: target.url,
-                  repoFullName: target.repoFullName,
-                  name: target.name,
-                },
-                instruction: buildVibeSecurityInstruction(goal),
-                maxBudgetUsd,
-              },
+      let engineResult: EngineRunResult
+      let maxBudgetUsd = 0
+
+      if (target.type === "REPO") {
+        maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd)
+        if (maxBudgetUsd <= 0) {
+          const errorMessage = "Protected run limit is zero"
+          log.warn("Scan rejected: zero budget", { scanId, workspaceId, policyMaxBudgetUsd })
+          try {
+            await addScanEvent(scanId, "budget_exceeded", "error", errorMessage, {
+              maxBudgetUsd,
+              policyMaxBudgetUsd,
+            })
+          } catch (eventErr) {
+            log.warn("Failed to persist budget_exceeded event", {
               scanId,
-              resolveEngineTimeoutMs(policy?.maxDurationMinutes),
-              isScanCancelled
-            )
-          : {
-              exitCode: 0,
-              cancelled: false,
-              timedOut: false,
-              sourceCheckoutPath: null,
-              output: {
-                vulnerabilities: [],
-                runRecord: null,
-                findingCount: 0,
-                summary: "URL target scanned through the pinned deterministic URL scanner.",
-                findingsComplete: true,
-              },
-            }
+              error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+            })
+          }
+          return {
+            status: "failed",
+            errorCategory: "BUDGET_EXCEEDED",
+            errorMessage,
+          }
+        }
+
+        engineProfile = resolveEngineProfile(mode)
+        engineModel = requireEngineModel(engineProfile.model)
+        const budgetSource =
+          typeof policyMaxBudgetUsd === "number" &&
+          Number.isFinite(policyMaxBudgetUsd) &&
+          policyMaxBudgetUsd > 0
+            ? "policy"
+            : "mode_default"
+
+        try {
+          await addScanEvent(scanId, "budget_cap", "info", "Protected run limit enabled", {
+            maxBudgetUsd,
+            source: budgetSource,
+          })
+        } catch (eventErr) {
+          log.warn("Failed to persist budget_cap event", {
+            scanId,
+            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
+          })
+        }
+
+        // Once the external engine begins, an automatic BullMQ replay could
+        // spend twice for the same scan. Preflight remains retryable; the
+        // billable phase is terminal and any rerun requires a fresh scan.
+        await addScanEvent(
+          scanId,
+          "billable_boundary",
+          "info",
+          "Automatic retries disabled before provider-billable analysis",
+          { retryPolicy: "fresh_scan_required" }
+        )
+        billablePhaseStarted = true
+
+        engineResult = await runEngine(
+          {
+            scanId,
+            goal,
+            mode,
+            target: {
+              id: target.id,
+              type: target.type as TargetType,
+              url: target.url,
+              repoFullName: target.repoFullName,
+              name: target.name,
+            },
+            instruction: buildVibeSecurityInstruction(goal),
+            maxBudgetUsd,
+          },
+          scanId,
+          resolveEngineTimeoutMs(policy?.maxDurationMinutes),
+          isScanCancelled
+        )
+      } else if (target.type === "WEB_APP" || target.type === "API") {
+        urlProfile = getUrlScanProfile(target.type, mode)
+        engineResult = {
+          exitCode: 0,
+          cancelled: false,
+          timedOut: false,
+          sourceCheckoutPath: null,
+          output: {
+            vulnerabilities: [],
+            runRecord: null,
+            findingCount: 0,
+            summary: "URL target scanned through the pinned deterministic URL scanner.",
+            findingsComplete: true,
+          },
+        }
+      } else {
+        return {
+          status: "failed",
+          errorCategory: "INVALID_TARGET",
+          errorMessage: `Unsupported target type for scanning: ${target.type}`,
+        }
+      }
 
       if (globalScanTimeoutReached) {
         const timeoutMessage = timeoutErrorMessage(scanRuntimeBudgetMs)
@@ -769,9 +790,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const runRecord = engineResult.output.runRecord
       const exitInterpretation = interpretExitCode(engineResult.exitCode)
       const engineExecution =
-        target.type === "REPO"
+        target.type === "REPO" && engineProfile && engineModel
           ? {
-              model: requireEngineModel(engineModel),
+              model: engineModel,
               reasoningEffort: engineProfile.reasoningEffort,
               image: env.LYRASHIELD_IMAGE || null,
               ...(runRecord?.engine_version ? { engineVersion: runRecord.engine_version } : {}),
@@ -921,6 +942,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           url: target.url,
           repoFullName: target.repoFullName,
           name: target.name,
+          apiSpecUrl: target.apiSpecUrl,
         },
         goal,
         mode,
@@ -928,6 +950,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         workspaceDir: engineResult.sourceCheckoutPath ?? undefined,
         scannerPhaseTimeoutMs,
         isCancelled: isCancelledOrTimedOut,
+        urlProfile,
       })
 
       try {
@@ -1039,6 +1062,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         engineFindingCount: orchestratorResult.engineFindings.length,
         coverageIssues: orchestratorResult.coverageIssues,
         matchedControlRanks: coverage.matchedControlRanks,
+        urlExecution: orchestratorResult.urlExecution,
         engineExecution,
       })
 

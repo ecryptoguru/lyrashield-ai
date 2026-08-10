@@ -50,6 +50,7 @@ export const targetSchema = z
     name: z.string(),
     type: z.string(),
     url: z.string().nullable(),
+    apiSpecUrl: z.string().nullable(),
     repoFullName: z.string().nullable(),
     branch: z.string().nullable(),
     environment: z.string(),

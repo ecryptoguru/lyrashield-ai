@@ -42,17 +42,29 @@ vi.mock("./scanners/secrets-scanner", () => ({
 }))
 
 vi.mock("./scanners/url-scanner", () => ({
-  scanUrl: vi.fn().mockResolvedValue([
-    {
-      id: "url-missing-header-content-security-policy",
-      title: "Missing Content-Security-Policy header",
-      severity: "MEDIUM",
-      timestamp: new Date().toISOString(),
-      cwe: "CWE-693",
-      description: "Missing CSP header",
-      remediation_steps: "Add CSP header",
+  scanUrl: vi.fn().mockResolvedValue({
+    findings: [
+      {
+        id: "url-missing-header-content-security-policy",
+        title: "Missing Content-Security-Policy header",
+        severity: "MEDIUM",
+        timestamp: new Date().toISOString(),
+        cwe: "CWE-693",
+        description: "Missing CSP header",
+        remediation_steps: "Add CSP header",
+      },
+    ],
+    execution: {
+      contractVersion: "url-scan/2.0.0",
+      profile: "WEB_APP_SAFE",
+      methods: ["GET"],
+      subjectCount: 1,
+      totalBytes: 100,
+      truncated: false,
+      issues: [],
     },
-  ]),
+    issues: [],
+  }),
 }))
 
 vi.mock("./scanners/agent-config-scanner", () => ({
@@ -101,7 +113,6 @@ describe("runScannerOrchestrator", () => {
       target: {
         id: "target-1",
         type: "REPO",
-        url: "https://github.com/test/repo",
         repoFullName: "test/repo",
         name: "Test Repo",
       },
@@ -113,15 +124,53 @@ describe("runScannerOrchestrator", () => {
 
     expect(scanSca).toHaveBeenCalled()
     expect(scanSecrets).toHaveBeenCalled()
-    expect(scanUrl).toHaveBeenCalled()
     expect(scanAgentConfig).toHaveBeenCalled()
 
     expect(result.engineFindings.length).toBe(1)
     expect(result.scaFindings.length).toBe(1)
     expect(result.secretsFindings.length).toBe(1)
-    expect(result.urlFindings.length).toBe(1)
+    expect(result.urlFindings.length).toBe(0)
     expect(result.agentConfigFindings).toEqual([])
-    expect(result.allFindings.length).toBe(4)
+    expect(result.allFindings.length).toBe(3)
+  })
+
+  it("runs the URL scanner for web targets when a profile is provided", async () => {
+    const result = await runScannerOrchestrator({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      target: {
+        id: "target-1",
+        type: "WEB_APP",
+        url: "https://example.test",
+        name: "Web target",
+      },
+      goal: "LAUNCH_REVIEW",
+      mode: "SAFE",
+      engineFindings: [],
+      urlProfile: {
+        id: "WEB_APP_SAFE",
+        targetType: "WEB_APP",
+        mode: "SAFE",
+        label: "Surface Review",
+        description: "...",
+        maxDocuments: 1,
+        maxAssets: 6,
+        maxDepth: 0,
+        maxTotalBytes: 8 * 1024 * 1024,
+        maxResponseBytes: 3 * 1024 * 1024,
+        maxConcurrency: 3,
+        maxWallTimeMs: 60_000,
+        maxOperations: 0,
+        maxMethodProbes: 0,
+        maxOriginProbes: 0,
+        allowedMethods: ["GET"],
+        requiresApiSpec: false,
+      },
+    })
+
+    expect(scanUrl).toHaveBeenCalled()
+    expect(result.urlFindings.length).toBe(1)
   })
 
   it("normalizes all findings with correct severity", async () => {
@@ -328,12 +377,31 @@ describe("runScannerOrchestrator", () => {
         scanId: "scan-cancelled",
         workspaceId: "ws-1",
         targetId: "target-1",
-        target: { id: "target-1", type: "URL", url: "https://example.com", name: "Test" },
+        target: { id: "target-1", type: "WEB_APP", url: "https://example.com", name: "Test" },
         goal: "TEST_APP",
         mode: "STANDARD",
         engineFindings: [],
         workspaceDir: sourceCheckout,
         isCancelled: async () => true,
+        urlProfile: {
+          id: "WEB_APP_STANDARD",
+          targetType: "WEB_APP",
+          mode: "STANDARD",
+          label: "Expanded Surface Review",
+          description: "...",
+          maxDocuments: 20,
+          maxAssets: 30,
+          maxDepth: 2,
+          maxTotalBytes: 25 * 1024 * 1024,
+          maxResponseBytes: 3 * 1024 * 1024,
+          maxConcurrency: 4,
+          maxWallTimeMs: 120_000,
+          maxOperations: 0,
+          maxMethodProbes: 0,
+          maxOriginProbes: 0,
+          allowedMethods: ["GET"],
+          requiresApiSpec: false,
+        },
       })
     ).rejects.toThrow("Scanner phase cancelled")
   })
@@ -367,17 +435,29 @@ describe("runScannerOrchestrator", () => {
       remediation_steps: "Add CSP",
     }
 
-    vi.mocked(scanUrl).mockResolvedValueOnce([
-      {
-        id: "url-missing-header-content-security-policy",
-        title: "Missing Content-Security-Policy header",
-        severity: "MEDIUM",
-        timestamp: new Date().toISOString(),
-        cwe: "CWE-693",
-        description: "Missing CSP header",
-        remediation_steps: "Add CSP header",
+    vi.mocked(scanUrl).mockResolvedValueOnce({
+      findings: [
+        {
+          id: "url-missing-header-content-security-policy",
+          title: "Missing Content-Security-Policy header",
+          severity: "MEDIUM",
+          timestamp: new Date().toISOString(),
+          cwe: "CWE-693",
+          description: "Missing CSP header",
+          remediation_steps: "Add CSP header",
+        },
+      ],
+      execution: {
+        contractVersion: "url-scan/2.0.0",
+        profile: "WEB_APP_SAFE",
+        methods: ["GET"],
+        subjectCount: 1,
+        totalBytes: 100,
+        truncated: false,
+        issues: [],
       },
-    ])
+      issues: [],
+    })
 
     const result = await runScannerOrchestrator({
       scanId: "scan-1",

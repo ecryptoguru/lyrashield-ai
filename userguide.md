@@ -186,7 +186,9 @@ Open a target to view repository or URL details, its recent scans, latest eligib
 
 ## 8. Scan types and models
 
-The authenticated dashboard exposes three one-off review depths. Weekly Monitor is the recurring user workflow.
+The authenticated dashboard exposes one-off review depths that depend on the selected target. Weekly Monitor is the recurring version of the same choices.
+
+### Repository targets
 
 | User option          | Backend mode | Model for repository engine | Reasoning |
 | -------------------- | ------------ | --------------------------- | --------- |
@@ -195,7 +197,22 @@ The authenticated dashboard exposes three one-off review depths. Weekly Monitor 
 | Deep Security Review | DEEP         | GPT-5.6 Terra               | Medium    |
 | Weekly Monitor       | SAFE         | GPT-5.6 Luna                | Medium    |
 
-The backend also supports QUICK (Luna/medium) and CUSTOM (Terra/medium coordination with Luna/medium specialists) for approved API or agent workflows. They are not additional one-off dashboard choices.
+### Web App and API targets
+
+Web App and API targets use the pinned deterministic URL scanner. The external AI engine is not invoked for these targets. The available modes are:
+
+| User option               | Target type | Backend mode | Requirements                          |
+| ------------------------- | ----------- | ------------ | ------------------------------------- |
+| Surface Review            | Web App     | SAFE         | Public HTTP(S) URL                    |
+| Expanded Surface Review   | Web App     | STANDARD     | Public HTTP(S) URL                    |
+| Behavioral Surface Review | Web App     | DEEP         | Public HTTP(S) URL                    |
+| Endpoint Review           | API         | SAFE         | Public HTTP(S) URL                    |
+| Contract Review           | API         | STANDARD     | An OpenAPI document URL on the target |
+| Contract Behavior Review  | API         | DEEP         | An OpenAPI document URL on the target |
+
+These reviews are passive and non-mutating: they do not authenticate, exploit, fuzz, or enumerate arbitrary paths beyond the configured scope. Contract and Contract Behavior reviews use the supplied OpenAPI document to bound the operations reviewed.
+
+The backend also supports `QUICK` (Luna/medium) and `CUSTOM` (Terra/medium coordination with Luna/medium specialists) for approved repository, API, or agent workflows. They are not additional one-off dashboard choices for URL or API targets.
 
 LyraShield applies protected internal run limits automatically. The dashboard does not display model costs, spend, or accounting events. If a protected limit is reached, the scan ends with a neutral limit message while operators retain the internal usage record for reconciliation.
 
@@ -204,7 +221,7 @@ LyraShield applies protected internal run limits automatically. The dashboard do
 1. Open **Scans**.
 2. Select **New Scan**.
 3. Choose a target.
-4. Choose Release Check, Code Review, or Deep Security Review.
+4. Choose a review depth that is available for that target type. Locked options explain why they are unavailable (for example, Contract Review requires an OpenAPI document on an API target).
 5. Review the selected workflow description.
 6. Select **Start Scan**.
 

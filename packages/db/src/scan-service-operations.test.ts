@@ -201,27 +201,48 @@ describe("getScanWithEvents", () => {
     expect(scan?.events.map((event) => event.id)).toEqual(["old", "new"])
   })
 
-  it("projects only the manifest checksum, never the manifest blob", async () => {
+  it("projects the manifest checksum and the bounded urlExecution blob", async () => {
     mockPrisma.scan.findFirst.mockResolvedValue({
       id: "scan-1",
       events: [],
-      resultManifest: { checksum: "abc123" },
+      resultManifest: {
+        checksum: "abc123",
+        manifest: {
+          urlExecution: {
+            contractVersion: "url-scan/2.0.0",
+            profile: "WEB_APP_STANDARD",
+            methods: ["GET"],
+            subjectCount: 17,
+            documentCount: 10,
+            assetCount: 7,
+            operationCount: 0,
+            methodProbeCount: 0,
+            originProbeCount: 0,
+            totalBytes: 2048,
+            truncated: true,
+            issueCodes: ["LIMIT_REACHED"],
+          },
+        },
+      },
       coverageReceipts: [],
       target: null,
     })
 
     const scan = await getScanWithEvents("scan-1", "ws-1")
 
-    // This shape is returned on every scan-detail poll; fetching the manifest's
-    // Json column here would move tens of KB per tick for a field nothing reads.
+    // The scan detail page and report generator need the bounded urlExecution
+    // metadata, but not the full manifest coverage blob.
     expect(mockPrisma.scan.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         include: expect.objectContaining({
-          resultManifest: { select: { checksum: true } },
+          resultManifest: { select: { checksum: true, manifest: true } },
         }),
       })
     )
     expect(scan?.resultManifest?.checksum).toBe("abc123")
+    expect(
+      (scan?.resultManifest?.manifest as { urlExecution?: unknown } | undefined)?.urlExecution
+    ).toBeTruthy()
   })
 
   it("does not query child records when the scoped scan is absent", async () => {

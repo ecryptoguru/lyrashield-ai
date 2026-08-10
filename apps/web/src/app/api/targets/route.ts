@@ -57,6 +57,23 @@ export async function POST(request: Request) {
           { status: 400 }
         )
       }
+
+      if (data.apiSpecUrl) {
+        const specSsrf = await checkScanUrlSafe(data.apiSpecUrl)
+        if (!specSsrf.safe) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: {
+                code: "SSRF_BLOCKED",
+                message:
+                  "This OpenAPI URL is not allowed (it targets an internal, private, or unresolvable address).",
+              },
+            },
+            { status: 400 }
+          )
+        }
+      }
     }
 
     if (data.projectId) {
@@ -142,6 +159,7 @@ export async function POST(request: Request) {
             type: data.type as "WEB_APP" | "API",
             name: data.name,
             url: data.url,
+            apiSpecUrl: data.apiSpecUrl ?? null,
             environment: data.environment,
           }
 
@@ -245,6 +263,7 @@ export async function GET(request: Request) {
         name: t.name,
         type: t.type,
         url: t.url,
+        apiSpecUrl: t.apiSpecUrl,
         repoFullName: t.repoFullName,
         branch: t.branch,
         environment: t.environment,

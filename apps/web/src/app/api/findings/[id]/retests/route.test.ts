@@ -21,6 +21,7 @@ const prisma = {
   findingCandidate: { findMany: vi.fn() },
   retest: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   auditLog: { create: vi.fn() },
+  target: { findFirst: vi.fn() },
 }
 
 vi.mock("@lyrashield/db", () => ({ getFinding, createScan, updateScanStatus, prisma }))
@@ -57,6 +58,12 @@ describe("POST /api/findings/[id]/retests", () => {
     })
     enqueueScanJob.mockResolvedValue("job-1")
     assertScanWorkerAvailable.mockResolvedValue(undefined)
+    prisma.target.findFirst.mockResolvedValue({
+      id: "target-1",
+      type: "REPO",
+      url: null,
+      apiSpecUrl: null,
+    })
   })
 
   it("queues a fresh scan from server-owned source-scan configuration", async () => {
@@ -123,6 +130,36 @@ describe("POST /api/findings/[id]/retests", () => {
 
     expect(response.status).toBe(503)
     expect((await response.json()).error.code).toBe("SCAN_SERVICE_UNAVAILABLE")
+    expect(createScan).not.toHaveBeenCalled()
+  })
+
+  it("returns API_SPEC_REQUIRED when the target no longer supports the source mode", async () => {
+    prisma.scan.findFirst.mockResolvedValue({
+      id: "source-scan",
+      targetId: "target-1",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      policyId: null,
+    })
+    prisma.target.findFirst.mockResolvedValue({
+      id: "target-1",
+      type: "API",
+      url: "https://api.example.com",
+      apiSpecUrl: null,
+    })
+    prisma.findingCandidate.findMany.mockResolvedValue([{ scannerSource: "engine" }])
+
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId: "workspace-1" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe("API_SPEC_REQUIRED")
     expect(createScan).not.toHaveBeenCalled()
   })
 

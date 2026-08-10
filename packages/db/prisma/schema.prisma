@@ -12,17 +12,17 @@ datasource db {
 // Reference user.id from application models.
 
 model User {
-  id            String    @id
+  id            String   @id
   name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  email         String   @unique
+  emailVerified Boolean  @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  sessions      Session[]
-  accounts      Account[]
-  verifications Verification[]
+  sessions           Session[]
+  accounts           Account[]
+  verifications      Verification[]
   oauthclients       OauthClient[]
   oauthrefreshtokens OauthRefreshToken[]
   oauthaccesstokens  OauthAccessToken[]
@@ -33,17 +33,17 @@ model User {
 }
 
 model Session {
-  id           String   @id
-  expiresAt    DateTime
-  token        String   @unique
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  ipAddress    String?
-  userAgent    String?
-  userId       String
+  id                String   @id
+  expiresAt         DateTime
+  token             String   @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  ipAddress         String?
+  userAgent         String?
+  userId            String
   activeWorkspaceId String?
 
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   oauthrefreshtokens OauthRefreshToken[]
   oauthaccesstokens  OauthAccessToken[]
 
@@ -52,21 +52,21 @@ model Session {
 }
 
 model Account {
-  id                String    @id
-  accountId         String
-  providerId        String
-  userId            String
-  accessToken       String?
-  refreshToken      String?
-  idToken           String?
-  accessTokenExpiresAt DateTime?
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
   refreshTokenExpiresAt DateTime?
-  scope             String?
-  password          String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([providerId, accountId])
   @@index([userId])
@@ -114,45 +114,53 @@ model Jwks {
   privateKey String
   createdAt  DateTime
   expiresAt  DateTime?
+  alg        String?
+  crv        String?
 
   @@map("jwks")
 }
 
 model OauthClient {
-  id                      String              @id
-  clientId                String
-  clientSecret            String?
-  disabled                Boolean?            @default(false)
-  skipConsent             Boolean?
-  enableEndSession        Boolean?
-  subjectType             String?
-  scopes                  String[]
-  userId                  String?
-  user                    User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt               DateTime?
-  updatedAt               DateTime?
-  name                    String?
-  uri                     String?
-  icon                    String?
-  contacts                String[]
-  tos                     String?
-  policy                  String?
-  softwareId              String?
-  softwareVersion         String?
-  softwareStatement       String?
-  redirectUris            String[]
-  postLogoutRedirectUris  String[]
-  tokenEndpointAuthMethod String?
-  grantTypes              String[]
-  responseTypes           String[]
-  public                  Boolean?
-  type                    String?
-  requirePKCE             Boolean?
-  referenceId             String?
-  metadata                Json?
-  oauthrefreshtokens      OauthRefreshToken[]
-  oauthaccesstokens       OauthAccessToken[]
-  oauthconsents           OauthConsent[]
+  id                               String                @id
+  clientId                         String
+  clientSecret                     String?
+  disabled                         Boolean?              @default(false)
+  skipConsent                      Boolean?
+  enableEndSession                 Boolean?
+  subjectType                      String?
+  scopes                           String[]
+  userId                           String?
+  user                             User?                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt                        DateTime?
+  updatedAt                        DateTime?
+  name                             String?
+  uri                              String?
+  icon                             String?
+  contacts                         String[]
+  tos                              String?
+  policy                           String?
+  softwareId                       String?
+  softwareVersion                  String?
+  softwareStatement                String?
+  redirectUris                     String[]
+  postLogoutRedirectUris           String[]
+  backchannelLogoutUri             String?
+  backchannelLogoutSessionRequired Boolean?
+  tokenEndpointAuthMethod          String?
+  jwks                             String?
+  jwksUri                          String?
+  grantTypes                       String[]
+  responseTypes                    String[]
+  public                           Boolean?
+  type                             String?
+  requirePKCE                      Boolean?
+  dpopBoundAccessTokens            Boolean?              @default(false)
+  referenceId                      String?
+  metadata                         Json?
+  oauthrefreshtokens               OauthRefreshToken[]
+  oauthaccesstokens                OauthAccessToken[]
+  oauthconsents                    OauthConsent[]
+  oauthclientresources             OauthClientResource[]
 
   @@unique([clientId])
   @@index([userId])
@@ -160,67 +168,126 @@ model OauthClient {
 }
 
 model OauthRefreshToken {
-  id                String             @id
-  token             String
-  clientId          String
-  oauthclient       OauthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
-  sessionId         String?
-  session           Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  userId            String
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  referenceId       String?
-  expiresAt         DateTime?
-  createdAt         DateTime?
-  revoked           DateTime?
-  authTime          DateTime?
-  scopes            String[]
-  oauthaccesstokens OauthAccessToken[]
+  id                      String             @id
+  token                   String
+  clientId                String
+  oauthclient             OauthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId               String?
+  session                 Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId                  String
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId             String?
+  authorizationCodeId     String?
+  resources               String[]           @default([])
+  requestedUserInfoClaims String[]           @default([])
+  expiresAt               DateTime?
+  createdAt               DateTime?
+  revoked                 DateTime?
+  rotatedAt               DateTime?
+  rotationReplayResponse  String?
+  rotationReplayExpiresAt DateTime?
+  authTime                DateTime?
+  confirmation            Json?
+  scopes                  String[]
+  oauthaccesstokens       OauthAccessToken[]
 
   @@unique([token])
   @@index([clientId])
   @@index([sessionId])
   @@index([userId])
+  @@index([authorizationCodeId])
   @@map("oauth_refresh_tokens")
 }
 
 model OauthAccessToken {
-  id                String             @id
-  token             String?
-  clientId          String
-  oauthclient       OauthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
-  sessionId         String?
-  session           Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  userId            String?
-  user              User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  referenceId       String?
-  refreshId         String?
-  oauthrefreshtoken OauthRefreshToken? @relation(fields: [refreshId], references: [id], onDelete: Cascade)
-  expiresAt         DateTime?
-  createdAt         DateTime?
-  scopes            String[]
+  id                      String             @id
+  token                   String?
+  clientId                String
+  oauthclient             OauthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId               String?
+  session                 Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId                  String?
+  user                    User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId             String?
+  authorizationCodeId     String?
+  resources               String[]           @default([])
+  requestedUserInfoClaims String[]           @default([])
+  refreshId               String?
+  oauthrefreshtoken       OauthRefreshToken? @relation(fields: [refreshId], references: [id], onDelete: Cascade)
+  expiresAt               DateTime?
+  createdAt               DateTime?
+  revoked                 DateTime?
+  confirmation            Json?
+  scopes                  String[]
 
   @@unique([token])
   @@index([clientId])
   @@index([sessionId])
   @@index([userId])
+  @@index([authorizationCodeId])
   @@index([refreshId])
   @@map("oauth_access_tokens")
 }
 
 model OauthConsent {
-  id          String      @id
-  clientId    String
-  oauthclient OauthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
-  userId      String?
-  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  referenceId String?
-  scopes      String[]
-  createdAt   DateTime?
-  updatedAt   DateTime?
+  id                      String      @id
+  clientId                String
+  oauthclient             OauthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId                  String?
+  user                    User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId             String?
+  resources               String[]    @default([])
+  requestedUserInfoClaims String[]    @default([])
+  scopes                  String[]
+  createdAt               DateTime?
+  updatedAt               DateTime?
 
   @@index([clientId])
   @@index([userId])
   @@map("oauth_consents")
+}
+
+model OauthResource {
+  id                            String                @id
+  identifier                    String                @unique
+  name                          String
+  accessTokenTtl                Int?
+  refreshTokenTtl               Int?
+  signingAlgorithm              String?
+  signingKeyId                  String?
+  allowedScopes                 String[]              @default([])
+  customClaims                  Json?
+  dpopBoundAccessTokensRequired Boolean?              @default(false)
+  disabled                      Boolean?              @default(false)
+  createdAt                     DateTime?
+  updatedAt                     DateTime?
+  policyVersion                 Int?                  @default(1)
+  metadata                      Json?
+  oauthclientresources          OauthClientResource[]
+
+  @@map("oauth_resources")
+}
+
+model OauthClientResource {
+  id            String        @id
+  clientId      String
+  oauthclient   OauthClient   @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  resourceId    String
+  oauthresource OauthResource @relation(fields: [resourceId], references: [identifier], onDelete: Cascade)
+  metadata      Json?
+  createdAt     DateTime?
+
+  @@unique([clientId, resourceId])
+  @@index([clientId])
+  @@index([resourceId])
+  @@map("oauth_client_resources")
+}
+
+model OauthClientAssertion {
+  id        String   @id
+  expiresAt DateTime
+
+  @@map("oauth_client_assertions")
 }
 
 // ─── Application Models ─────────────────────────────────────────────────────
@@ -388,55 +455,55 @@ enum IntegrationType {
 }
 
 model Workspace {
-  id                String        @id @default(cuid())
-  name              String
-  slug              String        @unique
-  mode              WorkspaceMode @default(VIBE)
-  plan              WorkspacePlan @default(FREE)
-  billingStatus     String?
-  deploymentType    String        @default("saas")
-  retentionDays     Int           @default(30)
-  telemetryEnabled  Boolean       @default(true)
-  deletedAt         DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id               String        @id @default(cuid())
+  name             String
+  slug             String        @unique
+  mode             WorkspaceMode @default(VIBE)
+  plan             WorkspacePlan @default(FREE)
+  billingStatus    String?
+  deploymentType   String        @default("saas")
+  retentionDays    Int           @default(30)
+  telemetryEnabled Boolean       @default(true)
+  deletedAt        DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  members           WorkspaceMember[]
-  projects          Project[]
-  targets           Target[]
-  scans             Scan[]
-  findings          Finding[]
-  policies          Policy[]
-  integrations      Integration[]
-  auditLogs         AuditLog[]
-  usageRecords      UsageRecord[]
-  reports           Report[]
-  notifications     Notification[]
-  schedules         Schedule[]
-  billingAccount    BillingAccount?
-  invitations       Invitation[]
-  webhookEvents     WebhookEvent[]
-  apiKeys           ApiKey[]
-  retests           Retest[]
-  agentApprovals    AgentApproval[]
-  scoreSnapshots    ScoreSnapshot[]
-  findingCandidates FindingCandidate[]
+  members              WorkspaceMember[]
+  projects             Project[]
+  targets              Target[]
+  scans                Scan[]
+  findings             Finding[]
+  policies             Policy[]
+  integrations         Integration[]
+  auditLogs            AuditLog[]
+  usageRecords         UsageRecord[]
+  reports              Report[]
+  notifications        Notification[]
+  schedules            Schedule[]
+  billingAccount       BillingAccount?
+  invitations          Invitation[]
+  webhookEvents        WebhookEvent[]
+  apiKeys              ApiKey[]
+  retests              Retest[]
+  agentApprovals       AgentApproval[]
+  scoreSnapshots       ScoreSnapshot[]
+  findingCandidates    FindingCandidate[]
   findingVerifications FindingVerification[]
 }
 
 model WorkspaceMember {
-  id            String     @id @default(cuid())
-  workspaceId   String
-  userId        String
-  role          MemberRole @default(MEMBER)
-  status        String     @default("active")
-  invitedEmail  String?
-  invitedById   String?
-  idpSubject    String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id           String     @id @default(cuid())
+  workspaceId  String
+  userId       String
+  role         MemberRole @default(MEMBER)
+  status       String     @default("active")
+  invitedEmail String?
+  invitedById  String?
+  idpSubject   String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, userId])
   @@index([userId])
@@ -445,53 +512,54 @@ model WorkspaceMember {
 }
 
 model Project {
-  id            String    @id @default(cuid())
-  workspaceId   String
-  name          String
-  description   String?
-  ownerUserId   String?
-  ownerTeam     String?
-  riskScore     Int       @default(100)
-  trustPlan     Json?     @db.JsonB
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  ownerUserId String?
+  ownerTeam   String?
+  riskScore   Int       @default(100)
+  trustPlan   Json?     @db.JsonB
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  targets       Target[]
-  scans         Scan[]
-  findings      Finding[]
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  targets   Target[]
+  scans     Scan[]
+  findings  Finding[]
 
   @@index([workspaceId])
 }
 
 model Target {
-  id              String            @id @default(cuid())
-  workspaceId     String
-  projectId       String?
-  type            TargetType
-  name            String
-  url             String?
-  repoProvider    String?
-  repoOwner       String?
-  repoName        String?
-  repoFullName    String?
-  installationId  String?
-  branch          String?
-  environment     TargetEnvironment @default(STAGING)
-  status          String            @default("active")
-  lastScanAt      DateTime?
-  deletedAt       DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id             String            @id @default(cuid())
+  workspaceId    String
+  projectId      String?
+  type           TargetType
+  name           String
+  url            String?
+  apiSpecUrl     String?
+  repoProvider   String?
+  repoOwner      String?
+  repoName       String?
+  repoFullName   String?
+  installationId String?
+  branch         String?
+  environment    TargetEnvironment @default(STAGING)
+  status         String            @default("active")
+  lastScanAt     DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
-  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project         Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  scans           Scan[]
-  findings        Finding[]
-  credentials     CredentialSet[]
-  schedules       Schedule[]
-  scoreSnapshots  ScoreSnapshot[]
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project           Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  scans             Scan[]
+  findings          Finding[]
+  credentials       CredentialSet[]
+  schedules         Schedule[]
+  scoreSnapshots    ScoreSnapshot[]
   findingCandidates FindingCandidate[]
 
   @@unique([workspaceId, repoFullName])
@@ -503,95 +571,95 @@ model Target {
 }
 
 model CredentialSet {
-  id            String   @id @default(cuid())
-  workspaceId   String
-  targetId      String?
-  kind          String
-  name          String
-  vaultRef      String
-  scope         Json?
-  expiresAt     DateTime?
-  createdById   String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String    @id @default(cuid())
+  workspaceId String
+  targetId    String?
+  kind        String
+  name        String
+  vaultRef    String
+  scope       Json?
+  expiresAt   DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  target        Target?  @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  target Target? @relation(fields: [targetId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([targetId])
 }
 
 model Policy {
-  id                       String    @id @default(cuid())
-  workspaceId              String
-  name                     String
-  description              String?
-  scanWindow               Json?
-  blockedPaths             String[]
-  allowedDomains           String[]
-  rateLimit                Json?
-  networkEgressPolicy      String    @default("target_only")
-  destructiveTestsAllowed  Boolean   @default(false)
-  approvalRequired         Boolean   @default(false)
-  maxBudgetUsd             Decimal?  @db.Decimal(10, 2)
-  maxDurationMinutes       Int       @default(60)
-  piiRedactionEnabled      Boolean   @default(true)
-  evidenceRetentionDays    Int       @default(30)
-  deletedAt                DateTime?
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @updatedAt
+  id                      String    @id @default(cuid())
+  workspaceId             String
+  name                    String
+  description             String?
+  scanWindow              Json?
+  blockedPaths            String[]
+  allowedDomains          String[]
+  rateLimit               Json?
+  networkEgressPolicy     String    @default("target_only")
+  destructiveTestsAllowed Boolean   @default(false)
+  approvalRequired        Boolean   @default(false)
+  maxBudgetUsd            Decimal?  @db.Decimal(10, 2)
+  maxDurationMinutes      Int       @default(60)
+  piiRedactionEnabled     Boolean   @default(true)
+  evidenceRetentionDays   Int       @default(30)
+  deletedAt               DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
-  workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  scans                    Scan[]
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scans     Scan[]
 
   @@index([workspaceId])
 }
 
 model Scan {
-  id              String      @id @default(cuid())
-  workspaceId     String
-  projectId       String?
-  targetId        String?
-  policyId        String?
-  goal            ScanGoal
-  mode            ScanMode    @default(SAFE)
-  status          ScanStatus  @default(QUEUED)
-  triggerType     String      @default("manual")
-  startedAt       DateTime?
-  endedAt         DateTime?
-  summary         String?
-  errorCategory   String?
-  errorMessage    String?
-  riskScoreBefore Int?
-  riskScoreAfter  Int?
+  id                   String     @id @default(cuid())
+  workspaceId          String
+  projectId            String?
+  targetId             String?
+  policyId             String?
+  goal                 ScanGoal
+  mode                 ScanMode   @default(SAFE)
+  status               ScanStatus @default(QUEUED)
+  triggerType          String     @default("manual")
+  startedAt            DateTime?
+  endedAt              DateTime?
+  summary              String?
+  errorCategory        String?
+  errorMessage         String?
+  riskScoreBefore      Int?
+  riskScoreAfter       Int?
   estimatedCostCents   Int?
   actualCostCents      Int?
-  providerCostUsd      Decimal? @db.Decimal(12, 6)
-  billedCostUsd        Decimal? @db.Decimal(12, 6)
+  providerCostUsd      Decimal?   @db.Decimal(12, 6)
+  billedCostUsd        Decimal?   @db.Decimal(12, 6)
   llmRequestCount      Int?
   llmInputTokens       Int?
   llmCachedInputTokens Int?
   llmOutputTokens      Int?
-  determinismMode      String?  @default("default")
+  determinismMode      String?    @default("default")
   durationMs           Int?
-  sarifUri            String?
-  createdById     String
-  deletedAt       DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  sarifUri             String?
+  createdById          String
+  deletedAt            DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 
-  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project         Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  target          Target?     @relation(fields: [targetId], references: [id], onDelete: SetNull)
-  policy          Policy?     @relation(fields: [policyId], references: [id], onDelete: SetNull)
-  events          ScanEvent[]
-  findings        Finding[]
-  retests         Retest[]
-  reports         Report[]
-  scoreSnapshot   ScoreSnapshot?
-  resultManifest  ScanResultManifest?
-  coverageReceipts ScanCoverageReceipt[]
-  findingCandidates FindingCandidate[]
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project              Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  target               Target?               @relation(fields: [targetId], references: [id], onDelete: SetNull)
+  policy               Policy?               @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  events               ScanEvent[]
+  findings             Finding[]
+  retests              Retest[]
+  reports              Report[]
+  scoreSnapshot        ScoreSnapshot?
+  resultManifest       ScanResultManifest?
+  coverageReceipts     ScanCoverageReceipt[]
+  findingCandidates    FindingCandidate[]
   findingVerifications FindingVerification[]
 
   @@index([workspaceId])
@@ -606,92 +674,93 @@ model Scan {
 }
 
 model ScanEvent {
-  id          String   @id @default(cuid())
-  scanId      String
-  stage       String
-  level       String   @default("info")
-  message     String
-  metadata    Json?
-  deletedAt   DateTime?
-  createdAt   DateTime @default(now())
+  id        String    @id @default(cuid())
+  scanId    String
+  stage     String
+  level     String    @default("info")
+  message   String
+  metadata  Json?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
 
-  scan        Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
   @@index([scanId])
   @@index([stage])
 }
 
 model ApiKey {
-  id            String    @id @default(cuid())
-  workspaceId   String
-  name          String
-  hashedKey     String    @unique
-  prefix        String
-  scopes        String[]
-  lastUsedAt    DateTime?
-  expiresAt     DateTime?
-  revokedAt     DateTime?
-  createdById   String
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  hashedKey   String    @unique
+  prefix      String
+  scopes      String[]
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdById String
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([prefix])
 }
 
 model Finding {
-  id                  String           @id @default(cuid())
-  workspaceId         String
-  projectId           String?
-  targetId            String?
-  scanId              String
-  title               String
-  summary             String
-  category            String?
-  cwe                 String?
-  owaspCategory       String?
-  severity            FindingSeverity
-  confidence          String           @default("medium")
-  cvssScore           Float?
-  cvssVector          String?
-  cvss3Score          Float?
-  cvss3Vector         String?
-  sarifRuleId         String?
-  verified            Boolean          @default(false)
-  verificationStatus  FindingVerificationStatus @default(DETECTED)
-  verificationMethod  FindingVerificationMethod?
-  verificationReason  String?
-  exploitability      String?
-  businessImpact      String?
-  technicalDetail     String?
-  recommendedFix      String?
-  status              FindingStatus   @default(OPEN)
-  statusReason        String?
-  dedupeKey           String
-  ownerUserId         String?
-  ownerTeam           String?
-  slaDueAt            DateTime?
-  firstSeenAt         DateTime         @default(now())
-  lastSeenAt          DateTime         @default(now())
-  fixedAt             DateTime?
-  deletedAt           DateTime?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  id                 String                     @id @default(cuid())
+  workspaceId        String
+  projectId          String?
+  targetId           String?
+  scanId             String
+  title              String
+  summary            String
+  category           String?
+  cwe                String?
+  owaspCategory      String?
+  severity           FindingSeverity
+  confidence         String                     @default("medium")
+  cvssScore          Float?
+  cvssVector         String?
+  cvss3Score         Float?
+  cvss3Vector        String?
+  sarifRuleId        String?
+  verified           Boolean                    @default(false)
+  verificationStatus FindingVerificationStatus  @default(DETECTED)
+  verificationMethod FindingVerificationMethod?
+  verificationReason String?
+  exploitability     String?
+  businessImpact     String?
+  technicalDetail    String?
+  recommendedFix     String?
+  status             FindingStatus              @default(OPEN)
+  statusReason       String?
+  dedupeKey          String
+  ownerUserId        String?
+  ownerTeam          String?
+  slaDueAt           DateTime?
+  firstSeenAt        DateTime                   @default(now())
+  lastSeenAt         DateTime                   @default(now())
+  fixedAt            DateTime?
+  deletedAt          DateTime?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
 
-  workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project             Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  target              Target?          @relation(fields: [targetId], references: [id], onDelete: SetNull)
-  scan                Scan             @relation(fields: [scanId], references: [id], onDelete: Cascade)
-  evidence            Evidence[]
-  candidates          FindingCandidate[]
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project              Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  target               Target?               @relation(fields: [targetId], references: [id], onDelete: SetNull)
+  scan                 Scan                  @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  evidence             Evidence[]
+  candidates           FindingCandidate[]
   verificationReceipts FindingVerification[]
-  fixProposals        FixProposal[]
-  tickets             Ticket[]
-  retests             Retest[]
+  fixProposals         FixProposal[]
+  tickets              Ticket[]
+  retests              Retest[]
 
+  @@unique([targetId, dedupeKey])
   @@index([workspaceId])
   @@index([scanId])
   @@index([status])
@@ -700,7 +769,6 @@ model Finding {
   @@index([slaDueAt])
   @@index([workspaceId, status, severity])
   @@index([workspaceId, createdAt])
-  @@unique([targetId, dedupeKey])
 }
 
 model Evidence {
@@ -714,10 +782,10 @@ model Evidence {
   redactionStatus    String   @default("pending")
   createdAt          DateTime @default(now())
 
-  finding            Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  finding Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
 
-  @@index([findingId])
   @@unique([findingId, checksum])
+  @@index([findingId])
 }
 
 model ScanResultManifest {
@@ -728,7 +796,7 @@ model ScanResultManifest {
   checksum  String
   createdAt DateTime @default(now())
 
-  scan      Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
 }
 
 model ScanCoverageReceipt {
@@ -742,7 +810,7 @@ model ScanCoverageReceipt {
   metadata  Json?
   createdAt DateTime           @default(now())
 
-  scan      Scan               @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
   @@unique([scanId, controlId])
   @@index([scanId])
@@ -750,23 +818,23 @@ model ScanCoverageReceipt {
 }
 
 model FindingCandidate {
-  id             String                 @id @default(cuid())
-  workspaceId    String
-  scanId         String
-  targetId       String
-  findingId      String?
-  scannerSource  String
-  dedupeKey      String
-  status         FindingCandidateStatus @default(DETECTED)
-  payload        Json
-  evidenceHash   String
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
+  id            String                 @id @default(cuid())
+  workspaceId   String
+  scanId        String
+  targetId      String
+  findingId     String?
+  scannerSource String
+  dedupeKey     String
+  status        FindingCandidateStatus @default(DETECTED)
+  payload       Json
+  evidenceHash  String
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
 
-  workspace      Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  scan           Scan                    @relation(fields: [scanId], references: [id], onDelete: Cascade)
-  target         Target                  @relation(fields: [targetId], references: [id], onDelete: Cascade)
-  finding        Finding?                @relation(fields: [findingId], references: [id], onDelete: SetNull)
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scan                 Scan                  @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  target               Target                @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  finding              Finding?              @relation(fields: [findingId], references: [id], onDelete: SetNull)
   verificationReceipts FindingVerification[]
 
   @@unique([scanId, dedupeKey, scannerSource])
@@ -777,24 +845,24 @@ model FindingCandidate {
 }
 
 model FindingVerification {
-  id             String                    @id @default(cuid())
-  workspaceId    String
-  findingId      String
-  scanId         String
-  candidateId    String?
-  status         FindingVerificationStatus
-  method         FindingVerificationMethod
-  reason         String
+  id              String                    @id @default(cuid())
+  workspaceId     String
+  findingId       String
+  scanId          String
+  candidateId     String?
+  status          FindingVerificationStatus
+  method          FindingVerificationMethod
+  reason          String
   verifierVersion String?
-  sourceRevision String?
-  evidence       Json?
-  idempotencyKey String                    @unique
-  createdAt      DateTime                  @default(now())
+  sourceRevision  String?
+  evidence        Json?
+  idempotencyKey  String                    @unique
+  createdAt       DateTime                  @default(now())
 
-  workspace      Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  finding        Finding                   @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  scan           Scan                      @relation(fields: [scanId], references: [id], onDelete: Cascade)
-  candidate      FindingCandidate?         @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  finding   Finding           @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  scan      Scan              @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  candidate FindingCandidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([findingId, createdAt])
@@ -804,94 +872,94 @@ model FindingVerification {
 }
 
 model FixProposal {
-  id                String   @id @default(cuid())
-  findingId         String
-  kind              String   @default("patch")
-  summary           String
-  diffRef           String?
-  status            String   @default("draft")
-  safetyScore       Int?
-  generatedByModel  String?
-  deletedAt         DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String    @id @default(cuid())
+  findingId        String
+  kind             String    @default("patch")
+  summary          String
+  diffRef          String?
+  status           String    @default("draft")
+  safetyScore      Int?
+  generatedByModel String?
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  finding           Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  pullRequests      PullRequest[]
+  finding      Finding       @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  pullRequests PullRequest[]
 
   @@index([findingId])
 }
 
 model PullRequest {
-  id              String   @id @default(cuid())
-  fixProposalId   String
-  provider        String
-  repoOwner       String
-  repoName        String
-  branchName      String
-  prNumber        Int?
-  prUrl           String?
-  status          String   @default("open")
-  deletedAt       DateTime?
-  createdAt       DateTime @default(now())
-  mergedAt        DateTime?
-  closedAt        DateTime?
+  id            String    @id @default(cuid())
+  fixProposalId String
+  provider      String
+  repoOwner     String
+  repoName      String
+  branchName    String
+  prNumber      Int?
+  prUrl         String?
+  status        String    @default("open")
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  mergedAt      DateTime?
+  closedAt      DateTime?
 
-  fixProposal     FixProposal @relation(fields: [fixProposalId], references: [id], onDelete: Cascade)
+  fixProposal FixProposal @relation(fields: [fixProposalId], references: [id], onDelete: Cascade)
 
   @@index([fixProposalId])
 }
 
 model Ticket {
-  id            String   @id @default(cuid())
-  findingId     String
-  provider      String
-  externalId    String?
-  status        String   @default("open")
-  url           String?
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id         String    @id @default(cuid())
+  findingId  String
+  provider   String
+  externalId String?
+  status     String    @default("open")
+  url        String?
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  finding       Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  finding Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
 
   @@index([findingId])
 }
 
 model Integration {
-  id            String          @id @default(cuid())
-  workspaceId   String
-  type          IntegrationType
-  name          String
-  configRef     String?
-  status        String          @default("active")
-  capabilities  Json?
-  externalId    String?
-  metadata      Json?
-  deletedAt     DateTime?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id           String          @id @default(cuid())
+  workspaceId  String
+  type         IntegrationType
+  name         String
+  configRef    String?
+  status       String          @default("active")
+  capabilities Json?
+  externalId   String?
+  metadata     Json?
+  deletedAt    DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
-  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@unique([workspaceId, type, externalId])
+  @@unique([type, externalId])
   @@index([workspaceId])
   @@index([type])
   @@index([workspaceId, createdAt])
-  @@unique([workspaceId, type, externalId])
-  @@unique([type, externalId])
 }
 
 model UsageRecord {
-  id            String   @id @default(cuid())
-  workspaceId   String
-  kind          String
-  quantity      Int
-  metadata      Json?
-  idempotencyKey String? @unique
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
+  id             String    @id @default(cuid())
+  workspaceId    String
+  kind           String
+  quantity       Int
+  metadata       Json?
+  idempotencyKey String?   @unique
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
 
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   referralReward ReferralAttribution? @relation("ReferralReward")
 
   @@index([workspaceId])
@@ -913,10 +981,10 @@ model ScoreSnapshot {
   computedAt    DateTime   @default(now())
   expiresAt     DateTime
 
-  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  target        Target     @relation(fields: [targetId], references: [id], onDelete: Cascade)
-  scan          Scan       @relation(fields: [scanId], references: [id], onDelete: Cascade)
-  shares        ScorecardShare[]
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target    Target           @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  scan      Scan             @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  shares    ScorecardShare[]
 
   @@index([workspaceId])
   @@index([workspaceId, computedAt])
@@ -926,47 +994,47 @@ model ScoreSnapshot {
 }
 
 model ReferralCode {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  code          String   @unique
-  createdAt     DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  code      String   @unique
+  createdAt DateTime @default(now())
 
-  attributions  ReferralAttribution[]
+  attributions    ReferralAttribution[]
   scorecardShares ScorecardShare[]
 }
 
 model ReferralAttribution {
-  id              String         @id @default(cuid())
-  codeId          String
-  referredUserId  String         @unique
-  source          String
-  ipHash          String?
-  status          ReferralStatus @default(PENDING)
-  qualifiedAt     DateTime?
-  rewardRecordId  String?        @unique
-  createdAt       DateTime       @default(now())
+  id             String         @id @default(cuid())
+  codeId         String
+  referredUserId String         @unique
+  source         String
+  ipHash         String?
+  status         ReferralStatus @default(PENDING)
+  qualifiedAt    DateTime?
+  rewardRecordId String?        @unique
+  createdAt      DateTime       @default(now())
 
-  code            ReferralCode   @relation(fields: [codeId], references: [id], onDelete: Cascade)
-  rewardRecord    UsageRecord?   @relation("ReferralReward", fields: [rewardRecordId], references: [id], onDelete: SetNull)
+  code         ReferralCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  rewardRecord UsageRecord? @relation("ReferralReward", fields: [rewardRecordId], references: [id], onDelete: SetNull)
 
   @@index([codeId])
   @@index([status])
 }
 
 model ScorecardShare {
-  id             String        @id @default(cuid())
+  id             String    @id @default(cuid())
   snapshotId     String
-  slug           String        @unique
+  slug           String    @unique
   publicPayload  Json
   referralCodeId String?
   createdById    String
   revokedAt      DateTime?
-  viewCount      Int           @default(0)
-  createdAt      DateTime      @default(now())
+  viewCount      Int       @default(0)
+  createdAt      DateTime  @default(now())
 
-  snapshot       ScoreSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-  referralCode   ReferralCode? @relation(fields: [referralCodeId], references: [id], onDelete: SetNull)
-  events         ScorecardEvent[]
+  snapshot     ScoreSnapshot    @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  referralCode ReferralCode?    @relation(fields: [referralCodeId], references: [id], onDelete: SetNull)
+  events       ScorecardEvent[]
 
   @@index([snapshotId])
 }
@@ -982,7 +1050,7 @@ model ScorecardEvent {
   dayBucket   DateTime
   createdAt   DateTime @default(now())
 
-  share       ScorecardShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  share ScorecardShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
 
   @@unique([shareId, eventType, channel, visitorHash, dayBucket])
   @@index([shareId, createdAt])
@@ -990,20 +1058,20 @@ model ScorecardEvent {
 }
 
 model AuditLog {
-  id            String   @id @default(cuid())
-  workspaceId   String
-  actorUserId   String?
-  action        String
-  resourceType  String
-  resourceId    String?
-  ipAddress     String?
-  userAgent     String?
-  metadata      Json?
-  prevHash      String?
-  hash          String?
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  workspaceId  String
+  actorUserId  String?
+  action       String
+  resourceType String
+  resourceId   String?
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  prevHash     String?
+  hash         String?
+  createdAt    DateTime @default(now())
 
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([actorUserId])
@@ -1012,25 +1080,25 @@ model AuditLog {
 }
 
 model Report {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   workspaceId    String
   scanId         String?
-  type           String   @default("developer")
+  type           String    @default("developer")
   title          String
-  status         String   @default("generated")
-  format         String   @default("html")
+  status         String    @default("generated")
+  format         String    @default("html")
   storageUri     String?
   contentJson    Json?
-  shareTokenHash String?  @unique
+  shareTokenHash String?   @unique
   shareExpiresAt DateTime?
   revokedAt      DateTime?
   createdById    String
   deletedAt      DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  scan           Scan?     @relation(fields: [scanId], references: [id], onDelete: SetNull)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scan      Scan?     @relation(fields: [scanId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([scanId])
@@ -1038,20 +1106,20 @@ model Report {
 }
 
 model Notification {
-  id            String   @id @default(cuid())
-  workspaceId   String
-  userId        String?
-  channel       String   @default("email")
-  type          String
-  title         String
-  body          String
-  status        String   @default("pending")
-  sentAt        DateTime?
-  metadata      Json?
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String?
+  channel     String    @default("email")
+  type        String
+  title       String
+  body        String
+  status      String    @default("pending")
+  sentAt      DateTime?
+  metadata    Json?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
 
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([userId])
@@ -1060,22 +1128,22 @@ model Notification {
 }
 
 model Schedule {
-  id            String   @id @default(cuid())
-  workspaceId   String
-  targetId      String
-  cron          String
-  goal          ScanGoal
-  mode          ScanMode @default(SAFE)
-  enabled       Boolean  @default(true)
-  lastRunAt     DateTime?
-  nextRunAt     DateTime?
-  createdById   String
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String    @id @default(cuid())
+  workspaceId String
+  targetId    String
+  cron        String
+  goal        ScanGoal
+  mode        ScanMode  @default(SAFE)
+  enabled     Boolean   @default(true)
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+  createdById String
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  target        Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target    Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([targetId])
@@ -1083,36 +1151,36 @@ model Schedule {
 }
 
 model BillingAccount {
-  id              String   @id @default(cuid())
-  workspaceId     String   @unique
-  provider        String   @default("polar")
-  externalId      String?
-  status          String   @default("free")
-  currentPlan     WorkspacePlan @default(FREE)
-  trialEndsAt     DateTime?
-  deletedAt       DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id          String        @id @default(cuid())
+  workspaceId String        @unique
+  provider    String        @default("polar")
+  externalId  String?
+  status      String        @default("free")
+  currentPlan WorkspacePlan @default(FREE)
+  trialEndsAt DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([externalId])
 }
 
 model Invitation {
-  id            String     @id @default(cuid())
-  workspaceId   String
-  email         String
-  role          MemberRole @default(MEMBER)
-  token         String   @unique
-  status        String   @default("pending")
-  invitedById   String
-  expiresAt     DateTime
-  acceptedAt    DateTime?
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
+  id          String     @id @default(cuid())
+  workspaceId String
+  email       String
+  role        MemberRole @default(MEMBER)
+  token       String     @unique
+  status      String     @default("pending")
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime   @default(now())
 
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([email])
@@ -1121,18 +1189,18 @@ model Invitation {
 }
 
 model WebhookEvent {
-  id            String   @id @default(cuid())
-  workspaceId   String?
-  provider      String
-  eventType     String
-  externalId    String
-  payload       Json
-  processed     Boolean  @default(false)
-  processedAt   DateTime?
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
+  id          String    @id @default(cuid())
+  workspaceId String?
+  provider    String
+  eventType   String
+  externalId  String
+  payload     Json
+  processed   Boolean   @default(false)
+  processedAt DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
 
-  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([provider, externalId])
   @@index([workspaceId])
@@ -1140,19 +1208,19 @@ model WebhookEvent {
 }
 
 model Retest {
-  id            String   @id @default(cuid())
-  workspaceId   String
-  findingId     String
-  scanId        String
-  status        String   @default("pending")
-  resultBefore  String?
-  resultAfter   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  workspaceId  String
+  findingId    String
+  scanId       String
+  status       String   @default("pending")
+  resultBefore String?
+  resultAfter  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  finding       Finding   @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  scan          Scan      @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  finding   Finding   @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  scan      Scan      @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([findingId])
@@ -1184,7 +1252,7 @@ model AgentApproval {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([status])
@@ -1192,33 +1260,33 @@ model AgentApproval {
 }
 
 model OnboardingState {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  currentStep     Int      @default(0)
-  completed       Boolean  @default(false)
-  skipped         Boolean  @default(false)
-  workspaceId     String?
-  targetId        String?
-  selectedGoal    String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  currentStep  Int      @default(0)
+  completed    Boolean  @default(false)
+  skipped      Boolean  @default(false)
+  workspaceId  String?
+  targetId     String?
+  selectedGoal String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([userId])
   @@map("onboarding_states")
 }
 
 model NotificationPreference {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
-  emailDigest         Boolean  @default(true)
-  emailInstant        Boolean  @default(true)
-  inAppInstant        Boolean  @default(true)
-  inAppDigest         Boolean  @default(true)
-  pushEnabled         Boolean  @default(false)
-  quietHoursStart     Int?
-  quietHoursEnd       Int?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @default(now()) @updatedAt
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  emailDigest     Boolean  @default(true)
+  emailInstant    Boolean  @default(true)
+  inAppInstant    Boolean  @default(true)
+  inAppDigest     Boolean  @default(true)
+  pushEnabled     Boolean  @default(false)
+  quietHoursStart Int?
+  quietHoursEnd   Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
   @@index([userId])
   @@map("notification_preferences")

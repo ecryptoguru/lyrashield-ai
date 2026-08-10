@@ -48,12 +48,12 @@ describe("scanUrl", () => {
       </script>
     `
     mockFetch.mockResolvedValueOnce(makeResponse(html))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.some((finding) => finding.id.includes("supabase"))).toBe(false)
+    expect(findings.some((finding) => finding.id.includes("privileged-secret"))).toBe(false)
   })
 
   it("detects Supabase service_role keys without retaining the key", async () => {
@@ -65,13 +65,13 @@ describe("scanUrl", () => {
       </script>
     `
     mockFetch.mockResolvedValueOnce(makeResponse(html))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const finding = findings.find((candidate) => candidate.id.includes("supabase-privileged-key"))
-    expect(finding).toMatchObject({ severity: "CRITICAL", control_ids: [3] })
+    const finding = findings.find((candidate) => candidate.id.includes("privileged-secret"))
+    expect(finding).toMatchObject({ severity: "critical", control_ids: [3] })
     expect(JSON.stringify(finding)).not.toContain("signature123")
   })
 
@@ -85,23 +85,23 @@ describe("scanUrl", () => {
       </script>
     `
     mockFetch.mockResolvedValueOnce(makeResponse(html))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.some((finding) => finding.id.includes("firebase"))).toBe(false)
+    expect(findings.some((finding) => finding.id.includes("privileged-secret"))).toBe(false)
     expect(findings.some((finding) => finding.id.includes("generic-api-key"))).toBe(false)
   })
 
   it("detects missing security headers", async () => {
     mockFetch.mockResolvedValueOnce(makeResponse("<html></html>", {}))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const headerFindings = findings.filter((f) => f.id.includes("missing-header"))
+    const headerFindings = findings.filter((f) => f.id.includes("-missing"))
     expect(headerFindings.length).toBeGreaterThanOrEqual(3)
     expect(headerFindings.every((finding) => finding.control_ids?.includes(27))).toBe(true)
   })
@@ -113,14 +113,16 @@ describe("scanUrl", () => {
         "strict-transport-security": "max-age=31536000",
         "x-frame-options": "DENY",
         "x-content-type-options": "nosniff",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "permissions-policy": "camera=()",
       })
     )
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const headerFindings = findings.filter((f) => f.id.includes("missing-header"))
+    const headerFindings = findings.filter((f) => f.id.includes("-missing"))
     expect(headerFindings).toHaveLength(0)
   })
 
@@ -131,7 +133,7 @@ describe("scanUrl", () => {
         "access-control-allow-credentials": "true",
       })
     )
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -142,7 +144,7 @@ describe("scanUrl", () => {
   it("does not claim predictable identifiers prove IDOR", async () => {
     const html = `<script>fetch('/api/users/12345').then(r => r.json())</script>`
     mockFetch.mockResolvedValueOnce(makeResponse(html))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -153,7 +155,7 @@ describe("scanUrl", () => {
   it("does not turn an AI-builder attribution marker into a security finding", async () => {
     const html = `<html><!-- Built with Lovable --></html>`
     mockFetch.mockResolvedValueOnce(makeResponse(html))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -164,7 +166,7 @@ describe("scanUrl", () => {
   it("does not claim a dynamic redirect assignment proves an open redirect", async () => {
     const html = `<script>window.location = redirectUrl;</script>`
     mockFetch.mockResolvedValueOnce(makeResponse(html))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -175,25 +177,25 @@ describe("scanUrl", () => {
   it("detects exposed Stripe key", async () => {
     const html = `<script>const stripe = Stripe("sk_live_AbCdEf1234567890AbCdEf12")</script>`
     mockFetch.mockResolvedValueOnce(makeResponse(html))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const stripeFinding = findings.find((f) => f.id.includes("stripe-secret-key"))
+    const stripeFinding = findings.find((f) => f.id.includes("privileged-secret"))
     expect(stripeFinding).toBeDefined()
-    expect(stripeFinding!.severity).toBe("HIGH")
+    expect(stripeFinding!.severity).toBe("critical")
     expect(stripeFinding!.control_ids).toEqual([3])
   })
 
   it("detects cleartext HTTP transport", async () => {
     mockFetch.mockResolvedValueOnce(makeResponse("<html></html>"))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "http://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.find((finding) => finding.id === "url-insecure-http")).toMatchObject({
+    expect(findings.find((finding) => finding.id.includes("insecure-transport"))).toMatchObject({
       cwe: "CWE-319",
       control_ids: [29],
     })
@@ -203,12 +205,12 @@ describe("scanUrl", () => {
     mockFetch
       .mockResolvedValueOnce(makeResponse("", { location: "https://example.com/final" }, 302))
       .mockResolvedValueOnce(makeResponse("<html></html>"))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "http://example.com/start",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.some((finding) => finding.id === "url-insecure-http")).toBe(true)
+    expect(findings.some((finding) => finding.id.includes("insecure-transport"))).toBe(true)
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 
@@ -216,12 +218,12 @@ describe("scanUrl", () => {
     mockFetch.mockResolvedValueOnce(
       makeResponse("<html></html>", { "set-cookie": "sessionToken=super-secret-value; Path=/" })
     )
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const cookieFinding = findings.find((finding) => finding.id === "url-insecure-cookie-0")
+    const cookieFinding = findings.find((finding) => finding.id.includes("insecure-cookie"))
     expect(cookieFinding?.title).toContain("Secure, HttpOnly, SameSite")
     expect(cookieFinding?.control_ids).toEqual([28])
     expect(JSON.stringify(cookieFinding)).not.toContain("super-secret-value")
@@ -233,24 +235,24 @@ describe("scanUrl", () => {
         "set-cookie": "sessionToken=value; Path=/; Secure; HttpOnly; SameSite=Lax",
       })
     )
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.some((finding) => finding.id.startsWith("url-insecure-cookie"))).toBe(false)
+    expect(findings.some((finding) => finding.id.includes("insecure-cookie"))).toBe(false)
   })
 
   it("detects exposed stack traces", async () => {
     mockFetch.mockResolvedValueOnce(
       makeResponse("<pre>Error: failed\n at handler (/srv/app/routes/users.js:42:7)</pre>")
     )
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.find((finding) => finding.id === "url-verbose-error")).toMatchObject({
+    expect(findings.find((finding) => finding.id.includes("verbose-error"))).toMatchObject({
       cwe: "CWE-209",
       control_ids: [31],
     })
@@ -258,12 +260,12 @@ describe("scanUrl", () => {
 
   it("detects production source-map references", async () => {
     mockFetch.mockResolvedValueOnce(makeResponse('<script src="/assets/app.js.map"></script>'))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.find((finding) => finding.id === "url-source-map-exposed")).toMatchObject({
+    expect(findings.find((finding) => finding.id.includes("source-map"))).toMatchObject({
       cwe: "CWE-540",
       control_ids: [32],
     })
@@ -271,7 +273,7 @@ describe("scanUrl", () => {
 
   it("returns empty array when fetch fails", async () => {
     mockFetch.mockRejectedValueOnce(new Error("Network error"))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -281,7 +283,7 @@ describe("scanUrl", () => {
 
   it("returns empty array when fetch returns null", async () => {
     mockFetch.mockResolvedValueOnce(null)
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch as unknown as typeof fetch,
       resolver: stubResolver,
@@ -292,12 +294,12 @@ describe("scanUrl", () => {
   it("does not infer missing webhook verification from a public bundle", async () => {
     const html = `<script>fetch('/api/webhook/stripe', { method: 'POST', body: JSON.stringify({ event: 'payment' }) })</script>`
     mockFetch.mockResolvedValueOnce(makeResponse(html))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    expect(findings.some((finding) => finding.id.includes("webhook-no-verification"))).toBe(false)
+    expect(findings.some((finding) => finding.id.includes("webhook"))).toBe(false)
   })
 
   it("does not produce duplicate Google API key finding when Firebase config is present", async () => {
@@ -310,7 +312,7 @@ describe("scanUrl", () => {
       </script>
     `
     mockFetch.mockResolvedValueOnce(makeResponse(html))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -325,19 +327,21 @@ describe("scanUrl", () => {
         "Strict-Transport-Security": "max-age=31536000",
         "X-Frame-Options": "DENY",
         "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=()",
       })
     )
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
     })
-    const headerFindings = findings.filter((f) => f.id.includes("missing-header"))
+    const headerFindings = findings.filter((f) => f.id.includes("-missing"))
     expect(headerFindings).toHaveLength(0)
   })
 
   it("blocks SSRF — skips fetch to localhost", async () => {
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "http://localhost:3000",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -347,7 +351,7 @@ describe("scanUrl", () => {
   })
 
   it("blocks SSRF — skips fetch to private IP range", async () => {
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "http://192.168.1.1/admin",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -357,7 +361,7 @@ describe("scanUrl", () => {
   })
 
   it("blocks a hostname that resolves to a private address at fetch time", async () => {
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://rebind.example.test",
       fetchFn: mockFetch,
       resolver: async () => ["169.254.169.254"],
@@ -382,7 +386,7 @@ describe("scanUrl", () => {
     // resolver is required like every other case in this file: without it the
     // initial host resolution hits real DNS, so the scan aborts before fetching
     // and this assertion fails for an unrelated reason in offline environments.
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -393,7 +397,7 @@ describe("scanUrl", () => {
   })
 
   it("blocks SSRF — skips fetch to 10.x range", async () => {
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "http://10.0.0.1/internal",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -403,7 +407,7 @@ describe("scanUrl", () => {
   })
 
   it("blocks SSRF — skips non-HTTP protocols", async () => {
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "file:///etc/passwd",
       fetchFn: mockFetch as unknown as typeof fetch,
       resolver: stubResolver,
@@ -417,7 +421,7 @@ describe("scanUrl — SSRF protection (fetch-time)", () => {
   it("blocks a target whose hostname resolves to the cloud-metadata IP (rebinding)", async () => {
     const rebindResolver: HostResolver = async () => ["169.254.169.254"]
     mockFetch.mockResolvedValue(makeResponse("<html></html>"))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://internal.attacker.example",
       fetchFn: mockFetch,
       resolver: rebindResolver,
@@ -428,7 +432,7 @@ describe("scanUrl — SSRF protection (fetch-time)", () => {
 
   it("blocks a decimal-encoded loopback address (http://2130706433 = 127.0.0.1)", async () => {
     mockFetch.mockResolvedValue(makeResponse("<html></html>"))
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "http://2130706433/",
       fetchFn: mockFetch,
       resolver: stubResolver,
@@ -442,7 +446,7 @@ describe("scanUrl — SSRF protection (fetch-time)", () => {
     mockFetch.mockResolvedValueOnce(
       makeResponse("", { location: "http://169.254.169.254/latest/meta-data/" }, 302)
     )
-    const findings = await scanUrl({
+    const { findings } = await scanUrl({
       targetUrl: "https://example.com",
       fetchFn: mockFetch,
       resolver: async (host: string) =>

@@ -65,6 +65,7 @@ export default async function TargetsPage({
     name: t.name,
     type: t.type,
     url: t.url,
+    apiSpecUrl: t.apiSpecUrl,
     repoFullName: t.repoFullName,
     branch: t.branch,
     environment: t.environment,

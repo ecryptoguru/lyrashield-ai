@@ -29,7 +29,13 @@ export interface SafeFetchResult {
   headers: Record<string, string>
   finalUrl: string
   urlHistory: string[]
+  /** Bytes actually read into the in-memory body. May be less than the response content-length. */
+  bodyBytes: number
+  /** True when the response body was capped before the end of the declared or observed stream. */
+  bodyTruncated: boolean
 }
+
+export type SafeFetchMethod = "GET" | "HEAD" | "OPTIONS"
 
 export interface SafeFetchOptions {
   timeoutMs?: number
@@ -42,6 +48,12 @@ export interface SafeFetchOptions {
   resolver?: HostResolver
   /** Cancels the request and body read when its owning scan phase stops. */
   signal?: AbortSignal
+  /** Request method. Only safe, read-only methods are allowed. */
+  method?: SafeFetchMethod
+  /** Optional `Origin` request header value. */
+  origin?: string
+  /** Optional `Accept` request header value. */
+  accept?: string
 }
 
 export const DEFAULT_TIMEOUT_MS = 15_000
@@ -210,6 +222,9 @@ export async function safeFetchOnce(
     fetchFn,
     resolver,
     signal: externalSignal,
+    method = "GET",
+    origin,
+    accept,
   } = options
 
   if (externalSignal?.aborted) return { ok: false, reason: "aborted" }
@@ -243,12 +258,14 @@ export async function safeFetchOnce(
   const headers: Record<string, string> = {
     "User-Agent": userAgent,
   }
+  if (origin) headers["Origin"] = origin
+  if (accept) headers["Accept"] = accept
 
   const dispatcher = fetchFn ? undefined : createPinnedDispatcher(check.addresses)
   let res: Response
   try {
     const baseInit = {
-      method: "GET",
+      method,
       redirect: "manual" as const,
       signal: controller.signal,
       headers,
@@ -298,12 +315,14 @@ export async function safeFetchOnce(
         headers: responseHeaders,
         finalUrl: rawUrl,
         urlHistory: [rawUrl],
+        bodyBytes: 0,
+        bodyTruncated: false,
       },
     }
   }
 
   try {
-    const html = await readBounded(res, maxBytes)
+    const { html, bodyBytes, bodyTruncated } = await readBounded(res, maxBytes)
     clearTimeout(timer)
     externalSignal?.removeEventListener("abort", onExternalAbort)
     await dispatcher?.destroy()
@@ -315,6 +334,8 @@ export async function safeFetchOnce(
         headers: responseHeaders,
         finalUrl: rawUrl,
         urlHistory: [rawUrl],
+        bodyBytes,
+        bodyTruncated,
       },
     }
   } catch (err) {
@@ -339,32 +360,58 @@ function createPinnedDispatcher(addresses: string[]): Agent {
   return new Agent({ connect: { lookup } })
 }
 
-async function readBounded(res: Response, maxBytes: number): Promise<string> {
-  if (!res.body) return await res.text()
+async function readBounded(
+  res: Response,
+  maxBytes: number
+): Promise<{ html: string; bodyBytes: number; bodyTruncated: boolean }> {
+  const contentLengthHeader = res.headers.get("content-length")
+  const contentLength = contentLengthHeader ? Number(contentLengthHeader) : NaN
+
+  if (!res.body) {
+    const html = await res.text()
+    const bodyBytes = Buffer.byteLength(html, "utf8")
+    const bodyTruncated = Number.isFinite(contentLength) ? bodyBytes < contentLength : false
+    return { html, bodyBytes, bodyTruncated }
+  }
+
   const reader = res.body.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
+  let bodyTruncated = false
+
   try {
     for (;;) {
       const { done, value } = await reader.read()
-      if (done) break
+      if (done) {
+        bodyTruncated = Number.isFinite(contentLength) && total < contentLength
+        break
+      }
       if (value) {
         const remaining = Math.max(0, maxBytes - total)
-        if (remaining === 0) break
+        if (remaining === 0) {
+          bodyTruncated = true
+          break
+        }
 
         if (value.byteLength > remaining) {
           chunks.push(value.subarray(0, remaining))
           total += remaining
+          bodyTruncated = true
           break
         }
 
         chunks.push(value)
         total += value.byteLength
-        if (total === maxBytes) break
+        if (total === maxBytes) {
+          bodyTruncated = true
+          break
+        }
       }
     }
   } finally {
     await reader.cancel().catch(() => {})
   }
-  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf-8")
+
+  const html = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf-8")
+  return { html, bodyBytes: total, bodyTruncated }
 }

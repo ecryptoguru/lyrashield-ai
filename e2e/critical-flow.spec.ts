@@ -154,6 +154,54 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   const { data: target } = await targetResponse.json()
   const targetId = target.id as string
 
+  const apiTargetResponse = await page.request.post("/api/targets", {
+    data: {
+      workspaceId,
+      name: "API without contract",
+      type: "API",
+      url: "https://example.com/api",
+      environment: "STAGING",
+      ownershipAttested: true,
+    },
+    headers: { "x-forwarded-for": forwardedFor },
+  })
+  await expect(apiTargetResponse).toBeOK()
+
+  const contractTargetResponse = await page.request.post("/api/targets", {
+    data: {
+      workspaceId,
+      name: "API with contract",
+      type: "API",
+      url: "https://example.com/api/contract",
+      apiSpecUrl: "https://example.com/openapi.json",
+      environment: "STAGING",
+      ownershipAttested: true,
+    },
+    headers: { "x-forwarded-for": forwardedFor },
+  })
+  await expect(contractTargetResponse).toBeOK()
+
+  await page.goto("/dashboard/scans?new=1")
+  const targetSelect = page.getByLabel("Target")
+  await targetSelect.selectOption({ label: "Example target (WEB_APP)" })
+  await expect(page.getByRole("radio", { name: /^Surface Review:/ })).toBeEnabled()
+  await expect(page.getByRole("radio", { name: /^Expanded Surface Review:/ })).toBeEnabled()
+  const webDeep = page.getByRole("radio", { name: /^Behavioral Surface Review:/ })
+  await expect(webDeep).toBeEnabled()
+  await webDeep.click()
+
+  await targetSelect.selectOption({ label: "API without contract (API)" })
+  await expect(page.getByRole("radio", { name: /^Endpoint Review:/ })).toBeEnabled()
+  await expect(page.getByRole("radio", { name: /^Contract Review:/ })).toBeDisabled()
+  await expect(page.getByRole("radio", { name: /^Contract Behavior Review:/ })).toBeDisabled()
+  await expect(page.getByRole("status").filter({ hasText: "Review type reset" })).toContainText(
+    "Endpoint Review"
+  )
+
+  await targetSelect.selectOption({ label: "API with contract (API)" })
+  await expect(page.getByRole("radio", { name: /^Contract Review:/ })).toBeEnabled()
+  await expect(page.getByRole("radio", { name: /^Contract Behavior Review:/ })).toBeEnabled()
+
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: ownerEmail } })
   const scan = await withWorkspaceRLS(workspaceId, async (tx) => {
     const created = await tx.scan.create({

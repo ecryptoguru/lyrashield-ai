@@ -14,6 +14,7 @@ import { env, isProd, isDev } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { isOAuthProviderConfigured } from "./oauth-providers"
 import { activeWorkspaceIdFromCookie } from "./oauth-workspace"
+import { resourcesMatch } from "./oauth-resource"
 import { hasPermission, PERMISSIONS } from "./permissions"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
@@ -72,6 +73,16 @@ const oauthProviderPlugin = oauthProvider({
   consentPage: "/oauth/consent",
   scopes: oauthScopes,
   validAudiences: [OAUTH_RESOURCE, env.NEXT_PUBLIC_APP_URL],
+  resources: [
+    {
+      identifier: OAUTH_RESOURCE,
+      name: "LyraShield MCP",
+      allowedScopes: oauthScopes,
+    },
+  ],
+  // There is one hosted resource. Existing and dynamically registered MCP
+  // clients may request it without a separate administrative link step.
+  enforcePerClientResources: false,
   allowDynamicClientRegistration: true,
   allowUnauthenticatedClientRegistration: true,
   allowPublicClientPrelogin: true,
@@ -107,8 +118,8 @@ const oauthProviderPlugin = oauthProvider({
       return workspaceId
     },
   },
-  customAccessTokenClaims: async ({ user, scopes, referenceId, resource }) => {
-    if (!user || !referenceId || (resource && resource !== OAUTH_RESOURCE)) return {}
+  customAccessTokenClaims: async ({ user, scopes, referenceId, resources }) => {
+    if (!user || !referenceId || !resourcesMatch(resources, OAUTH_RESOURCE)) return {}
 
     const member = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId: referenceId, userId: user.id } },
