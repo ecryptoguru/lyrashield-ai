@@ -423,3 +423,5 @@ export const FindingQuerySchema = z.object({
 })
 
 export type FindingQueryInput = z.infer<typeof FindingQuerySchema>
+
+export * from "./url-scan-capabilities"
