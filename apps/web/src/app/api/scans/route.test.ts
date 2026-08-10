@@ -376,7 +376,7 @@ describe("POST /api/scans", () => {
     apiSpecUrl: null,
   }
 
-  it.each(["STANDARD", "DEEP", "CUSTOM"])("rejects unavailable %s for a URL target", async (mode) => {
+  it.each(["DEEP", "CUSTOM"])("rejects unavailable %s for a URL target", async (mode) => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
 
     const res = await POST(
@@ -420,6 +420,39 @@ describe("POST /api/scans", () => {
         targetId: "web-1",
         goal: "TEST_APP",
         mode: "QUICK",
+      })
+    )
+
+    expect(res.status).toBe(201)
+    expect(enqueueScanJob).toHaveBeenCalled()
+  })
+
+  it("allows STANDARD for a web target", async () => {
+    vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-web-std",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      triggerType: "manual",
+      startedAt: null,
+      endedAt: null,
+      durationMs: null,
+      summary: null,
+      errorCategory: null,
+      errorMessage: null,
+      targetId: "web-1",
+      createdAt: new Date(),
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-safe",
+        targetId: "web-1",
+        goal: "TEST_APP",
+        mode: "STANDARD",
       })
     )
 

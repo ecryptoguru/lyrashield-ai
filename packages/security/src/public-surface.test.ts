@@ -50,6 +50,14 @@ function countIssues(collection: SurfaceCollection, code: string) {
   return collection.issues.filter((i) => i.code === code).length
 }
 
+function documentUrls(collection: SurfaceCollection) {
+  return collection.subjects.filter((s) => s.kind === "document").map((s) => s.requestedUrl)
+}
+
+function sourceMaps(collection: SurfaceCollection) {
+  return collection.subjects.filter((s) => s.kind === "source_map").map((s) => s.requestedUrl)
+}
+
 describe("collectPublicSurface", () => {
   it("collects the seed and at most six same-origin assets for Safe", async () => {
     const { fetchFn } = immediateFetch(["/a.js", "/b.js", "/c.js"])
@@ -382,6 +390,238 @@ describe("collectPublicSurface", () => {
     })
 
     expect(collection.totalBytes).toBeLessThanOrEqual(2000)
+    expect(countIssues(collection, "LIMIT_REACHED")).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe("Standard web discovery", () => {
+  function buildStandardFetch(pages: Record<string, { html?: string; status?: number; headers?: Record<string, string>; redirect?: string }>) {
+    return vi.fn(async (url: string, init: RequestInit) => {
+      if (init.signal?.aborted) {
+        throw new DOMException("aborted", "AbortError")
+      }
+      const page = pages[url]
+      if (!page) {
+        return new Response("not found", { status: 404 })
+      }
+      if (page.redirect) {
+        return new Response(null, {
+          status: 302,
+          headers: { location: page.redirect, "content-type": "text/html" },
+        })
+      }
+      return new Response(page.html ?? "", {
+        status: page.status ?? 200,
+        headers: { "content-type": "text/html", ...(page.headers ?? {}) },
+      })
+    })
+  }
+
+  const graphBase = {
+    "https://example.com/": {
+      html: `<html><body>
+        <a href="/about">about</a>
+        <a href="/account">account</a>
+        <a href="/docs">docs</a>
+        <a href="https://outside.example/path">outside</a>
+        <script src="/a.js"></script>
+      </body></html>`,
+    },
+    "https://example.com/about": {
+      html: `<html><body>
+        <a href="/contact">contact</a>
+        <script src="/about.js"></script>
+      </body></html>`,
+    },
+    "https://example.com/account": { html: "<html><body>account</body></html>" },
+    "https://example.com/docs": { html: "<html><body>docs</body></html>" },
+    "https://example.com/contact": { html: "<html><body>contact</body></html>" },
+    "https://example.com/a.js": { html: "// a", headers: { "content-type": "application/javascript" } },
+    "https://example.com/about.js": { html: "// about", headers: { "content-type": "application/javascript" } },
+  }
+
+  it("performs bounded BFS, drops cross-origin links, and reports truncation", async () => {
+    const fetchFn = buildStandardFetch(graphBase)
+    const profile = getUrlScanProfile("WEB_APP", "STANDARD")
+    const collection = await collectPublicSurface({
+      seedUrl: "https://example.com/",
+      profile: { ...profile, maxDocuments: 4 },
+      userAgent: "LyraShield-Test/1.0",
+      fetchFn,
+      resolver: defaultResolver(),
+    })
+
+    expect(documentUrls(collection)).toEqual([
+      "https://example.com/",
+      "https://example.com/about",
+      "https://example.com/account",
+      "https://example.com/docs",
+    ])
+    expect(documentUrls(collection)).not.toContain("https://outside.example/path")
+    expect(documentUrls(collection)).not.toContain("https://example.com/contact")
+    expect(collection.subjects.filter((s) => s.kind === "document").length).toBeLessThanOrEqual(4)
+    expect(collection.truncated).toBe(true)
+    expect(countIssues(collection, "LIMIT_REACHED")).toBeGreaterThanOrEqual(1)
+  })
+
+  it("reaches depth 2 when the document limit allows", async () => {
+    const fetchFn = buildStandardFetch(graphBase)
+    const profile = getUrlScanProfile("WEB_APP", "STANDARD")
+    const collection = await collectPublicSurface({
+      seedUrl: "https://example.com/",
+      profile: { ...profile, maxDocuments: 5 },
+      userAgent: "LyraShield-Test/1.0",
+      fetchFn,
+      resolver: defaultResolver(),
+    })
+
+    expect(documentUrls(collection)).toContain("https://example.com/contact")
+    expect(collection.subjects.filter((s) => s.kind === "document").length).toBe(5)
+  })
+
+  it("orders discovered documents deterministically regardless of HTML link order", async () => {
+    const fetchFn = buildStandardFetch({
+      ...graphBase,
+      "https://example.com/": {
+        html: `<html><body>
+          <a href="/docs">docs</a>
+          <a href="/account">account</a>
+          <a href="/about">about</a>
+          <a href="https://outside.example/path">outside</a>
+          <script src="/a.js"></script>
+        </body></html>`,
+      },
+    })
+    const profile = getUrlScanProfile("WEB_APP", "STANDARD")
+    const collection = await collectPublicSurface({
+      seedUrl: "https://example.com/",
+      profile: { ...profile, maxDocuments: 4 },
+      userAgent: "LyraShield-Test/1.0",
+      fetchFn,
+      resolver: defaultResolver(),
+    })
+
+    expect(documentUrls(collection)).toEqual([
+      "https://example.com/",
+      "https://example.com/about",
+      "https://example.com/account",
+      "https://example.com/docs",
+    ])
+  })
+
+  it("collects robots and sitemap declarations and turns <loc> entries into documents", async () => {
+    const fetchFn = buildStandardFetch({
+      ...graphBase,
+      "https://example.com/robots.txt": {
+        html: "Sitemap: https://example.com/sitemap-robots.xml",
+        headers: { "content-type": "text/plain" },
+      },
+      "https://example.com/sitemap.xml": {
+        html: "<urlset></urlset>",
+        headers: { "content-type": "application/xml" },
+      },
+      "https://example.com/sitemap-robots.xml": {
+        html: `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://example.com/sitemap-page</loc></url></urlset>`,
+        headers: { "content-type": "application/xml" },
+      },
+      "https://example.com/sitemap-page": { html: "<html><body>sitemap page</body></html>" },
+    })
+    const profile = getUrlScanProfile("WEB_APP", "STANDARD")
+    const collection = await collectPublicSurface({
+      seedUrl: "https://example.com/",
+      profile: { ...profile, maxDocuments: 10 },
+      userAgent: "LyraShield-Test/1.0",
+      fetchFn,
+      resolver: defaultResolver(),
+    })
+
+    expect(collection.subjects.some((s) => s.kind === "robots")).toBe(true)
+    expect(collection.subjects.some((s) => s.kind === "sitemap")).toBe(true)
+    expect(documentUrls(collection)).toContain("https://example.com/sitemap-page")
+  })
+
+  it("records an out-of-scope issue when a sitemap entry redirects off-origin", async () => {
+    const fetchFn = buildStandardFetch({
+      ...graphBase,
+      "https://example.com/sitemap.xml": {
+        html: `<urlset><url><loc>https://example.com/redirect-to-private</loc></url></urlset>`,
+        headers: { "content-type": "application/xml" },
+      },
+      "https://example.com/redirect-to-private": {
+        redirect: "https://other.test/page",
+      },
+      "https://other.test/page": { html: "<html><body>other</body></html>" },
+    })
+    const profile = getUrlScanProfile("WEB_APP", "STANDARD")
+    const collection = await collectPublicSurface({
+      seedUrl: "https://example.com/",
+      profile,
+      userAgent: "LyraShield-Test/1.0",
+      fetchFn,
+      resolver: defaultResolver(),
+    })
+
+    expect(documentUrls(collection)).not.toContain("https://other.test/page")
+    expect(countIssues(collection, "OUT_OF_SCOPE")).toBeGreaterThanOrEqual(1)
+  })
+
+  it("records the asset limit and keeps asset count within the profile", async () => {
+    const fetchFn = buildStandardFetch(graphBase)
+    const profile = getUrlScanProfile("WEB_APP", "STANDARD")
+    const collection = await collectPublicSurface({
+      seedUrl: "https://example.com/",
+      profile: { ...profile, maxAssets: 1 },
+      userAgent: "LyraShield-Test/1.0",
+      fetchFn,
+      resolver: defaultResolver(),
+    })
+
+    expect(collection.subjects.filter((s) => s.kind === "asset").length).toBeLessThanOrEqual(1)
+    expect(countIssues(collection, "LIMIT_REACHED")).toBeGreaterThanOrEqual(1)
+  })
+
+  it("fetches same-origin source maps referenced by collected assets", async () => {
+    const fetchFn = buildStandardFetch({
+      ...graphBase,
+      "https://example.com/about.js": {
+        html: "// about\n//# sourceMappingURL=/about.js.map",
+        headers: { "content-type": "application/javascript" },
+      },
+      "https://example.com/about.js.map": {
+        html: '{"version":3,"sources":["about.js"]}',
+        headers: { "content-type": "application/json" },
+      },
+    })
+    const profile = getUrlScanProfile("WEB_APP", "STANDARD")
+    const collection = await collectPublicSurface({
+      seedUrl: "https://example.com/",
+      profile,
+      userAgent: "LyraShield-Test/1.0",
+      fetchFn,
+      resolver: defaultResolver(),
+    })
+
+    expect(sourceMaps(collection)).toContain("https://example.com/about.js.map")
+    expect(collection.subjects.some((s) => s.kind === "source_map")).toBe(true)
+  })
+
+  it("aborts when the caller signal is cancelled", async () => {
+    const fetchFn = buildStandardFetch(graphBase)
+    const controller = new AbortController()
+    const profile = getUrlScanProfile("WEB_APP", "STANDARD")
+    const promise = collectPublicSurface({
+      seedUrl: "https://example.com/",
+      profile: { ...profile, maxDocuments: 100 },
+      userAgent: "LyraShield-Test/1.0",
+      fetchFn,
+      resolver: defaultResolver(),
+      signal: controller.signal,
+    })
+
+    controller.abort()
+    const collection = await promise
+
+    expect(collection.truncated).toBe(true)
     expect(countIssues(collection, "LIMIT_REACHED")).toBeGreaterThanOrEqual(1)
   })
 })

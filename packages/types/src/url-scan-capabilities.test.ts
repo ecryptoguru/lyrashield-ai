@@ -56,11 +56,7 @@ describe("URL scan capabilities", () => {
 
   it("requires an OpenAPI URL for API Standard and Deep", () => {
     expect(getUrlModeAvailability("API", "SAFE", false)).toEqual({ available: true })
-    expect(getUrlModeAvailability("WEB_APP", "STANDARD", false)).toEqual({
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Expanded Surface Review is not available yet.",
-    })
+    expect(getUrlModeAvailability("WEB_APP", "STANDARD", false)).toEqual({ available: true })
     expect(getUrlModeAvailability("API", "STANDARD", false)).toEqual({
       available: false,
       code: "URL_MODE_UNAVAILABLE",

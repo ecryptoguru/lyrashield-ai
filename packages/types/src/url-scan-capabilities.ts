@@ -178,6 +178,7 @@ export type UrlModeAvailability =
 
 export const RELEASED_URL_PROFILE_IDS = new Set<string>([
   "WEB_APP_SAFE",
+  "WEB_APP_STANDARD",
   "API_SAFE",
 ])
 
