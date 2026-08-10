@@ -32,9 +32,9 @@ describe("getManualScanOptions", () => {
     expect(options.every((o) => o.available)).toBe(true)
   })
 
-  it("returns Safe and Standard web review options", () => {
+  it("returns Safe, Standard, and Deep web review options", () => {
     const options = getManualScanOptions({ type: "WEB_APP" })
-    expect(options.map((o) => o.id)).toEqual(["WEB_APP_SAFE", "WEB_APP_STANDARD"])
+    expect(options.map((o) => o.id)).toEqual(["WEB_APP_SAFE", "WEB_APP_STANDARD", "WEB_APP_DEEP"])
     expect(options[0]).toMatchObject({
       id: "WEB_APP_SAFE",
       label: "Surface Review",
@@ -49,6 +49,14 @@ describe("getManualScanOptions", () => {
       mode: "STANDARD",
       goal: "TEST_APP",
       estimate: { low: 4, high: 6 },
+      available: true,
+    })
+    expect(options[2]).toMatchObject({
+      id: "WEB_APP_DEEP",
+      label: "Behavioral Surface Review",
+      mode: "DEEP",
+      goal: "FULL_PENTEST",
+      estimate: { low: 8, high: 15 },
       available: true,
     })
   })

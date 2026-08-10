@@ -11,6 +11,7 @@ import {
 import { getUrlScanProfile, type UrlScanProfile } from "@lyrashield/types"
 import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
+import { runUrlBehaviorProbes } from "./url-behavior-probes"
 
 export interface UrlScanConfig {
   targetUrl: string
@@ -31,6 +32,8 @@ export type UrlExecutionSummary = {
   subjectCount: number
   totalBytes: number
   truncated: boolean
+  methodProbes: number
+  originProbes: number
   issues: SurfaceCollectionIssue[]
 }
 
@@ -44,6 +47,8 @@ function controlToCwe(controlId: number | undefined): string {
   switch (controlId) {
     case 3:
       return "CWE-798"
+    case 14:
+      return "CWE-942"
     case 27:
       return "CWE-693"
     case 28:
@@ -76,7 +81,11 @@ function toEngineVulnerability(signal: SurfaceSignal): EngineVulnerability {
   }
 }
 
-function buildExecution(collection: SurfaceCollection): UrlExecutionSummary {
+function buildExecution(
+  collection: SurfaceCollection,
+  methodProbes = 0,
+  originProbes = 0
+): UrlExecutionSummary {
   return {
     contractVersion: collection.contractVersion,
     profile: collection.profile.id,
@@ -84,6 +93,8 @@ function buildExecution(collection: SurfaceCollection): UrlExecutionSummary {
     subjectCount: collection.subjects.length,
     totalBytes: collection.totalBytes,
     truncated: collection.truncated,
+    methodProbes,
+    originProbes,
     issues: collection.issues,
   }
 }
@@ -124,6 +135,29 @@ export async function scanUrl(config: UrlScanConfig): Promise<UrlScannerResult> 
   }
 
   const signals = analyzePublicSurface(collection)
+
+  let methodProbes = 0
+  let originProbes = 0
+
+  if (profile.id === "WEB_APP_DEEP") {
+    const probeResult = await runUrlBehaviorProbes({
+      collection,
+      fetchFn,
+      resolver,
+      signal,
+    })
+
+    collection.subjects.push(...probeResult.subjects)
+    collection.issues.push(...probeResult.issues)
+    for (const signal of probeResult.signals) {
+      if (!signals.find((s) => s.id === signal.id)) {
+        signals.push(signal)
+      }
+    }
+    methodProbes = probeResult.subjects.filter((s) => s.method === "HEAD" || s.method === "OPTIONS").length
+    originProbes = probeResult.subjects.filter((s) => s.method === "GET").length
+  }
+
   const findings = signals.filter(isDetectedSignal).map(toEngineVulnerability)
 
   logger.info("URL scan complete", {
@@ -132,7 +166,7 @@ export async function scanUrl(config: UrlScanConfig): Promise<UrlScannerResult> 
   })
   return {
     findings,
-    execution: buildExecution(collection),
+    execution: buildExecution(collection, methodProbes, originProbes),
     issues: collection.issues,
   }
 }

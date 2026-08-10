@@ -54,9 +54,10 @@ describe("URL scan capabilities", () => {
     expect(profile.allowedMethods.every((m) => ["GET", "HEAD", "OPTIONS"].includes(m))).toBe(true)
   })
 
-  it("requires an OpenAPI URL for API Standard and Deep", () => {
+  it("gates URL modes by release state and OpenAPI requirement", () => {
     expect(getUrlModeAvailability("API", "SAFE", false)).toEqual({ available: true })
     expect(getUrlModeAvailability("WEB_APP", "STANDARD", false)).toEqual({ available: true })
+    expect(getUrlModeAvailability("WEB_APP", "DEEP", false)).toEqual({ available: true })
     expect(getUrlModeAvailability("API", "STANDARD", false)).toEqual({
       available: false,
       code: "URL_MODE_UNAVAILABLE",
@@ -66,11 +67,6 @@ describe("URL scan capabilities", () => {
       available: false,
       code: "URL_MODE_UNAVAILABLE",
       reason: "Contract Review is not available yet.",
-    })
-    expect(getUrlModeAvailability("WEB_APP", "DEEP", false)).toEqual({
-      available: false,
-      code: "URL_MODE_UNAVAILABLE",
-      reason: "Behavioral Surface Review is not available yet.",
     })
     expect(getUrlModeAvailability("API", "DEEP", false)).toEqual({
       available: false,

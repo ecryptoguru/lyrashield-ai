@@ -35,6 +35,8 @@ export interface SafeFetchResult {
   bodyTruncated: boolean
 }
 
+export type SafeFetchMethod = "GET" | "HEAD" | "OPTIONS"
+
 export interface SafeFetchOptions {
   timeoutMs?: number
   maxRedirects?: number
@@ -46,6 +48,12 @@ export interface SafeFetchOptions {
   resolver?: HostResolver
   /** Cancels the request and body read when its owning scan phase stops. */
   signal?: AbortSignal
+  /** Request method. Only safe, read-only methods are allowed. */
+  method?: SafeFetchMethod
+  /** Optional `Origin` request header value. */
+  origin?: string
+  /** Optional `Accept` request header value. */
+  accept?: string
 }
 
 export const DEFAULT_TIMEOUT_MS = 15_000
@@ -214,6 +222,9 @@ export async function safeFetchOnce(
     fetchFn,
     resolver,
     signal: externalSignal,
+    method = "GET",
+    origin,
+    accept,
   } = options
 
   if (externalSignal?.aborted) return { ok: false, reason: "aborted" }
@@ -247,12 +258,14 @@ export async function safeFetchOnce(
   const headers: Record<string, string> = {
     "User-Agent": userAgent,
   }
+  if (origin) headers["Origin"] = origin
+  if (accept) headers["Accept"] = accept
 
   const dispatcher = fetchFn ? undefined : createPinnedDispatcher(check.addresses)
   let res: Response
   try {
     const baseInit = {
-      method: "GET",
+      method,
       redirect: "manual" as const,
       signal: controller.signal,
       headers,

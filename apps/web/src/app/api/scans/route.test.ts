@@ -376,7 +376,7 @@ describe("POST /api/scans", () => {
     apiSpecUrl: null,
   }
 
-  it.each(["DEEP", "CUSTOM"])("rejects unavailable %s for a URL target", async (mode) => {
+  it.each(["CUSTOM"])("rejects unavailable %s for a URL target", async (mode) => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
 
     const res = await POST(
@@ -453,6 +453,39 @@ describe("POST /api/scans", () => {
         targetId: "web-1",
         goal: "TEST_APP",
         mode: "STANDARD",
+      })
+    )
+
+    expect(res.status).toBe(201)
+    expect(enqueueScanJob).toHaveBeenCalled()
+  })
+
+  it("allows DEEP for a web target", async () => {
+    vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
+    vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-web-deep",
+      status: "QUEUED",
+      goal: "FULL_PENTEST",
+      mode: "DEEP",
+      triggerType: "manual",
+      startedAt: null,
+      endedAt: null,
+      durationMs: null,
+      summary: null,
+      errorCategory: null,
+      errorMessage: null,
+      targetId: "web-1",
+      createdAt: new Date(),
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-safe",
+        targetId: "web-1",
+        goal: "FULL_PENTEST",
+        mode: "DEEP",
       })
     )
 
