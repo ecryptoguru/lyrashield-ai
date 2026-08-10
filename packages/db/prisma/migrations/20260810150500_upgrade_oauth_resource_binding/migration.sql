@@ -1,4 +1,8 @@
 -- Better Auth OAuth provider resource binding and token replay metadata.
+ALTER TABLE "jwks"
+  ADD COLUMN "alg" TEXT,
+  ADD COLUMN "crv" TEXT;
+
 ALTER TABLE "oauth_clients"
   ADD COLUMN "backchannelLogoutUri" TEXT,
   ADD COLUMN "backchannelLogoutSessionRequired" BOOLEAN,
