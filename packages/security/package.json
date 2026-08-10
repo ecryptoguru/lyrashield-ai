@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@lyrashield/logger": "workspace:*",
+    "@lyrashield/types": "workspace:*",
     "undici": "7.29.0"
   },
   "devDependencies": {

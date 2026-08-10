@@ -38,6 +38,14 @@ export {
 } from "./lite-scan"
 
 export {
+  collectPublicSurface,
+  type SurfaceSubject,
+  type SurfaceSubjectKind,
+  type SurfaceCollection,
+  type SurfaceCollectionIssue,
+} from "./public-surface"
+
+export {
   buildLiteScorecardPayload,
   LITE_SCORECARD_PAYLOAD_VERSION,
   type LiteScorecardPayload,

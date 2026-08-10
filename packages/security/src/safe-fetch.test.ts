@@ -116,4 +116,32 @@ describe("safeFetch", () => {
     expect(result).toBeNull()
     expect(fetchFn).toHaveBeenCalledTimes(2)
   })
+
+  it("reports exact body bytes for a short response", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response("hello world", { status: 200 }))
+
+    const result = await safeFetch("https://example.com", {
+      fetchFn,
+      resolver: async () => ["93.184.216.34"],
+      maxBytes: 100,
+    })
+
+    expect(result).not.toBeNull()
+    expect(result?.bodyBytes).toBe(11)
+    expect(result?.bodyTruncated).toBe(false)
+  })
+
+  it("reports bodyTruncated for an oversized response", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response("0123456789", { status: 200 }))
+
+    const result = await safeFetch("https://example.com", {
+      fetchFn,
+      resolver: async () => ["93.184.216.34"],
+      maxBytes: 5,
+    })
+
+    expect(result).not.toBeNull()
+    expect(result?.bodyBytes).toBe(5)
+    expect(result?.bodyTruncated).toBe(true)
+  })
 })
