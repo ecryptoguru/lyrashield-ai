@@ -345,7 +345,7 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({
         maxBudgetUsd: 3.2,
-        instruction: expect.stringContaining("vibe-security-50/1.0.0"),
+        instruction: expect.stringContaining("vibe-security-50/1.1.0"),
       }),
       "scan-1",
       25 * 60 * 1000,
@@ -355,7 +355,7 @@ describe("processScanJob", () => {
       "scan-1",
       "coverage_contract",
       "info",
-      expect.stringContaining("43 machine-testable controls"),
+      expect.stringContaining("43 code/URL review controls"),
       expect.objectContaining({ totalControls: 50, evidenceControlsRequired: 7 })
     )
   })

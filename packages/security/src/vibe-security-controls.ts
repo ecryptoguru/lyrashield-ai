@@ -1,6 +1,6 @@
 import { checkInstructionSafety } from "./instruction-safety"
 
-export const VIBE_SECURITY_COVERAGE_VERSION = "vibe-security-50/1.0.0"
+export const VIBE_SECURITY_COVERAGE_VERSION = "vibe-security-50/1.1.0"
 
 export type VibeCoverageStrategy = "deterministic" | "hybrid" | "engine" | "evidence"
 
@@ -27,7 +27,7 @@ export const VIBE_SECURITY_CONTROLS: readonly VibeSecurityControl[] = [
   },
   {
     rank: 3,
-    title: "API keys exposed in frontend bundles",
+    title: "Secrets and privileged keys exposed in frontend bundles",
     strategy: "deterministic",
     keywords: ["exposed api key", "hardcoded secret", "access key", "personal access token"],
   },
@@ -93,7 +93,7 @@ export const VIBE_SECURITY_CONTROLS: readonly VibeSecurityControl[] = [
   {
     rank: 14,
     title: "Permissive CORS",
-    strategy: "deterministic",
+    strategy: "hybrid",
     keywords: ["cors", "cross-origin"],
   },
   {
@@ -147,7 +147,7 @@ export const VIBE_SECURITY_CONTROLS: readonly VibeSecurityControl[] = [
   {
     rank: 23,
     title: "Unverified Stripe webhooks",
-    strategy: "deterministic",
+    strategy: "engine",
     keywords: ["webhook signature", "webhook verification", "forged webhook"],
   },
   {
@@ -184,7 +184,7 @@ export const VIBE_SECURITY_CONTROLS: readonly VibeSecurityControl[] = [
   {
     rank: 28,
     title: "Insecure cookies",
-    strategy: "deterministic",
+    strategy: "hybrid",
     keywords: ["insecure cookie", "cookie without", "missing cookie"],
   },
   {
@@ -202,13 +202,13 @@ export const VIBE_SECURITY_CONTROLS: readonly VibeSecurityControl[] = [
   {
     rank: 31,
     title: "Verbose errors and debug endpoints",
-    strategy: "deterministic",
+    strategy: "hybrid",
     keywords: ["stack trace", "debug output", "verbose error", "debug endpoint"],
   },
   {
     rank: 32,
     title: "Source maps and build-artifact leakage",
-    strategy: "deterministic",
+    strategy: "hybrid",
     keywords: ["source map", "sourcemap", "build artifact"],
   },
   {
@@ -338,14 +338,21 @@ export function buildVibeSecurityInstruction(goal: string): string {
   if (!safety.safe) {
     throw new Error(`Unsafe scan goal rejected: ${safety.reason}`)
   }
-  const machineControls = VIBE_SECURITY_CONTROLS.filter(
-    (control) => control.strategy !== "evidence"
-  )
+  const reviewControls = VIBE_SECURITY_CONTROLS.filter((control) => control.strategy !== "evidence")
   const evidenceControls = VIBE_SECURITY_CONTROLS.filter(
     (control) => control.strategy === "evidence"
   )
-  const checklist = machineControls.map((control) => `${control.rank}. ${control.title}`).join("; ")
-  return `Goal: ${goal}. Assess every applicable item in LyraShield ${VIBE_SECURITY_COVERAGE_VERSION}: ${checklist}. Report only evidence-backed findings; do not treat absence of evidence as a vulnerability. For each reported finding, include the applicable checklist ranks in control_ids. Operational evidence controls ${evidenceControls.map((control) => control.rank).join(", ")} require separate human or deployment proof.`
+  const checklist = reviewControls
+    .map((control) => `${control.rank} | ${control.strategy} | ${control.title}`)
+    .join("\n")
+  return [
+    `Goal: ${goal}`,
+    `LyraShield control version: ${VIBE_SECURITY_COVERAGE_VERSION}`,
+    "Assess each applicable control below. Report only evidence-backed findings; absence of evidence is not a vulnerability.",
+    "Every reported finding must include the applicable numeric ranks in control_ids.",
+    checklist,
+    `Controls ${evidenceControls.map((control) => control.rank).join(", ")} require separate deployment, operational, or accountable-human evidence and must not be inferred from source alone.`,
+  ].join("\n")
 }
 
 export function summarizeVibeSecurityCoverage(findings: readonly VibeCoverageFinding[]) {
@@ -364,7 +371,7 @@ export function summarizeVibeSecurityCoverage(findings: readonly VibeCoverageFin
   return {
     version: VIBE_SECURITY_COVERAGE_VERSION,
     totalControls: VIBE_SECURITY_CONTROLS.length,
-    machineControlsRequested: VIBE_SECURITY_CONTROLS.length - evidenceControlRanks.length,
+    reviewControlsRequested: VIBE_SECURITY_CONTROLS.length - evidenceControlRanks.length,
     evidenceControlsRequired: evidenceControlRanks.length,
     evidenceControlRanks,
     matchedControlRanks,

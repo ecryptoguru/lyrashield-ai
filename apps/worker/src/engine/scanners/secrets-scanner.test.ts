@@ -73,6 +73,7 @@ describe("scanSecrets", () => {
     expect(githubToken).toBeDefined()
     expect(githubToken!.severity).toBe("critical")
     expect(githubToken!.cwe).toBe("CWE-798")
+    expect(githubToken!.control_ids).toEqual([3])
     expect(githubToken!.code_locations).toBeDefined()
     expect(githubToken!.code_locations![0]!.file).toBe(".env")
   })
@@ -252,5 +253,21 @@ describe("scanSecrets", () => {
     const dir = await setupRepo({ "dense.env": values })
     const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
     expect(findings).toHaveLength(200)
+  })
+
+  it("records incomplete coverage when a source file exceeds the scanner limit", async () => {
+    const dir = await setupRepo({ "large.ts": "x".repeat(512 * 1024 + 1) })
+    const coverageIssues: Parameters<typeof scanSecrets>[0]["coverageIssues"] = []
+
+    await expect(
+      scanSecrets({ repoPath: dir, workspaceDir: dir, coverageIssues })
+    ).resolves.toEqual([])
+    expect(coverageIssues).toEqual([
+      expect.objectContaining({
+        scanner: "secrets",
+        status: "bounded",
+        subject: "1 file(s)",
+      }),
+    ])
   })
 })

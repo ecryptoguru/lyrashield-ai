@@ -11,4 +11,6 @@ paths = [
 regexes = [
   '''secretAccessKey:\s*env\.S3_SECRET_KEY''',
   '''dummy-ci-only-secret-not-a-real-credential''',
+  # Synthetic service_role JWT used only by the URL scanner regression fixture.
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJyb2xlIjoic2VydmljZV9yb2xlIn0\.signature123''',
 ]

@@ -22,7 +22,7 @@ faq:
 | Primary focus           | Evidence-backed release assurance for AI-built apps                                            | AI-native AppSec platform (SAST, SCA, secrets, IaC, containers) plus AI pentest   |
 | Scanning approach       | Agentic engine, coverage framework, evidence states                                            | LLMs combined with static analysis; business-logic detection ("BLAST")            |
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                           | Found → reachability prioritized → fix PR opened; pentest auto-retest loop        |
-| Control framework       | Vibe Security 50 (43 machine-testable + 7 evidence-required)                                   | No published control framework; endpoint-aware reachability                       |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                    | No published control framework; endpoint-aware reachability                       |
 | Fix model               | Approval-gated; PR execution blocked until a server-generated patch is bound to exact approval | Fix PRs opened into normal developer review; fixes statically validated before PR |
 | AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                           | Security design reviews of PRD/architecture docs before code is written           |
 

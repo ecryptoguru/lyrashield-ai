@@ -22,7 +22,7 @@ faq:
 | Primary focus     | Release assurance for AI-built apps                                          | Automated security validation / exposure management across the enterprise                      |
 | Scanning approach | Agentic engine with coverage framework and evidence states; AI-pattern focus | AI-powered adversarial testing: deterministic + AI payloads that adapt to the live environment |
 | Finding lifecycle | Detected → independently verified → retest-confirmed or inconclusive         | Validated attack path → prioritized by proven business impact → remediation ticket → re-test   |
-| Control framework | Vibe Security 50 (43 machine-testable + 7 evidence-required)                 | No published control framework; CTEM lifecycle support; maps findings to controls              |
+| Control framework | Vibe Security 50 (43 code/URL review + 7 evidence-required)                  | No published control framework; CTEM lifecycle support; maps findings to controls              |
 | Environment focus | App-layer + AI-generated code; MCP/agent configs                             | Internal networks, external surface, cloud, web apps, identities (full kill chains)            |
 | Remediation model | Approval-gated fix execution (PR blocked until patch bound to approval)      | Pentera Resolve: automated remediation workflows + revalidation                                |
 

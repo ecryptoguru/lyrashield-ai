@@ -22,7 +22,7 @@ faq:
 | Primary focus           | Evidence-backed release assurance for AI-built apps                                            | Triage and auto-fix of findings from your existing scanner stack                |
 | Scanning approach       | Agentic engine, coverage framework, evidence states                                            | Not a scanner; ingests SAST/SCA/DAST results via SARIF and native integrations  |
 | Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive                           | Ingested → exploitability triaged → fix PR generated → re-scan confirmed        |
-| Control framework       | Vibe Security 50 (43 machine-testable + 7 evidence-required)                                   | No published control framework; exploitability triage                           |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                    | No published control framework; exploitability triage                           |
 | Fix model               | Approval-gated; PR execution blocked until a server-generated patch is bound to exact approval | Constrained generation + independent fix-evaluation agent + customer CI/CD gate |
 | AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns                           | Foresight design-time review of specs before code is written                    |
 

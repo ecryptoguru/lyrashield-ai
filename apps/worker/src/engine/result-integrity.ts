@@ -48,12 +48,11 @@ type FamilyReceipt = {
 }
 
 const CONTROL_SCANNERS: Readonly<Record<number, readonly string[]>> = {
-  1: ["url", "engine"],
-  2: ["url", "engine"],
+  1: ["engine"],
+  2: ["engine"],
   3: ["secrets", "url"],
   14: ["url"],
-  20: ["url", "engine"],
-  23: ["url", "engine"],
+  20: ["engine"],
   27: ["url"],
   28: ["url"],
   29: ["url"],
@@ -176,20 +175,6 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
       }
     }
 
-    if (control.strategy === "engine") {
-      const engineReceipt = familyByScanner.get("engine")
-      if (engineReceipt?.status === "COMPLETED") {
-        return {
-          scanner: "engine",
-          controlId,
-          status: "BLOCKED",
-          reason:
-            "The model completed without an explicit control mapping; absence is inconclusive.",
-          metadata: { ...metadata, outcome: "INCONCLUSIVE" },
-        }
-      }
-    }
-
     if (
       applicableReceipts.length === 0 ||
       applicableReceipts.every((receipt) => receipt.status === "NOT_APPLICABLE")
@@ -214,6 +199,19 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
         reason: `Applicable coverage was limited: ${limitedReceipts
           .map((receipt) => receipt.reason ?? receipt.status)
           .join("; ")}`,
+        metadata: { ...metadata, outcome: "INCONCLUSIVE" },
+      }
+    }
+
+    if (control.strategy === "engine" || control.strategy === "hybrid") {
+      return {
+        scanner: scanners.join("+") || control.strategy,
+        controlId,
+        status: "BLOCKED",
+        reason:
+          control.strategy === "hybrid"
+            ? "Available signals did not establish an evidence-backed outcome; absence is inconclusive."
+            : "The model completed without an explicit control mapping; absence is inconclusive.",
         metadata: { ...metadata, outcome: "INCONCLUSIVE" },
       }
     }

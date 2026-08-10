@@ -58,6 +58,13 @@ describe("report-generator", () => {
         startedAt: new Date("2026-01-01"),
         endedAt: new Date("2026-01-02"),
         targetId: "target-1",
+        resultManifest: { checksum: "manifest-checksum" },
+        coverageReceipts: [
+          { controlId: "engine", status: "COMPLETED" },
+          { controlId: "vibe-03", status: "COMPLETED" },
+          { controlId: "vibe-14", status: "BLOCKED" },
+          { controlId: "vibe-50", status: "NOT_APPLICABLE" },
+        ],
       })
       mockPrisma.finding.findMany.mockResolvedValue([
         {
@@ -116,6 +123,7 @@ describe("report-generator", () => {
       expect(data.assurance?.verdict).toBe("NO_GO")
       expect(data.findingsByStatus).toEqual({ FIXED: 1, OPEN: 1 })
       expect(data.findingsByCategory).toEqual({ injection: 2 })
+      expect(data.scanInfo?.coverage).toEqual({ completed: 1, limited: 1, notApplicable: 1 })
     })
   })
 

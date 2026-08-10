@@ -1,14 +1,14 @@
 # Vibe Security 50 Coverage Contract
 
-Version: `vibe-security-50/1.0.0`
+Version: `vibe-security-50/1.1.0`
 
-The executable source of truth is `packages/security/src/vibe-security-controls.ts`. Every new full scan sends the 43 machine-testable controls to the existing engine, records a `coverage_contract` scan event, and stores one immutable coverage receipt for each of the 50 controls. A control is counted as a finding only when a scanner or the engine returns evidence; an unreported control is never presented as passed.
+The executable source of truth is `packages/security/src/vibe-security-controls.ts`. Every new full scan routes 43 code/URL review controls through the applicable deterministic, hybrid, or engine-led path, records a `coverage_contract` scan event, and stores one immutable receipt for each of the 50 controls. A control is counted as a finding only when a scanner or the engine returns evidence; an unreported control is never presented as passed.
 
 ## Coverage strategies
 
-- **Deterministic (10):** 3, 14, 23, 27, 28, 29, 31, 32, 37, 45. These use bounded secrets, URL, dependency, agent-instruction, or workflow checks.
-- **Hybrid (6):** 1, 2, 20, 38, 39, 47. A deterministic signal can identify a risky pattern, but the engine or a reviewer must establish exploitability and context.
-- **Engine-led (27):** 4-13, 15-19, 21-22, 24-26, 30, 33, 40-42, 44, 49. These require authentication, data-flow analysis, live interaction, business context, or exploit validation.
+- **Deterministic (5):** 3, 27, 29, 37, 45. These return a bounded repeatable observation over the supplied repository or response.
+- **Hybrid (10):** 1, 2, 14, 20, 28, 31, 32, 38, 39, 47. A deterministic signal can identify a risky pattern, but an unmatched signal is inconclusive; exploitability and context still need review.
+- **Engine-led (28):** 4-13, 15-19, 21-26, 30, 33, 40-42, 44, 49. These require authentication, data-flow analysis, live interaction, business context, or exploit validation.
 - **Evidence-required (7):** 34, 35, 36, 43, 46, 48, 50. Audit coverage, monitoring, restore proof, deployment egress, test independence, multi-agent trust, and accountable review cannot be proven safely from a URL or repository scan alone.
 
 ## Honest result language
@@ -20,13 +20,13 @@ The executable source of truth is `packages/security/src/vibe-security-controls.
 - `EVIDENCE_REQUIRED`: one of the seven operational controls needs deployment, process, or human-review proof that a code or URL scan cannot establish safely.
 - Never use `passed`, `clean`, or `covered` merely because no finding was returned.
 
-The scan-detail experience groups these receipts by control family and exposes the complete 50-control ledger on demand. The seven evidence-required controls are presented as user actions, not scanner failures.
+The scan-detail experience groups these receipts by control family and exposes the complete 50-control ledger on demand. The seven evidence-required controls are outside-scan requirements, not scanner failures. Version 1.1 does not claim an evidence-submission workflow that the product does not yet provide.
 
 The dashboard exposes this contract through Release Check, Code Review, and Deep Security Review; Weekly Monitor is the recurring Safe workflow. These presets change review depth, not the definition of the 50 controls. URL/API scans show only applicable deterministic receipts and never pretend repository or operational controls ran. See `userguide.md` §§8–10 for the user-facing interpretation.
 
 ## Execution controls
 
-The checklist reuses the current engine invocation and existing SCA, secrets, and URL phases. Maven and Gradle manifests use the existing batched OSV call. CVE-bearing dependency findings may also receive bounded, cached enrichment from the CISA Known Exploited Vulnerabilities catalog and FIRST EPSS API; either source may fail without failing the scan, and enrichment never changes severity or verification state. Agent-instruction and workflow checks read only a small allowlist of bounded files.
+The checklist reuses the current engine invocation and existing SCA, secrets, URL, and agent-configuration phases. Maven and Gradle manifests use the existing batched OSV call. CVE-bearing dependency findings may also receive bounded, cached enrichment from the CISA Known Exploited Vulnerabilities catalog and FIRST EPSS API; either source may fail without failing the scan, and enrichment never changes severity or verification state. Agent-instruction and workflow checks read only a small allowlist of bounded files. The engine currently emits findings with control IDs, not negative per-control assessments, so unmatched engine-led controls remain inconclusive.
 
 Repository scans use Luna/medium for Safe, Quick, and Standard. Deep and Custom use a Terra/medium coordinator with Luna/medium specialists. URL/API targets skip the engine. Protected limits and provider reconciliation remain internal and are not displayed in the dashboard.
 

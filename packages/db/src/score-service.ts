@@ -164,7 +164,7 @@ export async function completeScanWithScore(
       where: { id: scanId },
       include: {
         target: { select: { id: true, projectId: true, branch: true } },
-        coverageReceipts: { select: { status: true } },
+        coverageReceipts: { select: { controlId: true, status: true } },
       },
     })
     if (!scan || !scan.target) throw new Error("Scan or target not found")
@@ -193,12 +193,16 @@ export async function completeScanWithScore(
       mode: scan.mode,
       isDefaultBranch: true,
     })
-    // Public scorecards are fail-closed: a partial control ledger cannot be
-    // presented as a complete review.
+    // Public scorecards fail closed when an applicable scanner family did not
+    // finish. Control-level inconclusive/evidence-required outcomes are honest
+    // result states, not scanner execution failures.
+    const scannerReceipts = scan.coverageReceipts.filter(
+      (receipt) => !receipt.controlId.startsWith("vibe-")
+    )
     const coverageComplete =
-      scan.coverageReceipts.length > 0 &&
-      scan.coverageReceipts.every(
-        (receipt) => receipt.status === "PARTIAL" || receipt.status === "NOT_APPLICABLE"
+      scannerReceipts.length > 0 &&
+      scannerReceipts.every(
+        (receipt) => receipt.status === "COMPLETED" || receipt.status === "NOT_APPLICABLE"
       )
     const shareEligible =
       result.shareEligible &&

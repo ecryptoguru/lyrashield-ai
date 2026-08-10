@@ -119,11 +119,17 @@ async function runScaScan(
 async function runSecretsScan(
   scanId: string,
   workspaceDir: string,
+  coverageIssues: ScannerCoverageIssue[],
   signal: AbortSignal
 ): Promise<EngineVulnerability[]> {
   try {
     logger.info("Starting secrets scan phase", { scanId })
-    const findings = await scanSecrets({ repoPath: workspaceDir, workspaceDir, signal })
+    const findings = await scanSecrets({
+      repoPath: workspaceDir,
+      workspaceDir,
+      coverageIssues,
+      signal,
+    })
     logger.info("Secrets scan phase complete", { scanId, findingCount: findings.length })
     return findings
   } catch (err) {
@@ -155,7 +161,6 @@ async function runUrlScan(
         : undefined
     const findings = await scanUrl({
       targetUrl,
-      repoPath: workspaceDir,
       coverageIssues,
       signal,
       fetchFn,
@@ -249,7 +254,7 @@ export async function runScannerOrchestrator(
           ? runScaScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
         hasSourceCheckout
-          ? runSecretsScan(scanId, absWorkspace, signal)
+          ? runSecretsScan(scanId, absWorkspace, coverageIssues, signal)
           : Promise.resolve([] as EngineVulnerability[]),
         targetUrl
           ? runUrlScan(scanId, targetUrl, absWorkspace, coverageIssues, signal)
