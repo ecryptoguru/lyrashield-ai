@@ -79,7 +79,9 @@ export const getCachedPendingApprovals = cache(
 export const DASHBOARD_CACHE_TAG = "dashboard-aggregates"
 
 export function revalidateDashboardAggregates() {
-  revalidateTag(DASHBOARD_CACHE_TAG, "default")
+  // Mutations need the next dashboard request to see the new state. The
+  // default profile serves stale data while revalidating in the background.
+  revalidateTag(DASHBOARD_CACHE_TAG, { expire: 0 })
 }
 
 export const getCachedUnreadNotifications = cache(

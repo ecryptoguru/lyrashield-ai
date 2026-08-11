@@ -192,6 +192,14 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   })
   await expect(contractTargetResponse).toBeOK()
 
+  await page.goto("/dashboard")
+  await expect(page.getByRole("link", { name: "Evidence captured" }).first()).toHaveAttribute(
+    "href",
+    "/dashboard/scans?new=1"
+  )
+  await expect(page.getByRole("link", { name: "Blockers cleared" })).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Assurance shared" })).toHaveCount(0)
+
   const restoreOnboardingResponse = await page.request.patch("/api/onboarding", {
     data: {
       currentStep: 3,

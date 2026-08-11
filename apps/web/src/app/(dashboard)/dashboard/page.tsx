@@ -121,6 +121,7 @@ export default async function DashboardPage() {
   // health for a target nobody managed to inspect, so the number is withheld
   // entirely rather than qualified with a footnote the user will not open.
   const coverageEvaluated = evaluatedCoverageCount > 0
+  const evidenceCaptured = completedScanCount > 0 && coverageEvaluated
   const latestScore = coverageEvaluated ? snapshotScore : null
   const primaryAction = dashboardPrimaryAction(targetCount)
 
@@ -172,23 +173,22 @@ export default async function DashboardPage() {
     {
       // A completed run that evaluated nothing has not captured evidence.
       label: "Evidence captured",
-      complete: completedScanCount > 0 && coverageEvaluated,
+      complete: evidenceCaptured,
       href: targetCount === 0 ? null : primaryAction.href,
     },
     {
       label: "Blockers cleared",
       complete: readiness.verdict === "GO",
-      href:
-        targetCount === 0
-          ? null
-          : readiness.verdict === "NOT_EVALUATED"
-            ? primaryAction.href
-            : "/dashboard/findings",
+      href: !evidenceCaptured
+        ? null
+        : readiness.verdict === "NOT_EVALUATED"
+          ? primaryAction.href
+          : "/dashboard/findings",
     },
     {
       label: "Assurance shared",
       complete: reportCount > 0,
-      href: targetCount === 0 ? null : "/dashboard/findings?tab=reports",
+      href: evidenceCaptured ? "/dashboard/findings?tab=reports" : null,
     },
   ]
 
