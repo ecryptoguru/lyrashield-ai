@@ -1,10 +1,61 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import {
   buildUrlTargetPayload,
+  ensureOnboardingTargetId,
+  getOnboardingReviewOptions,
   nextStepForPath,
+  onboardingPathForTargetType,
   pathLabel,
   pathNeedsRepo,
 } from "./onboarding-flow.utils"
+
+describe("onboardingPathForTargetType", () => {
+  it("restores the onboarding path from an existing target", () => {
+    expect(onboardingPathForTargetType("REPO")).toBe("github")
+    expect(onboardingPathForTargetType("WEB_APP")).toBe("url")
+    expect(onboardingPathForTargetType("API")).toBe("api")
+    expect(onboardingPathForTargetType(null)).toBeNull()
+  })
+})
+
+describe("ensureOnboardingTargetId", () => {
+  it("reuses the persisted target when a failed scan is retried", async () => {
+    const createTarget = vi.fn().mockResolvedValue("target-1")
+
+    const firstTargetId = await ensureOnboardingTargetId(null, createTarget)
+    const retryTargetId = await ensureOnboardingTargetId(firstTargetId, createTarget)
+
+    expect(firstTargetId).toBe("target-1")
+    expect(retryTargetId).toBe("target-1")
+    expect(createTarget).toHaveBeenCalledOnce()
+  })
+})
+
+describe("getOnboardingReviewOptions", () => {
+  it("uses the canonical repository review choices and modes", () => {
+    expect(
+      getOnboardingReviewOptions("github").map(({ label, mode }) => ({ label, mode }))
+    ).toEqual([
+      { label: "Release check", mode: "QUICK" },
+      { label: "Code review", mode: "STANDARD" },
+      { label: "Deep security review", mode: "DEEP" },
+    ])
+  })
+
+  it("uses URL-specific safe, standard, and deep choices", () => {
+    expect(getOnboardingReviewOptions("url").map(({ label, mode }) => ({ label, mode }))).toEqual([
+      { label: "Surface Review", mode: "SAFE" },
+      { label: "Expanded Surface Review", mode: "STANDARD" },
+      { label: "Behavioral Surface Review", mode: "DEEP" },
+    ])
+  })
+
+  it("only offers the endpoint review for an API without an OpenAPI document", () => {
+    expect(getOnboardingReviewOptions("api").map(({ label, mode }) => ({ label, mode }))).toEqual([
+      { label: "Endpoint Review", mode: "SAFE" },
+    ])
+  })
+})
 
 describe("nextStepForPath", () => {
   it("sends GitHub to repo-select (step 2)", () => {

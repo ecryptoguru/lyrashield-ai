@@ -20,7 +20,7 @@ import { paginatedResponseSchema } from "@/lib/api-schemas"
 import { apiPost, apiGetPaginated, apiGetPaginatedConditional } from "@/lib/api-client"
 import { formatDateTime } from "@/lib/date-format"
 import { RUN_PLURAL, RUN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
-import { mergePolledScans } from "./scans-client.utils"
+import { getReviewSetupGuidance, mergePolledScans } from "./scans-client.utils"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { getManualScanOptions } from "@/lib/scan-presets"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
@@ -240,6 +240,13 @@ export function ScansClient({
   const enabledOptions = availableOptions.filter((o) => o.available)
   const selectedOption = enabledOptions.find((o) => o.id === selectedPreset) ?? enabledOptions[0]
   const selectedTargetUsesEngine = selectedTargetType === "REPO"
+  const reviewSetupGuidance = selectedTargetDetails
+    ? getReviewSetupGuidance({
+        targetId: selectedTargetDetails.id,
+        targetType: selectedTargetType,
+        hasApiSpec: Boolean(selectedTargetDetails.apiSpecUrl),
+      })
+    : null
 
   const ACTIVE_STATUS_PARAM = "QUEUED,PREFLIGHT,RUNNING,VERIFYING,REQUIRES_APPROVAL"
 
@@ -420,7 +427,7 @@ export function ScansClient({
               <div
                 role="radiogroup"
                 aria-label="Review type"
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
               >
                 {availableOptions.map((option) => {
                   const isSelected = selectedOption?.id === option.id
@@ -503,17 +510,28 @@ export function ScansClient({
                 {selectedOption?.hint}{" "}
                 {selectedTarget && !selectedTargetUsesEngine
                   ? "This target uses deterministic scanners."
-                  : "A protected limit is applied automatically."}
+                  : "Your selected review sets the scope automatically."}
               </p>
               {modeResetNotice && (
                 <p className="text-amber-600 mt-2 text-xs" role="status" aria-live="polite">
                   {modeResetNotice}
                 </p>
               )}
-              {selectedTarget && selectedTargetType === "API" && (
-                <p className="text-muted-foreground mt-2 text-xs" role="status" aria-live="polite">
-                  Contract and Contract Behavior reviews require an OpenAPI document on the target.
-                </p>
+              {reviewSetupGuidance && (
+                <div
+                  className="border-primary/20 bg-primary/5 mt-3 flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="text-sm leading-relaxed">{reviewSetupGuidance.message}</p>
+                  <Link
+                    href={reviewSetupGuidance.href}
+                    className="text-primary hover:text-primary/80 focus-visible:ring-ring inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md px-1 text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none"
+                  >
+                    {reviewSetupGuidance.actionLabel}
+                    <ChevronRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </div>
               )}
               <p
                 className="text-foreground mt-3 flex items-center gap-1.5 text-sm font-medium"
@@ -554,57 +572,14 @@ export function ScansClient({
                 >
                   <div className="space-y-3">
                     <div>
-                      <p className="text-sm font-medium">{selectedOption.label}</p>
+                      <p className="text-sm font-medium">What this review covers</p>
                       <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
                         {selectedOption.hint}
                       </p>
                     </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="bg-card border-border rounded-md border px-3 py-2.5">
-                        <p className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
-                          Goal
-                        </p>
-                        <p className="mt-1 text-xs font-medium">
-                          {getGoalLabel(selectedOption.goal)}
-                          <span className="text-muted-foreground ml-1.5 font-normal">
-                            · {selectedOption.goal}
-                          </span>
-                        </p>
-                      </div>
-                      <div className="bg-card border-border rounded-md border px-3 py-2.5">
-                        <p className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
-                          Mode
-                        </p>
-                        <div className="mt-1.5 flex items-center gap-2">
-                          <Badge
-                            variant={modeBadgeVariant(selectedOption.mode)}
-                            className="text-[11px] font-semibold tracking-wide uppercase"
-                          >
-                            {selectedOption.mode}
-                          </Badge>
-                          <span className="text-muted-foreground text-xs">
-                            {selectedOption.mode === "SAFE"
-                              ? "Bounded, fast"
-                              : selectedOption.mode === "STANDARD"
-                                ? "Expanded coverage"
-                                : "Deep review"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
                     <p className="text-muted-foreground text-[11px] leading-relaxed">
-                      No extra fields — we send{" "}
-                      <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">
-                        goal
-                      </code>{" "}
-                      and{" "}
-                      <code className="bg-card border-border rounded border px-1 py-0.5 text-[11px]">
-                        mode
-                      </code>{" "}
-                      from this option.{" "}
-                      {selectedTarget && !selectedTargetUsesEngine
-                        ? "This URL target uses deterministic scanners."
-                        : "Engine targets get a protected run budget automatically."}
+                      The completed run records the applicable evidence and any limitations so you
+                      can decide what to fix or retest next.
                     </p>
                   </div>
                 </div>

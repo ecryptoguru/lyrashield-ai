@@ -2,11 +2,11 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react"
 import { ShieldCheck, Clock, ListChecks } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants, cn } from "@lyrashield/ui"
-import { RUN_SINGULAR } from "@/lib/terminology"
+import { Card, CardContent, CardHeader, CardTitle, Badge, cn } from "@lyrashield/ui"
 import { estimateRunMinutes, formatEstimate } from "@/lib/estimator"
 import Link from "next/link"
 import { modeLabel } from "@/lib/labels"
+import { commandCenterFirstMetric } from "./trust-command-center.utils"
 
 function trustPlanLabel(data: unknown): string {
   if (!data || typeof data !== "object") return "Default"
@@ -125,24 +125,38 @@ export function TrustCommandCenter({
   const revealBase = "transition-[opacity,transform] duration-(--duration-slow) ease-(--ease-out)"
   const revealHidden = "opacity-0 translate-y-2"
   const revealVisible = "opacity-100 translate-y-0"
+  const firstMetric = commandCenterFirstMetric(assetCount)
 
   const metrics = [
     {
       key: "time",
-      title: "Estimated time",
+      title: firstMetric === "next-step" ? "Next step" : "Estimated time",
       icon: Clock,
-      content: (
-        <>
-          <div className="flex items-center gap-2">
-            <Clock className="text-primary size-5" aria-hidden="true" />
-            <span className="text-2xl font-bold">{formatEstimate(estimate)}</span>
-          </div>
-          <p className="text-muted-foreground text-xs">
-            For {assetCount} asset{assetCount === 1 ? "" : "s"}
-            {mode ? ` in ${modeLabel(mode).toLowerCase()} mode` : ""}
-          </p>
-        </>
-      ),
+      content:
+        firstMetric === "next-step" ? (
+          <>
+            <Link
+              href="/dashboard/targets"
+              className="text-lg font-semibold underline underline-offset-4"
+            >
+              Add a target
+            </Link>
+            <p className="text-muted-foreground text-xs">
+              Connect a repository, app URL, or API to begin.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <Clock className="text-primary size-5" aria-hidden="true" />
+              <span className="text-2xl font-bold">{formatEstimate(estimate)}</span>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              For {assetCount} asset{assetCount === 1 ? "" : "s"}
+              {mode ? ` in ${modeLabel(mode).toLowerCase()} mode` : ""}
+            </p>
+          </>
+        ),
     },
     {
       key: "plan",
@@ -193,25 +207,14 @@ export function TrustCommandCenter({
       >
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{productName}</h2>
-          <p className="text-muted-foreground text-sm">
-            Product trust score and active review plan
-          </p>
+          <p className="text-muted-foreground text-sm">Assurance status and active review plan</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={verdictVariant as "success" | "warning" | "danger" | "muted"}>
-            {/* Withhold the number entirely when nothing has been evaluated — a
-                large "100/100" next to a muted "Not evaluated" badge still reads
-                as a pass at a glance, which is the misread this prevents. */}
-            {hasCompletedReview ? `${animatedScore}/100` : "Not scored"}
-          </Badge>
-          <Link
-            href="/dashboard/scans?new=1"
-            className={buttonVariants({ variant: "secondary", size: "sm" })}
-          >
-            <ShieldCheck className="size-4" aria-hidden="true" />
-            Start {RUN_SINGULAR}
-          </Link>
-        </div>
+        <Badge variant={verdictVariant as "success" | "warning" | "danger" | "muted"}>
+          {/* Withhold the number entirely when nothing has been evaluated — a
+              large "100/100" next to a muted "Not evaluated" badge still reads
+              as a pass at a glance, which is the misread this prevents. */}
+          {hasCompletedReview ? `${animatedScore}/100` : "Not scored"}
+        </Badge>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

@@ -13,10 +13,12 @@ import {
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
-import { GOAL_OPTIONS } from "@/lib/labels"
 import {
   buildUrlTargetPayload,
+  ensureOnboardingTargetId,
+  getOnboardingReviewOptions,
   nextStepForPath,
+  onboardingPathForTargetType,
   pathLabel,
   pathNeedsRepo,
   type OnboardingPath,
@@ -29,6 +31,8 @@ interface OnboardingData {
   workspaceId: string | null
   targetId: string | null
   selectedGoal: string | null
+  targetType?: string | null
+  targetName?: string | null
 }
 
 interface Repo {
@@ -52,7 +56,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
   const [workspaceName, setWorkspaceName] = useState("")
   const [repos, setRepos] = useState<Repo[]>([])
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
-  const [productName, setProductName] = useState("")
+  const [productName, setProductName] = useState(initialState.targetName ?? "")
   const [environment, setEnvironment] = useState("STAGING")
   const [selectedGoal, setSelectedGoal] = useState<string>(
     initialState.selectedGoal ?? "LAUNCH_REVIEW"
@@ -60,10 +64,16 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
   // Four-way step 2: which way the user chose to add their first target.
   // If the user already created a target (targetId is set) but we don't know
   // which path they took, leave path null — the step is already past step 2.
-  const [path, setPath] = useState<OnboardingPath>(null)
+  const [path, setPath] = useState<OnboardingPath>(
+    onboardingPathForTargetType(initialState.targetType ?? null)
+  )
   const [githubUnavailable, setGithubUnavailable] = useState(false)
   const [urlForm, setUrlForm] = useState({ name: "", url: "", ownershipAttested: false })
   const autoFetchAttempted = useRef(false)
+  const reviewOptions = getOnboardingReviewOptions(path)
+  const selectedReview =
+    reviewOptions.find((option) => option.goal === selectedGoal) ?? reviewOptions[0]
+  const retryingExistingTarget = Boolean(data.targetId)
 
   function bucketCount(n: number): string {
     if (n <= 0) return "0"
@@ -268,16 +278,17 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
       setError("Workspace is required.")
       return
     }
-    // Every non-skip path creates its target here, at the final step, so the
-    // name/environment the user just confirmed are what get saved — and so Back
-    // -> Continue never orphans a duplicate. GitHub creates a REPO target;
-    // URL/API create a WEB_APP/API target (ownership was attested in step 2).
+    // A retry after scan admission fails reuses the target persisted by the
+    // first attempt. New flows create it here so Back -> Continue cannot orphan
+    // a duplicate before the final action.
+    const hasExistingTarget = Boolean(data.targetId)
     const needsRepo = pathNeedsRepo(path)
-    if (needsRepo && !selectedRepo) {
+    if (!hasExistingTarget && needsRepo && !selectedRepo) {
       setError("Workspace and repository are required.")
       return
     }
     if (
+      !hasExistingTarget &&
       !needsRepo &&
       !buildUrlTargetPayload({
         workspaceId: data.workspaceId,
@@ -291,11 +302,11 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
       setError("Add a valid target and confirm ownership to continue.")
       return
     }
-    if (!productName.trim()) {
+    if (!hasExistingTarget && !productName.trim()) {
       setError(`Name your ${PRODUCT_SINGULAR.toLowerCase()} to continue.`)
       return
     }
-    if (!selectedGoal) {
+    if (!selectedReview) {
       setError("Choose a goal for this review.")
       return
     }
@@ -303,25 +314,26 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
     setLoading(true)
     setError(null)
     try {
-      let targetId = data.targetId
-      if (needsRepo && selectedRepo) {
-        const target = await apiPost(
-          "/api/targets",
-          {
-            workspaceId: data.workspaceId,
-            name: productName.trim(),
-            type: "REPO",
-            repoProvider: "github",
-            repoOwner: selectedRepo.owner,
-            repoName: selectedRepo.name,
-            installationId: selectedRepo.installationId,
-            branch: selectedRepo.defaultBranch,
-            environment,
-          },
-          { schema: idSchema }
-        )
-        targetId = target.id
-      } else if (!needsRepo) {
+      const targetId = await ensureOnboardingTargetId(data.targetId, async () => {
+        if (needsRepo && selectedRepo) {
+          const target = await apiPost(
+            "/api/targets",
+            {
+              workspaceId: data.workspaceId,
+              name: productName.trim(),
+              type: "REPO",
+              repoProvider: "github",
+              repoOwner: selectedRepo.owner,
+              repoName: selectedRepo.name,
+              installationId: selectedRepo.installationId,
+              branch: selectedRepo.defaultBranch,
+              environment,
+            },
+            { schema: idSchema }
+          )
+          return target.id
+        }
+
         const payload = buildUrlTargetPayload({
           workspaceId: data.workspaceId,
           path,
@@ -330,28 +342,32 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
           environment,
           ownershipAttested: urlForm.ownershipAttested,
         })
-        if (payload) {
-          const target = await apiPost("/api/targets", payload, { schema: idSchema })
-          targetId = target.id
-        }
-      }
-      await persist({ targetId, selectedGoal, currentStep: 3, skipped: false })
+        if (!payload) throw new Error("Target details are required.")
+        const target = await apiPost("/api/targets", payload, { schema: idSchema })
+        return target.id
+      })
+      await persist({ targetId, selectedGoal: selectedReview.goal, currentStep: 3, skipped: false })
       const scan = await apiPost(
         "/api/scans",
         {
           workspaceId: data.workspaceId,
           targetId,
-          goal: selectedGoal,
-          mode: "SAFE",
+          goal: selectedReview.goal,
+          mode: selectedReview.mode,
         },
         { schema: idSchema }
       )
-      await persist({ currentStep: 4, completed: true, skipped: false, selectedGoal })
+      await persist({
+        currentStep: 4,
+        completed: true,
+        skipped: false,
+        selectedGoal: selectedReview.goal,
+      })
       track("first_run_started", {
-        preset: selectedGoal,
+        preset: selectedReview.goal,
         asset_count: 1,
-        estimate_low_min: 1,
-        estimate_high_min: 5,
+        estimate_low_min: selectedReview.estimate.low,
+        estimate_high_min: selectedReview.estimate.high,
       })
       router.push(`/dashboard/scans/${scan.id}`)
       router.refresh()
@@ -682,66 +698,89 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 4
+                Step {pathNeedsRepo(path) ? 4 : 3}
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">{PRODUCT_SINGULAR} details</h2>
               <p className="text-muted-foreground mt-2 text-sm">
-                {pathNeedsRepo(path)
-                  ? `Name your ${PRODUCT_SINGULAR.toLowerCase()} and choose the environment to review.`
-                  : `Reviewing your ${pathLabel(path)}. Name it and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
+                {retryingExistingTarget
+                  ? `Retry the review for ${productName || `this ${PRODUCT_SINGULAR.toLowerCase()}`}. The target stays locked so the retry cannot create or scan a different target.`
+                  : pathNeedsRepo(path)
+                    ? `Name your ${PRODUCT_SINGULAR.toLowerCase()} and choose the environment to review.`
+                    : `Reviewing your ${pathLabel(path)}. Name it and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
               </p>
             </div>
 
-            <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="product-name">
-              <Input
-                id="product-name"
-                value={productName}
-                onChange={(e) => setProductName(e.target.value)}
-                placeholder="My web app"
-              />
-            </FormField>
-
-            <fieldset>
-              <legend className="mb-2 text-sm font-medium">{ENVIRONMENT_SINGULAR}</legend>
-              <div className="grid grid-cols-3 gap-2">
-                {["STAGING", "PRODUCTION", "DEVELOPMENT"].map((env) => (
-                  <button
-                    type="button"
-                    key={env}
-                    onClick={() => setEnvironment(env)}
-                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                      environment === env
-                        ? "border-primary bg-primary/8 text-primary"
-                        : "hover:bg-accent"
-                    }`}
-                  >
-                    {env.toLowerCase()}
-                  </button>
-                ))}
+            {retryingExistingTarget ? (
+              <div className="bg-muted/40 rounded-lg border p-4">
+                <p className="text-sm font-medium">
+                  {productName || `Existing ${PRODUCT_SINGULAR}`}
+                </p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Existing {pathLabel(path)} · target details are locked for this retry
+                </p>
               </div>
-            </fieldset>
+            ) : (
+              <>
+                <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="product-name">
+                  <Input
+                    id="product-name"
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="My web app"
+                  />
+                </FormField>
+
+                <fieldset>
+                  <legend className="mb-2 text-sm font-medium">{ENVIRONMENT_SINGULAR}</legend>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {["STAGING", "PRODUCTION", "DEVELOPMENT"].map((env) => (
+                      <button
+                        type="button"
+                        key={env}
+                        onClick={() => setEnvironment(env)}
+                        aria-pressed={environment === env}
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                          environment === env
+                            ? "border-primary bg-primary/8 text-primary"
+                            : "hover:bg-accent"
+                        }`}
+                      >
+                        {env.toLowerCase()}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              </>
+            )}
 
             <fieldset>
               <legend className="mb-2 text-sm font-medium">
                 What do you need from this {RUN_SINGULAR.toLowerCase()}?
               </legend>
               <div className="grid gap-2 sm:grid-cols-2">
-                {GOAL_OPTIONS.map((goal) => (
+                {reviewOptions.map((option) => (
                   <button
                     type="button"
-                    key={goal.value}
-                    onClick={() => setSelectedGoal(goal.value)}
+                    key={option.id}
+                    onClick={() => setSelectedGoal(option.goal)}
+                    aria-pressed={selectedReview?.id === option.id}
                     className={`rounded-lg border p-3 text-left text-sm transition-colors ${
-                      selectedGoal === goal.value
+                      selectedReview?.id === option.id
                         ? "border-primary bg-primary/8"
                         : "hover:bg-accent"
                     }`}
                   >
-                    <span className="block font-medium">{goal.label}</span>
-                    <span className="text-muted-foreground text-xs">{goal.description}</span>
+                    <span className="block font-medium">{option.label}</span>
+                    <span className="text-muted-foreground text-xs">{option.description}</span>
                   </button>
                 ))}
               </div>
+              {path === "api" && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Add an OpenAPI document after setup to unlock Contract and Contract Behavior
+                  reviews.
+                </p>
+              )}
             </fieldset>
 
             <p className="border-warning bg-warning/10 border-l-2 p-3 text-sm">
@@ -752,19 +791,21 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
             <div className="flex justify-between gap-3">
               {/* GitHub path backs into repo-select (step 2); URL/API back into
                   the URL form (step 1, path kept). */}
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setStep(pathNeedsRepo(path) ? 2 : 1)}
-                disabled={loading}
-              >
-                <ChevronLeft className="size-4" /> Back
-              </Button>
+              {retryingExistingTarget ? (
+                <span />
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setStep(pathNeedsRepo(path) ? 2 : 1)}
+                  disabled={loading}
+                >
+                  <ChevronLeft className="size-4" /> Back
+                </Button>
+              )}
               <Button type="button" onClick={createProductAndStart} disabled={loading}>
                 <ShieldCheck className="size-4" />
-                {loading
-                  ? "Starting…"
-                  : `Start ${GOAL_OPTIONS.find((g) => g.value === selectedGoal)?.label.toLowerCase() ?? "review"}`}
+                {loading ? "Starting…" : `Start ${selectedReview?.label.toLowerCase() ?? "review"}`}
               </Button>
             </div>
           </div>

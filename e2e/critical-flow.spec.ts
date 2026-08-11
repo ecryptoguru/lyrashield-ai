@@ -139,6 +139,15 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   const workspaceId = workspace.id as string
   createdWorkspaceId = workspaceId
 
+  await page.goto("/dashboard")
+  await expect(page.getByRole("link", { name: "Target ready" }).first()).toHaveAttribute(
+    "href",
+    "/dashboard/targets"
+  )
+  await expect(page.getByRole("link", { name: "Evidence captured" })).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Blockers cleared" })).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Assurance shared" })).toHaveCount(0)
+
   const targetResponse = await page.request.post("/api/targets", {
     data: {
       workspaceId,
@@ -166,6 +175,8 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
     headers: { "x-forwarded-for": forwardedFor },
   })
   await expect(apiTargetResponse).toBeOK()
+  const { data: apiTarget } = await apiTargetResponse.json()
+  const apiTargetId = apiTarget.id as string
 
   const contractTargetResponse = await page.request.post("/api/targets", {
     data: {
@@ -181,6 +192,59 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   })
   await expect(contractTargetResponse).toBeOK()
 
+  await page.goto("/dashboard")
+  await expect(page.getByRole("link", { name: "Evidence captured" }).first()).toHaveAttribute(
+    "href",
+    "/dashboard/scans?new=1"
+  )
+  await expect(page.getByRole("link", { name: "Blockers cleared" })).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Assurance shared" })).toHaveCount(0)
+
+  const restoreOnboardingResponse = await page.request.patch("/api/onboarding", {
+    data: {
+      currentStep: 3,
+      skipped: false,
+      workspaceId,
+      targetId: apiTargetId,
+      selectedGoal: "LAUNCH_REVIEW",
+    },
+    headers: { "x-forwarded-for": forwardedFor },
+  })
+  await expect(restoreOnboardingResponse).toBeOK()
+
+  let scanAttempts = 0
+  await page.route("**/api/scans", async (route) => {
+    if (route.request().method() !== "POST") return route.continue()
+    scanAttempts += 1
+    return route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: false,
+        error: { code: "SCAN_SERVICE_UNAVAILABLE", message: "Retry the restored review." },
+      }),
+    })
+  })
+  await page.goto("/onboarding")
+  await expect(page.getByRole("button", { name: /^Endpoint Review/ })).toBeVisible()
+  await expect(page.getByText("target details are locked for this retry")).toBeVisible()
+  await expect(page.locator("#product-name")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0)
+  const restoredReviewButton = page.getByRole("button", { name: "Start endpoint review" })
+  await restoredReviewButton.click()
+  await expect(restoredReviewButton).toBeEnabled()
+  await restoredReviewButton.click()
+  await expect(restoredReviewButton).toBeEnabled()
+  expect(scanAttempts).toBe(2)
+  expect(await prisma.target.count({ where: { workspaceId } })).toBe(3)
+  await page.unroute("**/api/scans")
+
+  const finishOnboardingResponse = await page.request.patch("/api/onboarding", {
+    data: { skipped: true },
+    headers: { "x-forwarded-for": forwardedFor },
+  })
+  await expect(finishOnboardingResponse).toBeOK()
+
   await page.goto("/dashboard/scans?new=1")
   const targetSelect = page.getByLabel("Target")
   await targetSelect.selectOption({ label: "Example target (WEB_APP)" })
@@ -194,6 +258,10 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   await expect(page.getByRole("radio", { name: /^Endpoint Review:/ })).toBeEnabled()
   await expect(page.getByRole("radio", { name: /^Contract Review:/ })).toBeDisabled()
   await expect(page.getByRole("radio", { name: /^Contract Behavior Review:/ })).toBeDisabled()
+  await expect(page.getByRole("link", { name: "Add OpenAPI document" })).toHaveAttribute(
+    "href",
+    `/dashboard/targets/${apiTargetId}`
+  )
   await expect(page.getByRole("status").filter({ hasText: "Review type reset" })).toContainText(
     "Endpoint Review"
   )

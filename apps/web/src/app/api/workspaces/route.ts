@@ -82,29 +82,25 @@ export async function POST(request: Request) {
           slug,
           mode,
           plan: "FREE",
-        },
-      })
-
-      await tx.workspaceMember.create({
-        data: {
-          workspaceId: workspace.id,
-          userId: session.userId,
-          role: "OWNER",
-          status: "active",
-        },
-      })
-
-      await tx.policy.create({
-        data: {
-          workspaceId: workspace.id,
-          name: "Default Policy",
-          description: "Default scan policy with safe settings",
-          networkEgressPolicy: "target_only",
-          destructiveTestsAllowed: false,
-          approvalRequired: false,
-          maxDurationMinutes: 60,
-          piiRedactionEnabled: true,
-          evidenceRetentionDays: 30,
+          members: {
+            create: {
+              userId: session.userId,
+              role: "OWNER",
+              status: "active",
+            },
+          },
+          policies: {
+            create: {
+              name: "Default Policy",
+              description: "Default scan policy with safe settings",
+              networkEgressPolicy: "target_only",
+              destructiveTestsAllowed: false,
+              approvalRequired: false,
+              maxDurationMinutes: 60,
+              piiRedactionEnabled: true,
+              evidenceRetentionDays: 30,
+            },
+          },
         },
       })
 

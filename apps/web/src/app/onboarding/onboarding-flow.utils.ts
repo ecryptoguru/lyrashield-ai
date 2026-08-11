@@ -1,3 +1,5 @@
+import { getManualScanOptions, type ManualScanOption } from "@/lib/scan-presets"
+
 /**
  * Pure decision logic for the onboarding four-way flow.
  *
@@ -13,6 +15,25 @@
  */
 
 export type OnboardingPath = "github" | "url" | "api" | "skip" | null
+
+export function onboardingPathForTargetType(targetType: string | null): OnboardingPath {
+  if (targetType === "REPO") return "github"
+  if (targetType === "WEB_APP") return "url"
+  if (targetType === "API") return "api"
+  return null
+}
+
+export async function ensureOnboardingTargetId(
+  existingTargetId: string | null,
+  createTarget: () => Promise<string>
+): Promise<string> {
+  return existingTargetId ?? createTarget()
+}
+
+export function getOnboardingReviewOptions(path: OnboardingPath): ManualScanOption[] {
+  const type = path === "github" ? "REPO" : path === "url" ? "WEB_APP" : path === "api" ? "API" : ""
+  return getManualScanOptions({ type, hasApiSpec: false }).filter((option) => option.available)
+}
 
 export interface UrlTargetPayload {
   workspaceId: string

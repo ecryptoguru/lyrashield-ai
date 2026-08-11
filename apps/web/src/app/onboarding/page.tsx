@@ -6,6 +6,7 @@ import { ReferralClaim } from "./referral-claim"
 import { SignOutButton } from "./sign-out-button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { getOrCreateOnboardingState } from "@/lib/onboarding-state"
+import { withWorkspaceRLS } from "@lyrashield/db"
 
 export default async function OnboardingPage() {
   const session = await getSession()
@@ -20,6 +21,16 @@ export default async function OnboardingPage() {
     redirect("/dashboard")
   }
 
+  const target =
+    state.targetId && state.workspaceId
+      ? await withWorkspaceRLS(state.workspaceId, (tx) =>
+          tx.target.findFirst({
+            where: { id: state.targetId!, workspaceId: state.workspaceId! },
+            select: { type: true, name: true },
+          })
+        )
+      : null
+
   const initialState = {
     currentStep: state.currentStep,
     completed: state.completed,
@@ -27,6 +38,8 @@ export default async function OnboardingPage() {
     workspaceId: state.workspaceId,
     targetId: state.targetId,
     selectedGoal: state.selectedGoal,
+    targetType: target?.type ?? null,
+    targetName: target?.name ?? null,
   }
 
   return (

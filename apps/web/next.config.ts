@@ -1,4 +1,8 @@
 import type { NextConfig } from "next"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 
 // Baseline HTTP security headers applied to every response.
 // Content-Security-Policy is set per-request in proxy.ts with a nonce
@@ -16,6 +20,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingRoot: workspaceRoot,
+  turbopack: { root: workspaceRoot },
   reactStrictMode: true,
   poweredByHeader: false,
   experimental: {
