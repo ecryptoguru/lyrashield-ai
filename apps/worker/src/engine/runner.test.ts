@@ -305,6 +305,7 @@ describe("repository scan runtime configuration", () => {
     "",
     "ghcr.io/ecryptoguru/lyrashield-sandbox:latest",
     `ghcr.io/usestrix/strix-sandbox@sha256:${"a".repeat(64)}`,
+    ` ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)} `,
   ])("rejects an untrusted production sandbox image %s", (image) => {
     expect(() =>
       assertRepositoryScanRuntimeConfigured({
