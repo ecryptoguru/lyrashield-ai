@@ -273,28 +273,48 @@ describe("repository scan runtime configuration", () => {
   )
 
   it("requires an isolated remote Docker endpoint in production", () => {
+    const productionEnv = {
+      ...runtimeEnv,
+      NODE_ENV: "production",
+      LYRASHIELD_IMAGE: `ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)}`,
+    }
+
     expect(() =>
       assertRepositoryScanRuntimeConfigured({
-        ...runtimeEnv,
-        NODE_ENV: "production",
+        ...productionEnv,
       })
     ).toThrow("DOCKER_HOST")
 
     expect(() =>
       assertRepositoryScanRuntimeConfigured({
-        ...runtimeEnv,
-        NODE_ENV: "production",
+        ...productionEnv,
         DOCKER_HOST: "unix:///var/run/docker.sock",
       })
     ).toThrow("DOCKER_HOST")
 
     expect(() =>
       assertRepositoryScanRuntimeConfigured({
-        ...runtimeEnv,
-        NODE_ENV: "production",
+        ...productionEnv,
         DOCKER_HOST: "ssh://scanner@isolated-worker",
       })
     ).not.toThrow()
+  })
+
+  it.each([
+    undefined,
+    "",
+    "ghcr.io/ecryptoguru/lyrashield-sandbox:latest",
+    `ghcr.io/usestrix/strix-sandbox@sha256:${"a".repeat(64)}`,
+    ` ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)} `,
+  ])("rejects an untrusted production sandbox image %s", (image) => {
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...runtimeEnv,
+        NODE_ENV: "production",
+        DOCKER_HOST: "ssh://scanner@isolated-worker",
+        LYRASHIELD_IMAGE: image,
+      })
+    ).toThrow("LYRASHIELD_IMAGE")
   })
 })
 
