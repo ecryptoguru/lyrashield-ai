@@ -1,6 +1,6 @@
 id = "lyrashield-mcp"
 name = "LyraShield AI MCP"
-version = "0.1.0"
+version = "0.1.1"
 schema_version = 1
 authors = ["LyraShield AI <support@lyrashieldai.com>"]
 description = "Run verified security scans, review findings, and drive the fix/verify loop from the Zed agent panel via the LyraShield MCP server."

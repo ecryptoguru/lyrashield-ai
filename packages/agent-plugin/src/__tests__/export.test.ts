@@ -59,7 +59,7 @@ describe("exportMarketplace", () => {
     expect(claudeManifest).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
-      version: "0.1.15",
+      version: "0.1.16",
     })
     const codexManifest = JSON.parse(
       await readFile(path.join(output, ".codex-plugin", "plugin.json"), "utf8")
@@ -71,6 +71,19 @@ describe("exportMarketplace", () => {
         type: "streamable-http",
         url: "https://app.lyrashieldai.com/api/mcp",
       },
+    })
+    const cursorManifest = JSON.parse(
+      await readFile(path.join(output, ".cursor-plugin", "plugin.json"), "utf8")
+    ) as { mcpServers?: Record<string, unknown>; variables?: unknown }
+    expect(cursorManifest.mcpServers).toEqual({
+      lyrashield: { url: "https://app.lyrashieldai.com/api/mcp" },
+    })
+    expect(cursorManifest.variables).toBeUndefined()
+    const kiroMcp = JSON.parse(await readFile(path.join(output, ".mcp.kiro.json"), "utf8")) as {
+      mcpServers?: Record<string, { env?: Record<string, string> }>
+    }
+    expect(kiroMcp.mcpServers?.lyrashield?.env).toEqual({
+      LYRASHIELD_API_URL: "https://app.lyrashieldai.com",
     })
     await expect(
       readFile(path.join(output, "skills", "lyrashield", "SKILL.md"), "utf8")

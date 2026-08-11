@@ -2,7 +2,18 @@
 
 Run verified security scans, review findings, and drive the fix → verify loop from Zed's agent panel.
 
-## 1. Get a LyraShield API key
+## 1. Connect with OAuth (recommended)
+
+Run the following once in a terminal, select one workspace in the browser, then restart Zed:
+
+```sh
+lyrashield login --oauth
+```
+
+The extension starts `@lyrashield/mcp`, which reads the user-only credential from
+`~/.lyrashield/credentials.json`. No credential belongs in a project file or Zed settings.
+
+## 2. API-key fallback
 
 Open [LyraShield AI](https://app.lyrashieldai.com) and go to **Settings → API keys**.
 
@@ -13,7 +24,7 @@ Create a key with the scopes you need:
 
 Your key starts with `lsk_…`.
 
-## 2. Add the server to your Zed settings
+## 3. Add fallback settings only when needed
 
 Open your Zed settings and add:
 
@@ -39,14 +50,14 @@ Open your Zed settings and add:
 
 ## Available tools
 
-All tools call the LyraShield REST API with your key. Mutating tools ask for in-editor approval before running.
+All tools call the LyraShield REST API with the OAuth credential or fallback key. Mutating tools ask
+for approval before running.
 
 See the full tool list and behavior in the [`@lyrashield/mcp` README](https://www.npmjs.com/package/@lyrashield/mcp).
 
 ## Troubleshooting
 
-**"Missing settings" or the setup panel keeps appearing** — `api_key` is absent or empty. Add it under `context_servers.lyrashield-mcp.settings.api_key`.
-
-**Authentication errors from the tools** — check that your key has the required scope and that `api_url` is correct.
+**Authentication errors from the tools** — run `lyrashield login --oauth` again, restart Zed, and
+confirm the selected workspace. If using the fallback, check that `api_key` has the required scope.
 
 **Server fails to start** — confirm Zed can reach `https://registry.npmjs.org` to download the package.

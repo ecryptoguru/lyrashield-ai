@@ -76,7 +76,7 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
         <div className="mt-1.5 flex items-center gap-1.5">
           <CircleDashed className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
           <span className="text-muted-foreground text-[11px] leading-5 font-medium">
-            Setup status is not detected
+            Verify local setup with lyrashield doctor
           </span>
         </div>
         {primaryLocation ? (

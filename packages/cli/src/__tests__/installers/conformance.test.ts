@@ -202,6 +202,24 @@ describe("conformance: install/uninstall round-trips", () => {
     expect(result.message).toMatch(/shared config/i)
   })
 
+  it("OAuth device credentials write a local config without an expiring bearer token", async () => {
+    const result = await installAgent({
+      agent: claude,
+      transport: "stdio",
+      apiUrl: API_URL,
+      scope: "project",
+      cwd,
+      all: true,
+      useCredentialStore: true,
+    })
+
+    expect(result.outcome).toBe("CONFIGURED")
+    const content = await readFile(path.join(cwd, ".mcp.json"), "utf-8")
+    expect(content).toContain("LYRASHIELD_API_URL")
+    expect(content).not.toContain("LYRASHIELD_API_KEY")
+    expect(content).not.toContain("oauth")
+  })
+
   it("interpolated agent writes no literal API key", async () => {
     const result = await installAgent({
       agent: kilo,

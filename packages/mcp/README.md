@@ -131,7 +131,7 @@ The remote endpoint runs the same guard and tools as stdio. Because a stateless 
 
 ### Operator-only CI opt-out
 
-Set `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true` only in a documented operator-controlled automation environment. It is not a marketplace or normal-user feature. OAuth clients can never use this bypass; every OAuth write remains scope- and approval-gated.
+Remote MCP has no normal-user or marketplace write bypass. OAuth writes always remain scope- and approval-gated; operator-only automation controls are intentionally documented outside this public setup guide.
 
 Read-only tools never prompt. A read-only key is additionally rejected server-side for any write action.
 

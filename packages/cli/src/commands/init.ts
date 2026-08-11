@@ -35,7 +35,9 @@ export async function handleInit(args: string[], output: Output): Promise<number
 
   const creds = await getEffectiveCredentials()
   if (!creds.apiKey) {
-    output.error("No API key. Run: lyrashield login")
+    output.error(
+      "No LyraShield credential. Run: lyrashield login --oauth, or use an API key for CI."
+    )
     return 3
   }
 
@@ -50,6 +52,10 @@ export async function handleInit(args: string[], output: Output): Promise<number
     () => ({}) as Record<string, unknown>
   )
   const list = (registry as Record<string, unknown>).listAgents as (() => AgentEntry[]) | undefined
+  const listPreferred = (registry as Record<string, unknown>).listPreferredAgents as
+    (() => AgentEntry[]) | undefined
+  const getPreferredAgent = (registry as Record<string, unknown>).getPreferredAgent as
+    ((id: string) => AgentEntry | undefined) | undefined
   const arr = (registry as Record<string, unknown>).AGENTS as AgentEntry[] | undefined
   const allAgents = list?.() ?? arr ?? []
 
@@ -58,10 +64,14 @@ export async function handleInit(args: string[], output: Output): Promise<number
     return 1
   }
 
-  let agents = allAgents
+  let agents = listPreferred?.() ?? allAgents
   if (selectedAgents.length) {
-    agents = allAgents.filter((a) => selectedAgents.includes(a.id))
-    const missing = selectedAgents.filter((id) => !allAgents.some((a) => a.id === id))
+    agents = selectedAgents
+      .map((id) => getPreferredAgent?.(id) ?? allAgents.find((agent) => agent.id === id))
+      .filter((agent): agent is AgentEntry => Boolean(agent))
+    const missing = selectedAgents.filter(
+      (id) => !(getPreferredAgent?.(id) ?? allAgents.find((agent) => agent.id === id))
+    )
     if (missing.length) {
       output.warn(`Unknown agent(s): ${missing.join(", ")}`)
     }
@@ -79,7 +89,8 @@ export async function handleInit(args: string[], output: Output): Promise<number
       agent,
       transport,
       apiUrl: creds.apiUrl,
-      apiKey: creds.apiKey,
+      apiKey: creds.credentialKind === "api-key" ? creds.apiKey : undefined,
+      useCredentialStore: creds.credentialKind === "oauth",
       scope,
       all: parsed.all,
       dryRun: parsed["dry-run"],

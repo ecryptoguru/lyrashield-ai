@@ -25,6 +25,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   process.env = ORIGINAL_ENV
+  vi.unstubAllGlobals()
   try {
     await unlink(CREDENTIALS_FILE)
   } catch {
@@ -75,6 +76,40 @@ describe("resolveMcpCredentials", () => {
 
     expect(creds.apiKey).toBe("lsk_file")
     expect(creds.apiUrl).toBe("https://app.lyrashieldai.com")
+  })
+
+  it("refreshes an expired stored OAuth credential before starting the MCP server", async () => {
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            access_token: "fresh-oauth-access-token",
+            refresh_token: "fresh-oauth-refresh-token",
+            expires_in: 3600,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    )
+    vi.stubGlobal("fetch", fetchFn)
+    await mkdir(path.dirname(CREDENTIALS_FILE), { recursive: true })
+    await writeFile(
+      CREDENTIALS_FILE,
+      JSON.stringify({
+        installId: "install-1",
+        apiUrl: "https://app.example.com",
+        oauthAccessToken: "expired-oauth-access-token",
+        oauthRefreshToken: "old-oauth-refresh-token",
+        oauthExpiresAt: "2020-01-01T00:00:00.000Z",
+      })
+    )
+
+    const creds = await resolveMcpCredentials()
+
+    expect(creds.apiKey).toBe("fresh-oauth-access-token")
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://app.example.com/api/auth/oauth2/token",
+      expect.objectContaining({ method: "POST" })
+    )
   })
 
   it("throws NoApiKeyError when no key is available", async () => {

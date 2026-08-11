@@ -185,12 +185,21 @@ describe("handleRemoteMcpRequest (remote-oob approval)", () => {
     )
 
     const body = await readJson(res)
-    const result = body.result as { isError?: boolean; content?: Array<{ text: string }> }
+    const result = body.result as {
+      isError?: boolean
+      content?: Array<{ text: string }>
+      structuredContent?: Record<string, unknown>
+    }
     expect(result?.isError).toBeFalsy()
     const payload = JSON.parse(result?.content?.[0]?.text ?? "{}") as Record<string, unknown>
     expect(payload.status).toBe("PENDING")
     expect(payload.approvalId).toBeTruthy()
     expect(payload.approvalUrl).toContain("/agent-approvals/")
+    expect(result?.structuredContent).toMatchObject({
+      status: "PENDING",
+      approvalId: payload.approvalId,
+      approvalUrl: payload.approvalUrl,
+    })
     expect(fetchFn).not.toHaveBeenCalled()
   })
 

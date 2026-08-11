@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/antigravity", origin).toString()
 const title = "LyraShield MCP for Antigravity — Setup Guide"
 const description =
   "Connect LyraShield to Antigravity (Google's successor to Gemini CLI). Configure ~/.gemini/config/mcp_config.json for stdio or use serverUrl for the remote Streamable-HTTP endpoint."
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-08-12"
 
 const jsonLd: unknown[] = [
   {
@@ -125,7 +125,7 @@ const jsonLd: unknown[] = [
 
   <div class="callout">
     <strong>Read-only vs. read-and-write:</strong> Remote mutating tools (scan triggers, finding
-    submissions, report creation) require a read-and-write API key and a human out-of-band
+    submissions, report creation) require an explicit OAuth write scope or write-capable API key, plus a human out-of-band
     approval. Read-only inspection tools work with any key.
   </div>
 

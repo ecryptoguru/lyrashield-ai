@@ -69,7 +69,8 @@ ${SKILL_APPENDIX}
 
   const manifest = JSON.parse(await readFile(path.join(pluginRoot, "plugin.json"), "utf-8"))
 
-  // Kiro loads MCP config from a separate file so env expansion works for secrets.
+  // Kiro loads local stdio MCP config from a separate file. Authentication stays
+  // in the user-only credential store rather than the plugin manifest.
   await writeGeneratedFile(
     path.join(pluginRoot, ".mcp.kiro.json"),
     JSON.stringify(
@@ -80,7 +81,6 @@ ${SKILL_APPENDIX}
             args: ["-y", "@lyrashield/mcp"],
             env: {
               LYRASHIELD_API_URL,
-              LYRASHIELD_API_KEY: "${LYRASHIELD_API_KEY}",
             },
           },
         },
@@ -123,15 +123,6 @@ ${SKILL_APPENDIX}
                   mcpServers: {
                     lyrashield: {
                       url: `${LYRASHIELD_API_URL}/api/mcp`,
-                      headers: {
-                        Authorization: "Bearer ${LYRASHIELD_API_KEY}",
-                      },
-                    },
-                  },
-                  variables: {
-                    LYRASHIELD_API_KEY: {
-                      type: "string",
-                      description: "API key for the LyraShield MCP server",
                     },
                   },
                 }

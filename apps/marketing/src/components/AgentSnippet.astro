@@ -29,7 +29,7 @@ const effectiveTransport: Transport =
   transport && safeAgent.transports.includes(transport) ? transport : (safeAgent.transports[0] ?? "stdio")
 
 const defaultSecretMode: InstallOptions["secretMode"] =
-  safeAgent.forceInlineEnv ? "inline" : "interpolated"
+  effectiveTransport === "stdio" ? "shell" : safeAgent.forceInlineEnv ? "inline" : "interpolated"
 
 const effectiveSecretMode: InstallOptions["secretMode"] = secretMode ?? defaultSecretMode
 
@@ -40,7 +40,7 @@ function buildKeyNote(snippet: string): string {
   if (snippet.includes("{env:LYRASHIELD_API_KEY}")) {
     return "Make sure LYRASHIELD_API_KEY is exported in your shell or .env file."
   }
-  return "Add your workspace API key where required."
+  return "Recommended: run npx lyrashield login --oauth once; the local MCP server reads the selected workspace credential from ~/.lyrashield/credentials.json."
 }
 
 function buildManualCommand(): string {

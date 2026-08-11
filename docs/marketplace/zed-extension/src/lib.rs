@@ -13,8 +13,9 @@ const DEFAULT_API_URL: &str = "https://app.lyrashieldai.com";
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct LyraShieldMcpSettings {
-    /// Your LyraShield workspace API key.
-    api_key: String,
+    /// Optional LyraShield workspace API key for CI or non-OAuth environments.
+    #[serde(default)]
+    api_key: Option<String>,
     /// The LyraShield app URL. Defaults to https://app.lyrashieldai.com.
     #[serde(default = "default_api_url")]
     api_url: String,
@@ -27,10 +28,11 @@ fn default_api_url() -> String {
 struct LyraShieldMcpExtension;
 
 impl LyraShieldMcpExtension {
-    fn missing_settings_error(context_server_id: &ContextServerId, reason: &str) -> String {
+    fn settings_error(context_server_id: &ContextServerId, reason: &str) -> String {
         format!(
             "{reason}\n\n\
-             Add your LyraShield API key to your Zed settings:\n\n\
+             Recommended: run `lyrashield login --oauth` once in a terminal, then restart Zed.\n\n\
+             API-key fallback settings:\n\n\
              {{\n  \
                  \"context_servers\": {{\n    \
                      \"{context_server_id}\": {{\n      \
@@ -58,27 +60,15 @@ impl zed::Extension for LyraShieldMcpExtension {
     ) -> Result<Command> {
         let settings = ContextServerSettings::for_project(context_server_id.as_ref(), project)?;
 
-        let Some(settings) = settings.settings else {
-            return Err(Self::missing_settings_error(
-                context_server_id,
-                "The LyraShield MCP server is not configured yet.",
-            ));
-        };
-
-        let settings: LyraShieldMcpSettings = serde_json::from_value(settings).map_err(|err| {
-            Self::missing_settings_error(
+        let settings: LyraShieldMcpSettings = settings.settings.map_or_else(
+            || Ok(LyraShieldMcpSettings { api_key: None, api_url: default_api_url() }),
+            |settings| serde_json::from_value(settings).map_err(|err| {
+            Self::settings_error(
                 context_server_id,
                 &format!("Invalid settings for the LyraShield MCP server: {err}."),
             )
-        })?;
-
-        let api_key = settings.api_key.trim().to_string();
-        if api_key.is_empty() {
-            return Err(Self::missing_settings_error(
-                context_server_id,
-                "The LyraShield MCP server's `api_key` setting is empty.",
-            ));
-        }
+        }),
+        )?;
 
         let api_url = settings.api_url.trim().to_string();
         let api_url = if api_url.is_empty() {
@@ -100,14 +90,15 @@ impl zed::Extension for LyraShieldMcpExtension {
             .map_err(|err| format!("Failed to resolve the extension working directory: {err}"))?
             .join(SERVER_ENTRYPOINT);
 
-        Ok(Command {
+        let mut command = Command {
             command: node,
             args: vec![entrypoint.to_string_lossy().to_string()],
-            env: vec![
-                (API_KEY_ENV_VAR.to_string(), api_key),
-                (API_URL_ENV_VAR.to_string(), api_url),
-            ],
-        })
+            env: vec![(API_URL_ENV_VAR.to_string(), api_url)],
+        };
+        if let Some(api_key) = settings.api_key.map(|key| key.trim().to_string()).filter(|key| !key.is_empty()) {
+            command.env.push((API_KEY_ENV_VAR.to_string(), api_key));
+        }
+        Ok(command)
     }
 
     fn context_server_configuration(

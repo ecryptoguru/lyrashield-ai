@@ -3,7 +3,9 @@ import {
   AGENTS,
   agentEntrySchema,
   getAgent,
+  getPreferredAgent,
   listAgents,
+  listPreferredAgents,
   agentsByStrategy,
   renderConfig,
   renderEntry,
@@ -87,6 +89,19 @@ describe("agent registry", () => {
         `Oldest source.checkedOn (${oldest.toISOString().slice(0, 10)}) is ${Math.floor(daysSince)} days old.`
       )
     }
+  })
+})
+
+describe("preferred agent integrations", () => {
+  it("routes confirmed plugin clients to one primary install instead of a duplicate config entry", () => {
+    expect(getPreferredAgent("claude-code")?.id).toBe("claude-code-agent-plugin")
+    expect(getPreferredAgent("cursor")?.id).toBe("cursor-agent-plugin")
+    expect(getPreferredAgent("openai-codex")?.id).toBe("openai-codex-agent-plugin")
+  })
+
+  it("shows one dashboard choice for each documented integration", () => {
+    const docsSlugs = listPreferredAgents().map((agent) => agent.docsSlug)
+    expect(new Set(docsSlugs).size).toBe(docsSlugs.length)
   })
 })
 

@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/cursor", origin).toString()
 const title = "LyraShield MCP for Cursor — Setup Guide"
 const description =
   "Add the LyraShield MCP server to Cursor. Configure .cursor/mcp.json with the npx stdio transport to run security checks inline in the Cursor AI editor."
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-08-12"
 
 const jsonLd: unknown[] = [
   {
@@ -80,7 +80,7 @@ const jsonLd: unknown[] = [
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install cursor</code> from your project root. It detects Cursor, writes
-    the correct config automatically, and never inlines your API key into a file you might commit.
+    the generated Agent Plugin by default, and never copies an OAuth bearer into a file you might commit.
     Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
     <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
   </p>
@@ -96,8 +96,8 @@ const jsonLd: unknown[] = [
 
   <div class="callout">
     <strong>Project vs. global:</strong> Place <code>.cursor/mcp.json</code> inside your project
-    root to share config with the team (each developer sets their own <code>LYRASHIELD_API_KEY</code
-    > via a <code>.env</code> file or their shell). Place it at <code>~/.cursor/mcp.json</code> for
+    root to share config with the team (each developer runs <code>npx lyrashield login --oauth</code>
+    locally). Place it at <code>~/.cursor/mcp.json</code> for
     a personal global setup.
   </div>
 
@@ -125,7 +125,7 @@ const jsonLd: unknown[] = [
   </p>
   <pre><code>npx lyrashield install cursor</code></pre>
   <div class="callout">
-    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
+    <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>, the
     plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
     <code>LYRASHIELD_API_KEY</code> environment variable). No key needs to be inlined in{" "}
     <code>.cursor/mcp.json</code> or any other file you might commit.
@@ -140,7 +140,7 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. The
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace OAuth login. The
     <code>@lyrashield/mcp</code> package is published on npm, so
     <code>npx -y @lyrashield/mcp</code> resolves directly.
   </div>

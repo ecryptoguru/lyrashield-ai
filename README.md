@@ -24,7 +24,7 @@ LyraShield ships three ways to run checks without leaving your editor or CI pipe
 **CLI** — install and configure any supported agent in one command:
 
 ```bash
-npx lyrashield login              # paste a workspace API key when prompted
+npx lyrashield login --oauth      # select one workspace in the browser (recommended)
 npx lyrashield init                # detect installed agents and configure them
 npx lyrashield gate                # CI-friendly diff-aware security gate
 ```

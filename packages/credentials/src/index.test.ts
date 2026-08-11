@@ -8,6 +8,8 @@ import {
   DEFAULT_API_URL,
   normalizeCredentials,
   readCredentialsFile,
+  refreshOAuthCredentials,
+  revokeOAuthCredentials,
   tryReadCredentialsFile,
   resolveCredentials,
 } from "./index.js"
@@ -113,6 +115,16 @@ describe("resolveCredentials", () => {
     expect(resolved.source).toBe("env")
   })
 
+  it("keeps an environment OAuth bearer classified as OAuth when an old API key remains on disk", async () => {
+    process.env.LYRASHIELD_OAUTH_ACCESS_TOKEN = "oauth-token"
+    readFile.mockResolvedValueOnce(JSON.stringify({ apiKey: "old-api-key", installId: "i" }))
+
+    const resolved = await resolveCredentials()
+
+    expect(resolved.apiKey).toBe("oauth-token")
+    expect(resolved.credentialKind).toBe("oauth")
+  })
+
   it("reports source none when nothing is configured", async () => {
     readFile.mockRejectedValueOnce(enoent())
 
@@ -130,5 +142,66 @@ describe("resolveCredentials", () => {
     process.env.LYRASHIELD_API_KEY = "env-key"
     const tolerant = await resolveCredentials({ tolerateUnreadableFile: true })
     expect(tolerant.apiKey).toBe("env-key")
+  })
+})
+
+describe("refreshOAuthCredentials", () => {
+  it("refreshes an expired stored OAuth access token and keeps the rotated refresh token", async () => {
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            access_token: "fresh-access-token",
+            refresh_token: "fresh-refresh-token",
+            expires_in: 3600,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    ) as unknown as typeof fetch
+
+    const refreshed = await refreshOAuthCredentials(
+      {
+        installId: "install-1",
+        apiUrl: "https://app.example.com",
+        oauthAccessToken: "expired-access-token",
+        oauthRefreshToken: "old-refresh-token",
+        oauthExpiresAt: "2020-01-01T00:00:00.000Z",
+      },
+      { fetchFn, now: () => Date.parse("2026-08-12T00:00:00.000Z") }
+    )
+
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://app.example.com/api/auth/oauth2/token",
+      expect.objectContaining({ method: "POST" })
+    )
+    expect(refreshed).toMatchObject({
+      oauthAccessToken: "fresh-access-token",
+      oauthRefreshToken: "fresh-refresh-token",
+    })
+    expect(Date.parse(refreshed.oauthExpiresAt ?? "")).toBeGreaterThan(
+      Date.parse("2026-08-12T00:59:00.000Z")
+    )
+  })
+})
+
+describe("revokeOAuthCredentials", () => {
+  it("revokes the stored refresh token before local logout removes it", async () => {
+    const fetchFn = vi.fn(
+      async () => new Response(null, { status: 200 })
+    ) as unknown as typeof fetch
+
+    await revokeOAuthCredentials(
+      {
+        installId: "install-1",
+        apiUrl: "https://app.example.com",
+        oauthRefreshToken: "refresh-token",
+      },
+      { fetchFn }
+    )
+
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://app.example.com/api/auth/oauth2/revoke",
+      expect.objectContaining({ method: "POST" })
+    )
   })
 })

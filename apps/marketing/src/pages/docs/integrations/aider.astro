@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/aider", origin).toString()
 const title = "LyraShield MCP for Aider — Setup Guide"
 const description =
   "Connect LyraShield to Aider. Configure MCP servers as a YAML list under mcp-servers in ~/.aider.conf.yml, or use the --mcp-servers CLI flag."
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-08-12"
 
 const jsonLd: unknown[] = [
   {
@@ -105,7 +105,7 @@ const jsonLd: unknown[] = [
 
   <div class="callout">
     <strong>Read-only vs. read-and-write:</strong> Remote mutating tools (scan triggers, finding
-    submissions, report creation) require a read-and-write API key and a human out-of-band
+    submissions, report creation) require an explicit OAuth write scope or write-capable API key, plus a human out-of-band
     approval. Read-only inspection tools work with any key.
   </div>
 

@@ -8,7 +8,7 @@
  * here.
  */
 import { randomUUID } from "node:crypto"
-import { mkdir, writeFile, unlink, chmod, access, rename } from "node:fs/promises"
+import { unlink, access } from "node:fs/promises"
 import {
   CREDENTIALS_DIR,
   CREDENTIALS_FILE,
@@ -16,7 +16,9 @@ import {
   getEnvApiUrl,
   getEnvOAuthAccessToken,
   readCredentialsFile,
+  refreshOAuthCredentials,
   resolveCredentials,
+  writeCredentialsFile,
   type ResolvedCredentials,
   type StoredCredentials,
 } from "@lyrashield/credentials"
@@ -25,18 +27,6 @@ export { CREDENTIALS_DIR, CREDENTIALS_FILE, getEnvApiKey, getEnvApiUrl, getEnvOA
 
 export type Credentials = StoredCredentials
 export type EffectiveCredentials = ResolvedCredentials
-
-async function ensureDir(): Promise<void> {
-  await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 })
-}
-
-async function setFileMode(file: string, mode: number): Promise<void> {
-  try {
-    await chmod(file, mode)
-  } catch {
-    // ignore platforms without chmod semantics
-  }
-}
 
 /**
  * Read the stored credentials. Returns undefined when no file exists; throws an
@@ -47,12 +37,8 @@ export async function loadCredentials(): Promise<Credentials | undefined> {
 }
 
 export async function saveCredentials(credentials: Credentials): Promise<void> {
-  await ensureDir()
   const withId: Credentials = { ...credentials, installId: credentials.installId || randomUUID() }
-  const tmp = `${CREDENTIALS_FILE}.tmp`
-  await writeFile(tmp, JSON.stringify(withId, null, 2), { mode: 0o600 })
-  await setFileMode(tmp, 0o600)
-  await rename(tmp, CREDENTIALS_FILE)
+  await writeCredentialsFile(withId)
 }
 
 export async function removeCredentials(): Promise<void> {
@@ -74,7 +60,18 @@ export async function credentialsFileExists(): Promise<boolean> {
 }
 
 export async function getEffectiveCredentials(): Promise<EffectiveCredentials> {
-  return resolveCredentials()
+  const resolved = await resolveCredentials()
+  if (resolved.source !== "file" || resolved.credentialKind !== "oauth") return resolved
+
+  const stored = await loadCredentials()
+  if (!stored?.oauthAccessToken) return resolved
+  const refreshed = await refreshOAuthCredentials(stored)
+  if (refreshed.oauthAccessToken !== stored.oauthAccessToken) await saveCredentials(refreshed)
+  return {
+    ...resolved,
+    apiKey: refreshed.oauthAccessToken,
+    apiUrl: refreshed.apiUrl ?? resolved.apiUrl,
+  }
 }
 
 export function requireApiKey(creds: EffectiveCredentials): string {

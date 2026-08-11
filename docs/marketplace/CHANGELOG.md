@@ -2,6 +2,9 @@
 
 ## Next
 
+- Made the generated Cursor and Kiro shims OAuth-first, so neither writes an API-key variable into
+  a plugin manifest. The Zed extension now starts from the same local OAuth credential store; its
+  settings API key is an explicit CI/non-OAuth fallback.
 - Corrected the bundled skill's pre-PR and weekly-monitor defaults to `QUICK`, matching the
   current bounded-release contract, and bumped the Codebuff read-only review agent to `0.1.2`.
 - Flattened the portable Agent Plugin into the marketplace root, so conformant clients discover
