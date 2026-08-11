@@ -13,9 +13,9 @@ import {
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
-import { GOAL_OPTIONS } from "@/lib/labels"
 import {
   buildUrlTargetPayload,
+  getOnboardingReviewOptions,
   nextStepForPath,
   pathLabel,
   pathNeedsRepo,
@@ -64,6 +64,9 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
   const [githubUnavailable, setGithubUnavailable] = useState(false)
   const [urlForm, setUrlForm] = useState({ name: "", url: "", ownershipAttested: false })
   const autoFetchAttempted = useRef(false)
+  const reviewOptions = getOnboardingReviewOptions(path)
+  const selectedReview =
+    reviewOptions.find((option) => option.goal === selectedGoal) ?? reviewOptions[0]
 
   function bucketCount(n: number): string {
     if (n <= 0) return "0"
@@ -295,7 +298,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
       setError(`Name your ${PRODUCT_SINGULAR.toLowerCase()} to continue.`)
       return
     }
-    if (!selectedGoal) {
+    if (!selectedReview) {
       setError("Choose a goal for this review.")
       return
     }
@@ -335,23 +338,28 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
           targetId = target.id
         }
       }
-      await persist({ targetId, selectedGoal, currentStep: 3, skipped: false })
+      await persist({ targetId, selectedGoal: selectedReview.goal, currentStep: 3, skipped: false })
       const scan = await apiPost(
         "/api/scans",
         {
           workspaceId: data.workspaceId,
           targetId,
-          goal: selectedGoal,
-          mode: "SAFE",
+          goal: selectedReview.goal,
+          mode: selectedReview.mode,
         },
         { schema: idSchema }
       )
-      await persist({ currentStep: 4, completed: true, skipped: false, selectedGoal })
+      await persist({
+        currentStep: 4,
+        completed: true,
+        skipped: false,
+        selectedGoal: selectedReview.goal,
+      })
       track("first_run_started", {
-        preset: selectedGoal,
+        preset: selectedReview.goal,
         asset_count: 1,
-        estimate_low_min: 1,
-        estimate_high_min: 5,
+        estimate_low_min: selectedReview.estimate.low,
+        estimate_high_min: selectedReview.estimate.high,
       })
       router.push(`/dashboard/scans/${scan.id}`)
       router.refresh()
@@ -682,7 +690,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
           <div className="space-y-5">
             <div>
               <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">
-                Step 4
+                Step {pathNeedsRepo(path) ? 4 : 3}
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">{PRODUCT_SINGULAR} details</h2>
               <p className="text-muted-foreground mt-2 text-sm">
@@ -703,12 +711,13 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
 
             <fieldset>
               <legend className="mb-2 text-sm font-medium">{ENVIRONMENT_SINGULAR}</legend>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {["STAGING", "PRODUCTION", "DEVELOPMENT"].map((env) => (
                   <button
                     type="button"
                     key={env}
                     onClick={() => setEnvironment(env)}
+                    aria-pressed={environment === env}
                     className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                       environment === env
                         ? "border-primary bg-primary/8 text-primary"
@@ -726,22 +735,29 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
                 What do you need from this {RUN_SINGULAR.toLowerCase()}?
               </legend>
               <div className="grid gap-2 sm:grid-cols-2">
-                {GOAL_OPTIONS.map((goal) => (
+                {reviewOptions.map((option) => (
                   <button
                     type="button"
-                    key={goal.value}
-                    onClick={() => setSelectedGoal(goal.value)}
+                    key={option.id}
+                    onClick={() => setSelectedGoal(option.goal)}
+                    aria-pressed={selectedReview?.id === option.id}
                     className={`rounded-lg border p-3 text-left text-sm transition-colors ${
-                      selectedGoal === goal.value
+                      selectedReview?.id === option.id
                         ? "border-primary bg-primary/8"
                         : "hover:bg-accent"
                     }`}
                   >
-                    <span className="block font-medium">{goal.label}</span>
-                    <span className="text-muted-foreground text-xs">{goal.description}</span>
+                    <span className="block font-medium">{option.label}</span>
+                    <span className="text-muted-foreground text-xs">{option.description}</span>
                   </button>
                 ))}
               </div>
+              {path === "api" && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Add an OpenAPI document after setup to unlock Contract and Contract Behavior
+                  reviews.
+                </p>
+              )}
             </fieldset>
 
             <p className="border-warning bg-warning/10 border-l-2 p-3 text-sm">
@@ -762,9 +778,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               </Button>
               <Button type="button" onClick={createProductAndStart} disabled={loading}>
                 <ShieldCheck className="size-4" />
-                {loading
-                  ? "Starting…"
-                  : `Start ${GOAL_OPTIONS.find((g) => g.value === selectedGoal)?.label.toLowerCase() ?? "review"}`}
+                {loading ? "Starting…" : `Start ${selectedReview?.label.toLowerCase() ?? "review"}`}
               </Button>
             </div>
           </div>

@@ -6,6 +6,7 @@ import {
   Bug,
   CheckCircle2,
   Circle,
+  Plus,
   Play,
   ShieldCheck,
   Wrench,
@@ -32,6 +33,7 @@ import { generateLaunchReadinessReportFromAggregate } from "@/lib/launch-readine
 import { getScanPresentation } from "@/lib/scan-presentation"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+import { dashboardPrimaryAction } from "@/components/trust-command-center.utils"
 
 export const metadata: Metadata = {
   title: "Dashboard | LyraShield AI",
@@ -120,6 +122,7 @@ export default async function DashboardPage() {
   // entirely rather than qualified with a footnote the user will not open.
   const coverageEvaluated = evaluatedCoverageCount > 0
   const latestScore = coverageEvaluated ? snapshotScore : null
+  const primaryAction = dashboardPrimaryAction(targetCount)
 
   const trend = coverageEvaluated
     ? [...scoreSnapshots]
@@ -147,9 +150,12 @@ export default async function DashboardPage() {
         : readiness.verdict === "NOT_EVALUATED"
           ? {
               label: "Needs evidence",
-              description: "Run a scan before making a launch decision.",
-              href: "/dashboard/scans?new=1",
-              action: "Run first scan",
+              description:
+                targetCount === 0
+                  ? "Add a target before running your first scan."
+                  : "Run a scan before making a launch decision.",
+              href: primaryAction.href,
+              action: primaryAction.label,
               className: "border-warning bg-warning/10",
             }
           : {
@@ -167,18 +173,17 @@ export default async function DashboardPage() {
       // A completed run that evaluated nothing has not captured evidence.
       label: "Evidence captured",
       complete: completedScanCount > 0 && coverageEvaluated,
-      href: "/dashboard/scans?new=1",
+      href: primaryAction.href,
     },
     {
       label: "Blockers cleared",
       complete: readiness.verdict === "GO",
-      href:
-        readiness.verdict === "NOT_EVALUATED" ? "/dashboard/scans?new=1" : "/dashboard/findings",
+      href: readiness.verdict === "NOT_EVALUATED" ? primaryAction.href : "/dashboard/findings",
     },
     {
       label: "Assurance shared",
       complete: reportCount > 0,
-      href: "/dashboard/findings?tab=reports",
+      href: targetCount === 0 ? primaryAction.href : "/dashboard/findings?tab=reports",
     },
   ]
 
@@ -201,11 +206,15 @@ export default async function DashboardPage() {
           </p>
         </div>
         <Link
-          href="/dashboard/scans?new=1"
+          href={primaryAction.href}
           className={buttonVariants({ className: "self-start sm:self-auto" })}
         >
-          <Play className="size-4" aria-hidden="true" />
-          Start a scan
+          {targetCount === 0 ? (
+            <Plus className="size-4" aria-hidden="true" />
+          ) : (
+            <Play className="size-4" aria-hidden="true" />
+          )}
+          {primaryAction.label}
         </Link>
       </header>
 
@@ -260,10 +269,12 @@ export default async function DashboardPage() {
               })}
             </div>
           </div>
-          <Link href={readinessConfig.href} className={buttonVariants({ variant: "secondary" })}>
-            {readinessConfig.action}
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
+          {targetCount > 0 && (
+            <Link href={readinessConfig.href} className={buttonVariants({ variant: "secondary" })}>
+              {readinessConfig.action}
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          )}
         </div>
       </section>
 
@@ -394,14 +405,22 @@ export default async function DashboardPage() {
               <EmptyState
                 icon={Activity}
                 title="No scan activity yet"
-                description="Run your first scan to see activity here."
+                description={
+                  targetCount === 0
+                    ? "Add a target to begin your first review."
+                    : "Run your first scan to see activity here."
+                }
                 action={
                   <Link
-                    href="/dashboard/scans"
+                    href={primaryAction.href}
                     className={buttonVariants({ variant: "secondary", size: "sm" })}
                   >
-                    <Play className="size-4" aria-hidden="true" />
-                    Go to scans
+                    {targetCount === 0 ? (
+                      <Plus className="size-4" aria-hidden="true" />
+                    ) : (
+                      <Play className="size-4" aria-hidden="true" />
+                    )}
+                    {primaryAction.label}
                   </Link>
                 }
               />

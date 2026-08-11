@@ -1,10 +1,37 @@
 import { describe, expect, it } from "vitest"
 import {
   buildUrlTargetPayload,
+  getOnboardingReviewOptions,
   nextStepForPath,
   pathLabel,
   pathNeedsRepo,
 } from "./onboarding-flow.utils"
+
+describe("getOnboardingReviewOptions", () => {
+  it("uses the canonical repository review choices and modes", () => {
+    expect(
+      getOnboardingReviewOptions("github").map(({ label, mode }) => ({ label, mode }))
+    ).toEqual([
+      { label: "Release check", mode: "QUICK" },
+      { label: "Code review", mode: "STANDARD" },
+      { label: "Deep security review", mode: "DEEP" },
+    ])
+  })
+
+  it("uses URL-specific safe, standard, and deep choices", () => {
+    expect(getOnboardingReviewOptions("url").map(({ label, mode }) => ({ label, mode }))).toEqual([
+      { label: "Surface Review", mode: "SAFE" },
+      { label: "Expanded Surface Review", mode: "STANDARD" },
+      { label: "Behavioral Surface Review", mode: "DEEP" },
+    ])
+  })
+
+  it("only offers the endpoint review for an API without an OpenAPI document", () => {
+    expect(getOnboardingReviewOptions("api").map(({ label, mode }) => ({ label, mode }))).toEqual([
+      { label: "Endpoint Review", mode: "SAFE" },
+    ])
+  })
+})
 
 describe("nextStepForPath", () => {
   it("sends GitHub to repo-select (step 2)", () => {

@@ -33,13 +33,19 @@ export function DashboardSectionTabs({
   action?: React.ReactNode
 }) {
   return (
-    <div className="mb-6 space-y-4">
+    <div className="mb-6 space-y-4 sm:mb-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-          {description ? <p className="text-muted-foreground mt-1 text-sm">{description}</p> : null}
+          <h1 className="text-balance text-2xl font-bold tracking-tight">{title}</h1>
+          {description ? (
+            <p className="text-muted-foreground mt-1 max-w-2xl text-pretty text-sm leading-relaxed">
+              {description}
+            </p>
+          ) : null}
         </div>
-        {action ? <div className="flex gap-2">{action}</div> : null}
+        {action ? (
+          <div className="flex flex-wrap gap-2 self-start sm:self-auto">{action}</div>
+        ) : null}
       </div>
 
       <nav aria-label={`${title} sections`}>

@@ -166,6 +166,8 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
     headers: { "x-forwarded-for": forwardedFor },
   })
   await expect(apiTargetResponse).toBeOK()
+  const { data: apiTarget } = await apiTargetResponse.json()
+  const apiTargetId = apiTarget.id as string
 
   const contractTargetResponse = await page.request.post("/api/targets", {
     data: {
@@ -194,6 +196,10 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   await expect(page.getByRole("radio", { name: /^Endpoint Review:/ })).toBeEnabled()
   await expect(page.getByRole("radio", { name: /^Contract Review:/ })).toBeDisabled()
   await expect(page.getByRole("radio", { name: /^Contract Behavior Review:/ })).toBeDisabled()
+  await expect(page.getByRole("link", { name: "Add OpenAPI document" })).toHaveAttribute(
+    "href",
+    `/dashboard/targets/${apiTargetId}`
+  )
   await expect(page.getByRole("status").filter({ hasText: "Review type reset" })).toContainText(
     "Endpoint Review"
   )
