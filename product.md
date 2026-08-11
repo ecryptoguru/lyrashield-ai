@@ -75,7 +75,7 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 - Email verification is implemented and load-bearing, but deliberately disabled in production pending a mail provider — an accepted, documented blocker; see `docs/deployment/PRODUCTION_DEPLOYMENT.md` "Known production blockers".
 - Split marketing/app origin routing and the public Lite Scanner.
 - LyraShield Score, cross-admin-idempotent public scorecards, referrals, and premium social sharing.
-- Azure AI / GPT-5.6 mode routing (Safe/Quick/Standard → Luna/medium; Deep/Custom → Terra/medium with Luna/medium specialists).
+- Azure AI / GPT-5.6 mode routing (Safe/Quick/Standard → Luna/medium; Deep/Custom → Terra/medium with Luna/high specialists).
 - Evidence-backed marketing surface with a public methodology page (release verdict scale: Go, Go with conditions, No go, Not evaluated) and five browser-local no-upload tools.
 - Shared label module for consistent UI vocabulary with no raw database enums rendered.
 - Per-workspace scan-creation rate limiting and concurrency caps.
@@ -99,14 +99,14 @@ See `PRD.md` for the authoritative roadmap.
 
 ## User-facing review options
 
-| Workflow             | Mode     | Repository model | Reasoning |
-| -------------------- | -------- | ---------------- | --------- |
-| Release Check        | SAFE     | GPT-5.6 Luna     | medium    |
-| Code Review          | STANDARD | GPT-5.6 Luna     | medium    |
-| Deep Security Review | DEEP     | GPT-5.6 Terra    | medium    |
-| Weekly Monitor       | SAFE     | GPT-5.6 Luna     | medium    |
+| Workflow             | Mode     | Repository model                 | Reasoning     |
+| -------------------- | -------- | -------------------------------- | ------------- |
+| Release Check        | QUICK    | GPT-5.6 Luna                     | medium        |
+| Code Review          | STANDARD | GPT-5.6 Luna                     | medium        |
+| Deep Security Review | DEEP     | GPT-5.6 Terra + Luna specialists | medium + high |
+| Weekly Monitor       | QUICK    | GPT-5.6 Luna                     | medium        |
 
-URL/API targets skip the external engine. QUICK and CUSTOM remain backend/API modes rather than extra one-off dashboard choices; Sol remains an internal accounting model but is not assigned to a preset. Protected limits and provider reconciliation are operator concerns and are not displayed in the product UI. See `userguide.md` for the complete workflow and option reference.
+URL/API targets skip the external engine. SAFE remains a compatibility alias for the canonical repository QUICK profile, and CUSTOM resolves to Deep; neither is an extra one-off dashboard choice. Sol remains an internal accounting model but is not assigned to a preset. Protected limits and provider reconciliation are operator concerns and are not displayed in the product UI. See `userguide.md` for the complete workflow and option reference.
 
 ## Launch and growth
 

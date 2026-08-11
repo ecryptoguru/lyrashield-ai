@@ -11,7 +11,7 @@ Sandbox containers join only the internal network and therefore have no default 
 
 ## Worker image contract
 
-The production worker image must run from its own `worker` stage. The container entrypoint is expected to be the vendored TypeScript runner bundled with the workspace, for example `./apps/worker/node_modules/.bin/tsx apps/worker/src/index.ts`. Do not rely on Corepack or `pnpm install` at container startup; images run as the non-root `lyrashield` user without a TTY.
+The production worker image must run from its own `worker` stage on the digest-pinned Node 24 base. The container entrypoint is the vendored TypeScript runner bundled with the workspace, currently `./apps/worker/node_modules/.bin/tsx apps/worker/src/index.ts`. Do not rely on Corepack or `pnpm install` at container startup; images run as the non-root `lyrashield` user without a TTY.
 
 ## Install
 
@@ -19,7 +19,7 @@ Copy the three scripts to `/usr/local/libexec/`, the units to `/etc/systemd/syst
 
 ```sh
 LYRASHIELD_WORKER_IMAGE=ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:<approved-worker-digest>
-LYRASHIELD_SANDBOX_IMAGE=ghcr.io/usestrix/strix-sandbox@sha256:<approved-sandbox-digest>
+LYRASHIELD_SANDBOX_IMAGE=ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:<approved-sandbox-digest>
 LYRASHIELD_SANDBOX_NETWORK=lyrashield-sandbox
 # Required when either image is hosted on ghcr.io. GHCR_TOKEN is pulled from Key Vault by refresh-secrets.sh.
 GHCR_USERNAME=<github-username-or-bot>
@@ -39,6 +39,8 @@ systemctl enable --now lyrashield-worker.service
 
 Do not place secrets in the runtime configuration. `refresh-secrets.sh` owns the exact Key Vault-to-environment mapping and fails closed when a required secret is absent or empty. The Key Vault must contain both `worker-database-url` (the RLS-restricted runtime role) and `worker-database-system-url` (the privileged ownership-check role). `run-worker.sh` initializes the persistent runs volume through a networkless one-shot container, then starts the application as the image's non-root user.
 
+Keep `LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED=1`. The defaults run every 15 minutes and consider only resources at least 24 hours old. The reaper selects containers by the `strix-run-id` label and directories under the fixed checkout/run roots, skips running containers and scans in `QUEUED`, `PREFLIGHT`, `RUNNING`, or `VERIFYING`, and fails safe when scan ownership cannot be read. `REQUIRES_APPROVAL` occurs before worker execution and owns no checkout, run directory, or sandbox container. Do not replace the reaper with `docker system prune` or broad filesystem deletion.
+
 ## Verification
 
 Before enabling scan admission:
@@ -50,6 +52,8 @@ Before enabling scan admission:
 5. Confirm the worker becomes healthy, `/api/ready/scans` becomes `200`, and the registry score advances after 45 seconds.
 6. Stop the service gracefully and confirm `/api/ready/scans` returns `503`; restart it and confirm readiness recovers without replaying work.
 7. Run the engine's bounded provider-contract baseline against the deployed Azure route. Record its capability result with the deployment revision; run the programmatic-tool gate only when evaluating that optional feature.
+8. Confirm the worker image revision label matches the reviewed app commit and its engine-revision label matches the immutable engine checkout used by CI.
+9. Run the stale-resource reaper acceptance case: an old stopped owned fixture is removed, an active/running fixture is retained, and the result is visible in worker logs.
 
 Inspect `/run/lyrashield-egress-hosts` only as root when diagnosing endpoint drift. Every line must contain an approved hostname, one public IPv4 address, and its TCP port. Never hand-edit the file or add an unreviewed destination.
 

@@ -6,6 +6,8 @@ node_modules
 **/*.tsbuildinfo
 .git
 .gitignore
+.worktrees/
+lyrashield-engine/
 *.md
 .env*
 .env.local

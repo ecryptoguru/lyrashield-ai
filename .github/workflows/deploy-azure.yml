@@ -11,12 +11,12 @@ concurrency:
 permissions:
   contents: read
   packages: write
-  id-token: write
 
 env:
   REGISTRY: ghcr.io
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
+  ENGINE_REVISION: 67ecd6f89b190f9f21c193fce4a15defa21dddb8
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
@@ -25,7 +25,7 @@ env:
 jobs:
   build:
     name: Build and push container images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.ref == 'refs/heads/main'
     outputs:
       web_image: ${{ steps.meta.outputs.web_image }}
@@ -35,17 +35,36 @@ jobs:
     steps:
       - name: Checkout app
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      # The worker image requires the sibling engine source. If the engine repo
-      # is not available this step is skipped and only the web image is built.
+      # A production worker is reproducible only when its engine input is immutable.
+      # Upgrade this pin deliberately after the cross-repository contract gate passes.
       - name: Checkout engine
-        id: engine
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        continue-on-error: true
         with:
           repository: ${{ github.repository_owner }}/lyrashield-engine
+          ref: ${{ env.ENGINE_REVISION }}
           path: lyrashield-engine
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+      - name: Verify engine-worker contract
+        working-directory: lyrashield-engine
+        run: ./scripts/verify-worker-contract.sh "$GITHUB_WORKSPACE"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
@@ -82,19 +101,30 @@ jobs:
 
       - name: Build and push worker image
         id: build-worker
-        if: steps.engine.outcome == 'success' && hashFiles('lyrashield-engine/pyproject.toml') != ''
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           target: worker
           push: true
-          tags: ${{ env.WORKER_IMAGE }}:${{ github.sha }},${{ env.WORKER_IMAGE }}:latest
+          # Worker candidates stay immutable. Deployment consumes the verified digest;
+          # no mutable :latest tag may point at an image before policy verification.
+          tags: ${{ env.WORKER_IMAGE }}:${{ github.sha }}
           build-contexts: |
             engine=lyrashield-engine
           build-args: |
             BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify pushed worker image
+        run: |
+          worker_ref="${{ env.WORKER_IMAGE }}@${{ steps.build-worker.outputs.digest }}"
+          docker pull "$worker_ref"
+          bash apps/worker/scripts/verify-worker-image.sh \
+            "$worker_ref" "${{ github.sha }}" "${{ env.ENGINE_REVISION }}"
 
       - name: Worker image digest
         if: steps.build-worker.outcome == 'success'
@@ -102,8 +132,8 @@ jobs:
           echo "Pushed worker image: ${{ env.WORKER_IMAGE }}:${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Pinned digest: ${{ steps.build-worker.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
-  # Every merge to main pushes a new SHA-tagged image and re-points :latest, with nothing ever
-  # deleting what it replaced. Multi-arch buildx pushes also leave several untagged manifests
+  # Every merge to main pushes new SHA-tagged images; web also re-points :latest, while workers
+  # remain immutable and deploy by verified digest. Multi-arch buildx pushes leave untagged manifests
   # per build (per-platform layers under the tagged manifest list), so versions accumulate
   # faster than commits. Runs after `build` (not `deploy`) so cleanup happens even when the
   # Azure deploy is skipped (e.g. Azure vars not yet configured) — images were still pushed
@@ -117,7 +147,7 @@ jobs:
   cleanup-old-images:
     name: Clean up superseded container images
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       packages: write
     steps:
@@ -151,7 +181,7 @@ jobs:
   deploy:
     name: Deploy Azure Container Apps
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: azure-production
       url: ${{ env.APP_URL }}

@@ -229,6 +229,7 @@ rule.
 8. The stale-resource reaper is enabled with a conservative age threshold. It must be able to read active scan state, skip every active scan and running container, and report each cleanup result.
 9. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
 10. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
+11. `.github/workflows/deploy-azure.yml` pins the exact reviewed engine commit. CI must check out that revision, run `scripts/verify-worker-contract.sh` from the engine directory, build the worker with the same checkout, and verify the exact pushed worker digest. Advance the pin only after the engine change is merged and green; never point it at a branch or mutable tag.
 
 ## Full-scan resource checklist
 
@@ -351,11 +352,13 @@ The worker selects one profile before each engine subprocess:
 
 | Product mode | Engine mode | Model variable         | Reasoning | Default cap |
 | ------------ | ----------- | ---------------------- | --------- | ----------: |
-| Safe         | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $3.20 |
+| Safe         | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $1.20 |
 | Quick        | quick       | `LYRASHIELD_LUNA_LLM`  | medium    |       $1.20 |
 | Standard     | standard    | `LYRASHIELD_LUNA_LLM`  | medium    |       $3.20 |
-| Deep         | deep        | `LYRASHIELD_TERRA_LLM` | medium    |      $15.00 |
-| Custom       | deep        | `LYRASHIELD_TERRA_LLM` | medium    |      $15.00 |
+| Deep         | deep        | `LYRASHIELD_TERRA_LLM` | medium    |       $5.00 |
+| Custom       | deep        | `LYRASHIELD_TERRA_LLM` | medium    |       $5.00 |
+
+Safe and Quick are aliases of the same repository profile. Safe/Quick/Standard have a 15-minute wall-clock ceiling: at most 12 minutes for the AI engine plus a 3-minute deterministic-scanner reserve. Deep/Custom have a 45-minute ceiling: at most 40 minutes for the engine plus a 5-minute scanner reserve. A positive workspace duration policy may lower but cannot raise these ceilings. URL and API targets use their own deterministic capability profiles, never the repository AI engine, and have a $0 AI budget.
 
 The worker permanently versions the official Azure GPT-5.6 rate card in `apps/worker/src/engine/gpt56-pricing.ts` (effective 2026-08-06; USD per 1 million tokens):
 
@@ -368,13 +371,15 @@ Source: Azure GPT-5.6 pricing in Microsoft Foundry, captured with its effective 
 
 `LYRASHIELD_LLM` is mandatory as the backward-compatible fallback when a routed variable is absent or empty. Azure deployment names are operator-defined: if the Azure deployment is not literally named `gpt-5.6-luna` or `gpt-5.6-terra`, put the real deployment name after `azure/` or `azure_ai/`.
 
-A finite positive `Policy.maxBudgetUsd` overrides the default for that scan. Zero, negative, non-finite, missing, deleted, or cross-workspace policy values cannot remove the mode cap. The worker records `engine_start` with coordinator model/reasoning and retains accounting events privately. When the engine returns usage, the ledger retains provider telemetry, actual-model per-request buckets, the official rate-card calculation, calculation method, reconciliation status, request count, and normalized token counters. A numeric internal bill is written only when that rate-card amount is fully determined and agrees with provider-reported cost when one exists. Ambiguous long-context aggregates, missing billable dimensions, and mismatches remain unpriced and explicitly unreconciled; they do not turn a valid scan result into a fake failure. It never stores prompts or raw provider request payloads, and the dashboard renders no cost, spend, cap, or accounting-event value.
+A finite positive `Policy.maxBudgetUsd` can lower the default for that scan but cannot raise the profile ceiling. Zero fails closed; negative, non-finite, missing, deleted, or cross-workspace policy values cannot remove the mode cap. The worker records `engine_start` with coordinator model/reasoning and retains accounting events privately. When the engine returns usage, the ledger retains provider telemetry, actual-model per-request buckets, cache-read/cache-write counters, the official rate-card calculation, calculation method, reconciliation status, request count, and normalized token counters. A numeric internal bill is written only when that rate-card amount is fully determined and agrees with provider-reported cost when one exists. Ambiguous long-context aggregates, missing billable dimensions, and mismatches remain unpriced and explicitly unreconciled; they do not turn a valid scan result into a fake failure. It never stores prompts or raw provider request payloads, and the dashboard renders no cost, spend, cap, or accounting-event value.
 
 These amounts are internal hard ceilings, not expected per-scan charges or user-facing prices. Engine-reported telemetry is retained for reconciliation even when it exceeds the approved ceiling; the capped internal ledger cannot be presented as the provider invoice. Reconcile it against the Azure meter during the controlled gate; Azure billing remains the final expenditure source.
 
 A durable scan event is recorded immediately before a repository scan enters the provider-billable engine phase. Preflight work remains retryable, while recovery after that boundary fails closed instead of replaying provider work; a failed billable invocation requires an explicit new scan or retest so the queue cannot silently duplicate model spend. Deterministic SCA, secret, URL, and agent-configuration findings use the Safe profile for targeted retests; engine-only findings retain their originating review depth.
 
 Safe/Quick/Standard are Luna-only at medium reasoning. Deep/Custom use a deterministic two-tier invocation: Terra/medium is the root coordinator and Luna/high handles child specialist work. The model cannot self-promote a child to Terra, and only the root can create or stop specialists. On a root content-filter block, the engine switches directly to the delegate model (Luna/high) without retrying Terra; if the delegate also blocks, the scan salvages partial findings and terminates with `content_filter_stopped`. On any other `ModelBehaviorError` from Terra (not just content filter), the engine also falls back to Luna/high; if the delegate also fails, partial findings are salvaged with `engine_stopped` terminal reason. Azure's `response.failed` status without content-filter context is treated as transient and retried with backoff. The worker classifies `engine_stopped` and `content_filter_stopped` scans with findings as `COMPLETED` (error category `ENGINE_STOPPED` or `CONTENT_FILTER_STOPPED`); without findings they remain `FAILED`.
+
+Prompt caching is enabled by default only on supported GPT-5.6 routes. Stable coordinator/delegate cache keys and explicit cache breakpoints maximize repeated-prefix reuse without sharing cache identity across incompatible prompt bundles. Release evidence must retain the prompt-bundle hash and separate read/write token counters; provider records remain authoritative for billing.
 
 Engine PRs #6, #7, and #20 are merged. The promoted engine compacts estimated input at 240k toward 180k, bounds direct dedupe input to 200 kB, limits output and agent concurrency, reserves projected spend before each request, and accounts for provider-reported cache-read tokens with dict/object usage extraction. These controls do not replace provider-meter reconciliation or prove finding quality. Engine CI now runs ruff, mypy, bandit, and the full pytest suite on every PR and push to `main`; Dependabot tracks both GitHub Actions and Python pip dependencies.
 
@@ -401,15 +406,17 @@ git diff --check
 
 Then, in the target environment:
 
-1. Deploy all 30 migrations before application processes serve traffic, including `20260713170000_scorecard_events`, `20260714170000_integration_global_external_id_unique`, `20260716150000_integration_external_id_check`, `20260716151000_scorecard_share_active_snapshot_unique`, `20260718110000_scan_cost_ledger`, `20260725132208_add_finding_status_reason`, `20260725160000_scan_workspace_status_index`, `20260803000000_uxv2_schema`, and `20260803000001_child_table_rls`; run the migration-diff gate against a fresh shadow database.
+1. Run `prisma migrate deploy` for every committed migration before application processes serve traffic, then replay the complete migration directory on a fresh database and run the migration-diff gate against a fresh shadow database. Command output and the committed directory are authoritative; do not rely on copied migration counts or partial name lists.
 2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. The scan-specific endpoint must become `503` within 30 seconds of stopping every worker and recover only after a BullMQ-ready worker registers its lease.
 3. Verify the engine version and missing-model early-exit path.
-4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning and its `budget_cap` event contains the expected default or policy amount.
-5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with medium reasoning, that delegate/child calls use Luna at high reasoning, and its cap is $15 or the selected positive policy override.
+4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning, its 15-minute ceiling is recorded, and its `budget_cap` is $1.20 or $3.20 respectively (or a lower policy amount).
+5. Run a founder-approved Deep controlled scan and verify its `engine_start` event names Terra with medium reasoning, delegate/child calls use Luna at high reasoning, the 45-minute ceiling is recorded, and its cap is $5 (or a lower policy amount).
 6. Capture audit evidence, confirm the sandbox image digest used, reconcile provider billing with the retained usage/rate-card ledger without treating it as an invoice, and verify evidence artifacts are retrievable from the configured S3-compatible endpoint. Any placeholder or failed upload blocks the gate.
 7. Exercise backup and restore on non-production data before claiming an RPO/RTO.
 8. Confirm URL targets use only the pinned deterministic URL scanner. Do not re-enable the external engine for URL targets until its transport is DNS-pinned and redirect-safe.
 9. Confirm GitHub callbacks can refresh only a pre-existing workspace binding. Fresh installation claims and client-authored Fix PR payloads must remain blocked until their provider-ownership and server-generated-patch gates are implemented.
+10. Confirm the worker image label records the expected engine revision, the deployed worker reference is the exact digest verified by CI, and `LYRASHIELD_IMAGE` is the exact LyraShield-owned sandbox digest qualified on both architectures. A tag, upstream image, or digest built separately from the smoke-tested candidate fails the gate.
+11. Exercise the stale-resource reaper with one old stopped fixture and one active-scan fixture. Confirm only the owned stale resource is removed, cleanup results are logged, and a database ownership-read failure removes nothing.
 
 Queue recovery is deliberately fail-closed. Workers reconcile queue/database drift at startup and every 60 seconds under a renewable token-owned Redis lease. A scan left `QUEUED` for more than five minutes without a processable job becomes `FAILED` with `QUEUE_ORPHANED`; operators must not automatically requeue it because the original attempt may have crossed a paid-provider boundary.
 

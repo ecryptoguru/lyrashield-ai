@@ -106,7 +106,7 @@ The goal explains the intended outcome. Review depth determines the model, reaso
 
 ### Step 3: First scan
 
-Review the workspace, target, and goal, then select **Start safe scan**. The first scan always uses Safe mode. Other review depths are available from the Trust Runs page afterward.
+Review the workspace, target, and goal, choose an available review depth, then start the review. Repository onboarding offers Release Check, Code Review, and Deep Security Review. URL/API choices are capability-aware and depend on the target details supplied.
 
 ## 5. Navigation and workspace switching
 
@@ -190,12 +190,12 @@ The authenticated dashboard exposes one-off review depths that depend on the sel
 
 ### Repository targets
 
-| User option          | Backend mode | Model for repository engine | Reasoning |
-| -------------------- | ------------ | --------------------------- | --------- |
-| Release Check        | SAFE         | GPT-5.6 Luna                | Medium    |
-| Code Review          | STANDARD     | GPT-5.6 Luna                | Medium    |
-| Deep Security Review | DEEP         | GPT-5.6 Terra               | Medium    |
-| Weekly Monitor       | SAFE         | GPT-5.6 Luna                | Medium    |
+| User option          | Backend mode | Repository model route                       | Maximum duration |
+| -------------------- | ------------ | -------------------------------------------- | ---------------: |
+| Release Check        | QUICK        | GPT-5.6 Luna, medium                         |           15 min |
+| Code Review          | STANDARD     | GPT-5.6 Luna, medium                         |           15 min |
+| Deep Security Review | DEEP         | GPT-5.6 Terra/medium + Luna/high specialists |           45 min |
+| Weekly Monitor       | QUICK        | GPT-5.6 Luna, medium                         |           15 min |
 
 ### Web App and API targets
 
@@ -212,7 +212,7 @@ Web App and API targets use the pinned deterministic URL scanner. The external A
 
 These reviews are passive and non-mutating: they do not authenticate, exploit, fuzz, or enumerate arbitrary paths beyond the configured scope. Contract and Contract Behavior reviews use the supplied OpenAPI document to bound the operations reviewed.
 
-The backend also supports `QUICK` (Luna/medium) and `CUSTOM` (Terra/medium coordination with Luna/medium specialists) for approved repository, API, or agent workflows. They are not additional one-off dashboard choices for URL or API targets.
+`SAFE` is the compatibility alias for the canonical repository `QUICK` profile; it is not a fourth product choice. `CUSTOM` resolves to the Deep repository profile. Neither creates an additional URL/API capability. Durations are hard ceilings, not completion promises.
 
 LyraShield applies protected internal run limits automatically. The dashboard does not display model costs, spend, or accounting events. If a protected limit is reached, the scan ends with a neutral limit message while operators retain the internal usage record for reconciliation.
 
@@ -457,12 +457,12 @@ Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `
 
 | What you ask             | Goal                             | Mode       |
 | ------------------------ | -------------------------------- | ---------- |
-| Pre-PR check             | `CHECK_PR`                       | `SAFE`     |
+| Pre-PR check             | `CHECK_PR`                       | `QUICK`    |
 | Quick check              | `TEST_APP`                       | `QUICK`    |
 | Standard repo review     | `TEST_APP`                       | `STANDARD` |
 | Launch review            | `LAUNCH_REVIEW`                  | `STANDARD` |
 | Deep / compliance review | `TEST_APP` / `COMPLIANCE_REVIEW` | `DEEP`     |
-| Weekly monitor           | `WEEKLY_MONITOR`                 | `SAFE`     |
+| Weekly monitor           | `WEEKLY_MONITOR`                 | `QUICK`    |
 
 ### MCP
 

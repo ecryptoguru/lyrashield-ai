@@ -4,7 +4,7 @@
 >
 > **New agent? Start with [`AGENTS.md`](./AGENTS.md)** (repo root) for current state, the execution queue, and the landmines — then use this file as the deep code map and `PRD.md` Part C as the backlog and release-readiness source of truth.
 >
-> **Current merged baseline — 2026-08-10:** 4 apps, 18 shared packages (including `packages/score` and `packages/agent-plugin`), 40 web page route files, 76 API route files, 43 Prisma models, 21 enums, 31 migrations, and 21 RLS-protected workspace tables. **As of 2026-08-07 the 9 child tables (`ScanEvent`, `Evidence`, `ScanResultManifest`, `ScanCoverageReceipt`, `FixProposal`, `PullRequest`, `Ticket`, `ScorecardShare`, `ScorecardEvent`) have RLS re-enabled**, bringing database-level coverage to all 30 tables — `20260803000003_child_table_rls_disable` rolled back the enable after a production `42501` outage, and `20260807000003_child_table_rls_re_enable` restored it once the cause was traced to `account-deletion.ts` writing outside `withWorkspaceRLS`. See Deep Review v12 P0-1. PR #247 merged the OAuth/legal/MCP/marketplace v0.1.8 reconciliation: hosted OAuth for MCP remote clients, CLI device login, legal/support pages, the `@lyrashield/agent-plugin` package, and marketplace v0.1.8 export. PRs #249–#264 are merged on `main` at `d3b9868` and documented in §66; the working changes described there remain uncommitted until a later merge. The full suite passes lint, typecheck, E2E, production build, formatting, Prisma client generation, migration drift/application, SCA/secret scanning, the security diff gate, CodeRabbit, and diff checks, reaching **1,482 core tests in 146 files** (8 skipped), **112 marketing tests in 15 files**, **16 motion tests**, and **3 Playwright Chromium tests**. Sections 17–66 are dated implementation history; their older counts are checkpoints, not the current gate.
+> **Current architecture baseline — updated 2026-08-12:** the monorepo contains the web, worker, marketing, and motion apps plus shared product packages. Child-table RLS is restored after the historical `42501` incident, and the release gate covers lint, typecheck, E2E, production build, formatting, migration replay/drift, SCA/secret scanning, security diff, and repository diff checks. Executable schemas and test output—not copied counts in this document—are authoritative. Sections 17 onward are dated implementation history; their older counts and branch names are checkpoints, not the current gate.
 
 ---
 
@@ -26,13 +26,13 @@ The canonical engine repo is `ecryptoguru/lyrashield-engine`. It is a controlled
 
 - **Repo:** `ecryptoguru/lyrashield-engine`
 - **Upstream remote**: `https://github.com/usestrix/strix.git`
-- **Recorded upstream release/base:** `v1.1.0` / `7d5a67d234bd3faef34d22be8c6f5a9607de41a3`
-- **Adapter version:** `1.1.0.post1`
+- **Recorded upstream release/base:** `v1.5.3` / `7cc9fa9faa0179fc7e35111102fe3d20a9028393`
+- **Engine version:** `1.2.0`
 - **Compatibility:** maps `LYRASHIELD_*` only when the corresponding `STRIX_*` value is unset; explicit upstream values win; the product entry point forces upstream telemetry to `0`
-- **Model config:** the engine accepts only GPT-5.6 Terra or Luna deployment names. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for the Deep/Custom coordinator, falling back to `LYRASHIELD_LLM`; Deep/Custom child specialists receive Luna/medium through the separate delegate route. Empty allowlisted environment values are not forwarded to the engine, preventing them from shadowing a valid fallback. Per-request receipts retain their actual model for mixed-model reconciliation. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel Search is configured through `LYRASHIELD_WEB_SEARCH_*` values and requires `LYRASHIELD_WEB_SEARCH_API_KEY` to be useful.
+- **Model config:** the engine accepts only GPT-5.6 Terra or Luna deployment names. Before spawning it, the TypeScript worker resolves `LYRASHIELD_LUNA_LLM` for Safe/Quick/Standard or `LYRASHIELD_TERRA_LLM` for the Deep/Custom coordinator, falling back to `LYRASHIELD_LLM`; Deep/Custom child specialists receive Luna/high through the separate delegate route. Empty allowlisted environment values are not forwarded to the engine, preventing them from shadowing a valid fallback. Per-request receipts retain their actual model and cache buckets for mixed-model reconciliation. Perplexity and other non-OpenAI provider credentials are not part of the worker boundary; Parallel Search is configured through `LYRASHIELD_WEB_SEARCH_*` values and requires `LYRASHIELD_WEB_SEARCH_API_KEY` to be useful.
 - **Artifacts:** worker accepts `strix_runs` and legacy `lyrashield_runs`, with `run.json` or `vulnerabilities.json`
 - **Sync model:** stable-release tree imports on review branches; human approval and green CI are required, with no force-push or automatic conflict resolution
-- **Verification:** 597 tests (1 skipped), Ruff, formatting, headless mypy, Bandit, package/native-binary checks, sandbox build/smoke, and public worker compatibility
+- **Verification:** `scripts/verify-controlled-derivative.sh` owns the footprint, Ruff, formatting, pytest, mypy, Bandit, native-binary, sandbox, and public worker-contract gates; current command output is authoritative
 
 ### Engine Boundary
 
@@ -54,30 +54,30 @@ Public copy uses **LyraShield AI**. Internal package scopes (`@lyrashield/*`), e
 
 ## 2. Tech Stack
 
-| Layer                   | Technology                       | Version                                                |
-| ----------------------- | -------------------------------- | ------------------------------------------------------ |
-| Web framework           | Next.js (App Router, Turbopack)  | 16.2.x                                                 |
-| Language                | TypeScript                       | 6.0.x                                                  |
-| Runtime                 | React                            | 19.x                                                   |
-| ORM                     | Prisma (with @prisma/adapter-pg) | 7.8.x                                                  |
-| Database                | PostgreSQL                       | 16 (Docker)                                            |
-| Cache/Queue             | Redis                            | 7 (Docker)                                             |
-| Auth                    | Better Auth                      | 1.6.x                                                  |
-| Validation              | Zod                              | 4.x                                                    |
-| Styling                 | TailwindCSS (CSS-first config)   | 4.3.x                                                  |
-| Component variants      | class-variance-authority (cva)   | 0.7.x                                                  |
-| Icons                   | lucide-react                     | 1.23.x                                                 |
-| Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                        |
-| Testing                 | Vitest + Playwright              | 1482 core + 112 marketing + 16 motion + 3 Chromium E2E |
-| Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration   |
-| Job queue               | BullMQ                           | 5.80.x                                                 |
-| Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate        |
-| MCP                     | JSON-RPC over stdio              | API-backed tools + prompt-injection guard              |
-| Scan engine             | Python controlled derivative     | 1.1.0.post1 over pinned Strix v1.1.0 substrate         |
-| Marketing site          | Astro 7 + @astrojs/cloudflare    | Server output on Cloudflare Workers                    |
-| Marketing storage       | Cloudflare D1                    | Waitlist + fallback-rate-limit migrations              |
-| Marketing rate limiting | Cloudflare Rate Limits           | WAITLIST_RL binding for waitlist API                   |
-| Marketing analytics     | PostHog                          | posthog-js client-side capture                         |
+| Layer                   | Technology                       | Version                                              |
+| ----------------------- | -------------------------------- | ---------------------------------------------------- |
+| Web framework           | Next.js (App Router, Turbopack)  | 16.2.x                                               |
+| Language                | TypeScript                       | 6.0.x                                                |
+| Runtime                 | React                            | 19.x                                                 |
+| ORM                     | Prisma (with @prisma/adapter-pg) | 7.8.x                                                |
+| Database                | PostgreSQL                       | 16 (Docker)                                          |
+| Cache/Queue             | Redis                            | 7 (Docker)                                           |
+| Auth                    | Better Auth                      | 1.6.x                                                |
+| Validation              | Zod                              | 4.x                                                  |
+| Styling                 | TailwindCSS (CSS-first config)   | 4.3.x                                                |
+| Component variants      | class-variance-authority (cva)   | 0.7.x                                                |
+| Icons                   | lucide-react                     | 1.23.x                                               |
+| Monorepo                | Turborepo + pnpm workspaces      | 2.10.x / 11.6.x                                      |
+| Testing                 | Vitest + Playwright              | Current release-gate command output is authoritative |
+| Worker                  | Node.js/TypeScript + tsx         | BullMQ jobs, schedules, engine/scanner orchestration |
+| Job queue               | BullMQ                           | 5.80.x                                               |
+| Agent service           | Node.js/TypeScript               | Signed tokens, registry, actions, approval gate      |
+| MCP                     | JSON-RPC over stdio              | API-backed tools + prompt-injection guard            |
+| Scan engine             | Python controlled derivative     | 1.2.0 over pinned Strix v1.5.3 substrate             |
+| Marketing site          | Astro 7 + @astrojs/cloudflare    | Server output on Cloudflare Workers                  |
+| Marketing storage       | Cloudflare D1                    | Waitlist + fallback-rate-limit migrations            |
+| Marketing rate limiting | Cloudflare Rate Limits           | WAITLIST_RL binding for waitlist API                 |
+| Marketing analytics     | PostHog                          | posthog-js client-side capture                       |
 
 **Key version notes**:
 
@@ -440,19 +440,19 @@ This is the code-facing status summary. Product cutlines and release gates live 
 
 - `pnpm lint`: pass
 - `pnpm typecheck`: pass across the workspace package graph
-- `pnpm test`: **1357 core tests in 138 files**, **82 marketing tests in 12 files**, and **16 motion tests**, pass
-- `pnpm test:e2e`: **3 Chromium tests**, pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
+- `pnpm test`: pass; current command output is authoritative for suite counts
+- `pnpm test:e2e`: pass; covers auth, onboarding, target/scan creation, and cross-tenant scan/finding/report denial
 - `pnpm build`: pass for Next.js, worker/agent/MCP TypeScript, and Astro marketing
 - `pnpm format:check`: pass
 - `pnpm audit --prod --audit-level high`: pass, no known production vulnerabilities
-- Prisma validation, drift, deployment, and status: pass; the repository contains all 28 committed migrations
+- Prisma validation, fresh replay, drift, deployment, and status: pass for every committed migration
 - `git diff --check`: pass
-- Engine gate: 597 tests (1 skipped) + Ruff + formatting + headless mypy + Bandit + package/native-binary checks + sandbox smoke + public worker compatibility
+- Engine gate: `scripts/verify-controlled-derivative.sh` passes the bounded footprint, Ruff, formatting, pytest, mypy, Bandit, package/native-binary, sandbox, and public worker-contract checks
 
 ### Runtime Truth
 
 - The local Compose architecture includes PostgreSQL, Redis, a migration job, web, and worker. Docker Compose uses the local Redis service for BullMQ (`REDIS_URL`); Upstash env vars are not passed to web/worker containers, so rate limiting falls back to in-memory in dev.
-- The current engine-bearing worker image builds and exposes `lyrashield 1.1.0.post1`.
+- The current engine-bearing worker image builds and exposes `lyrashield 1.2.0`.
 - Missing engine model configuration fails before sandbox pull.
 - Historical Docker smoke in §§24–30 proves prior container health, routes, migrations, queue startup, and engine packaging. It does **not** prove a current authorized scan.
 - **First approved production Standard scan (2026-07-29):** a Standard (Code Review) scan against `ecryptoguru/OnboardingAI2` completed on the production Azure Container Apps stack using `azure_ai/gpt-5.6-luna` at medium reasoning. Duration 6m 53s, billed cost $1.78, 40 findings (2 CRITICAL, 2 HIGH, 36 MEDIUM), tamper-evident manifest saved. This is a production Standard/Luna scan, not a Deep/Terra scan or security guarantee. A prior attempt failed because two Prisma migrations had not been applied to the production Supabase database — at the time, the Azure deploy workflow did not run Prisma migrations at all. Fixed 2026-07-30: see §59 and the `AGENTS.md` landmine entry; the workflow now runs `prisma migrate deploy` before every container image update.
@@ -943,7 +943,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
   6. Emits scan events for RUNNING, output capture, completion
   7. Reads `vulnerabilities.json` + `run.json` from output dir
   8. Returns `{ exitCode, output: ParsedScanOutput }`
-- **`resolveEngineProfile(mode)`** — routes Safe/Quick/Standard to Luna/medium throughout and Deep/Custom to a Terra/medium coordinator with Luna/medium specialists; missing routed deployments fall back to `LYRASHIELD_LLM`.
+- **`resolveEngineProfile(mode)`** — routes Safe/Quick/Standard to Luna/medium throughout and Deep/Custom to a Terra/medium coordinator with Luna/high specialists; missing routed deployments fall back to `LYRASHIELD_LLM`.
 - **`interpretExitCode(code)`** — maps engine exit codes: 0 → COMPLETED (SUCCESS), 2 → COMPLETED (VULNERABILITIES_FOUND), 3 → STOPPED_BUDGET, 4 → RATE_LIMITED, 5 → FAILED, 137 → FAILED (SIGKILL/OOM). Salvaged scans with `engine_stopped` or `content_filter_stopped` terminal reason return 2 (findings present) or 5 (no findings); `run-scan.job.ts` classifies those with findings as `COMPLETED` rather than `FAILED`.
 - **`cleanupEngineWorkspace(dir)`** — removes temp workspace (best-effort, non-fatal).
 - Focused runner tests cover exit mapping, termination escalation, output discovery, every routing mode, and fallback selection.
@@ -951,7 +951,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 ### 21.4 Command Builder (`apps/worker/src/engine/command-builder.ts`)
 
 - **`buildEngineCommand(config)`** — constructs CLI args for the scan engine. Maps repository/URL targets to `--target`, maps Safe/Quick to engine `quick`, Standard to `standard`, and Deep/Custom to `deep`, then adds optional `--instruction` and the enforced `--max-budget-usd` value.
-- **`resolveScanBudgetUsd(mode, policyMaxBudgetUsd)`** — accepts a finite positive workspace-policy override; otherwise applies $3.20 Safe, $1.20 Quick, $3.20 Standard, and $15 Deep/Custom. Unknown modes fail safely to the $15 cap.
+- **`resolveScanBudgetUsd(mode, policyMaxBudgetUsd)`** — resolves the canonical repository profile first, then applies $1.20 Safe/Quick, $3.20 Standard, or $5 Deep/Custom. A finite positive workspace policy can lower but never raise that ceiling; explicit zero fails closed and unknown modes are rejected.
 - Focused command-builder tests cover target/mode mapping, CLI cap propagation, every default cap, policy override, and invalid-budget fallback.
 
 ### 21.5 Output Parser (`apps/worker/src/engine/output-parser.ts`)
@@ -1712,7 +1712,9 @@ Focused remediation after a fresh full-repository review.
 
 ---
 
-## §30 — Thin-Fork Automation and Current Release Gate (2026-07-11)
+## §30 — Historical Thin-Fork Automation (superseded, 2026-07-11)
+
+This section records the pre-v1.5.3 architecture. The current engine keeps product behavior outside `strix/**`, permits only two hard-gated upstream seams, and uses `scripts/verify-controlled-derivative.sh`.
 
 > Historical checkpoint. The controlled-derivative ownership and current release-import behavior in §54 supersede this section; the older baseline, test count, and no-auto-merge implementation description remain only as dated provenance.
 
@@ -1878,9 +1880,9 @@ Implements the "LyraShield Score, Shareable Scorecard & Referral System — Engi
 
 - `apps/worker/src/engine/runner.ts` resolves one engine profile per scan. Safe, Quick, and Standard use `LYRASHIELD_LUNA_LLM` with medium reasoning; Deep and Custom use `LYRASHIELD_TERRA_LLM` with medium reasoning. If the selected variable is empty, `LYRASHIELD_LLM` remains the backward-compatible fallback.
 - The resolved model and reasoning effort override only the spawned engine process. Azure credentials, endpoint, and API version continue through the existing generic/Azure allowlist; routing does not duplicate secrets or create separate queues.
-- `apps/worker/src/engine/command-builder.ts` applies positive default caps of $3.20 for Safe, $1.20 for Quick, $3.20 for Standard, and $15 for Deep/Custom. Unknown modes receive the conservative $15 fallback. A finite positive `Policy.maxBudgetUsd`, fetched with `workspaceId` and soft-delete scope, overrides the mode cap.
+- `apps/worker/src/engine/command-builder.ts` resolves the shared repository profile and applies caps of $1.20 for Safe/Quick, $3.20 for Standard, and $5 for Deep/Custom. Unknown modes are rejected. A finite positive `Policy.maxBudgetUsd`, fetched with `workspaceId` and soft-delete scope, can lower but never raise the profile cap.
 - `run-scan.job.ts` passes the cap to the engine's `--max-budget-usd` guard and records private accounting events. The `engine_start` event records model and reasoning selection; normalized `llm_usage` remains separately persisted after execution. PR #109 supersedes the original aggregate fallback with the per-request accounting boundary in §51.
-- Deep/Custom now use a deterministic within-scan route: Terra/medium owns coordination and cross-file judgment while Luna/medium runs focused child work. Only the root can create or stop specialists, specialists start without copied parent history unless explicitly requested, stable per-scan prompt-cache keys improve repeated-prefix reuse, and per-request model buckets keep reconciliation exact. Adaptive evidence-triggered promotion, billing-plan quotas, and cross-workspace cost policy remain roadmap work.
+- Deep/Custom use a deterministic within-scan route: Terra/medium owns coordination and cross-file judgment while Luna/high runs focused child work. Only the root can create or stop specialists, specialists start without copied parent history unless explicitly requested, stable role-specific prompt-cache keys improve repeated-prefix reuse, and per-request model/cache buckets keep reconciliation exact. Adaptive evidence-triggered promotion, billing-plan quotas, and cross-workspace cost policy remain roadmap work.
 - Configuration is propagated through `packages/config`, `turbo.json`, `docker-compose.yml`, `.env.example`, and the deployment runbooks. Regression tests cover every mode, fallback routing, policy overrides, invalid policy budgets, and CLI cap propagation. The full local gate passes 689 Vitest tests in 65 files, lint, typecheck, and production build.
 
 ## §35.5 — Parallel Search web_search integration (2026-08-04)
@@ -2075,16 +2077,16 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 
 ## §54 — Engine ownership and compatibility boundary (2026-07-18)
 
-- The engine repository is a controlled derivative, not a thin wrapper: the current production-relevant delta spans 68 modified `strix/` source files (+5,397 / −1,297 lines against pinned base `2e7040240d`) plus adapter and test additions. The adapter (`lyrashield_adapter/cli.py`) remains the public entry point, but significant LyraShield behavior — cost accounting (`hooks.py`), compaction, lifecycle, finding identity, evidence, and the worker contract — is intentionally carried inside the modified `strix/**` modules. See the engine repo's `UPGRADES.md` for the full ownership ledger.
+- The engine repository is a controlled derivative, not a thin wrapper. Version 1.2.0 keeps product behavior in `lyrashield/**` and `lyrashield_adapter/**`; `strix/**` differs from pinned Strix v1.5.3 (`7cc9fa9faa0179fc7e35111102fe3d20a9028393`) only at two generic registration seams (+24/−0). `scripts/verify-controlled-derivative.sh` rejects any unlisted upstream drift or footprint increase beyond that budget. See the engine repo's `UPGRADES.md` for the ownership ledger.
 - LyraShield owns GPT-5.6 acceptance, mode/reasoning policy, context compaction, output/agent/pre-request spend limits, non-interactive lifecycle, deterministic finding identity, structured control/evidence metadata, telemetry defaults, and the versioned worker-facing artifact contract.
-- The pinned Strix v1.1.0 tree remains the substrate for sandbox/session mechanics, generic tools, agent-SDK plumbing, and the vulnerability skill library. Current upstream `main` has no commits after the recorded base, so there is no compatibility regression motivating an independent rewrite.
+- The pinned Strix v1.5.3 tree remains the substrate for sandbox/session mechanics, generic tools, agent-SDK plumbing, and the vulnerability skill library. Stable-release imports remain review-gated; no independent rewrite is justified without repeated upstream blockers or evaluation evidence.
 - The target architecture is evolutionary: move LyraShield-owned policy behind explicit engine modules and a versioned JSON protocol when touching those paths, while preserving child-process isolation. Do not create a second runtime or speculative abstraction solely to make the repository look independent.
 - Result quality is not established by the inherited Strix v0.4 XBEN result. Before changing orchestration or making accuracy/coverage claims, add a private LyraShield corpus with expected findings and expected non-findings, evidence correctness, duplicate stability, control coverage, runtime, and token-use measurements for Luna and Terra.
 - Reconsider full independence only when upstream repeatedly blocks required product behavior, reviewed release imports become materially more expensive than ownership, or the LyraShield evaluation suite demonstrates a substrate-imposed result ceiling.
 
 ## §55 — Engine PR #20 and finding statusReason (2026-07-25)
 
-- **Engine PR #20 merged:** the controlled derivative now carries the `reduce-root-context` work on `main` along with GPT-5.6 rate fixes. `strix/core/hooks.py` returns a 2-tuple from `_model_rates`, handles provider-reported cache-read tokens, and extracts `input_tokens`/`output_tokens` from either dict or object usage entries. `strix/interface/main.py` passes explicit telemetry keyword arguments to `posthog.start` and `scarf.start`. `tests/conftest.py` clears LLM-related environment variables before each test to avoid leaked Azure endpoints. The `Makefile` type-check and security targets now match `scripts/verify-thin-fork.sh` (mypy excludes `strix/interface/tui`, bandit covers `strix` and `lyrashield_adapter`). Engine CI passes 597 tests (1 skipped) plus ruff, mypy, bandit, native-binary, sandbox, and worker-compatibility checks.
+- **Historical Engine PR #20 checkpoint:** the former in-tree implementation added GPT-5.6 rate and usage-extraction fixes. The v1.5.3 product-outside-Strix migration moved product behavior into `lyrashield/**`; the current gate is `scripts/verify-controlled-derivative.sh`, and its command output—not this dated checkpoint—is authoritative.
 - **Finding statusReason:** `Finding` gained an optional `statusReason` column (migration `20260725132208_add_finding_status_reason`). `packages/db/src/finding-service.ts` accepts an optional `reason` on `updateFindingStatus`, `acceptRisk`, and `markFalsePositive`. `apps/web/src/app/api/findings/[id]/route.ts` validates an optional `reason` field in the PATCH schema and passes it to the DB. The findings client (`apps/web/src/app/(dashboard)/dashboard/findings/findings-client.tsx`) sends the collected comment and renders `statusReason` in the detail drawer. Unit tests in `packages/db/src/finding-service.test.ts` cover the reason persistence path.
 - **Worker hardening:** `apps/worker/src/jobs/run-scan.job.ts` adds a single-model cost fallback for mixed-model usage, post-engine cancellation check, and target field projection before preflight. `apps/worker/src/engine/finding-persister.ts` recovers from unique-constraint races during finding creation by updating the recovered row.
 - **Dashboard UX:** the scans list (`apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx`) uses adaptive polling backoff and `visibilitychange` handling. Findings list syncs filter/sort with URL query params. `api-keys.tsx` uses a shared clipboard helper and surfaces copy errors. `inline-confirm.tsx` restores focus after confirm/cancel.
@@ -2352,7 +2354,7 @@ A DEEP scan against an approved repository completed successfully after all fixe
 - **Legal/support pages are merged.** `/privacy`, `/support`, and `/security-reporting` are live on the marketing site (`apps/marketing/src/pages/*.astro`).
 - **Brevo email integration is verified locally.** `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1` with `BREVO_API_KEY`, `EMAIL_FROM`, and `NOTIFICATION_FROM_EMAIL` set boots cleanly in `NODE_ENV=production`; a live test email was sent and accepted by Brevo (messageId `<202608082018.99543067577@smtp-relay.mailin.fr>`). Brevo IP security is disabled at the account level because Azure Container Apps Consumption has 180+ dynamic outbound NAT IPs that cannot be statically allowlisted. Production Container App secrets for `BREVO_API_KEY`, `EMAIL_FROM`, and `NOTIFICATION_FROM_EMAIL` are not yet provisioned — the production app still runs with `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0`.
 - **MCP server updates:** `packages/mcp/src/tools.ts` added safety metadata and structured results to tool calls. `packages/mcp/src/server.ts` and `packages/mcp/src/create-server.ts` updated for OAuth bearer token support. `packages/mcp/README.md` documents the remote (Streamable HTTP) endpoint, OAuth authentication, and the operator-only `LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS` opt-out.
-- **Full test suite passes:** 1,482 core tests in 146 files (8 skipped), 112 marketing tests in 15 files, 16 motion tests, lint, typecheck, format check, and `apps/web` production build all green.
+- **Full release gate:** core, marketing, motion, and E2E suites plus lint, typecheck, format check, migration checks, and the `apps/web` production build must be green. Current command output is authoritative.
 
 ## §66 — Marketplace/CI/OAuth hardening and agent-plugin packaging (2026-08-10, PRs #249–#264, `main` at `d3b9868`)
 
