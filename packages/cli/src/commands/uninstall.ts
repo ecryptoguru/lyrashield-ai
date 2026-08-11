@@ -18,12 +18,12 @@ export async function handleUninstall(args: string[], output: Output): Promise<n
   const registry = await import("@lyrashield/agent-registry").catch(
     () => ({}) as Record<string, unknown>
   )
-  const getAgent = (registry as Record<string, unknown>).getAgent as
+  const getPreferredAgent = (registry as Record<string, unknown>).getPreferredAgent as
     ((id: string) => AgentEntry | undefined) | undefined
   const list = (registry as Record<string, unknown>).listAgents as (() => AgentEntry[]) | undefined
   const arr = (registry as Record<string, unknown>).AGENTS as AgentEntry[] | undefined
   const all = list?.() ?? arr ?? []
-  const agent = getAgent?.(agentId) ?? all.find((a) => a.id === agentId)
+  const agent = getPreferredAgent?.(agentId) ?? all.find((a) => a.id === agentId)
 
   if (!agent) {
     output.error(`Unknown agent: ${agentId}`)

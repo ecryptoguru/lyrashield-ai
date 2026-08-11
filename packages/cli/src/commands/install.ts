@@ -25,7 +25,9 @@ export async function handleInstall(args: string[], output: Output): Promise<num
 
   const creds = await getEffectiveCredentials()
   if (!creds.apiKey) {
-    output.error("No API key. Run: lyrashield login")
+    output.error(
+      "No LyraShield credential. Run: lyrashield login --oauth, or use an API key for CI."
+    )
     return 3
   }
 
@@ -34,12 +36,12 @@ export async function handleInstall(args: string[], output: Output): Promise<num
   const registry = await import("@lyrashield/agent-registry").catch(
     () => ({}) as Record<string, unknown>
   )
-  const getAgent = (registry as Record<string, unknown>).getAgent as
+  const getPreferredAgent = (registry as Record<string, unknown>).getPreferredAgent as
     ((id: string) => AgentEntry | undefined) | undefined
   const list = (registry as Record<string, unknown>).listAgents as (() => AgentEntry[]) | undefined
   const arr = (registry as Record<string, unknown>).AGENTS as AgentEntry[] | undefined
   const all = list?.() ?? arr ?? []
-  const agent = getAgent?.(agentId) ?? all.find((a) => a.id === agentId)
+  const agent = getPreferredAgent?.(agentId) ?? all.find((a) => a.id === agentId)
 
   if (!agent) {
     output.error(`Unknown agent: ${agentId}`)
@@ -50,7 +52,8 @@ export async function handleInstall(args: string[], output: Output): Promise<num
     agent,
     transport,
     apiUrl: creds.apiUrl,
-    apiKey: creds.apiKey,
+    apiKey: creds.credentialKind === "api-key" ? creds.apiKey : undefined,
+    useCredentialStore: creds.credentialKind === "oauth",
     scope,
     dryRun: parsed["dry-run"],
     inlineSecret: parsed["inline-secret"],

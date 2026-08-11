@@ -16,6 +16,7 @@ export interface SecretModeOptions {
   apiKey?: string
   apiUrl: string
   inlineSecret?: boolean
+  useCredentialStore?: boolean
   dryRun?: boolean
   cwd?: string
 }
@@ -45,6 +46,17 @@ export async function resolveSecretMode(opts: SecretModeOptions): Promise<Resolv
   const { agent, location, inlineSecret, cwd } = opts
 
   const envVar = "LYRASHIELD_API_KEY"
+
+  if (opts.useCredentialStore) {
+    if (opts.transport !== "stdio") {
+      return {
+        mode: "manual",
+        reason:
+          "Remote MCP connections authenticate in the client. Complete that client's OAuth flow, or use an API key only when the client cannot use OAuth.",
+      }
+    }
+    return { mode: "shell", envVar }
+  }
 
   let mode: ResolvedSecretMode["mode"]
   if (agent.forceInlineEnv) {

@@ -6,7 +6,12 @@ Zed extension for the [LyraShield AI](https://lyrashieldai.com) MCP server. Adds
 
 The `@lyrashield/mcp` package is downloaded and kept up to date automatically.
 
-Add your API key to your Zed settings under `context_servers.lyrashield-mcp.settings.api_key`:
+Run `lyrashield login --oauth` once in a terminal, select one workspace, then restart Zed. The
+extension starts the local MCP server with that user-only credential store; no secret goes into Zed
+settings.
+
+For CI or an environment that cannot complete OAuth, add an API key under
+`context_servers.lyrashield-mcp.settings.api_key`:
 
 ```json
 {

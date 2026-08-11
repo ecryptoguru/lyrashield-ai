@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/vscode", origin).toString()
 const title = "LyraShield MCP for VS Code — Setup Guide"
 const description =
   'Add the LyraShield MCP server to VS Code with GitHub Copilot agent mode. The critical difference: VS Code uses the root key "servers" — not "mcpServers" — in .vscode/mcp.json.'
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-08-12"
 
 const jsonLd: unknown[] = [
   {
@@ -117,23 +117,11 @@ const jsonLd: unknown[] = [
     user-level MCP key.
   </p>
 
-  <h2>Agent Plugin (recommended)</h2>
-  <p>
-    VS Code (with the GitHub Copilot extension in agent mode) supports the open Agent Plugins v1.0.0
-    standard (agent-plugins.org), and LyraShield ships a portable plugin that bundles the MCP server
-    and a security skill into a single installable package. The skill teaches Copilot when to run
-    LyraShield checks, so you get both the tools and the guidance in one step.
-  </p>
-  <p>
-    <code>npx lyrashield install vscode</code> now installs the portable plugin by default — the
-    preferred path over the manual config above. Add <code>--dry-run</code> first to preview the
-    install with no write.
-  </p>
-  <pre><code>npx lyrashield install vscode</code></pre>
+  <h2>Credentials</h2>
   <div class="callout">
-    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
-    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
-    <code>LYRASHIELD_API_KEY</code> environment variable). No key needs to be inlined in{" "}
+    <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>,
+    the local MCP server reads the selected workspace credential from
+    <code>~/.lyrashield/credentials.json</code>. No key needs to be inlined in{" "}
     <code>.vscode/mcp.json</code> or any other file you might commit.
   </div>
 
@@ -145,7 +133,7 @@ const jsonLd: unknown[] = [
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. The
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace OAuth login. The
     <code>@lyrashield/mcp</code> package is published on npm, so
     <code>npx -y @lyrashield/mcp</code> resolves directly.
   </div>

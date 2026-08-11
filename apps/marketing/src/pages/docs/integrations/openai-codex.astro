@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/openai-codex", origin).toString()
 const title = "LyraShield MCP for OpenAI Codex — Setup Guide"
 const description =
   "Connect LyraShield to OpenAI Codex CLI. Install the Agent Plugin for one-step setup, or add the MCP server entry to ~/.codex/config.toml using the [mcp_servers.lyrashield] TOML table."
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-08-12"
 
 const jsonLd: unknown[] = [
   {
@@ -96,13 +96,13 @@ const jsonLd: unknown[] = [
   </p>
   <p>
     <code>npx lyrashield install openai-codex</code> now installs the plugin by default. Run{" "}
-    <code>npx lyrashield login</code> first so the MCP server can read credentials without inlining
-    a key in any config file.
+    <code>npx lyrashield login --oauth</code> first so the MCP server can read credentials without
+    inlining a key in any config file.
   </p>
-  <pre><code>npx lyrashield login
+  <pre><code>npx lyrashield login --oauth
 npx lyrashield install openai-codex</code></pre>
   <div class="callout">
-    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
+    <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>, the
     plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
     <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
   </div>
@@ -128,7 +128,7 @@ npx lyrashield install openai-codex</code></pre>
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. The
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace OAuth login. The
     <code>@lyrashield/mcp</code> package is published on npm, so
     <code>npx -y @lyrashield/mcp</code> resolves directly.
   </div>

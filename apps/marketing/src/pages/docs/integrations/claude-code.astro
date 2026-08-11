@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/claude-code", origin).toString()
 const title = "LyraShield MCP for Claude Code — Setup Guide"
 const description =
   "Add the LyraShield MCP server to Claude Code in under two minutes. Configure .mcp.json or use the claude mcp add command to run security checks inline while you build."
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-08-12"
 
 const jsonLd: unknown[] = [
   {
@@ -86,8 +86,8 @@ const jsonLd: unknown[] = [
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install claude-code</code> from your project root. It detects Claude
-    Code, writes the correct config automatically, and never inlines your API key into a file you
-    might commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
+    Code, installs the generated Agent Plugin by default, and never copies an OAuth bearer into a
+    file you might commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
     <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
   </p>
   <pre><code>npx lyrashield install claude-code</code></pre>
@@ -101,19 +101,18 @@ const jsonLd: unknown[] = [
   <h2>Option A — .mcp.json (recommended for teams)</h2>
   <p>
     Create or open <code>.mcp.json</code> in your project root and add the following. Commit the
-    file to share the configuration with your team; each developer supplies their own API key via
-    the environment variable.
+    file to share the configuration with your team; each developer runs the OAuth login locally.
   </p>
 
   <AgentSnippet agentId="claude-code" transport="stdio" />
 
   <div class="callout">
-    <strong>API key:</strong> Create a workspace key under Settings → API keys in the LyraShield
-    app. Keys begin with <code>lsk_</code>. Use a read-only key for inspection tools and a
-    read-and-write key if you need to trigger scans or submit findings.
+    <strong>OAuth first:</strong> Run <code>npx lyrashield login --oauth</code> to select one
+    workspace. API keys are the CI or non-OAuth-client fallback: create a read-only key for
+    inspection or an explicit write key for mutating actions, which still require approval.
   </div>
 
-  <h2>Option B — claude mcp add CLI</h2>
+  <h2>Option B — Claude CLI with an API-key fallback</h2>
   <p>
     Run the following command in a terminal. Claude Code stores this globally and it applies across
     all projects for the current user.
@@ -139,7 +138,7 @@ const jsonLd: unknown[] = [
   </p>
   <pre><code>npx lyrashield install claude-code</code></pre>
   <div class="callout">
-    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
+    <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>, the
     plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
     <code>LYRASHIELD_API_KEY</code> environment variable). No key needs to be inlined in{" "}
     <code>.mcp.json</code> or any other file you might commit.

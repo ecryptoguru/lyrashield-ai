@@ -140,20 +140,22 @@ export class McpServer {
             tool: name,
             approvalId: decision.approvalId,
           })
+          const pending = {
+            status: "PENDING",
+            approvalId: decision.approvalId,
+            approvalUrl: decision.approvalUrl,
+            message:
+              decision.reason ??
+              "This action requires human approval. Poll with the same arguments and approvalId once approved.",
+          }
           return {
             content: [
               {
                 type: "text",
-                text: JSON.stringify({
-                  status: "PENDING",
-                  approvalId: decision.approvalId,
-                  approvalUrl: decision.approvalUrl,
-                  message:
-                    decision.reason ??
-                    "This action requires human approval. Poll with the same arguments and approvalId once approved.",
-                }),
+                text: JSON.stringify(pending),
               },
             ],
+            structuredContent: pending,
           }
         }
         logger.warn("MCP mutating tool blocked — not approved", {

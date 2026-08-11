@@ -1,4 +1,4 @@
-import { listAgents } from "@lyrashield/agent-registry"
+import { listPreferredAgents } from "@lyrashield/agent-registry"
 import { prisma } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
 import { Plug } from "lucide-react"
@@ -24,7 +24,7 @@ function normalizeTab(value: string | undefined): IntegrationTab {
 }
 
 function mapAgentsToCardData(): AgentCardData[] {
-  return listAgents().map((a) => ({
+  return listPreferredAgents().map((a) => ({
     id: a.id,
     displayName: a.displayName,
     docsSlug: a.docsSlug,

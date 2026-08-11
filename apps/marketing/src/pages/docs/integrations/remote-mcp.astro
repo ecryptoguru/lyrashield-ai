@@ -6,12 +6,12 @@ const canonical = new URL("/docs/integrations/remote-mcp", origin).toString()
 const title = "LyraShield Remote MCP Endpoint — Cloud Editor Setup"
 const description =
   "Connect Lovable, Bolt.new, Replit, and v0 to LyraShield via the remote Streamable-HTTP MCP endpoint at https://app.lyrashieldai.com/api/mcp. No local process required."
-const updatedDate = "2026-07-31"
+const updatedDate = "2026-08-12"
 
 const faqItems = [
   {
     q: "Can cloud editors run mutating LyraShield tools?",
-    a: "Remote mutating tools (scan triggers, finding submissions, report creation) require an explicit OAuth write scope plus human out-of-band approval. When a cloud agent calls one, the server returns a PENDING result with an approvalId and a URL. After a human approves it in the LyraShield dashboard, the agent can re-call the same tool with the approvalId to execute it once. Read-only inspection and reporting tools work everywhere without approval. An operator-only CI override exists outside marketplace UX.",
+    a: "Remote mutating tools (scan triggers, finding submissions, report creation) require an explicit OAuth write scope plus human out-of-band approval. When a cloud agent calls one, the server returns a structured PENDING result with an approvalId and URL. After a human approves it in the LyraShield dashboard, the agent can re-call the same tool with the approvalId to execute it once. Read-only inspection tools work without approval.",
   },
   {
     q: "What is the difference between remote MCP and the GitHub Action?",
@@ -79,10 +79,9 @@ const jsonLd: unknown[] = [
   <div class="callout callout--warn">
     <strong>Human approval required:</strong> Remote mutating tools (scan triggers, finding
     submissions, report creation) return a PENDING result and an approval URL. They run only after a
-    human approves the action in the LyraShield dashboard. Read-only inspection and reporting tools
-    work everywhere. OAuth connections are read-only by default; write scope is explicit and every
-    mutating call still enters the approval flow. The <code>LYRASHIELD_MCP_ALLOW_REMOTE_MUTATIONS=true</code>
-    setting is operator-only and must not be exposed in marketplace setup.
+    human approves the action in the LyraShield dashboard. Read-only inspection tools work
+    everywhere. OAuth connections are read-only by default; write scope is explicit and every
+    mutating call still enters the approval flow. There is no normal-user or marketplace bypass.
   </div>
 
   <h2>Endpoint details</h2>
@@ -105,7 +104,8 @@ const jsonLd: unknown[] = [
       <tr>
         <td>Authentication</td>
         <td>
-          <code>Authorization: Bearer lsk_your_key_here</code>
+          OAuth discovery (recommended); <code>Authorization: Bearer lsk_your_key_here</code> only
+          for clients without OAuth
         </td>
       </tr>
     </tbody>
@@ -131,21 +131,22 @@ const jsonLd: unknown[] = [
   </ol>
   <p>
     Approvals expire after 15 minutes. An expired approval must be re-requested. Write scope is
-    required; read-only keys are refused even for approved actions.
+    required; read-only OAuth connections and API keys are refused even for approved actions.
   </p>
 
   <h2>Lovable</h2>
   <p>
     In Lovable, open <strong>Settings → Integrations → Custom MCP</strong>. Add a new remote MCP
-    server with the URL <code>https://app.lyrashieldai.com/api/mcp</code> and set the
-    Authorization header to <code>Bearer lsk_your_key_here</code>.
+    server with the URL <code>https://app.lyrashieldai.com/api/mcp</code>. Complete the host's OAuth
+    flow when offered; otherwise use a read-only API key in the Authorization header.
   </p>
 
   <h2>Bolt.new (hosted)</h2>
   <p>
     In the Bolt.new hosted environment, navigate to <strong>Settings → MCP Servers</strong> and add
-    a custom remote server. Use the endpoint URL and Bearer token auth. Note: Bolt.new Desktop
-    supports local stdio — see the other editor guides for that setup.
+    a custom remote server. Use the endpoint URL and complete OAuth when the host offers it; use a
+    Bearer API key only as a fallback. Note: Bolt.new Desktop supports local stdio — see the other
+    editor guides for that setup.
   </p>
 
   <h2>Replit</h2>
@@ -156,7 +157,7 @@ const jsonLd: unknown[] = [
       UI in your Replit version).
     </li>
     <li>Add a new server with the remote endpoint URL.</li>
-    <li>Set the Authorization header with your Bearer API key.</li>
+    <li>Complete OAuth if Replit presents it; otherwise set the Authorization header with a read-only API key.</li>
   </ol>
   <p>
     For automated checks on every push, the <a href="/docs/integrations/github-action"
@@ -168,7 +169,8 @@ const jsonLd: unknown[] = [
   <h2>v0 (Vercel)</h2>
   <p>
     In v0, open <strong>Settings → Integrations → MCP</strong> and add a custom remote MCP server.
-    Supply the endpoint URL and set the Bearer authorization header with your API key.
+    Supply the endpoint URL and complete OAuth if v0 presents it. If it does not, use a read-only
+    API key in the Bearer authorization header.
   </p>
 
   <h2>GitHub Action as a complement</h2>

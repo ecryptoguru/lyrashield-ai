@@ -24,6 +24,8 @@ export interface InstallAgentOptions {
   all?: boolean
   dryRun?: boolean
   inlineSecret?: boolean
+  /** Local OAuth credentials are read by the stdio server; never copy them into agent config. */
+  useCredentialStore?: boolean
   yes?: boolean
   cwd?: string
 }
@@ -45,10 +47,9 @@ function renderManualInstructions(agent: AgentEntry, opts: InstallAgentOptions):
   const serverName = opts.serverName ?? "lyrashield"
   const command = "npx"
   const args = ["-y", "@lyrashield/mcp"]
-  const env = {
-    LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY",
-    LYRASHIELD_API_URL: opts.apiUrl,
-  }
+  const env = opts.useCredentialStore
+    ? { LYRASHIELD_API_URL: opts.apiUrl }
+    : { LYRASHIELD_API_KEY: "$LYRASHIELD_API_KEY", LYRASHIELD_API_URL: opts.apiUrl }
   return `[${agent.displayName} — manual configuration]
 Server name: ${serverName}
 Command:     ${command}
@@ -69,6 +70,7 @@ async function tryMergeLocation(
     apiKey: opts.apiKey,
     apiUrl: opts.apiUrl,
     inlineSecret: opts.inlineSecret,
+    useCredentialStore: opts.useCredentialStore,
     dryRun: opts.dryRun,
     cwd: opts.cwd ?? process.cwd(),
   })
@@ -149,11 +151,11 @@ async function runVendorCli(
   }
 
   const args = [...agent.vendorCli.args]
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
-    LYRASHIELD_API_KEY: opts.apiKey ?? "",
     LYRASHIELD_API_URL: opts.apiUrl,
   }
+  if (opts.apiKey) env.LYRASHIELD_API_KEY = opts.apiKey
 
   return new Promise((resolve) => {
     execFile(command, args, { env }, (err) => {

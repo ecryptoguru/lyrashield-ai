@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/windsurf", origin).toString()
 const title = "LyraShield MCP for Windsurf — Setup Guide"
 const description =
   "Connect LyraShield to Windsurf (Codeium). Install the Agent Plugin for one-step setup, or configure the global mcp_config.json for stdio or the remote Streamable-HTTP endpoint."
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-08-12"
 
 const jsonLd: unknown[] = [
   {
@@ -80,34 +80,31 @@ const jsonLd: unknown[] = [
   <h2>Install with the CLI (fastest)</h2>
   <p>
     Run <code>npx lyrashield install windsurf</code> from your project root. It detects Windsurf,
-    installs the Agent Plugin by default, and never inlines your API key into a file you might
+    writes the verified local config, and never copies an OAuth bearer into a file you might
     commit. Add <code>--dry-run</code> first to preview the change with no write, or run{" "}
     <code>npx lyrashield doctor</code> afterward to confirm it's configured correctly.
   </p>
   <pre><code>npx lyrashield install windsurf</code></pre>
   <p>Prefer to see exactly what gets written, or set it up without Node.js? Configure it by hand below.</p>
 
-  <h2>Agent Plugin (recommended)</h2>
+  <h2>Local OAuth setup (recommended)</h2>
   <p>
-    Windsurf supports the open Agent Plugins v1.0.0 standard (agent-plugins.org), and LyraShield
-    ships a portable plugin that bundles the MCP server and a security skill into a single
-    installable package. The skill teaches Windsurf when to run LyraShield checks, so you get both
-    the tools and the guidance in one step.
+    Windsurf uses the local stdio MCP configuration shown below. Start by selecting one LyraShield
+    workspace with the OAuth device flow; the local MCP server reads that credential from your
+    user-only credentials file rather than a project config.
   </p>
   <p>
-    <code>npx lyrashield install windsurf</code> now installs the plugin by default. Run{" "}
-    <code>npx lyrashield login</code> first so the MCP server can read credentials without inlining
-    a key in any config file.
+    Run <code>npx lyrashield login --oauth</code> first, then install the local configuration.
   </p>
-  <pre><code>npx lyrashield login
+  <pre><code>npx lyrashield login --oauth
 npx lyrashield install windsurf</code></pre>
   <div class="callout">
-    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
-    plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
-    <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
+    <strong>No credential in committed files:</strong> The local MCP server reads OAuth credentials
+    from <code>~/.lyrashield/credentials.json</code>. API keys remain the fallback for CI or a
+    client that cannot complete OAuth; do not commit either credential.
   </div>
 
-  <h2>Local stdio setup</h2>
+  <h2>Manual local config</h2>
   <p>
     Add the following to <code>~/.codeium/windsurf/mcp_config.json</code>. Create the file if it
     does not exist.
@@ -125,9 +122,9 @@ npx lyrashield install windsurf</code></pre>
   <AgentSnippet agentId="windsurf" transport="remote-http" />
 
   <div class="callout">
-    <strong>Read-only vs. read-and-write:</strong> Remote mutating tools (scan triggers, finding
-    submissions, report creation) require a read-and-write API key and a human out-of-band
-    approval. Read-only inspection tools work with any key.
+    <strong>Read-only vs. write:</strong> Remote mutating tools (scan triggers, finding
+    submissions, report creation) require an explicit OAuth write scope or write-capable API key,
+    plus a human out-of-band approval. Read-only inspection tools work without approval.
   </div>
 
   <h2>Verify the connection</h2>
@@ -139,7 +136,7 @@ npx lyrashield install windsurf</code></pre>
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. The
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace OAuth login. The
     <code>@lyrashield/mcp</code> package is published on npm, so
     <code>npx -y @lyrashield/mcp</code> resolves directly.
   </div>

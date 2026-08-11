@@ -59,7 +59,7 @@ describe("exportMarketplace", () => {
     expect(claudeManifest).toMatchObject({
       $schema: "https://json.schemastore.org/claude-code-plugin-manifest.json",
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
-      version: "0.1.14",
+      version: "0.1.16",
     })
     const codexManifest = JSON.parse(
       await readFile(path.join(output, ".codex-plugin", "plugin.json"), "utf8")
@@ -72,6 +72,19 @@ describe("exportMarketplace", () => {
         url: "https://app.lyrashieldai.com/api/mcp",
       },
     })
+    const cursorManifest = JSON.parse(
+      await readFile(path.join(output, ".cursor-plugin", "plugin.json"), "utf8")
+    ) as { mcpServers?: Record<string, unknown>; variables?: unknown }
+    expect(cursorManifest.mcpServers).toEqual({
+      lyrashield: { url: "https://app.lyrashieldai.com/api/mcp" },
+    })
+    expect(cursorManifest.variables).toBeUndefined()
+    const kiroMcp = JSON.parse(await readFile(path.join(output, ".mcp.kiro.json"), "utf8")) as {
+      mcpServers?: Record<string, { env?: Record<string, string> }>
+    }
+    expect(kiroMcp.mcpServers?.lyrashield?.env).toEqual({
+      LYRASHIELD_API_URL: "https://app.lyrashieldai.com",
+    })
     await expect(
       readFile(path.join(output, "skills", "lyrashield", "SKILL.md"), "utf8")
     ).resolves.toContain("Pre-PR check")
@@ -81,7 +94,7 @@ describe("exportMarketplace", () => {
     ).resolves.toContain("lyrashield-mcp")
     await expect(
       readFile(path.join(output, "codebuff", "lyrashield-review.ts"), "utf8")
-    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.1"[\s\S]*mcpServers:/)
+    ).resolves.toMatch(/id: "lyrashield-review"[\s\S]*version: "0\.1\.2"[\s\S]*mcpServers:/)
     await expect(
       readFile(path.join(output, "gemini-extension", "gemini-extension.json"), "utf8")
     ).resolves.toContain("lyrashield-ai")

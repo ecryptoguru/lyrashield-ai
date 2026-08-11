@@ -6,7 +6,7 @@ const canonical = new URL("/docs/integrations/kiro", origin).toString()
 const title = "LyraShield Agent Plugin for Kiro — Setup Guide"
 const description =
   "Install the LyraShield Agent Plugin for Kiro. The portable plugin bundles the MCP server and a security skill into a single installable package following the Agent Plugins v1.0.0 standard."
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-08-12"
 
 const jsonLd: unknown[] = [
   {
@@ -29,7 +29,7 @@ const jsonLd: unknown[] = [
         "@type": "HowToStep",
         position: 1,
         name: "Log in to LyraShield",
-        text: "Run npx lyrashield login to save your API key to ~/.lyrashield/credentials.json.",
+        text: "Run npx lyrashield login --oauth to select a workspace and save the local OAuth credential.",
       },
       {
         "@type": "HowToStep",
@@ -80,10 +80,10 @@ const jsonLd: unknown[] = [
 
   <h2>Install with the CLI (fastest)</h2>
   <p>
-    Run <code>npx lyrashield login</code> first to save your API key to{" "}
-    <code>~/.lyrashield/credentials.json</code>. Then install the plugin:
+    Run <code>npx lyrashield login --oauth</code> first to select one workspace and save the OAuth
+    credential to <code>~/.lyrashield/credentials.json</code>. Then install the plugin:
   </p>
-  <pre><code>npx lyrashield login
+  <pre><code>npx lyrashield login --oauth
 npx lyrashield install kiro</code></pre>
   <p>
     The plugin is installed to <code>~/.kiro/plugins/lyrashield</code>. Kiro discovers plugins from{" "}
@@ -93,7 +93,7 @@ npx lyrashield install kiro</code></pre>
   </p>
 
   <div class="callout">
-    <strong>No API key in committed files:</strong> After <code>npx lyrashield login</code>, the
+    <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>, the
     plugin's MCP server reads credentials from <code>~/.lyrashield/credentials.json</code> (or the
     <code>LYRASHIELD_API_KEY</code> environment variable). Nothing with a key needs to be committed.
   </div>
@@ -113,8 +113,8 @@ npx lyrashield install kiro</code></pre>
   </p>
 
   <div class="callout callout--warn">
-    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace API key. Run{" "}
-    <code>npx lyrashield login</code> before installing so the MCP stdio server can read
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield workspace OAuth login. Run{" "}
+    <code>npx lyrashield login --oauth</code> before installing so the MCP stdio server can read
     credentials.
   </div>
 </DocsLayout>

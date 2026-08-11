@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/copilot-cli", origin).toString()
 const title = "LyraShield MCP for GitHub Copilot CLI — Setup Guide"
 const description =
   "Connect LyraShield to GitHub Copilot CLI. Configure ~/.copilot/mcp-config.json or .mcp.json with the stdio server, or use the remote HTTP endpoint for cloud environments."
-const updatedDate = "2026-08-07"
+const updatedDate = "2026-08-12"
 
 const jsonLd: unknown[] = [
   {
@@ -112,7 +112,7 @@ const jsonLd: unknown[] = [
 
   <div class="callout">
     <strong>Read-only vs. read-and-write:</strong> Remote mutating tools (scan triggers, finding
-    submissions, report creation) require a read-and-write API key and a human out-of-band
+    submissions, report creation) require an explicit OAuth write scope or write-capable API key, plus a human out-of-band
     approval. Read-only inspection tools work with any key.
   </div>
 

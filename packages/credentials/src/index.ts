@@ -19,7 +19,7 @@
  * being re-implemented per package.
  */
 import { randomUUID } from "node:crypto"
-import { readFile } from "node:fs/promises"
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 
@@ -40,13 +40,22 @@ export interface StoredCredentials {
 }
 
 export type CredentialSource = "env" | "file" | "none"
+export type CredentialKind = "api-key" | "oauth" | "none"
 
 export interface ResolvedCredentials {
   apiKey: string | undefined
+  credentialKind: CredentialKind
   apiUrl: string
   workspaceId: string | undefined
   installId: string | undefined
   source: CredentialSource
+}
+
+const OAUTH_REFRESH_SKEW_MS = 60_000
+
+type OAuthRefreshOptions = {
+  fetchFn?: typeof fetch
+  now?: () => number
 }
 
 export function getEnvApiKey(): string | undefined {
@@ -87,6 +96,99 @@ export function normalizeCredentials(parsed: Partial<StoredCredentials>): Stored
   return normalized
 }
 
+/**
+ * Refresh an expiring OAuth device credential without changing API-key or
+ * environment-variable precedence. Better Auth rotates refresh tokens, so the
+ * returned credential must replace the stored value before the next refresh.
+ */
+export async function refreshOAuthCredentials(
+  credentials: StoredCredentials,
+  { fetchFn = fetch, now = Date.now }: OAuthRefreshOptions = {}
+): Promise<StoredCredentials> {
+  const expiresAt = credentials.oauthExpiresAt ? Date.parse(credentials.oauthExpiresAt) : NaN
+  if (
+    credentials.oauthAccessToken &&
+    (!Number.isFinite(expiresAt) || expiresAt > now() + OAUTH_REFRESH_SKEW_MS)
+  ) {
+    return credentials
+  }
+  if (!credentials.oauthRefreshToken) return credentials
+
+  let response: Response
+  try {
+    response = await fetchFn(
+      `${(credentials.apiUrl ?? DEFAULT_API_URL).replace(/\/$/, "")}/api/auth/oauth2/token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: credentials.oauthRefreshToken,
+          client_id: "lyrashield-cli",
+        }).toString(),
+      }
+    )
+  } catch {
+    throw new Error("OAuth token refresh failed. Run `lyrashield login --oauth` to reconnect.")
+  }
+
+  const token = (await response.json().catch(() => null)) as {
+    access_token?: unknown
+    refresh_token?: unknown
+    expires_in?: unknown
+  } | null
+  if (!response.ok || typeof token?.access_token !== "string" || !token.access_token) {
+    throw new Error(
+      "OAuth token refresh was rejected. Run `lyrashield login --oauth` to reconnect."
+    )
+  }
+
+  const expiresIn =
+    typeof token.expires_in === "number" && token.expires_in > 0 ? token.expires_in : undefined
+  return normalizeCredentials({
+    ...credentials,
+    oauthAccessToken: token.access_token,
+    oauthRefreshToken:
+      typeof token.refresh_token === "string" && token.refresh_token
+        ? token.refresh_token
+        : credentials.oauthRefreshToken,
+    oauthExpiresAt: expiresIn ? new Date(now() + expiresIn * 1000).toISOString() : undefined,
+  })
+}
+
+/** Revoke a device-login refresh token before removing it from local storage. */
+export async function revokeOAuthCredentials(
+  credentials: StoredCredentials,
+  { fetchFn = fetch }: Pick<OAuthRefreshOptions, "fetchFn"> = {}
+): Promise<void> {
+  if (!credentials.oauthRefreshToken) return
+
+  let response: Response
+  try {
+    response = await fetchFn(
+      `${(credentials.apiUrl ?? DEFAULT_API_URL).replace(/\/$/, "")}/api/auth/oauth2/revoke`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          token: credentials.oauthRefreshToken,
+          token_type_hint: "refresh_token",
+          client_id: "lyrashield-cli",
+        }).toString(),
+      }
+    )
+  } catch {
+    throw new Error(
+      "OAuth revocation failed. Check your connection and try `lyrashield logout` again."
+    )
+  }
+  if (!response.ok) {
+    throw new Error(
+      "OAuth revocation was rejected. Run `lyrashield logout` again or revoke the connection in the dashboard."
+    )
+  }
+}
+
 function isNotFound(err: unknown): boolean {
   return Boolean(err && typeof err === "object" && "code" in err && err.code === "ENOENT")
 }
@@ -115,6 +217,21 @@ export async function readCredentialsFile(): Promise<StoredCredentials | undefin
   } catch {
     throw new Error(`${CREDENTIALS_FILE} is not valid JSON. Delete it and run: lyrashield login`)
   }
+}
+
+/** Persist shared CLI/MCP credentials atomically with user-only permissions. */
+export async function writeCredentialsFile(credentials: StoredCredentials): Promise<void> {
+  await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 })
+  const temporary = `${CREDENTIALS_FILE}.tmp`
+  await writeFile(temporary, JSON.stringify(normalizeCredentials(credentials), null, 2), {
+    mode: 0o600,
+  })
+  try {
+    await chmod(temporary, 0o600)
+  } catch {
+    // Platforms without POSIX permissions still receive the atomic replacement.
+  }
+  await rename(temporary, CREDENTIALS_FILE)
 }
 
 /**
@@ -150,6 +267,15 @@ export async function resolveCredentials(
 
   return {
     apiKey: envKey ?? envOAuth ?? stored?.apiKey ?? stored?.oauthAccessToken,
+    credentialKind: envKey
+      ? "api-key"
+      : envOAuth
+        ? "oauth"
+        : stored?.apiKey
+          ? "api-key"
+          : stored?.oauthAccessToken
+            ? "oauth"
+            : "none",
     apiUrl: envUrl ?? stored?.apiUrl ?? DEFAULT_API_URL,
     workspaceId: stored?.workspaceId,
     installId: stored?.installId,

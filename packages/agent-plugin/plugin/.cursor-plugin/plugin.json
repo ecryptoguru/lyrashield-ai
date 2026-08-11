@@ -1,6 +1,6 @@
 {
   "name": "lyrashield",
-  "version": "0.1.14",
+  "version": "0.1.16",
   "description": "LyraShield AI security and release-assurance plugin",
   "author": {
     "name": "LyraShield AI",
@@ -18,16 +18,7 @@
   ],
   "mcpServers": {
     "lyrashield": {
-      "url": "https://app.lyrashieldai.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer ${LYRASHIELD_API_KEY}"
-      }
-    }
-  },
-  "variables": {
-    "LYRASHIELD_API_KEY": {
-      "type": "string",
-      "description": "API key for the LyraShield MCP server"
+      "url": "https://app.lyrashieldai.com/api/mcp"
     }
   }
 }

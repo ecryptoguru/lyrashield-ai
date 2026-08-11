@@ -49,5 +49,5 @@ Last checked: 2026-08-12.
 - Claude: [plugin submissions](https://platform.claude.com/plugins/submissions) show two LyraShield AI submissions pending review.
 - Codebuff: the [LyraShield AI publisher](https://codebuff.com/publishers/lyrashield) has a public,
   unverified `0.1.1` listing with the MCP declaration live.
-- Cursor: the authenticated [publisher application](https://cursor.com/marketplace/publish) is ready, but no application has been submitted.
+- Cursor: the [LyraShield AI publisher application](https://cursor.com/marketplace/publish) is submitted and awaiting review.
 - OpenAI/Codex: LyraShield AI `0.1.10` is in review.
