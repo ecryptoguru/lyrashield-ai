@@ -15,8 +15,10 @@ import { track } from "@/lib/analytics"
 import { PRODUCT_SINGULAR, ENVIRONMENT_SINGULAR, RUN_SINGULAR } from "@/lib/terminology"
 import {
   buildUrlTargetPayload,
+  ensureOnboardingTargetId,
   getOnboardingReviewOptions,
   nextStepForPath,
+  onboardingPathForTargetType,
   pathLabel,
   pathNeedsRepo,
   type OnboardingPath,
@@ -29,6 +31,8 @@ interface OnboardingData {
   workspaceId: string | null
   targetId: string | null
   selectedGoal: string | null
+  targetType?: string | null
+  targetName?: string | null
 }
 
 interface Repo {
@@ -52,7 +56,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
   const [workspaceName, setWorkspaceName] = useState("")
   const [repos, setRepos] = useState<Repo[]>([])
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
-  const [productName, setProductName] = useState("")
+  const [productName, setProductName] = useState(initialState.targetName ?? "")
   const [environment, setEnvironment] = useState("STAGING")
   const [selectedGoal, setSelectedGoal] = useState<string>(
     initialState.selectedGoal ?? "LAUNCH_REVIEW"
@@ -60,7 +64,9 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
   // Four-way step 2: which way the user chose to add their first target.
   // If the user already created a target (targetId is set) but we don't know
   // which path they took, leave path null — the step is already past step 2.
-  const [path, setPath] = useState<OnboardingPath>(null)
+  const [path, setPath] = useState<OnboardingPath>(
+    onboardingPathForTargetType(initialState.targetType ?? null)
+  )
   const [githubUnavailable, setGithubUnavailable] = useState(false)
   const [urlForm, setUrlForm] = useState({ name: "", url: "", ownershipAttested: false })
   const autoFetchAttempted = useRef(false)
@@ -271,16 +277,17 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
       setError("Workspace is required.")
       return
     }
-    // Every non-skip path creates its target here, at the final step, so the
-    // name/environment the user just confirmed are what get saved — and so Back
-    // -> Continue never orphans a duplicate. GitHub creates a REPO target;
-    // URL/API create a WEB_APP/API target (ownership was attested in step 2).
+    // A retry after scan admission fails reuses the target persisted by the
+    // first attempt. New flows create it here so Back -> Continue cannot orphan
+    // a duplicate before the final action.
+    const hasExistingTarget = Boolean(data.targetId)
     const needsRepo = pathNeedsRepo(path)
-    if (needsRepo && !selectedRepo) {
+    if (!hasExistingTarget && needsRepo && !selectedRepo) {
       setError("Workspace and repository are required.")
       return
     }
     if (
+      !hasExistingTarget &&
       !needsRepo &&
       !buildUrlTargetPayload({
         workspaceId: data.workspaceId,
@@ -294,7 +301,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
       setError("Add a valid target and confirm ownership to continue.")
       return
     }
-    if (!productName.trim()) {
+    if (!hasExistingTarget && !productName.trim()) {
       setError(`Name your ${PRODUCT_SINGULAR.toLowerCase()} to continue.`)
       return
     }
@@ -306,25 +313,26 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
     setLoading(true)
     setError(null)
     try {
-      let targetId = data.targetId
-      if (needsRepo && selectedRepo) {
-        const target = await apiPost(
-          "/api/targets",
-          {
-            workspaceId: data.workspaceId,
-            name: productName.trim(),
-            type: "REPO",
-            repoProvider: "github",
-            repoOwner: selectedRepo.owner,
-            repoName: selectedRepo.name,
-            installationId: selectedRepo.installationId,
-            branch: selectedRepo.defaultBranch,
-            environment,
-          },
-          { schema: idSchema }
-        )
-        targetId = target.id
-      } else if (!needsRepo) {
+      const targetId = await ensureOnboardingTargetId(data.targetId, async () => {
+        if (needsRepo && selectedRepo) {
+          const target = await apiPost(
+            "/api/targets",
+            {
+              workspaceId: data.workspaceId,
+              name: productName.trim(),
+              type: "REPO",
+              repoProvider: "github",
+              repoOwner: selectedRepo.owner,
+              repoName: selectedRepo.name,
+              installationId: selectedRepo.installationId,
+              branch: selectedRepo.defaultBranch,
+              environment,
+            },
+            { schema: idSchema }
+          )
+          return target.id
+        }
+
         const payload = buildUrlTargetPayload({
           workspaceId: data.workspaceId,
           path,
@@ -333,11 +341,10 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
           environment,
           ownershipAttested: urlForm.ownershipAttested,
         })
-        if (payload) {
-          const target = await apiPost("/api/targets", payload, { schema: idSchema })
-          targetId = target.id
-        }
-      }
+        if (!payload) throw new Error("Target details are required.")
+        const target = await apiPost("/api/targets", payload, { schema: idSchema })
+        return target.id
+      })
       await persist({ targetId, selectedGoal: selectedReview.goal, currentStep: 3, skipped: false })
       const scan = await apiPost(
         "/api/scans",

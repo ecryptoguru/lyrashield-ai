@@ -1,11 +1,35 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import {
   buildUrlTargetPayload,
+  ensureOnboardingTargetId,
   getOnboardingReviewOptions,
   nextStepForPath,
+  onboardingPathForTargetType,
   pathLabel,
   pathNeedsRepo,
 } from "./onboarding-flow.utils"
+
+describe("onboardingPathForTargetType", () => {
+  it("restores the onboarding path from an existing target", () => {
+    expect(onboardingPathForTargetType("REPO")).toBe("github")
+    expect(onboardingPathForTargetType("WEB_APP")).toBe("url")
+    expect(onboardingPathForTargetType("API")).toBe("api")
+    expect(onboardingPathForTargetType(null)).toBeNull()
+  })
+})
+
+describe("ensureOnboardingTargetId", () => {
+  it("reuses the persisted target when a failed scan is retried", async () => {
+    const createTarget = vi.fn().mockResolvedValue("target-1")
+
+    const firstTargetId = await ensureOnboardingTargetId(null, createTarget)
+    const retryTargetId = await ensureOnboardingTargetId(firstTargetId, createTarget)
+
+    expect(firstTargetId).toBe("target-1")
+    expect(retryTargetId).toBe("target-1")
+    expect(createTarget).toHaveBeenCalledOnce()
+  })
+})
 
 describe("getOnboardingReviewOptions", () => {
   it("uses the canonical repository review choices and modes", () => {

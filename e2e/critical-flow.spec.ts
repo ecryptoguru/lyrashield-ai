@@ -183,6 +183,48 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   })
   await expect(contractTargetResponse).toBeOK()
 
+  const restoreOnboardingResponse = await page.request.patch("/api/onboarding", {
+    data: {
+      currentStep: 3,
+      skipped: false,
+      workspaceId,
+      targetId: apiTargetId,
+      selectedGoal: "LAUNCH_REVIEW",
+    },
+    headers: { "x-forwarded-for": forwardedFor },
+  })
+  await expect(restoreOnboardingResponse).toBeOK()
+
+  let scanAttempts = 0
+  await page.route("**/api/scans", async (route) => {
+    if (route.request().method() !== "POST") return route.continue()
+    scanAttempts += 1
+    return route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: false,
+        error: { code: "SCAN_SERVICE_UNAVAILABLE", message: "Retry the restored review." },
+      }),
+    })
+  })
+  await page.goto("/onboarding")
+  await expect(page.getByRole("button", { name: /^Endpoint Review/ })).toBeVisible()
+  const restoredReviewButton = page.getByRole("button", { name: "Start endpoint review" })
+  await restoredReviewButton.click()
+  await expect(restoredReviewButton).toBeEnabled()
+  await restoredReviewButton.click()
+  await expect(restoredReviewButton).toBeEnabled()
+  expect(scanAttempts).toBe(2)
+  expect(await prisma.target.count({ where: { workspaceId } })).toBe(3)
+  await page.unroute("**/api/scans")
+
+  const finishOnboardingResponse = await page.request.patch("/api/onboarding", {
+    data: { skipped: true },
+    headers: { "x-forwarded-for": forwardedFor },
+  })
+  await expect(finishOnboardingResponse).toBeOK()
+
   await page.goto("/dashboard/scans?new=1")
   const targetSelect = page.getByLabel("Target")
   await targetSelect.selectOption({ label: "Example target (WEB_APP)" })
