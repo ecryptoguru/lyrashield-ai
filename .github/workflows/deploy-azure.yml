@@ -15,7 +15,7 @@ env:
   REGISTRY: ghcr.io
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
-  ENGINE_REVISION: 67ecd6f89b190f9f21c193fce4a15defa21dddb8
+  ENGINE_REVISION: 80032d9345664e96bf725b19d62f6641828e08ad
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
