@@ -79,11 +79,12 @@ vi.mock("../engine/runner", () => ({
     delegateModel: "azure_ai/gpt-5.6-luna",
     delegateReasoningEffort: "medium",
   })),
-  resolveEngineTimeoutMs: vi.fn((minutes?: number | null) =>
-    typeof minutes === "number" && minutes > 0
-      ? Math.min(minutes * 60 * 1000, 25 * 60 * 1000)
-      : 25 * 60 * 1000
-  ),
+  resolveEngineTimeoutMs: vi.fn((minutes?: number | null, mode?: string) => {
+    const profileLimitMs = mode === "DEEP" || mode === "CUSTOM" ? 40 * 60 * 1000 : 12 * 60 * 1000
+    return typeof minutes === "number" && minutes > 0
+      ? Math.min(minutes * 60 * 1000, profileLimitMs)
+      : profileLimitMs
+  }),
   interpretExitCode: vi.fn((code: number) => {
     if (code === 0) return { status: "COMPLETED", category: "SUCCESS" }
     if (code === 2) return { status: "COMPLETED", category: "VULNERABILITIES_FOUND" }
@@ -147,6 +148,7 @@ import {
   extractActualCostUsd,
   extractUsageSummary,
   processScanJob,
+  resolveScanRuntimeBudgetMs,
   resolveScannerPhaseTimeoutMs,
 } from "./run-scan.job"
 import { runPreflight } from "./preflight.job"
@@ -193,6 +195,27 @@ const mockUrlTarget = {
   url: "https://example.com",
   repoFullName: null,
 }
+
+describe("resolveScanRuntimeBudgetMs", () => {
+  it.each(["SAFE", "QUICK", "STANDARD"] as const)(
+    "caps %s scans at fifteen minutes even when the default policy is longer",
+    (mode) => {
+      expect(resolveScanRuntimeBudgetMs(mode, 60)).toBe(15 * 60 * 1000)
+    }
+  )
+
+  it("caps deep scans at forty-five minutes", () => {
+    expect(resolveScanRuntimeBudgetMs("DEEP", 60)).toBe(45 * 60 * 1000)
+  })
+
+  it("honors a shorter explicit policy limit", () => {
+    expect(resolveScanRuntimeBudgetMs("SAFE", 8)).toBe(8 * 60 * 1000)
+  })
+
+  it("uses the deterministic URL profile limit instead of repository limits", () => {
+    expect(resolveScanRuntimeBudgetMs("DEEP", 60, "WEB_APP")).toBe(3 * 60 * 1000)
+  })
+})
 
 it("keeps URL targets out of the unpinned external engine", async () => {
   vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
@@ -356,11 +379,11 @@ describe("processScanJob", () => {
     })
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({
-        maxBudgetUsd: 3.2,
+        maxBudgetUsd: 1.2,
         instruction: expect.stringContaining("vibe-security-50/1.1.0"),
       }),
       "scan-1",
-      25 * 60 * 1000,
+      12 * 60 * 1000,
       expect.any(Function)
     )
     expect(addScanEvent).toHaveBeenCalledWith(
@@ -372,7 +395,7 @@ describe("processScanJob", () => {
     )
   })
 
-  it("uses the selected workspace policy budget for the engine cap", async () => {
+  it("does not let a workspace policy upgrade the selected profile budget", async () => {
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       maxBudgetUsd: { toNumber: () => 6.5 },
       maxDurationMinutes: 75,
@@ -397,9 +420,9 @@ describe("processScanJob", () => {
       select: { maxBudgetUsd: true, maxDurationMinutes: true },
     })
     expect(runEngine).toHaveBeenCalledWith(
-      expect.objectContaining({ maxBudgetUsd: 6.5 }),
+      expect.objectContaining({ maxBudgetUsd: 1.2 }),
       "scan-1",
-      25 * 60 * 1000,
+      12 * 60 * 1000,
       expect.any(Function)
     )
   })
@@ -431,7 +454,7 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.objectContaining({ maxBudgetUsd: 3.2 }),
       "scan-1",
-      25 * 60 * 1000,
+      40 * 60 * 1000,
       expect.any(Function)
     )
     expect(runScannerOrchestrator).toHaveBeenCalledWith(
@@ -482,8 +505,8 @@ describe("processScanJob", () => {
       where: { id: "scan-1" },
       data: {
         providerCostUsd: "3.500000",
-        billedCostUsd: "3.200000",
-        actualCostCents: 320,
+        billedCostUsd: "1.200000",
+        actualCostCents: 120,
         llmRequestCount: 1,
         llmInputTokens: 17_500_000,
         llmCachedInputTokens: 0,
@@ -495,13 +518,13 @@ describe("processScanJob", () => {
       data: {
         errorCategory: "BUDGET_EXCEEDED",
         errorMessage: "Protected run limit reached",
-        actualCostCents: 320,
+        actualCostCents: 120,
       },
     })
     expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
       errorCategory: "BUDGET_EXCEEDED",
       errorMessage: "Protected run limit reached",
-      actualCostCents: 320,
+      actualCostCents: 120,
     })
     expect(persistFindings).toHaveBeenCalled()
     expect(persistResultManifest).toHaveBeenCalled()
@@ -756,6 +779,33 @@ describe("processScanJob", () => {
     expect(result.errorCategory).toBe("TARGET_NOT_FOUND")
   })
 
+  it("rejects API Standard without an OpenAPI document inside the worker", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      ...mockUrlTarget,
+      type: "API",
+      apiSpecUrl: null,
+    } as never)
+    const apiStandardJob = {
+      ...mockJob,
+      data: { ...mockJob.data, mode: "STANDARD" },
+    } as never
+
+    const result = await processScanJob(apiStandardJob)
+
+    expect(result).toMatchObject({
+      status: "failed",
+      errorCategory: "API_SPEC_REQUIRED",
+      errorMessage: "Contract Review requires an OpenAPI document.",
+    })
+    expect(runEngine).not.toHaveBeenCalled()
+    expect(runScannerOrchestrator).not.toHaveBeenCalled()
+    expect(updateScanStatus).toHaveBeenCalledWith(
+      "scan-1",
+      "FAILED",
+      expect.objectContaining({ errorCategory: "API_SPEC_REQUIRED" })
+    )
+  })
+
   it("fails fast when the scan goal contains prompt-injection patterns", async () => {
     const maliciousJob = {
       id: "job-1",
@@ -839,6 +889,12 @@ describe("processScanJob", () => {
       "scan-1",
       "FAILED",
       expect.objectContaining({ errorCategory: "TIMEOUT" })
+    )
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanId: "scan-1",
+        coverageIssues: [expect.objectContaining({ scanner: "engine", status: "bounded" })],
+      })
     )
   })
 
@@ -1025,6 +1081,19 @@ describe("processScanJob", () => {
     expect(cleanupEngineWorkspace).toHaveBeenCalledWith("lyrashield_runs/scan-1", "scan-1")
   })
 
+  it("records cleanup failure without discarding completed scan results", async () => {
+    vi.mocked(cleanupEngineWorkspace).mockRejectedValueOnce(new Error("cleanup denied"))
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ status: "completed" })
+    expect(addScanEvent).toHaveBeenCalledWith(
+      "scan-1",
+      "cleanup_failed",
+      "error",
+      "Engine workspace cleanup requires operator attention",
+      { error: "cleanup denied" }
+    )
+  })
+
   it("transitions through VERIFYING status before completion", async () => {
     await processScanJob(mockJob)
 
@@ -1036,6 +1105,7 @@ describe("processScanJob", () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 2,
       sourceCheckoutPath: "/tmp/strix_repos/r1/repo",
+      sourceRevision: "c".repeat(40),
       output: {
         vulnerabilities: vulns,
         findingsComplete: true,
@@ -1071,6 +1141,11 @@ describe("processScanJob", () => {
       targetId: "target-1",
       vulnerabilities: [],
     })
+    expect(persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        engineExecution: expect.objectContaining({ sourceRevision: "c".repeat(40) }),
+      })
+    )
   })
 
   it("does not bill aggregate usage when the payload names no model", async () => {

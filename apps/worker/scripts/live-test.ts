@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto"
-import { execSync } from "node:child_process"
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
-import { enqueueScan } from "@lyrashield/integrations"
+import { execFileSync } from "node:child_process"
+import { cancelScan, isTerminalScanStatus, prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { closeRedis, enqueueScan, getScanQueue } from "@lyrashield/integrations"
+import { resolveScanProfile } from "@lyrashield/types"
 
-const REPO_OWNER = "ecryptoguru"
-const REPO_NAME = "OnboardingAI2"
-const REPO_BRANCH = "main"
 type ScanMode = "SAFE" | "STANDARD" | "DEEP" | "CUSTOM" | "QUICK"
+type LiveTargetType = "REPO" | "WEB_APP" | "API"
 type ScanGoal =
   | "LAUNCH_REVIEW"
   | "CHECK_PR"
@@ -16,15 +15,30 @@ type ScanGoal =
   | "COMPLIANCE_REVIEW"
 const SCAN_MODE = (process.env.SCAN_MODE || "STANDARD").toUpperCase() as ScanMode
 const SCAN_GOAL = (process.env.SCAN_GOAL || "LAUNCH_REVIEW") as ScanGoal
-const DEFAULT_BUDGET: Record<string, number> = {
-  SAFE: 1.2,
-  STANDARD: 3.2,
-  DEEP: 15,
-  CUSTOM: 15,
+const TARGET_TYPE = (process.env.TARGET_TYPE || "REPO").toUpperCase() as LiveTargetType
+const TARGET_URL = process.env.TARGET_URL?.trim()
+const API_SPEC_URL = process.env.API_SPEC_URL?.trim()
+const REPO_OWNER = process.env.REPO_OWNER?.trim() || "ecryptoguru"
+const REPO_NAME = process.env.REPO_NAME?.trim() || "OnboardingAI2"
+const REPO_BRANCH = process.env.REPO_BRANCH?.trim() || "main"
+if (!["REPO", "WEB_APP", "API"].includes(TARGET_TYPE)) {
+  throw new Error(`TARGET_TYPE must be REPO, WEB_APP, or API; received ${TARGET_TYPE}`)
 }
-const MAX_BUDGET_USD =
-  parseFloat(process.env.MAX_BUDGET_USD || "0") || DEFAULT_BUDGET[SCAN_MODE] || 3.2
-const MAX_DURATION_MINUTES = parseInt(process.env.MAX_DURATION_MINUTES || "30", 10)
+if (TARGET_TYPE !== "REPO" && !TARGET_URL) {
+  throw new Error(`TARGET_URL is required for ${TARGET_TYPE} live tests`)
+}
+const scanProfile = resolveScanProfile({ targetType: TARGET_TYPE, mode: SCAN_MODE })
+const requestedBudgetUsd = parseFloat(process.env.MAX_BUDGET_USD || "0")
+const requestedDurationMinutes = parseInt(process.env.MAX_DURATION_MINUTES || "0", 10)
+const CANCEL_AFTER_SECONDS = parseInt(process.env.CANCEL_AFTER_SECONDS || "0", 10)
+const MAX_BUDGET_USD = Math.min(
+  requestedBudgetUsd > 0 ? requestedBudgetUsd : scanProfile.maxBudgetUsd,
+  scanProfile.maxBudgetUsd
+)
+const MAX_DURATION_MINUTES = Math.min(
+  requestedDurationMinutes > 0 ? requestedDurationMinutes : scanProfile.maxDurationMinutes,
+  scanProfile.maxDurationMinutes
+)
 
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -74,17 +88,27 @@ async function main() {
 
   const target = await withWorkspaceRLS(workspace.id, async (tx) =>
     tx.target.create({
-      data: {
-        workspaceId: workspace.id,
-        type: "REPO",
-        name: `${REPO_OWNER}/${REPO_NAME}`,
-        repoProvider: "github",
-        repoOwner: REPO_OWNER,
-        repoName: REPO_NAME,
-        repoFullName: `${REPO_OWNER}/${REPO_NAME}`,
-        branch: REPO_BRANCH,
-        environment: "STAGING",
-      },
+      data:
+        TARGET_TYPE === "REPO"
+          ? {
+              workspaceId: workspace.id,
+              type: "REPO",
+              name: `${REPO_OWNER}/${REPO_NAME}`,
+              repoProvider: "github",
+              repoOwner: REPO_OWNER,
+              repoName: REPO_NAME,
+              repoFullName: `${REPO_OWNER}/${REPO_NAME}`,
+              branch: REPO_BRANCH,
+              environment: "STAGING",
+            }
+          : {
+              workspaceId: workspace.id,
+              type: TARGET_TYPE,
+              name: TARGET_URL!,
+              url: TARGET_URL!,
+              ...(API_SPEC_URL ? { apiSpecUrl: API_SPEC_URL } : {}),
+              environment: "STAGING",
+            },
     })
   )
 
@@ -124,6 +148,7 @@ async function main() {
 
   let terminal = false
   let lastStatus = "QUEUED"
+  let cancellationRequested = false
   while (!terminal) {
     await sleep(5_000)
     const current = await withWorkspaceRLS(workspace.id, async (tx) =>
@@ -154,9 +179,18 @@ async function main() {
       console.log(`[scan] ${new Date().toISOString()} status=${current.status}`)
       lastStatus = current.status as string
     }
-    terminal = ["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(
-      current.status as string
-    )
+    terminal = isTerminalScanStatus(current.status)
+    if (
+      !terminal &&
+      !cancellationRequested &&
+      CANCEL_AFTER_SECONDS > 0 &&
+      Date.now() - startTime.getTime() >= CANCEL_AFTER_SECONDS * 1000
+    ) {
+      await cancelScan(scan.id, workspace.id)
+      cancellationRequested = true
+      console.log(`[scan] cancellation requested after ${CANCEL_AFTER_SECONDS}s`)
+      continue
+    }
     if (terminal) {
       const findingCount = await withWorkspaceRLS(workspace.id, async (tx) =>
         tx.finding.count({ where: { scanId: scan.id, deletedAt: null } })
@@ -173,7 +207,10 @@ async function main() {
       console.log(`scanId:        ${scan.id}`)
       console.log(`workspaceId:   ${workspace.id}`)
       console.log(`targetId:      ${target.id}`)
-      console.log(`repo:          ${REPO_OWNER}/${REPO_NAME}`)
+      console.log(
+        `${TARGET_TYPE === "REPO" ? "repo" : "url"}:          ${TARGET_TYPE === "REPO" ? `${REPO_OWNER}/${REPO_NAME}` : TARGET_URL}`
+      )
+      console.log(`targetType:    ${TARGET_TYPE}`)
       console.log(`mode:          ${SCAN_MODE}`)
       console.log(`status:        ${current.status}`)
       console.log(`total latency: ${(latencyMs / 1000).toFixed(1)}s`)
@@ -196,9 +233,14 @@ async function main() {
 
       console.log("\n[logs] collecting worker logs since scan start...")
       try {
-        const logs = execSync(
-          `cd /Users/defiankit/Desktop/lyrashieldai && docker compose logs worker --since "${startIso}" 2>&1`,
-          { encoding: "utf8", maxBuffer: 50 * 1024 * 1024, timeout: 30_000 }
+        const logs = execFileSync(
+          "docker",
+          ["logs", "--since", startIso, process.env.HOSTNAME || "lyrashield-worker"],
+          {
+            encoding: "utf8",
+            maxBuffer: 50 * 1024 * 1024,
+            timeout: 30_000,
+          }
         )
         console.log("\n=== WORKER LOGS (tail 80 lines) ===\n")
         const lines = logs.split("\n")
@@ -218,5 +260,5 @@ main()
     process.exit(1)
   })
   .finally(async () => {
-    await prisma.$disconnect()
+    await Promise.allSettled([prisma.$disconnect(), getScanQueue().close(), closeRedis()])
   })

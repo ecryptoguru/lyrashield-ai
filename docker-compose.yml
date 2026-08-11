@@ -113,9 +113,9 @@ services:
       PORT: "3000"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-lyrashield-dev-redis}@redis:6379"
       NODE_ENV: "production"
-      # DEV ONLY: local environment has no mail provider, so make the unverified
-      # registration opt-in explicit instead of failing the auth env check.
-      LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "${LYRASHIELD_REQUIRE_EMAIL_VERIFICATION:-0}"
+      # DEV ONLY: local Compose has no transactional mail provider. Do not inherit
+      # a production verification setting and make every local request fail closed.
+      LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
       # This file is local-development only and binds the app to localhost.
       # Production must explicitly set this to the header its ingress strips and rewrites.
       TRUSTED_PROXY_IP_HEADER: "${TRUSTED_PROXY_IP_HEADER:-x-forwarded-for}"
@@ -188,13 +188,22 @@ services:
       GITHUB_APP_CLIENT_SECRET: "${GITHUB_APP_CLIENT_SECRET:-}"
       # Scan engine
       LYRASHIELD_LLM: "${LYRASHIELD_LLM:-}"
-      LYRASHIELD_LUNA_LLM: "${LYRASHIELD_LUNA_LLM:-}"
-      LYRASHIELD_TERRA_LLM: "${LYRASHIELD_TERRA_LLM:-}"
+      # Local defaults preserve the documented low-cost routing contract:
+      # Quick/Safe/Standard use Luna; Deep uses Terra with Luna delegates.
+      # Production must still set explicit deployment names through its secret
+      # and configuration management boundary.
+      LYRASHIELD_LUNA_LLM: "${LYRASHIELD_LUNA_LLM:-azure_ai/gpt-5.6-luna}"
+      LYRASHIELD_TERRA_LLM: "${LYRASHIELD_TERRA_LLM:-azure_ai/gpt-5.6-terra}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_API_BASE: "${LLM_API_BASE:-}"
       LLM_API_VERSION: "${LLM_API_VERSION:-}"
-      LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-ghcr.io/usestrix/strix-sandbox@sha256:478e0b37ec83b2ba8c6e159593cb46d5dc9b624a45d6a9bb606851b83058d284}"
+      # DEV ONLY: local image name. Production rejects this tag and requires
+      # the immutable digest emitted by the engine's publish-sandbox workflow.
+      LYRASHIELD_IMAGE: "${LYRASHIELD_IMAGE:-lyrashieldai-sandbox:local}"
       LYRASHIELD_TELEMETRY: "${LYRASHIELD_TELEMETRY:-0}"
+      # GPT-5.6 explicit prompt cache reads/writes; unsupported models ignore the breakpoint fields.
+      LYRASHIELD_PROMPT_CACHE_EXPLICIT: "${LYRASHIELD_PROMPT_CACHE_EXPLICIT:-1}"
+      LYRASHIELD_PROMPT_CACHE: "${LYRASHIELD_PROMPT_CACHE:-1}"
       LYRASHIELD_ENGINE_PATH: "${LYRASHIELD_ENGINE_PATH:-lyrashield}"
       LYRASHIELD_ENGINE_SANDBOX_NETWORK: "${LYRASHIELD_ENGINE_SANDBOX_NETWORK:-lyrashield-sandbox}"
       PLATFORM_MAX_SCAN_BUDGET_USD: "${PLATFORM_MAX_SCAN_BUDGET_USD:-50}"

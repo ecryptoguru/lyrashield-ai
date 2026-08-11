@@ -430,6 +430,7 @@ describe("score-service", () => {
             targetId: "t-1",
             status: "VERIFYING",
             mode: "STANDARD",
+            startedAt: new Date(Date.now() - 1_000),
             target: { id: "t-1", projectId: "p-1", branch: "main" },
             coverageReceipts: [
               { controlId: "engine", status: "COMPLETED" },
@@ -465,6 +466,11 @@ describe("score-service", () => {
         where: { id: "t-1" },
         data: { lastScanAt: expect.any(Date) },
       })
+      expect(tx.scan.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ durationMs: expect.any(Number) }),
+        })
+      )
       expect(tx.scoreSnapshot.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ shareEligible: true }) })
       )

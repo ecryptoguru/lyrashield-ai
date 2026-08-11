@@ -90,7 +90,12 @@ export {
   type ListScansParams,
   type ScanListItem,
 } from "./scan-service"
-export { isValidTransition, VALID_TRANSITIONS } from "./scan-transitions"
+export {
+  isTerminalScanStatus,
+  isValidTransition,
+  TERMINAL_SCAN_STATUSES,
+  VALID_TRANSITIONS,
+} from "./scan-transitions"
 export {
   completeScanWithScore,
   createScorecardShare,

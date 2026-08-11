@@ -61,6 +61,21 @@ describe("result integrity", () => {
     })
   })
 
+  it("records an engine timeout as blocked coverage", () => {
+    const receipts = buildCoverageReceipts({
+      scanId: "scan-timeout",
+      target: { id: "target-1", type: "REPO", repoFullName: "acme/app" },
+      sourceCheckoutAvailable: true,
+      engineFindingCount: 0,
+      coverageIssues: [{ scanner: "engine", status: "bounded", reason: "Engine timed out" }],
+    })
+
+    expect(receipts.find((receipt) => receipt.scanner === "engine")).toMatchObject({
+      status: "BLOCKED",
+      reason: "Engine timed out",
+    })
+  })
+
   it("records detected and no-finding control outcomes without claiming verification", () => {
     const receipts = buildCoverageReceipts({
       scanId: "scan-1",
@@ -79,6 +94,26 @@ describe("result integrity", () => {
       status: "COMPLETED",
       reason: expect.stringContaining("not independent verification"),
       metadata: expect.objectContaining({ outcome: "NO_FINDING" }),
+    })
+  })
+
+  it("does not attribute URL-only controls to a repository scan", () => {
+    const receipts = buildCoverageReceipts({
+      scanId: "scan-1",
+      target: { id: "target-1", type: "REPO", repoFullName: "acme/app" },
+      sourceCheckoutAvailable: true,
+      engineFindingCount: 1,
+      coverageIssues: [],
+      matchedControlRanks: [29, 31],
+    })
+
+    expect(receipts.find((receipt) => receipt.controlId === "vibe-29")).toMatchObject({
+      status: "NOT_APPLICABLE",
+      metadata: expect.objectContaining({ outcome: "NOT_APPLICABLE" }),
+    })
+    expect(receipts.find((receipt) => receipt.controlId === "vibe-31")).toMatchObject({
+      status: "NOT_APPLICABLE",
+      metadata: expect.objectContaining({ outcome: "NOT_APPLICABLE" }),
     })
   })
 
@@ -198,6 +233,29 @@ describe("result integrity", () => {
     expect(JSON.stringify(manifest)).not.toContain("token=")
   })
 
+  it("blocks completed repository coverage when immutable receipt identity is missing", async () => {
+    vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
+
+    await persistResultManifest({
+      scanId: "scan-missing-identity",
+      target: { id: "target-1", type: "REPO", repoFullName: "acme/app" },
+      sourceCheckoutAvailable: true,
+      engineFindingCount: 1,
+      coverageIssues: [],
+    })
+
+    const createCall = vi.mocked(prisma.scanResultManifest.create).mock.calls[0][0] as {
+      data: { manifest: { coverage: Array<Record<string, unknown>> } }
+    }
+    expect(
+      createCall.data.manifest.coverage.find((receipt) => receipt.controlId === "engine")
+    ).toMatchObject({
+      status: "BLOCKED",
+      subject: "result-manifest",
+      reason: expect.stringContaining("engineExecution"),
+    })
+  })
+
   it("stores a manifest once and uses idempotent coverage receipts", async () => {
     vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
 
@@ -211,8 +269,20 @@ describe("result integrity", () => {
         model: "azure_ai/gpt-5.6-luna",
         reasoningEffort: "medium",
         image: "sandbox@sha256:abc",
+        imageDigest: "sha256:abc",
         engineVersion: "1.1.0",
         promptBundleHash: "a".repeat(64),
+        delegateModel: "azure_ai/gpt-5.6-luna",
+        delegateReasoningEffort: "medium",
+        routingPolicy: "coordinator-luna-med-delegate-luna-med-v1",
+        compactionTriggerTokens: 200_000,
+        compactionTargetTokens: 180_000,
+        sourceRevision: "b".repeat(40),
+      },
+      accounting: {
+        maxBudgetUsd: 1.2,
+        billedCostUsd: 0.42,
+        reconciled: true,
       },
     })
 
@@ -230,7 +300,12 @@ describe("result integrity", () => {
           manifest: expect.objectContaining({
             coverage: expect.any(Array),
             scannerContractVersion: "2026-07-18",
-            engineExecution: expect.objectContaining({ model: "azure_ai/gpt-5.6-luna" }),
+            engineExecution: expect.objectContaining({
+              model: "azure_ai/gpt-5.6-luna",
+              imageDigest: "sha256:abc",
+              sourceRevision: "b".repeat(40),
+            }),
+            accounting: expect.objectContaining({ maxBudgetUsd: 1.2, reconciled: true }),
           }),
         }),
       })

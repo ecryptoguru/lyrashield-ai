@@ -26,10 +26,24 @@ type ResultManifestInput = {
     model: string
     reasoningEffort: string
     image: string | null
+    imageDigest?: string
     engineVersion?: string
     promptBundleHash?: string
+    delegateModel?: string
+    delegateReasoningEffort?: string
+    routingPolicy?: string
+    compactionTriggerTokens?: number
+    compactionTargetTokens?: number
     maxOutputTokens?: number
     maxAgents?: number
+    sourceRevision?: string
+    sandboxRemoved?: boolean
+  }
+  accounting?: {
+    maxBudgetUsd: number
+    billedCostUsd: number | null
+    reconciled: boolean
+    reconciliationReason?: string
   }
 }
 
@@ -69,6 +83,57 @@ const CONTROL_SCANNERS: Readonly<Record<number, readonly string[]>> = {
 
 function checksum(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex")
+}
+
+function receiptIdentityCoverageIssues(input: ResultManifestInput): ScannerCoverageIssue[] {
+  if (
+    input.target.type !== "REPO" ||
+    input.coverageIssues.some((issue) => issue.scanner === "engine")
+  ) {
+    return []
+  }
+
+  const execution = input.engineExecution
+  const missing: string[] = []
+  const requireValue = (name: string, value: unknown) => {
+    if (value === undefined || value === null || value === "") missing.push(name)
+  }
+  requireValue("engineExecution", execution)
+  if (execution) {
+    requireValue("model", execution.model)
+    requireValue("reasoningEffort", execution.reasoningEffort)
+    requireValue("imageDigest", execution.imageDigest)
+    requireValue("engineVersion", execution.engineVersion)
+    requireValue("promptBundleHash", execution.promptBundleHash)
+    requireValue("delegateModel", execution.delegateModel)
+    requireValue("delegateReasoningEffort", execution.delegateReasoningEffort)
+    requireValue("routingPolicy", execution.routingPolicy)
+    requireValue("compactionTriggerTokens", execution.compactionTriggerTokens)
+    requireValue("compactionTargetTokens", execution.compactionTargetTokens)
+    requireValue("maxOutputTokens", execution.maxOutputTokens)
+    requireValue("maxAgents", execution.maxAgents)
+    requireValue("sourceRevision", execution.sourceRevision)
+    if (execution.sandboxRemoved !== true) missing.push("sandboxRemoved")
+    if (execution.imageDigest && !/^sha256:[a-f0-9]{64}$/i.test(execution.imageDigest)) {
+      missing.push("imageDigest(exact sha256)")
+    }
+  }
+  requireValue("accounting", input.accounting)
+  if (input.accounting) {
+    if (!input.accounting.reconciled) missing.push("accounting.reconciled")
+    requireValue("accounting.billedCostUsd", input.accounting.billedCostUsd)
+  }
+
+  return missing.length === 0
+    ? []
+    : [
+        {
+          scanner: "engine",
+          status: "partial",
+          subject: "result-manifest",
+          reason: `Immutable repository receipt identity is incomplete: ${missing.join(", ")}`,
+        },
+      ]
 }
 
 function scannerStatus(
@@ -167,16 +232,6 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
       }
     }
 
-    if (matchedRanks.has(control.rank)) {
-      return {
-        scanner: scanners.join("+") || control.strategy,
-        controlId,
-        status: "COMPLETED",
-        reason: "One or more findings were mapped to this control.",
-        metadata: { ...metadata, outcome: "DETECTED" },
-      }
-    }
-
     if (
       applicableReceipts.length === 0 ||
       applicableReceipts.every((receipt) => receipt.status === "NOT_APPLICABLE")
@@ -187,6 +242,16 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
         status: "NOT_APPLICABLE",
         reason: "No applicable scanner ran for this target type.",
         metadata: { ...metadata, outcome: "NOT_APPLICABLE" },
+      }
+    }
+
+    if (matchedRanks.has(control.rank)) {
+      return {
+        scanner: scanners.join("+") || control.strategy,
+        controlId,
+        status: "COMPLETED",
+        reason: "One or more findings were mapped to this control.",
+        metadata: { ...metadata, outcome: "DETECTED" },
       }
     }
 
@@ -237,7 +302,10 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
     throw new Error("workspace context is required for persistResultManifest")
   }
 
-  const coverage = buildCoverageReceipts(input)
+  const coverage = buildCoverageReceipts({
+    ...input,
+    coverageIssues: [...input.coverageIssues, ...receiptIdentityCoverageIssues(input)],
+  })
   const manifest = {
     version: MANIFEST_VERSION,
     target: {
@@ -252,6 +320,7 @@ export async function persistResultManifest(input: ResultManifestInput): Promise
     scannerContractVersion: SCANNER_CONTRACT_VERSION,
     urlExecution: input.urlExecution ?? null,
     engineExecution: input.engineExecution ?? null,
+    accounting: input.accounting ?? null,
     // Coverage limitations are part of the immutable result contract. Keep
     // their bounded subjects and reasons in the manifest, not only in the
     // mutable receipt table.

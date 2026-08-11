@@ -1,3 +1,4 @@
+import { execFileSync } from "child_process"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { mkdtemp, mkdir, realpath, rm, utimes, writeFile } from "fs/promises"
 import { tmpdir } from "os"
@@ -32,9 +33,11 @@ import {
   extractEngineFailureType,
   findRunOutputDir,
   interpretExitCode,
+  prepareEngineWorkspace,
   assertRepositoryScanRuntimeConfigured,
   buildEngineEnv,
   resolveEngineSourceCheckout,
+  resolveEngineSourceRevision,
   resolveEngineProfile,
   resolveEngineSandboxNetwork,
   resolveEngineTimeoutMs,
@@ -86,6 +89,21 @@ it("selects the newest valid output across both layouts", async () => {
     new Date(2_000)
   )
   await expect(findRunOutputDir(workDir)).resolves.toBe(expected)
+})
+
+it("selects only the current scan receipt when stale output is present", async () => {
+  const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
+  cleanupPaths.push(workDir)
+  const expected = await createRun(
+    workDir,
+    "lyrashield_runs",
+    "scan-current",
+    "run.json",
+    new Date(1_000)
+  )
+  await createRun(workDir, "strix_runs", "scan-stale", "run.json", new Date(2_000))
+
+  await expect(findRunOutputDir(workDir, "scan-current")).resolves.toBe(expected)
 })
 
 it("ignores newer runs whose expected artifact is a directory", async () => {
@@ -253,6 +271,31 @@ describe("repository scan runtime configuration", () => {
       ).toThrow("LYRASHIELD_ENGINE_SANDBOX_NETWORK")
     }
   )
+
+  it("requires an isolated remote Docker endpoint in production", () => {
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...runtimeEnv,
+        NODE_ENV: "production",
+      })
+    ).toThrow("DOCKER_HOST")
+
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...runtimeEnv,
+        NODE_ENV: "production",
+        DOCKER_HOST: "unix:///var/run/docker.sock",
+      })
+    ).toThrow("DOCKER_HOST")
+
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...runtimeEnv,
+        NODE_ENV: "production",
+        DOCKER_HOST: "ssh://scanner@isolated-worker",
+      })
+    ).not.toThrow()
+  })
 })
 
 describe("buildEngineEnv", () => {
@@ -271,6 +314,8 @@ describe("buildEngineEnv", () => {
     original.LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN =
       process.env.LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN
     original.LYRASHIELD_WEB_SEARCH_BUDGET_USD = process.env.LYRASHIELD_WEB_SEARCH_BUDGET_USD
+    original.LYRASHIELD_PROMPT_CACHE_EXPLICIT = process.env.LYRASHIELD_PROMPT_CACHE_EXPLICIT
+    original.LYRASHIELD_PROMPT_CACHE = process.env.LYRASHIELD_PROMPT_CACHE
     process.env.LYRASHIELD_LLM = "azure/gpt-5.6-luna"
     process.env.LYRASHIELD_ENGINE_SANDBOX_NETWORK = "lyrashield-sandbox"
     // Remove all web-search variables from the live environment so these tests
@@ -283,6 +328,8 @@ describe("buildEngineEnv", () => {
     delete process.env.LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL
     delete process.env.LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN
     delete process.env.LYRASHIELD_WEB_SEARCH_BUDGET_USD
+    delete process.env.LYRASHIELD_PROMPT_CACHE_EXPLICIT
+    delete process.env.LYRASHIELD_PROMPT_CACHE
   })
 
   afterEach(() => {
@@ -330,22 +377,56 @@ describe("buildEngineEnv", () => {
     expect(engineEnv.LYRASHIELD_WEB_SEARCH_PROVIDER).toBeUndefined()
     expect(engineEnv.LYRASHIELD_WEB_SEARCH_MODE).toBeUndefined()
   })
+
+  it("labels sandbox containers with the managed scan id", () => {
+    const engineEnv = buildEngineEnv(
+      {
+        model: "azure/gpt-5.6-luna",
+        reasoningEffort: "medium",
+        delegateModel: "azure/gpt-5.6-luna",
+        delegateReasoningEffort: "medium",
+      },
+      "scan-label"
+    )
+
+    expect(engineEnv.STRIX_RUN_ID).toBe("scan-label")
+    expect(engineEnv.STRIX_RUN_TYPE).toBe("repository")
+  })
+
+  it("enables explicit GPT-5.6 prompt-cache reads and writes by default", () => {
+    const engineEnv = buildEngineEnv({
+      model: "azure/gpt-5.6-luna",
+      reasoningEffort: "medium",
+      delegateModel: "azure/gpt-5.6-luna",
+      delegateReasoningEffort: "medium",
+    })
+
+    expect(engineEnv.LYRASHIELD_PROMPT_CACHE_EXPLICIT).toBe("1")
+    expect(engineEnv.LYRASHIELD_PROMPT_CACHE).toBe("1")
+  })
 })
 
 describe("resolveEngineTimeoutMs", () => {
-  it("caps the policy duration at the release limit", () => {
-    expect(resolveEngineTimeoutMs(60)).toBe(25 * 60 * 1000)
-  })
-
-  it.each([undefined, null, 0, -1, Number.NaN])(
-    "uses the release-limit default for invalid duration %s",
-    (duration) => {
-      expect(resolveEngineTimeoutMs(duration)).toBe(25 * 60 * 1000)
+  it.each(["SAFE", "QUICK", "STANDARD"])(
+    "reserves scanner time within %s's fifteen-minute profile",
+    (mode) => {
+      expect(resolveEngineTimeoutMs(60, mode)).toBe(12 * 60 * 1000)
     }
   )
 
-  it("caps an excessive duration at the release limit", () => {
-    expect(resolveEngineTimeoutMs(10_000)).toBe(25 * 60 * 1000)
+  it.each([undefined, null, 0, -1, Number.NaN])(
+    "uses the Quick profile default for invalid duration %s",
+    (duration) => {
+      expect(resolveEngineTimeoutMs(duration, "QUICK")).toBe(12 * 60 * 1000)
+    }
+  )
+
+  it("caps an excessive Quick duration at the profile limit", () => {
+    expect(resolveEngineTimeoutMs(10_000, "QUICK")).toBe(12 * 60 * 1000)
+  })
+
+  it("allows Deep scans to use the forty-five-minute release limit", () => {
+    expect(resolveEngineTimeoutMs(60, "DEEP")).toBe(40 * 60 * 1000)
   })
 })
 
@@ -385,6 +466,33 @@ describe("resolveEngineSourceCheckout", () => {
         targets_info: [{ details: { cloned_repo_path: checkout } }],
       })
     ).resolves.toBeNull()
+  })
+})
+
+describe("resolveEngineSourceRevision", () => {
+  it("records the immutable commit checked out for deterministic scanners", async () => {
+    const checkout = await mkdtemp(join(tmpdir(), "lyrashield-source-revision-"))
+    cleanupPaths.push(checkout)
+    execFileSync("git", ["init", checkout])
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    await writeFile(join(checkout, "README.md"), "scan me\n", "utf8")
+    execFileSync("git", ["-C", checkout, "add", "README.md"])
+    execFileSync("git", [
+      "-C",
+      checkout,
+      "-c",
+      "user.name=LyraShield test",
+      "-c",
+      "user.email=test@example.com",
+      "commit",
+      "-m",
+      "initial",
+    ])
+    const expected = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim()
+
+    await expect(resolveEngineSourceRevision(checkout)).resolves.toBe(expected)
   })
 })
 
@@ -439,4 +547,38 @@ it("refuses to clean a workspace outside the worker-owned run root", async () =>
 
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await expect(realpath(join(outside, "keep.txt"))).resolves.toMatch(/keep\.txt$/)
+})
+
+it("cleans the engine-created temporary checkout for the run", async () => {
+  const runName = `cleanup-${Date.now()}`
+  const workspace = join(process.cwd(), "lyrashield_runs", runName)
+  const checkoutRoot = join(tmpdir(), "strix_repos", `repo_${runName}_source`)
+  cleanupPaths.push(workspace, checkoutRoot)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await mkdir(workspace, { recursive: true })
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await mkdir(checkoutRoot, { recursive: true })
+
+  await cleanupEngineWorkspace(workspace, runName)
+
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await expect(realpath(checkoutRoot)).rejects.toThrow()
+})
+
+it("clears stale receipts before a new engine attempt", async () => {
+  const runName = `fresh-${Date.now()}`
+  const workspace = join(process.cwd(), "lyrashield_runs", runName)
+  const staleReceipt = join(workspace, "strix_runs", runName, "run.json")
+  cleanupPaths.push(workspace)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await mkdir(join(workspace, "strix_runs", runName), { recursive: true })
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(staleReceipt, "{}", "utf8")
+
+  await prepareEngineWorkspace(workspace)
+
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await expect(realpath(staleReceipt)).rejects.toThrow()
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await expect(realpath(workspace)).resolves.toBe(workspace)
 })

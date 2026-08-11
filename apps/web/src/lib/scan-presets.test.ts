@@ -8,7 +8,7 @@ import {
 
 describe("scan presets", () => {
   it("binds each user-facing choice to one safe goal and mode", () => {
-    expect(SCAN_PRESETS.RELEASE_CHECK).toMatchObject({ goal: "LAUNCH_REVIEW", mode: "SAFE" })
+    expect(SCAN_PRESETS.RELEASE_CHECK).toMatchObject({ goal: "LAUNCH_REVIEW", mode: "QUICK" })
     expect(SCAN_PRESETS.CODE_REVIEW).toMatchObject({ goal: "TEST_APP", mode: "STANDARD" })
     expect(SCAN_PRESETS.DEEP_REVIEW).toMatchObject({ goal: "FULL_PENTEST", mode: "DEEP" })
   })
@@ -30,6 +30,7 @@ describe("getManualScanOptions", () => {
     const options = getManualScanOptions({ type: "REPO" })
     expect(options.map((o) => o.id)).toEqual(["RELEASE_CHECK", "CODE_REVIEW", "DEEP_REVIEW"])
     expect(options.every((o) => o.available)).toBe(true)
+    expect(options.every((option) => !Object.hasOwn(option, "maxBudgetUsd"))).toBe(true)
   })
 
   it("returns Safe, Standard, and Deep web review options", () => {

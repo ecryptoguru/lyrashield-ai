@@ -102,6 +102,18 @@ describe("command-builder", () => {
       expect(cmd.args).toContain("https://gitlab.com/org/repo")
     })
 
+    it("passes the configured repository branch to the engine", () => {
+      const cmd = buildEngineCommand({
+        scanId: "scan-branch",
+        goal: "VULNERABILITY_SCAN",
+        mode: "SAFE",
+        target: { ...REPO_TARGET, branch: "release/2026.08" },
+      })
+
+      expect(cmd.args).toContain("--repository-branch")
+      expect(cmd.args).toContain("release/2026.08")
+    })
+
     it("adds instruction flag when provided", () => {
       const cmd = buildEngineCommand({
         scanId: "scan-5",
@@ -190,31 +202,32 @@ describe("command-builder", () => {
       expect(cmd.args).toContain("deep")
     })
 
-    it("defaults scan mode to deep for unknown mode", () => {
-      const cmd = buildEngineCommand({
-        scanId: "scan-10",
-        goal: "VULNERABILITY_SCAN",
-        mode: "UNKNOWN",
-        target: WEB_TARGET,
-      })
-      expect(cmd.args).toContain("deep")
+    it("rejects an unknown mode instead of escalating execution", () => {
+      expect(() =>
+        buildEngineCommand({
+          scanId: "scan-10",
+          goal: "VULNERABILITY_SCAN",
+          mode: "UNKNOWN",
+          target: WEB_TARGET,
+        })
+      ).toThrow("SCAN_MODE_UNSUPPORTED")
     })
   })
 
   describe("resolveScanBudgetUsd", () => {
     it.each([
-      ["SAFE", 3.2],
+      ["SAFE", 1.2],
       ["QUICK", 1.2],
       ["STANDARD", 3.2],
-      ["DEEP", 15],
-      ["CUSTOM", 15],
-      ["UNKNOWN", 15],
+      ["DEEP", 5],
+      ["CUSTOM", 5],
     ])("uses the expected default cap for %s", (mode, expectedBudget) => {
       expect(resolveScanBudgetUsd(mode)).toBe(expectedBudget)
     })
 
-    it("uses a valid workspace policy budget over the mode default", () => {
-      expect(resolveScanBudgetUsd("DEEP", 6.5)).toBe(6.5)
+    it("treats the workspace policy as a ceiling rather than an upgrade", () => {
+      expect(resolveScanBudgetUsd("DEEP", 6.5)).toBe(5)
+      expect(resolveScanBudgetUsd("QUICK", 6.5)).toBe(1.2)
     })
 
     it("treats an explicit zero budget as a deliberate stop, not a fallback", () => {
@@ -227,8 +240,8 @@ describe("command-builder", () => {
       expect(resolveScanBudgetUsd("STANDARD", undefined)).toBe(3.2)
     })
 
-    it("clamps policy budgets to the platform maximum", () => {
-      expect(resolveScanBudgetUsd("DEEP", 500)).toBe(50)
+    it("rejects unknown modes before a policy can assign a spend cap", () => {
+      expect(() => resolveScanBudgetUsd("UNKNOWN", 500)).toThrow("SCAN_MODE_UNSUPPORTED")
     })
   })
 })

@@ -1,5 +1,6 @@
 import { env } from "@lyrashield/config"
 import { checkInstructionSafety } from "@lyrashield/security"
+import { resolveScanProfile } from "@lyrashield/types"
 
 export type TargetType = "REPO" | "WEB_APP" | "API" | "CLOUD_ACCOUNT" | "CONTAINER" | "IAC"
 
@@ -9,6 +10,7 @@ export interface TargetInfo {
   url?: string | null
   repoFullName?: string | null
   repoUrl?: string | null
+  branch?: string | null
   name: string
 }
 
@@ -27,44 +29,24 @@ export interface EngineCommand {
   workDir: string
 }
 
-const SCAN_MODE_MAP: Record<string, "quick" | "standard" | "deep"> = {
-  SAFE: "quick",
-  QUICK: "quick",
-  STANDARD: "standard",
-  DEEP: "deep",
-  CUSTOM: "deep",
-}
-
-const FALLBACK_SCAN_BUDGET_USD = 15
 export const PLATFORM_MAX_SCAN_BUDGET_USD = env.PLATFORM_MAX_SCAN_BUDGET_USD
 
-const DEFAULT_SCAN_BUDGET_USD: Record<string, number> = {
-  SAFE: 3.2,
-  QUICK: 1.2,
-  STANDARD: 3.2,
-  DEEP: FALLBACK_SCAN_BUDGET_USD,
-  CUSTOM: FALLBACK_SCAN_BUDGET_USD,
-}
-
 /**
- * Every engine run must have a positive spend cap. A policy can reduce or
- * increase the default for its workspace; invalid or absent policy values
- * safely fall back to the cap for the selected scan mode. An explicitly zero
- * budget is a deliberate policy choice and must fail the scan rather than
- * silently falling back to the mode default.
+ * Every engine run must have a positive spend cap. A policy can reduce the
+ * selected profile ceiling but can never silently upgrade a cheaper review.
+ * An explicitly zero budget is a deliberate policy choice and must fail the
+ * scan rather than silently falling back to the profile default.
  */
 export function resolveScanBudgetUsd(mode: string, policyMaxBudgetUsd?: number | null): number {
+  const profile = resolveScanProfile({ targetType: "REPO", mode })
   if (typeof policyMaxBudgetUsd === "number" && Number.isFinite(policyMaxBudgetUsd)) {
     if (policyMaxBudgetUsd === 0) return 0
     if (policyMaxBudgetUsd > 0) {
-      return Math.min(policyMaxBudgetUsd, PLATFORM_MAX_SCAN_BUDGET_USD)
+      return Math.min(profile.maxBudgetUsd, policyMaxBudgetUsd, PLATFORM_MAX_SCAN_BUDGET_USD)
     }
   }
 
-  return Math.min(
-    DEFAULT_SCAN_BUDGET_USD[mode] ?? FALLBACK_SCAN_BUDGET_USD,
-    PLATFORM_MAX_SCAN_BUDGET_USD
-  )
+  return Math.min(profile.maxBudgetUsd, PLATFORM_MAX_SCAN_BUDGET_USD)
 }
 
 function resolveTargetArg(target: TargetInfo): string {
@@ -105,7 +87,11 @@ function validateInstruction(instruction: string | undefined): string | undefine
 export function buildEngineCommand(config: ScanConfig): EngineCommand {
   const executable = resolveExecutable()
   const targetArg = resolveTargetArg(config.target)
-  const scanMode = SCAN_MODE_MAP[config.mode] ?? "deep"
+  // The external engine only has three native modes. Resolve through the
+  // repository profile even for direct command-builder callers so legacy
+  // aliases are normalized and invalid modes fail before a provider call.
+  const scanMode = resolveScanProfile({ targetType: "REPO", mode: config.mode }).engineMode
+  if (!scanMode) throw new Error("SCAN_MODE_UNSUPPORTED")
 
   const args: string[] = [
     "--non-interactive",
@@ -120,6 +106,10 @@ export function buildEngineCommand(config: ScanConfig): EngineCommand {
   const validatedInstruction = validateInstruction(config.instruction)
   if (validatedInstruction) {
     args.push("--instruction", validatedInstruction)
+  }
+
+  if (config.target.type === "REPO" && config.target.branch?.trim()) {
+    args.push("--repository-branch", config.target.branch.trim())
   }
 
   if (config.maxBudgetUsd && config.maxBudgetUsd > 0) {

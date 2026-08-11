@@ -26,6 +26,8 @@ const envSchema = z
     LLM_API_KEY: z.string().optional().or(z.literal("")),
     LYRASHIELD_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
+    LYRASHIELD_PROMPT_CACHE_EXPLICIT: z.enum(["0", "1"]).optional().default("1"),
+    LYRASHIELD_PROMPT_CACHE: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
@@ -61,6 +63,15 @@ const envSchema = z
     message:
       "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
   })
+  .refine(
+    (val) =>
+      val.NODE_ENV !== "production" ||
+      /^ghcr\.io\/ecryptoguru\/lyrashield-sandbox@sha256:[a-f0-9]{64}$/.test(val.LYRASHIELD_IMAGE),
+    {
+      path: ["LYRASHIELD_IMAGE"],
+      message: "LYRASHIELD_IMAGE must be a LyraShield-owned immutable sha256 digest in production",
+    }
+  )
   .refine(
     (val) =>
       val.LYRASHIELD_WEB_SEARCH_ENABLED !== "1" || Boolean(val.LYRASHIELD_WEB_SEARCH_API_KEY),
@@ -106,6 +117,7 @@ describe("Env Validation Schema", () => {
         ...validEnv,
         NODE_ENV: "production",
         TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
+        LYRASHIELD_IMAGE: `ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)}`,
       })
       expect(result.success).toBe(true)
       if (result.success) {
@@ -116,6 +128,29 @@ describe("Env Validation Schema", () => {
     it("rejects production without a trusted proxy header but permits development", () => {
       expect(envSchema.safeParse({ ...validEnv, NODE_ENV: "production" }).success).toBe(false)
       expect(envSchema.safeParse({ ...validEnv, NODE_ENV: "development" }).success).toBe(true)
+    })
+
+    it("requires a LyraShield-owned immutable sandbox digest in production", () => {
+      const production = {
+        ...validEnv,
+        NODE_ENV: "production",
+        TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
+      }
+      expect(envSchema.safeParse(production).success).toBe(false)
+      expect(
+        envSchema.safeParse({
+          ...production,
+          LYRASHIELD_IMAGE:
+            "ghcr.io/usestrix/strix-sandbox@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        }).success
+      ).toBe(false)
+      expect(
+        envSchema.safeParse({
+          ...production,
+          LYRASHIELD_IMAGE:
+            "ghcr.io/another-owner/another-sandbox@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        }).success
+      ).toBe(false)
     })
 
     it("should accept NODE_ENV as test", () => {
@@ -266,5 +301,11 @@ describe("Env Validation Schema", () => {
       })
       expect(result.success).toBe(true)
     })
+  })
+
+  it("enables GPT-5.6 prompt cache reads and writes by default", () => {
+    const parsed = envSchema.parse(validEnv)
+    expect(parsed.LYRASHIELD_PROMPT_CACHE_EXPLICIT).toBe("1")
+    expect(parsed.LYRASHIELD_PROMPT_CACHE).toBe("1")
   })
 })

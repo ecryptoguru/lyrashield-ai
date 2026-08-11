@@ -93,12 +93,30 @@ const envSchema = z
     LLM_API_VERSION: z.string().optional().or(z.literal("")),
     LYRASHIELD_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
+    // GPT-5.6 explicit cache breakpoints. The engine ignores this for unsupported models.
+    LYRASHIELD_PROMPT_CACHE_EXPLICIT: z.enum(["0", "1"]).optional().default("1"),
+    LYRASHIELD_PROMPT_CACHE: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_RUNTIME_BACKEND: z.enum(["docker"]).optional().or(z.literal("")),
     LYRASHIELD_ENGINE_SANDBOX_NETWORK: z.string().optional().or(z.literal("")),
     // Worker-local directory where the engine writes run artifacts. Defaults to cwd/lyrashield_runs.
     LYRASHIELD_ENGINE_WORK_ROOT: z.string().optional().or(z.literal("")),
+    // Conservative crash recovery: only resources older than this threshold
+    // and not associated with an active database scan can be removed.
+    LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED: z.enum(["0", "1"]).optional().default("1"),
+    LYRASHIELD_STALE_RESOURCE_MIN_AGE_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(60)
+      .max(10_080)
+      .default(1_440),
+    LYRASHIELD_STALE_RESOURCE_REAPER_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(60_000)
+      .max(86_400_000)
+      .default(900_000),
     LYRASHIELD_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
     SCANNER_PHASE_TIMEOUT_MS: z.coerce.number().int().positive().max(3_600_000).default(600_000),
     // Optional authenticated egress proxy for URL scanning. When both URL and secret are
@@ -210,6 +228,20 @@ const envSchema = z
     message:
       "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
   })
+  .refine(
+    (val) => {
+      const image = val.LYRASHIELD_IMAGE ?? ""
+      return (
+        val.NODE_ENV !== "production" ||
+        process.env.NEXT_PHASE === "phase-production-build" ||
+        /^ghcr\.io\/ecryptoguru\/lyrashield-sandbox@sha256:[a-f0-9]{64}$/.test(image)
+      )
+    },
+    {
+      path: ["LYRASHIELD_IMAGE"],
+      message: "LYRASHIELD_IMAGE must be a LyraShield-owned immutable sha256 digest in production",
+    }
+  )
   // Claiming to verify email addresses without a way to send the mail is worse than not
   // claiming it: sign-up would either break or silently fall through unverified.
   //

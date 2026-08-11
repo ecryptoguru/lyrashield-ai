@@ -291,7 +291,8 @@ export function createScanTargetTool(context: ToolHandlerContext): McpTool {
         },
         mode: {
           type: "string",
-          description: "Scan mode: SAFE, QUICK, STANDARD, DEEP, or CUSTOM",
+          description:
+            "Scan mode: QUICK, STANDARD, DEEP, or CUSTOM. SAFE remains a compatibility alias for QUICK.",
         },
       },
       required: ["workspaceId"],
@@ -599,7 +600,8 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
         },
         mode: {
           type: "string",
-          description: "Scan mode: SAFE (default), QUICK, STANDARD, DEEP, or CUSTOM",
+          description:
+            "Scan mode: QUICK (default), STANDARD, DEEP, or CUSTOM. SAFE remains a compatibility alias for QUICK.",
         },
       },
       required: ["workspaceId"],
@@ -611,7 +613,7 @@ export function createRunPrScanTool(context: ToolHandlerContext): McpTool {
           workspaceId: args.workspaceId,
           targetId: resolved.targetId,
           goal: "CHECK_PR",
-          mode: (args.mode as string) ?? "SAFE",
+          mode: (args.mode as string) ?? "QUICK",
         })
         const result: Record<string, unknown> = { action: "pr_scan_started", scan: data }
         if (resolved.repository) result.repository = resolved.repository

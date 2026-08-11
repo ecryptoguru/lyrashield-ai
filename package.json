@@ -20,7 +20,8 @@
     "test:motion": "node --test apps/marketing-motion/tests/*.test.mjs",
     "test": "node run-all-tests.mjs",
     "test:e2e": "playwright test --grep-invert '@visual'",
-    "test:watch": "vitest --exclude '**/dist/**'"
+    "test:watch": "vitest --exclude '**/dist/**'",
+    "verify:worker-image": "sh apps/worker/scripts/verify-worker-image.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

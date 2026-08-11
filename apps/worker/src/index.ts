@@ -14,11 +14,13 @@ import {
 } from "./engine/runner"
 import { reconcileFailedQueueJob, reconcileScanQueue } from "./queue-reconciliation"
 import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
+import { reapStaleScanResources } from "./engine/stale-resource-reaper"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
+let staleResourceReaperTimer: NodeJS.Timeout | null = null
 let shuttingDown = false
 const workerId = `${hostname() || process.env.HOSTNAME || "worker"}-${process.pid}-${randomUUID()}`
 const readinessPath = "/tmp/lyrashield-worker-ready"
@@ -49,6 +51,10 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
   if (reconciliationTimer) {
     clearInterval(reconciliationTimer)
     reconciliationTimer = null
+  }
+  if (staleResourceReaperTimer) {
+    clearInterval(staleResourceReaperTimer)
+    staleResourceReaperTimer = null
   }
   if (scheduleRunner) {
     clearInterval(scheduleRunner)
@@ -146,6 +152,26 @@ async function main(): Promise<void> {
       })
     })
   }, RECONCILIATION_INTERVAL_MS)
+  if (env.LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED === "1") {
+    const reap = async () => {
+      const result = await reapStaleScanResources({
+        minimumAgeMs: env.LYRASHIELD_STALE_RESOURCE_MIN_AGE_MINUTES * 60_000,
+      })
+      logger.info("Stale-resource reaper completed", { ...result })
+    }
+    await reap().catch((error) => {
+      logger.warn("Stale-resource reaper failed", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+    staleResourceReaperTimer = setInterval(() => {
+      void reap().catch((error) => {
+        logger.warn("Stale-resource reaper failed", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }, env.LYRASHIELD_STALE_RESOURCE_REAPER_INTERVAL_MS)
+  }
   await registerScanWorker(workerId)
   await refreshWorkerReadiness()
   void worker.run().catch((error) => {
