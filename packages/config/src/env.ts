@@ -228,20 +228,6 @@ const envSchema = z
     message:
       "TRUSTED_PROXY_IP_HEADER is required in production or rate limiting degrades to a single global bucket",
   })
-  .refine(
-    (val) => {
-      const image = val.LYRASHIELD_IMAGE ?? ""
-      return (
-        val.NODE_ENV !== "production" ||
-        process.env.NEXT_PHASE === "phase-production-build" ||
-        /^ghcr\.io\/ecryptoguru\/lyrashield-sandbox@sha256:[a-f0-9]{64}$/.test(image)
-      )
-    },
-    {
-      path: ["LYRASHIELD_IMAGE"],
-      message: "LYRASHIELD_IMAGE must be a LyraShield-owned immutable sha256 digest in production",
-    }
-  )
   // Claiming to verify email addresses without a way to send the mail is worse than not
   // claiming it: sign-up would either break or silently fall through unverified.
   //

@@ -268,6 +268,12 @@ export function assertRepositoryScanRuntimeConfigured(
   }
   resolveEngineSandboxNetwork(runtimeEnv)
   if (runtimeEnv.NODE_ENV === "production") {
+    const image = runtimeEnv.LYRASHIELD_IMAGE ?? ""
+    if (!/^ghcr\.io\/ecryptoguru\/lyrashield-sandbox@sha256:[a-f0-9]{64}$/.test(image)) {
+      throw new Error(
+        "LYRASHIELD_IMAGE must be a LyraShield-owned immutable sha256 digest in production"
+      )
+    }
     const dockerHost = runtimeEnv.DOCKER_HOST?.trim() ?? ""
     if (!/^ssh:\/\//.test(dockerHost) && !/^tcp:\/\//.test(dockerHost)) {
       throw new Error(
