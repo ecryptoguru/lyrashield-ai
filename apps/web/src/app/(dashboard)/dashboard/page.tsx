@@ -173,17 +173,22 @@ export default async function DashboardPage() {
       // A completed run that evaluated nothing has not captured evidence.
       label: "Evidence captured",
       complete: completedScanCount > 0 && coverageEvaluated,
-      href: primaryAction.href,
+      href: targetCount === 0 ? null : primaryAction.href,
     },
     {
       label: "Blockers cleared",
       complete: readiness.verdict === "GO",
-      href: readiness.verdict === "NOT_EVALUATED" ? primaryAction.href : "/dashboard/findings",
+      href:
+        targetCount === 0
+          ? null
+          : readiness.verdict === "NOT_EVALUATED"
+            ? primaryAction.href
+            : "/dashboard/findings",
     },
     {
       label: "Assurance shared",
       complete: reportCount > 0,
-      href: targetCount === 0 ? primaryAction.href : "/dashboard/findings?tab=reports",
+      href: targetCount === 0 ? null : "/dashboard/findings?tab=reports",
     },
   ]
 
@@ -251,12 +256,8 @@ export default async function DashboardPage() {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {assuranceSteps.map((step) => {
                 const Icon = step.complete ? CheckCircle2 : Circle
-                return (
-                  <Link
-                    key={step.label}
-                    href={step.href}
-                    className="flex items-center gap-1.5 text-xs font-medium hover:underline"
-                  >
+                const content = (
+                  <>
                     <Icon
                       className={
                         step.complete ? "text-success size-4" : "text-muted-foreground size-4"
@@ -264,7 +265,23 @@ export default async function DashboardPage() {
                       aria-hidden="true"
                     />
                     {step.label}
+                  </>
+                )
+                return step.href ? (
+                  <Link
+                    key={step.label}
+                    href={step.href}
+                    className="flex items-center gap-1.5 text-xs font-medium hover:underline"
+                  >
+                    {content}
                   </Link>
+                ) : (
+                  <span
+                    key={step.label}
+                    className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium"
+                  >
+                    {content}
+                  </span>
                 )
               })}
             </div>

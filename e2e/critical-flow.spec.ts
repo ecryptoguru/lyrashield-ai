@@ -139,6 +139,15 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   const workspaceId = workspace.id as string
   createdWorkspaceId = workspaceId
 
+  await page.goto("/dashboard")
+  await expect(page.getByRole("link", { name: "Target ready" }).first()).toHaveAttribute(
+    "href",
+    "/dashboard/targets"
+  )
+  await expect(page.getByRole("link", { name: "Evidence captured" })).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Blockers cleared" })).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Assurance shared" })).toHaveCount(0)
+
   const targetResponse = await page.request.post("/api/targets", {
     data: {
       workspaceId,
@@ -210,6 +219,9 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   })
   await page.goto("/onboarding")
   await expect(page.getByRole("button", { name: /^Endpoint Review/ })).toBeVisible()
+  await expect(page.getByText("target details are locked for this retry")).toBeVisible()
+  await expect(page.locator("#product-name")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0)
   const restoredReviewButton = page.getByRole("button", { name: "Start endpoint review" })
   await restoredReviewButton.click()
   await expect(restoredReviewButton).toBeEnabled()

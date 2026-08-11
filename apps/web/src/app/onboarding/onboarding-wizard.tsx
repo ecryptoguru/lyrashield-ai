@@ -73,6 +73,7 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
   const reviewOptions = getOnboardingReviewOptions(path)
   const selectedReview =
     reviewOptions.find((option) => option.goal === selectedGoal) ?? reviewOptions[0]
+  const retryingExistingTarget = Boolean(data.targetId)
 
   function bucketCount(n: number): string {
     if (n <= 0) return "0"
@@ -701,41 +702,56 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">{PRODUCT_SINGULAR} details</h2>
               <p className="text-muted-foreground mt-2 text-sm">
-                {pathNeedsRepo(path)
-                  ? `Name your ${PRODUCT_SINGULAR.toLowerCase()} and choose the environment to review.`
-                  : `Reviewing your ${pathLabel(path)}. Name it and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
+                {retryingExistingTarget
+                  ? `Retry the review for ${productName || `this ${PRODUCT_SINGULAR.toLowerCase()}`}. The target stays locked so the retry cannot create or scan a different target.`
+                  : pathNeedsRepo(path)
+                    ? `Name your ${PRODUCT_SINGULAR.toLowerCase()} and choose the environment to review.`
+                    : `Reviewing your ${pathLabel(path)}. Name it and choose what you need from this ${RUN_SINGULAR.toLowerCase()}.`}
               </p>
             </div>
 
-            <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="product-name">
-              <Input
-                id="product-name"
-                value={productName}
-                onChange={(e) => setProductName(e.target.value)}
-                placeholder="My web app"
-              />
-            </FormField>
-
-            <fieldset>
-              <legend className="mb-2 text-sm font-medium">{ENVIRONMENT_SINGULAR}</legend>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {["STAGING", "PRODUCTION", "DEVELOPMENT"].map((env) => (
-                  <button
-                    type="button"
-                    key={env}
-                    onClick={() => setEnvironment(env)}
-                    aria-pressed={environment === env}
-                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                      environment === env
-                        ? "border-primary bg-primary/8 text-primary"
-                        : "hover:bg-accent"
-                    }`}
-                  >
-                    {env.toLowerCase()}
-                  </button>
-                ))}
+            {retryingExistingTarget ? (
+              <div className="bg-muted/40 rounded-lg border p-4">
+                <p className="text-sm font-medium">
+                  {productName || `Existing ${PRODUCT_SINGULAR}`}
+                </p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Existing {pathLabel(path)} · target details are locked for this retry
+                </p>
               </div>
-            </fieldset>
+            ) : (
+              <>
+                <FormField label={`${PRODUCT_SINGULAR} name`} htmlFor="product-name">
+                  <Input
+                    id="product-name"
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="My web app"
+                  />
+                </FormField>
+
+                <fieldset>
+                  <legend className="mb-2 text-sm font-medium">{ENVIRONMENT_SINGULAR}</legend>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {["STAGING", "PRODUCTION", "DEVELOPMENT"].map((env) => (
+                      <button
+                        type="button"
+                        key={env}
+                        onClick={() => setEnvironment(env)}
+                        aria-pressed={environment === env}
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                          environment === env
+                            ? "border-primary bg-primary/8 text-primary"
+                            : "hover:bg-accent"
+                        }`}
+                      >
+                        {env.toLowerCase()}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              </>
+            )}
 
             <fieldset>
               <legend className="mb-2 text-sm font-medium">
@@ -775,14 +791,18 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
             <div className="flex justify-between gap-3">
               {/* GitHub path backs into repo-select (step 2); URL/API back into
                   the URL form (step 1, path kept). */}
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setStep(pathNeedsRepo(path) ? 2 : 1)}
-                disabled={loading}
-              >
-                <ChevronLeft className="size-4" /> Back
-              </Button>
+              {retryingExistingTarget ? (
+                <span />
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setStep(pathNeedsRepo(path) ? 2 : 1)}
+                  disabled={loading}
+                >
+                  <ChevronLeft className="size-4" /> Back
+                </Button>
+              )}
               <Button type="button" onClick={createProductAndStart} disabled={loading}>
                 <ShieldCheck className="size-4" />
                 {loading ? "Starting…" : `Start ${selectedReview?.label.toLowerCase() ?? "review"}`}

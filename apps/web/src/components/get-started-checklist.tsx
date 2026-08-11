@@ -15,7 +15,7 @@ import { CheckCircle2, Circle, X } from "lucide-react"
 export interface ChecklistStep {
   label: string
   complete: boolean
-  href: string
+  href: string | null
 }
 
 export function GetStartedChecklist({
@@ -108,37 +108,48 @@ export function GetStartedChecklist({
       <ol className="grid gap-2 sm:grid-cols-2">
         {steps.map((step, index) => {
           const Icon = step.complete ? CheckCircle2 : Circle
+          const content = (
+            <>
+              <span
+                className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold ${
+                  step.complete ? "bg-success/15 text-success" : "bg-primary/8 text-primary"
+                }`}
+                aria-hidden="true"
+              >
+                {step.complete ? <Icon className="size-4" /> : index + 1}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span
+                  className={`block truncate text-sm font-medium ${
+                    step.complete ? "text-muted-foreground line-through" : ""
+                  }`}
+                >
+                  {step.label}
+                </span>
+              </span>
+              {!step.complete && step.href && (
+                <span className="text-primary text-xs font-medium">Start →</span>
+              )}
+            </>
+          )
           return (
             <li key={step.label}>
-              <Link
-                href={step.href}
-                className={`flex min-h-16 items-center gap-3 rounded-lg border p-3.5 transition-colors ${
-                  step.complete
-                    ? "border-success/40 bg-success/5"
-                    : "hover:bg-accent hover:border-primary/40"
-                }`}
-              >
-                <span
-                  className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold ${
-                    step.complete ? "bg-success/15 text-success" : "bg-primary/8 text-primary"
+              {step.href ? (
+                <Link
+                  href={step.href}
+                  className={`flex min-h-16 items-center gap-3 rounded-lg border p-3.5 transition-colors ${
+                    step.complete
+                      ? "border-success/40 bg-success/5"
+                      : "hover:bg-accent hover:border-primary/40"
                   }`}
-                  aria-hidden="true"
                 >
-                  {step.complete ? <Icon className="size-4" /> : index + 1}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={`block truncate text-sm font-medium ${
-                      step.complete ? "text-muted-foreground line-through" : ""
-                    }`}
-                  >
-                    {step.label}
-                  </span>
-                </span>
-                {!step.complete && (
-                  <span className="text-primary text-xs font-medium">Start →</span>
-                )}
-              </Link>
+                  {content}
+                </Link>
+              ) : (
+                <div className="text-muted-foreground flex min-h-16 items-center gap-3 rounded-lg border p-3.5 opacity-70">
+                  {content}
+                </div>
+              )}
             </li>
           )
         })}
