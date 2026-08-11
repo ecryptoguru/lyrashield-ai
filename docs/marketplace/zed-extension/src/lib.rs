@@ -60,15 +60,18 @@ impl zed::Extension for LyraShieldMcpExtension {
     ) -> Result<Command> {
         let settings = ContextServerSettings::for_project(context_server_id.as_ref(), project)?;
 
-        let settings: LyraShieldMcpSettings = settings.settings.map_or_else(
-            || Ok(LyraShieldMcpSettings { api_key: None, api_url: default_api_url() }),
-            |settings| serde_json::from_value(settings).map_err(|err| {
-            Self::settings_error(
-                context_server_id,
-                &format!("Invalid settings for the LyraShield MCP server: {err}."),
-            )
-        }),
-        )?;
+        let settings: LyraShieldMcpSettings = match settings.settings {
+            Some(settings) => serde_json::from_value(settings).map_err(|err| {
+                Self::settings_error(
+                    context_server_id,
+                    &format!("Invalid settings for the LyraShield MCP server: {err}."),
+                )
+            })?,
+            None => LyraShieldMcpSettings {
+                api_key: None,
+                api_url: default_api_url(),
+            },
+        };
 
         let api_url = settings.api_url.trim().to_string();
         let api_url = if api_url.is_empty() {
@@ -95,7 +98,11 @@ impl zed::Extension for LyraShieldMcpExtension {
             args: vec![entrypoint.to_string_lossy().to_string()],
             env: vec![(API_URL_ENV_VAR.to_string(), api_url)],
         };
-        if let Some(api_key) = settings.api_key.map(|key| key.trim().to_string()).filter(|key| !key.is_empty()) {
+        if let Some(api_key) = settings
+            .api_key
+            .map(|key| key.trim().to_string())
+            .filter(|key| !key.is_empty())
+        {
             command.env.push((API_KEY_ENV_VAR.to_string(), api_key));
         }
         Ok(command)

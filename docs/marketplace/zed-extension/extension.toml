@@ -12,8 +12,3 @@ name = "LyraShield AI MCP"
 [[capabilities]]
 kind = "npm:install"
 package = "@lyrashield/mcp"
-
-[[capabilities]]
-kind = "process:exec"
-command = "node"
-args = ["**"]
