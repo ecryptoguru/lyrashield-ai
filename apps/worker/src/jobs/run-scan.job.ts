@@ -15,7 +15,7 @@ import {
   qualifyReferralForWorkspace,
   type ScanStatus,
 } from "@lyrashield/db"
-import { getUrlScanProfile, type UrlScanProfile } from "@lyrashield/types"
+import { resolveScanProfile, resolveTargetScanMode, type UrlScanProfile } from "@lyrashield/types"
 import { runPreflight } from "./preflight.job"
 import {
   runEngine,
@@ -152,15 +152,26 @@ export function extractUsageSummary(usage: Record<string, unknown>): UsageSummar
 
 const MAX_SCAN_RUNTIME_MS = 30 * 60 * 1000
 
-function resolveScanRuntimeBudgetMs(maxDurationMinutes: number | null | undefined): number {
+export function resolveScanRuntimeBudgetMs(
+  mode: ScanJobData["mode"],
+  maxDurationMinutes: number | null | undefined,
+  targetType = "REPO"
+): number {
+  let modeMaxMs = MAX_SCAN_RUNTIME_MS
+  try {
+    modeMaxMs = resolveScanProfile({ targetType, mode }).maxDurationMinutes * 60 * 1000
+  } catch {
+    // A historical invalid row must not turn a worker retry into an unbounded run.
+    modeMaxMs = MAX_SCAN_RUNTIME_MS
+  }
   const configuredMaxMs =
     typeof maxDurationMinutes === "number" &&
     Number.isFinite(maxDurationMinutes) &&
     maxDurationMinutes > 0
       ? Math.floor(maxDurationMinutes * 60 * 1000)
-      : MAX_SCAN_RUNTIME_MS
+      : modeMaxMs
 
-  return Math.min(configuredMaxMs, MAX_SCAN_RUNTIME_MS)
+  return Math.min(configuredMaxMs, modeMaxMs)
 }
 
 export function resolveScannerPhaseTimeoutMs(
@@ -183,6 +194,10 @@ function timeoutErrorMessage(totalRuntimeMs: number): string {
   return `Scan exceeded the configured runtime limit of ${minutes} minute(s)`
 }
 
+function imageDigest(image: string | undefined): string | undefined {
+  return image?.match(/@?(sha256:[a-f0-9]{64})$/i)?.[1]?.toLowerCase()
+}
+
 function isTimeoutError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   if (error.name === "TimeoutError") return true
@@ -195,6 +210,7 @@ export async function persistEngineUsageCheckpoint(params: {
   scanId: string
   maxBudgetUsd: number
   llmUsage?: Record<string, unknown>
+  webSearchCostUsd?: number
   usageExpected: boolean
 }): Promise<{
   budgetExceeded: boolean
@@ -202,7 +218,7 @@ export async function persistEngineUsageCheckpoint(params: {
   costReconciled: boolean
   reconciliationReason?: string
 }> {
-  const { scanId, maxBudgetUsd, llmUsage, usageExpected } = params
+  const { scanId, maxBudgetUsd, llmUsage, webSearchCostUsd = 0, usageExpected } = params
   if (!llmUsage) {
     if (usageExpected) {
       try {
@@ -252,18 +268,20 @@ export async function persistEngineUsageCheckpoint(params: {
   let rateCardCostUsd: number | null = null
 
   if (usage.modelPricingBuckets) {
-    rateCardCostUsd = calculateGpt56CostUsdFromModelBuckets(usage.modelPricingBuckets)
+    const tokenCostUsd = calculateGpt56CostUsdFromModelBuckets(usage.modelPricingBuckets)
+    rateCardCostUsd = tokenCostUsd === null ? null : tokenCostUsd + webSearchCostUsd
     pricingMethod = "per_request_model_buckets"
   } else if (usage.pricingBuckets) {
     if (usage.singleModel) {
-      rateCardCostUsd = calculateGpt56CostUsdFromBuckets(usage.singleModel, usage.pricingBuckets)
+      const tokenCostUsd = calculateGpt56CostUsdFromBuckets(usage.singleModel, usage.pricingBuckets)
+      rateCardCostUsd = tokenCostUsd === null ? null : tokenCostUsd + webSearchCostUsd
       pricingMethod = "per_request_buckets"
     } else {
       modelMixUnpriceable = true
       pricingMethod = "model_mix_unpriceable"
     }
   } else if (aggregateCostUsd !== null) {
-    rateCardCostUsd = aggregateCostUsd
+    rateCardCostUsd = aggregateCostUsd + webSearchCostUsd
     pricingMethod = "aggregate_tokens"
   } else {
     pricingMethod = "unavailable"
@@ -571,6 +589,26 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         }
       }
 
+      if (target.type === "WEB_APP" || target.type === "API") {
+        const resolved = resolveTargetScanMode({
+          targetType: target.type,
+          mode,
+          hasApiSpec: Boolean(target.apiSpecUrl),
+        })
+        if (!resolved.ok) {
+          await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+            errorCategory: resolved.code,
+            errorMessage: resolved.reason,
+          })
+          return {
+            status: "failed",
+            errorCategory: resolved.code,
+            errorMessage: resolved.reason,
+          }
+        }
+        urlProfile = resolved.profile ?? undefined
+      }
+
       // Reject prompt-injection patterns in user-controlled fields before they
       // reach the engine prompt. This is fail-fast, before any provider spend.
       const goalSafety = checkInstructionSafety(goal)
@@ -609,7 +647,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         : null
       const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
       const scanStartedAtMs = Date.now()
-      scanRuntimeBudgetMs = resolveScanRuntimeBudgetMs(policy?.maxDurationMinutes)
+      scanRuntimeBudgetMs = resolveScanRuntimeBudgetMs(
+        mode,
+        policy?.maxDurationMinutes,
+        target.type
+      )
 
       const hasGlobalScanTimeout = (): boolean => {
         if (Date.now() - scanStartedAtMs >= scanRuntimeBudgetMs) {
@@ -731,17 +773,17 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               type: target.type as TargetType,
               url: target.url,
               repoFullName: target.repoFullName,
+              branch: target.branch,
               name: target.name,
             },
             instruction: buildVibeSecurityInstruction(goal),
             maxBudgetUsd,
           },
           scanId,
-          resolveEngineTimeoutMs(policy?.maxDurationMinutes),
+          Math.min(resolveEngineTimeoutMs(policy?.maxDurationMinutes, mode), scanRuntimeBudgetMs),
           isScanCancelled
         )
       } else if (target.type === "WEB_APP" || target.type === "API") {
-        urlProfile = getUrlScanProfile(target.type, mode)
         engineResult = {
           exitCode: 0,
           cancelled: false,
@@ -781,12 +823,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       // Persist usage before deterministic scanners or finding persistence can
       // fail, so provider spend is never lost behind a downstream error.
-      const { budgetExceeded, billedCostUsd } = await persistEngineUsageCheckpoint({
-        scanId,
-        maxBudgetUsd,
-        llmUsage: engineResult.output.runRecord?.llm_usage,
-        usageExpected: target.type === "REPO",
-      })
+      const { budgetExceeded, billedCostUsd, costReconciled, reconciliationReason } =
+        await persistEngineUsageCheckpoint({
+          scanId,
+          maxBudgetUsd,
+          llmUsage: engineResult.output.runRecord?.llm_usage,
+          webSearchCostUsd: engineResult.output.runRecord?.webSearchCostUsd,
+          usageExpected: target.type === "REPO",
+        })
       const runRecord = engineResult.output.runRecord
       const exitInterpretation = interpretExitCode(engineResult.exitCode)
       const engineExecution =
@@ -795,6 +839,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               model: engineModel,
               reasoningEffort: engineProfile.reasoningEffort,
               image: env.LYRASHIELD_IMAGE || null,
+              ...(imageDigest(env.LYRASHIELD_IMAGE)
+                ? { imageDigest: imageDigest(env.LYRASHIELD_IMAGE) }
+                : {}),
               ...(runRecord?.engine_version ? { engineVersion: runRecord.engine_version } : {}),
               ...(runRecord?.prompt_bundle_hash
                 ? { promptBundleHash: runRecord.prompt_bundle_hash }
@@ -803,6 +850,27 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
                 ? { maxOutputTokens: runRecord.max_output_tokens }
                 : {}),
               ...(runRecord?.max_agents ? { maxAgents: runRecord.max_agents } : {}),
+              ...(runRecord?.delegate_model ? { delegateModel: runRecord.delegate_model } : {}),
+              ...(runRecord?.delegate_reasoning_effort
+                ? { delegateReasoningEffort: runRecord.delegate_reasoning_effort }
+                : {}),
+              ...(runRecord?.model_routing_policy
+                ? { routingPolicy: runRecord.model_routing_policy }
+                : {}),
+              ...(runRecord?.compaction_trigger_tokens
+                ? { compactionTriggerTokens: runRecord.compaction_trigger_tokens }
+                : {}),
+              ...(runRecord?.compaction_target_tokens
+                ? { compactionTargetTokens: runRecord.compaction_target_tokens }
+                : {}),
+              ...(engineResult.sourceRevision
+                ? { sourceRevision: engineResult.sourceRevision }
+                : {}),
+              ...(typeof engineResult.sandboxRemoved === "boolean"
+                ? { sandboxRemoved: engineResult.sandboxRemoved }
+                : runRecord?.cleanup
+                  ? { sandboxRemoved: runRecord.cleanup.sandbox_removed }
+                  : {}),
             }
           : undefined
 
@@ -816,6 +884,26 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       if (engineResult.timedOut) {
         const timeoutMessage = "Scan engine timed out before completing"
+        await persistResultManifest({
+          scanId,
+          target: {
+            id: target.id,
+            type: target.type,
+            repoFullName: target.repoFullName,
+            branch: target.branch,
+            url: target.url,
+          },
+          sourceCheckoutAvailable: Boolean(engineResult.sourceCheckoutPath),
+          engineFindingCount: 0,
+          coverageIssues: [{ scanner: "engine", status: "bounded", reason: timeoutMessage }],
+          engineExecution,
+          accounting: {
+            maxBudgetUsd,
+            billedCostUsd,
+            reconciled: costReconciled,
+            ...(reconciliationReason ? { reconciliationReason } : {}),
+          },
+        })
         await updateScanStatus(scanId, "FAILED" as ScanStatus, {
           errorCategory: "TIMEOUT",
           errorMessage: timeoutMessage,
@@ -1064,6 +1152,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         matchedControlRanks: coverage.matchedControlRanks,
         urlExecution: orchestratorResult.urlExecution,
         engineExecution,
+        accounting: {
+          maxBudgetUsd,
+          billedCostUsd,
+          reconciled: costReconciled,
+          ...(reconciliationReason ? { reconciliationReason } : {}),
+        },
       })
 
       if (engineTerminalError) {
@@ -1252,8 +1346,23 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       }
       try {
         await cleanupEngineWorkspace(`lyrashield_runs/${scanId}`, scanId)
-      } catch {
-        // Non-fatal — workspace cleanup is best-effort
+      } catch (cleanupError) {
+        const error = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+        log.error("Engine workspace cleanup requires operator attention", { scanId, error })
+        try {
+          await addScanEvent(
+            scanId,
+            "cleanup_failed",
+            "error",
+            "Engine workspace cleanup requires operator attention",
+            { error }
+          )
+        } catch (eventError) {
+          log.error("Failed to persist cleanup failure event", {
+            scanId,
+            error: eventError instanceof Error ? eventError.message : String(eventError),
+          })
+        }
       }
     }
   }) // end runWithWorkspaceContext

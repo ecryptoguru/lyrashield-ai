@@ -232,6 +232,35 @@ describe("POST /api/scans", () => {
     expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ policyId: "default-policy" }))
   })
 
+  it("persists the canonical URL profile instead of its Quick compatibility alias", async () => {
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "web-1",
+      type: "WEB_APP",
+      apiSpecUrl: null,
+    } as never)
+    vi.mocked(createScan).mockResolvedValue({
+      id: "scan-url-quick",
+      status: "QUEUED",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      targetId: "web-1",
+      createdAt: new Date(),
+    } as never)
+
+    const res = await POST(
+      makeRequest({
+        workspaceId: "ws-url-quick",
+        targetId: "web-1",
+        goal: "TEST_APP",
+        mode: "QUICK",
+      })
+    )
+
+    expect(res.status).toBe(201)
+    expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ mode: "SAFE" }))
+    expect(enqueueScanJob).toHaveBeenCalledWith(expect.objectContaining({ mode: "SAFE" }))
+  })
+
   /**
    * The Trust Runs page prepends this response straight into its scan list and
    * validates it against the list-item schema. When POST returned only

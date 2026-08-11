@@ -10,6 +10,6 @@ function hasOption(args: string[], long: string, short: string): boolean {
 export async function handlePrScan(args: string[], output: Output): Promise<number> {
   // `lyrashield pr-scan` is a convenience alias for `lyrashield scan --goal CHECK_PR`.
   const autoGoal = hasOption(args, "--goal", "-g") ? [] : ["--goal", "CHECK_PR"]
-  const autoMode = hasOption(args, "--mode", "-m") ? [] : ["--mode", "SAFE"]
+  const autoMode = hasOption(args, "--mode", "-m") ? [] : ["--mode", "QUICK"]
   return handleScan([...autoGoal, ...autoMode, ...args], output)
 }

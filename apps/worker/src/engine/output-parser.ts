@@ -52,13 +52,20 @@ export interface EngineRunRecord {
   status: string
   targets_info?: unknown[]
   llm_usage?: Record<string, unknown>
+  webSearchCostUsd?: number
   scan_results?: Record<string, unknown>
   engine_version?: string
   prompt_bundle_hash?: string
   model?: string
   reasoning_effort?: string
+  delegate_model?: string
+  delegate_reasoning_effort?: string
+  model_routing_policy?: string
+  compaction_trigger_tokens?: number
+  compaction_target_tokens?: number
   max_output_tokens?: number
   max_agents?: number
+  cleanup?: { sandbox_removed: boolean }
   scan_mode?: string
   terminal_reason?: string
 }
@@ -225,6 +232,18 @@ function usageCost(value: unknown): number | undefined {
     value < MAX_DB_DECIMAL_12_6
     ? value
     : undefined
+}
+
+function webSearchCostUsd(value: unknown): number | undefined {
+  if (!Array.isArray(value) || value.length > 50) return undefined
+  let total = 0
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return undefined
+    const cost = usageCost((entry as Record<string, unknown>).cost)
+    if (cost === undefined) return undefined
+    total += cost
+  }
+  return value.length > 0 ? Math.round(total * 1_000_000) / 1_000_000 : undefined
 }
 
 function findUsageMetric(
@@ -619,8 +638,20 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       : undefined
     const llmUsage = normalizeLlmUsage(record.llm_usage)
     const promptBundleHash = boundedString(record.prompt_bundle_hash)
+    const delegateModel = boundedString(record.delegate_model)
+    const delegateReasoningEffort = boundedString(record.delegate_reasoning_effort)
+    const modelRoutingPolicy = boundedString(record.model_routing_policy)
+    const compactionTriggerTokens = usageInteger(record.compaction_trigger_tokens)
+    const compactionTargetTokens = usageInteger(record.compaction_target_tokens)
     const maxOutputTokens = usageInteger(record.max_output_tokens)
     const maxAgents = usageInteger(record.max_agents)
+    const searchCost = webSearchCostUsd(record.web_search_usage)
+    const cleanup =
+      typeof record.cleanup === "object" &&
+      record.cleanup !== null &&
+      !Array.isArray(record.cleanup)
+        ? (record.cleanup as { sandbox_removed?: unknown })
+        : undefined
 
     const runRecord: EngineRunRecord = {
       run_id: runId,
@@ -630,6 +661,7 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       status,
       ...(targetsInfo ? { targets_info: targetsInfo } : {}),
       ...(llmUsage ? { llm_usage: llmUsage } : {}),
+      ...(searchCost !== undefined ? { webSearchCostUsd: searchCost } : {}),
       ...(boundedString(record.engine_version)
         ? { engine_version: boundedString(record.engine_version) }
         : {}),
@@ -640,8 +672,20 @@ export function parseRunJson(raw: string): EngineRunRecord | null {
       ...(boundedString(record.reasoning_effort)
         ? { reasoning_effort: boundedString(record.reasoning_effort) }
         : {}),
+      ...(delegateModel ? { delegate_model: delegateModel } : {}),
+      ...(delegateReasoningEffort ? { delegate_reasoning_effort: delegateReasoningEffort } : {}),
+      ...(modelRoutingPolicy ? { model_routing_policy: modelRoutingPolicy } : {}),
+      ...(compactionTriggerTokens !== undefined
+        ? { compaction_trigger_tokens: compactionTriggerTokens }
+        : {}),
+      ...(compactionTargetTokens !== undefined
+        ? { compaction_target_tokens: compactionTargetTokens }
+        : {}),
       ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
       ...(maxAgents !== undefined ? { max_agents: maxAgents } : {}),
+      ...(typeof cleanup?.sandbox_removed === "boolean"
+        ? { cleanup: { sandbox_removed: cleanup.sandbox_removed } }
+        : {}),
       ...(boundedString(record.scan_mode) ? { scan_mode: boundedString(record.scan_mode) } : {}),
       ...(boundedString(record.terminal_reason)
         ? { terminal_reason: boundedString(record.terminal_reason) }

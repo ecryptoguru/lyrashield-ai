@@ -27,21 +27,21 @@ Pick the cheapest goal+mode that satisfies the user's request. LyraShield scans 
 
 | User intent | Goal | Mode | When to use |
 | --- | --- | --- | --- |
-| "Check this diff before I commit" / "Pre-PR check" | CHECK_PR | SAFE | Fast, low-cost heuristic pre-filter. Use STANDARD only if the user asks for a thorough pre-PR review. |
+| "Check this diff before I commit" / "Pre-PR check" | CHECK_PR | QUICK | Fast, bounded release review. Use STANDARD only if the user asks for a thorough pre-PR review. |
 | "Quick check" / "Is this file safe?" | TEST_APP | QUICK | Cheapest, fastest scan. |
 | "Review this repo" / "Standard security review" | TEST_APP | STANDARD | Authoritative code review. This is the default for general review. |
 | "Launch review" / "Ready to ship?" | LAUNCH_REVIEW | STANDARD | Launch gating. |
 | "Deep security review" / "Pentest this" | TEST_APP | DEEP | Thorough, expensive. Use only when the user explicitly asks for deep review. |
 | "Compliance review" | COMPLIANCE_REVIEW | DEEP | Compliance / audit use case. |
-| "Weekly monitor" / "Re-check this" | WEEKLY_MONITOR | SAFE | Recurring lightweight check. |
+| "Weekly monitor" / "Re-check this" | WEEKLY_MONITOR | QUICK | Recurring lightweight check. |
 
-If the user does not specify a mode, default to SAFE for pre-PR checks and STANDARD for general reviews. Prefer QUICK only when the user asks for a quick check. Only use DEEP when the user asks for a deep or compliance review.
+If the user does not specify a mode, default to QUICK for pre-PR checks and STANDARD for general reviews. Only use DEEP when the user asks for a deep or compliance review.
 
 ## Example prompts and tool calls
 
 Use these as a guide for common user requests:
 
-- "Check this diff before I commit" → Run `lyrashield_check_diff` on the diff. If it reports issues, or the user asks for a verified scan, run `lyrashield_run_pr_scan` with goal `CHECK_PR` and mode `SAFE`.
+- "Check this diff before I commit" → Run `lyrashield_check_diff` on the diff. If it reports issues, or the user asks for a verified scan, run `lyrashield_run_pr_scan` with goal `CHECK_PR` and mode `QUICK`.
 - "Scan this repo" / "Review this project" → Resolve the current/default target, then run `lyrashield_scan_target` with goal `TEST_APP` and mode `STANDARD`.
 - "Run a launch review" → Run `lyrashield_scan_target` with goal `LAUNCH_REVIEW` and mode `STANDARD`.
 - "Deep security review" → Run `lyrashield_scan_target` with goal `TEST_APP` and mode `DEEP`.

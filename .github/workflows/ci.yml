@@ -150,6 +150,9 @@ jobs:
       BETTER_AUTH_URL: "http://127.0.0.1:3100"
       NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3100"
       TRUSTED_PROXY_IP_HEADER: "x-forwarded-for"
+      # The production-mode Playwright server validates the image policy but
+      # never pulls or executes this fixture digest.
+      LYRASHIELD_IMAGE: "ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       # CI has no mail provider, and the E2E web server runs in production mode where
       # the schema default of "1" would refuse to boot. Matches the production value.
       LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"

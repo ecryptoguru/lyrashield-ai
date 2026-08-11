@@ -13,7 +13,7 @@ export const SCAN_PRESETS = {
     description: "Fast, bounded review before you ship.",
     hint: "Quick pass over changed files, public surfaces, and configs. Best for pre-release confidence.",
     goal: "LAUNCH_REVIEW",
-    mode: "SAFE",
+    mode: "QUICK",
   },
   CODE_REVIEW: {
     label: "Code review",
@@ -34,7 +34,7 @@ export const SCAN_PRESETS = {
     description: "A bounded recurring check for new risk.",
     hint: "Light recurring sweep to catch new regressions between releases.",
     goal: "WEEKLY_MONITOR",
-    mode: "SAFE",
+    mode: "QUICK",
   },
 } as const
 

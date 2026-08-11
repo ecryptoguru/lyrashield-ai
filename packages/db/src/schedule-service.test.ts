@@ -76,7 +76,7 @@ describe("schedule-service", () => {
           targetId: "target-1",
           cron: "0 0 * * 0",
           goal: "TEST_APP",
-          mode: "SAFE",
+          mode: "QUICK",
           createdById: "user-1",
           enabled: true,
           nextRunAt: expect.any(Date),

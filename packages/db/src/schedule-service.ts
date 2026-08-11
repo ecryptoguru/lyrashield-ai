@@ -66,7 +66,7 @@ export async function createSchedule(params: {
       targetId: params.targetId,
       cron: params.cron,
       goal: params.goal as ScanGoal,
-      mode: (params.mode ?? "SAFE") as ScanMode,
+      mode: (params.mode ?? "QUICK") as ScanMode,
       createdById: params.createdById,
       enabled: true,
       nextRunAt,

@@ -8,7 +8,7 @@ import type {
 } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import { DeterminismModeSchema, type DeterminismMode } from "@lyrashield/types"
-import { isValidTransition } from "./scan-transitions"
+import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
 import { withWorkspaceRLS } from "./rls"
 import { getWorkspaceContext } from "./extension"
 
@@ -71,7 +71,7 @@ export async function createScan(params: CreateScanParams): Promise<Scan> {
         workspaceId: params.workspaceId,
         targetId: params.targetId,
         goal: params.goal as Scan["goal"],
-        mode: (params.mode ?? "SAFE") as Scan["mode"],
+        mode: (params.mode ?? "QUICK") as Scan["mode"],
         policyId: params.policyId ?? null,
         status: "QUEUED",
         triggerType: params.triggerType ?? "manual",
@@ -88,7 +88,7 @@ export async function createScan(params: CreateScanParams): Promise<Scan> {
         metadata: {
           targetId: params.targetId,
           goal: params.goal,
-          mode: params.mode ?? "SAFE",
+          mode: params.mode ?? "QUICK",
         },
       },
     })
@@ -143,7 +143,7 @@ export async function updateScanStatus(
     if ((newStatus === "PREFLIGHT" || newStatus === "RUNNING") && !scan.startedAt) {
       updateData.startedAt = now
     }
-    if (["COMPLETED", "FAILED", "CANCELLED", "STOPPED_BUDGET", "TIMED_OUT"].includes(newStatus)) {
+    if (isTerminalScanStatus(newStatus)) {
       updateData.endedAt = now
       const startTime = (updateData.startedAt as Date | undefined) ?? scan.startedAt
       if (startTime) {
@@ -389,13 +389,7 @@ export async function cancelScan(scanId: string, workspaceId: string): Promise<S
   if (!scan) throw new Error(`Scan not found: ${scanId}`)
 
   const status = scan.status as ScanStatus
-  if (
-    status === "COMPLETED" ||
-    status === "FAILED" ||
-    status === "CANCELLED" ||
-    status === "STOPPED_BUDGET" ||
-    status === "TIMED_OUT"
-  ) {
+  if (isTerminalScanStatus(status)) {
     throw new Error(`Cannot cancel scan in terminal state: ${status}`)
   }
 

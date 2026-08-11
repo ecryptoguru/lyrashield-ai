@@ -2,7 +2,12 @@ import { createHash } from "crypto"
 import { prisma, createScan, listScans, updateScanStatus, type ScanListItem } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { CreateScanSchema, ScanStatusSchema, resolveTargetScanMode } from "@lyrashield/types"
+import {
+  CreateScanSchema,
+  ScanStatusSchema,
+  resolveScanProfile,
+  resolveTargetScanMode,
+} from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
@@ -92,6 +97,21 @@ export async function POST(request: Request) {
       }
     }
 
+    let canonicalMode = data.mode
+    if (target.type === "REPO" || target.type === "WEB_APP" || target.type === "API") {
+      try {
+        canonicalMode = resolveScanProfile({
+          targetType: target.type,
+          mode: data.mode,
+        }).canonicalMode
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "TARGET_TYPE_UNSUPPORTED"
+        return apiError(code, "This review type is not available for the selected target.", 400)
+      }
+    } else if (target.type) {
+      return apiError("TARGET_TYPE_UNSUPPORTED", "This target cannot be reviewed yet.", 400)
+    }
+
     const policy = await prisma.policy.findFirst({
       where: data.policyId
         ? { id: data.policyId, workspaceId, deletedAt: null }
@@ -161,7 +181,7 @@ export async function POST(request: Request) {
       workspaceId,
       targetId: data.targetId,
       goal: data.goal,
-      mode: data.mode,
+      mode: canonicalMode,
       policyId,
       createdById: session.userId,
     })
@@ -172,7 +192,7 @@ export async function POST(request: Request) {
         workspaceId,
         targetId: data.targetId,
         goal: data.goal,
-        mode: data.mode,
+        mode: canonicalMode,
         policyId,
       })
     } catch (enqueueErr) {

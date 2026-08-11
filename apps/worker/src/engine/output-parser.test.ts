@@ -185,6 +185,18 @@ describe("output-parser", () => {
   })
 
   describe("parseRunJson", () => {
+    it("retains bounded web-search spend for provider-cost reconciliation", () => {
+      const result = parseRunJson(
+        JSON.stringify({
+          run_id: "run-search-cost",
+          status: "completed",
+          web_search_usage: [{ cost: 0.005 }, { cost: 0.005 }],
+        })
+      )
+
+      expect(result?.webSearchCostUsd).toBe(0.01)
+    })
+
     it("parses valid run record", () => {
       const raw = JSON.stringify({
         run_id: "run-abc",
@@ -208,8 +220,14 @@ describe("output-parser", () => {
           prompt_bundle_hash: "a".repeat(64),
           model: "azure_ai/gpt-5.6-luna",
           reasoning_effort: "medium",
+          delegate_model: "azure_ai/gpt-5.6-luna",
+          delegate_reasoning_effort: "high",
+          model_routing_policy: "coordinator-terra-med-delegate-luna-high-v3",
+          compaction_trigger_tokens: 96000,
+          compaction_target_tokens: 64000,
           max_output_tokens: 4096,
           max_agents: 2,
+          cleanup: { sandbox_removed: true },
           scan_mode: "quick",
         })
       )
@@ -219,8 +237,14 @@ describe("output-parser", () => {
         prompt_bundle_hash: "a".repeat(64),
         model: "azure_ai/gpt-5.6-luna",
         reasoning_effort: "medium",
+        delegate_model: "azure_ai/gpt-5.6-luna",
+        delegate_reasoning_effort: "high",
+        model_routing_policy: "coordinator-terra-med-delegate-luna-high-v3",
+        compaction_trigger_tokens: 96000,
+        compaction_target_tokens: 64000,
         max_output_tokens: 4096,
         max_agents: 2,
+        cleanup: { sandbox_removed: true },
         scan_mode: "quick",
       })
     })
@@ -281,6 +305,27 @@ describe("output-parser", () => {
         },
       })
     })
+
+    it.each(["incomplete", "rate_limited"])(
+      "retains the %s terminal receipt from the engine",
+      (terminalReason) => {
+        expect(
+          parseRunJson(
+            JSON.stringify({
+              run_id: `run-${terminalReason}`,
+              run_name: `run-${terminalReason}`,
+              status: "stopped",
+              terminal_reason: terminalReason,
+            })
+          )
+        ).toMatchObject({
+          run_id: `run-${terminalReason}`,
+          run_name: `run-${terminalReason}`,
+          status: "stopped",
+          terminal_reason: terminalReason,
+        })
+      }
+    )
 
     it("rejects usage values that cannot fit the exact database ledger", () => {
       const result = parseRunJson(

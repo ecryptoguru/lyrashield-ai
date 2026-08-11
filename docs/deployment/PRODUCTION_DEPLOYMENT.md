@@ -223,10 +223,12 @@ rule.
 2. Production Postgres migrations and the CI migration-drift check pass. Before applying `20260714170000_integration_global_external_id_unique`, resolve any duplicate non-null `(type, externalId)` bindings explicitly; the migration intentionally fails rather than silently reassigning an installation.
 3. Redis is private/TLS-protected and reachable by both web and worker. `REDIS_URL` (redis://) is for the BullMQ job queue; `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (HTTPS REST) are for distributed rate limiting only. The two are never interchangeable.
 4. All secrets are supplied through the platform's secret manager, never committed files.
-5. The worker runs as a dedicated non-root user with least-privilege filesystem and Docker access.
-6. The sandbox image is pinned to an inspected digest; mutable tags are not acceptable. The worker and each sandbox share a dedicated internal control-plane network that has no default external route.
-7. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
-8. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
+5. The worker runs on disposable, dedicated scan infrastructure. It must not share a host, Docker daemon, filesystem, network namespace, or secret boundary with the web application, database, or unrelated workloads.
+6. The worker reaches that isolated Docker daemon through `DOCKER_HOST=ssh://...` or a mutually authenticated `tcp://...` endpoint. A production worker fails fast for a local Unix socket; `docker-compose.yml` is development-only.
+7. The sandbox image is pinned to the immutable digest emitted by the engine's `publish-sandbox` workflow after both architecture-specific non-root smoke tests pass. That workflow emits BuildKit provenance, an SPDX SBOM, and GitHub/Sigstore-signed attestations. Mutable tags and upstream `usestrix` images are not acceptable.
+8. The stale-resource reaper is enabled with a conservative age threshold. It must be able to read active scan state, skip every active scan and running container, and report each cleanup result.
+9. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
+10. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
 
 ## Full-scan resource checklist
 
@@ -285,8 +287,16 @@ LYRASHIELD_LUNA_LLM="azure/gpt-5.6-luna"
 LYRASHIELD_TERRA_LLM="azure/gpt-5.6-terra"
 LLM_API_KEY="..."
 LYRASHIELD_ENGINE_PATH="lyrashield"
-LYRASHIELD_IMAGE="ghcr.io/usestrix/strix-sandbox@sha256:<approved-digest>"
+LYRASHIELD_IMAGE="ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:<published-digest>"
 LYRASHIELD_ENGINE_SANDBOX_NETWORK="lyrashield-sandbox"
+DOCKER_HOST="ssh://scanner@isolated-docker-host"
+# For a TLS Docker API instead of SSH:
+# DOCKER_HOST="tcp://isolated-docker-host:2376"
+# DOCKER_TLS_VERIFY="1"
+# DOCKER_CERT_PATH="/run/secrets/isolated-docker-client"
+LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED="1"
+LYRASHIELD_STALE_RESOURCE_MIN_AGE_MINUTES="1440"
+LYRASHIELD_STALE_RESOURCE_REAPER_INTERVAL_MS="900000"
 PLATFORM_MAX_SCAN_BUDGET_USD="50"
 LYRASHIELD_TELEMETRY="0"
 LYRASHIELD_WORKER_CONCURRENCY="1"

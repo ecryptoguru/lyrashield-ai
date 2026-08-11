@@ -214,6 +214,9 @@ export async function completeScanWithScore(
       select: { score: true },
     })
     const now = new Date()
+    const durationMs = scan.startedAt
+      ? Math.max(0, now.getTime() - new Date(scan.startedAt).getTime())
+      : null
     const snapshot = await tx.scoreSnapshot.create({
       data: {
         workspaceId: scan.workspaceId,
@@ -240,6 +243,7 @@ export async function completeScanWithScore(
         status: "COMPLETED",
         summary: summary ?? undefined,
         endedAt: now,
+        ...(durationMs === null ? {} : { durationMs }),
         riskScoreBefore: previous?.score,
         riskScoreAfter: result.score,
       },

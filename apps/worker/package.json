@@ -19,12 +19,12 @@
     "@lyrashield/types": "workspace:*",
     "bullmq": "^5.81.2",
     "ioredis": "^5.4.0",
+    "tsx": "^4.23.8",
     "yaml": "^2.9.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "tsx": "^4.23.8",
     "typescript": "^6.0.0"
   }
 }

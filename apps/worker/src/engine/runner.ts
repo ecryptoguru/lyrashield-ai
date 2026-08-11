@@ -1,10 +1,12 @@
-import { spawn, type ChildProcess } from "child_process"
+import { execFile, spawn, type ChildProcess } from "child_process"
 import { rm, mkdir, readdir, stat, lstat, realpath, open } from "fs/promises"
 import { join, relative, resolve, sep } from "path"
 import { tmpdir } from "os"
+import { promisify } from "util"
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
+import { resolveScanProfile } from "@lyrashield/types"
 import { buildEngineCommand, type ScanConfig, type EngineCommand } from "./command-builder"
 import { parseEngineOutput, type ParsedScanOutput } from "./output-parser"
 
@@ -15,20 +17,51 @@ export interface EngineRunResult {
   output: ParsedScanOutput
   /** Validated host-side checkout for deterministic repository scanners. */
   sourceCheckoutPath: string | null
+  /** Immutable Git commit actually checked out for repository scanners. */
+  sourceRevision?: string | null
+  /** Host-observed confirmation that no sandbox owned by this scan remains. */
+  sandboxRemoved?: boolean
 }
 
-const DEFAULT_ENGINE_TIMEOUT_MS = 25 * 60 * 1000
-const MAX_ENGINE_TIMEOUT_MS = 25 * 60 * 1000
+const execFileAsync = promisify(execFile)
 
-export function resolveEngineTimeoutMs(maxDurationMinutes?: number | null): number {
+const DEFAULT_ENGINE_TIMEOUT_MS = 12 * 60 * 1000
+const SANDBOX_RECEIPT_TIMEOUT_MS = 10_000
+
+async function verifySandboxRemoved(scanId: string): Promise<boolean | undefined> {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(scanId) || scanId.includes("..")) {
+    return undefined
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      "docker",
+      ["ps", "--filter", `label=strix-run-id=${scanId}`, "--quiet"],
+      { timeout: SANDBOX_RECEIPT_TIMEOUT_MS, maxBuffer: 16 * 1024 }
+    )
+    return stdout.trim() === ""
+  } catch (error) {
+    logger.warn("Could not verify terminal sandbox cleanup", {
+      scanId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return undefined
+  }
+}
+
+export function resolveEngineTimeoutMs(
+  maxDurationMinutes?: number | null,
+  mode?: ScanConfig["mode"]
+): number {
+  const profile = resolveScanProfile({ targetType: "REPO", mode: mode ?? "QUICK" })
+  const engineMaxMs = profile.maxEngineMinutes * 60 * 1000
   if (
     typeof maxDurationMinutes !== "number" ||
     !Number.isFinite(maxDurationMinutes) ||
     maxDurationMinutes <= 0
   ) {
-    return DEFAULT_ENGINE_TIMEOUT_MS
+    return engineMaxMs
   }
-  return Math.min(Math.floor(maxDurationMinutes * 60 * 1000), MAX_ENGINE_TIMEOUT_MS)
+  return Math.min(Math.floor(maxDurationMinutes * 60 * 1000), engineMaxMs)
 }
 
 const EXIT_CODE_MAP: Record<
@@ -234,6 +267,17 @@ export function assertRepositoryScanRuntimeConfigured(
     throw new Error("A model provider credential must be configured for repository scans")
   }
   resolveEngineSandboxNetwork(runtimeEnv)
+  if (runtimeEnv.NODE_ENV === "production") {
+    const dockerHost = runtimeEnv.DOCKER_HOST?.trim() ?? ""
+    if (!/^ssh:\/\//.test(dockerHost) && !/^tcp:\/\//.test(dockerHost)) {
+      throw new Error(
+        "DOCKER_HOST must be an ssh:// or tcp:// endpoint for an isolated sandbox worker in production"
+      )
+    }
+    if (/^tcp:\/\//.test(dockerHost) && runtimeEnv.DOCKER_TLS_VERIFY !== "1") {
+      throw new Error("DOCKER_TLS_VERIFY=1 is required for a tcp:// production DOCKER_HOST")
+    }
+  }
 }
 
 function requireRepositoryModel(model: string | undefined): string {
@@ -252,7 +296,7 @@ const WEB_SEARCH_DEFAULTS: Record<string, string> = {
   LYRASHIELD_WEB_SEARCH_BUDGET_USD: "1.0",
 }
 
-export function buildEngineEnv(profile: EngineProfile): Record<string, string> {
+export function buildEngineEnv(profile: EngineProfile, scanId?: string): Record<string, string> {
   const allow = new Set([
     "PATH",
     "HOME",
@@ -271,6 +315,8 @@ export function buildEngineEnv(profile: EngineProfile): Record<string, string> {
     "LLM_TIMEOUT",
     "LYRASHIELD_MAX_OUTPUT_TOKENS",
     "LYRASHIELD_MAX_INPUT_TOKENS",
+    "LYRASHIELD_PROMPT_CACHE_EXPLICIT",
+    "LYRASHIELD_PROMPT_CACHE",
     "LYRASHIELD_IMAGE",
     "LYRASHIELD_RUNTIME_BACKEND",
     "LYRASHIELD_SERVER_CONVERSATION",
@@ -302,10 +348,20 @@ export function buildEngineEnv(profile: EngineProfile): Record<string, string> {
       filtered[key] = value
     }
   }
+  if (!("LYRASHIELD_PROMPT_CACHE_EXPLICIT" in filtered)) {
+    filtered.LYRASHIELD_PROMPT_CACHE_EXPLICIT = "1"
+  }
+  if (!("LYRASHIELD_PROMPT_CACHE" in filtered)) {
+    filtered.LYRASHIELD_PROMPT_CACHE = "1"
+  }
   if (profile.model) filtered.LYRASHIELD_LLM = profile.model
   filtered.LYRASHIELD_REASONING_EFFORT = profile.reasoningEffort
   if (profile.delegateModel) filtered.LYRASHIELD_DELEGATE_LLM = profile.delegateModel
   filtered.LYRASHIELD_DELEGATE_REASONING_EFFORT = profile.delegateReasoningEffort
+  if (scanId) {
+    filtered.STRIX_RUN_ID = scanId
+    filtered.STRIX_RUN_TYPE = "repository"
+  }
   filtered.STRIX_DOCKER_SANDBOX_NETWORK = resolveEngineSandboxNetwork()
   filtered.STRIX_SANDBOX_MEM_LIMIT = env.STRIX_SANDBOX_MEM_LIMIT.trim() || "4g"
   filtered.STRIX_SANDBOX_CPUS = env.STRIX_SANDBOX_CPUS.trim() || "2"
@@ -357,7 +413,7 @@ async function runEngineProcess(
   return new Promise((resolvePromise, reject) => {
     const child: ChildProcess = spawn(cmd.executable, cmd.args, {
       cwd: absWorkDir,
-      env: buildEngineEnv(profile),
+      env: buildEngineEnv(profile, scanId),
       stdio: ["ignore", "pipe", "pipe"],
     })
 
@@ -503,6 +559,26 @@ export async function resolveEngineSourceCheckout(
   return null
 }
 
+export async function resolveEngineSourceRevision(
+  checkoutPath: string | null
+): Promise<string | null> {
+  if (!checkoutPath) return null
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", checkoutPath, "rev-parse", "--verify", "HEAD"],
+      {
+        timeout: 5_000,
+        maxBuffer: 1_024,
+      }
+    )
+    const revision = stdout.trim().toLowerCase()
+    return /^[a-f0-9]{40}$/.test(revision) ? revision : null
+  } catch {
+    return null
+  }
+}
+
 async function hasEngineOutputArtifact(runDir: string): Promise<boolean> {
   for (const artifact of ENGINE_OUTPUT_ARTIFACTS) {
     try {
@@ -518,7 +594,10 @@ async function hasEngineOutputArtifact(runDir: string): Promise<boolean> {
   return false
 }
 
-export async function findRunOutputDir(workDir: string): Promise<string | null> {
+export async function findRunOutputDir(
+  workDir: string,
+  expectedRunName?: string
+): Promise<string | null> {
   let newest: { path: string; mtimeMs: number } | null = null
   let entriesSeen = 0
 
@@ -535,6 +614,7 @@ export async function findRunOutputDir(workDir: string): Promise<string | null> 
           })
           break
         }
+        if (expectedRunName && entry !== expectedRunName) continue
         const entryPath = join(runsDir, entry)
         try {
           // entryPath is inside the validated run layout and is not used as a destination.
@@ -555,6 +635,23 @@ export async function findRunOutputDir(workDir: string): Promise<string | null> 
   }
 
   return newest?.path ?? null
+}
+
+export async function prepareEngineWorkspace(workDir: string): Promise<void> {
+  const workspace = resolve(workDir)
+  const workspaceFromRoot = relative(ENGINE_WORK_ROOT, workspace)
+  if (
+    !workspaceFromRoot ||
+    workspaceFromRoot === ".." ||
+    workspaceFromRoot.startsWith(`..${sep}`)
+  ) {
+    throw new Error("Refusing to prepare an engine workspace outside the owned run root")
+  }
+  // The work directory belongs to one scan id. Clearing it before launch
+  // prevents a crashed attempt's receipt from being mistaken for this attempt.
+  await rm(workspace, { recursive: true, force: true })
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await mkdir(workspace, { recursive: true })
 }
 
 async function readTextFileBounded(path: string, maxBytes: number): Promise<string> {
@@ -624,9 +721,7 @@ export async function runEngine(
   const profile = resolveEngineProfile(config.mode)
 
   const absWorkDir = resolve(cmd.workDir)
-  // workDir is generated by the engine command builder from the scan identifier.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  await mkdir(absWorkDir, { recursive: true })
+  await prepareEngineWorkspace(absWorkDir)
 
   logger.info("Starting engine process", {
     scanId,
@@ -701,13 +796,15 @@ export async function runEngine(
     )
   }
 
-  const outputDir = await findRunOutputDir(absWorkDir)
+  const outputDir = await findRunOutputDir(absWorkDir, scanId)
   const { vulnerabilitiesRaw, runJsonRaw } = outputDir
     ? await readEngineOutput(outputDir)
     : { vulnerabilitiesRaw: "", runJsonRaw: "" }
 
   const output = parseEngineOutput(vulnerabilitiesRaw, runJsonRaw)
   const sourceCheckoutPath = await resolveEngineSourceCheckout(output.runRecord)
+  const sourceRevision = await resolveEngineSourceRevision(sourceCheckoutPath)
+  const sandboxRemoved = await verifySandboxRemoved(scanId)
 
   if (config.target.type === "REPO") {
     await emitScanEvent(
@@ -733,7 +830,15 @@ export async function runEngine(
     }
   )
 
-  return { exitCode, cancelled, timedOut, output, sourceCheckoutPath }
+  return {
+    exitCode,
+    cancelled,
+    timedOut,
+    output,
+    sourceCheckoutPath,
+    sourceRevision,
+    sandboxRemoved,
+  }
 }
 
 export async function cleanupEngineWorkspace(workDir: string, runName?: string): Promise<void> {
@@ -751,22 +856,40 @@ export async function cleanupEngineWorkspace(workDir: string, runName?: string):
   }
 
   if (runName && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(runName) && !runName.includes("..")) {
-    const checkoutRunDir = resolve(ENGINE_CHECKOUT_ROOT, runName)
-    const checkoutFromRoot = relative(ENGINE_CHECKOUT_ROOT, checkoutRunDir)
-    if (checkoutFromRoot && checkoutFromRoot !== ".." && !checkoutFromRoot.startsWith(`..${sep}`)) {
-      targets.push(checkoutRunDir)
+    const checkoutPrefix = `repo_${runName}_`
+    try {
+      // ENGINE_CHECKOUT_ROOT is a fixed worker-owned temporary directory.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      for (const entry of await readdir(ENGINE_CHECKOUT_ROOT)) {
+        if (!entry.startsWith(checkoutPrefix)) continue
+        const checkoutDir = resolve(ENGINE_CHECKOUT_ROOT, entry)
+        if (relative(ENGINE_CHECKOUT_ROOT, checkoutDir) !== entry) continue
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
+        const checkoutStat = await lstat(checkoutDir)
+        if (checkoutStat.isDirectory() && !checkoutStat.isSymbolicLink()) targets.push(checkoutDir)
+      }
+    } catch {
+      // The engine may fail before cloning, so no checkout directory is normal.
     }
   }
 
+  const failures: Error[] = []
   for (const target of targets) {
     try {
       await rm(target, { recursive: true, force: true })
     } catch (err) {
+      failures.push(err instanceof Error ? err : new Error(String(err)))
       logger.warn("Failed to clean up engine-owned files", {
-        workDir,
+        target,
         error: err instanceof Error ? err.message : String(err),
       })
     }
   }
-  logger.info("Engine workspace cleaned up", { workDir })
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures,
+      `Failed to remove ${failures.length} engine workspace path(s)`
+    )
+  }
+  logger.info("Engine workspace cleaned up", { workDir, removedPaths: targets.length })
 }

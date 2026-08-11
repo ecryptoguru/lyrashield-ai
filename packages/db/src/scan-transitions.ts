@@ -14,9 +14,22 @@ const VALID_TRANSITIONS: Record<ScanStatus, ScanStatus[]> = {
   TIMED_OUT: [],
 }
 
+const TERMINAL_SCAN_STATUSES = new Set<ScanStatus>([
+  "COMPLETED",
+  "PARTIAL",
+  "FAILED",
+  "CANCELLED",
+  "STOPPED_BUDGET",
+  "TIMED_OUT",
+])
+
 export function isValidTransition(from: ScanStatus, to: ScanStatus): boolean {
   const allowed = VALID_TRANSITIONS[from]
   return allowed ? allowed.includes(to) : false
 }
 
-export { VALID_TRANSITIONS }
+export function isTerminalScanStatus(status: ScanStatus): boolean {
+  return TERMINAL_SCAN_STATUSES.has(status)
+}
+
+export { TERMINAL_SCAN_STATUSES, VALID_TRANSITIONS }

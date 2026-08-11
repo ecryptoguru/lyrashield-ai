@@ -71,6 +71,25 @@ describe("updateScanStatus", () => {
       })
     )
   })
+
+  it("records completion timing for a partial terminal scan", async () => {
+    const startedAt = new Date(Date.now() - 1_000)
+    mockPrisma.scan.findUnique
+      .mockResolvedValueOnce({ id: "scan-1", status: "VERIFYING", startedAt })
+      .mockResolvedValueOnce({ id: "scan-1", status: "PARTIAL", startedAt })
+    mockPrisma.scan.updateMany.mockResolvedValue({ count: 1 })
+
+    await updateScanStatus("scan-1", "PARTIAL", undefined, "ws-1")
+
+    expect(mockPrisma.scan.updateMany).toHaveBeenCalledWith({
+      where: { id: "scan-1", status: "VERIFYING" },
+      data: expect.objectContaining({
+        status: "PARTIAL",
+        endedAt: expect.any(Date),
+        durationMs: expect.any(Number),
+      }),
+    })
+  })
 })
 
 describe("addScanEvent — cross-tenant guard", () => {

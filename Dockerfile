@@ -53,6 +53,10 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     NEXT_PUBLIC_MARKETING_URL="$BUILD_PUBLIC_MARKETING_URL" \
     pnpm db:generate
 
+# Materialize only the worker's production dependency closure. This keeps the
+# final image independent of unrelated web, marketing, and test dependencies.
+RUN pnpm --filter @lyrashield/worker deploy --prod --legacy /worker-runtime
+
 FROM workspace-builder AS web-builder
 
 ARG BUILD_DATABASE_URL="postgresql://build@db.example.invalid:5432/lyrashield?schema=public"
@@ -114,6 +118,7 @@ RUN python3 -m venv /opt/uv-bootstrap && \
       /opt/uv-bootstrap/bin/uv sync \
         --project /opt/lyrashield-engine \
         --frozen \
+        --no-editable \
         --no-dev && \
     /opt/lyrashield-venv/bin/lyrashield --version && \
     rm -rf /opt/uv-bootstrap
@@ -126,7 +131,6 @@ RUN python3 -m venv /opt/uv-bootstrap && \
 FROM node:24-alpine AS worker
 
 RUN apk add --no-cache docker-cli git python3 && \
-    npm install -g pnpm@11.6.0 && \
     addgroup --system lyrashield && \
     adduser --system --ingroup lyrashield --home /app lyrashield
 
@@ -136,17 +140,15 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PATH="/opt/lyrashield-venv/bin:$PATH"
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=workspace-builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/tsconfig.json ./
-COPY --from=workspace-builder /app/packages ./packages
-COPY --from=workspace-builder /app/apps/worker ./apps/worker
-COPY --from=worker-engine /opt/lyrashield-engine /opt/lyrashield-engine
+COPY --from=workspace-builder /worker-runtime ./apps/worker
 COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
 
-# Named volumes are initialized from the image, so create and own these
-# runtime directories before the user switch so the worker can write to them.
-RUN mkdir -p /app/lyrashield_runs /app/.lyrashield/evidence && \
-    chown -R lyrashield:lyrashield /app /opt/lyrashield-engine /opt/lyrashield-venv
+# Product tests are build inputs, not worker runtime assets. Named volumes are
+# initialized from the image, so create and own only the runtime-write paths.
+RUN find /app/apps/worker -type f \
+      \( -name "*.test.ts" -o -name "*.test.tsx" \) -delete && \
+    mkdir -p /app/lyrashield_runs /app/.lyrashield/evidence && \
+    chown lyrashield:lyrashield /app/lyrashield_runs /app/.lyrashield/evidence
 
 USER lyrashield
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

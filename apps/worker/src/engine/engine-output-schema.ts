@@ -126,8 +126,19 @@ export const engineRunRecordSchema = z
     prompt_bundle_hash: sha256Hash,
     model: boundedString,
     reasoning_effort: boundedString,
+    delegate_model: boundedString,
+    delegate_reasoning_effort: boundedString,
+    model_routing_policy: boundedString,
+    compaction_trigger_tokens: z.number().int().min(1).optional(),
+    compaction_target_tokens: z.number().int().min(1).optional(),
     max_output_tokens: z.number().int().min(1).optional(),
     max_agents: z.number().int().min(1).optional(),
+    cleanup: z
+      .object({
+        sandbox_removed: z.boolean(),
+      })
+      .strip()
+      .optional(),
     scan_mode: boundedString,
     terminal_reason: z
       .enum([
@@ -135,6 +146,8 @@ export const engineRunRecordSchema = z
         "content_filter_stopped",
         "engine_stopped",
         "budget_exceeded",
+        "incomplete",
+        "rate_limited",
         "cancelled",
         "timed_out",
       ])
