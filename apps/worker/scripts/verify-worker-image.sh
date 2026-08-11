@@ -6,6 +6,8 @@ if [ "${1:-}" = "--" ]; then
 fi
 
 image="${1:-lyrashieldai-worker:latest}"
+expected_app_revision="${2:-}"
+expected_engine_revision="${3:-}"
 configured_user="$(docker image inspect "$image" --format '{{.Config.User}}')"
 
 case "$configured_user" in
@@ -14,6 +16,22 @@ case "$configured_user" in
     exit 1
     ;;
 esac
+
+if [ -n "$expected_app_revision" ]; then
+  actual_app_revision="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+  if [ "$actual_app_revision" != "$expected_app_revision" ]; then
+    echo "worker image app revision mismatch (expected: $expected_app_revision, found: ${actual_app_revision:-unset})" >&2
+    exit 1
+  fi
+fi
+
+if [ -n "$expected_engine_revision" ]; then
+  actual_engine_revision="$(docker image inspect "$image" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')"
+  if [ "$actual_engine_revision" != "$expected_engine_revision" ]; then
+    echo "worker image engine revision mismatch (expected: $expected_engine_revision, found: ${actual_engine_revision:-unset})" >&2
+    exit 1
+  fi
+fi
 
 docker image inspect "$image" --format 'image_id={{.Id}} size_bytes={{.Size}} user={{.Config.User}}'
 

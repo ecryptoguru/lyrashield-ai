@@ -27,23 +27,27 @@ reviewer pack. The Gemini repository must additionally carry the `gemini-cli-ext
 3. Export and tag the public repository with an immutable version.
 4. Smoke-test OAuth connect, workspace selection, read-only MCP calls, denied writes, pending approval,
    disconnect/revocation, CLI API-key fallback, Zed, Codebuff, and the generated marketplace fixtures.
-5. Submit the shared listing to OpenAI/Codex, Claude, Cursor, GitHub/Copilot, Kiro, Cline, Kilo, Zed,
-   Codebuff, Gemini CLI, and ClawHub according to each channel's current intake.
+5. Submit the shared listing to OpenAI/Codex, Claude, Cursor, Kiro, Cline, Kilo, Zed, Codebuff,
+   Gemini CLI, and ClawHub according to each channel's current intake. Verify GitHub Copilot through
+   its direct Agent Plugin install path; Awesome Copilot is not a product-listing channel.
 
-Marketplace availability is claimed only for channels with a visible public listing or accepted
-submission; direct adapter guides remain available for clients without a verified marketplace
-program.
+Marketplace availability is claimed only for channels with a visible public listing, never merely a
+submitted application. Direct adapter guides remain available for clients without a verified
+marketplace program.
 
 ## Submission tracking
 
-- Cline: [issue #2213](https://github.com/cline/mcp-marketplace/issues/2213) submitted; awaiting review.
-- Kilo: [PR #217](https://github.com/Kilo-Org/kilo-marketplace/pull/217) submitted; awaiting review.
-- Zed: [PR #7149](https://github.com/zed-industries/extensions/pull/7149) submitted; upstream package, Danger, and CLA checks pass; awaiting maintainer review.
-- Gemini CLI: public repository topic `gemini-cli-extension` and root `gemini-extension.json` are live.
+Last checked: 2026-08-12.
+
+- GitHub Copilot: direct Agent Plugin install is supported. The [Awesome Copilot submission #2592](https://github.com/github/awesome-copilot/issues/2592) was rejected as a product-marketing submission; do not resubmit it.
+- Cline: [issue #2213](https://github.com/cline/mcp-marketplace/issues/2213) is open with no maintainer decision.
+- Kilo: [PR #217](https://github.com/Kilo-Org/kilo-marketplace/pull/217) is open and awaiting maintainer review.
+- Zed: [PR #7149](https://github.com/zed-industries/extensions/pull/7149) is open; package, Danger, and CLA checks pass after the capability fix, and it awaits maintainer re-review.
+- Gemini CLI: the public repository has the `gemini-cli-extension` topic and a public `v0.1.14` release.
 - OpenClaw: [ClawHub listing](https://clawhub.ai/ecryptoguru/skills/lyrashield) is published as a community listing; it is not an official OpenClaw channel.
-- Kiro: submission was received and is awaiting review.
+- Kiro: submitted; its reviewer state is not publicly exposed.
 - Claude: [plugin submissions](https://platform.claude.com/plugins/submissions) show two LyraShield AI submissions pending review.
 - Codebuff: the [LyraShield AI publisher](https://codebuff.com/publishers/lyrashield) has a public,
   unverified `0.1.1` listing with the MCP declaration live.
-- Cursor: the authenticated [publisher application](https://cursor.com/marketplace/publish) is available for submission; no existing LyraShield application status is exposed in the portal.
-- OpenAI/Codex: the [review version](https://platform.openai.com/apps-manage) is submitted and locked for review; the portal exposes no editable draft state.
+- Cursor: the authenticated [publisher application](https://cursor.com/marketplace/publish) is ready, but no application has been submitted.
+- OpenAI/Codex: LyraShield AI `0.1.10` is in review.

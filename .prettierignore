@@ -2,6 +2,7 @@ node_modules
 .next
 dist
 .turbo
+.worktrees
 coverage
 .pytest_cache
 pnpm-lock.yaml

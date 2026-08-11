@@ -18,6 +18,7 @@ export default defineConfig({
       "**/dist/**",
       "**/.next/**",
       "**/.turbo/**",
+      "**/.worktrees/**",
       "e2e/**",
       "apps/marketing/src/tests/**",
       "apps/marketing-motion/tests/**",

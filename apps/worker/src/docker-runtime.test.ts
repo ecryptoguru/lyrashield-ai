@@ -14,10 +14,36 @@ const imageVerifier = readFileSync(
   fileURLToPath(new URL("../scripts/verify-worker-image.sh", import.meta.url)),
   "utf8"
 )
+// The path is anchored to this test module rather than derived from external input.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const dockerIgnore = readFileSync(
+  fileURLToPath(new URL("../../../.dockerignore", import.meta.url)),
+  "utf8"
+)
+// The path is anchored to this test module rather than derived from external input.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const deployWorkflow = readFileSync(
+  fileURLToPath(new URL("../../../.github/workflows/deploy-azure.yml", import.meta.url)),
+  "utf8"
+)
+// The path is anchored to this test module rather than derived from external input.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const ciWorkflow = readFileSync(
+  fileURLToPath(new URL("../../../.github/workflows/ci.yml", import.meta.url)),
+  "utf8"
+)
+const pinnedNodeBase =
+  "node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43"
 
 describe("worker Docker runtime", () => {
+  it("pins every Node base stage to one immutable digest", () => {
+    expect(dockerfile).not.toMatch(/^FROM node:24-alpine AS/m)
+    expect(dockerfile.match(/^FROM node:24-alpine@sha256:[0-9a-f]{64} AS/gm) ?? []).toHaveLength(5)
+    expect(new Set(dockerfile.match(/node:24-alpine@sha256:[0-9a-f]{64}/g))).toHaveLength(1)
+  })
+
   it("starts with the vendored TypeScript runner without invoking Corepack", () => {
-    const workerStage = dockerfile.slice(dockerfile.indexOf("FROM node:24-alpine AS worker"))
+    const workerStage = dockerfile.slice(dockerfile.indexOf(`FROM ${pinnedNodeBase} AS worker`))
 
     expect(workerStage).not.toContain("corepack")
     expect(workerStage).toContain(
@@ -26,9 +52,9 @@ describe("worker Docker runtime", () => {
   })
 
   it("installs the engine non-editably and omits its build checkout", () => {
-    const workerMarker = "FROM node:24-alpine AS worker\n"
+    const workerMarker = `FROM ${pinnedNodeBase} AS worker\n`
     const engineStage = dockerfile.slice(
-      dockerfile.indexOf("FROM node:24-alpine AS worker-engine"),
+      dockerfile.indexOf(`FROM ${pinnedNodeBase} AS worker-engine`),
       dockerfile.indexOf(workerMarker)
     )
     const workerStage = dockerfile.slice(dockerfile.indexOf(workerMarker))
@@ -40,7 +66,7 @@ describe("worker Docker runtime", () => {
     expect(dockerfile).toContain(
       "pnpm --filter @lyrashield/worker deploy --prod --legacy /worker-runtime"
     )
-    expect(workerStage).toContain("COPY --from=workspace-builder /worker-runtime ./apps/worker")
+    expect(workerStage).toContain("COPY --from=worker-deps /worker-runtime ./apps/worker")
     expect(workerStage).not.toContain("COPY --from=deps /app/node_modules ./node_modules")
     expect(workerStage).not.toContain("COPY --from=workspace-builder /app/packages ./packages")
     expect(workerStage).toContain(
@@ -48,6 +74,62 @@ describe("worker Docker runtime", () => {
     )
     expect(workerStage).toContain('-name "*.test.ts"')
     expect(workerStage).toContain("-delete")
+  })
+
+  it("isolates the worker production deploy from the web build workspace", () => {
+    const workerDepsMarker = "FROM workspace-builder AS worker-deps\n"
+    const webBuilderMarker = "FROM workspace-builder AS web-builder\n"
+    const workerDepsStage = dockerfile.slice(
+      dockerfile.indexOf(workerDepsMarker),
+      dockerfile.indexOf(webBuilderMarker)
+    )
+
+    expect(dockerfile).toContain(workerDepsMarker)
+    expect(workerDepsStage).toContain(
+      "pnpm --filter @lyrashield/worker deploy --prod --legacy /worker-runtime"
+    )
+    expect(dockerfile).toContain("COPY --from=worker-deps /worker-runtime ./apps/worker")
+  })
+
+  it("keeps nested development worktrees out of image build contexts", () => {
+    expect(dockerIgnore.split("\n")).toContain(".worktrees/")
+    expect(dockerIgnore.split("\n")).toContain("lyrashield-engine/")
+  })
+
+  it("pins and records the exact engine revision used by production workers", () => {
+    expect(deployWorkflow).toMatch(/ENGINE_REVISION: [0-9a-f]{40}/)
+    expect(deployWorkflow).toContain("ref: ${{ env.ENGINE_REVISION }}")
+    expect(deployWorkflow).toContain("io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}")
+    expect(deployWorkflow).not.toContain("continue-on-error: true")
+    expect(deployWorkflow.match(/persist-credentials: false/g) ?? []).toHaveLength(2)
+    expect(deployWorkflow).not.toContain("runs-on: ubuntu-latest")
+    expect(deployWorkflow).not.toContain("id-token: write")
+    expect(deployWorkflow).toContain("actions/setup-node@820762786026740c76f36085b0efc47a31fe5020")
+    expect(deployWorkflow).toContain(
+      "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
+    )
+    expect(deployWorkflow).toContain("astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990")
+    expect(deployWorkflow).toContain('node-version: "24"')
+    expect(deployWorkflow).toContain('python-version: "3.12"')
+    expect(deployWorkflow).toContain("Verify engine-worker contract")
+    expect(deployWorkflow).toContain("working-directory: lyrashield-engine")
+    expect(deployWorkflow).toContain('./scripts/verify-worker-contract.sh "$GITHUB_WORKSPACE"')
+    expect(deployWorkflow).toContain("Verify pushed worker image")
+    expect(deployWorkflow).toContain("@${{ steps.build-worker.outputs.digest }}")
+    expect(deployWorkflow).toContain("tags: ${{ env.WORKER_IMAGE }}:${{ github.sha }}")
+    expect(deployWorkflow).not.toContain("${{ env.WORKER_IMAGE }}:latest")
+    expect(deployWorkflow).toContain('"${{ github.sha }}" "${{ env.ENGINE_REVISION }}"')
+    expect(imageVerifier).toContain("org.opencontainers.image.revision")
+    expect(imageVerifier).toContain("io.lyrashield.engine.revision")
+    expect(ciWorkflow).toContain("engine-worker-contract:")
+    expect(ciWorkflow).toContain("Read pinned engine revision")
+    expect(ciWorkflow).toContain("Verify engine revision provenance")
+    expect(ciWorkflow).toContain("Verify pinned engine-worker contract")
+    expect(ciWorkflow).toContain("ref: ${{ steps.engine.outputs.revision }}")
+    expect(ciWorkflow).not.toContain("id-token: write")
+    expect(deployWorkflow).toContain("Verify engine revision provenance")
+    expect(deployWorkflow).toContain("packages: write")
+    expect(deployWorkflow).not.toMatch(/^permissions:\n  contents: read\n  packages: write/m)
   })
 
   it("audits private-key content without rejecting public certificate bundles", () => {

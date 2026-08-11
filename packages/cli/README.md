@@ -51,12 +51,12 @@ The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). On
 ### Targets and scans
 
 - `scan [--target <targetId>] [--goal <goal>] [--mode <mode>] [--auto] [--repo <repo>]` — start a scan
-  - Default mode is `STANDARD`; use `pr-scan` for a low-cost `SAFE` pre-PR check.
+  - Default mode is `STANDARD`; use `pr-scan` for a low-cost `QUICK` pre-PR check. `SAFE` remains an accepted compatibility alias for repository targets.
   - Goals: `CHECK_PR`, `TEST_APP`, `LAUNCH_REVIEW`, `WEEKLY_MONITOR`, `FULL_PENTEST`, `COMPLIANCE_REVIEW`
   - Modes: `SAFE`, `QUICK`, `STANDARD`, `DEEP`, `CUSTOM`
   - With no target and no default project, pass `--auto` to detect the current git repo and create or reuse a target
   - Pass `--repo` as `owner/repo`, an HTTPS URL, or an SSH URL (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git`, `git@github.com:ecryptoguru/lyrashield-ai.git`)
-- `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>]` — shortcut for `scan --goal CHECK_PR --mode SAFE`
+- `pr-scan [--auto] [--repo <owner/repo>] [--mode <mode>]` — shortcut for `scan --goal CHECK_PR --mode QUICK`
 - `status [scanId] [--watch]` — list scans or inspect one scan
 - `targets [--name ... --type ... --url ... --repo ...]` — list or create targets
 - `readiness [--target <targetId>]` — get the launch-readiness verdict
@@ -67,12 +67,12 @@ Pick the cheapest mode that answers the question. Deeper modes consume more comp
 
 | Intent                   | Goal                             | Mode       |
 | ------------------------ | -------------------------------- | ---------- |
-| Pre-PR check             | `CHECK_PR`                       | `SAFE`     |
+| Pre-PR check             | `CHECK_PR`                       | `QUICK`    |
 | Quick check              | `TEST_APP`                       | `QUICK`    |
 | Standard repo review     | `TEST_APP`                       | `STANDARD` |
 | Launch review            | `LAUNCH_REVIEW`                  | `STANDARD` |
 | Deep / compliance review | `TEST_APP` / `COMPLIANCE_REVIEW` | `DEEP`     |
-| Weekly monitor           | `WEEKLY_MONITOR`                 | `SAFE`     |
+| Weekly monitor           | `WEEKLY_MONITOR`                 | `QUICK`    |
 
 ### Findings and fixes
 

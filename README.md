@@ -91,7 +91,7 @@ The authenticated workflow supports project targets, findings, deterministic rec
 
 ## Local setup
 
-Prerequisites: Node.js 20+ (this monorepo and CI are validated on Node 24), pnpm, Docker, and an environment file based on `.env.example`.
+Prerequisites: Node.js 24, pnpm 11, Docker, and an environment file based on `.env.example`. CI and production container stages use the same Node major; the container base is pinned by digest.
 
 ```bash
 pnpm install
@@ -129,6 +129,8 @@ Repository reviews run through [LyraShield Engine](https://github.com/ecryptogur
 LyraShield owns the product-critical execution contract: GPT-5.6 model policy, bounded context/output/agent/spend controls, non-interactive lifecycle and telemetry-off behavior, deterministic finding identity, evidence/control metadata, and the bounded worker artifacts. The upstream substrate remains responsible for reviewed generic sandbox, tool, agent-SDK, and vulnerability-skill plumbing. Read the engine's [ownership boundary](https://github.com/ecryptoguru/lyrashield-engine#ownership-boundary) and [upstream-import ledger](https://github.com/ecryptoguru/lyrashield-engine/blob/main/UPGRADES.md) for the exact line.
 
 Upgrades are deliberately review-gated: the engine records its incorporated Strix base, compares stable releases, prepares a review PR, and requires human approval plus its read-only CI gate. It never auto-resolves conflicts, force-pushes history, or deploys from the sync workflow. The [engine verification and upgrade guidance](https://github.com/ecryptoguru/lyrashield-engine#verification) describes the checks; they prove implementation compatibility, not scan accuracy or universal coverage.
+
+The application pins an exact engine commit in `.github/workflows/deploy-azure.yml`, executes the engine-owned worker contract against that checkout, builds the worker with it, and verifies the exact pushed worker digest before deployment can succeed. A new engine release is not active until that pin is deliberately advanced and the cross-repository gate passes.
 
 ## Security and release boundaries
 

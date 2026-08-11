@@ -1,5 +1,5 @@
 # ─── Stage 1: Install deps ─────────────────────────────────────────────────────
-FROM node:24-alpine AS deps
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS deps
 RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
@@ -30,7 +30,7 @@ COPY apps/worker/package.json ./apps/worker/
 RUN pnpm install --frozen-lockfile
 
 # ─── Stage 2: Build ────────────────────────────────────────────────────────────
-FROM node:24-alpine AS workspace-builder
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS workspace-builder
 RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
 
 WORKDIR /app
@@ -55,6 +55,8 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
 
 # Materialize only the worker's production dependency closure. This keeps the
 # final image independent of unrelated web, marketing, and test dependencies.
+FROM workspace-builder AS worker-deps
+
 RUN pnpm --filter @lyrashield/worker deploy --prod --legacy /worker-runtime
 
 FROM workspace-builder AS web-builder
@@ -76,7 +78,7 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     pnpm exec turbo run build --filter=@lyrashield/web
 
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────
-FROM node:24-alpine AS runner
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS runner
 RUN addgroup --system lyrashield && \
     adduser --system --ingroup lyrashield --home /app lyrashield
 
@@ -106,7 +108,7 @@ CMD ["node", "server.js"]
 # The `engine` named build context is supplied only by the worker service in
 # docker-compose.yml, so web/migration builds remain independent of the sibling
 # engine repository.
-FROM node:24-alpine AS worker-engine
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS worker-engine
 
 RUN apk add --no-cache python3 py3-pip build-base python3-dev git
 
@@ -128,7 +130,7 @@ RUN python3 -m venv /opt/uv-bootstrap && \
 # worker image to be needlessly large. The worker needs only workspace runtime
 # packages, its TypeScript entry point, the generated Prisma client, and the
 # isolated engine virtual environment.
-FROM node:24-alpine AS worker
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS worker
 
 RUN apk add --no-cache docker-cli git python3 && \
     addgroup --system lyrashield && \
@@ -140,7 +142,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PATH="/opt/lyrashield-venv/bin:$PATH"
 
-COPY --from=workspace-builder /worker-runtime ./apps/worker
+COPY --from=worker-deps /worker-runtime ./apps/worker
 COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
 
 # Product tests are build inputs, not worker runtime assets. Named volumes are

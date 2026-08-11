@@ -4,7 +4,7 @@ This guide covers local development only. `docker-compose.yml` binds services to
 
 ## Prerequisites
 
-- Node.js 20+ and pnpm 11
+- Node.js 24 and pnpm 11
 - Docker Desktop / Docker Engine
 - Git
 - `uv` only when developing the sibling engine repository
@@ -75,7 +75,7 @@ pnpm build
 git diff --check
 ```
 
-Current `main` passes **1,482 core tests in 146 files** (8 skipped), **112 marketing tests in 15 files**, **16 motion tests**, and **3 Chromium E2E tests**. Treat current command output, not a hard-coded count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
+Treat current command output, not a hard-coded test count, as authoritative. Playwright uses an isolated production preview on `127.0.0.1:3100`.
 
 ### Use the CLI
 
@@ -163,7 +163,7 @@ curl -fsS http://localhost:3000/api/ready/scans # ready after registration
 
 Use the dashboard/API cancellation action for queued or running scans. Never remove a Redis job directly: cancellation owns the database transition and event, active phases observe it, and reconciliation removes a remaining non-active job.
 
-The base `LYRASHIELD_LLM` is the fallback. During worker scans, Safe/Quick/Standard use `LYRASHIELD_LUNA_LLM` at medium reasoning. Deep/Custom use `LYRASHIELD_TERRA_LLM` at medium for the coordinator and `LYRASHIELD_LUNA_LLM` at medium for focused child specialists. The values after `azure/` or `azure_ai/` must be the real Azure deployment names.
+The base `LYRASHIELD_LLM` is the fallback. During worker scans, Safe/Quick/Standard use `LYRASHIELD_LUNA_LLM` at medium reasoning. Deep/Custom use `LYRASHIELD_TERRA_LLM` at medium for the coordinator and `LYRASHIELD_LUNA_LLM` at high for focused child specialists. The values after `azure/` or `azure_ai/` must be the real Azure deployment names.
 
 For Azure OpenAI, use the `azure/` prefix and endpoint or the Azure-specific variables:
 
@@ -218,9 +218,17 @@ LYRASHIELD_WEB_SEARCH_BUDGET_USD="1.0"       # separate web-search cap
 
 Keep `LYRASHIELD_WEB_SEARCH_ENABLED="0"` unless the key is configured. When enabled, the engine redacts target hostnames, secrets, and PII from the search query before it leaves the worker and tracks each call against the scan's web-search budget. No mode is gated today; the tool is available to all scan modes while you evaluate which ones benefit.
 
-Default spend limits are $3.20 for Safe, $1.20 for Quick, $3.20 for Standard, and $15 for Deep/Custom. A finite positive workspace `Policy.maxBudgetUsd` overrides the mode amount. The worker passes the resolved amount through `--max-budget-usd`; invalid or missing policy values fall back to the mode limit.
+Repository profiles are defined once in `packages/types/src/scan-profile.ts`:
 
-The dashboard names these modes Release Check (Safe), Code Review (Standard), and Deep Security Review (Deep); Weekly Monitor schedules use Safe. URL/API targets skip the external engine. Model cost, spend, cap, and accounting events remain private and are not rendered in the dashboard. See `userguide.md` for the user-facing option matrix and `PRODUCTION_DEPLOYMENT.md` for the operator rate card.
+| Product mode                     | AI route                               | Budget ceiling | Total ceiling | Engine ceiling | Scanner reserve |
+| -------------------------------- | -------------------------------------- | -------------: | ------------: | -------------: | --------------: |
+| Quick / Safe compatibility alias | Luna, medium                           |          $1.20 |        15 min |         12 min |           3 min |
+| Standard                         | Luna, medium                           |          $3.20 |        15 min |         12 min |           3 min |
+| Deep / Custom                    | Terra, medium + Luna, high specialists |          $5.00 |        45 min |         40 min |           5 min |
+
+A finite positive workspace `Policy.maxBudgetUsd` or `maxDurationMinutes` may lower the selected profile ceiling but cannot raise it. The worker passes the resolved amount through `--max-budget-usd`; an explicit zero budget fails closed, while invalid or missing values fall back to the profile limit. Web-app/API scans use deterministic profiles with no AI model and a $0 AI budget.
+
+The dashboard names these modes Release Check (Quick), Code Review (Standard), and Deep Security Review (Deep); Weekly Monitor schedules use Quick. Safe is a compatibility alias for Quick. URL/API targets skip the external engine. Model cost, spend, cap, and accounting events remain private and are not rendered in the dashboard. See `userguide.md` for the user-facing option matrix and `PRODUCTION_DEPLOYMENT.md` for the operator rate card.
 
 Routing verification without printing credentials:
 
@@ -231,12 +239,16 @@ docker compose exec worker sh -lc \
 
 After an authorized scan, inspect its timeline and confirm:
 
-- Safe/Quick/Standard: `engine_start` reports Luna and `medium`; `budget_cap` reports $3.20/$1.20/$3.20 respectively unless policy-overridden.
-- Deep/Custom: `engine_start` reports the Terra/medium coordinator; the run artifact records Luna/high delegates and the versioned routing policy; `budget_cap` reports $15 unless policy-overridden. On a root content-filter block, the engine switches directly to Luna/high without retrying Terra.
+- Safe/Quick/Standard: `engine_start` reports Luna and `medium`; `budget_cap` reports $1.20/$1.20/$3.20 respectively unless lowered by policy.
+- Deep/Custom: `engine_start` reports the Terra/medium coordinator; the run artifact records Luna/high delegates and the versioned routing policy; `budget_cap` reports $5 unless lowered by policy. On a root content-filter block, the engine switches directly to Luna/high without retrying Terra.
 - `llm_usage` is present when the provider returned usage data.
 - When request entries are complete, `llm_usage` records `pricingMethod: per_request_buckets` and separates standard/long-context input, cached reads, cache writes, and output. Aggregate-only input above 272,000 tokens remains unavailable instead of being guessed.
 
 Deep/Custom use deterministic tiering rather than model-selected promotion: Terra coordinates and judges cross-file evidence, while Luna/high executes focused specialist tasks. Only the root can create or stop specialists, preventing recursive child fan-out. Safe/Quick/Standard remain Luna-only at medium reasoning.
+
+Supported GPT-5.6 routes enable prompt caching by default. Stable role-specific cache keys keep reusable prompt prefixes aligned across coordinator and delegate calls. Verify `run.json` and private usage events retain separate cache-read and cache-write token counters; absence of provider bucket detail must remain explicitly unreconciled.
+
+The worker runs a bounded stale-resource reaper by default every 15 minutes with a 24-hour minimum age. It skips running containers and every scan in `QUEUED`, `PREFLIGHT`, `RUNNING`, or `VERIFYING`; a database ownership-read failure skips cleanup entirely. Never use broad Docker prune or recursive host cleanup as a substitute.
 
 Engine PRs #6, #7, and #20 are merged. Current engine behavior compacts estimated input at 240,000 tokens toward about 180,000 tokens, bounds direct dedupe input to 200 kB, limits output/agent concurrency, reserves projected spend before each request, and correctly extracts usage tokens from dict or object entries with provider-reported cache-read accounting. The engine also falls back from Terra to Luna on any `ModelBehaviorError` (not just content filter), treats Azure's `response.failed` without filter context as transient (retried with backoff), and salvages partial findings with `engine_stopped` terminal reason when the delegate also fails. These are code/build guarantees; they do not prove result quality or replace provider-meter reconciliation.
 

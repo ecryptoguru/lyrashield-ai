@@ -36,33 +36,24 @@ This product includes software developed by the following projects:
 
 ### Baseline
 
-- Upstream release/base: `v1.1.0` / `7d5a67d234bd3faef34d22be8c6f5a9607de41a3`
+- Upstream release/base: `v1.5.3` / `7cc9fa9faa0179fc7e35111102fe3d20a9028393`
 - Fork repository: `ecryptoguru/lyrashield-engine`
 - Integration model: controlled LyraShield derivative over a pinned upstream substrate; release imports require review, approval, and green CI
 
 ### Modified upstream files
 
-- `strix/config/loader.py`
-- `strix/config/settings.py` — added Azure AI env aliases (`AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`) and `LLM_API_VERSION` support
-- `strix/config/models.py` — mirrors Azure / Azure AI config into LiteLLM env vars; avoids `OPENAI_BASE_URL` for Azure providers
-- `strix/core/hooks.py`
-- `strix/interface/main.py`
-- `strix/interface/utils.py`
-- `strix/report/state.py`
-- `strix/runtime/docker_client.py`
-- `strix/telemetry/logging.py`
-- `pyproject.toml` and `uv.lock`
-- Existing tests under `tests/`
+- `strix/config/loader.py` — registers a pluggable product settings loader and falls back to the upstream settings class
+- `strix/skills/__init__.py` — avoids creating the telemetry thread when resolved product settings disable telemetry
 
-The current derivative also carries GPT-5.6-only validation, context/output/agent/spend limits, non-interactive lifecycle hardening, deterministic report identity, structured evidence/control metadata, and worker compatibility. The file list above is representative rather than exhaustive; `git diff $(cat .lyrashield-upstream-base)..HEAD -- strix` is authoritative. The current delta spans 57 modified `strix/` source files plus adapter and test additions. These changes do not grant a right to use upstream trademarks.
+All product-specific behavior lives in `lyrashield/**` and `lyrashield_adapter/**`. The controlled-derivative gate permits only these two generic upstream seams and enforces a maximum `strix/**` footprint of two files, 30 insertions, and no deletions; the current delta is +24/−0. `git diff $(cat .lyrashield-upstream-base)..HEAD -- strix` and `scripts/verify-controlled-derivative.sh` are authoritative. These changes do not grant a right to use upstream trademarks.
 
 ### Added fork files
 
 - `lyrashield_adapter/` — compatibility entry point and CLI adapter
-- `.lyrashield-upstream-base`, `scripts/check-upstream.sh`, and `scripts/verify-thin-fork.sh` — upstream-boundary verification
-- `.github/workflows/upstream-sync.yml` — daily/manual, PR-only stable-release synchronization
+- `.lyrashield-upstream-base`, `scripts/check-upstream.sh`, and `scripts/verify-controlled-derivative.sh` — upstream-boundary verification
+- `lyrashield/` — product-owned model, budget, compaction, lifecycle, identity, evidence, and worker-contract policy
 - `UPGRADES.md` and historical upstream-boundary design/plan records
-- Adapter, hardening, and upstream-sync regression tests
+- Adapter, hardening, controlled-derivative, and worker-contract regression tests
 
 ### Upstream synchronization
 
