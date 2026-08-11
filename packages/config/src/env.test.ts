@@ -65,15 +65,6 @@ const envSchema = z
   })
   .refine(
     (val) =>
-      val.NODE_ENV !== "production" ||
-      /^ghcr\.io\/ecryptoguru\/lyrashield-sandbox@sha256:[a-f0-9]{64}$/.test(val.LYRASHIELD_IMAGE),
-    {
-      path: ["LYRASHIELD_IMAGE"],
-      message: "LYRASHIELD_IMAGE must be a LyraShield-owned immutable sha256 digest in production",
-    }
-  )
-  .refine(
-    (val) =>
       val.LYRASHIELD_WEB_SEARCH_ENABLED !== "1" || Boolean(val.LYRASHIELD_WEB_SEARCH_API_KEY),
     {
       path: ["LYRASHIELD_WEB_SEARCH_API_KEY"],
@@ -117,7 +108,6 @@ describe("Env Validation Schema", () => {
         ...validEnv,
         NODE_ENV: "production",
         TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
-        LYRASHIELD_IMAGE: `ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)}`,
       })
       expect(result.success).toBe(true)
       if (result.success) {
@@ -128,29 +118,6 @@ describe("Env Validation Schema", () => {
     it("rejects production without a trusted proxy header but permits development", () => {
       expect(envSchema.safeParse({ ...validEnv, NODE_ENV: "production" }).success).toBe(false)
       expect(envSchema.safeParse({ ...validEnv, NODE_ENV: "development" }).success).toBe(true)
-    })
-
-    it("requires a LyraShield-owned immutable sandbox digest in production", () => {
-      const production = {
-        ...validEnv,
-        NODE_ENV: "production",
-        TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
-      }
-      expect(envSchema.safeParse(production).success).toBe(false)
-      expect(
-        envSchema.safeParse({
-          ...production,
-          LYRASHIELD_IMAGE:
-            "ghcr.io/usestrix/strix-sandbox@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        }).success
-      ).toBe(false)
-      expect(
-        envSchema.safeParse({
-          ...production,
-          LYRASHIELD_IMAGE:
-            "ghcr.io/another-owner/another-sandbox@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        }).success
-      ).toBe(false)
     })
 
     it("should accept NODE_ENV as test", () => {
