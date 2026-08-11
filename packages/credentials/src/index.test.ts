@@ -147,12 +147,13 @@ describe("resolveCredentials", () => {
 
 describe("refreshOAuthCredentials", () => {
   it("refreshes an expired stored OAuth access token and keeps the rotated refresh token", async () => {
+    const refreshedPayload = { access: "fresh-access-token", refresh: "fresh-refresh-token" }
     const fetchFn = vi.fn(
       async () =>
         new Response(
           JSON.stringify({
-            access_token: "fresh-access-token",
-            refresh_token: "fresh-refresh-token",
+            access_token: refreshedPayload.access,
+            refresh_token: refreshedPayload.refresh,
             expires_in: 3600,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }

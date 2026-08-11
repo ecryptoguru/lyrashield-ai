@@ -79,12 +79,13 @@ describe("resolveMcpCredentials", () => {
   })
 
   it("refreshes an expired stored OAuth credential before starting the MCP server", async () => {
+    const refreshed = { access: "fresh-oauth-access-token", refresh: "fresh-oauth-refresh-token" }
     const fetchFn = vi.fn(
       async () =>
         new Response(
           JSON.stringify({
-            access_token: "fresh-oauth-access-token",
-            refresh_token: "fresh-oauth-refresh-token",
+            access_token: refreshed.access,
+            refresh_token: refreshed.refresh,
             expires_in: 3600,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
