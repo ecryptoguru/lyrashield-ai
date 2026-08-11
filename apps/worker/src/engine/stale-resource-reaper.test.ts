@@ -37,7 +37,12 @@ describe("reapStaleScanResources", () => {
 
     await expect(
       reapStaleScanResources({ dependencies: deps, now: 100 * HOUR, minimumAgeMs: 24 * HOUR })
-    ).resolves.toEqual({ containersRemoved: 1, directoriesRemoved: 1, skippedActive: 2, skippedRunning: 1 })
+    ).resolves.toEqual({
+      containersRemoved: 1,
+      directoriesRemoved: 1,
+      skippedActive: 2,
+      skippedRunning: 1,
+    })
 
     expect(deps.removeContainer).toHaveBeenCalledWith("stale-container")
     expect(deps.removeContainer).not.toHaveBeenCalledWith("active-container")
@@ -50,14 +55,21 @@ describe("reapStaleScanResources", () => {
   it("fails closed when active scan ownership cannot be determined", async () => {
     const deps = dependencies({
       activeScanIds: vi.fn().mockRejectedValue(new Error("database unavailable")),
-      containers: vi.fn().mockResolvedValue([
-        { id: "stale-container", scanId: "stale-scan", createdAt: 0, running: false },
-      ]),
+      containers: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "stale-container", scanId: "stale-scan", createdAt: 0, running: false },
+        ]),
     })
 
     await expect(
       reapStaleScanResources({ dependencies: deps, now: 100 * HOUR, minimumAgeMs: 24 * HOUR })
-    ).resolves.toEqual({ containersRemoved: 0, directoriesRemoved: 0, skippedActive: 0, skippedRunning: 0 })
+    ).resolves.toEqual({
+      containersRemoved: 0,
+      directoriesRemoved: 0,
+      skippedActive: 0,
+      skippedRunning: 0,
+    })
     expect(deps.removeContainer).not.toHaveBeenCalled()
     expect(deps.removeDirectory).not.toHaveBeenCalled()
   })
