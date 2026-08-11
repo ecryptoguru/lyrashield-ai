@@ -123,8 +123,13 @@ describe("worker Docker runtime", () => {
     expect(imageVerifier).toContain("io.lyrashield.engine.revision")
     expect(ciWorkflow).toContain("engine-worker-contract:")
     expect(ciWorkflow).toContain("Read pinned engine revision")
+    expect(ciWorkflow).toContain("Verify engine revision provenance")
     expect(ciWorkflow).toContain("Verify pinned engine-worker contract")
     expect(ciWorkflow).toContain("ref: ${{ steps.engine.outputs.revision }}")
+    expect(ciWorkflow).not.toContain("id-token: write")
+    expect(deployWorkflow).toContain("Verify engine revision provenance")
+    expect(deployWorkflow).toContain("packages: write")
+    expect(deployWorkflow).not.toMatch(/^permissions:\n  contents: read\n  packages: write/m)
   })
 
   it("audits private-key content without rejecting public certificate bundles", () => {

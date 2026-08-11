@@ -309,9 +309,18 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/lyrashield-engine
           ref: ${{ steps.engine.outputs.revision }}
+          fetch-depth: 0
           path: lyrashield-engine
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
+
+      - name: Verify engine revision provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash .github/scripts/verify-engine-revision.sh \
+            lyrashield-engine "${{ steps.engine.outputs.revision }}" \
+            "${{ github.repository_owner }}/lyrashield-engine"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -565,4 +574,3 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write

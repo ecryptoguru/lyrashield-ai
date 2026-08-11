@@ -10,7 +10,6 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
 
 env:
   REGISTRY: ghcr.io
@@ -27,6 +26,9 @@ jobs:
     name: Build and push container images
     runs-on: ubuntu-24.04
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
     outputs:
       web_image: ${{ steps.meta.outputs.web_image }}
       worker_image: ${{ steps.meta.outputs.worker_image }}
@@ -45,9 +47,18 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/lyrashield-engine
           ref: ${{ env.ENGINE_REVISION }}
+          fetch-depth: 0
           path: lyrashield-engine
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
+
+      - name: Verify engine revision provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash .github/scripts/verify-engine-revision.sh \
+            lyrashield-engine "${{ env.ENGINE_REVISION }}" \
+            "${{ github.repository_owner }}/lyrashield-engine"
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -182,6 +193,8 @@ jobs:
     name: Deploy Azure Container Apps
     needs: build
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     environment:
       name: azure-production
       url: ${{ env.APP_URL }}
