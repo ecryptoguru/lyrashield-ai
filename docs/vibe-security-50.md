@@ -22,7 +22,7 @@ The executable source of truth is `packages/security/src/vibe-security-controls.
 
 The scan-detail experience groups these receipts by control family and exposes the complete 50-control ledger on demand. The seven evidence-required controls are outside-scan requirements, not scanner failures. Version 1.1 does not claim an evidence-submission workflow that the product does not yet provide.
 
-The dashboard exposes this contract through Release Check, Code Review, and Deep Security Review; Weekly Monitor is the recurring Safe workflow. These presets change review depth, not the definition of the 50 controls. URL/API scans show only applicable deterministic receipts and never pretend repository or operational controls ran. See `userguide.md` §§8–10 for the user-facing interpretation.
+The dashboard exposes this contract through Release Check, Code Review, and Deep Security Review; Weekly Monitor is the recurring Quick workflow. These presets change review depth, not the definition of the 50 controls. URL/API scans show only applicable deterministic receipts and never pretend repository or operational controls ran. See `userguide.md` §§8–10 for the user-facing interpretation.
 
 ## Execution controls
 
