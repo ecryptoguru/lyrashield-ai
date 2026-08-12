@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/kilo-code", origin).toString()
 const title = "LyraShield MCP for Kilo Code — Setup Guide"
 const description =
   'Connect LyraShield to Kilo Code. Configure kilo.jsonc with the mcp key and type:"local". Uses the same single-brace {env:VAR} interpolation as OpenCode.'
-const updatedDate = "2026-07-31"
+const updatedDate = "2026-08-13"
 
 const jsonLd: unknown[] = [
   {
@@ -48,8 +48,9 @@ const jsonLd: unknown[] = [
 >
   <h1>Kilo Code</h1>
   <p>
-    Kilo Code reads MCP servers from <code>kilo.jsonc</code> in your project root (JSONC — JSON
-    with comments). The root key is <code>mcp</code>.
+    Kilo Code reads project MCP servers from <code>kilo.jsonc</code> (JSONC — JSON with comments).
+    The root key is <code>mcp</code>. It also recognizes <code>.kilo/kilo.jsonc</code> when a team
+    prefers the hidden project directory.
   </p>
 
   <h2>Install with the CLI (fastest)</h2>

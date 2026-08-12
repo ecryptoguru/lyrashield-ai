@@ -90,8 +90,6 @@ const strategyNotes: Record<string, string> = {
     "PiCode: manual. The exact config file path is not documented; use the command below as a reference and verify with PiCode's docs.",
   openclaw:
     "OpenClaw: manual. The profile YAML path is not verified; use the command below as a reference.",
-  hermes:
-    "Hermes: manual. The profile YAML path is not documented; use the command below as a reference.",
 }
 
 let snippet = ""
@@ -175,7 +173,12 @@ if (safeAgent.installStrategy === "config-file") {
 
 {!secondary && (
   <div class="callout">
-    <strong>One-line install:</strong> the CLI writes exactly the configuration above.
+    <strong>One-line install:</strong>
+    {safeAgent.installStrategy === "config-file"
+      ? " the CLI writes exactly the configuration above."
+      : safeAgent.installStrategy === "vendor-cli"
+        ? " the CLI delegates this setup to the agent's own installer."
+        : " the CLI prints these connection values; add them in the agent's own settings UI."}
     <pre><code>npx lyrashield install {agentId}</code></pre>
   </div>
 )}

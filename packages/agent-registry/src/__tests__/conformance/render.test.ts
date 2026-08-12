@@ -134,8 +134,8 @@ describe("conformance: renderConfig round-trips through the format parser", () =
 
   describe("deriveMcpUrl URL normalization", () => {
     it("strips a stale /api suffix from the remote HTTP endpoint", () => {
-      const windsurf = AGENTS.find((a) => a.id === "windsurf")!
-      const { content } = renderConfig(windsurf, {
+      const cursor = AGENTS.find((a) => a.id === "cursor")!
+      const { content } = renderConfig(cursor, {
         transport: "remote-http",
         apiUrl: "https://app.lyrashieldai.com/api",
         secretMode: "interpolated",
@@ -143,14 +143,14 @@ describe("conformance: renderConfig round-trips through the format parser", () =
         serverName: SERVER_NAME,
       })
       const parsed = parseContent("json", content)
-      const root = parsed[windsurf.rootKey!] as Record<string, unknown>
+      const root = parsed[cursor.rootKey!] as Record<string, unknown>
       const entry = root[SERVER_NAME] as Record<string, unknown>
-      expect(entry.serverUrl).toBe("https://app.lyrashieldai.com/api/mcp")
+      expect(entry.url).toBe("https://app.lyrashieldai.com/api/mcp")
     })
 
     it("strips a stale /api/v1 suffix from the remote HTTP endpoint", () => {
-      const windsurf = AGENTS.find((a) => a.id === "windsurf")!
-      const { content } = renderConfig(windsurf, {
+      const cursor = AGENTS.find((a) => a.id === "cursor")!
+      const { content } = renderConfig(cursor, {
         transport: "remote-http",
         apiUrl: "https://app.lyrashieldai.com/api/v1",
         secretMode: "interpolated",
@@ -158,9 +158,9 @@ describe("conformance: renderConfig round-trips through the format parser", () =
         serverName: SERVER_NAME,
       })
       const parsed = parseContent("json", content)
-      const root = parsed[windsurf.rootKey!] as Record<string, unknown>
+      const root = parsed[cursor.rootKey!] as Record<string, unknown>
       const entry = root[SERVER_NAME] as Record<string, unknown>
-      expect(entry.serverUrl).toBe("https://app.lyrashieldai.com/api/mcp")
+      expect(entry.url).toBe("https://app.lyrashieldai.com/api/mcp")
     })
   })
 })

@@ -1,0 +1,77 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/devin", origin).toString()
+const title = "LyraShield MCP for Devin — Setup Guide"
+const description =
+  "Connect LyraShield to Devin through its MCP Marketplace using a remote Streamable HTTP server."
+const updatedDate = "2026-08-13"
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/devin"
+>
+  <h1>Devin</h1>
+  <p>
+    Devin connects custom MCP servers through its MCP Marketplace. It does not use the legacy
+    Windsurf configuration path. Configure LyraShield in the Devin UI and verify the server before
+    relying on it in a session.
+  </p>
+
+  <h2>Add LyraShield in Devin</h2>
+  <ol>
+    <li>Open <strong>Settings → MCP Marketplace</strong> in Devin.</li>
+    <li>Select <strong>Add Your Own</strong> and choose <strong>HTTP</strong>.</li>
+    <li>Enter <code>https://app.lyrashieldai.com/api/mcp</code> as the server URL.</li>
+    <li>
+      Add an <code>Authorization</code> header with <code>Bearer &lt;your lsk_ API key&gt;</code>.
+      Keep that key out of source control.
+    </li>
+    <li>Save, then select <strong>Test listing tools</strong>.</li>
+  </ol>
+
+  <div class="callout">
+    <strong>Use the test result as the connection check:</strong> Devin runs the test in an
+    isolated environment and reports connectivity, authentication, or timeout failures before the
+    server is enabled for work.
+  </div>
+
+  <h2>Credential choice</h2>
+  <p>
+    Use a scoped LyraShield API key for the Marketplace header. The local OAuth device flow is for
+    LyraShield CLI and local stdio clients; Devin&apos;s hosted Marketplace configuration needs the
+    header supplied in its UI.
+  </p>
+
+  <h2>Verify the connection</h2>
+  <p>
+    After the Marketplace test passes, start a Devin session and ask which LyraShield tools are
+    available. Remote write actions remain approval-gated; read-only inspection does not grant
+    permission to trigger a scan or create a pull request.
+  </p>
+
+  <p>
+    See Devin&apos;s <a href="https://docs.devin.ai/work-with-devin/mcp">official MCP Marketplace documentation</a>
+    for its current transport fields and troubleshooting guidance.
+  </p>
+</DocsLayout>

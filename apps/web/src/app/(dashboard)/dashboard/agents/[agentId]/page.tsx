@@ -78,11 +78,11 @@ export default async function AgentWizardPage({
 function BackLink() {
   return (
     <Link
-      href="/dashboard/integrations?tab=agents"
+      href="/dashboard/agents"
       className="text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center gap-1.5 text-sm font-medium"
     >
       <ArrowLeft className="size-4" aria-hidden="true" />
-      All agent integrations
+      All coding agents
     </Link>
   )
 }

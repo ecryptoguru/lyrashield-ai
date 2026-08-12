@@ -18,6 +18,7 @@ const PERMANENT_REDIRECTS: Record<string, string> = {
   "/docs": "/docs/integrations",
   "/resources": "/blog",
   "/how-it-works": "/#how-it-works",
+  "/docs/integrations/windsurf": "/docs/integrations/devin",
 }
 
 export const onRequest = defineMiddleware(async ({ url }, next) => {

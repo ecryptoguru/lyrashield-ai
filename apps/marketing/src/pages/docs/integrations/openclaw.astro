@@ -6,8 +6,8 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/openclaw", origin).toString()
 const title = "LyraShield MCP for OpenClaw — Setup Guide"
 const description =
-  "Connect LyraShield to OpenClaw agent runtime using MCPorter YAML. Define the stdio transport under mcp_servers: and optionally add a skill.md to teach OpenClaw when to invoke LyraShield."
-const updatedDate = "2026-07-31"
+  "Connect LyraShield to OpenClaw through its MCP registry or Control UI. Configure a local stdio or Streamable HTTP server, then probe it before enabling it for agent runs."
+const updatedDate = "2026-08-13"
 
 const jsonLd: unknown[] = [
   {
@@ -48,24 +48,22 @@ const jsonLd: unknown[] = [
 >
   <h1>OpenClaw</h1>
   <p>
-    OpenClaw uses MCPorter YAML to configure MCP server connections. Define the LyraShield server
-    under the <code>mcp_servers:</code> key with stdio transport.
+    OpenClaw manages client-side MCP servers through its MCP registry and Control UI. Do not use
+    MCPorter configuration for OpenClaw-managed servers.
   </p>
 
   <h2>Get the exact values with the CLI</h2>
   <p>
-    There's no config file LyraShield can safely write for OpenClaw yet. Run{" "}
-    <code>npx lyrashield install openclaw</code> anyway — it won't write anything, but it prints the
-    exact command, arguments, and environment values below, generated from the current registry, so
-    this page can't drift out of sync with what you actually need to paste in.
+    LyraShield prints the connection values, then OpenClaw stores them through its own MCP UI or
+    CLI. Run <code>npx lyrashield install openclaw</code> to retrieve the local command values.
   </p>
   <pre><code>npx lyrashield install openclaw</code></pre>
 
-  <h2>MCPorter YAML configuration</h2>
+  <h2>Add the server in OpenClaw</h2>
   <p>
-    Add the following to your MCPorter YAML configuration file (typically <code>
-      mcporter.yaml
-    </code> or your OpenClaw agent profile YAML):
+    In the Control UI, open <strong>Settings → MCP</strong>, add a server, and enter the values
+    below. Alternatively use <code>openclaw mcp add</code> for a local server or
+    <code>openclaw mcp set</code> for a remote server.
   </p>
 
   <AgentSnippet agentId="openclaw" />
@@ -90,8 +88,8 @@ Use the lyrashield MCP tools available in the tool registry.`}</code></pre>
 
   <h2>Verify the connection</h2>
   <p>
-    Start OpenClaw and list available tools. The LyraShield tools from the MCP server should appear
-    in the tool registry.
+    Run <code>openclaw mcp doctor --probe</code> after saving. It checks the saved configuration,
+    connects to the server, and lists the available tools.
   </p>
 
   <div class="callout callout--warn">
