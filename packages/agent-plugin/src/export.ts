@@ -12,6 +12,7 @@ const PUBLIC_FILES = [
   "mcp.json",
   "skills",
   ".claude-plugin/plugin.json",
+  ".claude-plugin/marketplace.json",
   ".codex-plugin/plugin.json",
   ".cursor-plugin/plugin.json",
   ".kiro-plugin/plugin.json",
