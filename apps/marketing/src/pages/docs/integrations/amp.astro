@@ -6,8 +6,8 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/amp", origin).toString()
 const title = "LyraShield MCP for Amp (Sourcegraph) — Setup Guide"
 const description =
-  "Add the LyraShield MCP server to Amp by Sourcegraph using the amp mcp add CLI command. Amp stores MCP config globally — there is no per-project config file."
-const updatedDate = "2026-07-31"
+  "Add the LyraShield MCP server to Amp using its CLI. Keep credentials in your shell environment, and choose an always-available server or a task-scoped Agent Skill."
+const updatedDate = "2026-08-13"
 
 const jsonLd: unknown[] = [
   {
@@ -46,15 +46,15 @@ const jsonLd: unknown[] = [
   updatedDate={updatedDate}
   currentPath="/docs/integrations/amp"
 >
-  <h1>Amp (Sourcegraph)</h1>
+  <h1>Amp</h1>
   <p>
-    Amp uses a CLI command to register MCP servers. The config is stored globally — there is no
-    per-project MCP config file.
+    Amp uses a CLI command to register MCP servers. It can also load MCP configuration from an
+    Agent Skill, which keeps the tools out of context until that skill is needed.
   </p>
 
   <div class="callout">
-    <strong>Global only:</strong> Amp MCP config applies across all projects for the current user.
-    Set your API key as a shell environment variable rather than hardcoding it in the command.
+    <strong>Keep secrets out of config:</strong> Set your API key as a shell environment variable
+    rather than hardcoding it in a command or settings file.
   </div>
 
   <h2>Install with the CLI (fastest)</h2>

@@ -38,7 +38,7 @@ const docsPaths = [
   "/docs/integrations/roo-code",
   "/docs/integrations/troubleshooting",
   "/docs/integrations/vscode",
-  "/docs/integrations/windsurf",
+  "/docs/integrations/devin",
   "/docs/integrations/zed",
 ]
 

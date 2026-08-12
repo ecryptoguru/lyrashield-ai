@@ -7,7 +7,7 @@ const canonical = new URL("/docs/integrations/hermes", origin).toString()
 const title = "LyraShield MCP for Hermes (Nous Research) — Setup Guide"
 const description =
   "Connect LyraShield to Hermes by Nous Research. Configure the mcp_servers: block in your profile YAML for stdio transport. Hermes also supports ACP for editor integrations."
-const updatedDate = "2026-07-31"
+const updatedDate = "2026-08-13"
 
 const jsonLd: unknown[] = [
   {
@@ -48,21 +48,19 @@ const jsonLd: unknown[] = [
 >
   <h1>Hermes (Nous Research)</h1>
   <p>
-    Hermes by Nous Research reads MCP server configuration from a profile YAML file under the{" "}
-    <code>mcp_servers:</code> key.
+    Hermes by Nous Research reads MCP server configuration from <code>~/.hermes/config.yaml</code>
+    under the <code>mcp_servers:</code> key.
   </p>
 
-  <h2>Get the exact values with the CLI</h2>
+  <h2>Install with the CLI</h2>
   <p>
-    There's no config file LyraShield can safely write for Hermes yet. Run{" "}
-    <code>npx lyrashield install hermes</code> anyway — it won't write anything, but it prints the
-    exact command, arguments, and environment values below, generated from the current registry, so
-    this page can't drift out of sync with what you actually need to paste in.
+    Run <code>npx lyrashield install hermes</code> to merge the LyraShield entry into the documented
+    user configuration file. Use <code>--dry-run</code> first if you want to inspect the change.
   </p>
   <pre><code>npx lyrashield install hermes</code></pre>
 
   <h2>Profile YAML configuration</h2>
-  <p>Add the following to your Hermes profile YAML:</p>
+  <p>Add the following to <code>~/.hermes/config.yaml</code> if you prefer to configure it manually:</p>
 
   <AgentSnippet agentId="hermes" />
 
@@ -75,8 +73,8 @@ const jsonLd: unknown[] = [
 
   <h2>Verify the connection</h2>
   <p>
-    Start Hermes with your profile and list available tools. The LyraShield MCP tools should appear
-    in the tool registry. Ask the agent: <em>"What LyraShield security tools do you have?"</em>
+    Run <code>hermes mcp test lyrashield</code> after saving, then start Hermes and list available
+    tools. The LyraShield MCP tools should appear in the tool registry.
   </p>
 
   <div class="callout callout--warn">

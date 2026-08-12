@@ -160,6 +160,10 @@ exports[`renderConfig snapshot — every agent × every transport > cursor × st
 
 exports[`renderConfig snapshot — every agent × every transport > cursor-agent-plugin × stdio 1`] = `[Error: Agent "cursor-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
 
+exports[`renderConfig snapshot — every agent × every transport > devin × remote-http 1`] = `[Error: Agent "devin" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
+exports[`renderConfig snapshot — every agent × every transport > devin × stdio 1`] = `[Error: Agent "devin" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > devin-cli × stdio 1`] = `
 "{
   "mcpServers": {
@@ -202,7 +206,25 @@ exports[`renderConfig snapshot — every agent × every transport > goose × rem
 
 exports[`renderConfig snapshot — every agent × every transport > goose × stdio 1`] = `[Error: Agent "goose" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
-exports[`renderConfig snapshot — every agent × every transport > hermes × stdio 1`] = `[Error: Agent "hermes" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+exports[`renderConfig snapshot — every agent × every transport > hermes × remote-http 1`] = `
+"mcp_servers:
+  lyrashield:
+    url: "https://app.lyrashieldai.com/api/mcp"
+    headers:
+      Authorization: "Bearer lsk_test_lyrashield_api_key""
+`;
+
+exports[`renderConfig snapshot — every agent × every transport > hermes × stdio 1`] = `
+"mcp_servers:
+  lyrashield:
+    command: "npx"
+    args:
+      - "-y"
+      - "@lyrashield/mcp"
+    env:
+      LYRASHIELD_API_URL: "https://app.lyrashieldai.com"
+      LYRASHIELD_API_KEY: "lsk_test_lyrashield_api_key""
+`;
 
 exports[`renderConfig snapshot — every agent × every transport > jetbrains × stdio 1`] = `[Error: Agent "jetbrains" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
@@ -290,6 +312,8 @@ LYRASHIELD_API_KEY = "lsk_test_lyrashield_api_key""
 
 exports[`renderConfig snapshot — every agent × every transport > openai-codex-agent-plugin × stdio 1`] = `[Error: Agent "openai-codex-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
 
+exports[`renderConfig snapshot — every agent × every transport > openclaw × remote-http 1`] = `[Error: Agent "openclaw" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
+
 exports[`renderConfig snapshot — every agent × every transport > openclaw × stdio 1`] = `[Error: Agent "openclaw" uses installStrategy "guided-manual"; renderConfig/renderEntry only support "config-file" agents.]`;
 
 exports[`renderConfig snapshot — every agent × every transport > opencode × remote-http 1`] = `
@@ -310,15 +334,16 @@ exports[`renderConfig snapshot — every agent × every transport > opencode × 
 "{
   "mcp": {
     "lyrashield": {
-      "command": "npx",
-      "args": [
+      "command": [
+        "npx",
         "-y",
         "@lyrashield/mcp"
       ],
-      "env": {
+      "environment": {
         "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
         "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
       },
+      "enabled": true,
       "type": "local"
     }
   }
@@ -393,37 +418,6 @@ exports[`renderConfig snapshot — every agent × every transport > vscode × st
 `;
 
 exports[`renderConfig snapshot — every agent × every transport > vscode-agent-plugin × stdio 1`] = `[Error: Agent "vscode-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.]`;
-
-exports[`renderConfig snapshot — every agent × every transport > windsurf × remote-http 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "serverUrl": "https://app.lyrashieldai.com/api/mcp",
-      "headers": {
-        "Authorization": "Bearer lsk_test_lyrashield_api_key"
-      }
-    }
-  }
-}"
-`;
-
-exports[`renderConfig snapshot — every agent × every transport > windsurf × stdio 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@lyrashield/mcp"
-      ],
-      "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com",
-        "LYRASHIELD_API_KEY": "lsk_test_lyrashield_api_key"
-      }
-    }
-  }
-}"
-`;
 
 exports[`renderConfig snapshot — every agent × every transport > zed × stdio 1`] = `
 "{

@@ -7,6 +7,7 @@ import {
   Settings,
   Users,
   Plug,
+  Bot,
   ClipboardCheck,
   type LucideIcon,
 } from "lucide-react"
@@ -115,6 +116,12 @@ const WORKSPACE_NAV_ITEMS: NavItem[] = [
     label: NOTIFICATION_PLURAL,
     shortLabel: NOTIFICATION_PLURAL,
     icon: Bell,
+  },
+  {
+    href: "/dashboard/agents",
+    label: "Coding Agents",
+    shortLabel: "Agents",
+    icon: Bot,
   },
   {
     href: "/dashboard/integrations",

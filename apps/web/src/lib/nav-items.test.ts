@@ -78,6 +78,18 @@ describe("nav-items lifecycle primary destinations", () => {
   })
 })
 
+describe("nav-items workspace destinations", () => {
+  it("keeps coding agents before direct service integrations", () => {
+    expect(SECONDARY_NAV_ITEMS.map((item) => item.href)).toEqual([
+      "/dashboard/notifications",
+      "/dashboard/agents",
+      "/dashboard/integrations",
+      "/dashboard/team",
+      "/dashboard/settings",
+    ])
+  })
+})
+
 describe("nav-items conditional Review Queue", () => {
   it("hides Review Queue when there are no pending approvals", () => {
     const nav = resolveNav({ pendingApprovals: 0 })

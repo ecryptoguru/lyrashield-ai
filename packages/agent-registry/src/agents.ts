@@ -1,7 +1,7 @@
 import type { AgentEntry } from "./types"
 import { API_URL_PLACEHOLDER } from "./render"
 
-const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-07-31"
+const LAST_AGENT_REGISTRY_CHECK_DATE = "2026-08-13"
 
 const claudeCode: AgentEntry = {
   id: "claude-code",
@@ -69,33 +69,27 @@ const cursor: AgentEntry = {
   ],
 }
 
-const windsurf: AgentEntry = {
-  id: "windsurf",
-  displayName: "Devin Desktop (Windsurf)",
-  docsSlug: "windsurf",
-  installStrategy: "config-file",
-  format: "json",
-  rootKey: "mcpServers",
-  locations: [
-    {
-      scope: "global",
-      path: "~/.codeium/windsurf/mcp_config.json",
-      sharedByConvention: false,
-    },
-  ],
+const devin: AgentEntry = {
+  id: "devin",
+  displayName: "Devin",
+  docsSlug: "devin",
+  installStrategy: "guided-manual",
+  format: null,
+  rootKey: null,
+  locations: [],
   transports: ["stdio", "remote-http"],
   credential: { kind: "inline-env" },
   transportFields: {
-    "remote-http": { serverUrl: API_URL_PLACEHOLDER },
+    "remote-http": { type: "http", url: API_URL_PLACEHOLDER },
   },
-  rulesFiles: [".windsurf/rules/lyrashield.md"],
+  rulesFiles: [],
   source: {
-    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://docs.devin.ai/windsurf/plugins/cascade/mcp",
+    checkedOn: "2026-08-13",
+    url: "https://docs.devin.ai/work-with-devin/mcp",
   },
   gotchas: [
-    "Windsurf is now Devin Desktop (June 2026); the config path ~/.codeium/windsurf/mcp_config.json is unchanged. This entry is the Devin Desktop (Cascade) surface — the separate Devin CLI uses .devin/config.local.json (see the devin-cli entry).",
-    "Windsurf's remote form uses `serverUrl`, not `url`. Add via the MCP Marketplace UI or View raw config, then click Refresh.",
+    "In Devin, open Settings → MCP Marketplace → Add Your Own. Configure the server in that UI; Devin does not document a local JSON configuration file for custom MCP servers.",
+    "For LyraShield's remote server, select HTTP (Streamable HTTP), enter the endpoint and Bearer header, save it, then use Test listing tools before enabling it for work.",
   ],
 }
 
@@ -112,16 +106,6 @@ const vscode: AgentEntry = {
       path: ".vscode/mcp.json",
       sharedByConvention: true,
     },
-    {
-      scope: "global",
-      path: "~/.config/Code/User/settings.json",
-      platform: {
-        darwin: "~/Library/Application Support/Code/User/settings.json",
-        linux: "~/.config/Code/User/settings.json",
-        win32: "~/AppData/Roaming/Code/User/settings.json",
-      },
-      sharedByConvention: false,
-    },
   ],
   transports: ["stdio", "remote-http"],
   credential: { kind: "inline-env" },
@@ -137,7 +121,7 @@ const vscode: AgentEntry = {
   gotchas: [
     "VS Code uses `servers`, not `mcpServers`; using `mcpServers` silently fails.",
     'VS Code stdio entries require `type: "stdio"`; remote entries use `type: "http"`.',
-    "Global VS Code settings.json is per-platform; verify the resolved path against your installation.",
+    "For a user-profile server, run MCP: Open User Configuration or MCP: Add Server. VS Code owns the profile-specific mcp.json path, so do not edit settings.json for MCP configuration.",
   ],
 }
 
@@ -214,6 +198,7 @@ const opencode: AgentEntry = {
     stdio: { type: "local" },
     "remote-http": { type: "remote", url: API_URL_PLACEHOLDER },
   },
+  stdioStyle: "array-command-environment",
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -221,7 +206,7 @@ const opencode: AgentEntry = {
   },
   gotchas: [
     "OpenCode uses single-brace `{env:VAR}` syntax, not `${VAR}`; wrong syntax passes the literal string through.",
-    'OpenCode entries need `type: "local"` for stdio and `type: "remote"` for remote.',
+    'OpenCode local entries use `type: "local"`, a command array, and `environment`; remote entries use `type: "remote"`.',
   ],
 }
 
@@ -248,6 +233,7 @@ const kiloCode: AgentEntry = {
     stdio: { type: "local" },
     "remote-http": { type: "remote", url: API_URL_PLACEHOLDER },
   },
+  stdioStyle: "array-command-environment",
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -256,7 +242,7 @@ const kiloCode: AgentEntry = {
   gotchas: [
     "Kilo Code uses single-brace `{env:VAR}` syntax, not `${VAR}`; wrong syntax passes the literal string through.",
     "Kilo Code's file is JSONC; a JSON.parse/stringify round-trip destroys the user's comments.",
-    'Kilo Code entries need `type: "local"` for stdio and `type: "remote"` for remote.',
+    'Kilo Code local entries use `type: "local"`, a command array, and `environment`; remote entries use `type: "remote"`.',
   ],
 }
 
@@ -348,7 +334,10 @@ const amp: AgentEntry = {
   locations: [],
   transports: ["stdio"],
   credential: { kind: "shell-env" },
-  vendorCli: { command: "amp", args: ["mcp", "add"] },
+  vendorCli: {
+    command: "amp",
+    args: ["mcp", "add", "lyrashield", "--", "npx", "-y", "@lyrashield/mcp"],
+  },
   rulesFiles: ["AGENTS.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
@@ -356,7 +345,7 @@ const amp: AgentEntry = {
   },
   gotchas: [
     "Amp takes no --env flags; the key must be exported in the user's shell profile and inherited by the Amp CLI.",
-    "Amp config is global and CLI-managed; there is no per-project file.",
+    "Amp can use global or workspace settings. The CLI command adds an always-available server; use an Agent Skill when the tools should only load for a relevant task.",
   ],
 }
 
@@ -388,16 +377,19 @@ const openclaw: AgentEntry = {
   format: null,
   rootKey: null,
   locations: [],
-  transports: ["stdio"],
+  transports: ["stdio", "remote-http"],
   credential: { kind: "inline-env" },
+  transportFields: {
+    "remote-http": { transport: "streamable-http", url: API_URL_PLACEHOLDER },
+  },
   rulesFiles: ["OpenClaw skill.md"],
   source: {
     checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
     url: "https://docs.openclaw.ai/gateway/configuration-reference",
   },
   gotchas: [
-    "OpenClaw's `mcporter.yaml` resolution order and profile YAML path are not verified.",
-    "If promoted to config-file, OpenClaw uses YAML with `mcp_servers` root, stdio transport, and must declare `transport: stdio` explicitly.",
+    "OpenClaw manages client-side servers with `openclaw mcp add`, `set`, and `configure`, or in its Control UI at /settings/mcp. Do not use mcporter configuration for OpenClaw-managed servers.",
+    'For a local server, declare `transport: stdio` explicitly. For Streamable HTTP, use `transport: "streamable-http"`; then run `openclaw mcp doctor --probe` for a live tool-list check.',
   ],
 }
 
@@ -405,11 +397,11 @@ const hermes: AgentEntry = {
   id: "hermes",
   displayName: "Hermes",
   docsSlug: "hermes",
-  installStrategy: "guided-manual",
-  format: null,
-  rootKey: null,
-  locations: [],
-  transports: ["stdio"],
+  installStrategy: "config-file",
+  format: "yaml",
+  rootKey: "mcp_servers",
+  locations: [{ scope: "global", path: "~/.hermes/config.yaml", sharedByConvention: false }],
+  transports: ["stdio", "remote-http"],
   credential: { kind: "inline-env" },
   rulesFiles: ["AGENTS.md"],
   source: {
@@ -417,8 +409,8 @@ const hermes: AgentEntry = {
     url: "https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference",
   },
   gotchas: [
-    "Hermes' profile YAML path is not documented.",
-    "If promoted to config-file, Hermes uses YAML with `mcp_servers` root, stdio transport, and must declare `transport: stdio` explicitly.",
+    "Hermes stores MCP entries under `mcp_servers` in ~/.hermes/config.yaml. It also supports `hermes mcp add` and `hermes mcp test <name>` from the CLI.",
+    "Hermes resolves `${env:VAR}` and `${VAR}` in its YAML configuration. Prefer the environment reference over storing a key in config.yaml.",
   ],
 }
 
@@ -868,7 +860,7 @@ const kiroPlugin: AgentEntry = {
 export const AGENTS: readonly AgentEntry[] = [
   claudeCode,
   cursor,
-  windsurf,
+  devin,
   vscode,
   openaiCodex,
   cline,

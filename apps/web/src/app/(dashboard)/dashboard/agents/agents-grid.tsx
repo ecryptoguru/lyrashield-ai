@@ -142,10 +142,10 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
             </p>
           ) : null}
 
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Link
               href={`/dashboard/agents/${agent.id}`}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors sm:min-h-9"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold whitespace-nowrap transition-colors sm:min-h-9"
             >
               Set up
             </Link>
@@ -153,13 +153,13 @@ function AgentCard({ agent, docsBaseUrl }: { agent: AgentCardData; docsBaseUrl: 
               href={`${docsBaseUrl}/${agent.docsSlug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-card hover:bg-accent inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors sm:min-h-9"
+              className="bg-card hover:bg-accent inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-medium whitespace-nowrap transition-colors sm:min-h-9"
             >
               <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
               Docs
             </a>
             <div
-              className="bg-muted/60 text-muted-foreground inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-md border px-2 font-mono text-[11px] sm:min-h-9"
+              className="bg-muted/60 text-muted-foreground col-span-2 inline-flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-md border px-2 font-mono text-[11px] sm:min-h-9"
               title={installCmd}
             >
               <Terminal className="size-3 shrink-0" aria-hidden="true" />

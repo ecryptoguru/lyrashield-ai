@@ -49,7 +49,8 @@ const jsonLd: unknown[] = [
   <h1>OpenCode</h1>
   <p>
     OpenCode reads MCP servers from <code>opencode.json</code> in your project root. The root key
-    is <code>mcp</code> (not <code>mcpServers</code>).
+    is <code>mcp</code> (not <code>mcpServers</code>). Local entries use a command array and
+    <code>environment</code>; remote entries use <code>type: "remote"</code>.
   </p>
 
   <h2>Install with the CLI (fastest)</h2>

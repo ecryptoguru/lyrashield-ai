@@ -204,27 +204,21 @@ describe("renderEntry returns correct structural patch", () => {
     expect(entry.rootKey).toBe("mcp")
     expect(entry.value).toMatchObject({
       type: "local",
-      command: "npx",
-      args: ["-y", "@lyrashield/mcp"],
-      env: {
+      command: ["npx", "-y", "@lyrashield/mcp"],
+      environment: {
         LYRASHIELD_API_KEY: "{env:LYRASHIELD_API_KEY}",
         LYRASHIELD_API_URL: TEST_BASE_URL,
       },
     })
   })
 
-  it("windsurf — remote uses `serverUrl` instead of `url`", () => {
-    const agent = getAgent("windsurf")!
-    const opts = testOptions(agent, "remote-http")
-    const entry = renderEntry(agent, opts)
-    expect(entry.rootKey).toBe("mcpServers")
-    expect(entry.value).toMatchObject({
-      serverUrl: TEST_MCP_URL,
-      headers: {
-        Authorization: `Bearer ${TEST_API_KEY}`,
-      },
-    })
-    expect(entry.value).not.toHaveProperty("url")
+  it("Devin is configured through its MCP Marketplace, not a legacy Windsurf file", () => {
+    const agent = getAgent("devin")!
+    expect(agent.displayName).toBe("Devin")
+    expect(agent.installStrategy).toBe("guided-manual")
+    expect(agent.locations).toEqual([])
+    expect(agent.source?.url).toBe("https://docs.devin.ai/work-with-devin/mcp")
+    expect(getAgent("windsurf")).toBeUndefined()
   })
 
   it("antigravity — remote uses `serverUrl` instead of `url`", () => {
@@ -269,7 +263,7 @@ describe("gotchas from §3.4 are represented", () => {
     "single-brace `{env:VAR}`",
     "Gemini CLI strips env vars whose names contain KEY, TOKEN or SECRET",
     "Cline defaults to legacy SSE",
-    "Windsurf's remote form uses `serverUrl`, not `url`",
+    "Settings → MCP Marketplace → Add Your Own",
     "Kilo Code's file is JSONC",
     "Amp takes no --env flags",
     "JetBrains has no file we can write",

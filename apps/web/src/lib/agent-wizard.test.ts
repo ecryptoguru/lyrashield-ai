@@ -22,4 +22,14 @@ describe("agent wizard connection snippets", () => {
       "lyrashield login --oauth"
     )
   })
+
+  it("uses Devin's MCP Marketplace instead of a fictitious local config file", () => {
+    const wizard = buildAgentWizard("devin", "https://app.lyrashieldai.com")
+
+    const config = wizard?.steps.find((step) => step.id === "config")
+    expect(wizard?.displayName).toBe("Devin")
+    expect(config?.title).toBe("Add LyraShield in the agent")
+    expect(config?.note).toContain("MCP Marketplace")
+    expect(config?.snippet).toContain("https://app.lyrashieldai.com/api/mcp")
+  })
 })
