@@ -84,12 +84,12 @@ function buildVendorCommand(agent: AgentEntry): string {
 const strategyNotes: Record<string, string> = {
   jetbrains:
     "JetBrains AI & Junie: UI-only. Open Settings → Tools → AI Assistant → MCP Servers and add a new server using the values below.",
-  amp: "Amp (Sourcegraph): shell-env CLI-only. Export the variables in the shell where Amp runs, then run the command.",
-  cline: "Cline: manual. Edit cline_mcp_settings.json or use the Cline MCP settings panel.",
+  amp: "Amp: export the variables in the shell where Amp runs, then add the server with the CLI command below.",
+  cline: "Cline: add the server from the MCP settings panel; Cline manages the configuration file.",
   picode:
     "PiCode: manual. The exact config file path is not documented; use the command below as a reference and verify with PiCode's docs.",
   openclaw:
-    "OpenClaw: manual. The profile YAML path is not verified; use the command below as a reference.",
+    "OpenClaw: add the server in Settings → MCP or with openclaw mcp, then verify it with openclaw mcp doctor --probe.",
 }
 
 let snippet = ""
