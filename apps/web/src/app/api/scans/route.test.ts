@@ -275,6 +275,7 @@ describe("POST /api/scans", () => {
       name: "Staging Site",
       type: "WEB_APP",
       url: "https://example.com",
+      apiSpecUrl: null,
       repoFullName: null,
     } as never)
     vi.mocked(prisma.scan.count).mockResolvedValue(0 as never)
@@ -323,6 +324,7 @@ describe("POST /api/scans", () => {
       name: "Staging Site",
       type: "WEB_APP",
       url: "https://example.com",
+      apiSpecUrl: null,
       repoFullName: null,
     })
     // Dates serialize to ISO strings, matching the SSR-rendered payload.
