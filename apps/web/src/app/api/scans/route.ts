@@ -256,6 +256,7 @@ export async function POST(request: Request) {
           name: target.name,
           type: target.type,
           url: target.url,
+          apiSpecUrl: target.apiSpecUrl,
           repoFullName: target.repoFullName,
         },
       }),

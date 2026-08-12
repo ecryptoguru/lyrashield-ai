@@ -306,7 +306,9 @@ export const SCAN_LIST_SELECT = {
   errorCategory: true,
   errorMessage: true,
   createdAt: true,
-  target: { select: { id: true, name: true, type: true, url: true, repoFullName: true } },
+  target: {
+    select: { id: true, name: true, type: true, url: true, apiSpecUrl: true, repoFullName: true },
+  },
   _count: { select: { findings: { where: { deletedAt: null } } } },
 } as const
 
@@ -329,6 +331,7 @@ export interface ScanListItem {
     name: string
     type: string
     url: string | null
+    apiSpecUrl: string | null
     repoFullName: string | null
   } | null
 }
