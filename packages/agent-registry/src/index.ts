@@ -6,13 +6,30 @@ export * from "./agents"
 import { AGENTS } from "./agents"
 import type { AgentEntry, InstallStrategy } from "./types"
 
-// These clients have a generated, client-specific plugin shim in the public
-// marketplace artifact. Their ordinary CLI names should therefore install the
-// plugin, while the legacy config entry remains addressable for recovery.
+// These clients install via the Agent Plugin under their ordinary CLI name,
+// while any legacy config entry remains addressable for recovery.
+//
+// Two distinct reasons an id appears here:
+//   1. claude-code / cursor / openai-codex / kiro have a generated,
+//      client-specific plugin shim in the public marketplace artifact (see
+//      CLIENTS in @lyrashield/agent-plugin's build.ts).
+//   2. github-copilot has no config-file entry at all, so the plugin is its only
+//      install path and it reads the portable root `plugin.json`. Without a
+//      mapping here getPreferredAgent("github-copilot") returns undefined and
+//      the documented `lyrashield install github-copilot` fails as an unknown
+//      agent. The same was true of `kiro`.
+//
+// Deliberately absent: `vscode`. It has a verified config-file path
+// (.vscode/mcp.json, root key `servers`), no generated VS Code shim exists, and
+// its plugin discovery path is unverified — mapping it here would reroute a
+// working install onto an unverified one. Revisit only once a VS Code shim is
+// generated and the discovery path is confirmed.
 const PREFERRED_PLUGIN_ID_BY_AGENT_ID: Readonly<Record<string, string>> = {
   "claude-code": "claude-code-agent-plugin",
   cursor: "cursor-agent-plugin",
   "openai-codex": "openai-codex-agent-plugin",
+  "github-copilot": "github-copilot-agent-plugin",
+  kiro: "kiro-agent-plugin",
 }
 
 export function getAgent(id: string): AgentEntry | undefined {

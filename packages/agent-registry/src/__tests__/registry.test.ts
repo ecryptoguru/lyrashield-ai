@@ -99,6 +99,24 @@ describe("preferred agent integrations", () => {
     expect(getPreferredAgent("openai-codex")?.id).toBe("openai-codex-agent-plugin")
   })
 
+  // These two ship only as plugin entries, so before they were mapped
+  // `getPreferredAgent` returned undefined and the documented
+  // `lyrashield install <agent>` failed as an unknown agent.
+  it("resolves plugin-only clients that have no config-file entry", () => {
+    expect(getAgent("github-copilot")).toBeUndefined()
+    expect(getAgent("kiro")).toBeUndefined()
+    expect(getPreferredAgent("github-copilot")?.id).toBe("github-copilot-agent-plugin")
+    expect(getPreferredAgent("kiro")?.id).toBe("kiro-agent-plugin")
+  })
+
+  // VS Code keeps its verified .vscode/mcp.json path: no generated VS Code
+  // plugin shim exists, so preferring the plugin would reroute a working
+  // install onto an unverified one.
+  it("keeps VS Code on its verified config-file install path", () => {
+    expect(getPreferredAgent("vscode")?.id).toBe("vscode")
+    expect(getPreferredAgent("vscode")?.installStrategy).toBe("config-file")
+  })
+
   it("shows one dashboard choice for each documented integration", () => {
     const docsSlugs = listPreferredAgents().map((agent) => agent.docsSlug)
     expect(new Set(docsSlugs).size).toBe(docsSlugs.length)
