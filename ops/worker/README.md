@@ -27,6 +27,12 @@ GHCR_USERNAME=<github-username-or-bot>
 
 `/etc/lyrashield/worker.env` supplies the remaining runtime variables. Defaults in `run-worker.sh` set `NODE_ENV=production`, `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0`, and `LYRASHIELD_WORKER_CONCURRENCY=1`; override these there if the deployment requires email verification or a different concurrency.
 
+## Promote a verified worker release
+
+Digest pinning prevents silent updates; it does not freeze the worker. After the application repository's main deployment verifies a SHA-only worker image, its exact digest, and its OCI labels, update only `LYRASHIELD_WORKER_IMAGE` in `/etc/lyrashield/worker-runtime.conf` to that `@sha256:` reference. Retain the previous configuration as the rollback record and restart `lyrashield-worker.service`.
+
+After restarting, reconcile the configured and running image references, the `org.opencontainers.image.revision` and `io.lyrashield.engine.revision` labels, Docker health, and `/api/ready/scans`. Never promote `latest`, another mutable tag, an unverified digest, or an engine branch. To roll back, restore the prior digest reference and repeat the same checks.
+
 For Azure AI Foundry, retrieve `LYRASHIELD_LUNA_LLM`, `LYRASHIELD_TERRA_LLM`, `AZURE_AI_API_KEY`, `AZURE_AI_API_BASE`, and `AZURE_API_VERSION` from Key Vault as one coherent deployment route. `LYRASHIELD_LLM` is the explicit fallback only. Do not set `LYRASHIELD_PROGRAMMATIC_TOOL_CALLING` for the configured endpoint: it rejects that Responses tool type, so direct JSON function tools are the supported production route. Enable the flag only after the engine provider-contract gate passes for the exact deployment.
 
 Then reload systemd and enable the policy refresh and worker:

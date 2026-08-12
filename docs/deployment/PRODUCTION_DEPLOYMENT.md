@@ -96,8 +96,8 @@ keep the most recent 10 tagged versions; worker images keep the most recent 100 
 versions because the worker VM pins images by digest and the approved digest may lag
 behind `main` deploys.
 
-**Why this existed.** Every merge to `main` pushes a new SHA-tagged image and re-points
-`:latest`; nothing ever deleted what it replaced. Multi-arch buildx pushes also leave several
+**Why this existed.** Historically, every merge to `main` pushed a new SHA-tagged image and re-pointed
+`:latest`; worker publication now uses SHA-only tags. Multi-arch buildx pushes also leave several
 untagged manifests per build. Confirmed 2026-07-30: `lyrashield-web` had 10 versions (6
 untagged) and `lyrashield-worker` had 4 (3 untagged) after only a handful of deploys.
 
@@ -119,25 +119,17 @@ keep threshold. The 2026-08-01 update splits worker cleanup into its own step wi
 app/scanner images as `image:tag@sha256:<digest>` so the running container is pinned to an
 immutable manifest even if the `:latest` tag moves.
 
-### 5. Nightly backups have a schedule but no credentials — they are not actually running
+### 5. Production backups are running; restore proof remains required
 
-**Status:** broken. Do not treat "the backup workflow is on a cron schedule" as "backups are
-happening." As of 2026-07-30 every scheduled run fails immediately with `AWS_ACCESS_KEY_ID is
-required`.
+**Status:** backup automation is live. The production backup workflow completed successfully on
+2026-08-12 after the required repository credentials were provisioned. A successful backup is
+operational evidence, not an RPO/RTO claim: restore the artifact into an isolated environment and
+verify application-level integrity before making recovery claims.
 
-**What happened.** `production-backup.yml` was `workflow_dispatch`-only until 2026-07-30, when
-a `schedule: cron("0 2 * * *")` trigger was added so nightly backups would not depend on
-someone remembering to click a button. The first automatic run then failed at its very first
-step. This is not a regression the schedule caused — the underlying credential gap already
-existed and dispatch-only runs were apparently never exercised (or never checked) — but adding
-the schedule is what surfaced it.
-
-**Way out.** Provision S3-compatible storage credentials (`AWS_ACCESS_KEY_ID` and whatever
-else the backup job's next failing step turns out to need — only the first missing variable
-is visible until this one is fixed) as repository secrets. Confirm whether this should be the
-same bucket/credentials as evidence storage (`S3_*` in the application config) or a dedicated
-backup destination, then re-run `production-backup.yml` via `workflow_dispatch` to confirm a
-real backup completes before trusting the nightly schedule.
+**Operating rule.** Keep the backup destination and credentials separate from ordinary evidence
+storage where practical, retain the workflow run and artifact metadata as release evidence, and
+alert on a missed scheduled run or failed upload. Do not infer a successful restore from a green
+backup workflow.
 
 ### 6. GitHub App connect path requires app creation + 4 secrets — currently unprovisioned (blocks new signups)
 
@@ -231,7 +223,7 @@ rule.
 8. The stale-resource reaper is enabled with a conservative age threshold. It must be able to read active scan state, skip every active scan and running container, and report each cleanup result.
 9. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
 10. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
-11. `.github/workflows/deploy-azure.yml` pins the exact reviewed engine commit. PR CI proves that the pin is merged into engine `main`, its named engine checks passed, and the worker contract is compatible. The main deployment repeats provenance and contract checks, builds and pushes the SHA-only worker candidate, pulls its exact digest, and verifies the app and engine OCI labels. Promoting that verified digest to the worker VM remains a separate operator action. Advance the pin only after the engine change is merged and green; never point it at a branch or mutable tag.
+11. `.github/workflows/deploy-azure.yml` pins the exact reviewed engine commit. PR CI proves that the pin is merged into engine `main`, its named engine checks passed, and the worker contract is compatible. The main deployment repeats provenance and contract checks, builds and pushes the SHA-only worker candidate, pulls its exact digest, and verifies the app and engine OCI labels. Promote that verified digest by updating the worker VM runtime configuration, retaining the prior digest for rollback, restarting the systemd worker service, and reconciling the configured/running digest, OCI labels, Docker health, and `/api/ready/scans`. This prevents silent updates without preventing future releases. Advance the engine pin only after the engine change is merged and green; never point it at a branch or mutable tag.
 
 ## Full-scan resource checklist
 
@@ -431,7 +423,7 @@ Then, in the target environment:
 7. Exercise backup and restore on non-production data before claiming an RPO/RTO.
 8. Confirm URL targets use only the pinned deterministic URL scanner. Do not re-enable the external engine for URL targets until its transport is DNS-pinned and redirect-safe.
 9. Confirm GitHub callbacks can refresh only a pre-existing workspace binding. Fresh installation claims and client-authored Fix PR payloads must remain blocked until their provider-ownership and server-generated-patch gates are implemented.
-10. Confirm the worker image label records the expected engine revision, the deployed worker reference is the exact digest verified by CI, and `LYRASHIELD_IMAGE` is the exact LyraShield-owned sandbox digest qualified on both architectures. A tag, upstream image, or digest built separately from the smoke-tested candidate fails the gate.
+10. Confirm the worker image labels record the expected app and engine revisions, the configured and running worker references are the exact digest verified by CI, and `LYRASHIELD_IMAGE` is the exact LyraShield-owned sandbox digest qualified on both architectures. Retain the prior worker digest as the rollback record. A tag, upstream image, or digest built separately from the smoke-tested candidate fails the gate.
 11. Exercise the stale-resource reaper with one old stopped fixture and one active-scan fixture. Confirm only the owned stale resource is removed, cleanup results are logged, and a database ownership-read failure removes nothing.
 
 Queue recovery is deliberately fail-closed. Workers reconcile queue/database drift at startup and every 60 seconds under a renewable token-owned Redis lease. A scan left `QUEUED` for more than five minutes without a processable job becomes `FAILED` with `QUEUE_ORPHANED`; operators must not automatically requeue it because the original attempt may have crossed a paid-provider boundary.

@@ -2,6 +2,10 @@
 
 ## Next
 
+- Removed the Zed extension's `process:exec` capability after it was found unnecessary; the
+  extension now uses only Zed's `npm:install` capability to run the npm-installed MCP server.
+  The Zed Rust extension starts from the local OAuth credential store; the settings API key is
+  an explicit CI/non-OAuth fallback.
 - Made the generated Cursor and Kiro shims OAuth-first, so neither writes an API-key variable into
   a plugin manifest. The Zed extension now starts from the same local OAuth credential store; its
   settings API key is an explicit CI/non-OAuth fallback and uses only Zed's `npm:install` capability.
