@@ -6,7 +6,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/docs/integrations/windsurf", origin).toString()
 const title = "LyraShield MCP for Windsurf — Setup Guide"
 const description =
-  "Connect LyraShield to Windsurf (Codeium). Install the Agent Plugin for one-step setup, or configure the global mcp_config.json for stdio or the remote Streamable-HTTP endpoint."
+  "Connect LyraShield to Windsurf, now Devin Desktop. Run npx lyrashield install windsurf, or configure the global mcp_config.json by hand for stdio or the remote Streamable-HTTP endpoint."
 const updatedDate = "2026-08-12"
 
 const jsonLd: unknown[] = [
@@ -73,8 +73,10 @@ const jsonLd: unknown[] = [
 >
   <h1>Windsurf</h1>
   <p>
-    Windsurf (by Codeium) stores MCP configuration in a global file at{" "}
-    <code>~/.codeium/windsurf/mcp_config.json</code>. The file applies to all projects.
+    Windsurf is now Devin Desktop, and stores MCP configuration in a global file at{" "}
+    <code>~/.codeium/windsurf/mcp_config.json</code>. The path is unchanged, and the file applies
+    to all projects. There is no Windsurf Agent Plugin, so the CLI and this config file are the two
+    supported setup paths.
   </p>
 
   <h2>Install with the CLI (fastest)</h2>
@@ -119,7 +121,7 @@ npx lyrashield install windsurf</code></pre>
     endpoint.
   </p>
 
-  <AgentSnippet agentId="windsurf" transport="remote-http" />
+  <AgentSnippet agentId="windsurf" transport="remote-http" secondary />
 
   <div class="callout">
     <strong>Read-only vs. write:</strong> Remote mutating tools (scan triggers, finding

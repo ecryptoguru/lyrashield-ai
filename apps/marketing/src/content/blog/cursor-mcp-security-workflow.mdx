@@ -17,7 +17,9 @@ faq:
     a: Cursor reads MCP servers from .cursor/mcp.json at the project root. The top level key is mcpServers. Use the project file for the LyraShield entry so the team shares one server definition, and keep real keys in environment variables referenced by the env block.
 ---
 
-To secure Cursor built apps with LyraShield, add the LyraShield MCP server via stdio using npx -y @lyrashield/mcp with your LYRASHIELD*API_KEY and optionally remote endpoint with Bearer lsk* key, verify the connection in Cursor Settings, then run targeted scans for injection, auth flaws, secrets and supply chain issues inline while coding.
+Fastest path: run `npx lyrashield init`, which detects Cursor and writes the config. For a one-step install, use the Agent Plugin (agent-plugins.org v1.0.0), the preferred route for launch clients. The manual config below is what the CLI writes, kept for reference.
+
+To secure Cursor built apps with LyraShield, add the LyraShield MCP server via stdio using npx -y @lyrashield/mcp with your LYRASHIELD_API_KEY and optionally remote endpoint with Bearer lsk\_ key, verify the connection in Cursor Settings, then run targeted scans for injection, auth flaws, secrets and supply chain issues inline while coding.
 
 Vibe coding in Cursor ships features quickly, but speed can recreate classic [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks like injection, broken auth and hardcoded secrets. This workflow applies the [vibe coding security guide](/blog/vibe-coding-security-guide) method to daily Cursor use. LyraShield AI is agent native AppSec at [LyraShield site](https://lyrashieldai.com), designed around Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. You get inline evidence review while agent edits. See [Cursor integration guide](/docs/integrations/cursor) and checklist [Cursor security checklist](/blog/cursor-app-security-checklist). Transport uses [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions) plus [NIST SSDF](https://csrc.nist.gov/projects/ssdf). Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
 
@@ -27,7 +29,7 @@ Create LyraShield API key starting with lsk\_ and store as LYRASHIELD_API_KEY. N
 
 You need Node 18 plus so npx resolves pinned package, cursor updated to build supporting MCP, and testable target such as http://localhost:3000 or repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
 
-Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks, and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals record intended remediation for human review, not hands off merges, after Sprints 0 to 2 shipped MCP contract. Steps are generate key with scan scope, export variable, verify npx works, add secret to GitHub, check Node version. See [Cursor integration guide](/docs/integrations/cursor).
+Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks, and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals record intended remediation for human review, not hands off merges, after Sprints 0 to 2 shipped MCP contract. See [Cursor integration guide](/docs/integrations/cursor).
 
 ## 2. Configure MCP server in cursor config file
 
@@ -61,7 +63,7 @@ Restart cursor after saving config and open MCP servers view to confirm lyrashie
 
 If disconnected, open log panel. For 401 from [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) reissue key. For npx not found or EACCES fix Node PATH or install via nvm user space. Run npx -y @lyrashield/mcp manually in terminal with LYRASHIELD_API_KEY set to confirm handshake JSON prints. This isolates IDE versus Node issues.
 
-Verification prevents silent failure where agent assumes scan succeeded but server was unreachable. That leaves [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks undetected and breaks verification loop. Document success in [Cursor integration guide](/docs/integrations/cursor) and allow egress to [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) if org blocks external.
+Verification prevents silent failure where agent assumes scan succeeded but server was unreachable. That leaves [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks undetected and breaks verification loop. Allow egress to [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) if org blocks external.
 
 ## 4. Run a security check inline while you code
 
@@ -135,9 +137,9 @@ Test rule by scaffolding endpoint accepting query param and confirming scan trig
 
 Cursor speeds AI development but can repeat patterns [OWASP Top 10](https://owasp.org/www-project-top-ten/) warns about such as trusting generated SQL or leaving debug endpoints enabled. LyraShield adds verification without changing UX, exposing scan and findings as native tools agent knows how to call.
 
-Sprints 0 to 2 shipped MCP contract and SARIF wiring, so teams adopt today with config change while engine depth expands on roadmap. Unlike generic linters flagging style, LyraShield focuses on findings with recorded evidence states that the agent can retest, reducing noise and preserving flow. It also covers supply chain via [OSV database](https://osv.dev/) so vulnerable npm packages surface with first party flaws.
+Sprints 0 to 2 shipped MCP contract and SARIF wiring, so teams adopt today with config change while engine depth expands on roadmap. Unlike generic linters flagging style, LyraShield focuses on findings with recorded evidence states that the agent can retest, reducing noise and preserving flow. It also covers supply chain via [OSV database](https://osv.dev/).
 
-Local feedback plus CI gate creates defense in depth matching how AI apps evolve, many small edits per hour. For policy framing revisit [vibe coding security guide](/blog/vibe-coding-security-guide) and [NIST SSDF](https://csrc.nist.gov/projects/ssdf). External refs such as [CWE Top 25](https://cwe.mitre.org/top25/) and [OSV database](https://osv.dev/) provide standardized ids for prioritization, making triage consistent.
+Local feedback plus CI gate creates defense in depth matching how AI apps evolve, many small edits per hour. For policy framing revisit [vibe coding security guide](/blog/vibe-coding-security-guide) and [NIST SSDF](https://csrc.nist.gov/projects/ssdf).
 
 Close loop by tracking findings as tasks, rerunning scans after fixes to confirm resolution, and ensuring SARIF appears in GitHub code scanning with file and line mapping. Run [AI app security checklist](/tools/ai-app-security-checklist) before launch to cover injection, auth, secrets, headers and supply chain in one pass.
 

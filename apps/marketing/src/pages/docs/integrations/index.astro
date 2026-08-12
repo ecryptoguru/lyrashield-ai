@@ -57,7 +57,7 @@ const faqItems = [
   },
   {
     q: "What is the Agent Plugin?",
-    a: "The Agent Plugin is a portable plugin following the open Agent Plugins v1.0.0 standard (agent-plugins.org). It bundles LyraShield's MCP server and a security skill into one installable package. npx lyrashield init prefers the generated plugin shims for Claude Code, Cursor, and OpenAI Codex; other clients use the verified config-file or vendor-CLI path in their guide.",
+    a: "The Agent Plugin is a portable plugin following the open Agent Plugins v1.0.0 standard (agent-plugins.org). It bundles LyraShield's MCP server and a security skill into one installable package. npx lyrashield init prefers the plugin for Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and Kiro; other clients, VS Code among them, use the verified config-file or vendor-CLI path in their guide. See the Agent Plugins guide at /docs/integrations/agent-plugins.",
   },
 ]
 
@@ -138,9 +138,10 @@ npx lyrashield init</code></pre>
     the guidance in a single install — no hand-edited config required.
   </p>
   <p>
-    <code>npx lyrashield init</code> prefers the generated plugin shims for Claude Code, Cursor,
-    and OpenAI Codex. For the other supported clients, it uses the verified config-file, vendor-CLI,
-    or guided-manual path documented below.
+    <code>npx lyrashield init</code> prefers the plugin for Claude Code, Cursor, OpenAI Codex,
+    GitHub Copilot, and Kiro. For the other supported clients, VS Code among them, it uses the
+    verified config-file, vendor-CLI, or guided-manual path documented below. Full detail is in the{" "}
+    <a href="/docs/integrations/agent-plugins">Agent Plugins guide</a>.
   </p>
   <div class="callout">
     <strong>No credential in committed files:</strong> After <code>npx lyrashield login --oauth</code>,
@@ -167,6 +168,14 @@ npx lyrashield init</code></pre>
     </a>
     <a href="/docs/integrations/openai-codex" class="nav-card">
       <span class="nav-card__label">OpenAI Codex</span>
+      <span class="nav-card__sub">Agent Plugin install</span>
+    </a>
+    <a href="/docs/integrations/github-copilot" class="nav-card">
+      <span class="nav-card__label">GitHub Copilot</span>
+      <span class="nav-card__sub">Agent Plugin install</span>
+    </a>
+    <a href="/docs/integrations/kiro" class="nav-card">
+      <span class="nav-card__label">Kiro</span>
       <span class="nav-card__sub">Agent Plugin install</span>
     </a>
   </div>

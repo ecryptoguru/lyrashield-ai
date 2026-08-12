@@ -24,7 +24,7 @@ When you ship apps with Zed, AI generated code can introduce secrets, vulnerable
 
 Zed uses Model Context Protocol to let the agent read project files, call tools, and run commands. That power expands your attack surface because a misconfigured MCP server can read secrets, write files, or exfiltrate code. Keep scope tight and treat all external tool output as untrusted data.
 
-The official MCP spec defines how tool listing and invocation works over stdio and streamable HTTP, including transport security and tool permissions [MCP spec for tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools). For LLM integrations, OWASP highlights excessive agency and tool output handling as key risks to review before you enable write actions [Zed context servers](https://zed.dev/docs/extensions/context-servers). Hard coded credential risks map to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html), a frequent failure in AI suggested code. If you decouple spec from enforcement, review drift happens quickly. For a comparison of IDE side controls, see our review of lovable app security checklist at [lovable app security checklist](/blog/lovable-app-security-checklist).
+The official MCP spec defines how tool listing and invocation works over stdio and streamable HTTP, including transport security and tool permissions [MCP spec for tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools). For LLM integrations, OWASP highlights excessive agency and tool output handling as key risks to review before you enable write actions [Zed context servers](https://zed.dev/docs/extensions/context-servers). Hard coded credential risks map to [CWE 798 for hard coded credentials](https://cwe.mitre.org/data/definitions/798.html), a frequent failure in AI suggested code. For a comparison of IDE side controls, see our review of lovable app security checklist at [lovable app security checklist](/blog/lovable-app-security-checklist).
 
 ## Locking down MCP configuration for Zed
 
@@ -46,10 +46,12 @@ Fourth, commit project scoped configs and add a CI check that validates JSON sch
 {
   "context_servers": {
     "lyrashield": {
-      "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": {
-        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
+      "command": {
+        "path": "npx",
+        "args": ["-y", "@lyrashield/mcp"],
+        "env": {
+          "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
+        }
       },
       "settings": {}
     },
@@ -74,7 +76,7 @@ Dependencies are the second common gap. AI often suggests outdated versions. Res
 
 Prompt injection can come from docs, issue comments, or web fetched content that the assistant brings into context. Add explicit agent instructions that require approval before write actions and never act on instructions embedded in README files. Restrict network egress for local MCP servers via OS firewall rules where possible, and log anomalous outbound calls that MCP tools trigger. For Node backends, apply Node security guidance for env isolation [Node.js security best practices](https://nodejs.org/en/learn/getting-started/security-best-practices).
 
-Add these to your Definition of Done: secrets scan passes with no new findings, SCA passes with no high severity advisories, and a second engineer reviews any change that touches auth, sessions, payments, file uploads, or crypto. Keep a reproducible SBOM so you can trace each artifact back to its source.
+Add these to your Definition of Done: secrets scan passes with no new findings, SCA passes with no high severity advisories, and a second engineer reviews any change that touches auth, sessions, payments, file uploads, or crypto.
 
 ## Verifying and gating AI generated code before merge
 
@@ -98,13 +100,13 @@ Checks do not stop at merge. Add runtime protections that catch what static anal
 
 Store build attestations so you can trace any production artifact back to a verified commit hash. Schedule quarterly exercises where you insert a known vulnerable snippet that AI might suggest and verify your gate catches it. Use OWASP WebGoat patterns as test payloads and track detection rate as a metric for your secure vibe coding program [OWASP WebGoat](https://owasp.org/www-project-webgoat/).
 
-Supply chain hygiene matters because AI generated code often pulls transitive dependencies you did not explicitly choose. Lock files, provenance, and signed commits reduce risk that a compromised package enters your build. Pair that with branch protection that requires two reviewers for MCP config changes and for any change to auth middleware.
+Supply chain hygiene matters because AI generated code often pulls transitive dependencies you did not explicitly choose. Lock files, provenance, and signed commits reduce risk that a compromised package enters your build.
 
 ## Why pair Zed with LyraShield
 
 LyraShield is release assurance for AI-built apps at [https://lyrashieldai.com](https://lyrashieldai.com). Our core loop is target, review, evidence, fix, retest, report, built for teams shipping with Zed and other AI coding tools. We separate detection from proof: findings come with evidence you can verify, and every result is an immutable assurance record tied to the exact commit and scan.
 
-The platform is live in open beta with open registration. The full scan engine MVP, automated fix execution, and billing are on the roadmap. What works today includes a single MCP server you can add via stdio `npx -y @lyrashield/mcp` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer lsk_ key, diff aware gating that posts SARIF to GitHub code scanning, and v1 coverage spanning agentic pentest, SCA, secrets, GitHub Action, and SARIF, with findings mapped to CWE and OWASP for faster remediation.
+The platform is live in open beta with open registration. The full scan engine MVP, automated fix execution, and billing are on the roadmap. What works today includes a single MCP server you can add via stdio `npx -y @lyrashield/mcp` or remote [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer lsk_ key, and v1 coverage spanning agentic pentest, SCA, secrets, GitHub Action, and SARIF, with findings mapped to CWE and OWASP for faster remediation.
 
 LyraShield sits after your Zed drafts and before merge, giving you verified findings instead of noisy rescans. Fix proposals are approval gated: PR execution is blocked until a server generated patch is bound to the exact approval, and retest runs the same scanners on the fix commit to confirm remediation.
 

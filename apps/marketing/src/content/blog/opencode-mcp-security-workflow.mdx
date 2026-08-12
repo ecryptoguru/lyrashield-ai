@@ -17,6 +17,8 @@ faq:
     a: "OpenCode reads MCP servers from opencode.json under mcp.servers. Each entry sets type local or remote, command and args for stdio, and url and headers for remote. Keep the LYRASHIELD_API_KEY in the env map so the server reads it from your environment rather than a literal in the file."
 ---
 
+Fastest path: run `npx lyrashield init` to auto-detect OpenCode and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials in ~/.lyrashield/credentials.json. The manual config below is what the CLI writes, kept for reference.
+
 Connect OpenCode to LyraShield AI through MCP to scan AI generated code for findings with evidence states, propose Fix Proposals that are designed to be minimal, and enforce the same checks in CI with a diff aware gate. The server entry lives in `opencode.json` under `mcp.servers` and supports local stdio via `npx -y @lyrashield/mcp@0.2.2` plus remote HTTP with a bearer token.
 
 OpenCode runs agent workflows from `opencode.json`, which makes it a natural place to add security tooling that survives across sessions. The [vibe coding security guide](/blog/vibe-coding-security-guide) outlines why AI built projects need verification that ties code, deps, and secrets together. LyraShield AI is agent native AppSec for AI built software following Target to Scan to Evidence State to Fix Proposal to Retest to Report. This guide shows exact OpenCode config using `npx -y @lyrashield/mcp@0.2.2` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification steps, inline scans, GitHub Action, and rules.

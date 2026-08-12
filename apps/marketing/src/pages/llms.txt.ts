@@ -8,6 +8,7 @@ const docsPaths = [
   "/docs/api",
   "/docs/approvals",
   "/docs/integrations",
+  "/docs/integrations/agent-plugins",
   "/docs/integrations/agent-rules",
   "/docs/integrations/aider",
   "/docs/integrations/amp",

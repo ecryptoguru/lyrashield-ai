@@ -1,5 +1,6 @@
 ---
 import Base from "@layouts/Base.astro"
+import { listPreferredAgents } from "@lyrashield/agent-registry"
 
 interface NavLink {
   href: string
@@ -26,24 +27,22 @@ const {
   currentPath = "",
 } = Astro.props
 
-const defaultNavLinks: NavLink[] = [
-  { href: "/docs/integrations", label: "Overview" },
-  { href: "/docs/integrations/claude-code", label: "Claude Code" },
-  { href: "/docs/integrations/cursor", label: "Cursor" },
-  { href: "/docs/integrations/windsurf", label: "Windsurf" },
-  { href: "/docs/integrations/vscode", label: "VS Code" },
-  { href: "/docs/integrations/openai-codex", label: "OpenAI Codex" },
-  { href: "/docs/integrations/cline", label: "Cline" },
-  { href: "/docs/integrations/opencode", label: "OpenCode" },
-  { href: "/docs/integrations/kilo-code", label: "Kilo Code" },
-  { href: "/docs/integrations/zed", label: "Zed" },
-  { href: "/docs/integrations/gemini-cli", label: "Gemini CLI" },
-  { href: "/docs/integrations/jetbrains", label: "JetBrains AI" },
-  { href: "/docs/integrations/amp", label: "Amp" },
-  { href: "/docs/integrations/picode", label: "PiCode" },
-  { href: "/docs/integrations/openclaw", label: "OpenClaw" },
-  { href: "/docs/integrations/hermes", label: "Hermes" },
+// Derived from the registry rather than hand-listed: a hard-coded list silently
+// drops every newly shipped agent, which is how 11 shipped guides ended up
+// unreachable from the sidebar. `listPreferredAgents` is the same source the
+// integrations index and the dashboard use, so the three stay in sync.
+// The "(Agent Plugin)" suffix is display detail for a card, not a nav label.
+const agentNavLinks: NavLink[] = listPreferredAgents()
+  .map((agent) => ({
+    href: `/docs/integrations/${agent.docsSlug}`,
+    label: agent.displayName.replace(/\s*\(Agent Plugin\)\s*$/, ""),
+  }))
+  .sort((a, b) => a.label.localeCompare(b.label, "en"))
+
+const guideNavLinks: NavLink[] = [
+  { href: "/docs/integrations/agent-plugins", label: "Agent Plugins" },
   { href: "/docs/integrations/remote-mcp", label: "Remote MCP" },
+  { href: "/docs/approvals", label: "Approvals" },
   { href: "/docs/integrations/github-action", label: "GitHub Action" },
   { href: "/docs/integrations/rest-api", label: "REST API" },
   { href: "/docs/integrations/agent-rules", label: "Agent Rules" },
@@ -51,8 +50,20 @@ const defaultNavLinks: NavLink[] = [
   { href: "/docs/api", label: "API v1" },
 ]
 
-const allLinks = navLinks.length > 0 ? navLinks : defaultNavLinks
 const resolvedPath = currentPath || Astro.url.pathname
+
+// A caller-supplied list stays one flat group; the derived default splits into
+// guides and the 26 per-agent guides so the agent list stays scannable.
+const navGroups: { heading: string; links: NavLink[] }[] =
+  navLinks.length > 0
+    ? [{ heading: "Integrations", links: navLinks }]
+    : [
+        {
+          heading: "Integrations",
+          links: [{ href: "/docs/integrations", label: "Overview" }, ...guideNavLinks],
+        },
+        { heading: "Coding agents", links: agentNavLinks },
+      ]
 ---
 
 <Base
@@ -64,23 +75,27 @@ const resolvedPath = currentPath || Astro.url.pathname
   <div class="docs-shell">
     <aside class="docs-sidebar" aria-label="Docs navigation">
       <nav>
-        <p class="docs-sidebar__heading">Integrations</p>
-        <ul class="docs-sidebar__list">
-          {allLinks.map((link) => (
-            <li>
-              <a
-                href={link.href}
-                class:list={[
-                  "docs-sidebar__link",
-                  { "docs-sidebar__link--active": resolvedPath === link.href },
-                ]}
-                aria-current={resolvedPath === link.href ? "page" : undefined}
-              >
-                {link.label}
-              </a>
-            </li>
-          ))}
-        </ul>
+        {navGroups.map((group) => (
+          <>
+            <p class="docs-sidebar__heading">{group.heading}</p>
+            <ul class="docs-sidebar__list">
+              {group.links.map((link) => (
+                <li>
+                  <a
+                    href={link.href}
+                    class:list={[
+                      "docs-sidebar__link",
+                      { "docs-sidebar__link--active": resolvedPath === link.href },
+                    ]}
+                    aria-current={resolvedPath === link.href ? "page" : undefined}
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </>
+        ))}
       </nav>
     </aside>
 
@@ -169,6 +184,11 @@ const resolvedPath = currentPath || Astro.url.pathname
     padding: 0;
     list-style: none;
     border-left: 1px solid var(--color-border);
+  }
+
+  /* Second and subsequent group headings need breathing room from the list above. */
+  .docs-sidebar__list + .docs-sidebar__heading {
+    margin-top: 1.5rem;
   }
 
   .docs-sidebar__link {
