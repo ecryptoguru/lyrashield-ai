@@ -16,13 +16,15 @@ faq:
   - q: 'How do I restrict which MCP tools Gemini CLI can call?'
     a: 'Use the includeTools array in the server entry to allow only the tools you need, such as scan, lyrashield_list_targets, and lyrashield_get_findings. Set trust to false so the agent prompts before running a tool. Combine includeTools with the mcp.allowed policy list for a second layer of control.'
 ---
+Fastest path: run `npx lyrashield init` to detect Gemini CLI and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
+
 Secure AI generated apps from your terminal by connecting Gemini CLI to LyraShield AI through MCP, running bounded checks without leaving the CLI, and enforcing the same policy in a diff aware GitHub Action. The server loads from `settings.json` under `mcpServers` and supports local stdio via `npx -y @lyrashield/mcp` plus remote HTTP with a bearer key.
 
 Gemini CLI brings agent assisted development to the command line, but terminal velocity can miss injection, auth, and supply chain risks introduced by scaffolding. The [vibe coding security guide](/blog/vibe-coding-security-guide) calls this unverified generation at scale. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This post shows the exact Gemini CLI config using `npx -y @lyrashield/mcp` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), plus verification and CI wiring. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
 
 ## 1. Prerequisites and setup
 
-You need Gemini CLI 0.9 or newer, Node 18 or newer, a LyraShield key prefixed `lsk_` for remote mode, and a GitHub repo for workflow setup. Gemini CLI stores MCP under `~/.gemini/settings.json` with key `mcpServers`, including `trust`, `includeTools`, and env expansion. The pattern is documented in the [Gemini CLI docs](https://github.com/google-gemini/gemini-cli) and summarized in the [Gemini CLI integration guide](/docs/integrations/gemini-cli). Restart Gemini CLI, then use its MCP tool list to confirm discovery. Review risk baselines via [OWASP Top 10](https://owasp.org/www-project-top-ten/) and advisory data via [OSV](https://osv.dev/). For protocol context, see [Model Context Protocol intro](https://modelcontextprotocol.io/docs/getting-started/intro). The `~/.gemini/settings.json` schema is a single JSON document. A trailing comma or missing bracket will block all servers from loading, so validate with a JSON linter after each edit. The `trust` key on each server controls whether the agent can invoke tools without prompting you first, and `includeTools` narrows which tools are even discoverable by the model.
+You need Gemini CLI 0.9 or newer, Node 18 or newer, a LyraShield key prefixed `lsk_` for remote mode, and a GitHub repo for workflow setup. Gemini CLI stores MCP under `~/.gemini/settings.json` with key `mcpServers`, including `trust`, `includeTools`, and env expansion. The pattern is documented in the [Gemini CLI docs](https://github.com/google-gemini/gemini-cli) and summarized in the [Gemini CLI integration guide](/docs/integrations/gemini-cli). Restart Gemini CLI, then use its MCP tool list to confirm discovery. Review risk baselines via [OWASP Top 10](https://owasp.org/www-project-top-ten/) and advisory data via [OSV](https://osv.dev/). For protocol context, see [Model Context Protocol intro](https://modelcontextprotocol.io/docs/getting-started/intro). Validate the JSON with a linter after each edit, since a trailing comma or missing bracket will block all servers from loading.
 
 ## 2. Configure Gemini CLI MCP servers
 
@@ -58,8 +60,8 @@ Remote HTTP:
       "command": "npx",
       "args": ["-y", "@lyrashield/mcp", "--remote"],
       "env": {
-        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}",
-        "LYRASHIELD_MCP_URL": "https://app.lyrashieldai.com/api/mcp"
+        "LYRASHIELD_API_KEY": "${GEMINI_LYRASHIELD_CRED}",
+        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp"
       },
       "trust": false,
       "includeTools": ["scan", "lyrashield_list_targets", "lyrashield_get_findings"],
@@ -74,17 +76,17 @@ Remote HTTP:
 
 Remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer `lsk_`. The pinned npx form `npx -y @lyrashield/mcp` appears in both blocks. `$VAR` expansion and `mcp.allowed` policy are Gemini CLI specifics that control which servers run without prompting. For sibling editors, see the [Gemini CLI AI app security checklist](/blog/gemini-cli-app-security-checklist) which uses the same gate shape.
 
-One env expansion gotcha worth knowing is silent auth failure. If `${LYRASHIELD_API_KEY}` is not exported in the shell session that launched `gemini`, the MCP server starts with an empty key and every call returns a 401. The CLI does not surface a settings error, so the symptom looks like a server bug. The fix is to verify the variable in the parent shell before launch, not after.
+One env expansion gotcha worth knowing is silent auth failure. Gemini CLI strips env var names containing KEY, TOKEN, or SECRET from the subprocess environment before it spawns the MCP server, so a value exported as `LYRASHIELD_API_KEY` never reaches the server and every call returns a 401. The fix is to export the key under a name without those substrings, such as `GEMINI_LYRASHIELD_CRED`, and map `LYRASHIELD_API_KEY` to that reference in the server env block, as the config above does.
 
 ## 3. Verify the connection in Gemini CLI
 
-Restart Gemini CLI and run `gemini mcp list` or ask "list MCP tools". You should see `lyrashield` with `scan` and `lyrashield_get_findings`. Run a status call: `gemini mcp call lyrashield lyrashield_get_scan_status`. If auth fails, ensure `LYRASHIELD_API_KEY` is exported in the shell that launched `gemini`. If tools do not appear, check `mcp.allowed` includes your server names and that `includeTools` does not hide them. For troubleshooting, the [Gemini CLI GitHub repo](https://github.com/google-gemini/gemini-cli) issues show common env visibility problems, and the [MCP spec](https://modelcontextprotocol.io/specification/2025-03-26) explains transport negotiation. Another frequent issue is a mismatch between the server name in `mcpServers` and the name in `mcp.allowed`. Names are case sensitive and must match exactly, otherwise the policy gate drops the server with no error message.
+Restart Gemini CLI and run `gemini mcp list` or ask "list MCP tools". You should see `lyrashield` with `scan` and `lyrashield_get_findings`. Run a status call: `gemini mcp call lyrashield lyrashield_get_scan_status`. If auth fails, ensure the credential var is exported in the shell that launched `gemini` (see the gotcha above for the naming rule). If tools do not appear, check `mcp.allowed` includes your server names and that `includeTools` does not hide them. For troubleshooting, the [Gemini CLI GitHub repo](https://github.com/google-gemini/gemini-cli) issues show common env visibility problems, and the [MCP spec](https://modelcontextprotocol.io/specification/2025-03-26) explains transport negotiation.
 
 ## 4. Run an inline check from the CLI
 
 From Gemini CLI, ask it to scan the authorized target and return findings with their recorded evidence states, file locations, supporting evidence, and limitations. Use `lyrashield_scan_target`, then inspect results with `lyrashield_get_findings`; do not filter to “verified,” because independent verification requires a separate receipt.
 
-The distinction between a finding with a recorded evidence state and raw lint noise matters for blocking merges. A finding with a recorded evidence state includes a concrete file path, a line number, and a proof snippet that demonstrates exploitability. For example, a stored XSS finding points to `src/components/Comment.jsx` line 42, where unsanitized user input is rendered into the DOM, and the proof shows a payload string that executes in the browser. Raw lint noise, by contrast, flags a pattern without proof, such as a generic "dangerouslySetInnerHTML usage detected" with no reachable input source. You block on the former and triage the latter.
+The distinction between a finding with a recorded evidence state and raw lint noise matters for blocking merges. A finding with a recorded evidence state includes a concrete file path, a line number, and a proof snippet that demonstrates exploitability, such as a stored XSS finding that points to an unsanitized input rendered into the DOM along with a payload that executes in the browser. Raw lint noise flags a pattern without proof, such as a generic usage warning with no reachable input source. You block on the former and triage the latter.
 
 Sample instruction for your Gemini CLI prompt library:
 
@@ -124,7 +126,7 @@ jobs:
           fail_on_severity: HIGH
 ```
 
-The workflow mirrors your Gemini CLI transport: same endpoint [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and same key shape. Diff mode keeps scans fast for agent driven branches by only scanning changed files rather than the full tree. Use GitHub code scanning rules to require merge approval for critical findings with recorded evidence states while keeping notes informational.
+The workflow mirrors your Gemini CLI transport: same endpoint [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and same key shape. Diff mode keeps scans fast for agent driven branches by only scanning changed files rather than the full tree.
 
 The SARIF file is uploaded to the GitHub security tab, where findings appear alongside CodeQL results with file, line, and severity metadata. This gives reviewers a single surface to triage both static analysis and LyraShield findings with recorded evidence states without switching tools.
 
@@ -142,7 +144,7 @@ Save as `.gemini/rules/security.md` or your rules path.
 - Report scan ID and SARIF link in PR or CLI summary.
 ```
 
-This keeps Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report consistent across local CLI and CI. Point teammates to the [Gemini CLI integration guide](/docs/integrations/gemini-cli) and the pillar [vibe coding security guide](/blog/vibe-coding-security-guide) as markdown links in onboarding. Keeping the rules file short and declarative helps the agent follow it consistently. Long rule lists get truncated or deprioritized by the model, so favor a handful of concrete steps over verbose prose.
+This keeps Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report consistent across local CLI and CI. Point teammates to the [Gemini CLI integration guide](/docs/integrations/gemini-cli) and the pillar [vibe coding security guide](/blog/vibe-coding-security-guide) as markdown links in onboarding. Keeping the rules file short and declarative helps the agent follow it consistently.
 
 | Setting | Meaning | Recommended |
 | --- | --- | --- |
@@ -156,6 +158,6 @@ This keeps Target to Scan to Evidence State to Fix Proposal to Retest to Assuran
 
 Gemini CLI gives you terminal native agent workflows, LyraShield adds recorded security evidence that is designed to travel from CLI to CI without custom scripts. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains how AI built apps accumulate risks across injection, auth, and supply chain when verification is deferred. Pairing provides one loop from Target to Report with SARIF that GitHub code scanning understands per [docs.github.com on code scanning](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning). v1 is agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, Bounded scans, evidence states, fix-proposal recording, retest queueing, and SARIF are available now.
 
-The value of a single transport across local and CI is consistency. The same MCP endpoint, the same `lsk_` key, and the same tool surface mean a finding you reproduce in your terminal is the same finding that blocks a PR in GitHub. You do not maintain two scan configurations or reconcile two result formats. SARIF output standardizes severity and location data so reviewers see results in the security tab they already use for CodeQL.
+The value of a single transport across local and CI is consistency. The same MCP endpoint, the same `lsk_` key, and the same tool surface mean a finding you reproduce in your terminal is the same finding that blocks a PR in GitHub. SARIF output standardizes severity and location data so reviewers see results in the security tab they already use for CodeQL.
 
 Start with local stdio MCP, verify tool listing, run a bounded scan on your next AI-scaffolded branch, record a reviewed fix proposal for one finding, apply the change yourself, and poll the queued retest. Deepen coverage with the [AI app security checklist](/tools/ai-app-security-checklist) and [create an account at LyraShield AI](https://lyrashieldai.com).

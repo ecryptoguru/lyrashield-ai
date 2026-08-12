@@ -17,6 +17,8 @@ faq:
     a: "Use autoApprove sparingly. Keep read only tools like lyrashield_list_targets and lyrashield_get_findings allowed, but gate fix and retest tools behind a prompt so the agent cannot run them without your confirmation. Every auto approved tool is an action the agent takes autonomously."
 ---
 
+Fastest path: run `npx lyrashield init` to detect Cline and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store your credentials. The manual config below is what the CLI writes, kept for reference.
+
 You can run secure AI app development in Cline by adding LyraShield AI as an MCP server, getting findings with their recorded evidence states and supporting evidence inside Cline, and enforcing the same checks in CI with a diff aware GitHub Action that uploads SARIF.
 
 Cline automates file edits and terminal actions, which speeds up feature work but can introduce secrets, injection, and vulnerable dependencies when scaffolding is agent driven. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification must be part of the agent loop. LyraShield AI is agent native AppSec for AI built software with a loop from Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives exact Cline config using `npx -y @lyrashield/mcp` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification, inline checks, and the GitHub gate. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
@@ -91,7 +93,7 @@ Example rules you can store in `.clinerules/security.md`:
 - Append Report with scan ID and SARIF link
 ```
 
-A fix proposal is a recorded remediation summary, not a patch, branch, pull request, or merge. The developer applies the code change; `lyrashield_verify_fix` then queues a retest and returns a reference to poll.
+An approval-gated fix proposal is a recorded remediation summary, not a patch, branch, pull request, or merge. The developer applies the code change; `lyrashield_verify_fix` then queues a retest and returns a reference to poll.
 
 ## 5. Wire the GitHub Action diff aware gate
 

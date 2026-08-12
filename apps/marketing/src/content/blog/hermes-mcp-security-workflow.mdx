@@ -17,9 +17,11 @@ faq:
     a: "Hermes reads MCP servers from its settings file under mcpServers with local stdio and remote entries. Use the pinned npx -y @lyrashield/mcp command for local and the remote endpoint with a Bearer lsk_ key for shared team or CI use. Keep the key in an env reference, never as a literal in the committed config."
 ---
 
+Fastest path: run `npx lyrashield init` to auto-detect Hermes and write the config, or `npx lyrashield install hermes` for the CLI-managed path, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
+
 You can pair Hermes AI with LyraShield AI over MCP to get target aware scans, recorded evidence states, and fix proposals without leaving your agent workflow. In this guide you will add the local server using pinned npx -y @lyrashield/mcp plus the remote endpoint at https://app.lyrashieldai.com/api/mcp inside ~/.hermes/config.yaml, verify tool discovery, run a scoped inline check, and wire a diff aware GitHub Action gate that uploads SARIF for code scanning.
 
-Fast generation from Hermes is powerful, but without review you can ship injection flaws, broken access control, and vulnerable deps. Use the [vibe coding security guide](/blog/vibe-coding-security-guide) as your policy spine, then map categories to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) for concrete weakness definitions that justify your triage order. Bounded scans with explicit evidence states keep agents productive while preserving the limitations security teams need to see.
+Fast generation from Hermes is powerful, but without review you can ship injection flaws, broken access control, and vulnerable deps. Use the [vibe coding security guide](/blog/vibe-coding-security-guide) as your policy spine, then map categories to the [OWASP Top 10](https://owasp.org/www-project-top-ten/) official standard and [CWE Top 25](https://cwe.mitre.org/top25/) for concrete weakness definitions that justify your triage order. Bounded scans with explicit evidence states keep agents productive while preserving the limitations security teams need to see.
 
 LyraShield follows a clear loop of Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report, with human approval retained for mutations.
 
@@ -82,7 +84,7 @@ If you run Hermes inside a shared container, mount the config file from a secure
 
 ## 3. Verify connection and list security tools
 
-Restart Hermes after editing ~/.hermes/config.yaml. Open the MCP panel and expect lyrashield and lyrashield-remote to show connected with transport type stdio and streamable-http. If either shows failed, confirm that Node can resolve npx and that the shell that launched Hermes has LYRASHIELD_API_KEY exported. Also check that yaml indentation is exactly two spaces under mcp_servers, since Hermes uses strict yaml parsing.
+Restart Hermes after editing ~/.hermes/config.yaml. Open the MCP panel and expect lyrashield and lyrashield-remote to show connected with transport type stdio and streamable-http. If either shows failed, confirm that Node can resolve npx and that the shell that launched Hermes has LYRASHIELD_API_KEY exported. Also check that yaml indentation is exactly two spaces under mcp_servers, since Hermes uses strict yaml parsing. A common failure is launching Hermes from a GUI launcher or dock icon that does not inherit your shell environment, so the exported key never reaches the agent process; relaunch Hermes from the same terminal where you exported the key to fix the silent auth gap.
 
 Ask Hermes to list tools:
 
