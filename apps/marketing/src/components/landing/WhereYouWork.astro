@@ -14,5 +14,122 @@
       <span data-reveal="scale" class="lift rounded-full border border-border bg-bg-raised px-4 py-2 text-sm text-text-muted hover:border-accent hover:text-text">OpenCode</span>
       <span data-reveal="scale" class="lift rounded-full border border-border bg-bg-raised px-4 py-2 text-sm text-text-muted hover:border-accent hover:text-text">Any compatible MCP client</span>
     </div>
+    <p data-reveal class="mt-6 text-sm text-text-muted">
+      Setup is one command: <code class="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[0.8em] text-text">npx lyrashield init</code> detects your client and writes the config. See the <a href="/docs/integrations" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">per-agent setup guides</a>.
+    </p>
   </div>
+
+  {/* What the loop looks like from inside a coding agent. The transcript is real
+      text, not an image, so it stays crawlable and screen-reader readable; only
+      the window chrome and the caret are decorative. */}
+  <figure class="mcp-term mx-auto mt-12 max-w-3xl" data-reveal="scale">
+    <div class="mcp-term__chrome" aria-hidden="true">
+      <span></span><span></span><span></span>
+      <p>your coding agent — LyraShield MCP</p>
+    </div>
+    <pre class="mcp-term__body"><code><span class="mcp-term__you">you</span>  check this app before I ship it
+<span class="mcp-term__sys">lyrashield</span>  scope confirmed · authorized target only
+<span class="mcp-term__sys">lyrashield</span>  review running · layers kept separate
+<span class="mcp-term__sys">lyrashield</span>  4 detected · 2 independently verified · 1 inconclusive
+<span class="mcp-term__you">you</span>  fix the verified one
+<span class="mcp-term__sys">lyrashield</span>  fix proposal staged · plain-English explanation + patch
+<span class="mcp-term__warn">      ⚠ approval required on this terminal · nothing auto-merges</span>
+<span class="mcp-term__warn">      approve? [y/N]</span><span class="mcp-term__caret" aria-hidden="true"></span></code></pre>
+    <figcaption class="mcp-term__caption">
+      Illustrative session. The approval gate is real: a fix proposal cannot execute unless a
+      server-generated patch is bound to your explicit approval on the controlling terminal, and it
+      fails closed when no terminal is present.
+    </figcaption>
+  </figure>
 </section>
+
+<style>
+  .mcp-term {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 0.6rem;
+    background: #0b1723;
+    box-shadow: 0 1.25rem 3.5rem rgba(0, 0, 0, 0.28);
+    text-align: left;
+  }
+
+  .mcp-term__chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-bottom: 1px solid rgba(32, 50, 70, 0.9);
+    padding: 0.65rem 0.9rem;
+    background: #0e1a28;
+  }
+
+  .mcp-term__chrome span {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: #2b4258;
+  }
+
+  .mcp-term__chrome p {
+    margin: 0 0 0 0.7rem;
+    color: #5f7081;
+    font: 500 0.7rem/1 "JetBrains Mono Variable", monospace;
+  }
+
+  .mcp-term__body {
+    margin: 0;
+    overflow-x: auto;
+    padding: 1.1rem 1.15rem 1.25rem;
+    color: #b7cad8;
+    font: 500 0.78rem/1.95 "JetBrains Mono Variable", monospace;
+  }
+
+  .mcp-term__you {
+    color: #edf6fb;
+    font-weight: 700;
+  }
+
+  .mcp-term__sys {
+    color: #54d6df;
+    font-weight: 700;
+  }
+
+  .mcp-term__warn {
+    color: #f5b84b;
+  }
+
+  .mcp-term__caret {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.95rem;
+    margin-left: 0.35rem;
+    background: #54d6df;
+    translate: 0 0.15rem;
+  }
+
+  /* The caret only blinks once the card has scrolled into view, and never for
+     reduced-motion users. `is-revealed` is applied by the JS reveal helper,
+     which already opts out of motion for reduced-motion and Save-Data. */
+  .mcp-term.is-revealed .mcp-term__caret {
+    animation: mcp-term-blink 1.15s steps(1, end) infinite;
+  }
+
+  @keyframes mcp-term-blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mcp-term.is-revealed .mcp-term__caret {
+      animation: none;
+    }
+  }
+
+  .mcp-term__caption {
+    border-top: 1px solid var(--border);
+    padding: 0.85rem 1.15rem 1rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+</style>

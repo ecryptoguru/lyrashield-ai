@@ -1,9 +1,11 @@
 ---
 import Base from "@layouts/Base.astro"
 import PremiumHero from "@components/landing/PremiumHero.astro"
+import HeroProductFrame from "@components/landing/HeroProductFrame.astro"
 import V2Launch from "@components/landing/V2Launch.astro"
 import HomeLiteScan from "@components/landing/HomeLiteScan.astro"
 import AssuranceRecord from "@components/landing/AssuranceRecord.astro"
+import AssuranceLoop from "@components/landing/AssuranceLoop.astro"
 import EvidenceWorld from "@components/landing/EvidenceWorld.astro"
 import WhereYouWork from "@components/landing/WhereYouWork.astro"
 import TwoDepths from "@components/landing/TwoDepths.astro"
@@ -57,7 +59,7 @@ const jsonLd = [
     description,
     url: pageUrl,
     inLanguage: "en-US",
-    dateModified: "2026-07-17",
+    dateModified: "2026-08-13",
     isPartOf: { "@id": `${siteOrigin}/#website` },
     about: { "@id": `${pageUrl}#application` },
     mainEntity: { "@id": `${pageUrl}#faq` },
@@ -97,6 +99,7 @@ const jsonLd = [
   jsonLd={jsonLd}
 >
   <PremiumHero />
+  <HeroProductFrame />
   <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
   <V2Launch />
   <HomeLiteScan />
@@ -105,6 +108,10 @@ const jsonLd = [
       loop; this keeps the shareable /#how-it-works URL resolving on the homepage. */}
   <div id="how-it-works" aria-hidden="true" style="scroll-margin-top: 4.5rem"></div>
   <div class="cinematic-threshold cinematic-threshold--to-dark" aria-hidden="true"></div>
+  {/* The loop diagram orients the visitor before the cinematic walkthrough: map
+      first, then territory. It is an addition to the Assurance World narrative,
+      never a replacement for it — the seven scroll chapters below stay. */}
+  <AssuranceLoop />
   <EvidenceWorld manifest={motionManifest} />
   <div class="cinematic-threshold cinematic-threshold--to-light" aria-hidden="true"></div>
   <AssuranceRecord />

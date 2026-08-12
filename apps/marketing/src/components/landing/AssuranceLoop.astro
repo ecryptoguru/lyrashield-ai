@@ -1,0 +1,378 @@
+---
+/**
+ * The assurance loop, as a single orienting diagram.
+ *
+ * This sits immediately BEFORE the Assurance World scroll narrative and exists
+ * to answer "what is the shape of this product?" in one glance, before the
+ * cinematic per-step storytelling walks the visitor through each stage in
+ * depth. It complements that narrative — it does not replace it. Do not remove
+ * the per-chapter sections in EvidenceWorld.astro in favour of this diagram.
+ *
+ * Crawlability: every stage and every evidence-state definition is real text in
+ * an ordered/description list, not an image. Answer engines can lift the
+ * definitions directly. The connectors are decorative CSS only.
+ */
+
+const stages = [
+  {
+    n: "01",
+    name: "Target",
+    body: "Name the repo, live URL, or API and set the boundary first. Nothing is tested that you did not explicitly approve.",
+  },
+  {
+    n: "02",
+    name: "Review",
+    body: "Deterministic scanners catch known patterns; AI-assisted review looks at logic, auth flows, and data handling. They stay separate coverage layers, never one blended score.",
+  },
+  {
+    n: "03",
+    name: "Evidence",
+    body: 'Every result carries an honest state, so "we saw it" never quietly becomes "we proved it". Missing proof stays visible.',
+  },
+  {
+    n: "04",
+    name: "Fix",
+    body: "A plain-English explanation plus a staged patch proposal that requires your explicit review and approval. Nothing auto-merges.",
+  },
+  {
+    n: "05",
+    name: "Retest",
+    body: "A fresh, server-owned run re-checks the change instead of trusting the same conversation that made it.",
+  },
+  {
+    n: "06",
+    name: "Report",
+    body: "One reviewable release record: scope, coverage, findings, evidence states, fixes, retest outcomes, and what could not be checked.",
+  },
+]
+
+const states = [
+  {
+    key: "detected",
+    label: "Detected",
+    body: "A scanner signal that needs review. Confidence is triage metadata, not proof.",
+  },
+  {
+    key: "verified",
+    label: "Independently verified",
+    body: "A separate verification receipt supports the finding.",
+  },
+  {
+    key: "confirmed",
+    label: "Retest-confirmed",
+    body: "A fresh server-owned retest found the condition absent, with the applicable deterministic coverage complete.",
+  },
+  {
+    key: "inconclusive",
+    label: "Inconclusive",
+    body: "The retained evidence cannot establish that the condition is gone. It is reported as inconclusive, not as a pass.",
+  },
+]
+---
+
+<section class="loop" aria-labelledby="assurance-loop-heading">
+  <div class="loop__inner" data-reveal-group>
+    <p class="loop__eyebrow" data-reveal>The assurance loop</p>
+    <h2 id="assurance-loop-heading" class="loop__title" data-reveal>
+      Six stages, one record. Here is the whole loop before we walk through it.
+    </h2>
+    <p class="loop__lede" data-reveal>
+      Everything below this point is the same loop told stage by stage. This is the map; the
+      walkthrough that follows is the territory.
+    </p>
+
+    <ol class="loop__stages" data-reveal-group>
+      {
+        stages.map((stage) => (
+          <li class="loop__stage" data-reveal="scale">
+            <span class="loop__node" aria-hidden="true">
+              {stage.n}
+            </span>
+            <h3 class="loop__stage-name">
+              <span class="loop__stage-index">{stage.n}</span> {stage.name}
+            </h3>
+            <p class="loop__stage-body">{stage.body}</p>
+          </li>
+        ))
+      }
+    </ol>
+
+    <p class="loop__return" data-reveal>
+      <span aria-hidden="true">↺</span> Ship a change and the loop starts again at Target, so the record
+      stays current instead of ageing into a screenshot from last month.
+    </p>
+
+    <div class="loop__legend" data-reveal>
+      <h3 class="loop__legend-title">The four evidence states</h3>
+      <p class="loop__legend-lede">
+        Stage 03 is the part most tools blur. LyraShield keeps these four apart for every single
+        finding, and a report shows all four.
+      </p>
+      <dl class="loop__states">
+        {
+          states.map((state) => (
+            <div class="loop__state">
+              <dt>
+                <i class:list={["loop__dot", `is-${state.key}`]} aria-hidden="true" />
+                {state.label}
+              </dt>
+              <dd>{state.body}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </div>
+
+    <nav class="loop__links" aria-label="Learn more about the assurance loop" data-reveal>
+      <a href="/methodology">How coverage and evidence are defined</a>
+      <a href="/vibe-security-50">The 50 controls in the Vibe Security registry</a>
+      <a href="/sample-report">See a sample release report</a>
+      <a href="/docs/integrations">Run the loop from your coding agent</a>
+    </nav>
+  </div>
+</section>
+
+<style>
+  .loop {
+    --loop-cyan: #54d6df;
+    position: relative;
+    padding: clamp(3.5rem, 7vw, 6rem) max(1rem, calc((100% - 1280px) / 2));
+    color: #edf6fb;
+    background: #08111c;
+  }
+
+  .loop::before {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(84, 214, 223, 0.09), transparent 58%),
+      linear-gradient(180deg, rgba(84, 214, 223, 0.05), transparent 34%);
+    content: "";
+    pointer-events: none;
+  }
+
+  .loop__inner {
+    position: relative;
+  }
+
+  .loop__eyebrow {
+    margin: 0 0 1rem;
+    color: var(--loop-cyan);
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .loop__title {
+    max-width: 30ch;
+    margin: 0;
+    font-family: "Bricolage Grotesque Variable", sans-serif;
+    font-size: clamp(2rem, 4.2vw, 3.4rem);
+    font-weight: 800;
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    text-wrap: balance;
+  }
+
+  .loop__lede {
+    max-width: 58ch;
+    margin: 1.25rem 0 0;
+    color: #b7cad8;
+    font-size: clamp(0.98rem, 1.2vw, 1.1rem);
+    line-height: 1.7;
+  }
+
+  .loop__stages {
+    display: grid;
+    gap: 1rem;
+    margin: clamp(2.5rem, 5vw, 3.5rem) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (min-width: 640px) {
+    .loop__stages {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .loop__stages {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+  }
+
+  .loop__stage {
+    position: relative;
+    padding: 1.35rem 1.25rem 1.5rem;
+    border: 1px solid rgba(84, 214, 223, 0.2);
+    border-radius: 0.4rem;
+    background: linear-gradient(180deg, rgba(84, 214, 223, 0.06), rgba(8, 17, 28, 0.9));
+  }
+
+  /* Decorative connector between stages on the wide layout only. */
+  @media (min-width: 1024px) {
+    .loop__stage + .loop__stage::before {
+      position: absolute;
+      top: 2.05rem;
+      left: calc(-0.75rem - 1px);
+      width: 0.75rem;
+      height: 1px;
+      background: rgba(84, 214, 223, 0.45);
+      content: "";
+    }
+  }
+
+  .loop__node {
+    display: inline-flex;
+    width: 2.1rem;
+    height: 2.1rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(84, 214, 223, 0.45);
+    border-radius: 50%;
+    margin-bottom: 0.9rem;
+    color: var(--loop-cyan);
+    background: rgba(8, 17, 28, 0.9);
+    box-shadow: 0 0 18px rgba(84, 214, 223, 0.18);
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .loop__stage-name {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  /* The index is duplicated for screen readers and no-CSS contexts; the round
+     node above is decorative, so hide this copy visually only. */
+  .loop__stage-index {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .loop__stage-body {
+    margin: 0.6rem 0 0;
+    color: #b7cad8;
+    font-size: 0.88rem;
+    line-height: 1.6;
+  }
+
+  .loop__return {
+    margin: 1.5rem 0 0;
+    color: #91a7b8;
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+  }
+
+  .loop__return span {
+    margin-right: 0.4rem;
+    color: var(--loop-cyan);
+  }
+
+  .loop__legend {
+    margin-top: clamp(2.5rem, 5vw, 3.5rem);
+    padding: clamp(1.35rem, 3vw, 2.25rem);
+    border: 1px solid rgba(84, 214, 223, 0.18);
+    border-radius: 0.4rem;
+    background: rgba(8, 17, 28, 0.72);
+  }
+
+  .loop__legend-title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .loop__legend-lede {
+    max-width: 62ch;
+    margin: 0.65rem 0 0;
+    color: #b7cad8;
+    font-size: 0.92rem;
+    line-height: 1.65;
+  }
+
+  .loop__states {
+    display: grid;
+    gap: 1.1rem;
+    margin: 1.5rem 0 0;
+  }
+
+  @media (min-width: 768px) {
+    .loop__states {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.35rem 2rem;
+    }
+  }
+
+  .loop__state dt {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: #edf6fb;
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .loop__state dd {
+    margin: 0.45rem 0 0 1.2rem;
+    color: #b7cad8;
+    font-size: 0.86rem;
+    line-height: 1.6;
+  }
+
+  .loop__dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    flex: none;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 14px currentColor;
+  }
+
+  .is-detected { color: #54d6df; }
+  .is-verified { color: #5cdb95; }
+  .is-confirmed { color: #f5b84b; }
+  .is-inconclusive { color: #ff7168; }
+
+  .loop__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.75rem;
+    margin-top: 1.75rem;
+  }
+
+  .loop__links a {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    color: var(--loop-cyan);
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: rgba(84, 214, 223, 0.4);
+    text-underline-offset: 4px;
+  }
+
+  .loop__links a:hover {
+    text-decoration-color: var(--loop-cyan);
+  }
+
+  .loop__links a:focus-visible {
+    outline: 2px solid var(--loop-cyan);
+    outline-offset: 3px;
+  }
+</style>
