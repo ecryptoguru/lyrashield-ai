@@ -1,5 +1,19 @@
 ---
 import { tools, toolUrl } from "../../lib/tools"
+
+/**
+ * One glyph per tool, so the list scans as five distinct things instead of five
+ * rows of text. Purely decorative: the icons are aria-hidden and the tool title
+ * beside them carries the meaning. Keyed by slug so a newly added tool simply
+ * renders without an icon rather than silently borrowing the wrong one.
+ */
+const toolIcons: Record<string, string> = {
+  "ai-app-security-checklist": "M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11",
+  "security-headers-checker": "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  "secret-exposure-scanner": "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  "supabase-rls-checker": "M12 3c4.42 0 8 1.34 8 3s-3.58 3-8 3-8-1.34-8-3 3.58-3 8-3zM4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3",
+  "jwt-session-inspector": "M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z",
+}
 ---
 
 <section aria-labelledby="tools-heading" class="border-y border-border bg-bg-raised/70 px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
@@ -20,8 +34,15 @@ import { tools, toolUrl } from "../../lib/tools"
     <ul class="mt-12 divide-y divide-border border-y border-border" data-reveal-group>
       {tools.map((tool, index) => (
         <li data-reveal>
-          <a href={toolUrl(tool.slug)} class="group grid min-h-16 gap-2 py-4 transition-[padding,color] duration-200 hover:pl-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:grid-cols-[3rem_1fr_auto] sm:items-center sm:gap-5">
+          <a href={toolUrl(tool.slug)} class="group grid min-h-16 gap-2 py-4 transition-[padding,color] duration-200 hover:pl-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:grid-cols-[3rem_2rem_1fr_auto] sm:items-center sm:gap-5">
             <span class="font-mono text-xs text-text-muted" aria-hidden="true">0{index + 1}</span>
+            <span class="hidden text-text-muted transition-colors group-hover:text-accent sm:block" aria-hidden="true">
+              {toolIcons[tool.slug] && (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d={toolIcons[tool.slug]} />
+                </svg>
+              )}
+            </span>
             <span class="font-medium text-text group-hover:text-accent">{tool.title}</span>
             <span class="text-sm text-text-muted">Local analyzer · {tool.privacy}</span>
           </a>

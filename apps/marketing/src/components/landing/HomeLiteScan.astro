@@ -28,7 +28,179 @@ const scannerAvailable = Boolean(appOrigin)
       <p id="home-scan-error" class="mt-4 hidden text-sm leading-6 text-danger" role="alert"></p>
     </form>
   </div>
+
+  {/* Shows the shape of a Lite Check result before the visitor spends 30 seconds
+      on one. Sample values, real check names, and the honest closing line: a
+      passive check cannot prove absence. All text, so it stays crawlable. */}
+  <figure class="lite-sample mx-auto mt-12 max-w-6xl" data-reveal="scale">
+    <figcaption class="lite-sample__head">
+      <span class="lite-sample__eyebrow">What a result looks like</span>
+      <span class="lite-sample__note">Sample values · your result depends on your app</span>
+    </figcaption>
+    <ul class="lite-sample__list">
+      <li class="lite-sample__row">
+        <i class="lite-sample__dot is-warn" aria-hidden="true"></i>
+        <span class="lite-sample__name">Security headers</span>
+        <span class="lite-sample__verdict is-warn">3 missing</span>
+        <span class="lite-sample__detail">No Content-Security-Policy, no HSTS, no X-Content-Type-Options.</span>
+      </li>
+      <li class="lite-sample__row">
+        <i class="lite-sample__dot is-warn" aria-hidden="true"></i>
+        <span class="lite-sample__name">Frontend data-layer signals</span>
+        <span class="lite-sample__verdict is-warn">1 to review</span>
+        <span class="lite-sample__detail">A client bundle references a key-shaped string. Worth a look before launch.</span>
+      </li>
+      <li class="lite-sample__row">
+        <i class="lite-sample__dot is-pass" aria-hidden="true"></i>
+        <span class="lite-sample__name">HTTPS and redirects</span>
+        <span class="lite-sample__verdict is-pass">Clean</span>
+        <span class="lite-sample__detail">Valid certificate, HTTP redirects to HTTPS.</span>
+      </li>
+      <li class="lite-sample__row">
+        <i class="lite-sample__dot is-muted" aria-hidden="true"></i>
+        <span class="lite-sample__name">CORS policy</span>
+        <span class="lite-sample__verdict is-muted">Not applicable</span>
+        <span class="lite-sample__detail">No cross-origin API surface was reachable from the public page.</span>
+      </li>
+    </ul>
+    <p class="lite-sample__foot">
+      A passive check reads what your app already exposes publicly. It can show you what is missing;
+      it cannot prove nothing is wrong. The deeper questions — auth flows, logic, and whether a fix
+      actually held — need the full loop.
+      <a href="/scan">What the Lite Check covers, and what it cannot prove</a>
+    </p>
+  </figure>
 </section>
+
+<style>
+  .lite-sample {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--bg);
+  }
+
+  .lite-sample__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    padding: 0.9rem 1.15rem;
+    background: color-mix(in srgb, var(--bg-raised) 70%, transparent);
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.72rem;
+  }
+
+  .lite-sample__eyebrow {
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .lite-sample__note {
+    color: var(--text-muted);
+  }
+
+  .lite-sample__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .lite-sample__row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.35rem 0.75rem;
+    padding: 0.95rem 1.15rem;
+  }
+
+  .lite-sample__row + .lite-sample__row {
+    border-top: 1px solid var(--border);
+  }
+
+  .lite-sample__dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .lite-sample__name {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .lite-sample__verdict {
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .lite-sample__detail {
+    grid-column: 2 / -1;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.55;
+  }
+
+  /* Under 480px the name and the right-aligned verdict crowd each other, so the
+     verdict drops onto its own line under the check name. */
+  @media (max-width: 479px) {
+    .lite-sample__row {
+      grid-template-columns: auto 1fr;
+    }
+
+    .lite-sample__verdict {
+      grid-column: 2 / -1;
+      text-align: left;
+    }
+  }
+
+  /* Theme-aware state colours: darker in light mode so the text keeps its
+     contrast ratio, brighter on the dark surface. */
+  .lite-sample {
+    --sample-pass: #1f7a4d;
+    --sample-warn: var(--terminal-warning-text);
+  }
+
+  :root[data-theme="dark"] .lite-sample {
+    --sample-pass: #5cdb95;
+    --sample-warn: #f5b84b;
+  }
+
+  .is-pass {
+    color: var(--sample-pass);
+  }
+
+  .is-warn {
+    color: var(--sample-warn);
+  }
+
+  .is-muted {
+    color: var(--text-muted);
+  }
+
+  .lite-sample__foot {
+    margin: 0;
+    border-top: 1px solid var(--border);
+    padding: 0.95rem 1.15rem 1.1rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  .lite-sample__foot a {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+</style>
 
 <script>
   import { normalizePublicHttpUrl } from "../../lib/public-url"

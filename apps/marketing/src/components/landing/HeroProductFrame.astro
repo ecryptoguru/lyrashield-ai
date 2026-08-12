@@ -1,0 +1,130 @@
+---
+/**
+ * The hero product-image slot.
+ *
+ * Renders on the same #08111c canvas as PremiumHero and rises into it, so it
+ * reads as the second half of the hero rather than a separate band.
+ *
+ * Today this is a deliberate PLACEHOLDER, not a screenshot — see
+ * `public/product/README.md` for the swap procedure. The <figure>/<img>/
+ * <figcaption> structure and the explicit width/height are the point: the slot
+ * is crawlable, captioned, and layout-stable now, so dropping the real capture
+ * in later is a one-file change with no markup churn.
+ *
+ * Guardrail: while `heroProductIsPlaceholder` is true the caption must keep
+ * saying so. Never let a mock read as a real product screenshot.
+ */
+
+const heroProductImage = "/product/dashboard-placeholder.svg"
+const heroProductIsPlaceholder: boolean = true
+const heroProductAlt =
+  "Placeholder illustration of the LyraShield release record: a findings ledger with each row tagged by evidence state — detected, independently verified, retest-confirmed, or inconclusive."
+---
+
+<section class="hero-frame" aria-labelledby="hero-frame-caption">
+  <figure class="hero-frame__figure">
+    <div class="hero-frame__window">
+      <div class="hero-frame__chrome" aria-hidden="true">
+        <span></span><span></span><span></span>
+        <p>app.lyrashieldai.com — release record</p>
+      </div>
+      <img
+        class="hero-frame__img"
+        src={heroProductImage}
+        alt={heroProductAlt}
+        width="1600"
+        height="1000"
+        loading="lazy"
+        decoding="async"
+      />
+    </div>
+    <figcaption id="hero-frame-caption" class="hero-frame__caption">
+      {
+        heroProductIsPlaceholder ? (
+          <Fragment>
+            <b>Illustrative placeholder — product screenshot coming.</b> This is a mock of the
+            release record, not a capture of a real account. What it stands in for: every finding
+            carried with its evidence state, so a fix is only "confirmed" when a fresh retest says
+            so.
+          </Fragment>
+        ) : (
+          <Fragment>
+            The release record: findings grouped by evidence state, with retest outcomes and the
+            checks that were limited or not applicable kept visible.
+          </Fragment>
+        )
+      }
+    </figcaption>
+  </figure>
+</section>
+
+<style>
+  .hero-frame {
+    --frame-cyan: #54d6df;
+    position: relative;
+    padding: clamp(1.5rem, 3vw, 2.5rem) max(1rem, calc((100% - 1280px) / 2))
+      clamp(3rem, 6vw, 5rem);
+    background: #08111c;
+  }
+
+  .hero-frame__figure {
+    margin: 0;
+  }
+
+  .hero-frame__window {
+    overflow: hidden;
+    border: 1px solid rgba(84, 214, 223, 0.22);
+    border-radius: 0.6rem;
+    background: #0b1723;
+    box-shadow:
+      0 2rem 5rem rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(8, 17, 28, 0.6);
+  }
+
+  .hero-frame__chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-bottom: 1px solid rgba(32, 50, 70, 0.9);
+    padding: 0.7rem 0.95rem;
+    background: #0e1a28;
+  }
+
+  .hero-frame__chrome span {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: #2b4258;
+  }
+
+  .hero-frame__chrome p {
+    margin: 0 0 0 0.75rem;
+    overflow: hidden;
+    color: #5f7081;
+    font: 500 0.72rem/1 "JetBrains Mono Variable", monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hero-frame__img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 8 / 5;
+    object-fit: cover;
+    object-position: top center;
+  }
+
+  .hero-frame__caption {
+    max-width: 68ch;
+    margin: 1rem 0 0;
+    color: #91a7b8;
+    font-size: 0.86rem;
+    line-height: 1.65;
+  }
+
+  .hero-frame__caption b {
+    color: #b7cad8;
+    font-weight: 700;
+  }
+</style>
