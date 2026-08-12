@@ -1,0 +1,229 @@
+---
+import DocsLayout from "@layouts/DocsLayout.astro"
+
+const origin = Astro.site?.origin || "http://localhost:4321"
+const canonical = new URL("/docs/integrations/agent-plugins", origin).toString()
+const title = "LyraShield Agent Plugin — One-Install Setup for Coding Agents"
+const description =
+  "Install LyraShield as a portable Agent Plugin (Agent Plugins v1.0.0). One package bundles the MCP server and the security skill for Claude Code, Cursor, VS Code, OpenAI Codex, GitHub Copilot, and Kiro."
+const updatedDate = "2026-08-12"
+
+// Kept in the same order as the launch-client table below.
+const launchClients = [
+  {
+    name: "Claude Code",
+    slug: "claude-code",
+    path: "~/.claude/plugins/lyrashield",
+    cliDefault: true,
+  },
+  {
+    name: "Cursor",
+    slug: "cursor",
+    path: "~/.cursor/plugins/local/lyrashield",
+    cliDefault: true,
+  },
+  {
+    name: "OpenAI Codex",
+    slug: "openai-codex",
+    path: "~/.codex/plugins/lyrashield",
+    cliDefault: true,
+  },
+  {
+    name: "GitHub Copilot",
+    slug: "github-copilot",
+    path: "~/.copilot/plugins/lyrashield",
+    cliDefault: true,
+  },
+  {
+    name: "Kiro",
+    slug: "kiro",
+    path: "~/.kiro/plugins/lyrashield",
+    cliDefault: true,
+  },
+  {
+    name: "VS Code",
+    slug: "vscode",
+    path: "~/.vscode/extensions/lyrashield",
+    cliDefault: false,
+  },
+]
+
+const faqItems = [
+  {
+    q: "What is the LyraShield Agent Plugin?",
+    a: "It is a portable plugin that follows the open Agent Plugins v1.0.0 standard published at agent-plugins.org. A single package carries both the LyraShield MCP server and a security skill that tells the agent when to run LyraShield checks, so a supported client gets the tools and the guidance from one install instead of a hand-edited MCP config.",
+  },
+  {
+    q: "Which clients can install the Agent Plugin?",
+    a: "Six launch clients: Claude Code, Cursor, VS Code, OpenAI Codex, GitHub Copilot, and Kiro. Every other supported agent uses the verified config-file, vendor-CLI, or guided-manual path documented in its own guide. There is no Agent Plugin for Windsurf or for any client outside these six.",
+  },
+  {
+    q: "Do I need to log in before installing the plugin?",
+    a: "Yes. Run npx lyrashield login --oauth first. The bundled MCP server runs over stdio and reads the selected workspace credential from ~/.lyrashield/credentials.json, so installing before you log in leaves the plugin with no credential to use. The CLI reports this rather than writing a broken install.",
+  },
+  {
+    q: "Does the plugin let the agent change my code on its own?",
+    a: "No. LyraShield findings and fixes are proposals requiring review. Mutating tools need a write-scoped credential, and over the remote endpoint they additionally need a human out-of-band approval before they run.",
+  },
+  {
+    q: "Why does VS Code use an MCP config file instead of the plugin?",
+    a: "A VS Code plugin entry exists, but its verified setup path today is the .vscode/mcp.json config file, which npx lyrashield install vscode writes for you. The VS Code guide documents that path, including the servers root key and the per-entry type of stdio.",
+  },
+]
+
+const jsonLd: unknown[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: title,
+    description,
+    url: canonical,
+    dateModified: updatedDate,
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en-US",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Integrations",
+        item: `${origin}/docs/integrations`,
+      },
+      { "@type": "ListItem", position: 3, name: "Agent Plugins", item: canonical },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqItems.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+]
+---
+
+<DocsLayout
+  title={`${title} | LyraShield AI`}
+  description={description}
+  canonical={canonical}
+  jsonLd={jsonLd}
+  updatedDate={updatedDate}
+  currentPath="/docs/integrations/agent-plugins"
+>
+  <h1>Agent Plugins</h1>
+  <p>
+    LyraShield ships as a portable plugin following the open{" "}
+    <a href="https://agent-plugins.org" target="_blank" rel="noopener noreferrer"
+      >Agent Plugins v1.0.0</a
+    >{" "}
+    standard. One package bundles two things: the LyraShield MCP server, which gives your agent the
+    scan, finding, fix-plan, and verify tools, and a security skill that tells the agent when to
+    reach for them. For the six launch clients below, this replaces hand-editing an MCP config file.
+  </p>
+
+  <h2>Install in two commands</h2>
+  <p>
+    Log in first. The bundled MCP server runs over stdio and reads your selected workspace
+    credential from <code>~/.lyrashield/credentials.json</code>, so the login has to come before the
+    install or the plugin has no credential to read.
+  </p>
+  <pre><code>npx lyrashield login --oauth
+npx lyrashield install &lt;agent&gt;</code></pre>
+  <p>
+    Prefer to let the CLI decide? <code>npx lyrashield init</code> detects the agents you have
+    installed and picks the plugin for the clients that support it, falling back to the verified
+    config-file or vendor-CLI path for the rest. Run <code>npx lyrashield doctor</code> afterwards to
+    confirm what is configured, and add <code>--dry-run</code> to any install to preview the change
+    without writing.
+  </p>
+
+  <div class="callout">
+    <strong>No credential in committed files:</strong> the plugin never writes your credential into
+    a project file. The MCP server reads it from <code>~/.lyrashield/credentials.json</code>, which
+    is user-only. A workspace API key in <code>LYRASHIELD_API_KEY</code> remains the fallback for CI
+    and clients that cannot complete OAuth. Do not commit either credential.
+  </div>
+
+  <h2>The six launch clients</h2>
+  <p>
+    An Agent Plugin exists for these six clients only. Every other agent LyraShield supports uses
+    the config-file, vendor-CLI, or guided-manual path in its own guide, and those guides stay the
+    reference for exactly what gets written.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Client</th>
+        <th>Plugin location</th>
+        <th>CLI default</th>
+      </tr>
+    </thead>
+    <tbody>
+      {launchClients.map((client) => (
+        <tr>
+          <td><a href={`/docs/integrations/${client.slug}`}>{client.name}</a></td>
+          <td><code>{client.path}</code></td>
+          <td>{client.cliDefault ? "Agent Plugin" : "MCP config file"}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+
+  <div class="callout callout--warn">
+    <strong>VS Code is the one exception:</strong> a VS Code plugin entry exists, but the verified
+    setup path today is the <code>.vscode/mcp.json</code> config file, so
+    <code>npx lyrashield install vscode</code> writes that instead. Note the two traps the{" "}
+    <a href="/docs/integrations/vscode">VS Code guide</a> covers: the root key is
+    <code>servers</code>, not <code>mcpServers</code>, and each entry needs
+    <code>"type": "stdio"</code>.
+  </div>
+
+  <h2>What the skill adds</h2>
+  <p>
+    The MCP server alone gives an agent tools; the bundled skill gives it judgement about depth. It
+    maps a request like a pre-commit diff check to a quick bounded review, and a deep security
+    review to the intrusive agentic mode that only runs inside the authorised isolated sandbox for a
+    repository target. That keeps a routine check from silently becoming a long expensive scan.
+  </p>
+
+  <h2>Findings are proposals, not automatic changes</h2>
+  <p>
+    Installing the plugin does not let an agent rewrite your code unattended. Read-only tools work
+    with any valid credential. Mutating tools need a write-scoped credential, and over the{" "}
+    <a href="/docs/integrations/remote-mcp">remote endpoint</a> they also need a human out-of-band
+    approval: the server returns a pending result with an approval link rather than executing, and
+    the agent can only proceed after a person approves it. See{" "}
+    <a href="/docs/approvals">Approvals</a> for the full flow. Fixes LyraShield generates are
+    proposals requiring review before they land.
+  </p>
+
+  <h2>Uninstall</h2>
+  <p>
+    Removing the plugin is the reverse of installing it. The CLI deletes the plugin directory it
+    created and leaves the rest of your agent's configuration untouched.
+  </p>
+  <pre><code>npx lyrashield uninstall &lt;agent&gt;</code></pre>
+
+  <h2>Frequently asked questions</h2>
+  {faqItems.map((item) => (
+    <>
+      <h3>{item.q}</h3>
+      <p>{item.a}</p>
+    </>
+  ))}
+
+  <div class="callout">
+    <strong>Requirements:</strong> Node.js 20+ and a LyraShield account. LyraShield is live with
+    open registration in open beta, and some platform features remain on the near-term roadmap. Get
+    started at{" "}
+    <a href="https://lyrashieldai.com" target="_blank" rel="noopener noreferrer">lyrashieldai.com</a
+    >.
+  </div>
+</DocsLayout>
