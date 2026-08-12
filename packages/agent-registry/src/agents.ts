@@ -762,7 +762,7 @@ const vscodePlugin: AgentEntry = {
   pluginLocations: [
     {
       scope: "global",
-      path: "~/.vscode/extensions/lyrashield",
+      path: "~/.lyrashield/plugins/lyrashield",
       sharedByConvention: false,
     },
   ],
@@ -770,11 +770,13 @@ const vscodePlugin: AgentEntry = {
   credential: { kind: "shell-env" },
   rulesFiles: [".github/copilot-instructions.md"],
   source: {
-    checkedOn: LAST_AGENT_REGISTRY_CHECK_DATE,
-    url: "https://code.visualstudio.com/docs/copilot/customization/agent-plugins",
+    checkedOn: "2026-08-12",
+    url: "https://code.visualstudio.com/docs/agent-customization/agent-plugins",
   },
   gotchas: [
-    "VS Code auto-detects the plugin format by checking for format-specific manifest paths.",
+    "VS Code reads the portable root `plugin.json`; there is no VS Code-specific shim directory. Our manifest declares the Agent Plugins 1.0 `$schema`, so VS Code classifies it as Agent Plugins 1.0 and takes MCP servers from the root `mcp.json`.",
+    "Auto-registration is NOT wired yet, so this path is a staging copy rather than a discovery path. VS Code only auto-discovers plugins under `~/.copilot/installed-plugins/`; everything else arrives via a configured marketplace, Install-from-Source, or an explicit entry in the `chat.pluginLocations` setting.",
+    "Until marketplace or Install-from-Source registration ships, install VS Code through its verified config-file path: `lyrashield install vscode` writes `.vscode/mcp.json`. Agent plugins additionally require the `chat.plugins.enabled` setting.",
     "Run `lyrashield login --oauth` before installing so the MCP stdio server can read credentials.",
   ],
 }
