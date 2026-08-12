@@ -257,11 +257,7 @@ For engine work on the host:
 ```bash
 cd ~/Desktop/lyrashield-engine
 uv sync --frozen
-uv run pytest
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy strix lyrashield_adapter
-uv run bandit -c pyproject.toml -r strix lyrashield_adapter
+./scripts/verify-controlled-derivative.sh
 ```
 
 The engine CI workflow now runs all of the above (ruff, mypy, bandit, pytest) on every PR and push to `main`. Pre-commit hooks remain for local feedback, but CI enforces the same gates — `--no-verify` is no longer a way to bypass quality checks.

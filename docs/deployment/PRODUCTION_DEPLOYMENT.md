@@ -91,7 +91,7 @@ when handed a role that can bypass RLS. CI provisions that restricted role and e
 ### 4. Container registry cleanup — RESOLVED 2026-07-30, updated 2026-08-01
 
 **Status:** live. `cleanup-old-images` in `deploy-azure.yml` runs after every successful
-deploy with `dry-run: false`, removing dangling untagged manifests. Web/scanner images
+image build, even when the Azure deploy is skipped or later fails, with `dry-run: false`, removing dangling untagged manifests. Web/scanner images
 keep the most recent 10 tagged versions; worker images keep the most recent 100 tagged
 versions because the worker VM pins images by digest and the approved digest may lag
 behind `main` deploys.
@@ -107,6 +107,8 @@ manifest list still references, silently breaking a future pull of an image that
 valid. `dataaxiom/ghcr-cleanup-action` resolves manifest lists before deleting specifically to
 avoid that, but a first run against accumulated history was reviewed before going live rather
 than trusted blind.
+
+**Rollback boundary.** Container Apps revision recovery is not complete merely because an older revision is activated. Production traffic must be assigned to that revision and `/api/ready` must pass afterward. Single-revision mode may retain no previous revision to reactivate. The workflow treats missing history, traffic reassignment failure, or failed readiness as manual-recovery conditions. Revision recovery never reverses database migrations or application-scope secrets and configuration.
 
 **What the review found.** Run `30496418272`'s dry-run pass reported "no tagged images found
 to delete" and "no untagged images found" for both packages — with `keep-n-tagged: 10` and
@@ -229,7 +231,7 @@ rule.
 8. The stale-resource reaper is enabled with a conservative age threshold. It must be able to read active scan state, skip every active scan and running container, and report each cleanup result.
 9. Authorized Luna and Terra deployment names plus the matching provider credentials are available for a controlled scan; the fallback model is also configured and tested.
 10. Egress policy, DNS pinning/proxying, logs, alerts, backup, and restore ownership are defined. If threat enrichment is enabled, permit bounded HTTPS access to the CISA KEV JSON feed and FIRST EPSS API.
-11. `.github/workflows/deploy-azure.yml` pins the exact reviewed engine commit. CI must check out that revision, run `scripts/verify-worker-contract.sh` from the engine directory, build the worker with the same checkout, and verify the exact pushed worker digest. Advance the pin only after the engine change is merged and green; never point it at a branch or mutable tag.
+11. `.github/workflows/deploy-azure.yml` pins the exact reviewed engine commit. PR CI proves that the pin is merged into engine `main`, its named engine checks passed, and the worker contract is compatible. The main deployment repeats provenance and contract checks, builds and pushes the SHA-only worker candidate, pulls its exact digest, and verifies the app and engine OCI labels. Promoting that verified digest to the worker VM remains a separate operator action. Advance the pin only after the engine change is merged and green; never point it at a branch or mutable tag.
 
 ## Full-scan resource checklist
 
@@ -245,9 +247,9 @@ The live Lite Scanner is a separate passive API and cannot be promoted into the 
 
 Brevo is required when production email verification or invitations are enabled. GitHub App credentials are required for private-repository integration flows. Slack/Discord, billing, and product analytics are optional integrations and are not scan-runtime dependencies.
 
-## Required application configuration
+## Required web/shared and worker configuration
 
-Set the production values appropriate to the selected infrastructure:
+Set only the production values appropriate to each process. Web and Lite Scanner Container Apps use the shared application values; they must not require or receive worker sandbox configuration. `ops/worker/run-worker.sh` owns injection of worker-only model, engine, Docker, sandbox, reaper, telemetry, and concurrency values.
 
 ```bash
 DATABASE_URL="postgresql://..."
@@ -282,11 +284,25 @@ GOOGLE_CLIENT_SECRET="..."
 AZURE_AD_CLIENT_ID="..."
 AZURE_AD_CLIENT_SECRET="..."
 AZURE_AD_TENANT_ID="common"
+```
+
+### Worker-only configuration
+
+The production worker also requires the restricted runtime database URL and the separate privileged ownership-check URL. `ops/worker/refresh-secrets.sh` maps Key Vault secrets `worker-database-url` and `worker-database-system-url` to these variables and fails closed if either is absent. Do not set `DATABASE_SYSTEM_URL` on web or Lite Scanner processes.
+
+```bash
+DATABASE_URL="postgresql://..." # worker-database-url; RLS-restricted runtime role
+DATABASE_SYSTEM_URL="postgresql://..." # worker-database-system-url; privileged ownership-check role
+REDIS_URL="rediss://..."
+BETTER_AUTH_SECRET="..."
+BETTER_AUTH_URL="https://app.example.com"
+NEXT_PUBLIC_APP_URL="https://app.example.com"
 
 LYRASHIELD_LLM="azure/gpt-5.6-terra"
 LYRASHIELD_LUNA_LLM="azure/gpt-5.6-luna"
 LYRASHIELD_TERRA_LLM="azure/gpt-5.6-terra"
 LLM_API_KEY="..."
+# Do not set LYRASHIELD_IMAGE on the web or Lite Scanner Container Apps.
 LYRASHIELD_ENGINE_PATH="lyrashield"
 LYRASHIELD_IMAGE="ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:<published-digest>"
 LYRASHIELD_ENGINE_SANDBOX_NETWORK="lyrashield-sandbox"
@@ -406,7 +422,7 @@ git diff --check
 
 Then, in the target environment:
 
-1. Run `prisma migrate deploy` for every committed migration before application processes serve traffic, then replay the complete migration directory on a fresh database and run the migration-diff gate against a fresh shadow database. Command output and the committed directory are authoritative; do not rely on copied migration counts or partial name lists.
+1. Run `prisma migrate deploy` for every committed migration before application processes serve traffic, then replay the complete migration directory on a fresh database and run the migration-diff gate against a fresh shadow database. Command output and the committed directory are authoritative; do not rely on copied migration counts or partial name lists. Container revision rollback never reverses a Prisma migration or application-scope secret/config change, so migrations must remain forward-only and backward-compatible with the previously running image; recovery ownership must be explicit.
 2. Verify `/api/health`, `/api/ready`, `/api/ready/scans`, authentication, workspace isolation, Redis queue connectivity, and worker readiness. The scan-specific endpoint must become `503` within 30 seconds of stopping every worker and recover only after a BullMQ-ready worker registers its lease.
 3. Verify the engine version and missing-model early-exit path.
 4. Run a Safe or Standard controlled scan and verify its `engine_start` event names Luna with medium reasoning, its 15-minute ceiling is recorded, and its `budget_cap` is $1.20 or $3.20 respectively (or a lower policy amount).

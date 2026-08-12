@@ -1,6 +1,6 @@
 # @lyrashield/mcp
 
-The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an AI coding tool run verified security scans, read findings, and drive the fix → verify loop against your LyraShield workspace — without leaving the editor.
+The **LyraShield AI** [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an AI coding tool run bounded security scans, read findings with their recorded evidence states, and drive the fix → verify loop against your LyraShield workspace — without leaving the editor.
 
 Built on the official `@modelcontextprotocol/sdk`. Available two ways: this **stdio** package (local editors) and a hosted **remote (Streamable HTTP)** endpoint at `/api/mcp` for cloud platforms that can't run a local server (Lovable, Bolt.new, Replit, v0). The server is also distributed as a portable Agent Plugin via [`@lyrashield/agent-plugin`](../agent-plugin/README.md) (Agent Plugins v1.0.0).
 
@@ -25,11 +25,11 @@ Every tool calls the LyraShield REST API with a workspace API key or OAuth beare
 | `lyrashield_verify_fix`               | write | Queue a retest to verify a fix                                |
 | `lyrashield_create_report`            | write | Generate a shareable report                                   |
 
-> `lyrashield_check_diff` is a lightweight local heuristic (obvious hardcoded secrets, `eval`, unsafe HTML, SQL concatenation) meant as a pre-PR pre-filter. It is **not** a scanner — run `lyrashield_run_pr_scan` for verified, exploit-validated results.
+> `lyrashield_check_diff` is a lightweight local heuristic (obvious hardcoded secrets, `eval`, unsafe HTML, SQL concatenation) meant as a pre-PR pre-filter. It is **not** a scanner — run `lyrashield_run_pr_scan` for a bounded repository scan with findings, coverage receipts, evidence states, and explicit limitations. Results are not automatically independently verified or exploit-validated.
 >
 > `lyrashield_scan_target` and `lyrashield_run_pr_scan` accept `targetId` directly, or you can pass `repo` (e.g. `ecryptoguru/lyrashield-ai`, `https://github.com/ecryptoguru/lyrashield-ai.git`, or `git@github.com:ecryptoguru/lyrashield-ai.git`) to create or reuse a target automatically. `auto: true` detects the current git repo only in the local stdio server; hosted MCP clients must pass `repo` or `targetId`.
 >
-> **Mode guide:** choose the cheapest mode that fits the question — `SAFE` for pre-PR, `QUICK` for fast checks, `STANDARD` for repo/launch review, `DEEP` for deep or compliance review. Deeper modes consume more compute and, in the SaaS plan, more billable minutes. `lyrashield_scan_target` defaults to `STANDARD`; `lyrashield_run_pr_scan` defaults to `SAFE`.
+> **Review-depth guide:** choose `QUICK` for pre-PR and fast repository checks, `STANDARD` for general repository or launch reviews, and `DEEP` only for explicit deep/compliance work. `SAFE` is a compatibility alias for repository `QUICK`. `CUSTOM` selects only the repository `DEEP` profile; it does not select a goal. For an authorized repository pentest, send `goal: FULL_PENTEST` with `mode: DEEP` or `CUSTOM`. Deeper modes consume more compute and take longer, so choose the least intensive mode that answers the question. `lyrashield_scan_target` defaults to `STANDARD`; `lyrashield_run_pr_scan` defaults to `QUICK`.
 
 ## Setup
 

@@ -197,6 +197,8 @@ The authenticated dashboard exposes one-off review depths that depend on the sel
 | Deep Security Review | DEEP         | GPT-5.6 Terra/medium + Luna/high specialists |           45 min |
 | Weekly Monitor       | QUICK        | GPT-5.6 Luna, medium                         |           15 min |
 
+For an authorized repository target, Deep is the intrusive agentic pentest profile: it may execute and investigate code inside LyraShield's isolated sandbox. That authorization does not extend to attacking a deployed URL or API. URL/API Deep is a separate deterministic, non-mutating behavior profile described below.
+
 ### Web App and API targets
 
 Web App and API targets use the pinned deterministic URL scanner. The external AI engine is not invoked for these targets. The available modes are:
@@ -210,15 +212,15 @@ Web App and API targets use the pinned deterministic URL scanner. The external A
 | Contract Review           | API         | STANDARD     | An OpenAPI document URL on the target |
 | Contract Behavior Review  | API         | DEEP         | An OpenAPI document URL on the target |
 
-These reviews are passive and non-mutating: they do not authenticate, exploit, fuzz, or enumerate arbitrary paths beyond the configured scope. Contract and Contract Behavior reviews use the supplied OpenAPI document to bound the operations reviewed.
+These reviews are non-mutating. Surface and Expanded reviews use passive GET requests; Behavioral Surface Review and Contract Behavior Review may add bounded GET, HEAD, OPTIONS, and CORS behavior probes within the selected profile. They do not authenticate, exploit, fuzz, or enumerate arbitrary paths outside the configured scope. Contract and Contract Behavior reviews use the supplied OpenAPI document to bound the operations reviewed.
 
-`SAFE` is the compatibility alias for the canonical repository `QUICK` profile; it is not a fourth product choice. `CUSTOM` resolves to the Deep repository profile. Neither creates an additional URL/API capability. Durations are hard ceilings, not completion promises.
+For repository targets, `SAFE` resolves to `QUICK` and `CUSTOM` resolves to `DEEP`. For Web App and API targets, `QUICK` resolves to `SAFE` for compatibility, while `CUSTOM` is unsupported. These aliases do not create a fourth product capability. Durations are hard ceilings, not completion promises.
 
 LyraShield applies protected internal run limits automatically. The dashboard does not display model costs, spend, or accounting events. If a protected limit is reached, the scan ends with a neutral limit message while operators retain the internal usage record for reconciliation.
 
 ## 9. Start and monitor a scan
 
-1. Open **Scans**.
+1. Open **Trust Runs → Runs**.
 2. Select **New Scan**.
 3. Choose a target.
 4. Choose a review depth that is available for that target type. Locked options explain why they are unavailable (for example, Contract Review requires an OpenAPI document on an API target).
@@ -256,7 +258,7 @@ The Vibe Security 50 ledger contains one receipt for each control. Read `NO_FIND
 
 ## 11. Findings
 
-Open **Findings** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed, and Verified.
+Open **Issues → Issues** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed, and Verified.
 
 A finding may contain:
 
@@ -335,7 +337,7 @@ A newer score may supersede an older card. Revocation disables the public page, 
 
 ## 16. Reports
 
-Open **Reports → Generate Report** and choose:
+Open **Issues → Reports → Generate Report** and choose:
 
 - **Executive** — decision-first posture, score trajectory, release conditions, and priority actions.
 - **Developer** — technical findings, remediation state, retest outcomes, and fix guidance.
@@ -353,7 +355,7 @@ Available actions:
 
 Private report links expire after 30 days. Shared report pages are noindex and use a no-referrer policy. Revocation prevents further access through the old token.
 
-## 17. Schedules
+## 17. Monitoring schedules
 
 Open **Trust Runs → Monitoring → New Schedule** and configure:
 
@@ -449,20 +451,21 @@ npx lyrashield gate                # CI-friendly diff-aware security gate
 
 `uninstall <agent>` removes the LyraShield entry from the chosen agent's config or plugin directory.
 
-Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `findings`, `explain <findingId>`, `fix-plan <findingId>`, `verify <findingId>`, `report`, `readiness`, `targets`, and `rules add/remove/check <agent>` (writes or removes LyraShield's security policy in that agent's native rules format — `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others — inside a checksummed block so re-running never clobbers your own edits to the surrounding file). `check-diff` is the same fast, local, **advisory** heuristic as the MCP tool of the same purpose — not a verified scan. Every command supports `--json` for scripting, and `gate` exits non-zero when a finding at or above the configured severity is present, matching the GitHub Action's own gate semantics.
+Other commands mirror the dashboard and the MCP tools below: `scan`, `status`, `findings`, `explain <findingId>`, `fix-plan <findingId>`, `verify <findingId>`, `report`, `readiness`, `targets`, and `rules add/remove/check <agent>` (writes or removes LyraShield's security policy in that agent's native rules format — `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and others — inside a checksummed block so re-running never clobbers your own edits to the surrounding file). `check-diff` is the same fast, local, **advisory** heuristic as the MCP tool of the same purpose — not a full recorded scan. Every command supports `--json` for scripting, and `gate` exits non-zero when a finding at or above the configured severity is present, matching the GitHub Action's own gate semantics.
 
 **Project defaults** make scans one-command: `lyrashield project use` detects the current git repo, creates or reuses a repo target, and saves it as the default project. `lyrashield scan` then starts a scan without `--target`. Switch projects with `lyrashield project switch <targetId>`, list them with `lyrashield project list`, or clear with `lyrashield project clear`. To scan the current git repo instead of the saved default, pass `--auto`; to scan another repository, pass `--repo <owner/repo>`.
 
-**Scan modes and cost:** pick the cheapest mode that answers the question. Deeper modes consume more compute and, in the SaaS plan, more billable minutes.
+**Review depth:** deeper modes consume more compute and take longer. Choose the least intensive mode that answers the question.
 
-| What you ask             | Goal                             | Mode       |
-| ------------------------ | -------------------------------- | ---------- |
-| Pre-PR check             | `CHECK_PR`                       | `QUICK`    |
-| Quick check              | `TEST_APP`                       | `QUICK`    |
-| Standard repo review     | `TEST_APP`                       | `STANDARD` |
-| Launch review            | `LAUNCH_REVIEW`                  | `STANDARD` |
-| Deep / compliance review | `TEST_APP` / `COMPLIANCE_REVIEW` | `DEEP`     |
-| Weekly monitor           | `WEEKLY_MONITOR`                 | `QUICK`    |
+| What you ask         | Goal                | Mode       |
+| -------------------- | ------------------- | ---------- |
+| Pre-PR check         | `CHECK_PR`          | `QUICK`    |
+| Quick check          | `TEST_APP`          | `QUICK`    |
+| Standard repo review | `TEST_APP`          | `STANDARD` |
+| Launch review        | `LAUNCH_REVIEW`     | `STANDARD` |
+| Repository pentest   | `FULL_PENTEST`      | `DEEP`     |
+| Compliance review    | `COMPLIANCE_REVIEW` | `DEEP`     |
+| Weekly monitor       | `WEEKLY_MONITOR`    | `QUICK`    |
 
 ### MCP
 
@@ -478,7 +481,7 @@ LyraShield exposes an MCP server for local editors and a hosted remote endpoint.
 - `lyrashield_generate_fix_plan` — assemble a remediation plan from a finding;
 - `lyrashield_get_launch_readiness` — retrieve the current scoped launch verdict;
 - `lyrashield_create_pr_security_recap` — generate a markdown security recap for a PR comment;
-- `lyrashield_check_diff` — fast **advisory** heuristic pre-filter on a diff (not a verified scan).
+- `lyrashield_check_diff` — fast **advisory** heuristic pre-filter on a diff (not a full recorded scan).
 
 #### Write tools
 
@@ -505,9 +508,9 @@ For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai
 
 ## 23. Current availability
 
-The public marketing site, Lite Check, browser-local tools, methodology, and content are live. The authenticated dashboard is open for registration; its dedicated BullMQ/engine worker remains a separate controlled full-scan boundary. Ordinary web requests use a restricted `NOBYPASSRLS` database role, and repository scan admission fails closed when the worker heartbeat is absent. A current-tree Safe retest and a successful, reconciled Deep controlled scan are still required before the full-scan release gate passes.
+The public marketing site, Lite Check, browser-local tools, methodology, and content are live. The authenticated dashboard is open for registration; its dedicated BullMQ/engine worker remains a separate controlled full-scan boundary. Ordinary web requests use a restricted `NOBYPASSRLS` database role, and repository scan admission fails closed when the worker heartbeat is absent. An approved production Standard/Luna repository scan exercised the deployed path with retained findings, coverage receipts, and an immutable manifest. That target- and version-scoped result is not a security guarantee or universal coverage proof; an approved Deep/Terra run remains a separate gate.
 
-The production application has an authenticated application origin, TLS Redis queue, private evidence storage, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. Azure Foundry repository scans use direct JSON function tools. The current endpoint rejects programmatic tool calling; this is an optimization gate, not a user-facing scan failure. Broad full-scan availability still requires controlled-scan proof to be completed, application-level readiness/queue/provider alerts, capacity evidence, and backup/restore. No recovery or RPO/RTO claim is made.
+The production application has an authenticated application origin, TLS Redis queue, private evidence storage, sandbox-capable worker compute, authorized Luna/Terra deployments, baseline Azure alerts, and DNS-pinned deny-by-default egress. Azure Foundry repository scans use direct JSON function tools. The current endpoint rejects programmatic tool calling; this is an optimization gate, not a user-facing scan failure. Broad full-scan availability still requires current image provenance, application-level readiness/queue/provider alerts, capacity evidence, backup/restore, and approved evidence for each additional review profile claimed. No recovery or RPO/RTO claim is made.
 
 Billing plans, plan quotas, automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Terra cascade, Security Copilot, and enterprise identity/deployment controls are not currently user features.
 

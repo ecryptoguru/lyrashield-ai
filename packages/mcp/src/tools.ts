@@ -491,12 +491,12 @@ export function createGetScanStatusTool(context: ToolHandlerContext): McpTool {
 // ---------------------------------------------------------------------------
 // Workflow tools — the developer loop (pre-PR check → scan → explain → fix →
 // verify → recap). Honest scoping: check_diff and the recap are advisory
-// read-only helpers; a real verified scan always runs server-side.
+// read-only helpers; a full recorded scan always runs server-side.
 // ---------------------------------------------------------------------------
 
 // High-signal, obviously-risky patterns for the local advisory diff check.
 // This is a fast heuristic pre-filter, NOT a scanner — real detection is the
-// server-side verified scan. Kept deliberately small and honest.
+// full server-side scan. Kept deliberately small and honest.
 const DIFF_ADVISORY_PATTERNS: Array<{ id: string; label: string; re: RegExp }> = [
   {
     id: "hardcoded-secret",
@@ -533,7 +533,7 @@ export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
     name: "lyrashield_check_diff",
     mutating: false,
     description:
-      "Fast ADVISORY heuristic scan of a code diff for obviously risky patterns (hardcoded secrets, eval, unsafe HTML, SQL concatenation). This is a lightweight pre-PR pre-filter only — it is NOT a substitute for a verified scan. Run lyrashield_run_pr_scan for authoritative, exploit-validated results.",
+      "Fast ADVISORY heuristic scan of a code diff for obviously risky patterns (hardcoded secrets, eval, unsafe HTML, SQL concatenation). This is a lightweight pre-PR pre-filter only — it is NOT a substitute for a full recorded scan. Run lyrashield_run_pr_scan for a bounded repository scan with findings, coverage receipts, evidence states, and explicit limitations; results are not automatically independently verified or exploit-validated.",
     inputSchema: {
       type: "object",
       properties: {
@@ -567,8 +567,8 @@ export function createCheckDiffTool(context: ToolHandlerContext): McpTool {
         checked: addedLines.length,
         note:
           advisory.length > 0
-            ? "Advisory findings are heuristic and may include false positives. Run lyrashield_run_pr_scan for a verified scan."
-            : "No high-signal patterns matched. This does not mean the diff is secure — run lyrashield_run_pr_scan for a verified scan.",
+            ? "Advisory findings are heuristic and may include false positives. Run lyrashield_run_pr_scan for a full recorded scan."
+            : "No high-signal patterns matched. This does not mean the diff is secure — run lyrashield_run_pr_scan for a full recorded scan.",
       })
     },
   }
@@ -657,14 +657,14 @@ export function createExplainFindingTool(context: ToolHandlerContext): McpTool {
 
 export function createGenerateFixPlanTool(context: ToolHandlerContext): McpTool {
   return {
-    // Read-only: assembles a remediation plan from the finding's verified
+    // Read-only: assembles a remediation plan from the finding's recorded
     // detail. Recording it as a proposal is a separate, gated tool
     // (lyrashield_record_fix_proposal) so the common "just show me the plan"
     // call needs no approval.
     name: "lyrashield_generate_fix_plan",
     mutating: false,
     description:
-      "Assemble a remediation plan for a finding from its verified detail, recommended fix, and plain-language explanation. Read-only — records nothing. Use lyrashield_record_fix_proposal to persist a proposal on the finding.",
+      "Assemble a remediation plan for a finding from its recorded detail, recommended fix, and plain-language explanation. Read-only — records nothing. Use lyrashield_record_fix_proposal to persist a proposal on the finding.",
     inputSchema: {
       type: "object",
       properties: {
@@ -770,7 +770,7 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
     name: "lyrashield_create_pr_security_recap",
     mutating: false,
     description:
-      "Assemble a PR-ready security recap (Markdown) for a workspace/target: the launch-readiness verdict plus a severity breakdown of current findings. Read-only — paste the result into a PR comment.",
+      "Assemble a PR-ready current-state security recap (Markdown) for a workspace/target: the launch-readiness verdict plus all currently open findings by severity. Read-only — paste the result into a PR comment.",
     inputSchema: {
       type: "object",
       properties: {
@@ -784,19 +784,32 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
         const wsParam = new URLSearchParams({ workspaceId: args.workspaceId as string })
         if (args.targetId) wsParam.set("targetId", args.targetId as string)
 
-        const [readiness, findings] = await Promise.all([
-          apiCall(context, "GET", `/api/launch-readiness?${wsParam.toString()}`),
-          apiCall(context, "GET", `/api/findings?${wsParam.toString()}&limit=100`),
-        ])
+        const readiness = await apiCall(
+          context,
+          "GET",
+          `/api/launch-readiness?${wsParam.toString()}`
+        )
+
+        const items: Array<Record<string, unknown>> = []
+        let cursor: string | undefined
+        do {
+          const findingParams = new URLSearchParams(wsParam)
+          findingParams.set("status", "OPEN")
+          findingParams.set("limit", "100")
+          if (cursor) findingParams.set("cursor", cursor)
+          const page = (await apiCall(
+            context,
+            "GET",
+            `/api/findings?${findingParams.toString()}`
+          )) as {
+            items?: Array<Record<string, unknown>>
+            nextCursor?: string | null
+          }
+          if (Array.isArray(page.items)) items.push(...page.items)
+          cursor = page.nextCursor ?? undefined
+        } while (cursor)
 
         const readinessObj = (readiness ?? {}) as Record<string, unknown>
-        const items = (
-          Array.isArray((findings as { items?: unknown[] })?.items)
-            ? (findings as { items: Array<Record<string, unknown>> }).items
-            : Array.isArray(findings)
-              ? (findings as Array<Record<string, unknown>>)
-              : []
-        ) as Array<Record<string, unknown>>
 
         const bySeverity: Record<string, number> = {}
         for (const f of items) {
@@ -817,7 +830,7 @@ export function createPrSecurityRecapTool(context: ToolHandlerContext): McpTool 
           ``,
           sevLines ? `**Open findings by severity:**\n${sevLines}` : `**Open findings:** none`,
           ``,
-          `_Findings are verified/exploit-validated. This recap reflects the latest completed scan for this scope._`,
+          `_This is a current workspace/target snapshot, not a single-scan report. Findings retain their recorded evidence states; scan detection alone is not independent verification or exploit validation._`,
         ].join("\n")
 
         return makeToolResult({ markdown, verdict, bySeverity, findingCount: items.length })

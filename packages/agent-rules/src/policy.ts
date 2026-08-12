@@ -19,7 +19,8 @@ export const LYRASHIELD_POLICY: Policy = {
       title: "Post-fix verification",
       instructions: [
         "After applying a fix for a security finding, run verify_fix with the finding ID.",
-        "Include the verification receipt in the PR description.",
+        "Poll the returned retest scan to a terminal state, then include its outcome and scan reference in the PR description.",
+        "Call the result independently verified only when a separate independent-verification receipt exists.",
       ],
     },
     {

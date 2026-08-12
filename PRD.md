@@ -672,7 +672,7 @@ This separation allows:
 
 ### Engine Repo Status
 
-Status: **Controlled-derivative gate passed; one historical local Safe scan completed; production controlled-scan proof still pending**
+Status: **Controlled-derivative gate passed; approved production Standard/Luna proof completed; Deep/Terra proof remains pending**
 
 ```txt
 Repo: ecryptoguru/lyrashield-engine
@@ -3475,7 +3475,7 @@ Duration: 3–5 days
 Goal:
 
 ```txt
-New users can complete first scan in under 5 minutes with a guided onboarding wizard.
+New users can configure onboarding and submit their first scan in under five minutes; completion time depends on the selected review profile.
 ```
 
 Tasks:
@@ -3502,7 +3502,7 @@ New user is redirected to onboarding after signup.
 User can complete first scan from onboarding wizard.
 Onboarding can be skipped.
 Onboarding completion is tracked.
-Time to first scan is under 5 minutes for guided flow.
+Guided onboarding lets a new user configure and submit the first scan in under five minutes; completion time depends on the selected review profile.
 ```
 
 Codex/Hermes prompt:
@@ -4139,7 +4139,7 @@ Run security review.
 Acceptance criteria:
 
 ```txt
-New user can complete first scan in under 5 minutes.
+New user can configure onboarding and submit the first scan in under five minutes; completion time depends on the selected review profile.
 Scan failures show actionable messages.
 No raw secrets in logs.
 Worker cleanup verified.
@@ -5352,7 +5352,7 @@ Historical test and migration counts elsewhere in this PRD describe earlier chec
 - Permission enforcement, workspace matching, signed service tokens, audit logging, queue error handling, and exact `actionName` plus input-hash approval verification. Both `DEEP` and `CUSTOM` agent scan modes require approval.
 - Approval list/approve/deny APIs and an `AgentApproval` persistence model protected by RLS. Execution uses an atomic single-use transition and retains execution time/result without reopening the approval on result-recording failure.
 - MCP package with real API-backed tools and stdio JSON-RPC transport. Mutating tools require approval on the controlling terminal; headless/no-TTY invocation fails closed while stdout remains reserved for JSON-RPC.
-- The scan tool advertises and defaults to the API's real goal/mode enums (`TEST_APP`/`SAFE`) rather than obsolete pre-schema labels. The complete current tool and user workflow reference lives in `userguide.md`.
+- The scan tool advertises the API's real goal/mode enums, defaults target scans to `TEST_APP`/`STANDARD`, and defaults PR scans to `CHECK_PR`/`QUICK`. Repository `SAFE` remains a compatibility alias for `QUICK`. The complete current tool and user workflow reference lives in `userguide.md`.
 
 ### C1.5 User experience and marketing
 
@@ -5512,13 +5512,11 @@ Implements spec Phases 0–2 of the "LyraShield Score, Shareable Scorecard & Ref
 
 - **Declare Zed Node capability (PR #264, `d3b9868`).** `docs/marketplace/zed-extension/extension.toml` adds `[[capabilities]] kind = "process:exec"` with `command = "node"` and `args = ["**"]` so Zed can run the npm-installed MCP server.
 
-- **Working changes (uncommitted, on top of branch `codex/marketplace-release-notes` at `804342c`).** Add `git config --global init.defaultBranch main` to the checkout steps of `.github/workflows/ci.yml`, `.github/workflows/deploy-azure.yml`, `.github/workflows/lyrashield-scan.yml`, `.github/workflows/production-backup.yml`, and `.github/workflows/update-action-version.yml`. Add `BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` as a Dockerfile `ARG` and pass it into the web build as `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION`. Add `LYRASHIELD_REQUIRE_EMAIL_VERIFICATION` to `turbo.json` env allowlist. Add `bin/*.mjs` shim entrypoints to `packages/cli` (`lyrashield.mjs`), `packages/cli-alias` (`lyrashield-cli.mjs`), and `packages/mcp` (`lyrashield-mcp.mjs`) and update each `package.json` `bin` and `files` fields so pnpm can create `.bin` symlinks before build.
-
 ## C2. Phase 1 gaps and release gates
 
 ### C2.1 Required before a controlled product pilot
 
-1. **Controlled scan proof:** one pre-v4 local Safe scan against an approved public repository completed with Luna/medium routing, Docker sandbox execution, retained scan events, zero findings, and a persisted post-run budget-overage warning under behavior that PR #79 has since replaced with terminal/clamped handling. It is not a production proof and does not establish coverage of all controls. A production target, approved Terra/Deep run, production-pinned image provenance, retained artifacts when findings exist, and production egress enforcement are still required.
+1. **Controlled scan proof:** an approved production Standard/Luna repository scan completed through the deployed worker and engine with retained lifecycle events, findings, a Vibe Security 50 ledger, and an immutable manifest. That target- and version-scoped run is not a security guarantee or proof of universal control coverage. An approved Deep/Terra run, current image provenance, retained artifacts, and production egress enforcement remain separate gates.
 2. **Transport-level egress control:** application SSRF checks are present, but untrusted multi-tenant scanning still requires a deployment-level proxy or equivalent DNS-pinned network enforcement.
 3. **Production infrastructure:** provision production PostgreSQL, a BullMQ-compatible TLS Redis endpoint (REST-only Upstash credentials do not operate the queue), mandatory private S3-compatible evidence storage, secrets, TLS, backups, monitoring, dedicated worker capacity with the engine and pinned sandbox, and the authenticated Next.js application origin. Apply every committed migration and replay the complete migration directory on a fresh database; command output and the directory are authoritative rather than copied counts. This includes scorecard events, approvals, evidence/result integrity, accounting, provider uniqueness, finding status reasons, UX state, OAuth/provider binding, API-spec support, and the final child-table RLS sequence. Reconcile legacy duplicate provider bindings before the uniqueness migration; evidence persistence fails closed until the configured `S3_*` endpoint succeeds.
 

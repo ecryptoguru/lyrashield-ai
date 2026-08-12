@@ -1391,7 +1391,7 @@
   },
   {
     "index": 140,
-    "title": "Hermes MCP workflow for verified security scans",
+    "title": "Hermes MCP workflow for evidence-backed security scans",
     "slug": "hermes-mcp-security-workflow",
     "query": "hermes mcp security - workflow",
     "cluster": "Workflow",

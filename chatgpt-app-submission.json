@@ -143,7 +143,7 @@
       "user_prompt": "Review this diff for obvious secrets, unsafe HTML, SQL concatenation, or eval usage.",
       "file_attachment_urls": null,
       "tools_triggered": "lyrashield_check_diff",
-      "expected_output": "Returns heuristic advisory matches and clearly states that a verified scan is still needed.",
+      "expected_output": "Returns heuristic advisory matches and clearly states that a full recorded scan is needed for broader bounded coverage; that scan is not automatically independently verified.",
       "expected_output_url": null
     },
     {
