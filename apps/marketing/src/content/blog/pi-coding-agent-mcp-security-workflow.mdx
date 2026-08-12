@@ -17,6 +17,8 @@ faq:
     a: "Pi reads MCP servers from its settings file under mcpServers with local stdio and remote http entries. Use the pinned npx -y @lyrashield/mcp@0.2.2 command for local and the remote endpoint with a Bearer lsk_ key for team or CI use. Keep the key in an env reference, never as a literal in the committed config."
 ---
 
+Fastest path: run `npx lyrashield init` to auto-detect Pi and write the MCP config, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store your credentials. The manual config below is what the CLI writes, kept here for reference.
+
 You can attach Pi Coding Agent to LyraShield AI via MCP to scan generated code, get findings with evidence states with file evidence, and gate pull requests with SARIF. In this guide you will configure local stdio using pinned npx -y @lyrashield/mcp@0.2.2 and remote at https://app.lyrashieldai.com/api/mcp in Pi style .mcp.json, verify tool discovery, run a tight inline check, and wire a diff aware GitHub Action with SARIF upload.
 
 Pi is built for speed and terminal centric workflows. Fast scaffolding is valuable, but speed also produces more code that needs verification. Use the [vibe coding security guide](/blog/vibe-coding-security-guide) as your baseline policy and map issues to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) so triage stays grounded in industry definitions. When Pi generates a full stack feature in one turn, you want a single command that highlights findings in that new code while preserving their recorded evidence states, not a dashboard you must remember to open later.

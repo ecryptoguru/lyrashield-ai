@@ -17,17 +17,19 @@ faq:
     a: JetBrains reads MCP servers from the IDE settings under Tools or the project config depending on version. Use the built in MCP settings panel to add the LyraShield server so the entry survives IDE updates, and keep the lsk_ key in env rather than the config file.
 ---
 
+Fastest path: run `npx lyrashield init` to detect JetBrains and produce the MCP config JSON, then paste it via Settings to AI Assistant to MCP to Add As JSON. Run `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
+
 JetBrains IDEs with AI Assistant can secure AI built apps by adding LyraShield MCP as JSON via Settings to AI Assistant to MCP to Add As JSON using npx -y @lyrashield/mcp with lsk\_ key or remote with Bearer auth, then verifying connection and scanning inline for OWASP risks.
 
 JetBrains with AI Assistant changes many files, propagating [OWASP Top 10](https://owasp.org/www-project-top-ten/) issues like SSRF and injection. This guide integrates LyraShield via [vibe coding security guide](/blog/vibe-coding-security-guide) pattern. LyraShield AI is agent native AppSec at [LyraShield site](https://lyrashieldai.com), following Target to Scan to Evidence State to Fix Proposal to Retest to Report. See [JetBrains integration guide](/docs/integrations/jetbrains) and [Replit security checklist](/blog/replit-app-security-checklist). Contract aligns with [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions).
 
 ## 1. Prerequisites and api key setup
 
-Create LyraShield API key starting with lsk\_ and store as LYRASHIELD_API_KEY. Never commit key to source control or chat logs. For local work, export it in shell profile. For teams, keep it in secret manager and add to GitHub repository secrets for CI parity. Naming consistency between shell, IDE config and CI reduces misconfig.
+Create LyraShield API key starting with lsk\_ and store as LYRASHIELD_API_KEY. Never commit key to source control or chat logs. For local work, export it in shell profile. For teams, keep it in secret manager and add to GitHub repository secrets for CI parity.
 
-You need Node 18 plus so npx resolves pinned package, jetbrains updated to build supporting MCP, and testable target such as http://localhost:3000 or repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
+You need Node 18 plus so npx resolves pinned package, jetbrains updated to build supporting MCP, and testable target such as repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
 
-Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks, and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals are proposals requiring review, not hands off merges, after Sprints 0 to 2 shipped MCP contract. Steps are generate key with scan scope, export variable, verify npx works, add secret to GitHub, check Node version. See [JetBrains integration guide](/docs/integrations/jetbrains).
+Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks, and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals are proposals requiring review, not hands off merges, after Sprints 0 to 2 shipped MCP contract.
 
 ## 2. Configure MCP server in jetbrains config file
 
@@ -53,7 +55,7 @@ jetbrains reads MCP from Settings to AI Assistant to MCP to Add As JSON. Top lev
 }
 ```
 
-Placeholder `${env:LYRASHIELD_API_KEY}` is resolved securely without writing secret to disk. Remote validates Bearer lsk\_ at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp). Do not commit real values, commit placeholder only and document setup in [JetBrains integration guide](/docs/integrations/jetbrains) onboarding. For multiple projects, keep personal keys in global config and team policy in project file. See [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions) for parity.
+Placeholder `${env:LYRASHIELD_API_KEY}` is resolved securely without writing secret to disk. Remote validates Bearer lsk\_ at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp). Do not commit real values, commit placeholder only and document setup in [JetBrains integration guide](/docs/integrations/jetbrains) onboarding. See [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions) for parity.
 
 ## 3. Verify the connection inside jetbrains
 
@@ -61,7 +63,7 @@ Restart jetbrains after saving config and open MCP servers view to confirm lyras
 
 If disconnected, open log panel. For 401 from [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) reissue key. For npx not found or EACCES fix Node PATH or install via nvm user space. Run npx -y @lyrashield/mcp manually in terminal with LYRASHIELD_API_KEY set to confirm handshake JSON prints. This isolates IDE versus Node issues.
 
-Verification prevents silent failure where agent assumes scan succeeded but server was unreachable. That leaves [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks undetected and breaks verification loop. Document success in [JetBrains integration guide](/docs/integrations/jetbrains) and allow egress to [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) if org blocks external.
+Verification prevents silent failure where agent assumes scan succeeded but server was unreachable. That leaves [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks undetected and breaks verification loop. Allow egress to [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) if org blocks external.
 
 ## 4. Run a security check inline while you code
 

@@ -7,6 +7,12 @@ interface Props {
   transport?: Transport
   secretMode?: InstallOptions["secretMode"]
   apiKey?: string
+  /**
+   * Set on additional snippets for the same agent (e.g. the remote-HTTP block
+   * below a stdio block). The one-line install command and the gotchas list
+   * describe the agent, not the transport, so they render only once per page.
+   */
+  secondary?: boolean
 }
 
 const appOrigin = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "")
@@ -15,13 +21,17 @@ const MCP_REMOTE_URL = `${API_URL}/api/mcp`
 const SERVER_NAME = "lyrashield"
 const DEFAULT_API_KEY = "<LYRASHIELD_API_KEY>"
 
-const { agentId, transport, secretMode, apiKey = DEFAULT_API_KEY } = Astro.props
+const {
+  agentId,
+  transport,
+  secretMode,
+  apiKey = DEFAULT_API_KEY,
+  secondary = false,
+} = Astro.props
 const agent = getAgent(agentId)
 if (!agent) {
   throw new Error(`Unknown agent: ${agentId}`)
 }
-
-const showInstallCommand = import.meta.env.SHOW_INSTALL_COMMAND === "true"
 
 const safeAgent = agent as AgentEntry
 
@@ -163,14 +173,14 @@ if (safeAgent.installStrategy === "config-file") {
 
 <pre><code>{snippet}</code></pre>
 
-{showInstallCommand && (
-  <div class="callout callout--warn">
-    <strong>One-line install</strong> (available after npm publish):
+{!secondary && (
+  <div class="callout">
+    <strong>One-line install:</strong> the CLI writes exactly the configuration above.
     <pre><code>npx lyrashield install {agentId}</code></pre>
   </div>
 )}
 
-{safeAgent.installStrategy !== "config-file" && safeAgent.gotchas.length > 0 && (
+{!secondary && safeAgent.gotchas.length > 0 && (
   <>
     <h3>Important gotchas</h3>
     <ul>

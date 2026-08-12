@@ -10,6 +10,10 @@ const CLIENTS = ["claude", "cursor", "codex", "kiro"] as const
 
 const LYRASHIELD_API_URL = "https://app.lyrashieldai.com"
 
+// Marketplace identifier users type when installing: `/plugin install lyrashield@lyrashield-ai`.
+// Kept distinct from the plugin name ("lyrashield") so the two are unambiguous in install strings.
+const MARKETPLACE_NAME = "lyrashield-ai"
+
 async function writeGeneratedFile(file: string, content: string): Promise<void> {
   const temporary = `${file}.${randomUUID()}.tmp`
   await writeFile(temporary, content.endsWith("\n") ? content : `${content}\n`, "utf-8")
@@ -145,6 +149,48 @@ ${SKILL_APPENDIX}
       JSON.stringify(clientManifest, null, 2)
     )
   }
+
+  // Marketplace catalog. This is what turns the exported repository into an addressable
+  // plugin marketplace (`/plugin marketplace add`, and VS Code's "Install Plugin From
+  // Source") rather than a bare plugin directory. The catalog is a Claude Code format;
+  // Agent Plugins 1.0 deliberately leaves distribution to clients, and VS Code documents
+  // this same file as the marketplace schema it consumes.
+  //
+  // `source: "./"` points at the marketplace root, which is the directory containing
+  // `.claude-plugin/` — i.e. the exported repository root, where plugin.json already lives.
+  const marketplaceDir = path.join(pluginRoot, ".claude-plugin")
+  await mkdir(marketplaceDir, { recursive: true })
+  await writeGeneratedFile(
+    path.join(marketplaceDir, "marketplace.json"),
+    JSON.stringify(
+      {
+        $schema: "https://json.schemastore.org/claude-code-marketplace.json",
+        name: MARKETPLACE_NAME,
+        version: manifest.version,
+        description: "LyraShield AI security and release-assurance plugin for AI coding agents",
+        owner: {
+          name: "LyraShield AI",
+          url: "https://lyrashieldai.com",
+        },
+        plugins: [
+          {
+            name: manifest.name,
+            source: "./",
+            description: manifest.description,
+            version: manifest.version,
+            author: manifest.author,
+            homepage: manifest.homepage,
+            repository: manifest.repository,
+            license: manifest.license,
+            keywords: manifest.keywords,
+            category: "security",
+          },
+        ],
+      },
+      null,
+      2
+    )
+  )
 }
 
 if (import.meta.main) {

@@ -17,6 +17,8 @@ faq:
     a: "Treat the lsk_ key like any secret. Load it from your shell env for local stdio, from a password manager for remote HTTP in Zed, and from GitHub Actions encrypted secrets for the diff gate. Never hardcode it in settings.json and never commit it, because context_servers files are often shared between machines and repos."
 ---
 
+Fastest path: run `npx lyrashield init`, which detects Zed and writes the MCP config. Verify with `npx lyrashield doctor`, then `npx lyrashield login` to store credentials in ~/.lyrashield/credentials.json. The manual config below is what the CLI writes, kept for reference.
+
 You can secure AI built apps in Zed by connecting LyraShield AI through the [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and reviewing findings with recorded evidence states directly from the editor, then enforcing the same policy in CI with a diff aware GitHub Action gate. Zed reads servers from `settings.json` under `context_servers`, supporting local stdio and remote HTTP with a bearer key.
 
 Zed is fast and agent native, which makes it popular for vibe coding, but speed can leave security gaps when dependencies and routes are scaffolded by agents. The [vibe coding security guide](/blog/vibe-coding-security-guide) frames this problem as unverified generation at scale. LyraShield AI is an agent native AppSec layer for AI built software that follows a loop of Target to Scan to Evidence State to Fix Proposal to Retest to Report. This post shows the exact Zed configuration for both local and remote MCP, how to verify the connection, how to run an inline check, and how to wire CI so findings stay actionable.
@@ -36,10 +38,12 @@ Local stdio mode:
   "context_servers": {
     "lyrashield": {
       "source": "custom",
-      "command": "npx",
-      "args": ["-y", "@lyrashield/mcp"],
-      "env": {
-        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
+      "command": {
+        "path": "npx",
+        "args": ["-y", "@lyrashield/mcp"],
+        "env": {
+          "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}"
+        }
       }
     }
   }
@@ -53,18 +57,20 @@ Remote HTTP mode with Bearer:
   "context_servers": {
     "lyrashield-remote": {
       "source": "custom",
-      "command": "npx",
-      "args": ["-y", "@lyrashield/mcp", "--remote"],
-      "env": {
-        "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}",
-        "LYRASHIELD_MCP_URL": "https://app.lyrashieldai.com/api/mcp"
+      "command": {
+        "path": "npx",
+        "args": ["-y", "@lyrashield/mcp", "--remote"],
+        "env": {
+          "LYRASHIELD_API_KEY": "${LYRASHIELD_API_KEY}",
+          "LYRASHIELD_API_URL": "https://app.lyrashieldai.com/api/mcp"
+        }
       }
     }
   }
 }
 ```
 
-The remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and authenticates with `Authorization: Bearer lsk_...`. The stdio entry uses the pinned command `npx -y @lyrashield/mcp` as requested. You can also run the remote endpoint directly from tools that support streamable HTTP. Keep `$VAR` expansion explicit as shown, since Zed expands variables at launch. For comparison of editor setups, see the [Zed AI app security checklist](/blog/zed-ai-app-security-checklist) which walks through the same pattern for checklist driven reviews. The core difference is the `--remote` flag and `LYRASHIELD_MCP_URL` entry. In stdio mode the binary lives in the `npx` cache, pin a version if reproducibility matters. In remote mode the server is managed, but at the cost of network dependency.
+The remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) and authenticates with `Authorization: Bearer lsk_...`. The stdio entry uses the pinned command `npx -y @lyrashield/mcp` as requested. You can also run the remote endpoint directly from tools that support streamable HTTP. Keep `$VAR` expansion explicit as shown, since Zed expands variables at launch. For comparison of editor setups, see the [Zed AI app security checklist](/blog/zed-ai-app-security-checklist) which walks through the same pattern for checklist driven reviews. The core difference is the `--remote` flag and `LYRASHIELD_API_URL` entry. In stdio mode the binary lives in the `npx` cache, pin a version if reproducibility matters. In remote mode the server is managed, but at the cost of network dependency, so editor and CI share the same finding IDs.
 
 ## 3. Verify the connection in Zed
 
