@@ -17,6 +17,8 @@ faq:
     a: "Codex stores MCP servers in ~/.codex/config.toml under [mcp_servers.*] sections. Each section defines command, args, and bearer_token_env_var for remote auth. Keep the token in an env var referenced by the config, never as a literal in the TOML file."
 ---
 
+Fastest path: run `npx lyrashield init`, which detects Codex and writes the config. For a one-step install, use the Agent Plugin (agent-plugins.org v1.0.0), the preferred route for launch clients. The manual config below is what the CLI writes, kept for reference.
+
 You can review AI generated pull requests in Codex with evidence-state AppSec findings by connecting LyraShield AI through MCP, running a targeted scan from your Codex session, and enforcing the same policy in CI with a diff aware gate. The config lives in `~/.codex/config.toml` and supports both local stdio and remote HTTP with a bearer token.
 
 OpenAI Codex excels at large refactors, but refactors can introduce auth bypasses, injection, and vulnerable dependencies that are hard to spot in a diff. The [vibe coding security guide](/blog/vibe-coding-security-guide) describes why AI built code needs findings with recorded evidence states instead of noisy lint. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives you the exact `~/.codex/config.toml` entries for local and remote MCP using `npx -y @lyrashield/mcp` and `https://app.lyrashieldai.com/api/mcp`, plus verification, inline checks, and a GitHub Action. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
@@ -35,9 +37,11 @@ Local stdio example:
 [mcp_servers.lyrashield]
 command = "npx"
 args = ["-y", "@lyrashield/mcp"]
-env = { LYRASHIELD_API_KEY = "${LYRASHIELD_API_KEY}" }
 startup_timeout_sec = 20
 tool_timeout_sec = 120
+
+[mcp_servers.lyrashield.env_vars]
+LYRASHIELD_API_KEY = "${LYRASHIELD_API_KEY}"
 ```
 
 Remote HTTP with Bearer:
@@ -47,14 +51,16 @@ Remote HTTP with Bearer:
 command = "npx"
 args = ["-y", "@lyrashield/mcp", "--remote", "--url", "https://app.lyrashieldai.com/api/mcp"]
 bearer_token_env_var = "LYRASHIELD_API_KEY"
-env = { LYRASHIELD_MCP_URL = "https://app.lyrashieldai.com/api/mcp" }
 startup_timeout_sec = 20
 tool_timeout_sec = 120
+
+[mcp_servers.lyrashield_remote.env_vars]
+LYRASHIELD_API_URL = "https://app.lyrashieldai.com/api/mcp"
 ```
 
 Remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with `Authorization: Bearer lsk_...` derived from the token env var. The config uses the pinned npx form and exposes env expansion through `bearer_token_env_var` which Codex resolves at runtime. If you are comparing editor flows, the related [Codex security workflow](/blog/codex-security-workflow) checklist shows a similar gate pattern, and sibling editors are covered in guides like the [Cline AI app security checklist](/blog/cline-app-security-checklist) for team wide rollout.
 
-The local stdio entry is best for solo dev because Codex spawns the MCP server as a child process with no network hop, keeping latency low. The remote HTTP entry suits team keys and CI because `bearer_token_env_var` lets you rotate the secret in one place. Each `[mcp_servers.*]` block needs `command` to launch `npx`, `args` to pin `@lyrashield/mcp`, and either `env` for stdio or `bearer_token_env_var` for remote auth. Keep `startup_timeout_sec` at 20 so cold starts of `npx` do not trip the watchdog, and raise `tool_timeout_sec` to 120 for large repos.
+The local stdio entry is best for solo dev because Codex spawns the MCP server as a child process with no network hop, keeping latency low. The remote HTTP entry suits team keys and CI because `bearer_token_env_var` lets you rotate the secret in one place. Each `[mcp_servers.*]` block needs `command` to launch `npx`, `args` to pin `@lyrashield/mcp`, and either an `[mcp_servers.*.env_vars]` sub-table for stdio env or `bearer_token_env_var` for remote auth. Keep `startup_timeout_sec` at 20 so cold starts of `npx` do not trip the watchdog, and raise `tool_timeout_sec` to 120 for large repos.
 
 ## 3. Verify the connection in Codex
 

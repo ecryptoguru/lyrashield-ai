@@ -10,22 +10,24 @@ faq:
   - q: "Where does Kilo Code store MCP server config?"
     a: "Project local kilo.jsonc or global ~/.kilo/kilo.jsonc under mcp.servers. Use type local for stdio with pinned npx -y @lyrashield/mcp@0.2.2 and type remote for https://app.lyrashieldai.com/api/mcp."
   - q: "Do I need to expose my API key in config?"
-    a: "No. Reference ${env:LYRASHIELD_API_KEY} in env or headers. Kilo Code resolves env at runtime so the key stays out of checked in files."
+    a: "No. Reference {env:LYRASHIELD_API_KEY} in env or headers. Kilo Code resolves env at runtime so the key stays out of checked in files."
   - q: "Can this gate pull requests?"
     a: "Yes. Wire the LyraShield GitHub Action in diff aware mode to comment on PRs and upload SARIF, then require the check in branch protection."
   - q: "Where does Kilo Code read MCP server config from?"
     a: "Kilo Code reads MCP servers from its settings under mcpServers with local and remote transports. Use the CLI installer to write the LyraShield entry with the correct transport type and auth fields, and keep the lsk_ key in an env reference so the literal never lands in the committed config file."
 ---
 
+Fastest path: run `npx lyrashield init` to auto-detect Kilo Code and write the correct entry, then `npx lyrashield doctor` to verify and `npx lyrashield login` to store credentials. The manual config below is what the CLI writes, kept for reference.
+
 You can connect Kilo Code to LyraShield AI over MCP to get target aware scans, recorded evidence states, and fix proposals inside your normal agent loop without leaving the editor. In this guide you will configure the local stdio server using pinned npx -y @lyrashield/mcp@0.2.2 plus the remote endpoint at https://app.lyrashieldai.com/api/mcp, verify tools are listed, run an inline check, and wire a diff aware GitHub Action gate with SARIF upload.
 
 Vibe coding moves fast and security debt can accumulate when large batches of routes, components, and queries are generated in one pass. If your team uses Kilo Code to scaffold features, you want verification that matches that speed. A good starting policy is the [vibe coding security guide](/blog/vibe-coding-security-guide) which frames prompt hygiene, review checkpoints, and supply chain checks. For context on what to look for, see [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/), both of which confirm injection, broken access control, and vulnerable dependencies remain top risks in generated web apps.
 
-When you generate code with an agent, you generate more attack surface than a human would in the same window. That is why early target aware scanning matters. The workflow below keeps scanning close to generation, then enforces a consistent gate in CI so main stays clean even when generation velocity spikes. It also maps cleanly to how Kilo Code already handles file permissions and tool scopes, so you do not need a separate security console for daily work.
+When you generate code with an agent, you generate more attack surface than a human would in the same window. That is why early target aware scanning matters. The workflow below keeps scanning close to generation, then enforces a consistent gate in CI so main stays clean even when generation velocity spikes.
 
 ## 1. Prerequisites and workspace baseline
 
-Start with Node.js 20 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Git with pull request workflow, and a LyraShield API key in the form lsk\_... Set the key as an environment variable named LYRASHIELD_API_KEY and avoid pasting raw values into checked in files. Kilo Code resolves `${env:LYRASHIELD_API_KEY}` at runtime, so secrets stay out of kilo.jsonc.
+Start with Node.js 20 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Git with pull request workflow, and a LyraShield API key in the form lsk\_... Set the key as an environment variable named LYRASHIELD_API_KEY and avoid pasting raw values into checked in files. Kilo Code resolves `{env:LYRASHIELD_API_KEY}` at runtime, so secrets stay out of kilo.jsonc.
 
 Take stock of the app scope you want to protect. LyraShield combines bounded repository review, SCA, secrets scanning, a GitHub Action, and SARIF output. Findings retain their recorded evidence states; scan detection alone is not independent verification. Fix proposals and retests remain approval-gated, and PR execution remains unavailable until a server-generated patch can be bound to an exact approval. Read [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) for why stdio works locally and streamable HTTP fits remote hosting.
 
@@ -55,7 +57,7 @@ Kilo Code reads MCP servers from kilo.jsonc at project root or from the global f
         "command": "npx",
         "args": ["-y", "@lyrashield/mcp@0.2.2"],
         "env": {
-          "LYRASHIELD_API_KEY": "${env:LYRASHIELD_API_KEY}"
+          "LYRASHIELD_API_KEY": "{env:LYRASHIELD_API_KEY}"
         },
         "permissions": {
           "fs": ["read:./src/**", "read:./app/**", "read:./packages/**"],
@@ -74,7 +76,7 @@ Kilo Code reads MCP servers from kilo.jsonc at project root or from the global f
         "type": "remote",
         "url": "https://app.lyrashieldai.com/api/mcp",
         "headers": {
-          "Authorization": "Bearer ${env:LYRASHIELD_API_KEY}"
+          "Authorization": "Bearer {env:LYRASHIELD_API_KEY}"
         },
         "permissions": {
           "tools": [
@@ -92,9 +94,9 @@ Kilo Code reads MCP servers from kilo.jsonc at project root or from the global f
 }
 ```
 
-This satisfies the product requirement to pin stdio to npx -y @lyrashield/mcp@0.2.2 and to expose remote at https://app.lyrashieldai.com/api/mcp via bearer header. The canonical reference lives in [Kilo Code integration guide](/docs/integrations/kilo-code). Keep hostConfigDiscovery style defaults off for deterministic clones and ensure permission globs cover only source roots you intend to share. Avoid broad read grants to the entire filesystem, since that complicates audit and increases risk if the config is copied. Minimal fs permissions also help you reason about what the agent can actually open when it builds evidence for a finding.
+This satisfies the product requirement to pin stdio to npx -y @lyrashield/mcp@0.2.2 and to expose remote at https://app.lyrashieldai.com/api/mcp via bearer header. The canonical reference lives in [Kilo Code integration guide](/docs/integrations/kilo-code). Keep hostConfigDiscovery style defaults off for deterministic clones and ensure permission globs cover only source roots you intend to share.
 
-If you manage config centrally, you can also store the global file at ~/.kilo/kilo.jsonc with the same shape and let projects inherit it. This pattern works well for platform teams that want consistent verification across many repos without asking each team to copy paste security wiring.
+If you manage config centrally, store the global file at ~/.kilo/kilo.jsonc with the same shape and let projects inherit it, which gives platform teams consistent verification across many repos.
 
 ## 3. Verify connection and list security tools
 
@@ -196,7 +198,7 @@ Add a repo level rules file that Kilo Code reads on each run. This makes the wor
 - For high severity findings, generate and record a fix proposal; do not claim a branch or PR was created.
 - On every PR, ensure lyrashield security gate passed and SARIF uploaded.
 - Reference OWASP Top 10 and internal vibe coding security guide in PR descriptions when relevant.
-- Never include secrets in logs or code. Use ${env:LYRASHIELD_API_KEY}.
+- Never include secrets in logs or code. Use {env:LYRASHIELD_API_KEY}.
 ```
 
 Store the file as .kilo/rules.md or kilo.md in your repo root so it travels with the code. This turns the core loop into daily behavior and reduces the chance that a teammate forgets to run the check during rapid iteration. It also makes security expectations visible to code reviewers, because the same rules they see in the PR description are the rules the agent followed while generating the change.
