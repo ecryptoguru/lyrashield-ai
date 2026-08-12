@@ -55,4 +55,29 @@ const rootEntries = await readdir(root)
 assert(rootEntries.includes("plugin.json"), "root plugin.json is missing")
 assert(rootEntries.includes("skills"), "root skills directory is missing")
 
+// The marketplace catalog is what makes this repository installable rather than merely
+// readable: `/plugin marketplace add` and VS Code's "Install Plugin From Source" both
+// resolve plugins through it. Keep it consistent with the root plugin manifest.
+const marketplace = await readJson(".claude-plugin/marketplace.json")
+const rootPlugin = await readJson("plugin.json")
+assert(
+  typeof marketplace.name === "string" && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(marketplace.name),
+  "marketplace.name must be a non-empty kebab-case identifier"
+)
+assert(typeof marketplace.owner?.name === "string", "marketplace.owner.name is required")
+assert(
+  Array.isArray(marketplace.plugins) && marketplace.plugins.length > 0,
+  "marketplace.plugins must list at least one plugin"
+)
+const rootEntry = marketplace.plugins.find((entry) => entry.name === rootPlugin.name)
+assert(rootEntry, `marketplace.plugins must list the root plugin (${rootPlugin.name})`)
+assert(
+  rootEntry.source === "./",
+  'the root plugin entry must use source "./" so it resolves to the marketplace root'
+)
+assert(
+  marketplace.version === rootPlugin.version && rootEntry.version === rootPlugin.version,
+  "marketplace catalog versions must track plugin.json"
+)
+
 console.log(`Marketplace validation passed (${manifest.generatedFiles.length} generated artifacts).`)

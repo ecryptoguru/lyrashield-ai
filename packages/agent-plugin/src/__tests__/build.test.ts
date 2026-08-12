@@ -41,6 +41,24 @@ describe("buildPlugin", () => {
       expect(content.endsWith("\n")).toBe(true)
       if (client === "codex") expect(JSON.parse(content).skills).toBe("./skills/")
     }
+
+    // Marketplace catalog: makes the exported repo addressable for `/plugin marketplace add`
+    // and VS Code's "Install Plugin From Source". `source: "./"` resolves to the marketplace
+    // root — the directory holding `.claude-plugin/` — which is where plugin.json lives.
+    const marketplacePath = path.join(pluginRoot, ".claude-plugin", "marketplace.json")
+    await access(marketplacePath)
+    const marketplaceRaw = await readFile(marketplacePath, "utf-8")
+    expect(marketplaceRaw.endsWith("\n")).toBe(true)
+    const marketplace = JSON.parse(marketplaceRaw)
+    expect(marketplace.name).toBe("lyrashield-ai")
+    expect(marketplace.owner.name).toBe("LyraShield AI")
+    expect(marketplace.plugins).toHaveLength(1)
+    expect(marketplace.plugins[0].name).toBe("lyrashield")
+    expect(marketplace.plugins[0].source).toBe("./")
+    // Catalog version must track the plugin manifest so installs aren't pinned to a stale build.
+    const pluginManifest = JSON.parse(await readFile(path.join(pluginRoot, "plugin.json"), "utf-8"))
+    expect(marketplace.version).toBe(pluginManifest.version)
+    expect(marketplace.plugins[0].version).toBe(pluginManifest.version)
   })
 
   it("leaves every generated manifest valid during concurrent builds", async () => {

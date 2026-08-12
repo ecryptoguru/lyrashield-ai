@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "lyrashield-ai",
+  "version": "0.1.16",
+  "description": "LyraShield AI security and release-assurance plugin for AI coding agents",
+  "owner": {
+    "name": "LyraShield AI",
+    "url": "https://lyrashieldai.com"
+  },
+  "plugins": [
+    {
+      "name": "lyrashield",
+      "source": "./",
+      "description": "LyraShield AI security and release-assurance plugin",
+      "version": "0.1.16",
+      "author": {
+        "name": "LyraShield AI",
+        "url": "https://lyrashieldai.com"
+      },
+      "homepage": "https://lyrashieldai.com",
+      "repository": "https://github.com/ecryptoguru/lyrashield-marketplace",
+      "license": "Apache-2.0",
+      "keywords": [
+        "security",
+        "appsec",
+        "lyrashield",
+        "mcp",
+        "ai-coding"
+      ],
+      "category": "security"
+    }
+  ]
+}

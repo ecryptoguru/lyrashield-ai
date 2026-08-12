@@ -1,5 +1,41 @@
 # LyraShield AI marketplace release source
 
+## Install from this repository
+
+This repository is an addressable plugin marketplace: `.claude-plugin/marketplace.json` catalogs the
+root plugin with `source: "./"`, so the marketplace root and the plugin root are the same directory.
+
+Clients with marketplace commands:
+
+```
+/plugin marketplace add ecryptoguru/lyrashield-marketplace
+/plugin install lyrashield@lyrashield-ai
+```
+
+VS Code: run **Chat: Install Plugin From Source** from the Command Palette and paste
+`https://github.com/ecryptoguru/lyrashield-marketplace`. To make adoption a repo-committed team
+decision instead, add this to `.claude/settings.json` or `.github/copilot/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "lyrashield-ai": {
+      "source": { "source": "github", "repo": "ecryptoguru/lyrashield-marketplace" }
+    }
+  },
+  "enabledPlugins": { "lyrashield@lyrashield-ai": true }
+}
+```
+
+Neither path inlines a credential. Run `lyrashield login --oauth` once per machine; the MCP server
+reads the selected workspace credential from `~/.lyrashield/credentials.json`.
+
+LyraShield is not yet listed in a published VS Code plugin marketplace, so there is no one-click
+marketplace install for VS Code today. Install-from-source and the marketplace-by-URL paths above
+install the same plugin.
+
+## Release boundary
+
 The installable client boundary is the exported root `plugin.json`, OAuth-first `mcp.json`,
 `skills/`, and generated client shims. It is Apache-2.0; the hosted dashboard, worker, and engine
 remain proprietary. The OpenClaw directory additionally carries its narrow MIT-0 grant.

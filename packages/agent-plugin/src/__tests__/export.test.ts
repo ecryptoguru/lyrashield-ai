@@ -61,6 +61,30 @@ describe("exportMarketplace", () => {
       repository: "https://github.com/ecryptoguru/lyrashield-marketplace",
       version: "0.1.16",
     })
+    // The marketplace catalog is what makes the exported repo addressable via
+    // `/plugin marketplace add` and VS Code's "Install Plugin From Source".
+    // `source: "./"` must stay pointed at the marketplace root, where plugin.json lives.
+    const marketplace = JSON.parse(
+      await readFile(path.join(output, ".claude-plugin", "marketplace.json"), "utf8")
+    ) as {
+      name?: string
+      version?: string
+      owner?: { name?: string }
+      plugins?: { name?: string; source?: string; version?: string; license?: string }[]
+    }
+    expect(marketplace).toMatchObject({
+      $schema: "https://json.schemastore.org/claude-code-marketplace.json",
+      name: "lyrashield-ai",
+      version: "0.1.16",
+      owner: { name: "LyraShield AI" },
+    })
+    expect(marketplace.plugins).toHaveLength(1)
+    expect(marketplace.plugins?.[0]).toMatchObject({
+      name: "lyrashield",
+      source: "./",
+      version: "0.1.16",
+      license: "Apache-2.0",
+    })
     const codexManifest = JSON.parse(
       await readFile(path.join(output, ".codex-plugin", "plugin.json"), "utf8")
     ) as { $schema?: string; skills?: string }
@@ -126,6 +150,7 @@ describe("exportMarketplace", () => {
       "mcp.json",
       "skills",
       ".claude-plugin/plugin.json",
+      ".claude-plugin/marketplace.json",
       ".codex-plugin/plugin.json",
       ".cursor-plugin/plugin.json",
       ".kiro-plugin/plugin.json",
