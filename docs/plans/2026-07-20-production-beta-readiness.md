@@ -1,6 +1,6 @@
 # LyraShield AI production beta readiness plan
 
-Status: **proposed — auth/worker environment controls and local Docker proof implemented; production deployment not approved**
+Status: **historical plan of record, dated 2026-07-20** — at that time auth/worker environment controls and local Docker proof were implemented and production deployment was not yet approved. The open-registration beta has since shipped: LyraShield AI is live in open beta at `https://app.lyrashieldai.com/sign-up`. Read the gate lists below as the verification standard, not as a claim that deployment is still pending. Current state lives in `AGENTS.md` and `codebase.md`.
 Date: 2026-07-20
 Target: open-registration production beta with a controlled number of real users
 Primary constraints: production-grade safety, truthful beta UX, Supabase Free, Upstash Free, low Azure cost, and controlled GPT-5.6 spend without a material quality reduction.

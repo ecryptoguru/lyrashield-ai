@@ -132,9 +132,9 @@ Astro development serves at `http://localhost:4321`. To exercise the actual Work
 pnpm --filter @lyrashield/marketing preview -- --port 8787
 ```
 
-That preview is intentionally noindex. It should return 200 for `/`, `/robots.txt`, and `/sitemap-index.xml`, and 404 for `/llms.txt` before launch.
+That preview is intentionally noindex. It should return 200 for `/`, `/robots.txt`, and `/sitemap-index.xml`, and 404 for `/llms.txt` because that build is not indexable.
 
-Open the local app, sign up for a new account, and complete onboarding. Any email works. The waitlist endpoint remains available for the homepage referral flow if still configured.
+Open the local app, sign up for a new account, and complete onboarding. Any email works — registration is open, with no invitation step. The `waitlist` endpoint (the optional product-updates subscription backend) remains available for the homepage referral flow if still configured.
 
 ## 5. Build the worker image and engine
 

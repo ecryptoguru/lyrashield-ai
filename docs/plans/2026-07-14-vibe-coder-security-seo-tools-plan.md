@@ -1,3 +1,5 @@
+<!-- Load-bearing: read by apps/marketing/src/tests/blog-contracts.test.ts as the editorial source of truth for the 100-topic program. Do not delete or move without updating that test. -->
+
 # Vibe-Coder Security SEO, AEO, GEO, and Free-Tools Plan
 
 Date: 2026-07-14

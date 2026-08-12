@@ -454,7 +454,9 @@ Monitor only coarse funnel stages: deduplicated scorecard view, share-button han
 
 ## Marketing deployment
 
-### Current pre-launch deployment status — 2026-07-16
+### Marketing deployment status snapshot — 2026-07-16
+
+The product is now live in open beta with open registration; the snapshot below records the marketing Worker state verified on that date.
 
 - `https://lyrashieldai.com` is live on the `lyrashield-marketing` Worker. The apex and `www` custom domains are attached.
 - Production D1, Rate Limit, and KV bindings are provisioned; migrations `0001`–`0003` are applied remotely; `WAITLIST_IP_SALT` is stored as a Worker secret.
