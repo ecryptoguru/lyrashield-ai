@@ -1,24 +1,25 @@
 ---
 title: OpenAI Codex MCP security workflow for PR reviews
-description: Set up OpenAI Codex with LyraShield AI over MCP to get verified findings in your Codex workflow and enforce a diff aware GitHub Action gate with SARIF.
-pubDate: '2026-07-30'
+description: Connect OpenAI Codex to LyraShield MCP for bounded scans, evidence-state findings, reviewed fix proposals, retests, and a diff-aware SARIF gate.
+pubDate: "2026-07-30"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-13
 faq:
-  - q: 'Where does Codex store MCP config?'
-    a: 'Codex stores MCP servers in ~/.codex/config.toml under [mcp_servers.*]. Each entry defines command, args, and bearer_token_env_var for remote auth to LyraShield.'
-  - q: 'How does LyraShield handle false positives in Codex?'
-    a: 'LyraShield is designed to return verified findings with evidence and a retest step, so only reproducible issues block PRs. The verification and Fix PR flow is on the roadmap.'
-  - q: 'Do I need both local and remote MCP?'
-    a: 'Use local stdio for solo dev and remote HTTP for team keys and CI. Both use npx -y @lyrashield/mcp and the same API endpoint pattern.'
-  - q: 'Where does Codex store MCP server config?'
-    a: 'Codex stores MCP servers in ~/.codex/config.toml under [mcp_servers.*] sections. Each section defines command, args, and bearer_token_env_var for remote auth. Keep the token in an env var referenced by the config, never as a literal in the TOML file.'
+  - q: "Where does Codex store MCP config?"
+    a: "Codex stores MCP servers in ~/.codex/config.toml under [mcp_servers.*]. Each entry defines command, args, and bearer_token_env_var for remote auth to LyraShield."
+  - q: "How does LyraShield handle false positives in Codex?"
+    a: "LyraShield returns findings with recorded evidence states. A clean deterministic retest can be retest-confirmed; independent verification requires a separate receipt. Current tools record fix proposals and queue retests but do not edit code or open pull requests."
+  - q: "Do I need both local and remote MCP?"
+    a: "Use local stdio for solo dev and remote HTTP for team keys and CI. Both use npx -y @lyrashield/mcp and the same API endpoint pattern."
+  - q: "Where does Codex store MCP server config?"
+    a: "Codex stores MCP servers in ~/.codex/config.toml under [mcp_servers.*] sections. Each section defines command, args, and bearer_token_env_var for remote auth. Keep the token in an env var referenced by the config, never as a literal in the TOML file."
 ---
-You can review AI generated pull requests in Codex with verified AppSec evidence by connecting LyraShield AI through MCP, running a targeted scan from your Codex session, and enforcing the same policy in CI with a diff aware gate. The config lives in `~/.codex/config.toml` and supports both local stdio and remote HTTP with a bearer token.
 
-OpenAI Codex excels at large refactors, but refactors can introduce auth bypasses, injection, and vulnerable dependencies that are hard to spot in a diff. The [vibe coding security guide](/blog/vibe-coding-security-guide) describes why AI built code needs verified findings instead of noisy lint. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Verified Finding to Fix PR to Retest to Report. This guide gives you the exact `~/.codex/config.toml` entries for local and remote MCP using `npx -y @lyrashield/mcp` and `https://app.lyrashieldai.com/api/mcp`, plus verification, inline checks, and a GitHub Action.
+You can review AI generated pull requests in Codex with evidence-state AppSec findings by connecting LyraShield AI through MCP, running a targeted scan from your Codex session, and enforcing the same policy in CI with a diff aware gate. The config lives in `~/.codex/config.toml` and supports both local stdio and remote HTTP with a bearer token.
+
+OpenAI Codex excels at large refactors, but refactors can introduce auth bypasses, injection, and vulnerable dependencies that are hard to spot in a diff. The [vibe coding security guide](/blog/vibe-coding-security-guide) describes why AI built code needs findings with recorded evidence states instead of noisy lint. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives you the exact `~/.codex/config.toml` entries for local and remote MCP using `npx -y @lyrashield/mcp` and `https://app.lyrashieldai.com/api/mcp`, plus verification, inline checks, and a GitHub Action. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches, or open pull requests.
 
 ## 1. Prerequisites and setup
 
@@ -57,24 +58,25 @@ The local stdio entry is best for solo dev because Codex spawns the MCP server a
 
 ## 3. Verify the connection in Codex
 
-Start a new Codex session with `codex --verbose` and run `codex mcp list` or ask the agent "list MCP servers". You should see `lyrashield` and `lyrashield_remote` as available. Try a dry tool call: "call lyrashield.scan_status". If it fails, check that `LYRASHIELD_API_KEY` is exported and that Node can resolve `npx`. Common failure is launching Codex from a GUI that does not inherit shell env. For auth debugging, the [OpenAI platform docs](https://openai.com/index/openai-api/) discuss bearer handling, and [docs.github.com on encrypted secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) covers secret propagation for CI parity. Reopen Codex after package upgrades so `npx` resolves the current package. If `bearer_token_env_var` is set but the env var is empty, Codex connects without auth and the server rejects calls with a 401, which shows as a tool error rather than a crash.
+Start a new Codex session with `codex --verbose` and run `codex mcp list` or ask the agent "list MCP servers". You should see `lyrashield` and `lyrashield_remote` as available. Try a dry tool call: "call lyrashield_get_scan_status". If it fails, check that `LYRASHIELD_API_KEY` is exported and that Node can resolve `npx`. Common failure is launching Codex from a GUI that does not inherit shell env. For auth debugging, the [OpenAI platform docs](https://openai.com/index/openai-api/) discuss bearer handling, and [docs.github.com on encrypted secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) covers secret propagation for CI parity. Reopen Codex after package upgrades so `npx` resolves the current package. If `bearer_token_env_var` is set but the env var is empty, Codex connects without auth and the server rejects calls with a 401, which shows as a tool error rather than a crash.
 
 ## 4. Run an inline scan from a Codex session
 
-In your Codex prompt, target the workspace and request a focused scan: "scan the current repo for XSS, auth, and secrets, show only verified findings with file and line". LyraShield is designed to filter to verified findings with evidence and is designed to support retest after a Fix PR, both capabilities are on the roadmap and not claimed as live automatic behavior today. Map findings to [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) for consistent naming and to [NIST SSDF](https://csrc.nist.gov/Projects/ssdf) practices for secure development hygiene. For dependency findings, attach an [OSV](https://osv.dev/) link in the PR body so reviewers can validate version ranges.
+In your Codex prompt, target the authorized workspace and request a focused scan. Ask for every finding’s recorded evidence state, supporting evidence, file location, CWE, and limitations. Call `lyrashield_scan_target`, then use `lyrashield_get_findings`; do not request “verified findings only,” because detection and independent verification are separate states.
 
-A verified finding is not a raw heuristic. It includes a file, a line range, and proof, such as a reachable sink or a confirmed vulnerable call path, plus the CWE and severity. A raw heuristic might flag any use of `eval` as dangerous, but LyraShield is designed to keep only findings where the tainted input path is reproducible, so your Codex review stays focused on real risk instead of triaging noise. When you ask the agent to show findings, request the evidence block so the PR reviewer can follow the same path without re running the scan.
+A finding retains its recorded evidence state, supporting detail, file location, CWE, severity, and limitations when available. Evidence strength and reproducibility depend on that state; detection alone does not imply a reachable sink, confirmed vulnerable call path, or independent verification. When you ask the agent to show findings, request the evidence block so the PR reviewer can assess the same recorded context without rerunning the scan. Independent verification still requires a separate receipt.
 
 Example Codex instruction you can paste:
 
 ```md
 Use lyrashield MCP to scan this repo diff against main.
-- Return only verified findings with evidence and fix guidance
+
+- Return findings with their recorded evidence states, supporting evidence, and fix guidance.
 - Group by risk: auth, injection, secrets, supply chain
-- Propose a Fix PR diff for each critical, do not apply without confirmation
+- Record the intended remediation with `lyrashield_record_fix_proposal`; do not claim that LyraShield generated or applied a patch.
 ```
 
-The Fix PR step is designed to produce a minimal patch plus tests and is on the roadmap. Keep report steps explicit so audit trails include scan ID and SARIF artifact links.
+`lyrashield_record_fix_proposal` stores a remediation summary; it does not produce a patch. After a developer changes the code, `lyrashield_verify_fix` queues a retest and returns a scan reference to poll.
 
 ## 5. Wire the GitHub Action diff aware gate
 
@@ -102,7 +104,7 @@ jobs:
           fail_on_severity: HIGH
 ```
 
-The `--diff` flag limits analysis to changed files, which is critical for Codex generated PRs that touch many files. SARIF upload lets you use GitHub code scanning rules to block merges on critical verified findings while still keeping low risk notes informational. The diff aware gate matters because a full repo scan on a large codebase can time out the job and drown reviewers in preexisting issues, whereas the diff scan returns only findings tied to the PR changes. Add a branch protection rule requiring the gate to pass before merge.
+The `--diff` flag limits analysis to changed files, which is critical for Codex generated PRs that touch many files. SARIF upload lets you use GitHub code scanning rules to block merges on critical findings with recorded evidence states while still keeping low risk notes informational. The diff aware gate matters because a full repo scan on a large codebase can time out the job and drown reviewers in preexisting issues, whereas the diff scan returns only findings tied to the PR changes. Add a branch protection rule requiring the gate to pass before merge.
 
 ## 6. Add agent rules snippet for Codex
 
@@ -113,23 +115,23 @@ Create `.codex/rules/security.md` so every Codex agent run follows the same loop
 
 - Identify Target: app root, entry routes, data classification.
 - Scan via LyraShield MCP before final answer on refactors.
-- Summarize verified findings only, with evidence path and CWE.
-- Propose Fix PR with minimal diff and tests, then request retest.
+- Summarize findings with recorded evidence states only, with evidence path and CWE.
+- Record a fix proposal, apply the code change outside LyraShield, then queue and poll a retest.
 - Append Report section: scan ID, SARIF file, policy version.
 ```
 
-This rule file codifies Target to Scan to Verified Finding to Fix PR to Retest to Report and avoids language that implies fixes land unattended. For broader editor coverage, link your team to the [OpenAI Codex integration guide](/docs/integrations/openai-codex) and the pillar [vibe coding security guide](/blog/vibe-coding-security-guide) inside the first third of your internal docs, which keeps onboarding aligned. Treat the rules file as approval gated fix proposals, not unattended fixes, so every patch lands only after a human reviews the diff and the retest result. The snippet also keeps Codex from summarizing unverified hints as if they were confirmed.
+This rule file codifies Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. It tells Codex to preserve evidence states, use `lyrashield_record_fix_proposal` only for the remediation record, and use `lyrashield_verify_fix` only to queue a retest after code changes are applied. Neither tool writes code or opens a branch or pull request.
 
-| Step | Codex action | LyraShield MCP tool | Output |
-| --- | --- | --- | --- |
-| Target | Identify app root and risk areas | list_targets | target inventory |
-| Scan | Run diff scan via MCP | scan --diff | SARIF + findings |
-| Verify | Triage with evidence | get_finding | verified list |
-| Fix and retest | Propose patch and rerun | create_fix_pr, retest | Fix PR + new SARIF |
-| Report | Summarize in PR body | report | audit note |
+| Step           | Codex action                     | LyraShield MCP tool                                   | Output                          |
+| -------------- | -------------------------------- | ----------------------------------------------------- | ------------------------------- |
+| Target         | Identify app root and risk areas | lyrashield_list_targets                               | target inventory                |
+| Scan           | Run scoped scan via MCP          | lyrashield_scan_target                                | SARIF + findings                |
+| Verify         | Triage with evidence             | lyrashield_get_findings                               | findings + evidence states      |
+| Fix and retest | Propose patch and rerun          | lyrashield_record_fix_proposal, lyrashield_verify_fix | proposal record + retest status |
+| Report         | Summarize in PR body             | lyrashield_create_report                              | audit note                      |
 
 ## 7. Why pair Codex with LyraShield
 
-Codex accelerates code change, LyraShield adds the verification layer that is designed to be evidence driven. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains how fast scaffolding without verification leaves injection and auth gaps that show up late. By pairing, you get a single loop in both editor and CI, plus SARIF that integrates with existing GitHub policy. LyraShield v1 covers agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, so you can replace ad hoc scripts with one consistent flow. Sprints 0 to 2 are shipped, while scan engine MVP, Fix PR execution, and billing are on the roadmap and described as designed to capabilities. The pairing works because Codex owns the change and LyraShield owns the evidence, so the same verified finding flows from editor to CI without reformatting. When a Codex refactor touches auth middleware, the diff scan catches bypasses that unit tests miss.
+Codex accelerates code change, LyraShield adds the verification layer that is designed to be evidence driven. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains how fast scaffolding without verification leaves injection and auth gaps that show up late. By pairing, you get a single loop in both editor and CI, plus SARIF that integrates with existing GitHub policy. LyraShield v1 covers agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF, so you can replace ad hoc scripts with one consistent flow. Sprints 0 to 2 are shipped, while scan engine MVP, automatic branch and pull-request execution, and billing are on the roadmap and described as designed to capabilities. The pairing works because Codex owns the change and LyraShield owns the evidence, so the same finding with a recorded evidence state flows from editor to CI without reformatting. When a Codex refactor touches auth middleware, the diff scan catches bypasses that unit tests miss.
 
-Adopt this by configuring Codex MCP today, running one diff scan on your next AI generated PR, proposing a reviewed Fix PR for one verified finding, and expanding with the [AI app security checklist](/tools/ai-app-security-checklist). When ready, [create an account at LyraShield AI](https://lyrashieldai.com) to follow progress on live engine execution and Fix PR automation.
+Adopt this by configuring Codex MCP, running one bounded scan on your next AI-generated change, recording a reviewed fix proposal, applying the code change yourself, and polling the queued retest. Expand with the [AI app security checklist](/tools/ai-app-security-checklist), then [create an account at LyraShield AI](https://lyrashieldai.com).

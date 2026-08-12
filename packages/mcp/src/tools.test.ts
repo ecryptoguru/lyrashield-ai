@@ -4,6 +4,7 @@ import {
   createGetFindingsTool,
   createGetLaunchReadinessTool,
   createCreateReportTool,
+  createPrSecurityRecapTool,
   type ToolHandlerContext,
   MCP_TOOL_ANNOTATIONS,
 } from "./tools"
@@ -174,6 +175,44 @@ describe("createCreateReportTool", () => {
     const data = JSON.parse(result.content[0]!.text)
     expect(data.action).toBe("report_created")
     expect(data.report.id).toBe("r-1")
+  })
+})
+
+describe("createPrSecurityRecapTool", () => {
+  it("paginates all open findings and labels the result as a current-state snapshot", async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeApiResponse({ verdict: "HOLD" }))
+      .mockResolvedValueOnce(
+        makeApiResponse({
+          items: [{ id: "f-1", severity: "HIGH", status: "OPEN" }],
+          nextCursor: "f-1",
+        })
+      )
+      .mockResolvedValueOnce(
+        makeApiResponse({
+          items: [{ id: "f-2", severity: "MEDIUM", status: "OPEN" }],
+          nextCursor: null,
+        })
+      )
+
+    const tool = createPrSecurityRecapTool(context)
+    const result = await tool.handler({ workspaceId: "ws-1", targetId: "target-1" })
+
+    expect(result.isError).toBeUndefined()
+    const data = JSON.parse(result.content[0]!.text)
+    expect(data.findingCount).toBe(2)
+    expect(data.bySeverity).toEqual({ HIGH: 1, MEDIUM: 1 })
+    expect(data.markdown).toContain("**Open findings by severity:**")
+    expect(data.markdown).toContain("current workspace/target snapshot")
+    expect(data.markdown).not.toContain("latest completed scan")
+
+    const firstFindingsUrl = String(mockFetch.mock.calls[1]![0])
+    const secondFindingsUrl = String(mockFetch.mock.calls[2]![0])
+    expect(firstFindingsUrl).toContain("targetId=target-1")
+    expect(firstFindingsUrl).toContain("status=OPEN")
+    expect(firstFindingsUrl).toContain("limit=100")
+    expect(firstFindingsUrl).not.toContain("cursor=")
+    expect(secondFindingsUrl).toContain("cursor=f-1")
   })
 })
 

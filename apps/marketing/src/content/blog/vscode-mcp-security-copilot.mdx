@@ -1,6 +1,6 @@
 ---
 title: VS Code MCP Security Workflow with Copilot
-description: Add LyraShield MCP to VS Code for Copilot aware security checks verified findings and diff aware GitHub Action gates
+description: Add LyraShield MCP to VS Code for Copilot aware security checks findings with evidence states and diff aware GitHub Action gates
 pubDate: "2026-07-30"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
@@ -8,30 +8,30 @@ draft: false
 heroImage: agent-security-10
 faq:
   - q: How does LyraShield MCP work with Vscode?
-    a: It exposes scan targets verified findings and fix guidance via MCP tools so the agent can request a security check inline without leaving the IDE.
+    a: It exposes scan targets findings with evidence states and fix guidance via MCP tools so the agent can request a security check inline without leaving the IDE.
   - q: Does this replace the GitHub Action gate?
     a: No. IDE checks give fast feedback while the GitHub Action provides a diff aware merge gate with SARIF output for team review.
   - q: What API key does remote MCP use?
     a: A Bearer key starting with lsk_ issued from LyraShield. Set it as LYRASHIELD_API_KEY for remote https://app.lyrashieldai.com/api/mcp.
   - q: Where does VS Code read MCP config from?
-    a: VS Code reads MCP servers from the user or workspace settings json under mcp.servers. Workspace scope shares the entry with the team via the repo, user scope stays local. Use the pinned npx -y @lyrashield/mcp command and reference the key through env so the literal never lands in the committed file.
+    a: VS Code reads MCP servers from the user or workspace settings json under mcp.servers. Workspace scope shares the entry with the team via the repo, user scope stays local. Use the pinned npx -y @lyrashield/mcp@0.2.2 command and reference the key through env so the literal never lands in the committed file.
 ---
 
-To add LyraShield security to VS Code, configure .vscode/mcp.json using servers key and inputs promptString for your lsk\_ key, add stdio npx -y @lyrashield/mcp and remote entries, verify in Copilot chat, then scan for OWASP risks inline and enforce a diff aware gate.
+To add LyraShield security to VS Code, configure .vscode/mcp.json using servers key and inputs promptString for your lsk\_ key, add stdio npx -y @lyrashield/mcp@0.2.2 and remote entries, verify in Copilot chat, then scan for OWASP risks inline and enforce a diff aware gate.
 
-VS Code with Copilot generates code rapidly but inherits [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks such as injection and secrets. This workflow aligns VS Code with [vibe coding security guide](/blog/vibe-coding-security-guide) methodology, adding security check via MCP. LyraShield AI is agent native AppSec at [LyraShield site](https://lyrashieldai.com), designed as Target to Scan to Verified Finding to Fix pull request to Retest to Report. See [VS Code integration guide](/docs/integrations/vscode) and [Codex security workflow](/blog/codex-security-workflow). Transport uses [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions).
+VS Code with Copilot generates code rapidly but inherits [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks such as injection and secrets. This workflow aligns VS Code with [vibe coding security guide](/blog/vibe-coding-security-guide) methodology, adding security check via MCP. LyraShield AI is agent native AppSec at [LyraShield site](https://lyrashieldai.com), designed as Target to Scan to Evidence State to Fix Proposal to Retest to Report. See [VS Code integration guide](/docs/integrations/vscode) and [Codex security workflow](/blog/codex-security-workflow). Transport uses [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub Actions](https://docs.github.com/en/actions).
 
 ## 1. Prerequisites and api key setup
 
 Create LyraShield API key starting with lsk\_ and store as LYRASHIELD_API_KEY. Never commit key to source control or chat logs. For local work, export it in shell profile. For teams, keep it in secret manager and add to GitHub repository secrets for CI parity. Naming consistency between shell, IDE config and CI reduces misconfig.
 
-You need Node 18 plus so npx resolves pinned package, vscode updated to build supporting MCP, and testable target such as http://localhost:3000 or repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
+You need Node 18 plus so npx resolves pinned package, vscode updated to build supporting MCP, and testable target such as http://localhost:3000 or repo root. LyraShield MCP supports stdio via npx -y @lyrashield/mcp@0.2.2 and remote HTTP at [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) using Bearer lsk\_ key. Stdio keeps traffic local, remote enables central policy.
 
-Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks, and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix pull requests are proposals requiring review, not hands off merges, after Sprints 0 to 2 shipped MCP contract. Steps are generate key with scan scope, export variable, verify npx works, add secret to GitHub, check Node version. See [VS Code integration guide](/docs/integrations/vscode).
+Review [CWE Top 25](https://cwe.mitre.org/top25/) and [OWASP Top 10](https://owasp.org/www-project-top-ten/) to map checks to weaknesses your team tracks, and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for secure build. LyraShield v1 is designed to cover agentic pentest plus SCA and secrets with SARIF output. Fix proposals are proposals requiring review, not hands off merges, after Sprints 0 to 2 shipped MCP contract. Steps are generate key with scan scope, export variable, verify npx works, add secret to GitHub, check Node version. See [VS Code integration guide](/docs/integrations/vscode).
 
 ## 2. Configure MCP server in vscode config file
 
-vscode reads MCP from .vscode/mcp.json. Top level key is servers with inputs promptString. Include stdio and remote to switch without code edits. Use pinned npx -y @lyrashield/mcp for stdio.
+vscode reads MCP from .vscode/mcp.json. Top level key is servers with inputs promptString. Include stdio and remote to switch without code edits. Use pinned npx -y @lyrashield/mcp@0.2.2 for stdio.
 
 ```json
 {
@@ -68,17 +68,17 @@ Placeholder `${input:lyrashield-key}` is resolved securely without writing secre
 
 Restart vscode after saving config and open MCP servers view to confirm lyrashield shows connected with tools. In chat ask to list MCP tools to see scan tool. This confirms handshake completed.
 
-If disconnected, open log panel. For 401 from [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) reissue key. For npx not found or EACCES fix Node PATH or install via nvm user space. Run npx -y @lyrashield/mcp manually in terminal with LYRASHIELD_API_KEY set to confirm handshake JSON prints. This isolates IDE versus Node issues.
+If disconnected, open log panel. For 401 from [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) reissue key. For npx not found or EACCES fix Node PATH or install via nvm user space. Run npx -y @lyrashield/mcp@0.2.2 manually in terminal with LYRASHIELD_API_KEY set to confirm handshake JSON prints. This isolates IDE versus Node issues.
 
 Verification prevents silent failure where agent assumes scan succeeded but server was unreachable. That leaves [OWASP Top 10](https://owasp.org/www-project-top-ten/) risks undetected and breaks verification loop. Document success in [VS Code integration guide](/docs/integrations/vscode) and allow egress to [remote MCP endpoint](https://app.lyrashieldai.com/api/mcp) if org blocks external.
 
 ## 4. Run a security check inline while you code
 
-With MCP connected, prompt agent to scan current target before committing. Example prompt is scan target http://localhost:3000 for injection and secrets using LyraShield and return verified findings only with file paths and CWE.
+With MCP connected, prompt agent to scan current target before committing. Example prompt is scan target http://localhost:3000 for injection and secrets using LyraShield and return findings with evidence states only with file paths and CWE.
 
 Agent calls MCP tool and returns file, line, evidence snippet or reproduction notes, and remediation pointers that reference [OWASP Top 10](https://owasp.org/www-project-top-ten/). For injection it shows untrusted input flowing into query without validation. For secrets it shows detected key pattern in source. For supply chain it maps lock entries against [OSV database](https://osv.dev/).
 
-LyraShield is designed to reduce noise by returning verified findings that can be retested via same MCP call. Fix workflow is designed to propose pull request branch that developer reviews, keeping human approval central. Retest loop is key. After fix, ask agent to re run scan on same target and confirm status changed to fixed with evidence. Aligns with [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for verifiable remediation and [CWE Top 25](https://cwe.mitre.org/top25/) for classification.
+LyraShield preserves each finding's evidence state and supports a server-owned retest after the developer applies a fix. The MCP workflow can generate and record a fix proposal, but it does not create a branch or pull request. Poll the retest to a terminal state and include its outcome and scan reference in the PR. See [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for verifiable remediation and [CWE Top 25](https://cwe.mitre.org/top25/) for classification.
 
 | Check type   | What to scan                                            | How to fix                                                                                        |
 | ------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -118,7 +118,7 @@ jobs:
           sarif_file: lyrashield-results.sarif
 ```
 
-Store LYRASHIELD_API_KEY in repository secrets, never in workflow file. Action comments with verified findings and is designed to propose fix branch requiring review on roadmap. SARIF upload lets findings appear in GitHub code scanning alerts. Document secret name in [VS Code integration guide](/docs/integrations/vscode) onboarding and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for build integrity.
+Store LYRASHIELD_API_KEY in repository secrets, never in workflow file. Action comments with findings with evidence states and is designed to propose fix branch requiring review on roadmap. SARIF upload lets findings appear in GitHub code scanning alerts. Document secret name in [VS Code integration guide](/docs/integrations/vscode) onboarding and [NIST SSDF](https://csrc.nist.gov/projects/ssdf) for build integrity.
 
 ## 6. Add agent rules for continuous guardrails
 
@@ -132,7 +132,7 @@ Location varies. Cursor uses .cursor/rules/security.mdc with globs, Claude Code 
 For any task involving user input, auth, file upload or secrets:
 
 1. Call LyraShield MCP scan on target .
-2. List verified findings with file and CWE
+2. List findings with evidence states with file and CWE
 3. Propose remediation with code edit
 4. Ensure .env.example has placeholders only
 5. Retest via LyraShield after fix
@@ -144,10 +144,10 @@ Test rule by scaffolding endpoint accepting query param and confirming scan trig
 
 Vscode speeds AI development but can repeat patterns [OWASP Top 10](https://owasp.org/www-project-top-ten/) warns about such as trusting generated SQL or leaving debug endpoints enabled. LyraShield adds verification without changing UX, exposing scan and findings as native tools agent knows how to call.
 
-Sprints 0 to 2 shipped MCP contract and SARIF wiring, so teams adopt today with config change while engine depth expands on roadmap. Unlike generic linters flagging style, LyraShield focuses on verified findings agent can retest, reducing noise and preserving flow. It also covers supply chain via [OSV database](https://osv.dev/) so vulnerable npm packages surface with first party flaws.
+Sprints 0 to 2 shipped MCP contract and SARIF wiring, so teams adopt today with config change while engine depth expands on roadmap. Unlike generic linters flagging style, LyraShield focuses on findings with evidence states agent can retest, reducing noise and preserving flow. It also covers supply chain via [OSV database](https://osv.dev/) so vulnerable npm packages surface with first party flaws.
 
 Local feedback plus CI gate creates defense in depth matching how AI apps evolve, many small edits per hour. For policy framing revisit [vibe coding security guide](/blog/vibe-coding-security-guide) and [NIST SSDF](https://csrc.nist.gov/projects/ssdf). External refs such as [CWE Top 25](https://cwe.mitre.org/top25/) and [OSV database](https://osv.dev/) provide standardized ids for prioritization, making triage consistent.
 
 Close loop by tracking findings as tasks, rerunning scans after fixes to confirm resolution, and ensuring SARIF appears in GitHub code scanning with file and line mapping. Run [AI app security checklist](/tools/ai-app-security-checklist) before launch to cover injection, auth, secrets, headers and supply chain in one pass.
 
-When ready to centralize results across vscode sessions and pull requests with dashboards and retention, [create an account at LyraShield AI](https://lyrashieldai.com) for early access to team policies. LyraShield is designed to grow with your vscode workflow, bringing verified findings, proposals requiring review, and retest evidence into existing loop without claiming hands off merges.
+When ready to centralize results across vscode sessions and pull requests with dashboards and retention, [create an account at LyraShield AI](https://lyrashieldai.com) for early access to team policies. LyraShield is designed to grow with your vscode workflow, bringing findings with evidence states, proposals requiring review, and retest evidence into existing loop without claiming hands off merges.

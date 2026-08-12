@@ -1,6 +1,6 @@
 # LyraShield AI MCP Server — Setup
 
-Run verified security scans, review findings, and drive the fix → verify loop from Zed's agent panel.
+Run bounded security scans, review findings with their evidence states, and drive the fix → verify loop from Zed's agent panel.
 
 ## 1. Connect with OAuth (recommended)
 

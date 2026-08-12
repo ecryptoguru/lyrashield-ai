@@ -1,6 +1,6 @@
 # LyraShield AI MCP
 
-Zed extension for the [LyraShield AI](https://lyrashieldai.com) MCP server. Adds verified security scans, findings review, and the fix → verify loop to the Zed agent panel.
+Zed extension for the [LyraShield AI](https://lyrashieldai.com) MCP server. Adds bounded security scans, evidence-state review, and the fix → verify loop to the Zed agent panel.
 
 ## Setup
 

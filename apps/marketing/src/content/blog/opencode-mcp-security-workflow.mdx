@@ -1,24 +1,25 @@
 ---
 title: OpenCode MCP security workflow for AI built projects
-description: Wire OpenCode to LyraShield AI via MCP for verified security findings and a diff aware GitHub gate, using opencode.json server config and pinned npx command.
-pubDate: '2026-07-30'
+description: Connect OpenCode to LyraShield MCP for evidence-state findings and a diff-aware GitHub gate using opencode.json and a pinned local package.
+pubDate: "2026-07-30"
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
 heroImage: agent-security-14
 faq:
-  - q: 'How do I register LyraShield in OpenCode?'
-    a: 'Add an mcp.servers entry in opencode.json with type local or remote, command npx -y @lyrashield/mcp, and env mapping for LYRASHIELD_API_KEY. Restart OpenCode and verify the tool list.'
-  - q: 'Does OpenCode support remote MCP with Bearer?'
-    a: 'Yes. Use type remote with URL https://app.lyrashieldai.com/api/mcp and pass LYRASHIELD_API_KEY as Bearer via env. The same pattern is used in the GitHub Action.'
-  - q: 'What matches LyraShield v1 scope?'
-    a: 'Agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF is v1. Scan engine MVP, Fix PR, and billing are on the roadmap and described as designed to, not live automatic.'
-  - q: 'Where does OpenCode read MCP config from?'
-    a: 'OpenCode reads MCP servers from opencode.json under mcp.servers. Each entry sets type local or remote, command and args for stdio, and url and headers for remote. Keep the LYRASHIELD_API_KEY in the env map so the server reads it from your environment rather than a literal in the file.'
+  - q: "How do I register LyraShield in OpenCode?"
+    a: "Add an mcp.servers entry in opencode.json with type local or remote, command npx -y @lyrashield/mcp@0.2.2, and env mapping for LYRASHIELD_API_KEY. Restart OpenCode and verify the tool list."
+  - q: "Does OpenCode support remote MCP with Bearer?"
+    a: "Yes. Use type remote with URL https://app.lyrashieldai.com/api/mcp and pass LYRASHIELD_API_KEY as Bearer via env. The same pattern is used in the GitHub Action."
+  - q: "What matches LyraShield v1 scope?"
+    a: "Agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF is v1. Scan engine MVP, Fix Proposal, and billing are on the roadmap and described as designed to, not live automatic."
+  - q: "Where does OpenCode read MCP config from?"
+    a: "OpenCode reads MCP servers from opencode.json under mcp.servers. Each entry sets type local or remote, command and args for stdio, and url and headers for remote. Keep the LYRASHIELD_API_KEY in the env map so the server reads it from your environment rather than a literal in the file."
 ---
-Connect OpenCode to LyraShield AI through MCP to scan AI generated code for verified findings, propose Fix PRs that are designed to be minimal, and enforce the same checks in CI with a diff aware gate. The server entry lives in `opencode.json` under `mcp.servers` and supports local stdio via `npx -y @lyrashield/mcp` plus remote HTTP with a bearer token.
 
-OpenCode runs agent workflows from `opencode.json`, which makes it a natural place to add security tooling that survives across sessions. The [vibe coding security guide](/blog/vibe-coding-security-guide) outlines why AI built projects need verification that ties code, deps, and secrets together. LyraShield AI is agent native AppSec for AI built software following Target to Scan to Verified Finding to Fix PR to Retest to Report. This guide shows exact OpenCode config using `npx -y @lyrashield/mcp` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification steps, inline scans, GitHub Action, and rules.
+Connect OpenCode to LyraShield AI through MCP to scan AI generated code for findings with evidence states, propose Fix Proposals that are designed to be minimal, and enforce the same checks in CI with a diff aware gate. The server entry lives in `opencode.json` under `mcp.servers` and supports local stdio via `npx -y @lyrashield/mcp@0.2.2` plus remote HTTP with a bearer token.
+
+OpenCode runs agent workflows from `opencode.json`, which makes it a natural place to add security tooling that survives across sessions. The [vibe coding security guide](/blog/vibe-coding-security-guide) outlines why AI built projects need verification that ties code, deps, and secrets together. LyraShield AI is agent native AppSec for AI built software following Target to Scan to Evidence State to Fix Proposal to Retest to Report. This guide shows exact OpenCode config using `npx -y @lyrashield/mcp@0.2.2` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification steps, inline scans, GitHub Action, and rules.
 
 ## 1. Prerequisites and setup
 
@@ -68,31 +69,32 @@ Remote HTTP with Bearer:
 }
 ```
 
-Both use the pinned command `npx -y @lyrashield/mcp` in some form, and remote uses [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer `lsk_`. The `{env:VAR}` expansion is OpenCode native, it pulls from your shell env without hardcoding secrets. If you want a sibling checklist for rollout, see the [OpenCode AI app security checklist](/blog/opencode-app-security-checklist) which mirrors this gate pattern. Link the guide as [OpenCode integration guide](/docs/integrations/opencode) rather than a bare path to pass editorial checks.
+Both use the pinned command `npx -y @lyrashield/mcp@0.2.2` in some form, and remote uses [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer `lsk_`. The `{env:VAR}` expansion is OpenCode native, it pulls from your shell env without hardcoding secrets. If you want a sibling checklist for rollout, see the [OpenCode AI app security checklist](/blog/opencode-app-security-checklist) which mirrors this gate pattern. Link the guide as [OpenCode integration guide](/docs/integrations/opencode) rather than a bare path to pass editorial checks.
 
 The remote Bearer pattern targets `https://app.lyrashieldai.com/api/mcp` and passes `${LYRASHIELD_API_KEY}` in the `Authorization` header. This is the same endpoint the GitHub Action calls, so editor and CI produce the same finding IDs. Keeping both entries in `opencode.json` lets you use local stdio for fast editor feedback and switch to remote for CI parity by setting `disabled: true` on the one you are not using.
 
 ## 3. Verify the connection in OpenCode
 
-Restart OpenCode after editing `opencode.json`, then run `opencode mcp list` or open the MCP panel. You should see `lyrashield` active with tools like `scan`, `list_targets`, and `get_finding`. Try a status call. If the server shows `disabled`, set `disabled: false`. If auth fails, export `LYRASHIELD_API_KEY` in your terminal and launch OpenCode from there so `{env:LYRASHIELD_API_KEY}` resolves. For general MCP troubleshooting, the [MCP documentation](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub MCP registry discussion](https://github.com/modelcontextprotocol/servers) show common env and transport errors.
+Restart OpenCode after editing `opencode.json`, then run `opencode mcp list` or open the MCP panel. You should see `lyrashield` active with tools like `scan`, `lyrashield_list_targets`, and `lyrashield_get_findings`. Try a status call. If the server shows `disabled`, set `disabled: false`. If auth fails, export `LYRASHIELD_API_KEY` in your terminal and launch OpenCode from there so `{env:LYRASHIELD_API_KEY}` resolves. For general MCP troubleshooting, the [MCP documentation](https://modelcontextprotocol.io/docs/getting-started/intro) and [GitHub MCP registry discussion](https://github.com/modelcontextprotocol/servers) show common env and transport errors.
 
-A quick way to confirm the server is live is to call `list_targets` and check that your project root appears. If the tool list is empty, verify that `opencode.json` is valid JSON and that `mcp.servers` is at the top level. A common mistake is nesting servers under a wrong parent key, which makes OpenCode skip the entry silently. For remote mode, confirm the Bearer header is set and that `${LYRASHIELD_API_KEY}` is exported in the shell that launched OpenCode.
+A quick way to confirm the server is live is to call `lyrashield_list_targets` and check that your project root appears. If the tool list is empty, verify that `opencode.json` is valid JSON and that `mcp.servers` is at the top level. A common mistake is nesting servers under a wrong parent key, which makes OpenCode skip the entry silently. For remote mode, confirm the Bearer header is set and that `${LYRASHIELD_API_KEY}` is exported in the shell that launched OpenCode.
 
 ## 4. Run an inline security check from OpenCode
 
-Ask your OpenCode agent: "using lyrashield MCP, scan diff against main for verified findings and group by auth, injection, secrets, supply chain". LyraShield is designed to return only verified findings with evidence and a proposed remediation, not every low signal match. Cross reference code issues with [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) and dependency issues with [OSV](https://osv.dev/). For secrets, verify against [GitHub secret scanning partner patterns](https://docs.github.com/en/code-security/secret-scanning/about-secret-scanning) to avoid noise. The Fix PR capability is designed to produce a minimal patch plus tests and is on the roadmap, so treat it as proposed until live, with human review before merge.
+Ask your OpenCode agent: "using lyrashield MCP, scan diff against main and group findings by auth, injection, secrets, and supply chain; retain each evidence state". Cross-reference code issues with [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) and dependency issues with [OSV](https://osv.dev/). `lyrashield_generate_fix_plan` is read-only, while `lyrashield_record_fix_proposal` records remediation intent; neither produces a patch, edits code, creates a branch, or opens a PR. Apply the fix through the approved development workflow, then queue and poll the retest.
 
 Prompt you can store in `.opencode/prompts/security.md`:
 
 ```md
 Scan the current project via lyrashield MCP.
+
 - Scope: changed files vs main
-- Return verified findings only, with file, line, evidence
+- Return findings with evidence states only, with file, line, evidence
 - Map each to CWE and OWASP category
-- Propose Fix PR diff and ask for retest
+- Propose Fix Proposal diff and ask for retest
 ```
 
-This keeps Target to Scan to Verified Finding to Fix PR to Retest to Report explicit.
+This keeps Target to Scan to Evidence State to Fix Proposal to Retest to Report explicit.
 
 ## 5. Wire the GitHub Action diff aware gate
 
@@ -133,25 +135,25 @@ Create `opencode-rules/security.md` or your rules directory so every OpenCode se
 
 - Start with Target: define app root and sensitive data flows.
 - Scan changed files via LyraShield MCP before approving.
-- Allow only verified findings to block, include evidence.
-- Propose Fix PR with tests, request retest and report.
+- Allow only findings with evidence states to block, include evidence.
+- Propose Fix Proposal with tests, request retest and report.
 - Log scan ID and SARIF link in PR description.
 ```
 
 This codifies the same behavior you wired in Zed and Codex flows. For team rollout, share the [OpenCode integration guide](/docs/integrations/opencode) and the pillar [vibe coding security guide](/blog/vibe-coding-security-guide) in your onboarding doc, both as markdown links.
 
-The agent rules snippet matters because OpenCode loads rules from your rules directory into every session context, so the security loop becomes default behavior. Each bullet maps to a stage in Target to Scan to Verified Finding to Fix PR to Retest to Report. The "allow only verified findings to block" line prevents the agent from halting on heuristic noise that LyraShield already filtered out. Treat the Fix PR bullet as approval gated fix proposals requiring review, not unattended fixes, until that capability ships.
+The agent rules snippet matters because OpenCode loads rules from your rules directory into every session context, so the security loop becomes default behavior. Each bullet maps to a stage in Target to Scan to Evidence State to Fix Proposal to Retest to Report. The "allow only findings with evidence states to block" line prevents the agent from halting on heuristic noise that LyraShield already filtered out. Treat the Fix Proposal bullet as approval gated fix proposals requiring review, not unattended fixes, until that capability ships.
 
-| Config key | Purpose | Example |
-| --- | --- | --- |
-| type | Transport mode | local or remote |
-| command, args | Launch MCP | npx, -y @lyrashield/mcp |
-| env, `{env:}` | Inject secrets | LYRASHIELD_API_KEY |
-| disabled | Toggle server | false to enable |
-| url, headers | Remote endpoint auth | https://app.lyrashieldai.com/api/mcp with Bearer |
+| Config key    | Purpose              | Example                                          |
+| ------------- | -------------------- | ------------------------------------------------ |
+| type          | Transport mode       | local or remote                                  |
+| command, args | Launch MCP           | npx, -y @lyrashield/mcp                          |
+| env, `{env:}` | Inject secrets       | LYRASHIELD_API_KEY                               |
+| disabled      | Toggle server        | false to enable                                  |
+| url, headers  | Remote endpoint auth | https://app.lyrashieldai.com/api/mcp with Bearer |
 
 ## 7. Why pair OpenCode with LyraShield
 
-OpenCode organizes agent work through declarative config, LyraShield adds verified security results that travel from editor to CI without extra scripts. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification matters more as generation volume grows. Pairing gives you Target to Scan to Verified Finding to Fix PR to Retest to Report in a single tool surface, with SARIF that GitHub understands per [docs.github.com on code scanning](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning). v1 scope is agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF. Sprints 0 to 2 are shipped, scan engine MVP, Fix PR, and billing remain on the roadmap and are described as designed to.
+OpenCode organizes agent work through declarative config, LyraShield adds findings with recorded evidence states that travel from editor to CI without extra scripts. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification matters more as generation volume grows. Pairing gives you Target to Scan to Evidence State to Fix Proposal to Retest to Report in a single tool surface, with SARIF that GitHub understands per [docs.github.com on code scanning](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning). v1 scope is agentic pentest plus SCA plus secrets plus GitHub Action plus SARIF. Sprints 0 to 2 are shipped, scan engine MVP, Fix Proposal, and billing remain on the roadmap and are described as designed to.
 
-To adopt this, add the MCP servers to `opencode.json`, verify the tool list, run a diff scan on your next feature branch, propose one Fix PR with a test, and track retest results via SARIF. Then deepen coverage with the [AI app security checklist](/tools/ai-app-security-checklist) and [create an account at LyraShield AI](https://lyrashieldai.com) for engine execution updates.
+To adopt this, add the MCP servers to `opencode.json`, verify the tool list, run a diff scan on your next feature branch, propose one Fix Proposal with a test, and track retest results via SARIF. Then deepen coverage with the [AI app security checklist](/tools/ai-app-security-checklist) and [create an account at LyraShield AI](https://lyrashieldai.com) for engine execution updates.

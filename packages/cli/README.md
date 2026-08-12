@@ -9,7 +9,7 @@ npx lyrashield login --oauth      # browser-based OAuth device login (recommende
 npx lyrashield use <workspace>
 npx lyrashield project use        # detect the current git repo and set it as the default project
 npx lyrashield scan               # scan the default project (uses default mode)
-npx lyrashield pr-scan --auto     # run a low-cost PR check on the current repo
+npx lyrashield pr-scan --auto     # run a bounded PR check on the current repo
 ```
 
 You can also set `LYRASHIELD_API_KEY` (and optionally `LYRASHIELD_API_URL`) in the environment. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com`.
@@ -51,7 +51,7 @@ The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). On
 ### Targets and scans
 
 - `scan [--target <targetId>] [--goal <goal>] [--mode <mode>] [--auto] [--repo <repo>]` — start a scan
-  - Default mode is `STANDARD`; use `pr-scan` for a low-cost `QUICK` pre-PR check. `SAFE` remains an accepted compatibility alias for repository targets.
+  - Default mode is `STANDARD`; use `pr-scan` for a bounded `QUICK` pre-PR check. `SAFE` remains an accepted compatibility alias for repository targets.
   - Goals: `CHECK_PR`, `TEST_APP`, `LAUNCH_REVIEW`, `WEEKLY_MONITOR`, `FULL_PENTEST`, `COMPLIANCE_REVIEW`
   - Modes: `SAFE`, `QUICK`, `STANDARD`, `DEEP`, `CUSTOM`
   - With no target and no default project, pass `--auto` to detect the current git repo and create or reuse a target
@@ -63,28 +63,29 @@ The default project is stored in `~/.lyrashield/project.json` (mode `0o600`). On
 
 ### Scan mode guide
 
-Pick the cheapest mode that answers the question. Deeper modes consume more compute and, in the SaaS plan, more billable minutes.
+Deeper modes consume more compute and take longer. Choose the least intensive mode that answers the question.
 
-| Intent                   | Goal                             | Mode       |
-| ------------------------ | -------------------------------- | ---------- |
-| Pre-PR check             | `CHECK_PR`                       | `QUICK`    |
-| Quick check              | `TEST_APP`                       | `QUICK`    |
-| Standard repo review     | `TEST_APP`                       | `STANDARD` |
-| Launch review            | `LAUNCH_REVIEW`                  | `STANDARD` |
-| Deep / compliance review | `TEST_APP` / `COMPLIANCE_REVIEW` | `DEEP`     |
-| Weekly monitor           | `WEEKLY_MONITOR`                 | `QUICK`    |
+| Intent                        | Goal                | Mode       |
+| ----------------------------- | ------------------- | ---------- |
+| Pre-PR check                  | `CHECK_PR`          | `QUICK`    |
+| Quick check                   | `TEST_APP`          | `QUICK`    |
+| Standard repo review          | `TEST_APP`          | `STANDARD` |
+| Launch review                 | `LAUNCH_REVIEW`     | `STANDARD` |
+| Authorized repository pentest | `FULL_PENTEST`      | `DEEP`     |
+| Compliance review             | `COMPLIANCE_REVIEW` | `DEEP`     |
+| Weekly monitor                | `WEEKLY_MONITOR`    | `QUICK`    |
 
 ### Findings and fixes
 
 - `findings [--severity ...] [--status ...] [--target ...] [--scan ...] [--verified ...] [--stats]` — list findings
 - `explain <findingId>` — show full finding detail and plain-language guidance
-- `fix-plan <findingId>` — **read-only** remediation plan assembled from the finding's verified detail
+- `fix-plan <findingId>` — **read-only** remediation plan assembled from the finding's recorded detail
 - `fix-plan create <findingId> --summary <summary>` — record a fix proposal on a finding (summary must be ≥ 10 characters)
 - `verify <findingId>` — queue a retest of a finding
 
 ### Local checks and CI
 
-- `check-diff [--staged] [--base <ref>] [--head <ref>] [--sarif <file>]` — fast advisory diff check for obvious risky patterns; not a substitute for a verified scan
+- `check-diff [--staged] [--base <ref>] [--head <ref>] [--sarif <file>]` — fast advisory diff check for obvious risky patterns; not a substitute for a full recorded scan
 - `gate [--fail-on HIGH|MEDIUM|LOW] [--staged] [--base <ref>] [--head <ref>] [--sarif <file>]` — combine local diff patterns with open findings and fail at the chosen severity threshold
 
 ### Reports and approvals

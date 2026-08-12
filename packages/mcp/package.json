@@ -1,7 +1,7 @@
 {
   "name": "@lyrashield/mcp",
   "version": "0.2.2",
-  "description": "LyraShield AI MCP server — run verified security scans, review findings, and drive the fix/verify loop from your AI coding tool.",
+  "description": "LyraShield AI MCP server — run bounded security scans, review recorded evidence states, and drive the fix/verify loop from your AI coding tool.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

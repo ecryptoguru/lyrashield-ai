@@ -15,9 +15,16 @@ describe("buildPlugin", () => {
 
     const skillContent = await readFile(skill, "utf-8")
     expect(skillContent).toContain("name: lyrashield")
-    expect(skillContent).toContain("## Mode and cost guide")
+    expect(skillContent).toContain("## Review-depth guide")
     expect(skillContent).toContain("## Example prompts and tool calls")
-    expect(skillContent).toContain("## Cost and minute awareness")
+    expect(skillContent).toContain("## Depth and runtime awareness")
+    expect(skillContent).toContain(
+      '| "Repository pentest" / "Deep security review" | FULL_PENTEST | DEEP |'
+    )
+    expect(skillContent).toContain("authorized repository target")
+    expect(skillContent).toContain("poll the returned retest scan to a terminal state")
+    expect(skillContent).toContain("outcome and scan reference")
+    expect(skillContent).toContain("separate independent-verification receipt")
 
     // The appendix must not duplicate sections already emitted by LYRASHIELD_POLICY.
     for (const heading of ["## Pre-PR check", "## Post-fix verification", "## Honesty clause"]) {
