@@ -67,7 +67,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 ## What is here
 
 - `apps/web` — Next.js workspace for targets, scans, evidence, reports, scorecards, and approval-gated API/MCP actions.
-- `apps/worker` — BullMQ scan worker with queue admission, reconciliation, evidence receipts, and controlled engine execution.
+- `apps/worker` — BullMQ scan worker with queue admission, reconciliation, evidence receipts, controlled engine execution, URL/API deterministic scanners (public-surface collector, behavior probes, OpenAPI contract scanner), and worker image provenance verification.
 - `apps/marketing` — Astro 7 / Cloudflare Workers marketing site.
 - `apps/marketing-motion` — deterministic Three.js assurance-world motion workspace; the Astro site consumes rendered posters and clips.
 - `packages/cli` — the published `lyrashield` command-line tool. (`@lyrashield/cli` is deprecated and will be removed in the next major release; use `lyrashield` instead.)
@@ -130,17 +130,18 @@ LyraShield owns the product-critical execution contract: GPT-5.6 model policy, b
 
 Upgrades are deliberately review-gated: the engine records its incorporated Strix base, compares stable releases, prepares a review PR, and requires human approval plus its read-only CI gate. It never auto-resolves conflicts, force-pushes history, or deploys from the sync workflow. The [engine verification and upgrade guidance](https://github.com/ecryptoguru/lyrashield-engine#verification) describes the checks; they prove implementation compatibility, not scan accuracy or universal coverage.
 
-The application pins an exact engine commit in `.github/workflows/deploy-azure.yml`, executes the engine-owned worker contract against that checkout, builds the worker with it, and verifies the exact pushed worker digest before deployment can succeed. A new engine release is not active until that pin is deliberately advanced and the cross-repository gate passes.
+The application pins an exact engine commit in `.github/workflows/deploy-azure.yml`, executes the engine-owned worker contract against that checkout, builds the worker with it, and verifies the exact pushed worker digest before deployment can succeed. A separate operator promotion reconciles that immutable digest on the dedicated worker VM; it never follows `latest` or another mutable tag. A new engine release is not active until that pin is deliberately advanced, the cross-repository gate passes, and the resulting worker digest is explicitly promoted.
 
 ## Security and release boundaries
 
 - Workspace data is tenant-scoped; sensitive operations are audit-logged; and child tables (`ScanEvent`, `Evidence`, `FixProposal`, `PullRequest`, `ScanCoverageReceipt`, `ScanResultManifest`, `ScorecardShare`, `ScorecardEvent`, `Ticket`) are protected by Postgres RLS.
 - Engine output is treated as untrusted; only independent verifier evidence can mark a finding verified.
-- URL targets use pinned deterministic URL scanners rather than the repository engine.
+- URL/API targets use pinned deterministic URL scanners with a versioned `url-scan/2.0.0` capability registry (six profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) rather than the repository engine.
 - Queue admission fails closed without a healthy worker heartbeat.
 - Public scorecard payloads are allowlisted and sharing is revocable.
 - The MCP server's mutating tools (start a scan, record a fix, queue a retest) require human approval before executing, both locally and over the remote endpoint.
 - The public marketing surface and the authenticated workspace have separate deployment boundaries.
+- Worker image provenance is verified end-to-end: PR CI proves the pinned engine commit is merged, its engine checks passed, and the worker contract is compatible; the main deployment repeats provenance/contract checks, builds the SHA-only worker candidate, pulls its exact digest, and verifies app and engine OCI labels before any deploy. Operator promotion of that digest on the worker VM remains a separate manual action.
 
 See [the production beta readiness plan](docs/plans/2026-07-20-production-beta-readiness.md) for the exact deployment and verification gates. Do not treat this repository, the Lite Check, the CLI, or a local run as proof of an authenticated provider-backed production scan.
 

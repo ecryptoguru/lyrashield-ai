@@ -59,7 +59,7 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 
 - Core workspaces, targets, scans, and scan orchestration.
 - Source-aware SCA, secret, and agent-config handling.
-- Pinned deterministic URL scanning with required ownership attestation.
+- Pinned deterministic URL/API scanning with a versioned `url-scan/2.0.0` capability registry: six released profiles (Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) with bounded limits, SSRF-safe public-surface collection, Deep web behavior probes, OpenAPI contract parsing, and required ownership attestation.
 - Fix proposals, queued retests, and reports.
 - Notifications, schedules, and single-use agent approvals.
 - GitHub integration refresh and the GitHub diff gate.
