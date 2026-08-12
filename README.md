@@ -10,9 +10,12 @@ It keeps detected findings, independently verified evidence, retest-confirmed re
 
 ## Try it
 
+LyraShield AI is live in **open beta with open registration** — anyone can create a free account today. There is no waitlist or invitation gate.
+
+- Create a free account: [app.lyrashieldai.com/sign-up](https://app.lyrashieldai.com/sign-up)
 - Marketing and methodology: [lyrashieldai.com](https://lyrashieldai.com)
 - Public passive Lite Check: [lyrashieldai.com/scan](https://lyrashieldai.com/scan)
-- Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com) (open registration)
+- Authenticated workspace: [app.lyrashieldai.com](https://app.lyrashieldai.com)
 - User guide: [userguide.md](userguide.md)
 
 The public Lite Check is a bounded public-surface review. It is not the authenticated full scan pipeline and does not claim universal coverage. Repository scans are admitted only while the dedicated production worker holds a live lease, and the current release gate requires a current-tree Safe retest plus a successful, reconciled Deep run.

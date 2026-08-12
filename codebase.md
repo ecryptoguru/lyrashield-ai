@@ -458,7 +458,7 @@ This is the code-facing status summary. Product cutlines and release gates live 
 - Missing engine model configuration fails before sandbox pull.
 - Historical Docker smoke in §§24–30 proves prior container health, routes, migrations, queue startup, and engine packaging. It does **not** prove a current authorized scan.
 - **First approved production Standard scan (2026-07-29):** a Standard (Code Review) scan against `ecryptoguru/OnboardingAI2` completed on the production Azure Container Apps stack using `azure_ai/gpt-5.6-luna` at medium reasoning. Duration 6m 53s, billed cost $1.78, 40 findings (2 CRITICAL, 2 HIGH, 36 MEDIUM), tamper-evident manifest saved. This is a production Standard/Luna scan, not a Deep/Terra scan or security guarantee. A prior attempt failed because two Prisma migrations had not been applied to the production Supabase database — at the time, the Azure deploy workflow did not run Prisma migrations at all. Fixed 2026-07-30: see §59 and the `AGENTS.md` landmine entry; the workflow now runs `prisma migrate deploy` before every container image update.
-- Marketing is deployed and indexable at `https://lyrashieldai.com` with production D1/Rate Limit/KV bindings, all D1 migrations, a Worker-secret IP salt, custom apex/`www` domains, an active canonical 301, sitemap/robots/`llms.txt`, security headers, privacy-bounded PostHog capture, and live waitlist/crawl/Lighthouse/Brave QA. The passive `/scan` route is live and indexable behind the separate scanner origin, Turnstile, rate limit, and monitored abuse route. `/terms` remains individually `noindex`; the authenticated app origin and app-origin unfurl/referral proof remain open gates.
+- Marketing is deployed and indexable at `https://lyrashieldai.com` with production D1/Rate Limit/KV bindings, all D1 migrations, a Worker-secret IP salt, custom apex/`www` domains, an active canonical 301, sitemap/robots/`llms.txt`, security headers, privacy-bounded PostHog capture, and live waitlist/crawl/Lighthouse/Brave QA. The passive `/scan` route is live and indexable behind the separate scanner origin, Turnstile, rate limit, and monitored abuse route. `/terms` remains individually `noindex`. The authenticated app origin is now live in open beta with open registration; app-origin unfurl/referral proof remains an open gate.
 - PR #52 merged the social distribution loop; PR #53 merged GPT-5.6 routing/caps; PRs #54–#57 merged Deep Review v3; PR #59 preserved deletion/report compatibility; PR #60 added the premium UI; PR #79 merged Deep Review v4 correctness, worker-truth, UX, database, and PostHog remediation. Each merged implementation PR passes the applicable CI migration, lint, format, typecheck, test, build, Chromium E2E, SCA/secret, and security-diff gates. External social-network cache/unfurl behavior remains a real-domain release check.
 
 ---
@@ -913,7 +913,7 @@ The four Codex handoff items from PRD §B13.7 are now done. All changes verified
 
 **tsconfig evaluation:**
 
-- `verbatimModuleSyntax` evaluated — requires `"type": "module"` in all package.json files (breaking change, deferred to pre-launch).
+- `verbatimModuleSyntax` evaluated — requires `"type": "module"` in all package.json files (breaking change, deferred).
 - Root `tsconfig.json` is not orphaned (extended by `packages/config/tsconfig.json` → `library.json` chain); left as-is.
 
 ---
@@ -1776,7 +1776,7 @@ This section records the pre-v1.5.3 architecture. The current engine keeps produ
 - `SeoHead.astro`, homepage JSON-LD, blog JSON-LD, `robots.txt`, RSS, and the sitemap derive their origin from Astro's configured `site`; canonical, Open Graph, and sitemap URLs therefore cannot diverge during a configured build.
 - `src/pages/robots.txt.ts` emits `Sitemap: <site>/sitemap-index.xml` when indexable and `Disallow: /` otherwise.
 - `src/pages/rss.xml.ts` uses `description` for the RSS summary; raw `post.body` markdown is no longer exposed as `content`.
-- `src/pages/llms.txt.ts` is a dynamic Worker route: it returns 404 before launch and generates an LLM-readable summary only for an approved indexable build.
+- `src/pages/llms.txt.ts` is a dynamic Worker route: it returns 404 for a non-indexable build and generates an LLM-readable summary only for an approved indexable build.
 
 ### Generated-file hygiene
 
@@ -1797,7 +1797,7 @@ This section records the pre-v1.5.3 architecture. The current engine keeps produ
 - `pnpm --filter @lyrashield/marketing typecheck` passes.
 - `pnpm --filter @lyrashield/marketing build` passes.
 - `pnpm --filter @lyrashield/marketing lint` passes (`eslint src --max-warnings 0`).
-- A local Worker smoke passes at `http://localhost:8787`: `/`, `/robots.txt`, and `/sitemap-index.xml` return 200; pre-launch `/llms.txt` returns 404.
+- A local Worker smoke passes at `http://localhost:8787`: `/`, `/robots.txt`, and `/sitemap-index.xml` return 200; `/llms.txt` returns 404 in that non-indexable local build.
 
 ### Caveats
 
@@ -1977,7 +1977,7 @@ This pass closed the review queue in four focused, CI-gated merges while preserv
 - `apps/marketing/src/pages/index.astro` now leads with the bounded public loop: `Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report`. `apps/marketing/src/pages/methodology.astro` is the corresponding public reference for evidence states, coverage, and non-claims.
 - `apps/marketing/src/components/TrustBar.astro`, `HowItWorks.astro`, `ComparisonTable.astro`, `ResultsPreview.astro`, `CoverageMatrix.astro`, `FAQ.astro`, and `Footer.astro` replace universal-verification and automatic-PR framing with scope, provenance, limitations, approval-gated proposals, and truthful retest language.
 - The `/tools` hub and its five browser-local utilities remain local-only: supplied text and files are not uploaded or sent to a target. `apps/marketing/src/pages/tools/index.astro` and `ToolCTA.astro` preserve only allowlisted `source=tools|tool` attribution; unknown values revert to `landing` in the waitlist API.
-- `apps/marketing/src/components/Header.astro` renders Sign in only when `PUBLIC_APP_URL` is configured, avoiding a broken localhost link in pre-launch builds. `apps/marketing/src/components/MarketingPageShell.astro` links the new methodology reference from the global surface.
+- `apps/marketing/src/components/Header.astro` renders Sign in only when `PUBLIC_APP_URL` is configured, avoiding a broken localhost link in builds without a configured app origin. `apps/marketing/src/components/MarketingPageShell.astro` links the new methodology reference from the global surface.
 - `apps/marketing/src/lib/public-claims.test.ts` is the load-bearing public-copy regression suite. It bans claims that every finding is verified, that the product opens a fix PR today, that it scans like an attacker, or that a result is provably gone. PR #69 validation passed the full repository gate: 778 tests in 77 files, 2 Chromium E2E tests, lint, typecheck, build, formatting, Prisma generation, and `git diff --check`.
 
 ## §42 — Cloudflare production marketing and Lite Scanner foundation (2026-07-16, PR #71)

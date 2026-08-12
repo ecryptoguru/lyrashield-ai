@@ -87,7 +87,7 @@ SCA, secret scanning, URL checks, SARIF, and GitHub diff gates are important cov
 
 ### Live
 
-- The passive Lite Scanner, browser-local tools, and authenticated application with open registration are public.
+- LyraShield AI is in **open beta with open registration**. The passive Lite Scanner, browser-local tools, and authenticated application are public, and access is via **create a free account** at `https://app.lyrashieldai.com/sign-up` — never a waitlist or invitation. The marketing email form is an optional product-updates subscription only.
 - The authenticated app and full BullMQ/engine worker are a separate deployment surface; full repository scans require the worker pipeline and configured evidence storage.
 
 ### Not implemented
@@ -110,7 +110,7 @@ URL/API targets skip the external engine. SAFE remains a compatibility alias for
 
 ## Launch and growth
 
-- Open registration is live at `app.lyrashieldai.com`; acquisition flows through the public Lite Check, browser-local tools, public scorecards, referrals, and technical content.
+- Open-beta registration is live at `app.lyrashieldai.com/sign-up`; the marketing email form is an optional product-updates subscription, not an access gate. Acquisition flows through the public Lite Check, browser-local tools, public scorecards, referrals, and technical content.
 - Use reports, fix proposals, retests, the public methodology, browser-local tools, and MCP read workflows as demonstrations; do not promise automatic PR creation or use unverified marketing claims.
 - Publish answer-first technical content for AI-built-app security only after founder approval.
 - Keep sample blog posts as drafts until their claims, sources, author, and launch timing are approved.

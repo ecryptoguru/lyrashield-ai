@@ -1,12 +1,12 @@
 # LyraShield AI Lite Check
 
-Status: deployed at `https://lyrashieldai.com/scan` with the scanner API isolated at `https://scanner.lyrashieldai.com`. Production Turnstile, origin-scoped CORS, rate limiting, monitored abuse routing, health/readiness, and a real browser Lite Check have passed. The separate application is open for registration at `https://app.lyrashieldai.com`; this status does not include the full worker/engine scan pipeline.
+Status: deployed at `https://lyrashieldai.com/scan` with the scanner API isolated at `https://scanner.lyrashieldai.com`. Production Turnstile, origin-scoped CORS, rate limiting, monitored abuse routing, health/readiness, and a real browser Lite Check have passed. The separate application is live in open beta with open registration at `https://app.lyrashieldai.com`; this status does not include the full worker/engine scan pipeline.
 
 For the end-user walkthrough, target rules, result interpretation, and the difference between Lite Check and authenticated scans, see `userguide.md` §§2 and 23.
 
 ## Product boundary
 
-The public route is `/scan`. It returns a distinct **Lite Check**, never the official deterministic LyraShield Score. Findings appear without signup. Email is used only for the waitlist and optional saved scorecard.
+The public route is `/scan`. It returns a distinct **Lite Check**, never the official deterministic LyraShield Score. Findings appear without signup. Email is used only for the optional product-updates subscription and the optional saved scorecard; full access is via **create a free account** at `https://app.lyrashieldai.com/sign-up`, never a waitlist.
 
 The check is passive and outside-only:
 
@@ -51,7 +51,7 @@ The Next.js app HMAC-signs this payload before generating `/lite-check/[token]` 
 
 The marketing client sends the requested funnel events only when the approved PostHog project is configured and browser privacy controls allow capture. The target hostname is SHA-256 hashed in the browser. Manual `$pageview` capture retains only origin and pathname; PostHog's page-leave lifecycle capture adds scroll-depth metadata, and a final send hook removes query strings and fragments from URL/referrer properties on all events. Web Vitals capture records CLS, FCP, LCP, and INP through the managed `pulse.lyrashieldai.com` proxy. Events do not contain the scanned URL, page content, matched value, email, IP, user agent, finding text, or referral code value. Automatic full-URL pageviews, general DOM autocapture, and session recording remain disabled; DNT and GPC opt out.
 
-Waitlist email is submitted with consent to the existing D1 endpoint. The existing non-leaking duplicate/honeypot response and referral ladder remain unchanged.
+Product-updates email is submitted with consent to the existing D1 `waitlist` endpoint (unchanged route and table names). The existing non-leaking duplicate/honeypot response and referral ladder remain unchanged.
 
 ## Verification matrix
 
