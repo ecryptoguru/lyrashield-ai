@@ -52,10 +52,7 @@ export default async function IntegrationsPage({
 
   return (
     <div>
-      <PageHeader
-        title="Integrations"
-        description="Connect external services to your workspace."
-      />
+      <PageHeader title="Integrations" description="Connect external services to your workspace." />
 
       {githubVerificationRequired && (
         <div

@@ -389,7 +389,7 @@ const openclaw: AgentEntry = {
   },
   gotchas: [
     "OpenClaw manages client-side servers with `openclaw mcp add`, `set`, and `configure`, or in its Control UI at /settings/mcp. Do not use mcporter configuration for OpenClaw-managed servers.",
-    "For a local server, declare `transport: stdio` explicitly. For Streamable HTTP, use `transport: \"streamable-http\"`; then run `openclaw mcp doctor --probe` for a live tool-list check.",
+    'For a local server, declare `transport: stdio` explicitly. For Streamable HTTP, use `transport: "streamable-http"`; then run `openclaw mcp doctor --probe` for a live tool-list check.',
   ],
 }
 

@@ -53,7 +53,10 @@ export default async function AgentsPage() {
         title="Coding Agents"
         description="Install LyraShield in the coding agent your team uses."
       />
-      <AgentsGrid agents={mapAgentsToCardData()} docsBaseUrl={`${marketingUrl}/docs/integrations`} />
+      <AgentsGrid
+        agents={mapAgentsToCardData()}
+        docsBaseUrl={`${marketingUrl}/docs/integrations`}
+      />
     </div>
   )
 }
