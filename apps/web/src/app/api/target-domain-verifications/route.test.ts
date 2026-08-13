@@ -43,7 +43,7 @@ describe("target domain verification route", () => {
   it("returns the DNS challenge only to the authorized issuance response", async () => {
     vi.mocked(issueDnsDomainVerification).mockResolvedValue({
       verification: { id: "proof-1", domain: "staging.example.com", status: "PENDING" },
-      token: "proof-token",
+      token: "proof",
       expiresAt: new Date("2026-08-14T01:00:00.000Z"),
     } as never)
     const response = await POST(
@@ -51,7 +51,7 @@ describe("target domain verification route", () => {
     )
     expect(response.status).toBe(201)
     expect(await response.json()).toMatchObject({
-      data: { dns: { host: "_lyrashield.staging.example.com", value: "proof-token" } },
+      data: { dns: { host: "_lyrashield.staging.example.com", value: "proof" } },
     })
   })
 
