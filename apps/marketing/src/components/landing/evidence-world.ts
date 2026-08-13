@@ -172,7 +172,8 @@ class EvidenceWorldElement extends HTMLElement {
 
     const chapter = this.manifest.chapters[nextIndex]
     const frame = 1 / 30
-    this.targetTime = chapter.start + chapterProgress * Math.max(chapter.end - chapter.start - frame, 0)
+    this.targetTime =
+      chapter.start + chapterProgress * Math.max(chapter.end - chapter.start - frame, 0)
     this.queueSeek()
 
     const totalProgress = this.clamp(this.targetTime / this.manifest.desktop.duration)
@@ -272,8 +273,7 @@ class EvidenceWorldElement extends HTMLElement {
 
   private handlePosterError = (event: Event) => {
     const chapterId = (event.currentTarget as HTMLImageElement).dataset.posterChapter as
-      | EvidenceChapterId
-      | undefined
+      EvidenceChapterId | undefined
     if (chapterId) this.captureError(chapterId, "poster")
   }
 

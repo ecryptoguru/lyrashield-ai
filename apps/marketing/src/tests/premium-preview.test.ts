@@ -100,7 +100,7 @@ describe("premium assurance-world homepage", () => {
     expect(worldModule).not.toContain("userAgent")
     expect(worldModule).toContain('matchMedia("(prefers-reduced-motion: reduce)")')
     expect(worldModule).toContain("connection?.saveData")
-    expect(worldModule.indexOf('if (!this.motionEnabled)')).toBeLessThan(
+    expect(worldModule.indexOf("if (!this.motionEnabled)")).toBeLessThan(
       worldModule.indexOf('this.classList.add("is-enhanced")')
     )
     expect(worldModule).toContain('rootMargin: "50% 0px"')

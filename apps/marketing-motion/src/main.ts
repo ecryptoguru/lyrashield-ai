@@ -339,9 +339,7 @@ const portraitCameraPoints = [
   new THREE.Vector3(-1.6, 5.1, -41.9),
   new THREE.Vector3(1.5, 5.7, -51.8),
 ]
-const cameraPath = new THREE.CatmullRomCurve3(
-  portrait ? portraitCameraPoints : desktopCameraPoints
-)
+const cameraPath = new THREE.CatmullRomCurve3(portrait ? portraitCameraPoints : desktopCameraPoints)
 const targetPath = new THREE.CatmullRomCurve3(
   stations.map((station) => new THREE.Vector3(0, 0.55, station.position.z))
 )
