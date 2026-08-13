@@ -17,6 +17,17 @@ export interface EvidenceWorldChapter {
   body: string
   desktopPoster: string
   portraitPoster: string
+  supportingCard?: EvidenceWorldSupportingCard
+}
+
+export interface EvidenceWorldSupportingCard {
+  eyebrow: string
+  title: string
+  body: string
+  items?: readonly string[]
+  status?: string
+  primaryCta?: { label: string; href: string; id: string }
+  secondaryCta?: { label: string; href: string; id: string }
 }
 
 export interface MotionMediaManifest {
@@ -27,9 +38,7 @@ export interface MotionMediaManifest {
   chapters: readonly EvidenceWorldChapter[]
 }
 
-const chapterCopy: ReadonlyArray<
-  Pick<EvidenceWorldChapter, "id" | "start" | "end" | "eyebrow" | "title" | "body">
-> = [
+const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "portraitPoster">> = [
   {
     id: "gateway",
     start: 0,
@@ -37,6 +46,16 @@ const chapterCopy: ReadonlyArray<
     eyebrow: 'From "it works" to "ready to ship"',
     title: "One reviewable record of what you checked, fixed, and retested before you ship.",
     body: "AI builds fast. LyraShield keeps what you checked, how you checked it, and what changed after in one reviewable record instead of scattered chats and manual checks.",
+    supportingCard: {
+      eyebrow: "Live in open beta",
+      title: "Start with the surface you need to ship.",
+      body: "Review a repository, public URL, or API. Use a passive Lite Check for a quick public-surface read, or create an account for the full evidence loop.",
+      items: [
+        "Repository, URL, and API targets",
+        "GitHub and coding-agent workflows",
+        "Approval-gated fixes and fresh retests",
+      ],
+    },
   },
   {
     id: "target",
@@ -53,6 +72,12 @@ const chapterCopy: ReadonlyArray<
     eyebrow: "02 / Review",
     title: "Run checks that do not blur together.",
     body: "Deterministic checks find known signals. AI-assisted review examines logic, auth flows, and data handling. Separate coverage layers show what kind of evidence you actually have.",
+    supportingCard: {
+      eyebrow: "Vibe Security 50",
+      title: "Coverage stays explicit, including what needs human evidence.",
+      body: "The control ledger separates 43 code or URL review controls from 7 evidence-required controls. Unmatched or unsupported checks remain inconclusive, never silently passed.",
+      status: "43 review controls · 7 evidence-required",
+    },
   },
   {
     id: "evidence-state",
@@ -61,6 +86,16 @@ const chapterCopy: ReadonlyArray<
     eyebrow: "03 / Evidence",
     title: 'Keep "we saw it" separate from "we proved it".',
     body: "Detected, independently verified, retest-confirmed, and inconclusive remain distinct. Missing proof stays visible; it never becomes a silent pass.",
+    supportingCard: {
+      eyebrow: "Illustrative evidence ledger",
+      title: "Every conclusion carries its basis and its limit.",
+      body: "See which check produced the signal, whether independent proof exists, and whether a fresh retest confirmed the change. Shared records omit repository coordinates and raw secrets.",
+      items: [
+        "Finding and evidence state",
+        "Control-level coverage receipt",
+        "Retest outcome and stated limitations",
+      ],
+    },
   },
   {
     id: "fix-proposal",
@@ -69,6 +104,16 @@ const chapterCopy: ReadonlyArray<
     eyebrow: "04 / Fix",
     title: "Get a fix proposal you review. Nothing auto-merges.",
     body: "Review a plain-English explanation and staged patch proposal. PR execution stays blocked until a server-generated patch is bound to your exact approval.",
+    supportingCard: {
+      eyebrow: "Where you build",
+      title: "Bring the review loop into your coding agent.",
+      body: "Use the hosted MCP server and supported agent integrations to inspect results and prepare approval-gated remediation without copying findings between tools.",
+      items: [
+        "OAuth-first agent connections",
+        "GitHub-aware review context",
+        "No automatic merge or silent write",
+      ],
+    },
   },
   {
     id: "retest",
@@ -85,6 +130,21 @@ const chapterCopy: ReadonlyArray<
     eyebrow: "06 / Report",
     title: "Ship one report that shows limits too.",
     body: "Scope, coverage, findings, fixes, retest outcomes, and limits become one immutable release record. Shared versions exclude repository coordinates and raw secrets.",
+    supportingCard: {
+      eyebrow: "Your first release record",
+      title: "Turn the next release into evidence your team can review.",
+      body: "Create a workspace, add the target you are shipping, and choose the depth of review. LyraShield keeps the resulting scope, evidence, and retest outcome together.",
+      primaryCta: {
+        label: "Create account",
+        href: "https://app.lyrashieldai.com/sign-up?source=landing_story&cta=report",
+        id: "story-report-create-account",
+      },
+      secondaryCta: {
+        label: "View sample report",
+        href: "/sample-report",
+        id: "story-report-sample",
+      },
+    },
   },
 ]
 

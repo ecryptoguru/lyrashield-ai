@@ -56,3 +56,39 @@ test("disconnects an incomplete motion world without a page error", async ({ pag
   })
   expect(errors).toEqual([])
 })
+
+for (const viewport of [
+  { name: "mobile", width: 390, height: 844 },
+  { name: "desktop", width: 1440, height: 900 },
+]) {
+  test(`cross-fades story cards without horizontal overflow on ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport)
+    await page.goto("/")
+    const expectedChapterHeight = viewport.name === "mobile" ? 1055 : 1035
+    expect(await page.locator('[data-chapter-index="0"]').evaluate((el) => el.clientHeight)).toBeGreaterThanOrEqual(expectedChapterHeight)
+    await page.locator("evidence-world").scrollIntoViewIfNeeded()
+    await page.evaluate(() => customElements.whenDefined("evidence-world"))
+
+    const gateway = page.locator('[data-chapter-index="0"]')
+    await expect(gateway.locator('[data-story-card-index="0"]')).toHaveClass(/is-card-active/)
+    await gateway.evaluate((chapter) => {
+      const top = chapter.getBoundingClientRect().top + scrollY
+      scrollTo(0, top + chapter.clientHeight * 0.7 - innerHeight * (innerWidth < 768 ? 0.68 : 0.5))
+    })
+    await expect(gateway.locator('[data-story-card-index="1"]')).toHaveClass(/is-card-active/)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      viewport.width
+    )
+  })
+}
+
+test("shows every story card in reduced-motion mode", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await page.goto("/")
+  await page.locator("evidence-world").scrollIntoViewIfNeeded()
+  await expect(page.locator("[data-story-card-index]")).toHaveCount(12)
+  for (const card of await page.locator("[data-story-card-index]").all())
+    await expect(card).toBeVisible()
+})

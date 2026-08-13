@@ -12,15 +12,7 @@ const homeScan = readFileSync(
   "utf8"
 )
 // eslint-disable-next-line security/detect-non-literal-fs-filename
-const assurancePreview = readFileSync(
-  new URL("../components/landing/AssuranceRecord.astro", import.meta.url),
-  "utf8"
-)
-// eslint-disable-next-line security/detect-non-literal-fs-filename
-const freeToolsPreview = readFileSync(
-  new URL("../components/landing/FreeToolsPreview.astro", import.meta.url),
-  "utf8"
-)
+const motionManifest = readFileSync(new URL("../lib/motion-manifest.ts", import.meta.url), "utf8")
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const toolsIndex = readFileSync(new URL("../pages/tools/index.astro", import.meta.url), "utf8")
 // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -147,20 +139,17 @@ describe("Lite Check marketing surface", () => {
   it("distinguishes the live URL scan from browser-local analyzers", () => {
     expect(page).toContain("Live URL scan · passive and read-only")
     expect(homeScan).toContain("Live URL scan · passive and read-only")
-    expect(freeToolsPreview).toContain("Local analyzer · {tool.privacy}")
+    expect(homeScan).toContain("browser-local tools")
     expect(toolsIndex).toContain("Local analyzer · {tool.privacy}")
     expect(toolLayout).toContain("Local analyzer:")
     expect(toolLayout).toContain("Runs entirely in this browser.")
   })
 
-  it("previews the future product with clearly labeled sample and registry data", () => {
-    expect(assurancePreview).toContain("Illustrative product preview · sample data")
-    expect(assurancePreview).toContain("illustrate the states, not production metrics")
-    expect(assurancePreview).toContain("Vibe Security 50 registry")
-    expect(assurancePreview).toContain(">43<")
-    expect(assurancePreview).toContain(">7<")
-    expect(assurancePreview).toContain(">50<")
-    expect(assurancePreview).toContain('href="/sample-report"')
+  it("keeps the control boundary and sample-report handoff inside the story", () => {
+    expect(motionManifest).toContain("Vibe Security 50")
+    expect(motionManifest).toContain("43 code or URL review controls")
+    expect(motionManifest).toContain("7 evidence-required controls")
+    expect(motionManifest).toContain('href: "/sample-report"')
   })
 
   it("starts the real Lite Check from the homepage without putting the target in the URL", () => {

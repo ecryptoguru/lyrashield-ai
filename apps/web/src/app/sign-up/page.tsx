@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { AlertCircle } from "lucide-react"
@@ -18,6 +18,12 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthSplitLayout } from "@/components/auth-split-layout"
 import { PasswordInput } from "@/components/password-input"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  readSignupAttribution,
+  signupErrorUrl,
+  track,
+  type SignupAttribution,
+} from "@/lib/analytics"
 
 const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(
   /\/$/,
@@ -45,15 +51,20 @@ export default function SignUpPage() {
   // "no OAuth configured" from "still loading" — rendering nothing makes the
   // page look like a bare credentials form. Show a skeleton instead.
   const [providersLoading, setProvidersLoading] = useState(true)
+  const attribution = useRef<SignupAttribution>({})
 
   useEffect(() => {
-    const oauthError = new URLSearchParams(window.location.search).get("error")
+    const params = new URLSearchParams(window.location.search)
+    const nextAttribution = readSignupAttribution(window.location.search)
+    const oauthError = params.get("error")
+    attribution.current = nextAttribution
+    track("signup_page_viewed", nextAttribution)
     let oauthErrorTimer: number | undefined
     if (oauthError) {
       oauthErrorTimer = window.setTimeout(() => {
         setError("Social sign up could not be completed. Please try again.")
       }, 0)
-      window.history.replaceState(null, "", "/sign-up")
+      window.history.replaceState(null, "", signupErrorUrl(nextAttribution))
     }
 
     void fetch("/api/auth/providers", { signal: AbortSignal.timeout(5_000) })
@@ -89,6 +100,7 @@ export default function SignUpPage() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    track("signup_started", { method: "email", ...attribution.current })
 
     try {
       const { data, error: signUpError } = await authClient.signUp.email({
@@ -102,6 +114,8 @@ export default function SignUpPage() {
         setError(getAuthErrorMessage(signUpError) ?? "Sign up failed")
         return
       }
+
+      track("account_created", { method: "email", ...attribution.current })
 
       // When email verification is required the server returns token: null;
       // otherwise Better Auth signs the new user in immediately.
@@ -128,11 +142,12 @@ export default function SignUpPage() {
   async function handleGitHub() {
     setLoading(true)
     setError(null)
+    track("signup_started", { method: "github", ...attribution.current })
     try {
       const { error: socialError } = await authClient.signIn.social({
         provider: "github",
         callbackURL: "/onboarding",
-        errorCallbackURL: "/sign-up",
+        errorCallbackURL: signupErrorUrl(attribution.current),
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "GitHub sign up failed. Please try again.")
@@ -147,11 +162,16 @@ export default function SignUpPage() {
   async function handleGoogle() {
     setLoading(true)
     setError(null)
+    track("signup_started", { method: "google", ...attribution.current })
     try {
-      await authClient.signIn.social({
+      const { error: socialError } = await authClient.signIn.social({
         provider: "google",
         callbackURL: "/onboarding",
+        errorCallbackURL: signupErrorUrl(attribution.current),
       })
+      if (socialError) {
+        setError(getAuthErrorMessage(socialError) ?? "Google sign up failed. Please try again.")
+      }
     } catch {
       setError("Google sign up failed. Please try again.")
     } finally {
@@ -162,11 +182,12 @@ export default function SignUpPage() {
   async function handleMicrosoft() {
     setLoading(true)
     setError(null)
+    track("signup_started", { method: "microsoft", ...attribution.current })
     try {
       const { error: socialError } = await authClient.signIn.social({
         provider: "microsoft",
         callbackURL: "/onboarding",
-        errorCallbackURL: "/sign-up",
+        errorCallbackURL: signupErrorUrl(attribution.current),
       })
       if (socialError) {
         setError(getAuthErrorMessage(socialError) ?? "Microsoft sign up failed. Please try again.")

@@ -160,7 +160,6 @@ export function OnboardingWizard({ initialState }: { initialState: OnboardingDat
       )
       await persist({ workspaceId: workspace.id, currentStep: 1, skipped: false })
       setStep(1)
-      track("signup_started", { method: "web" })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not create your workspace.")
     } finally {

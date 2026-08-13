@@ -135,7 +135,7 @@ describe("marketing SEO metadata", () => {
     expect(premiumHero).toContain('href="#free-scan" data-cta-id="premium-hero-lite-check"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('href="/scan"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('action="/scan"')
-    expect(source("../components/landing/FinalCta.astro")).toContain('href="/scan"')
+    expect(source("../components/landing/FinalCta.astro")).toContain('href="/sample-report"')
     expect(scanner).toContain(
       'const title = "Free AI App Security Check — Passive URL Scan | LyraShield AI"'
     )

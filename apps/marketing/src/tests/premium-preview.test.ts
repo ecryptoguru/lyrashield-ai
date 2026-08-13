@@ -28,18 +28,23 @@ describe("premium assurance-world homepage", () => {
     expect(astroConfig).toContain('inlineStylesheets: "always"')
     expect(homepage).toContain("<HomeLiteScan />")
     expect(homepage).toContain("<EvidenceWorld manifest={motionManifest} />")
-    expect(homepage).toContain('import.meta.env.DEV ? "/media-local"')
-    expect(homepage).toContain("cinematic-threshold--to-dark")
-    expect(homepage.match(/cinematic-threshold--to-light/g)).toHaveLength(3)
+    expect(homepage.indexOf("<EvidenceWorld")).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
+    expect(homepage).toContain('renderHash === "local" ? "/media-local"')
+    expect(homepage).not.toContain("cinematic-threshold--to-dark")
+    expect(homepage.match(/cinematic-threshold--to-light/g)).toHaveLength(2)
+    expect(homepage).not.toContain("<AssuranceLoop")
+    expect(homepage).not.toContain("<AssuranceRecord")
     expect(homepage).not.toContain("<Loop />")
   })
 
   it("uses approved gateway copy and conversion anchors", () => {
-    expect(hero).toContain("release assurance for AI-built apps")
+    expect(hero).toContain("Release assurance for AI-built apps")
     expect(hero).toContain("Ship AI-built apps with evidence, not hope.")
-    expect(hero).toContain('href="#free-scan"')
+    expect(hero.indexOf("landing_hero&cta=create_account")).toBeLessThan(
+      hero.indexOf('href="#free-scan"')
+    )
     expect(hero).toContain("app.lyrashieldai.com/sign-up")
-    expect(hero).toContain("Passive + read-only")
+    expect(hero).toContain("Missing evidence stays visible")
   })
 
   it("builds one immutable desktop and portrait track with seven timed chapters", () => {
@@ -59,6 +64,7 @@ describe("premium assurance-world homepage", () => {
       duration: 42,
     })
     expect(ids).toHaveLength(7)
+    expect(manifest.chapters.filter((chapter) => chapter.supportingCard)).toHaveLength(5)
     expect(new Set(ids).size).toBe(7)
     expect(ids).toEqual([
       "gateway",
@@ -88,6 +94,9 @@ describe("premium assurance-world homepage", () => {
     expect(world).toContain('import("./evidence-world.ts")')
     expect(world).toContain("IntersectionObserver")
     expect(world).toContain("bootstrapEvidenceWorld")
+    expect(world).toContain("min-height: max(840px, 115svh)")
+    expect(world).toContain("min-height: max(840px, 125svh)")
+    expect(world).toContain("font-size: clamp(1.6rem, 7.4vw, 2.5rem)")
   })
 
   it("keeps telemetry privacy-bounded and includes resilient media fallbacks", () => {
@@ -123,5 +132,7 @@ describe("premium assurance-world homepage", () => {
     expect(worldModule).not.toContain("loadPair")
     expect(worldModule).toContain("if (innerWidth === this.viewportWidth)")
     expect(worldModule).toContain('chapter.classList.toggle("is-active", chapterIndex === index)')
+    expect(worldModule).toContain("chapterProgress >= 0.55")
+    expect(worldModule).toContain('"is-card-active"')
   })
 })
