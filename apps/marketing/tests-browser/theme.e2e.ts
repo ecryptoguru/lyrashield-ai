@@ -16,6 +16,9 @@ test("cycles and synchronizes the rendered marketing theme", async ({ page }) =>
   await expect(toggle).toHaveAttribute("aria-label", "System theme active. Change color theme")
   await expect(toggle).toHaveAttribute("title", "System theme")
   await expect(themeColor).toHaveAttribute("content", "#f5f9fc")
+  await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgb(238, 246, 250)")
+  await expect(page.locator(".hero-frame")).toHaveCSS("background-color", "rgb(245, 249, 252)")
+  await expect(page.locator("evidence-world")).toHaveCSS("background-color", "rgb(234, 243, 247)")
 
   await toggle.click()
   await expect(root).toHaveAttribute("data-theme-preference", "light")
@@ -26,6 +29,9 @@ test("cycles and synchronizes the rendered marketing theme", async ({ page }) =>
   await expect(root).toHaveAttribute("data-theme", "dark")
   await expect(activeIcon("dark")).toBeVisible()
   await expect(themeColor).toHaveAttribute("content", "#08111c")
+  await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgb(8, 17, 28)")
+  await expect(page.locator(".hero-frame")).toHaveCSS("background-color", "rgb(8, 17, 28)")
+  await expect(page.locator("evidence-world")).toHaveCSS("background-color", "rgb(8, 17, 28)")
 
   await toggle.click()
   await page.emulateMedia({ colorScheme: "dark" })
@@ -93,4 +99,75 @@ test("shows every story card in reduced-motion mode", async ({ page }) => {
   await expect(page.locator("[data-story-card-index]")).toHaveCount(12)
   for (const card of await page.locator("[data-story-card-index]").all())
     await expect(card).toBeVisible()
+})
+
+test("keeps the mobile story card anchored below the header without flashing the video", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/")
+
+  const world = page.locator("evidence-world")
+  await world.scrollIntoViewIfNeeded()
+  await page.evaluate(() => customElements.whenDefined("evidence-world"))
+  const firstChapter = page.locator('[data-chapter-index="0"]')
+  await firstChapter.evaluate((chapter) => {
+    const top = chapter.getBoundingClientRect().top + scrollY
+    scrollTo(0, top + 200)
+  })
+
+  await expect(world).toHaveClass(/is-pinned/)
+  const activeCard = firstChapter.locator(".is-card-active")
+  await expect(activeCard).toBeVisible()
+  await expect
+    .poll(() => activeCard.evaluate((card) => getComputedStyle(card).transform))
+    .toBe("none")
+  expect(
+    await activeCard.evaluate((card) => innerHeight - card.getBoundingClientRect().bottom)
+  ).toBe(16)
+
+  const headerBottom = await page
+    .locator("header.sticky")
+    .evaluate((header) => header.getBoundingClientRect().bottom)
+  const progressTop = await page
+    .locator(".evidence-world__chrome")
+    .evaluate((chrome) => chrome.getBoundingClientRect().top)
+  expect(progressTop).toBeGreaterThan(headerBottom)
+
+  const video = page.locator(".evidence-world__video")
+  await expect(video).toHaveClass(/is-front/, { timeout: 15_000 })
+  await page.locator('[data-chapter-index="1"]').evaluate((chapter) => {
+    const top = chapter.getBoundingClientRect().top + scrollY
+    scrollTo(0, top + 200)
+  })
+  await expect(video).toHaveClass(/is-front/)
+})
+
+test("retains the motion layout on a short portrait phone", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 })
+  await page.goto("/")
+  const world = page.locator("evidence-world")
+  await world.scrollIntoViewIfNeeded()
+  await page.evaluate(() => customElements.whenDefined("evidence-world"))
+  await world.evaluate((element) => {
+    const top = element.getBoundingClientRect().top + scrollY
+    scrollTo(0, top + 200)
+  })
+
+  await expect(world).toHaveClass(/is-motion-layout/)
+  await expect(world).toHaveClass(/is-pinned/)
+  await expect(page.locator(".evidence-world__stage")).toHaveCSS("position", "sticky")
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320)
+})
+
+test("keeps a short landscape phone in the stable document flow", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 })
+  await page.goto("/")
+  const world = page.locator("evidence-world")
+  await world.scrollIntoViewIfNeeded()
+  await page.evaluate(() => customElements.whenDefined("evidence-world"))
+
+  await expect(page.locator(".evidence-world__stage")).toHaveCSS("position", "relative")
+  await expect(page.locator(".evidence-world__chapters")).toHaveCSS("margin-top", "0px")
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844)
 })

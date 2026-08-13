@@ -458,4 +458,68 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       transition: none;
     }
   }
+
+  :global(:root[data-theme="light"]) .premium-hero {
+    --hero-cyan: #087f78;
+    color: #102235;
+    background: #eef6fa;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__poster img {
+    opacity: 0.38;
+    filter: saturate(0.58) contrast(0.9) brightness(1.2);
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__veil {
+    background:
+      linear-gradient(90deg, rgba(245, 249, 252, 0.99) 0%, rgba(245, 249, 252, 0.94) 45%, rgba(245, 249, 252, 0.28) 82%),
+      linear-gradient(180deg, rgba(245, 249, 252, 0.22), rgba(238, 246, 250, 0.96));
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__lede,
+  :global(:root[data-theme="light"]) .premium-hero__proof,
+  :global(:root[data-theme="light"]) .premium-hero__sample {
+    color: #40596c;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__sample:hover {
+    color: #102235;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__boundary,
+  :global(:root[data-theme="light"]) .premium-hero__rail,
+  :global(:root[data-theme="light"]) .premium-hero__artifact-meta {
+    color: #5f7081;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__primary {
+    color: #ffffff;
+    background: #087f78;
+    box-shadow: 0 0.8rem 2.5rem rgba(8, 127, 120, 0.18);
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__secondary {
+    color: #102235;
+    background: rgba(255, 255, 255, 0.82);
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__artifact-card {
+    border-color: rgba(8, 127, 120, 0.25);
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 1rem 3rem rgba(39, 75, 94, 0.16);
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__artifact-title {
+    color: #102235;
+  }
+
+  @media (max-width: 720px) {
+    :global(:root[data-theme="light"]) .premium-hero__veil {
+      background: linear-gradient(
+        180deg,
+        rgba(245, 249, 252, 0.5) 0%,
+        rgba(245, 249, 252, 0.97) 62%
+      );
+    }
+  }
 </style>

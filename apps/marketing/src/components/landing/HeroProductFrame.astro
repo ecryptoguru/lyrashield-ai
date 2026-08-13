@@ -2,8 +2,8 @@
 /**
  * The hero product-image slot.
  *
- * Renders on the same #08111c canvas as PremiumHero and rises into it, so it
- * reads as the second half of the hero rather than a separate band.
+ * Renders on the same theme-aware canvas as PremiumHero and rises into it, so
+ * it reads as the second half of the hero rather than a separate band.
  *
  * Today this is a deliberate PLACEHOLDER, not a screenshot — see
  * `public/product/README.md` for the swap procedure. The <figure>/<img>/
@@ -126,5 +126,40 @@ const heroProductAlt =
   .hero-frame__caption b {
     color: #b7cad8;
     font-weight: 700;
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame {
+    --frame-cyan: #087f78;
+    background: var(--bg);
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__window {
+    border-color: rgba(8, 127, 120, 0.24);
+    background: #ffffff;
+    box-shadow:
+      0 2rem 5rem rgba(39, 75, 94, 0.16),
+      0 0 0 1px rgba(217, 228, 236, 0.9);
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__chrome {
+    border-color: #d9e4ec;
+    background: #eef4f7;
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__chrome span {
+    background: #9db3c1;
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__chrome p,
+  :global(:root[data-theme="light"]) .hero-frame__caption {
+    color: #5f7081;
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__img {
+    opacity: 0.42;
+  }
+
+  :global(:root[data-theme="light"]) .hero-frame__caption b {
+    color: #102235;
   }
 </style>
